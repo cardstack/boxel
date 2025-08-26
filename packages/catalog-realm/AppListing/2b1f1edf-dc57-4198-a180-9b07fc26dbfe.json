@@ -11,7 +11,8 @@
       "name": "Route",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot-01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot-02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot-02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot-03.png"
       ],
       "summary": "Interactive mapping application for creating and visualizing routes between locations worldwide",
       "cardInfo": {
@@ -80,6 +81,16 @@
       "examples.0": {
         "links": {
           "self": "../route/Route/33fdd7c1-ec6a-4e99-95a7-418bb33d01af"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../route/Route/770f6435-3129-4cde-817a-52e6e4ce443f"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../Route/1d724807-b192-4cc1-82fc-2ca226671bb3"
         }
       },
       "categories.0": {

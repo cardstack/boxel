@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "Route",
-        "module": "../route"
+        "module": "../route/route"
       }
     },
     "type": "card",
@@ -15,20 +15,20 @@
         "thumbnailURL": null
       },
       "mapConfig": {
-        "tileserverUrl": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        "tileserverUrl": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         "disableMapClick": false
       },
-      "routeName": "Sibu-Kl",
+      "routeName": null,
       "coordinates": [
         {
-          "searchKey": "Sibu",
-          "lat": 2.2996601,
-          "lon": 111.8710012
+          "searchKey": "Thailand",
+          "lat": 14.8971921,
+          "lon": 100.83273
         },
         {
-          "searchKey": "kl",
-          "lat": 3.1526589,
-          "lon": 101.7022205
+          "searchKey": "Vietnam",
+          "lat": 15.9266657,
+          "lon": 107.9650855
         }
       ]
     },
