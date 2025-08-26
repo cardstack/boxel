@@ -1,9 +1,6 @@
 import Component from '@glimmer/component';
 
-import {
-  CardContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
@@ -60,12 +57,7 @@ export default class CardList extends Component<Signature> {
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                 data-cards-grid-item={{removeFileExtension card.url}}
               >
-                <CardContainer
-                  class='card-item {{@format}}-card-item'
-                  @displayBoundaries={{true}}
-                >
-                  <card.component />
-                </CardContainer>
+                <card.component />
               </li>
             {{else}}
               <p>No results were found</p>
@@ -116,20 +108,8 @@ export default class CardList extends Component<Signature> {
         width: var(--item-width);
         height: var(--item-height);
       }
-      .boxel-card-list-item > :deep(.fitted-card-item) {
-        width: 100%;
-        height: 100%;
-        min-height: 40px;
-        max-height: 600px;
-        container-name: fitted-card;
-        container-type: size;
-        overflow: hidden;
-      }
-      .boxel-card-list-item > :deep(.atom-card-item) {
-        width: fit-content;
-        max-width: 100%;
-      }
-      .boxel-card-list-item > :deep(.embedded-card-item) {
+
+      .boxel-card-list-item > :deep(.field-component-card.embedded-format) {
         width: 100%;
         height: auto;
         max-width: var(--embedded-card-max-width);
