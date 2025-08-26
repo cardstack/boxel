@@ -215,7 +215,7 @@ export function getBoxComponent(
 
   function getThemeStyles(cardDef?: CardDef) {
     if (!extractCssVariables) {
-      return;
+      return htmlSafe('');
     }
     let css =
       cardDef && 'cssVariables' in cardDef
@@ -272,7 +272,7 @@ export function getBoxComponent(
                         fieldType=field.fieldType
                         fieldName=field.name
                       }}
-                      style={{htmlSafe (getThemeStyles model.value)}}
+                      style={{getThemeStyles model.value}}
                       data-test-card={{card.id}}
                       data-test-card-format={{effectiveFormats.cardDef}}
                       data-test-field-component-card

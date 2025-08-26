@@ -3,7 +3,7 @@ import { capabilities } from '@ember/component';
 import { setComponentTemplate } from '@ember/component';
 
 import templateOnly from '@ember/component/template-only';
-import { htmlSafe } from '@ember/template';
+import { htmlSafe, type SafeString } from '@ember/template';
 import { precompileTemplate } from '@ember/template-compilation';
 
 import { ComponentLike } from '@glint/template';
@@ -14,7 +14,7 @@ import { compiler } from '@cardstack/runtime-common/etc';
 class _DynamicHTMLComponent {
   constructor(
     readonly component: TopElement,
-    readonly attrs: Record<string, string>,
+    readonly attrs: Record<string, string | SafeString>,
     readonly children: Node[],
   ) {}
 }
@@ -46,12 +46,16 @@ export function htmlComponent(
     let tagName = cardElement.tagName.toLowerCase();
 
     let sourceParts: string[] = [];
-    let attrs: Record<string, string> = {};
+    let attrs: Record<string, string | SafeString> = {};
 
     sourceParts.push(`<${tagName} `);
 
     for (let { name, value } of cardElement.attributes) {
-      attrs[name] = value;
+      if (name === 'style') {
+        attrs[name] = htmlSafe(value);
+      } else {
+        attrs[name] = value;
+      }
       sourceParts.push(`${name}={{@attrs.${name}}} `);
     }
 
