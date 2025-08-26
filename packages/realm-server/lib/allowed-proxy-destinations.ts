@@ -1,5 +1,8 @@
 import { type CreditStrategy } from './credit-strategies';
 import { CreditStrategyFactory } from './credit-strategies';
+import { type DBAdapter, logger } from '@cardstack/runtime-common';
+
+const log = logger('allowed-proxy-destinations');
 
 export interface AllowedProxyDestination {
   url: string;
@@ -18,14 +21,38 @@ interface ProxyDestinationInput {
 export class AllowedProxyDestinations {
   private destinations: Record<string, AllowedProxyDestination> = {};
   private static instance: AllowedProxyDestinations | null = null;
+  private dbAdapter: DBAdapter;
+  private cacheExpiry: number = 0;
+  private readonly CACHE_DURATION = 5000; // 5 seconds
 
-  private constructor(configJson: string) {
-    this.initializeFromJson(configJson);
+  private constructor(dbAdapter: DBAdapter) {
+    this.dbAdapter = dbAdapter;
   }
 
-  private initializeFromJson(configJson: string) {
-    const configs: ProxyDestinationInput[] = JSON.parse(configJson);
+  private async loadFromDatabase() {
+    try {
+      const result = await this.dbAdapter.execute(
+        'SELECT value FROM server_config WHERE key = $1',
+        { bind: ['allowed_proxy_destinations'] },
+      );
 
+      if (result.length === 0) {
+        this.destinations = {};
+        return;
+      }
+
+      const configs = result[0].value as unknown as ProxyDestinationInput[];
+      this.initializeFromConfigs(configs);
+    } catch (error) {
+      log.error(
+        'Failed to load allowed proxy destinations from database:',
+        error,
+      );
+      this.destinations = {};
+    }
+  }
+
+  private initializeFromConfigs(configs: ProxyDestinationInput[]) {
     this.destinations = {};
     for (const config of configs) {
       this.destinations[config.url] = {
@@ -40,25 +67,36 @@ export class AllowedProxyDestinations {
     }
   }
 
-  getDestinationConfig(url: string): AllowedProxyDestination | undefined {
+  private async ensureCacheValid() {
+    const now = Date.now();
+    if (now > this.cacheExpiry) {
+      await this.loadFromDatabase();
+      this.cacheExpiry = now + this.CACHE_DURATION;
+    }
+  }
+
+  async getDestinationConfig(
+    url: string,
+  ): Promise<AllowedProxyDestination | undefined> {
+    await this.ensureCacheValid();
     return Object.entries(this.destinations).find(([destinationUrl]) =>
       url.includes(destinationUrl),
     )?.[1];
   }
 
-  isDestinationAllowed(url: string): boolean {
-    return this.getDestinationConfig(url) !== undefined;
+  async isDestinationAllowed(url: string): Promise<boolean> {
+    return (await this.getDestinationConfig(url)) !== undefined;
   }
 
-  supportsStreaming(url: string): boolean {
-    const config = this.getDestinationConfig(url);
+  async supportsStreaming(url: string): Promise<boolean> {
+    const config = await this.getDestinationConfig(url);
     return config?.supportsStreaming ?? false;
   }
 
-  static getInstance(configJson: string) {
+  static async getInstance(dbAdapter: DBAdapter) {
     if (!AllowedProxyDestinations.instance) {
       AllowedProxyDestinations.instance = new AllowedProxyDestinations(
-        configJson,
+        dbAdapter,
       );
     }
 

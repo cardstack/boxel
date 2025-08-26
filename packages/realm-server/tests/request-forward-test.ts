@@ -22,6 +22,7 @@ import {
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
+import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -51,20 +52,6 @@ module(basename(__filename), function () {
       if (testRealm) {
         virtualNetwork.unmount(testRealm.handle);
       }
-      const testConfig = JSON.stringify([
-        {
-          url: 'https://openrouter.ai/api/v1/chat/completions',
-          apiKey: 'openrouter-api-key',
-          creditStrategy: 'openrouter',
-          supportsStreaming: true,
-        },
-        {
-          url: 'https://api.example.com',
-          apiKey: 'example-api-key',
-          creditStrategy: 'no-credit',
-          supportsStreaming: false,
-        },
-      ]);
 
       ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
         await runTestRealmServer({
@@ -76,7 +63,6 @@ module(basename(__filename), function () {
           publisher,
           runner,
           matrixURL: new URL('http://localhost:8008'),
-          allowedProxyDestinations: testConfig,
         }));
       request = supertest(testRealmHttpServer);
     }
@@ -89,6 +75,33 @@ module(basename(__filename), function () {
         testRealmDir = join(dir.name, 'realm_server_2', 'test');
         ensureDirSync(testRealmDir);
         copySync(join(__dirname, 'cards'), testRealmDir);
+
+        // Reset the singleton before setting up configuration
+        AllowedProxyDestinations.reset();
+
+        // Set up allowed proxy destinations in database BEFORE starting server
+        const testConfig = [
+          {
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            apiKey: 'openrouter-api-key',
+            creditStrategy: 'openrouter',
+            supportsStreaming: true,
+          },
+          {
+            url: 'https://api.example.com',
+            apiKey: 'example-api-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+        ];
+        await dbAdapter.execute(
+          `INSERT INTO server_config (key, value, updated_at) 
+           VALUES ('allowed_proxy_destinations', $1::jsonb, CURRENT_TIMESTAMP) 
+           ON CONFLICT (key) 
+           DO UPDATE SET value = $1::jsonb, updated_at = CURRENT_TIMESTAMP`,
+          { bind: [JSON.stringify(testConfig)] },
+        );
+
         await startRealmServer(dbAdapter, publisher, runner);
 
         // Set up test user
@@ -124,6 +137,7 @@ module(basename(__filename), function () {
       },
       afterEach: async () => {
         await closeServer(testRealmHttpServer);
+        AllowedProxyDestinations.reset();
       },
     });
 
