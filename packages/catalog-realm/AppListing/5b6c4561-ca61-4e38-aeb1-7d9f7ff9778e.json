@@ -1,0 +1,107 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Routes",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/routes-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/routes-listing/screenshot_02.png"
+      ],
+      "summary": "A comprehensive application for managing and organizing travel routes between multiple destinations.",
+      "cardInfo": {
+        "notes": null,
+        "title": "Routes",
+        "description": "Organize and manage travel routes with support for multiple destinations and route planning. Perfect for logistics, travel planning, and route optimization.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/routes-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/1fc2bd0a-2751-4449-9b6c-4561ca617e38"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/0a275164-495b-4c45-a1ca-617e386eb17d"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/64495b6c-4561-4a61-be38-6eb17d9f7ff9"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/bd0a2751-6449-4b6c-8561-ca617e386eb1"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/c2bd0a27-5164-495b-ac45-61ca617e386e"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/495b6c45-61ca-417e-b86e-b17d9f7ff977"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/27516449-5b6c-4561-8a61-7e386eb17d9f"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/5164495b-6c45-41ca-a17e-386eb17d9f7f"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../routes/Routes/14027fa4-003c-4b89-bcca-f5bb3c4b4740"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/travel-experiences"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../fields/route",
-        "name": "RouteField"
+        "module": "../components/map-render",
+        "name": "MapRender"
       },
-      "specType": "field",
+      "specType": "component",
       "containedExamples": [],
-      "title": "RouteField",
+      "title": "MapRender",
       "description": null,
       "cardInfo": {
         "title": null,

@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../fields-preview/route",
-        "name": "RoutePreview"
+        "module": "../routes/routes",
+        "name": "Routes"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "RoutePreview",
+      "title": "Routes",
       "description": null,
       "cardInfo": {
         "title": null,
