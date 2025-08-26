@@ -614,3 +614,9 @@ export default class AiAssistantPanelService extends Service {
     }
   });
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'ai-assistant-panel-service': AiAssistantPanelService;
+  }
+}

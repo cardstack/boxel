@@ -1,21 +1,22 @@
+import { getService } from '@universal-ember/test-support';
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
-import type MonacoService from '@cardstack/host/services/monaco-service';
+import MonacoService from '@cardstack/host/services/monaco-service';
 
 module('Unit | Service | ai-assistant-panel-service', function (hooks) {
   setupTest(hooks);
 
+  let service: AiAssistantPanelService;
+  let monacoService: MonacoService;
+
+  hooks.beforeEach(function () {
+    service = getService('ai-assistant-panel-service');
+    monacoService = getService('monaco-service');
+  });
+
   test('focusPillCodeRange returns undefined when there is no selection', function (assert) {
-    let service = this.owner.lookup(
-      'service:ai-assistant-panel-service',
-    ) as AiAssistantPanelService;
-
-    let monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
-
     // Mock no selection
     monacoService.trackedSelection = null;
 
@@ -27,14 +28,6 @@ module('Unit | Service | ai-assistant-panel-service', function (hooks) {
   });
 
   test('focusPillCodeRange returns undefined when there is only a cursor position (no actual selection)', function (assert) {
-    let service = this.owner.lookup(
-      'service:ai-assistant-panel-service',
-    ) as AiAssistantPanelService;
-
-    let monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
-
     // Mock cursor position at line 5, column 10 (no text selected)
     monacoService.trackedSelection = {
       startLineNumber: 5,
@@ -51,14 +44,6 @@ module('Unit | Service | ai-assistant-panel-service', function (hooks) {
   });
 
   test('focusPillCodeRange returns "Line X" when selection is on a single line', function (assert) {
-    let service = this.owner.lookup(
-      'service:ai-assistant-panel-service',
-    ) as AiAssistantPanelService;
-
-    let monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
-
     // Mock selection on line 3, columns 5-15
     monacoService.trackedSelection = {
       startLineNumber: 3,
@@ -75,14 +60,6 @@ module('Unit | Service | ai-assistant-panel-service', function (hooks) {
   });
 
   test('focusPillCodeRange returns "Lines X-Y" when selection spans multiple lines', function (assert) {
-    let service = this.owner.lookup(
-      'service:ai-assistant-panel-service',
-    ) as AiAssistantPanelService;
-
-    let monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
-
     // Mock selection from line 2 to line 5
     monacoService.trackedSelection = {
       startLineNumber: 2,
@@ -99,14 +76,6 @@ module('Unit | Service | ai-assistant-panel-service', function (hooks) {
   });
 
   test('focusPillCodeRange handles single character selection on same line', function (assert) {
-    let service = this.owner.lookup(
-      'service:ai-assistant-panel-service',
-    ) as AiAssistantPanelService;
-
-    let monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
-
     // Mock single character selection on line 1 (column 5 to 6)
     monacoService.trackedSelection = {
       startLineNumber: 1,
