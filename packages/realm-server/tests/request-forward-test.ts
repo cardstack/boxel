@@ -76,9 +76,6 @@ module(basename(__filename), function () {
         ensureDirSync(testRealmDir);
         copySync(join(__dirname, 'cards'), testRealmDir);
 
-        // Reset the singleton before setting up configuration
-        AllowedProxyDestinations.reset();
-
         // Set up allowed proxy destinations in database BEFORE starting server
         const testConfig = [
           {
@@ -95,8 +92,8 @@ module(basename(__filename), function () {
           },
         ];
         await dbAdapter.execute(
-          `INSERT INTO server_config (key, value, updated_at) 
-           VALUES ('allowed_proxy_destinations', $1::jsonb, CURRENT_TIMESTAMP) 
+          `INSERT INTO server_config (key, value, created_at, updated_at) 
+           VALUES ('allowed_proxy_destinations', $1::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
            ON CONFLICT (key) 
            DO UPDATE SET value = $1::jsonb, updated_at = CURRENT_TIMESTAMP`,
           { bind: [JSON.stringify(testConfig)] },
@@ -136,6 +133,7 @@ module(basename(__filename), function () {
         }
       },
       afterEach: async () => {
+        AllowedProxyDestinations.reset();
         await closeServer(testRealmHttpServer);
       },
     });
