@@ -22,6 +22,10 @@ export interface CommandRequest {
 export const CommandContextStamp = Symbol.for('CommandContext');
 export interface CommandContext {
   [CommandContextStamp]: boolean;
+  stackInfo?: {
+    index: number;
+    total: number;
+  };
 }
 
 export interface CommandInvocation<CardResultType extends CardDefConstructor> {

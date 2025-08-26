@@ -104,6 +104,7 @@ export interface StackItemRenderedCardForOverlayActions
   stackItem: StackItem;
 }
 
+
 export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
@@ -241,10 +242,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
-  private get context(): StackItemCardContext {
+  private get context(): CardContext {
+    // Mutate commandContext with stack information from the item
+    let enhancedCommandContext = {
+      ...this.args.commandContext,
+      stackInfo: {
+        index: this.args.item.stackIndex,
+        total: this.operatorModeStateService.numberOfStacks(),
+      }
+    };
+
     return {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
+      commandContext: enhancedCommandContext,
       actions: this.args.publicAPI, //we put this last to overwrite card context so stackIndex is correct
     };
   }

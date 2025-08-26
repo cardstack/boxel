@@ -8,7 +8,6 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
 
-import type CommandService from '../services/command-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
 
@@ -16,7 +15,6 @@ export default class ViewCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.ViewCardInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private commandService: CommandService;
   @service declare private store: StoreService;
 
   description =
@@ -55,12 +53,13 @@ export default class ViewCardCommand extends HostBaseCommand<
     }
 
     const format = (input.format as 'isolated' | 'edit') || 'isolated';
-    let stackIndex: number | undefined = input.stackIndex;
 
-    if (stackIndex === undefined) {
-      stackIndex =
-        Math.min(this.operatorModeStateService.numberOfStacks(), 1) - 1;
+    // Stack context is required - no fallback behavior
+    if (this.commandContext.stackInfo === undefined) {
+      throw new Error('No stackInfo exists inside context');
     }
+
+    let stackIndex = this.commandContext.stackInfo.index;
 
     const newStackItem = await this.operatorModeStateService.createStackItem(
       input.cardId,
@@ -75,7 +74,7 @@ export default class ViewCardCommand extends HostBaseCommand<
     await this.operatorModeStateService.updateCodePath(new URL(input.cardId));
 
     await new UpdatePlaygroundSelectionCommand(
-      this.commandService.commandContext,
+      this.commandContext,
     ).execute({
       moduleId: undefined,
       cardId: input.cardId,

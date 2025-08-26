@@ -55,7 +55,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
-import ViewCardCommand from '@cardstack/host/commands/view-card';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -509,13 +508,12 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await new ViewCardCommand(this.commandService.commandContext).execute(
-            {
-              cardId: url.href,
-              format: 'isolated',
-              stackIndex: 1,
-            },
-          );
+          let newItem = new StackItem({
+            id: url.href,
+            format: 'isolated',
+            stackIndex: 1,
+          });
+          this.addToStack(newItem);
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
           // the rightmost stack will be REPLACED by the selection
@@ -527,13 +525,15 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await new ViewCardCommand(
-              this.commandService.commandContext,
-            ).execute({
-              cardId: url.href,
+            // No stacks exist or rightmost stack is empty - create new card in first stack
+            let newItem = new StackItem({
+              id: url.href,
               format: 'isolated',
+              stackIndex: 0,
             });
+            this.addToStack(newItem);
           } else {
+            // Replace the contents of the rightmost stack with the selected card
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
               let bottomMostItem = stack[0];
@@ -543,7 +543,6 @@ export default class InteractSubmode extends Component {
                   format: 'isolated',
                   stackIndex,
                 });
-                // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(
                   stackIndex,
                   stackItem,
