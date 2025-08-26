@@ -128,9 +128,7 @@ export default class IconButtonUsage extends Component {
           />
           <Css.Basic
             @name='--boxel-icon-button-background'
-            @type='background'
-            @description='css shorthand "background" property'
-            @defaultValue='#fff'
+            @type='background-color'
           />
           <Css.Basic
             @name='--boxel-icon-button-color'
@@ -143,11 +141,6 @@ export default class IconButtonUsage extends Component {
             @type='color'
             @description='icon color'
             @defaultValue='currentColor'
-          />
-          <Css.Basic
-            @name='--boxel-icon-button-transition'
-            @type='transition'
-            @description='css shorthand "transition" property'
           />
         </:cssVars>
       </FreestyleUsage>

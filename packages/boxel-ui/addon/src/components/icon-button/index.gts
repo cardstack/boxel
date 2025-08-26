@@ -56,41 +56,40 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
         align-items: center;
         justify-content: center;
         padding: var(--boxel-icon-button-padding, 0);
-        background: var(
+        background-color: var(
           --boxel-icon-button-background,
           var(--boxel-button-color)
         );
         color: var(--boxel-icon-button-color, var(--boxel-button-text-color));
         z-index: 0;
         overflow: hidden;
-        transition: var(
-          --boxel-icon-button-transition,
-          var(--boxel-transition-properties)
-        );
       }
       .is-round {
         border-radius: 50%;
       }
 
       .kind-default {
-        --boxel-button-color: transparent;
-        --boxel-button-text-color: var(--foreground, var(--boxel-dark));
-        --boxel-button-border: var(
-          --boxel-icon-button-background,
-          var(--boxel-button-color)
+        background: var(--boxel-icon-button-background, none);
+        color: var(
+          --boxel-icon-button-color,
+          var(--foreground, var(--boxel-dark))
         );
-      }
-      .kind-default:not(:disabled):hover,
-      .kind-default:not(:disabled):active {
-        --boxel-button-color: transparent;
-        color: color-mix(
-          in oklab,
-          var(--boxel-icon-button-color, var(--boxel-button-text-color)) 90%,
-          transparent
-        );
+        border: none;
       }
       .kind-default:disabled {
-        --boxel-button-text-color: var(--muted-foreground, var(--boxel-450));
+        color: var(--muted, var(--boxel-400));
+      }
+
+      .kind-primary-dark:not(:disabled) {
+        --boxel-button-color: var(--primary-foreground, var(--boxel-dark));
+        --boxel-button-text-color: var(--primary, var(--boxel-highlight));
+      }
+      .kind-primary-dark:not(:disabled):hover {
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--primary-foreground, var(--boxel-dark)) 85%,
+          transparent
+        );
       }
 
       @media (prefers-reduced-motion: no-preference) {
