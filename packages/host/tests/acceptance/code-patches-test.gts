@@ -38,6 +38,27 @@ import { setupApplicationTest } from '../helpers/setup';
 let matrixRoomId = '';
 let mockedFileContent = 'Hello, world!';
 
+const testCardContent = `
+import { CardDef, Component, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+
+export class TestCard extends CardDef {
+  static displayName = 'Test Card';
+  
+  @field name = contains(StringField);
+  @field description = contains(StringField);
+  
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <div data-test-test-card>
+        <h1>{{@model.name}}</h1>
+        <p>{{@model.description}}</p>
+      </div>
+    </template>
+  };
+}
+`;
+
 module('Acceptance | Code patches tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -54,7 +75,11 @@ module('Acceptance | Code patches tests', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+    getService('matrix-service').fetchMatrixHostedFile = async (url) => {
+      // Mock different file contents based on the URL
+      if (url.includes('test-card.gts')) {
+        return new Response(testCardContent);
+      }
       return new Response(mockedFileContent);
     };
 
@@ -76,6 +101,7 @@ module('Acceptance | Code patches tests', function (hooks) {
         },
         'hello.txt': 'Hello, world!',
         'hi.txt': 'Hi, world!\nHow are you?',
+        'test-card.gts': testCardContent,
         'Skill/useful-commands.json': {
           data: {
             type: 'card',
@@ -1008,6 +1034,7 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-file="hi.txt"]').exists();
 
     // hi-1.txt (file with suffix) got created because hi.txt already exists
+    await waitFor('[data-test-file="hi-1.txt"]');
     assert
       .dom('[data-test-file="hi-1.txt"]')
       .exists('File hi-1.txt exists in file tree');
@@ -1021,6 +1048,7 @@ ${REPLACE_MARKER}
     assert
       .dom('[data-test-attached-file-dropdown-button="file2.gts"]')
       .exists();
+    await waitFor('[data-test-attached-file-dropdown-button="hi-1.txt"]');
     assert.dom('[data-test-attached-file-dropdown-button="hi-1.txt"]').exists();
 
     assert
@@ -1511,6 +1539,218 @@ ${REPLACE_MARKER}
         getMonacoContent() ===
         'Greetings from Act mode!\nWe are awesome in Act mode!',
       { timeout: 2000 },
+    );
+  });
+
+  test('schema editor gets refreshed when code patches are executed on executable files', async function (assert) {
+    assert.expect(6);
+
+    // Visit the executable file in code mode
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}test-card.gts`,
+    });
+
+    // Wait for schema editor to load and verify initial state
+    await waitFor('[data-test-card-schema]');
+    assert
+      .dom('[data-test-card-schema="Test Card"] [data-test-total-fields]')
+      .containsText('2', 'Initial total fields count is correct');
+    assert
+      .dom('[data-test-card-schema="Test Card"] [data-test-field-name="name"]')
+      .exists('Initial name field exists');
+    assert
+      .dom(
+        '[data-test-card-schema="Test Card"] [data-test-field-name="description"]',
+      )
+      .exists('Initial description field exists');
+
+    // Open AI assistant and simulate a code patch that adds a new field
+    // The loader reset is now handled centrally in cardService.saveSource
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/test-card.gts
+${SEARCH_MARKER}
+  @field description = contains(StringField);
+${SEPARATOR_MARKER}
+  @field description = contains(StringField);
+  @field email = contains(StringField);
+${REPLACE_MARKER}\n\`\`\``;
+
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'Add an email field to the TestCard',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: {
+        attachedFiles: [
+          {
+            url: 'http://test-realm/test/test-card.gts',
+            name: 'test-card.gts',
+            sourceUrl: 'http://test-realm/test/test-card.gts',
+          },
+        ],
+      },
+    });
+
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    // Apply the code patch
+    await waitFor('[data-test-apply-code-button]');
+    await click('[data-test-apply-code-button]');
+
+    // Wait for the schema editor to refresh and verify the new field appears
+    await waitUntil(
+      () => {
+        let totalFieldsElement = document.querySelector(
+          '[data-test-card-schema="Test Card"] [data-test-total-fields]',
+        );
+        return (
+          totalFieldsElement && totalFieldsElement.textContent?.includes('3')
+        );
+      },
+      { timeout: 5000 },
+    );
+
+    assert
+      .dom('[data-test-card-schema="Test Card"] [data-test-total-fields]')
+      .containsText('3', 'Total fields count updated after code patch');
+    assert
+      .dom('[data-test-card-schema="Test Card"] [data-test-field-name="email"]')
+      .exists('New email field appears in schema editor');
+
+    // Verify the code patch result event was dispatched
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.event_id === eventId &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      codePatchResultEvents.length,
+      1,
+      'code patch result event is dispatched',
+    );
+  });
+
+  test('loader reset happens when restoring patched executable files', async function (assert) {
+    // Visit the executable file in code mode
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}test-card.gts`,
+    });
+
+    // Wait for schema editor to load and verify initial state
+    await waitFor('[data-test-card-schema]');
+    assert
+      .dom('[data-test-card-schema="Test Card"] [data-test-total-fields]')
+      .containsText('2', 'Initial total fields count is correct');
+
+    // Open AI assistant and simulate a code patch that adds a new field
+    // The loader reset is now handled centrally in cardService.saveSource
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/test-card.gts
+${SEARCH_MARKER}
+  @field description = contains(StringField);
+${SEPARATOR_MARKER}
+  @field description = contains(StringField);
+  @field email = contains(StringField);
+${REPLACE_MARKER}\n\`\`\``;
+
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'Add an email field to the TestCard',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: {
+        attachedFiles: [
+          {
+            url: 'http://test-realm/test/test-card.gts',
+            name: 'test-card.gts',
+            sourceUrl: 'http://test-realm/test/test-card.gts',
+          },
+        ],
+      },
+    });
+
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    // Apply the code patch
+    await waitFor('[data-test-apply-code-button]');
+    await click('[data-test-apply-code-button]');
+
+    // Wait for the schema editor to refresh and verify the new field appears
+    await waitUntil(
+      () => {
+        let totalFieldsElement = document.querySelector(
+          '[data-test-card-schema="Test Card"] [data-test-total-fields]',
+        );
+        return (
+          totalFieldsElement && totalFieldsElement.textContent?.includes('3')
+        );
+      },
+      { timeout: 5000 },
+    );
+
+    assert
+      .dom('[data-test-card-schema="Test Card"] [data-test-total-fields]')
+      .containsText('3', 'Total fields count updated after code patch');
+
+    // Find the attached file dropdown and restore the content
+    await click('[data-test-attached-file-dropdown-button="test-card.gts"]');
+    await click('[data-test-boxel-menu-item-text="Restore Submitted Content"]');
+    await click('[data-test-confirm-restore-button]');
+
+    // Wait for the restore to complete and verify the schema editor shows the original state
+    await waitUntil(
+      () => {
+        let totalFieldsElement = document.querySelector(
+          '[data-test-card-schema="Test Card"] [data-test-total-fields]',
+        );
+        return (
+          totalFieldsElement && totalFieldsElement.textContent?.includes('2')
+        );
+      },
+      { timeout: 5000 },
+    );
+
+    assert
+      .dom('[data-test-card-schema="Test Card"] [data-test-total-fields]')
+      .containsText(
+        '2',
+        'Total fields count restored to original state after restore',
+      );
+
+    // Verify the code patch result event was dispatched
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.event_id === eventId &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      codePatchResultEvents.length,
+      1,
+      'code patch result event is dispatched',
     );
   });
 });
