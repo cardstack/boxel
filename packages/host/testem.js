@@ -10,10 +10,7 @@ const config = {
   disable_watching: true,
   launch_in_ci: ['Chrome'],
   launch_in_dev: ['Chrome'],
-
-  // Give Chrome time to boot/connect (values are generous by design)
-  browser_start_timeout: 120,
-
+  browser_start_timeout: 240,
   browser_args: {
     Chrome: {
       ci: [
