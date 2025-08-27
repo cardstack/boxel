@@ -77,26 +77,17 @@ module(basename(__filename), function () {
         copySync(join(__dirname, 'cards'), testRealmDir);
 
         // Set up allowed proxy destinations in database BEFORE starting server
-        const testConfig = [
-          {
-            url: 'https://openrouter.ai/api/v1/chat/completions',
-            apiKey: 'openrouter-api-key',
-            creditStrategy: 'openrouter',
-            supportsStreaming: true,
-          },
-          {
-            url: 'https://api.example.com',
-            apiKey: 'example-api-key',
-            creditStrategy: 'no-credit',
-            supportsStreaming: false,
-          },
-        ];
         await dbAdapter.execute(
-          `INSERT INTO server_config (key, value, created_at, updated_at) 
-           VALUES ('allowed_proxy_destinations', $1::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
-           ON CONFLICT (key) 
-           DO UPDATE SET value = $1::jsonb, updated_at = CURRENT_TIMESTAMP`,
-          { bind: [JSON.stringify(testConfig)] },
+          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, created_at, updated_at) 
+           VALUES 
+             (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'openrouter-api-key', 'openrouter', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+             (gen_random_uuid(), 'https://api.example.com', 'example-api-key', 'no-credit', false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT (url) 
+           DO UPDATE SET 
+             api_key = EXCLUDED.api_key,
+             credit_strategy = EXCLUDED.credit_strategy,
+             supports_streaming = EXCLUDED.supports_streaming,
+             updated_at = CURRENT_TIMESTAMP`,
         );
 
         await startRealmServer(dbAdapter, publisher, runner);

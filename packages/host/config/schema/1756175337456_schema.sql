@@ -77,11 +77,3 @@
    current_version INTEGER NOT NULL,
    PRIMARY KEY ( realm_url ) 
 );
-
- CREATE TABLE IF NOT EXISTS server_config (
-   key TEXT NOT NULL,
-   value BLOB NOT NULL,
-   created_at NOT NULL,
-   updated_at NOT NULL,
-   PRIMARY KEY ( key ) 
-);

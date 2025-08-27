@@ -11,11 +11,16 @@ export interface AllowedProxyDestination {
   supportsStreaming: boolean;
 }
 
-interface ProxyDestinationInput {
+interface ProxyEndpointRow {
+  id: string;
   url: string;
-  apiKey: string;
-  creditStrategy: 'openrouter' | 'no-credit';
-  supportsStreaming: boolean;
+  api_key: string;
+  credit_strategy: string;
+  supports_streaming: boolean;
+  auth_method?: string;
+  auth_parameter_name?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export class AllowedProxyDestinations {
@@ -32,8 +37,7 @@ export class AllowedProxyDestinations {
   private async loadFromDatabase() {
     try {
       const result = await this.dbAdapter.execute(
-        'SELECT value FROM server_config WHERE key = $1',
-        { bind: ['allowed_proxy_destinations'] },
+        'SELECT * FROM proxy_endpoints',
       );
 
       if (result.length === 0) {
@@ -41,8 +45,8 @@ export class AllowedProxyDestinations {
         return;
       }
 
-      const configs = result[0].value as unknown as ProxyDestinationInput[];
-      this.initializeFromConfigs(configs);
+      const endpoints = result as unknown as ProxyEndpointRow[];
+      this.initializeFromEndpoints(endpoints);
     } catch (error) {
       log.error(
         'Failed to load allowed proxy destinations from database:',
@@ -52,17 +56,17 @@ export class AllowedProxyDestinations {
     }
   }
 
-  private initializeFromConfigs(configs: ProxyDestinationInput[]) {
+  private initializeFromEndpoints(endpoints: ProxyEndpointRow[]) {
     this.destinations = {};
-    for (const config of configs) {
-      this.destinations[config.url] = {
-        url: config.url,
-        apiKey: config.apiKey,
+    for (const endpoint of endpoints) {
+      this.destinations[endpoint.url] = {
+        url: endpoint.url,
+        apiKey: endpoint.api_key,
         creditStrategy: CreditStrategyFactory.create(
-          config.creditStrategy,
-          config.apiKey,
+          endpoint.credit_strategy as 'openrouter' | 'no-credit',
+          endpoint.api_key,
         ),
-        supportsStreaming: config.supportsStreaming,
+        supportsStreaming: endpoint.supports_streaming,
       };
     }
   }
