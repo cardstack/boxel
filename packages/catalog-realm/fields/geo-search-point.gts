@@ -57,7 +57,9 @@ class AtomTemplate extends Component<typeof GeoSearchPointField> {
   </template>
 }
 
-class EditTemplate extends Component<typeof GeoSearchPointField> {
+export class GeoSearchPointEditTemplate extends Component<
+  typeof GeoSearchPointField
+> {
   get searchAddressValue() {
     return this.args.model.searchKey;
   }
@@ -419,7 +421,7 @@ export class GeoSearchPointField extends GeoPointField {
 
   @field searchKey = contains(StringField);
 
-  static edit = EditTemplate;
+  static edit = GeoSearchPointEditTemplate;
   static atom = AtomTemplate;
   static embedded = EmbeddedTemplate;
 }

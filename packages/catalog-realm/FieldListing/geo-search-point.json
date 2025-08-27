@@ -38,27 +38,22 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/100481ef-b683-4748-b217-9076b5c04154"
+          "self": "../Spec/geo-point"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/b6839748-3217-4076-b5c0-415482adeb07"
+          "self": "../Spec/geo-search-point"
         }
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/efb68397-4832-4790-b6b5-c0415482adeb"
+          "self": "../Spec/map-render"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/0481efb6-8397-4832-9790-76b5c0415482"
-        }
-      },
-      "specs.4": {
-        "links": {
-          "self": "../Spec/81efb683-9748-4217-9076-b5c0415482ad"
+          "self": "../Spec/coordinate"
         }
       },
       "publisher": {

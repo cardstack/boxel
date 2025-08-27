@@ -2,7 +2,7 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "AppListing",
+        "name": "CardListing",
         "module": "../catalog-app/listing/listing"
       }
     },
@@ -40,37 +40,32 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/0ef3879b-48b5-482b-9f1e-dfdc571198a1"
+          "self": "../Spec/route"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/48b5382b-1f1e-4fdc-9711-98a1809b07fc"
+          "self": "../Spec/geo-point"
         }
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/9b48b538-2b1f-4edf-9c57-1198a1809b07"
+          "self": "../Spec/map-render"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/f3879b48-b538-4b1f-9edf-dc571198a180"
+          "self": "../Spec/geo-search-point"
         }
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/879b48b5-382b-4f1e-9fdc-571198a1809b"
+          "self": "../Spec/coordinate"
         }
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/b5382b1f-1edf-4c57-9198-a1809b07fc26"
-        }
-      },
-      "specs.6": {
-        "links": {
-          "self": "../Spec/382b1f1e-dfdc-4711-98a1-809b07fc26db"
+          "self": "../Spec/leaflet-map-config"
         }
       },
       "publisher": {
@@ -80,17 +75,17 @@
       },
       "examples.0": {
         "links": {
-          "self": "../route/Route/33fdd7c1-ec6a-4e99-95a7-418bb33d01af"
+          "self": "../route/Route/china-tokyo"
         }
       },
       "examples.1": {
         "links": {
-          "self": "../route/Route/770f6435-3129-4cde-817a-52e6e4ce443f"
+          "self": "../route/Route/sibu-kl"
         }
       },
       "examples.2": {
         "links": {
-          "self": "../route/Route/1d724807-b192-4cc1-82fc-2ca226671bb3"
+          "self": "../route/Route/thailand-vietnam"
         }
       },
       "categories.0": {

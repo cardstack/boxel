@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../components/map-render",
-        "name": "MapRender"
+        "name": "MapConfigField",
+        "module": "../fields/leaflet-map-config-field"
       },
-      "specType": "component",
+      "specType": "field",
       "containedExamples": [],
-      "title": "MapRender",
+      "title": "MapConfigField",
       "description": null,
       "cardInfo": {
         "title": null,
@@ -20,6 +20,11 @@
     },
     "relationships": {
       "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
         "links": {
           "self": null
         }

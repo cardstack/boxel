@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "MapConfigField",
-        "module": "../routes/fields/map-config-field"
+        "module": "../route/route",
+        "name": "CoordinateField"
       },
-      "specType": "field",
+      "specType": "card",
       "containedExamples": [],
-      "title": "MapConfigField",
+      "title": "CoordinateField",
       "description": null,
       "cardInfo": {
         "title": null,
@@ -20,11 +20,6 @@
     },
     "relationships": {
       "linkedExamples": {
-        "links": {
-          "self": null
-        }
-      },
-      "cardInfo.theme": {
         "links": {
           "self": null
         }

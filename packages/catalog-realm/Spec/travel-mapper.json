@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../routes/routes",
-        "name": "Routes"
+        "module": "../travel-mapper/travel-mapper",
+        "name": "TravelMapper"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Routes",
+      "title": "Travel Mapper",
       "description": null,
       "cardInfo": {
         "title": null,

@@ -15,8 +15,7 @@
         "thumbnailURL": null
       },
       "mapConfig": {
-        "tileserverUrl": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "disableMapClick": false
+        "tileserverUrl": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
       },
       "routeName": "Sibu-Kl",
       "coordinates": [
@@ -26,7 +25,7 @@
           "lon": 111.8710012
         },
         {
-          "searchKey": "kl",
+          "searchKey": "Kl",
           "lat": 3.1526589,
           "lon": 101.7022205
         }

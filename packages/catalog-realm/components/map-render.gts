@@ -166,11 +166,6 @@ class LeafletLayerState implements LeafletLayerStateInterface {
     this.group?.addTo(this.map);
   }
 
-  addLayers(layers: LeafletLayers[]) {
-    layers.forEach((layer) => this.group?.addLayer(layer));
-    this.readjustMapView();
-  }
-
   onCoordinatesChange(coordinates: Coordinate[]) {
     this.teardown();
     let markers = this.createMarkers(coordinates);
@@ -190,6 +185,11 @@ class LeafletLayerState implements LeafletLayerStateInterface {
       if (line) layersToAdd.push(line);
     });
     this.addLayers(layersToAdd);
+  }
+
+  private addLayers(layers: LeafletLayers[]) {
+    layers.forEach((layer) => this.group?.addLayer(layer));
+    this.readjustMapView();
   }
 
   private createMarkers(coords: Coordinate[]): LeafletMarker[] {

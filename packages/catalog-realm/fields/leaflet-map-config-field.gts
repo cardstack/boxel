@@ -4,7 +4,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import StringField from 'https://cardstack.com/base/string';
 import { contains, field } from 'https://cardstack.com/base/card-api';
 
-class AtomTemplate extends Component<typeof MapConfigField> {
+class AtomTemplate extends Component<typeof LeafletMapConfigField> {
   get displayValue() {
     const tileserverUrl = this.args.model?.tileserverUrl;
 
@@ -37,7 +37,7 @@ class AtomTemplate extends Component<typeof MapConfigField> {
   </template>
 }
 
-class EditTemplate extends Component<typeof MapConfigField> {
+class EditTemplate extends Component<typeof LeafletMapConfigField> {
   get tileserverUrlValue() {
     return this.args.model?.tileserverUrl || '';
   }
@@ -142,7 +142,7 @@ class EditTemplate extends Component<typeof MapConfigField> {
   </template>
 }
 
-export class MapConfigField extends FieldDef {
+export class LeafletMapConfigField extends FieldDef {
   static displayName = 'Map Configuration';
 
   @field tileserverUrl = contains(StringField);

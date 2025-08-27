@@ -2,23 +2,23 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "AppListing",
+        "name": "CardListing",
         "module": "../catalog-app/listing/listing"
       }
     },
     "type": "card",
     "attributes": {
-      "name": "Routes",
+      "name": "Travel Mapper",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/routes-listing/screenshot_01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/routes-listing/screenshot_02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/travel-mapper-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/travel-mapper-listing/screenshot_02.png"
       ],
       "summary": "A comprehensive application for managing and organizing travel routes between multiple destinations.",
       "cardInfo": {
         "notes": null,
-        "title": "Routes",
+        "title": "Travel Mapper",
         "description": "Organize and manage travel routes with support for multiple destinations and route planning. Perfect for logistics, travel planning, and route optimization.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/routes-listing/thumbnail.png"
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/travel-mapper-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -39,47 +39,37 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/1fc2bd0a-2751-4449-9b6c-4561ca617e38"
+          "self": "../Spec/travel-mapper"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/0a275164-495b-4c45-a1ca-617e386eb17d"
+          "self": "../Spec/route"
         }
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/64495b6c-4561-4a61-be38-6eb17d9f7ff9"
+          "self": "../Spec/geo-point"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/bd0a2751-6449-4b6c-8561-ca617e386eb1"
+          "self": "../Spec/map-render"
         }
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/c2bd0a27-5164-495b-ac45-61ca617e386e"
+          "self": "../Spec/geo-search-point"
         }
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/495b6c45-61ca-417e-b86e-b17d9f7ff977"
+          "self": "../Spec/coordinate"
         }
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/27516449-5b6c-4561-8a61-7e386eb17d9f"
-        }
-      },
-      "specs.7": {
-        "links": {
-          "self": "../Spec/5164495b-6c45-41ca-a17e-386eb17d9f7f"
-        }
-      },
-      "specs.8": {
-        "links": {
-          "self": "../Spec/9f29443e-19f8-4e64-ad0f-8287adad5d54"
+          "self": "../Spec/leaflet-map-config"
         }
       },
       "publisher": {
@@ -89,7 +79,22 @@
       },
       "examples.0": {
         "links": {
-          "self": "../routes/Routes/14027fa4-003c-4b89-bcca-f5bb3c4b4740"
+          "self": "../travel-mapper/TravelMapper/14027fa4-003c-4b89-bcca-f5bb3c4b4740"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../route/Route/sibu-kl"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../route/Route/china-tokyo"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../route/Route/thailand-vietnam"
         }
       },
       "categories.0": {

@@ -8,8 +8,11 @@ import {
   field,
 } from 'https://cardstack.com/base/card-api';
 import { MapRender, type Coordinate } from '../components/map-render';
-import { CoordinateField } from './fields/coordinate-field';
-import { MapConfigField } from './fields/map-config-field';
+import { LeafletMapConfigField } from '../fields/leaflet-map-config-field';
+import {
+  GeoSearchPointField,
+  GeoSearchPointEditTemplate,
+} from '../fields/geo-search-point';
 
 class AtomTemplate extends Component<typeof Route> {
   <template>
@@ -396,13 +399,21 @@ class EmbeddedTemplate extends Component<typeof Route> {
   </template>
 }
 
+// @ts-ignore TODO fix type
+export class CoordinateField extends GeoSearchPointField {
+  static displayName = 'Coordinate';
+
+  // resuse the edit template to prevent map embedding
+  static embedded = GeoSearchPointEditTemplate;
+}
+
 export class Route extends CardDef {
   static displayName = 'Route';
   static prefersWideFormat = true;
 
   @field routeName = contains(StringField);
   @field coordinates = containsMany(CoordinateField);
-  @field mapConfig = contains(MapConfigField);
+  @field mapConfig = contains(LeafletMapConfigField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Route) {

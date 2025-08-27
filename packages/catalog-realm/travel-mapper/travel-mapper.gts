@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { MapRender, type Coordinate } from '../components/map-render';
 import { Route } from '../route/route';
-import { MapConfigField } from './fields/map-config-field';
+import { LeafletMapConfigField } from '../fields/leaflet-map-config-field';
 
 class AtomTemplate extends Component<typeof Routes> {
   <template>
@@ -494,12 +494,12 @@ class EmbeddedTemplate extends Component<typeof Routes> {
   </template>
 }
 
-export class Routes extends CardDef {
-  static displayName = 'Routes';
+export class TravelMapper extends CardDef {
+  static displayName = 'Travel Mapper';
   static prefersWideFormat = true;
 
   @field routes = linksToMany(Route);
-  @field mapConfig = contains(MapConfigField);
+  @field mapConfig = contains(LeafletMapConfigField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Routes) {
