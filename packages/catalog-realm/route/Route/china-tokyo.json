@@ -1,0 +1,42 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Route",
+        "module": "../route"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "mapConfig": {
+        "tileserverUrl": ""
+      },
+      "routeName": "China–Tokyo",
+      "coordinates": [
+        {
+          "searchKey": "China",
+          "lat": 35.000074,
+          "lon": 104.999927
+        },
+        {
+          "searchKey": "Tokyo",
+          "lat": 35.6768601,
+          "lon": 139.7638947
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
