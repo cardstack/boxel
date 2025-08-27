@@ -232,8 +232,10 @@ export default class SearchSheet extends Component<Signature> {
         <IconButton
           class='open-search-field'
           @icon={{IconSearch}}
-          @width='24'
+          @width='18'
           @height='24'
+          @round={{true}}
+          @variant='primary-dark'
           {{on 'click' @onFocus}}
           data-test-open-search-field
         />
@@ -405,13 +407,7 @@ export default class SearchSheet extends Component<Signature> {
       .prompt .search-sheet-content {
         overflow-x: auto;
       }
-      .open-search-field {
-        padding: var(--boxel-sp-xs);
-        border-radius: 50%;
-        background-color: var(--boxel-700);
 
-        --icon-color: var(--boxel-highlight);
-      }
       .open-search-field:focus:focus-visible {
         outline-offset: 0;
         outline-width: 2px;

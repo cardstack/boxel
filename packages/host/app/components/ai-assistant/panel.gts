@@ -301,6 +301,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         --boxel-button-min-height: 0;
         --boxel-loading-indicator-size: 16px;
 
+        border: none;
         border-radius: var(--boxel-border-radius-xs);
         transform: translateY(-1px);
       }
