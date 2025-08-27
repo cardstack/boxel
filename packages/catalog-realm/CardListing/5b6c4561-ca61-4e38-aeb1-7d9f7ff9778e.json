@@ -10,8 +10,7 @@
     "attributes": {
       "name": "Travel Mapper",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/travel-mapper-listing/screenshot_01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/travel-mapper-listing/screenshot_02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/travel-mapper-listing/screenshot_01.png"
       ],
       "summary": "A comprehensive application for managing and organizing travel routes between multiple destinations.",
       "cardInfo": {
