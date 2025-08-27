@@ -11,7 +11,7 @@ import { MapRender, type Coordinate } from '../components/map-render';
 import { Route } from '../route/route';
 import { LeafletMapConfigField } from '../fields/leaflet-map-config-field';
 
-class AtomTemplate extends Component<typeof Routes> {
+class AtomTemplate extends Component<typeof TravelMapper> {
   <template>
     <div class='routes-display'>
       <MapIcon class='map-icon' />
@@ -55,7 +55,7 @@ class AtomTemplate extends Component<typeof Routes> {
   </template>
 }
 
-class IsolatedTemplate extends Component<typeof Routes> {
+class IsolatedTemplate extends Component<typeof TravelMapper> {
   get allRouteCoordinates(): Coordinate[] {
     const allCoordinates: Coordinate[] = [];
 
@@ -311,7 +311,7 @@ class IsolatedTemplate extends Component<typeof Routes> {
   </template>
 }
 
-class EmbeddedTemplate extends Component<typeof Routes> {
+class EmbeddedTemplate extends Component<typeof TravelMapper> {
   get allRouteCoordinates(): Coordinate[] {
     const allCoordinates: Coordinate[] = [];
 
