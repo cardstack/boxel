@@ -26,7 +26,10 @@
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
-      "*": ["types/*"]
+      "@cardstack/host/*": ["../host/app/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
+      "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
+      "*": ["types/*", "../host/types/*"]
     }
   },
   "glint": {
@@ -39,5 +42,6 @@
         "../boxel-ui/addon/**"
       ]
     }
-  }
+  },
+  "include": ["../host/types/**/*"]
 }

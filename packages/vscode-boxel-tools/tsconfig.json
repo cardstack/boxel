@@ -16,12 +16,20 @@
       "babel-plugin-ember-template-compilation": [
         "node_modules/babel-plugin-ember-template-compilation/*"
       ],
-      "*": ["types/*"]
+      "@cardstack/host/*": ["../host/app/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
+      "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
+      "*": ["types/*", "../host/types/*"]
     }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]
   },
-  "include": ["../base/**/*", "./src/**/*", "../runtime-common/**/*"],
+  "include": [
+    "../base/**/*",
+    "./src/**/*",
+    "../runtime-common/**/*",
+    "../host/types/**/*"
+  ],
   "exclude": ["node_modules", ".vscode-test"]
 }

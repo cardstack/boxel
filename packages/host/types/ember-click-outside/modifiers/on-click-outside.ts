@@ -1,6 +1,5 @@
+import Modifier from 'ember-modifier';
 declare module 'ember-click-outside/modifiers/on-click-outside' {
-  import Modifier from 'ember-modifier';
-
   type Signature = {
     Args: {
       Named: {

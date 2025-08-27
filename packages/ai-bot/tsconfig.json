@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "target": "es2023",
-    "lib": ["es2023", "dom"],
     "allowJs": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
@@ -28,7 +27,10 @@
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
-      "*": ["types/*"]
+      "@cardstack/host/*": ["../host/app/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
+      "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
+      "*": ["types/*", "../host/types/*"]
     }
   },
   "glint": {
@@ -37,6 +39,11 @@
       "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
     }
   },
-  "include": ["../base/**/*", "./**/*", "../runtime-common/types/*"],
+  "include": [
+    "../base/**/*",
+    "./**/*",
+    "../runtime-common/types/*",
+    "../host/types/**/*"
+  ],
   "exclude": ["../base/**/__boxel/**"]
 }
