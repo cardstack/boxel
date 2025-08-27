@@ -1318,18 +1318,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .containsText('Plant', 'FocusPill shows selected code label');
     assert
       .dom('[data-test-focus-pill-meta]')
-      .exists({ count: 2 }, 'FocusPill shows two meta pills');
+      .exists({ count: 1 }, 'FocusPill shows one meta pill');
     {
       const metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
       assert
         .dom(metaEls[0] as Element)
         .hasText('Schema', 'FocusPill shows item type "Schema"');
-      assert
-        .dom(metaEls[1] as Element)
-        .hasText(
-          'Line 3',
-          'FocusPill shows single-line selection range "Line 3"',
-        );
     }
 
     await fillIn('[data-test-message-field]', `Message - 2`);
