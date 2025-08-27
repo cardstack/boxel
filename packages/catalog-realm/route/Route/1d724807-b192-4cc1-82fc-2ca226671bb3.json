@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "Route",
-        "module": "../route/route"
+        "module": "../route"
       }
     },
     "type": "card",
@@ -15,8 +15,7 @@
         "thumbnailURL": null
       },
       "mapConfig": {
-        "tileserverUrl": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        "disableMapClick": false
+        "tileserverUrl": ""
       },
       "routeName": null,
       "coordinates": [

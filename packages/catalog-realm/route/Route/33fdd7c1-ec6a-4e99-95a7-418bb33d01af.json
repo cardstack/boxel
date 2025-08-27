@@ -15,8 +15,7 @@
         "thumbnailURL": null
       },
       "mapConfig": {
-        "tileserverUrl": "",
-        "disableMapClick": true
+        "tileserverUrl": ""
       },
       "routeName": "China–Tokyo",
       "coordinates": [
@@ -24,11 +23,6 @@
           "searchKey": "China",
           "lat": 35.000074,
           "lon": 104.999927
-        },
-        {
-          "searchKey": "Tokyo",
-          "lat": 35.6768601,
-          "lon": 139.7638947
         }
       ]
     },

@@ -1,22 +1,15 @@
 import { Component, FieldDef } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
 import { contains, field } from 'https://cardstack.com/base/card-api';
 
 class AtomTemplate extends Component<typeof MapConfigField> {
   get displayValue() {
     const tileserverUrl = this.args.model?.tileserverUrl;
-    const disableMapClick = this.args.model?.disableMapClick;
 
     if (tileserverUrl) {
       return `Custom tileserver: ${tileserverUrl}`;
-    }
-
-    if (disableMapClick) {
-      return 'Map clicks disabled';
     }
 
     return 'Default map settings';
@@ -49,22 +42,10 @@ class EditTemplate extends Component<typeof MapConfigField> {
     return this.args.model?.tileserverUrl || '';
   }
 
-  get disableMapClickValue() {
-    return this.args.model?.disableMapClick || false;
-  }
-
   @action
   updateTileserverUrl(value: string) {
     if (this.args.model) {
       this.args.model.tileserverUrl = value || undefined;
-    }
-  }
-
-  @action
-  updateDisableMapClick(event: Event) {
-    if (this.args.model) {
-      const target = event.target as HTMLInputElement;
-      this.args.model.disableMapClick = target.checked;
     }
   }
 
@@ -87,23 +68,6 @@ class EditTemplate extends Component<typeof MapConfigField> {
         />
         <div class='field-help'>
           Leave empty to use default OpenStreetMap tiles
-        </div>
-      </div>
-
-      <div class='field-group'>
-        <label class='field-label'>Map Behavior</label>
-        <div class='checkbox-group'>
-          <label class='checkbox-label'>
-            <input
-              type='checkbox'
-              checked={{this.disableMapClickValue}}
-              {{on 'change' this.updateDisableMapClick}}
-            />
-            <span class='checkbox-text'>Disable map click events</span>
-          </label>
-        </div>
-        <div class='field-help'>
-          When enabled, clicking on the map won't trigger events
         </div>
       </div>
     </div>
@@ -182,7 +146,6 @@ export class MapConfigField extends FieldDef {
   static displayName = 'Map Configuration';
 
   @field tileserverUrl = contains(StringField);
-  @field disableMapClick = contains(BooleanField);
 
   static atom = AtomTemplate;
   static embedded = EditTemplate;

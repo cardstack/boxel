@@ -13,6 +13,9 @@
         "title": null,
         "description": null,
         "thumbnailURL": null
+      },
+      "mapConfig": {
+        "tileserverUrl": null
       }
     },
     "relationships": {
