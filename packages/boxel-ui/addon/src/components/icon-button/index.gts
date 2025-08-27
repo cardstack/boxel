@@ -60,6 +60,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
           --boxel-icon-button-background,
           var(--boxel-button-color)
         );
+        border-radius: var(--boxel-border-radius);
         color: var(--boxel-icon-button-color, var(--boxel-button-text-color));
         z-index: 0;
         overflow: hidden;
@@ -70,10 +71,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
 
       .kind-default {
         background: var(--boxel-icon-button-background, none);
-        color: var(
-          --boxel-icon-button-color,
-          var(--foreground, var(--boxel-dark))
-        );
+        color: var(--boxel-icon-button-color, inherit);
         border: none;
       }
       .kind-default:disabled {
@@ -81,13 +79,13 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
       }
 
       .kind-primary-dark:not(:disabled) {
-        --boxel-button-color: var(--primary-foreground, var(--boxel-dark));
+        --boxel-button-color: var(--primary-foreground, var(--boxel-700));
         --boxel-button-text-color: var(--primary, var(--boxel-highlight));
       }
       .kind-primary-dark:not(:disabled):hover {
         --boxel-button-color: color-mix(
           in oklab,
-          var(--primary-foreground, var(--boxel-dark)) 85%,
+          var(--primary-foreground, var(--boxel-700)) 85%,
           transparent
         );
       }
