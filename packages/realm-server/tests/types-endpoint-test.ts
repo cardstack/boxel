@@ -124,6 +124,15 @@ module(basename(__filename), function () {
         data: [
           {
             type: 'card-type-summary',
+            id: 'http://127.0.0.1:4444/family_photo_card/FamilyPhotoCard',
+            attributes: {
+              displayName: 'Family Photo Card',
+              total: 2,
+              iconHTML,
+            },
+          },
+          {
+            type: 'card-type-summary',
             id: `${testRealm.url}friend/Friend`,
             attributes: {
               displayName: 'Friend',
@@ -155,6 +164,15 @@ module(basename(__filename), function () {
             attributes: {
               displayName: 'Person',
               total: 3,
+              iconHTML,
+            },
+          },
+          {
+            type: 'card-type-summary',
+            id: 'http://127.0.0.1:4444/person-with-error/PersonCard',
+            attributes: {
+              displayName: 'Person',
+              total: 4,
               iconHTML,
             },
           },

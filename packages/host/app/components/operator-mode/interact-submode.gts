@@ -244,14 +244,14 @@ export default class InteractSubmode extends Component {
     // otherwise we delegate to each stack to handle this
     let { hasDifferingBackgroundURLs } = this.stackBackgroundsState;
     if (this.stackBackgroundsState.backgroundImageURLs.length === 0) {
-      return false;
+      return htmlSafe('');
     }
     if (!hasDifferingBackgroundURLs) {
       return htmlSafe(
         `background-image: url(${this.stackBackgroundsState.backgroundImageURLs[0]});`,
       );
     }
-    return false;
+    return htmlSafe('');
   }
 
   private findCardInStack(card: CardDef, stackIndex: number): StackItem {
