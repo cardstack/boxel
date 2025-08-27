@@ -502,7 +502,7 @@ export class TravelMapper extends CardDef {
   @field mapConfig = contains(LeafletMapConfigField);
 
   @field title = contains(StringField, {
-    computeVia: function (this: Routes) {
+    computeVia: function (this: TravelMapper) {
       const routes = this.routes || [];
       if (routes.length === 0) {
         return 'Empty Routes Collection';
