@@ -509,4 +509,58 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(1)')
       .containsText('Cardy Stackington Jr. III');
   });
+
+  test(`normalizes realm URLs that are provided with a missing trailing slash`, async function (assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.firstName': 'Cardy',
+        },
+      },
+      sort: [
+        {
+          by: 'author.lastName',
+          on: { module: `${testRealmURL}book`, name: 'Book' },
+        },
+      ],
+    };
+    let realms = [testRealmURL.replace(/\/$/, '')];
+
+    await render(<template>
+      <PrerenderedCardSearch
+        @query={{query}}
+        @format='fitted'
+        @realms={{realms}}
+      >
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          {{#each cards as |card|}}
+            <card.component />
+          {{/each}}
+        </:response>
+      </PrerenderedCardSearch>
+    </template>);
+    await waitFor('#ember-testing > [data-test-boxel-card-container]');
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]')
+      .exists({ count: 2 });
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(1)')
+      .containsText('Card 2 by Cardy Jones');
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(2)')
+      .containsText('Cardy Stackington Jr. III');
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container] .book')
+      .hasStyle({ backgroundColor: 'rgb(255, 255, 0)' });
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container] .author')
+      .hasStyle({ color: 'rgb(0, 0, 255)' });
+  });
 });
