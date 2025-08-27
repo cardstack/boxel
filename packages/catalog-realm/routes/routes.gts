@@ -9,6 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { MapRender, type Coordinate } from '../components/map-render';
 import { Route } from '../route/route';
+import { MapConfigField } from './fields/map-config-field';
 
 class AtomTemplate extends Component<typeof Routes> {
   <template>
@@ -128,12 +129,16 @@ class IsolatedTemplate extends Component<typeof Routes> {
           </div>
           <div class='fields-container'>
             <@fields.routes @format='edit' />
+            <@fields.mapConfig @format='edit' />
           </div>
         </div>
 
         <div class='map-panel'>
           {{#if this.hasValidRoutes}}
-            <MapRender @routes={{this.routesForMap}} />
+            <MapRender
+              @routes={{this.routesForMap}}
+              @mapConfig={{@model.mapConfig}}
+            />
           {{else}}
             <div class='map-placeholder'>
               <div class='placeholder-content'>
@@ -209,6 +214,10 @@ class IsolatedTemplate extends Component<typeof Routes> {
         padding: var(--boxel-sp-xl);
         overflow-y: auto;
         background: var(--boxel-light);
+      }
+
+      .fields-container > * + * {
+        margin-top: var(--boxel-sp);
       }
 
       .routes-section {
@@ -384,7 +393,10 @@ class EmbeddedTemplate extends Component<typeof Routes> {
             </div>
           </div>
 
-          <MapRender @routes={{this.routesForMap}} />
+          <MapRender
+            @routes={{this.routesForMap}}
+            @mapConfig={{@model.mapConfig}}
+          />
         </div>
       {{else}}
         <div class='routes-placeholder'>
@@ -487,6 +499,7 @@ export class Routes extends CardDef {
   static prefersWideFormat = true;
 
   @field routes = linksToMany(Route);
+  @field mapConfig = contains(MapConfigField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Routes) {
