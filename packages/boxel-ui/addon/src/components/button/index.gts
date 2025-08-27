@@ -219,14 +219,14 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       *
       */
       .kind-default {
-        --boxel-button-color: var(--background, transparent);
+        --boxel-button-color: var(--background, var(--boxel-light));
         --boxel-button-text-color: var(--foreground, var(--boxel-dark));
         --boxel-button-border: 1px solid var(--border, var(--boxel-400));
       }
       .kind-default:not(:disabled):hover,
       .kind-default:not(:disabled):active {
-        --boxel-button-color: var(--accent);
-        --boxel-button-text-color: var(--accent-foreground);
+        --boxel-button-color: var(--accent, var(--boxel-light));
+        --boxel-button-text-color: var(--accent-foreground, var(--boxel-dark));
         --boxel-button-border: 1px solid var(--border, var(--boxel-dark));
       }
 

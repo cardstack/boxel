@@ -21,7 +21,7 @@ interface ToggleButtonSignature {
 const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
   <Button
     @disabled={{@disabled}}
-    @kind={{if @isActive 'primary-dark' 'secondary'}}
+    @kind={{if @isActive 'primary-dark'}}
     @size='extra-small'
     class={{cn 'toggle-button' active=@isActive}}
     ...attributes
@@ -40,28 +40,17 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
   </Button>
   <style scoped>
     .toggle-button {
-      --boxel-button-border: 1px solid var(--boxel-400);
       --boxel-button-font: 600 var(--boxel-font-xs);
       --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       --boxel-button-min-width: 6rem;
       --boxel-button-padding: 0;
-      --boxel-button-color: var(--boxel-light);
-      border-radius: var(--boxel-border-radius);
+      border-radius: var(--boxel-border-radius-sm);
       flex: 1;
       justify-content: space-between;
       white-space: nowrap;
     }
 
-    .toggle-button:disabled {
-      --boxel-button-color: var(--boxel-button-border-color);
-    }
-
-    .toggle-button:hover:not(:disabled) {
-      border-color: var(--boxel-dark);
-    }
     .toggle-button.active {
-      border-color: var(--boxel-dark);
-      --boxel-button-color: var(--boxel-dark);
       --boxel-button-text-color: var(--boxel-highlight);
     }
 

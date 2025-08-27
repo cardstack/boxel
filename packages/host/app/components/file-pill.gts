@@ -81,7 +81,11 @@ export default class FilePill extends Component<FilePillSignature> {
       ...attributes
     >
       <:iconLeft>
-        <FileCode style={{cssVar icon-color='#0031ff'}} />
+        <FileCode
+          width='18'
+          height='18'
+          style={{cssVar icon-color='#0031ff'}}
+        />
       </:iconLeft>
       <:default>
         <div class='file-content' title={{@file.name}}>
