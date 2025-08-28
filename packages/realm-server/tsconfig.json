@@ -26,8 +26,7 @@
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
-      "*": ["types/*"]
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
     },
     "types": ["@cardstack/local-types"]
   },
