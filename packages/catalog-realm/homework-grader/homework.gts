@@ -1,4 +1,5 @@
 import { add } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import {
   contains,
   containsMany,
@@ -17,6 +18,7 @@ import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
+import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
 
 class GradeField extends FieldDef {
   @field overallGrade = contains(StringField);
@@ -326,10 +328,15 @@ class HomeworkIsolated extends Component<typeof Homework> {
         skillCards: [this.args.model.gradingSkill],
         attachedCards: [this.args.model as CardDef],
         prompt: 'Please grade this homework assignment.',
-        requireCommandCall: true,
       });
 
       this.roomId = result.roomId;
+
+      let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
+      await setActiveLLMCommand.execute({
+        roomId: this.roomId,
+        mode: 'act',
+      });
     }
 
     return this.roomId;
@@ -369,18 +376,19 @@ class HomeworkIsolated extends Component<typeof Homework> {
       </div>
       <div class='header-actions'>
         {{#if @model.gradingSkill}}
-          <button
-            type='button'
+          <BoxelButton
+            @kind='primary-dark'
+            @size='base'
+            @loading={{this.isGrading}}
+            @disabled={{this.isGrading}}
             {{on 'click' this.grade}}
-            disabled={{this.isGrading}}
-            class='grade-button'
           >
             {{if
               this.isGrading
               '⏳ Grading...'
               (if this.hasGrade '🔄 Re-grade' '🎯 Grade Homework')
             }}
-          </button>
+          </BoxelButton>
         {{/if}}
       </div>
     </header>
@@ -484,35 +492,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
         display: flex;
         align-items: center;
         flex-shrink: 0;
-      }
-
-      .grade-button {
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        border: none;
-        color: white;
-        padding: 0.75rem 1.5rem;
-        font-size: 0.875rem;
-        font-weight: 500;
-        cursor: pointer;
-        border-radius: 0.75rem;
-        box-shadow:
-          0 4px 6px -1px rgba(0, 0, 0, 0.1),
-          0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        transition: all 0.2s ease-in-out;
-      }
-
-      .grade-button:hover:not(:disabled) {
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-        box-shadow:
-          0 6px 8px -1px rgba(0, 0, 0, 0.15),
-          0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        transform: translateY(-1px);
-      }
-
-      .grade-button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none;
       }
 
       .instructions {
