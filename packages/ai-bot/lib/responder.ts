@@ -1,5 +1,5 @@
 import { logger } from '@cardstack/runtime-common';
-import { isCommandOrCodePatchResult, type MatrixClient } from './matrix/util';
+import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -12,6 +12,7 @@ import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
+import { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
@@ -139,7 +140,12 @@ export class Responder {
   }
 
   async onError(error: OpenAIError | string) {
-    Sentry.captureException(error);
+    Sentry.captureException(error, {
+      extra: {
+        roomId: this.matrixResponsePublisher.roomId,
+        agentId: this.matrixResponsePublisher.agentId,
+      },
+    });
     if (this.responseState.isStreamingFinished) {
       return;
     }

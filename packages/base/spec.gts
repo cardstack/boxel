@@ -396,12 +396,6 @@ class Fitted extends Component<typeof Spec> {
           white-space: nowrap;
           overflow: hidden;
         }
-        :deep(.spec-tag-pill) {
-          height: max-content;
-        }
-        :deep(.spec-tag-pill .icon) {
-          width: 18px;
-        }
       }
 
       /* Aspect Ratio <= 1.0 (Vertical) */
@@ -1001,9 +995,9 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   }
   <template>
     {{#if this.icon}}
-      <Pill class='spec-tag-pill' ...attributes>
+      <Pill @variant='muted' class='spec-tag-pill' ...attributes>
         <:iconLeft>
-          {{this.icon}}
+          <this.icon width='18px' height='18px' />
         </:iconLeft>
         <:default>
           {{@specType}}
@@ -1015,6 +1009,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
       .spec-tag-pill {
         --pill-font: 500 var(--boxel-font-xs);
         --pill-background-color: var(--boxel-200);
+        --pill-icon-size: 18px;
         word-break: initial;
         text-transform: uppercase;
       }

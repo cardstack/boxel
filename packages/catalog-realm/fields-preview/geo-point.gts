@@ -1,15 +1,8 @@
 import { GeoPointField } from '../fields/geo-point';
 
-import {
-  CardDef,
-  field,
-  contains,
-  type BaseDefConstructor,
-  type Field,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
-import { getField } from '@cardstack/runtime-common';
 
 export class GeoPointPreview extends CardDef {
   @field geoPoint = contains(GeoPointField);
@@ -18,16 +11,14 @@ export class GeoPointPreview extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <section class='fields'>
-        <FieldContainer
-          @label='Geo Point'
-          @icon={{this.getFieldIcon 'geoPoint'}}
-        >
-          <FieldContainer @vertical={{true}} @label='Atom'>
-            <@fields.geoPoint @format='atom' />
-          </FieldContainer>
-          <FieldContainer @vertical={{true}} @label='Embedded'>
-            <@fields.geoPoint @format='embedded' />
-          </FieldContainer>
+        <FieldContainer @vertical={{true}} @label='Edit'>
+          <@fields.geoPoint @format='edit' />
+        </FieldContainer>
+        <FieldContainer @vertical={{true}} @label='Atom'>
+          <@fields.geoPoint @format='atom' />
+        </FieldContainer>
+        <FieldContainer @vertical={{true}} @label='Embedded'>
+          <@fields.geoPoint @format='embedded' />
         </FieldContainer>
       </section>
 
@@ -39,21 +30,5 @@ export class GeoPointPreview extends CardDef {
         }
       </style>
     </template>
-
-    getFieldIcon = (key: string) => {
-      const field: Field<BaseDefConstructor> | undefined = getField(
-        this.args.model.constructor!,
-        key,
-      );
-      let fieldInstance = field?.card;
-      return fieldInstance?.icon;
-    };
-
-    updateCoordinates = (lat: number, lon: number) => {
-      if (this.args.model?.geoPoint) {
-        this.args.model.geoPoint.lat = lat;
-        this.args.model.geoPoint.lon = lon;
-      }
-    };
   };
 }

@@ -12,18 +12,20 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { MapRender } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoPointField> {
-  get latValue() {
-    return this.args.model?.lat ?? 'N/A';
-  }
+  get displayValue() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
 
-  get lonValue() {
-    return this.args.model?.lon ?? 'N/A';
+    if (lat != null && lon != null) {
+      return `${lat}, ${lon}`;
+    }
+    return 'No coordinates';
   }
 
   <template>
     <div class='geo-point-display'>
       <MapIcon class='map-icon' />
-      <span class='coordinate'>{{this.latValue}}, {{this.lonValue}}</span>
+      <span class='coordinate'>{{this.displayValue}}</span>
     </div>
 
     <style scoped>
@@ -44,26 +46,32 @@ class AtomTemplate extends Component<typeof GeoPointField> {
 }
 
 class EmbeddedTemplate extends Component<typeof GeoPointField> {
-  get latValue() {
-    return this.args.model?.lat ?? 'N/A';
+  get displayValue() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
+
+    if (lat != null && lon != null) {
+      return `${lat}, ${lon}`;
+    }
+    return 'No coordinates';
   }
 
-  get lonValue() {
-    return this.args.model?.lon ?? 'N/A';
+  get coordinates() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
+
+    if (lat != null && lon != null) {
+      return [{ lat, lng: lon }];
+    }
+    return [];
   }
 
-  get coordinate() {
-    const lat = this.args.model?.lat ?? 0;
-    const lon = this.args.model?.lon ?? 0;
-    return { lat, lng: lon };
-  }
-
-  get lonNumber() {
-    return this.args.model?.lon ?? 0;
+  get hasValidCoordinates() {
+    return this.args.model?.lat != null && this.args.model?.lon != null;
   }
 
   @action
-  updatecoordinate(coordinate: { lat: number; lng: number }) {
+  updateCoordinate(coordinate: { lat: number; lng: number }) {
     if (this.args.model) {
       this.args.model.lat = coordinate.lat;
       this.args.model.lon = coordinate.lng;
@@ -71,23 +79,72 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
   }
 
   <template>
-    <div class='coordinate-section'>
-      <MapIcon class='map-icon' />
-      <span class='coordinate'>{{this.latValue}}, {{this.lonValue}}</span>
-    </div>
-    <div class='map-section'>
-      <MapRender
-        @coordinate={{this.coordinate}}
-        @onMapClickUpdate={{this.updatecoordinate}}
-      />
+    <div class='embedded-template'>
+      {{#if this.hasValidCoordinates}}
+        <div class='geo-preview'>
+          <div class='geo-header'>
+            <MapIcon class='map-icon' />
+            <div class='geo-info'>
+              <h3 class='geo-title'>Location</h3>
+              <span class='coordinate'>{{this.displayValue}}</span>
+            </div>
+          </div>
+
+          <div class='map-container'>
+            <MapRender
+              @coordinates={{this.coordinates}}
+              @onMapClick={{this.updateCoordinate}}
+            />
+          </div>
+        </div>
+      {{else}}
+        <div class='geo-placeholder'>
+          <div class='placeholder-text'>
+            <div class='placeholder-icon'>📍</div>
+            <div class='placeholder-title'>Add Coordinates</div>
+            <div class='placeholder-description'>
+              Enter latitude and longitude values to see the location on the map
+            </div>
+          </div>
+        </div>
+      {{/if}}
     </div>
 
     <style scoped>
-      .coordinate-section {
-        display: inline-flex;
+      .embedded-template {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-md);
+      }
+
+      .geo-preview {
+        overflow: hidden;
+        background: var(--boxel-surface-secondary);
+        border: 1px solid var(--boxel-border-color);
+      }
+
+      .geo-header {
+        display: flex;
         align-items: flex-start;
         gap: var(--boxel-sp-xxs);
-        flex-shrink: 0;
+        padding: var(--boxel-sp-sm);
+        background: var(--boxel-surface);
+        border-bottom: 1px solid var(--boxel-border-color);
+      }
+
+      .geo-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+        flex: 1;
+      }
+
+      .geo-title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        line-height: normal;
+        color: var(--boxel-text-color);
       }
 
       .map-icon {
@@ -100,18 +157,50 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
       .coordinate {
         font-weight: 500;
         color: var(--boxel-text-color);
+        font-size: 14px;
       }
 
-      .map-section {
+      .map-container {
         flex: 1;
         width: 100%;
         height: 100%;
-        margin-top: var(--boxel-sp-sm);
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         background: var(--boxel-surface-secondary);
         overflow: hidden;
         position: relative;
+      }
+
+      .geo-placeholder {
+        height: 250px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--boxel-surface-secondary);
+        border: 2px dashed var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius);
+      }
+
+      .placeholder-text {
+        text-align: center;
+        color: var(--boxel-text-muted);
+      }
+
+      .placeholder-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+      }
+
+      .placeholder-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: var(--boxel-text-color);
+      }
+
+      .placeholder-description {
+        font-size: 14px;
+        line-height: 1.4;
       }
     </style>
   </template>

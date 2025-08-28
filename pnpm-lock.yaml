@@ -88,11 +88,11 @@ catalogs:
       specifier: ^2.0.1
       version: 2.0.1
     '@percy/cli':
-      specifier: ^1.30.10
-      version: 1.30.10
+      specifier: ^1.31.1
+      version: 1.31.1
     '@percy/ember':
-      specifier: ^4.2.0
-      version: 4.2.0
+      specifier: ^5.0.0
+      version: 5.0.0
     '@playwright/test':
       specifier: ^1.54.0
       version: 1.54.0
@@ -1591,6 +1591,9 @@ importers:
       '@glint/environment-ember-loose':
         specifier: 1.3.0
         version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
+      ember-basic-dropdown:
+        specifier: 8.0.4
+        version: 8.0.4(patch_hash=19b0fc5d4bd8b9aa296c4065fa5e33bdbb965db0b277810b596eacd0b9e2f428)(2ae94f35bd5e6e6dafa095817afdf7bd)
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -1734,8 +1737,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
       ember-freestyle:
-        specifier: ^0.20.0
-        version: 0.20.0(@babel/core@7.26.10)(@ember/string@3.1.1)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6)
+        specifier: ^0.22.0
+        version: 0.22.0(@babel/core@7.26.10)(@ember/string@3.1.1)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6)
       ember-load-initializers:
         specifier: ^2.1.2
         version: 2.1.2(@babel/core@7.26.10)
@@ -1754,6 +1757,9 @@ importers:
       ember-resources:
         specifier: 'catalog:'
         version: 7.0.4(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)
+      ember-route-template:
+        specifier: ^1.0.3
+        version: 1.0.3
       ember-source:
         specifier: ^5.4.0
         version: 5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)
@@ -2050,10 +2056,10 @@ importers:
         version: 1.3.0
       '@percy/cli':
         specifier: 'catalog:'
-        version: 1.30.10(typescript@5.1.6)
+        version: 1.31.1(typescript@5.1.6)
       '@percy/ember':
         specifier: 'catalog:'
-        version: 4.2.0
+        version: 5.0.0(@babel/core@7.26.10)(@glint/template@1.3.0)(webpack@5.99.6)
       '@simple-dom/interface':
         specifier: 'catalog:'
         version: 1.4.0
@@ -2497,7 +2503,7 @@ importers:
         version: 8.11.5
       ts-node:
         specifier: ^10.9.1
-        version: 10.9.2(@types/node@18.19.54)(typescript@5.8.3)
+        version: 10.9.2(@types/node@18.19.54)(typescript@5.1.6)
     devDependencies:
       concurrently:
         specifier: 'catalog:'
@@ -2872,6 +2878,12 @@ importers:
       marked:
         specifier: 'catalog:'
         version: 12.0.1
+      matrix-js-sdk:
+        specifier: 'catalog:'
+        version: 31.0.0(patch_hash=e48a62d3beba2bd8e529374a29cd1b08fa45c4e8b1d6bbe0ec26d0abc3b42dca)
+      openai:
+        specifier: 'catalog:'
+        version: 5.12.2(patch_hash=6833f1bcf56cde16edb25881777c31d2745994c6ea992d1e2051d1248d213449)(ws@8.18.2)(zod@3.24.4)
       pluralize:
         specifier: 'catalog:'
         version: 8.0.0
@@ -5059,77 +5071,81 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
 
-  '@percy/cli-app@1.30.10':
-    resolution: {integrity: sha512-XL1vW4A2C74DOgXx6kilxUxGVtAgQDik+J1Gyr0SF324cpW6fIDB55ktLSvbv8z4qRqUIhEEWyOAWGpngwv8og==}
+  '@percy/cli-app@1.31.1':
+    resolution: {integrity: sha512-Z/15B6SmorHNTZWtVkxFYKpW9v5Guz+gOWV3tgzW7c062JpiXdQOhhFoH30e8hUP1bK3NCHLnD4Vt++SE9ORZQ==}
     engines: {node: '>=14'}
 
-  '@percy/cli-build@1.30.10':
-    resolution: {integrity: sha512-mMj1asBNW8oYavMuMtg3TU72+UoCg/8eoKshZ8jb4i9Tg/nWG1q9wfbS9/lSdenKPjQuqzfpQ8TB/Q/UI2cajA==}
+  '@percy/cli-build@1.31.1':
+    resolution: {integrity: sha512-by0HU5WOO8gfRsYs8d7ARinX50/9F9k4goBP7S1rMVJYVh3VBqngjZaMQ+fizuDlHoSL/hUPpMZEJgAPFtczQg==}
     engines: {node: '>=14'}
 
-  '@percy/cli-command@1.30.10':
-    resolution: {integrity: sha512-xvTZBTpjQMxihEVI3bEjIfBRjZ5momxFeFgLUFQUhQZXPtNp3o+vWFI1CCltjkK2JAXK/q883ozoeiuKgoacWg==}
-    engines: {node: '>=14'}
-    hasBin: true
-
-  '@percy/cli-config@1.30.10':
-    resolution: {integrity: sha512-8xb4WhC67qiX6lRmpKnJhhvJiYVvTC4bQ9/BZYUpk6r3Ftq8ViOe0sySVj3Ms0vF1IwPn2t0E1osqKOvtKumFg==}
-    engines: {node: '>=14'}
-
-  '@percy/cli-exec@1.30.10':
-    resolution: {integrity: sha512-NV2KqC15Y9e0PyCqQrt01QuOT7sIXhs3yrovuVvbutqNL2+Ol25eHGoNJG+kMo9jSJM36ZWmD9am4eX6L2VBaQ==}
-    engines: {node: '>=14'}
-
-  '@percy/cli-snapshot@1.30.10':
-    resolution: {integrity: sha512-xlrJj9VvoWLuWA0wjmY2cvvtOvzzPzGuHET14zUOhM7leBifGI8Gz6wNGtXKblKAtJUg+0dYPBZd0vNO6ZVIeA==}
-    engines: {node: '>=14'}
-
-  '@percy/cli-upload@1.30.10':
-    resolution: {integrity: sha512-6+aYDC3eZk+P7PpxftKfu/sSXyb0QpN4Rdtynsy5jt9RobrEL7q7YyZIbeksZm/WtgYszIa8yYQP3i5LUvfZdQ==}
-    engines: {node: '>=14'}
-
-  '@percy/cli@1.30.10':
-    resolution: {integrity: sha512-fKASLI1Qj38v64Vb6VktRsW2MZnxQ5JBDGPPk+sP/bSiTZ0D0GC5pz2s+tQaGD7wReYNy9JKzSujrkJqFiBbSg==}
+  '@percy/cli-command@1.31.1':
+    resolution: {integrity: sha512-arVQ1/MtcKf+LvpbkoxtAI2X621PEVn5l8mQ82+MJk8DaV7UbebYw8JSoXyiZjWmLyRQCltG79mw8EUYrsoUNA==}
     engines: {node: '>=14'}
     hasBin: true
 
-  '@percy/client@1.30.10':
-    resolution: {integrity: sha512-eIyuiBgiv5e+x8B14bOKkl38cYjTud3OYjN4Uo5uqo/raBaFlI24aoOMtSyq0TVKBNgPVEgmNAgQxj+P9fHFtA==}
+  '@percy/cli-config@1.31.1':
+    resolution: {integrity: sha512-1g0ZXmDQV5hAH4a8D9qFSQoppZcxwsGiUX51wzpgXYQqd4jWL8WzQEgfLaoXES4mNPPLSLHlTvMDNHmo+Z9lXg==}
     engines: {node: '>=14'}
 
-  '@percy/config@1.30.10':
-    resolution: {integrity: sha512-ixzxZ+rwHUCSOxFpAEEsqDfJVnb5mIYfnayGjsaIe1hnMvo/t/K9/npu6JhBGHR/kpaummJQEPCRxEuclN93Ew==}
+  '@percy/cli-exec@1.31.1':
+    resolution: {integrity: sha512-V+zQnkYHsxmD3EytAQsLOD6Xtim5HHRfARZW6xjgKWKHIQaLjRuI7/nJu/bBEgbX2dbcq7UWMfYKQ3QNhTCZjg==}
     engines: {node: '>=14'}
 
-  '@percy/core@1.30.10':
-    resolution: {integrity: sha512-6oZkiOdjy3YqFpZHVX9ZCHJKxslVEE9cgfqXI09Zba4iFKpG9PJ0pHFc/uee89G0uJj82sqIMu8Jgm833NLyMQ==}
+  '@percy/cli-snapshot@1.31.1':
+    resolution: {integrity: sha512-iIVShWZ17fd+ae6mEv6mDb1oIrW/VSn5LPnbtUW17IT1ZKWFfKydbOyA9sXsjkfcouKI6Wl2OCQcoZnEsu/6pQ==}
     engines: {node: '>=14'}
 
-  '@percy/dom@1.30.10':
-    resolution: {integrity: sha512-EJUHmrh6UE8YD3MZ1Hnrc2sTVAlQt2xTC0wWSBDVz2h1/IUvHw5yE7TQHhp615IYOmurI3k8AKjmdI7b70uD7Q==}
-
-  '@percy/ember@4.2.0':
-    resolution: {integrity: sha512-D/WckDD2tQetdn8uq46nQA1rOVgov8jsZG4uN7snAq6SrOpxNxacONg37QPwczmICBc7o/NlipCAUteukmtKzg==}
-    engines: {node: '>= 14'}
-
-  '@percy/env@1.30.10':
-    resolution: {integrity: sha512-kPJsACurTY9/5TZH8xDMDMaz2Yas9SLr0DqlCqIaqBWxikDzdWXUiDWwAIab0Dik5oAFbQAXC7f4V+0MBlZWag==}
+  '@percy/cli-upload@1.31.1':
+    resolution: {integrity: sha512-/A7JB/TxIh5hG/8yJ6xCgBBFGanoi8JLDt7s9YukMRGj6s5HqgS6CPgd09HC//oJfKXtJVwuqZ4rkjr7g8g13g==}
     engines: {node: '>=14'}
 
-  '@percy/logger@1.30.10':
-    resolution: {integrity: sha512-ABSzY/WVI/ePXac73Q6qEUKqUZ1+NJswzbZy/I/fgiBWmkzf4hKIrlD9RQZYmkjLWVESbjKPhZTmH3bntO084Q==}
+  '@percy/cli@1.31.1':
+    resolution: {integrity: sha512-o2O+yExTnA+FLCy5EWjsyms+dNZPBmIECjgByyE4/a8Kf9cYWGnImHwseDgN+xijyRvkn3BgsuLL+Bw7Y4Dv+Q==}
+    engines: {node: '>=14'}
+    hasBin: true
+
+  '@percy/client@1.31.1':
+    resolution: {integrity: sha512-EO4IM/Ldz3qGZFrd8X99ntS2FY/MlFKWhad2p3cW7fOFvex41oZH2c0fdpJBCD+ehiLmFAVJTnNMqMnuhVS81Q==}
     engines: {node: '>=14'}
 
-  '@percy/monitoring@1.30.10':
-    resolution: {integrity: sha512-Iaa6nx1GFc92uZdYHM1EJfyn4aIjm/DWPOp6RbF4eSFZhlpqhvqBQgXvgDLylNNrKmdaXsFIE56BjpJZhamtsQ==}
+  '@percy/config@1.31.1':
+    resolution: {integrity: sha512-PPxtvUHrVOnOFdHgajRyFKuJYKOM05t+jqntTXDMzUod7WRQzR9xdMexC9mzDx+r1+3hl/h6Z3eHuDQMXEZCXw==}
+    engines: {node: '>=14'}
+
+  '@percy/core@1.31.1':
+    resolution: {integrity: sha512-ZFxiN5ANTphaqcsZ8p0x57lsQuWQyaIh5PrtbuZAeBSybq9AuOz9eC9k/Cr+CMsSFYE/92i5O8MK5KsSfreXYQ==}
+    engines: {node: '>=14'}
+
+  '@percy/dom@1.31.1':
+    resolution: {integrity: sha512-JZ3m0/9+SPlKSNdBJXEs3uaIioXnJjvFRBN6cD9Fu+M0yl0mzNNNU+hmXSeNiUq9rvBEpbkkfehPJVKuRy2QPQ==}
+
+  '@percy/ember@5.0.0':
+    resolution: {integrity: sha512-Nod2k3zMUQKnAK29dO9Xp4tdIMUiLrEffntLXjHtQroEq2wqCTeS6gfLLEjV++TgPE0q2ehex/fd2QXzgKFKEA==}
+    engines: {node: '>= 16'}
+
+  '@percy/env@1.31.1':
+    resolution: {integrity: sha512-2Df042p8p0j6DwtYAUQ9nRCXFkpk/JJUvd8xV/S1bmvcD9LTmOzGfEu8kcA8ndDaeMcJJM2b12PNFxjVCEsmog==}
+    engines: {node: '>=14'}
+
+  '@percy/logger@1.31.1':
+    resolution: {integrity: sha512-2QzrW/9Mi0tEQWl+1keCYWRwRocZNaRdmfvhl4VSyYi6fD6zhMSD5oXZroIsxXNRIKfanm4vuKZZqhhlApdPmw==}
+    engines: {node: '>=14'}
+
+  '@percy/monitoring@1.31.1':
+    resolution: {integrity: sha512-oxu6pTwBdyJPF8KPPK8BBHCQmRS3DUy5zOTu9AWwl4wFVqGTeKLrKu5g+5Ig0Ja29k8FXCl/Ugfc4k27AiZKzQ==}
     engines: {node: '>=14'}
 
   '@percy/sdk-utils@1.30.10':
     resolution: {integrity: sha512-EOFm6XDbXIpo1YjF+JWxNCW5TB0ZaqjQfHLtOCmffhHi2T0MCXSAHdNxeTUyADyySzWjD4bKba/PbZwwTVE8Zw==}
     engines: {node: '>=14'}
 
-  '@percy/webdriver-utils@1.30.10':
-    resolution: {integrity: sha512-dTxSa0Dy7SZrXcjzy+kvWFIxBb3n/YAPJWMMX063ZMeAOINx5MhZ+JizOijW0QXXhy/UJAmW+2Q3VB32kj391Q==}
+  '@percy/sdk-utils@1.31.1':
+    resolution: {integrity: sha512-OU+n/TGEPt7ZikJOwau9S0X0bCfKNTxHIry9dX57amL82PysCrzEfcKUJIAf1BTaVqDH4In8GPssjLVhut95Ag==}
+    engines: {node: '>=14'}
+
+  '@percy/webdriver-utils@1.31.1':
+    resolution: {integrity: sha512-oaBL9D+QsP5ftxNW4ZJtlPF2KwCc4Wo0SRaLILqZxehG5IRXKAi0ggH7i4Shmv1Wt/QuYF6MJsdnluJb+s5+Eg==}
     engines: {node: '>=14'}
 
   '@pkgjs/parseargs@0.11.0':
@@ -8174,6 +8190,12 @@ packages:
   ember-freestyle@0.20.0:
     resolution: {integrity: sha512-wbtaqfqqWuVvBvB3say2ixfg/IJ7BH4r/u/15ifuCABVNFz6qSQzWcXs5ULTsKDrnaLBfUKu/pQI12zJ+CcI/w==}
     engines: {node: 14.* || >= 16}
+    peerDependencies:
+      '@ember/string': ^3.1.1
+
+  ember-freestyle@0.22.0:
+    resolution: {integrity: sha512-31u86z5NHknkFHc9/tofiS5Ye5CjMtZxgOyEYHe/kqtM6r/IfyznYDaWt6oE7EuTbcQ7DRbATVgOjI1a8j10RQ==}
+    engines: {node: '>= 18'}
     peerDependencies:
       '@ember/string': ^3.1.1
 
@@ -11643,6 +11665,7 @@ packages:
   puppeteer@24.8.2:
     resolution: {integrity: sha512-Sn6SBPwJ6ASFvQ7knQkR+yG7pcmr4LfXzmoVp3NR0xXyBbPhJa8a8ybtb6fnw1g/DD/2t34//yirubVczko37w==}
     engines: {node: '>=18'}
+    deprecated: < 24.9.0 is no longer supported
     hasBin: true
 
   qs@6.11.0:
@@ -12544,7 +12567,7 @@ packages:
   superagent@8.1.2:
     resolution: {integrity: sha512-6WTxW1EB6yCxV5VFOIPQruWGHqc3yI7hEmZK6h+pyk69Lk/Ut7rLUY6W/ONF2MjBuGjvmMiIpsrVJ2vjrHlslA==}
     engines: {node: '>=6.4.0 <13 || >=14'}
-    deprecated: Please upgrade to superagent v10.2.2+, see release notes at https://github.com/forwardemail/superagent/releases/tag/v10.2.2 - maintenance is supported by Forward Email @ https://forwardemail.net
+    deprecated: Please upgrade to v9.0.0+ as we have fixed a public vulnerability with formidable dependency. Note that v9.0.0+ requires Node.js v14.18.0+. See https://github.com/ladjs/superagent/pull/1800 for insight. This project is supported and maintained by the team at Forward Email @ https://forwardemail.net
 
   supertest@6.2.4:
     resolution: {integrity: sha512-M8xVnCNv+q2T2WXVzxDECvL2695Uv2uUj2O0utxsld/HRyJvOU8W9f1gvsYxSNU4wmIe0/L/ItnpU4iKq0emDA==}
@@ -16050,49 +16073,49 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.26.0(@opentelemetry/api@1.9.0)
 
-  '@percy/cli-app@1.30.10(typescript@5.1.6)':
+  '@percy/cli-app@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/cli-command': 1.30.10(typescript@5.1.6)
-      '@percy/cli-exec': 1.30.10(typescript@5.1.6)
+      '@percy/cli-command': 1.31.1(typescript@5.1.6)
+      '@percy/cli-exec': 1.31.1(typescript@5.1.6)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - typescript
       - utf-8-validate
 
-  '@percy/cli-build@1.30.10(typescript@5.1.6)':
+  '@percy/cli-build@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/cli-command': 1.30.10(typescript@5.1.6)
+      '@percy/cli-command': 1.31.1(typescript@5.1.6)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - typescript
       - utf-8-validate
 
-  '@percy/cli-command@1.30.10(typescript@5.1.6)':
+  '@percy/cli-command@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/config': 1.30.10(typescript@5.1.6)
-      '@percy/core': 1.30.10(typescript@5.1.6)
-      '@percy/logger': 1.30.10
+      '@percy/config': 1.31.1(typescript@5.1.6)
+      '@percy/core': 1.31.1(typescript@5.1.6)
+      '@percy/logger': 1.31.1
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - typescript
       - utf-8-validate
 
-  '@percy/cli-config@1.30.10(typescript@5.1.6)':
+  '@percy/cli-config@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/cli-command': 1.30.10(typescript@5.1.6)
+      '@percy/cli-command': 1.31.1(typescript@5.1.6)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - typescript
       - utf-8-validate
 
-  '@percy/cli-exec@1.30.10(typescript@5.1.6)':
+  '@percy/cli-exec@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/cli-command': 1.30.10(typescript@5.1.6)
-      '@percy/logger': 1.30.10
+      '@percy/cli-command': 1.31.1(typescript@5.1.6)
+      '@percy/logger': 1.31.1
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
@@ -16101,9 +16124,9 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@percy/cli-snapshot@1.30.10(typescript@5.1.6)':
+  '@percy/cli-snapshot@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/cli-command': 1.30.10(typescript@5.1.6)
+      '@percy/cli-command': 1.31.1(typescript@5.1.6)
       yaml: 2.5.1
     transitivePeerDependencies:
       - bufferutil
@@ -16111,9 +16134,9 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@percy/cli-upload@1.30.10(typescript@5.1.6)':
+  '@percy/cli-upload@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/cli-command': 1.30.10(typescript@5.1.6)
+      '@percy/cli-command': 1.31.1(typescript@5.1.6)
       fast-glob: 3.3.1
       image-size: 1.0.2
     transitivePeerDependencies:
@@ -16122,49 +16145,49 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@percy/cli@1.30.10(typescript@5.1.6)':
+  '@percy/cli@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/cli-app': 1.30.10(typescript@5.1.6)
-      '@percy/cli-build': 1.30.10(typescript@5.1.6)
-      '@percy/cli-command': 1.30.10(typescript@5.1.6)
-      '@percy/cli-config': 1.30.10(typescript@5.1.6)
-      '@percy/cli-exec': 1.30.10(typescript@5.1.6)
-      '@percy/cli-snapshot': 1.30.10(typescript@5.1.6)
-      '@percy/cli-upload': 1.30.10(typescript@5.1.6)
-      '@percy/client': 1.30.10
-      '@percy/logger': 1.30.10
+      '@percy/cli-app': 1.31.1(typescript@5.1.6)
+      '@percy/cli-build': 1.31.1(typescript@5.1.6)
+      '@percy/cli-command': 1.31.1(typescript@5.1.6)
+      '@percy/cli-config': 1.31.1(typescript@5.1.6)
+      '@percy/cli-exec': 1.31.1(typescript@5.1.6)
+      '@percy/cli-snapshot': 1.31.1(typescript@5.1.6)
+      '@percy/cli-upload': 1.31.1(typescript@5.1.6)
+      '@percy/client': 1.31.1
+      '@percy/logger': 1.31.1
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - typescript
       - utf-8-validate
 
-  '@percy/client@1.30.10':
+  '@percy/client@1.31.1':
     dependencies:
-      '@percy/env': 1.30.10
-      '@percy/logger': 1.30.10
+      '@percy/env': 1.31.1
+      '@percy/logger': 1.31.1
       pac-proxy-agent: 7.2.0
       pako: 2.1.0
     transitivePeerDependencies:
       - supports-color
 
-  '@percy/config@1.30.10(typescript@5.1.6)':
+  '@percy/config@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/logger': 1.30.10
+      '@percy/logger': 1.31.1
       ajv: 8.17.1
       cosmiconfig: 8.3.6(typescript@5.1.6)
       yaml: 2.5.1
     transitivePeerDependencies:
       - typescript
 
-  '@percy/core@1.30.10(typescript@5.1.6)':
+  '@percy/core@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/client': 1.30.10
-      '@percy/config': 1.30.10(typescript@5.1.6)
-      '@percy/dom': 1.30.10
-      '@percy/logger': 1.30.10
-      '@percy/monitoring': 1.30.10(typescript@5.1.6)
-      '@percy/webdriver-utils': 1.30.10(typescript@5.1.6)
+      '@percy/client': 1.31.1
+      '@percy/config': 1.31.1(typescript@5.1.6)
+      '@percy/dom': 1.31.1
+      '@percy/logger': 1.31.1
+      '@percy/monitoring': 1.31.1(typescript@5.1.6)
+      '@percy/webdriver-utils': 1.31.1(typescript@5.1.6)
       content-disposition: 0.5.4
       cross-spawn: 7.0.6
       extract-zip: 2.0.1
@@ -16182,36 +16205,42 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@percy/dom@1.30.10': {}
+  '@percy/dom@1.31.1': {}
 
-  '@percy/ember@4.2.0':
+  '@percy/ember@5.0.0(@babel/core@7.26.10)(@glint/template@1.3.0)(webpack@5.99.6)':
     dependencies:
       '@percy/sdk-utils': 1.30.10
-      ember-cli-babel: 7.26.11
+      ember-auto-import: 2.10.0(@glint/template@1.3.0)(webpack@5.99.6)
+      ember-cli-babel: 8.2.0(@babel/core@7.26.10)
     transitivePeerDependencies:
+      - '@babel/core'
+      - '@glint/template'
       - supports-color
+      - webpack
 
-  '@percy/env@1.30.10':
+  '@percy/env@1.31.1':
     dependencies:
-      '@percy/logger': 1.30.10
+      '@percy/logger': 1.31.1
 
-  '@percy/logger@1.30.10': {}
+  '@percy/logger@1.31.1': {}
 
-  '@percy/monitoring@1.30.10(typescript@5.1.6)':
+  '@percy/monitoring@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/config': 1.30.10(typescript@5.1.6)
-      '@percy/logger': 1.30.10
-      '@percy/sdk-utils': 1.30.10
+      '@percy/config': 1.31.1(typescript@5.1.6)
+      '@percy/logger': 1.31.1
+      '@percy/sdk-utils': 1.31.1
       systeminformation: 5.25.11
     transitivePeerDependencies:
       - typescript
 
   '@percy/sdk-utils@1.30.10': {}
 
-  '@percy/webdriver-utils@1.30.10(typescript@5.1.6)':
+  '@percy/sdk-utils@1.31.1': {}
+
+  '@percy/webdriver-utils@1.31.1(typescript@5.1.6)':
     dependencies:
-      '@percy/config': 1.30.10(typescript@5.1.6)
-      '@percy/sdk-utils': 1.30.10
+      '@percy/config': 1.31.1(typescript@5.1.6)
+      '@percy/sdk-utils': 1.31.1
     transitivePeerDependencies:
       - typescript
 
@@ -20301,6 +20330,30 @@ snapshots:
       '@glimmer/tracking': 1.1.2
       ember-auto-import: 2.10.0(@glint/template@1.3.0)(webpack@5.99.6)
       ember-cli-babel: 7.26.11
+      ember-cli-htmlbars: 6.3.0
+      ember-cli-typescript: 5.2.1
+      ember-focus-trap: 1.0.1
+      ember-modifier: 4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
+      ember-named-blocks-polyfill: 0.2.5
+      ember-truth-helpers: 4.0.3(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
+      json-formatter-js: 2.3.4
+      macro-decorators: 0.1.2
+      strip-indent: 3.0.0
+      tracked-built-ins: 3.3.0
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@glint/template'
+      - ember-source
+      - supports-color
+      - webpack
+
+  ember-freestyle@0.22.0(@babel/core@7.26.10)(@ember/string@3.1.1)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6):
+    dependencies:
+      '@ember/string': 3.1.1
+      '@glimmer/component': 1.1.2(@babel/core@7.26.10)
+      '@glimmer/tracking': 1.1.2
+      ember-auto-import: 2.10.0(@glint/template@1.3.0)(webpack@5.99.6)
+      ember-cli-babel: 8.2.0(@babel/core@7.26.10)
       ember-cli-htmlbars: 6.3.0
       ember-cli-typescript: 5.2.1
       ember-focus-trap: 1.0.1

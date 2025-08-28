@@ -53,7 +53,7 @@ interface ButtonSignature {
 
 const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
   {{#if @card}}
-    <button
+    <Button
       class='catalog-item {{if @isSelected "selected"}}'
       {{on 'click' (fn @select @card.url)}}
       {{on 'dblclick' (fn @select @card.url)}}
@@ -68,10 +68,10 @@ const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
         key=@card.url
       }}
     >
-      {{@card.component}}
-    </button>
+      <@card.component class='hide-boundaries' />
+    </Button>
   {{else if @newCard}}
-    <button
+    <Button
       class='create-card catalog-item {{if @isSelected "selected"}}'
       {{on 'click' (fn @select @newCard)}}
       {{on 'dblclick' (fn @select @newCard)}}
@@ -86,30 +86,24 @@ const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
         key=(@newCardKey @newCard.realmURL)
       }}
     >
-      <div class='add-icon'>
-        <IconPlus width='20' height='20' role='presentation' />
-      </div>
-      <div class='create-new-text'>
-        Create New
-        {{@cardRefName}}
-      </div>
-    </button>
+      <IconPlus class='plus-icon' width='16' height='16' role='presentation' />
+      Create New
+      {{@cardRefName}}
+    </Button>
   {{/if}}
   <style scoped>
     .catalog-item {
-      box-sizing: content-box; /* we want 65px height for the card inside this button */
-      height: 65px;
-      border: 1px solid var(--boxel-200);
-      border-radius: var(--boxel-border-radius-xl);
-      background-color: var(--boxel-light);
+      --boxel-button-padding: 0;
+      --boxel-button-border-radius: var(--boxel-border-radius-xl);
+      --boxel-button-border: 1px solid var(--boxel-200);
+      height: 67px;
       width: 100%;
+      max-width: 100%;
       overflow: hidden;
-      cursor: pointer;
       container-name: fitted-card;
       container-type: size;
       display: flex;
       text-align: left;
-      margin: auto;
     }
 
     .catalog-item.selected {
@@ -126,25 +120,14 @@ const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
     }
 
     .create-card.catalog-item {
-      display: flex;
-      height: 40px;
-      border-radius: var(--boxel-border-radius-lg);
-      justify-content: center;
-      padding: var(--boxel-sp-xs) var(--boxel-sp);
+      --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
+      --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       column-gap: var(--boxel-sp-xs);
       flex-wrap: nowrap;
+      justify-content: flex-start;
     }
-    .create-card .add-icon {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      max-width: 41px;
-    }
-    .create-card .create-new-text {
-      flex: 4;
-      font: 600 var(--boxel-font-sm);
-      letter-spacing: var(--boxel-lsp);
-      line-height: 1.5;
+    .plus-icon > :deep(path) {
+      stroke: none;
     }
   </style>
 </template>;

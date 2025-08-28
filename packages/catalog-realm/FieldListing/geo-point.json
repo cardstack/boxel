@@ -1,0 +1,77 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "FieldListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Geo Point Field",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/geo-point-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/geo-point-listing/screenshot_02.png"
+      ],
+      "summary": "The Geo Point Field is a powerful component that enables you to capture, store, and display geographical coordinates in your application. Perfect for location-based features, mapping applications, and any scenario where you need to work with latitude and longitude data.\n\nKey Features\n- Coordinate Storage: Store precise latitude and longitude values with decimal precision.\n- Interactive Map Integration: Visualize coordinates on an interactive map with click-to-set functionality.\n- Real-time Updates: Coordinates update instantly when modified through the map interface.\n\nDisplay Options\n- Text Format: Display coordinates as simple text (e.g., \"37.7749, -122.4194\").\n- Map Format: Show coordinates on an interactive map with markers and popups.\n- Edit Mode: Direct input fields for precise coordinate entry.\n\nUse Cases\n- Store business locations and addresses\n- Track user positions and preferences\n- Create location-based content\n- Build mapping and navigation features\n- Geotag photos, events, or other content",
+      "cardInfo": {
+        "notes": null,
+        "title": "Geo Point",
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/geo-point-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/geo-point"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/map-render"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../fields-preview/GeoPointPreview/ef3d6b85-cc8b-46fb-9447-a329d2ab270c"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/travel-experiences"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

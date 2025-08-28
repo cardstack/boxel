@@ -615,6 +615,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .workspace-button {
+        --icon-color: var(--boxel-highlight);
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);

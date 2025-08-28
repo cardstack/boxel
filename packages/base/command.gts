@@ -187,6 +187,7 @@ export class UseAiAssistantInput extends CardDef {
   @field prompt = contains(StringField);
   @field clientGeneratedId = contains(StringField);
   @field openCardIds = containsMany(StringField);
+  @field requireCommandCall = contains(BooleanField); // optional: require AI to execute commands
 }
 
 export class SendAiAssistantMessageInput extends CardDef {
@@ -250,6 +251,7 @@ export class ListingInstallResult extends CardDef {
 
 export class ListingCreateInput extends CardDef {
   @field openCardId = contains(StringField);
+  @field targetRealm = contains(StringField);
 }
 
 export class VisitCardsInput extends CardDef {
@@ -293,6 +295,14 @@ export class SendRequestViaProxyInput extends CardDef {
 
 export class SendRequestViaProxyResult extends CardDef {
   @field response = contains(ResponseField);
+}
+
+export class SummarizeSessionInput extends CardDef {
+  @field roomId = contains(StringField);
+}
+
+export class SummarizeSessionResult extends CardDef {
+  @field summary = contains(StringField);
 }
 
 export {

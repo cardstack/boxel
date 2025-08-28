@@ -16,6 +16,7 @@ interface Signature {
     onCreateNewSession: (opts?: {
       addSameSkills: boolean;
       shouldCopyFileHistory: boolean;
+      shouldSummarizeSession: boolean;
     }) => void;
   };
 }
@@ -56,6 +57,9 @@ export default class NewSessionButton extends Component<Signature> {
     this.args.onCreateNewSession({
       addSameSkills: this.selectedOptions.has('Add Same Skills'),
       shouldCopyFileHistory: this.selectedOptions.has('Copy File History'),
+      shouldSummarizeSession: this.selectedOptions.has(
+        'Summarize Current Session',
+      ),
     });
     this.closeMenu();
   }
@@ -114,6 +118,7 @@ export default class NewSessionButton extends Component<Signature> {
         --boxel-button-min-height: 0;
         --boxel-loading-indicator-size: 16px;
 
+        border: none;
         border-radius: var(--boxel-border-radius-xs);
         transform: translateY(-1px);
       }

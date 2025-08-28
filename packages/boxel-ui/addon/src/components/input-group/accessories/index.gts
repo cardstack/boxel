@@ -53,7 +53,7 @@ interface IconButtonSignature {
   Blocks: {
     default: [];
   };
-  Element: HTMLButtonElement;
+  Element: HTMLButtonElement | HTMLAnchorElement;
 }
 
 export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>

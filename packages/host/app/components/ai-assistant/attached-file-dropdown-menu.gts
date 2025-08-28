@@ -22,12 +22,16 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { ThreeDotsHorizontal, IconCode } from '@cardstack/boxel-ui/icons';
 
+import { hasExecutableExtension } from '@cardstack/runtime-common';
+
 import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-file-modal';
 import CardService from '@cardstack/host/services/card-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
+
+import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import { Submodes } from '../submode-switcher';
 
@@ -36,6 +40,7 @@ export default class AttachedFileDropdownMenu extends Component<{
     file: FileDef;
     isNewFile: boolean;
     version?: 'diff-editor';
+    codePatchStatus?: CodePatchStatus | 'applying' | 'ready';
   };
 }> {
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -87,7 +92,10 @@ export default class AttachedFileDropdownMenu extends Component<{
         action: this.toggleRestorePatchedFileModal,
         icon: Undo2,
         dangerous: true,
-        disabled: !this.args.file?.sourceUrl || this.args.isNewFile,
+        disabled:
+          !this.args.file?.sourceUrl ||
+          this.args.isNewFile ||
+          this.args.codePatchStatus !== 'applied',
       }),
     ];
 
@@ -105,6 +113,7 @@ export default class AttachedFileDropdownMenu extends Component<{
       new URL(this.args.file.sourceUrl!),
       content,
       'bot-patch',
+      { resetLoader: hasExecutableExtension(this.args.file.sourceUrl!) },
     );
 
     this.isRestorePatchedFileModalOpen = false;

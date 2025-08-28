@@ -22,6 +22,7 @@ import {
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
+import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -51,28 +52,6 @@ module(basename(__filename), function () {
       if (testRealm) {
         virtualNetwork.unmount(testRealm.handle);
       }
-      const testConfig = JSON.stringify([
-        {
-          url: 'https://openrouter.ai/api/v1/chat/completions',
-          apiKey: 'openrouter-api-key',
-          creditStrategy: 'openrouter',
-          supportsStreaming: true,
-        },
-        {
-          url: 'https://api.example.com',
-          apiKey: 'example-api-key',
-          creditStrategy: 'no-credit',
-          supportsStreaming: false,
-        },
-        {
-          url: 'https://www.googleapis.com/customsearch/v1',
-          apiKey: 'google-api-key',
-          creditStrategy: 'no-credit',
-          supportsStreaming: false,
-          authMethod: 'url-parameter',
-          authParameterName: 'key',
-        },
-      ]);
 
       ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
         await runTestRealmServer({
@@ -84,7 +63,6 @@ module(basename(__filename), function () {
           publisher,
           runner,
           matrixURL: new URL('http://localhost:8008'),
-          allowedProxyDestinations: testConfig,
         }));
       request = supertest(testRealmHttpServer);
     }
@@ -97,6 +75,22 @@ module(basename(__filename), function () {
         testRealmDir = join(dir.name, 'realm_server_2', 'test');
         ensureDirSync(testRealmDir);
         copySync(join(__dirname, 'cards'), testRealmDir);
+
+        // Set up allowed proxy destinations in database BEFORE starting server
+        await dbAdapter.execute(
+          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at) 
+           VALUES 
+             (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'openrouter-api-key', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+             (gen_random_uuid(), 'https://api.example.com', 'example-api-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+             (gen_random_uuid(), 'https://www.googleapis.com/customsearch/v1', 'google-api-key', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT (url) 
+           DO UPDATE SET 
+             api_key = EXCLUDED.api_key,
+             credit_strategy = EXCLUDED.credit_strategy,
+             supports_streaming = EXCLUDED.supports_streaming,
+             updated_at = CURRENT_TIMESTAMP`,
+        );
+
         await startRealmServer(dbAdapter, publisher, runner);
 
         // Set up test user
@@ -131,6 +125,7 @@ module(basename(__filename), function () {
         }
       },
       afterEach: async () => {
+        AllowedProxyDestinations.reset();
         await closeServer(testRealmHttpServer);
       },
     });

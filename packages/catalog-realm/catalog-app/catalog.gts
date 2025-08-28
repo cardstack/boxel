@@ -8,7 +8,6 @@ import {
   field,
   Component,
   CardDef,
-  CardContext,
   realmInfo,
   type BaseDef,
   linksToMany,
@@ -21,14 +20,10 @@ import {
   Filter,
 } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
-import GlimmerComponent from '@glimmer/component';
 
 import FilterSidebar, { type FilterItem } from './components/filter-section';
-import CardsDisplaySection, {
-  CardsIntancesGrid,
-} from './components/cards-display-section';
-
-import { CardsGrid } from './components/grid';
+import ShowcaseView from './components/showcase-view';
+import ListView from './components/list-view';
 
 import CatalogLayout from './layouts/catalog-layout';
 
@@ -40,243 +35,13 @@ import HealthRecognition from '@cardstack/boxel-icons/health-recognition';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import WorldIcon from '@cardstack/boxel-icons/world';
-import {
-  Grid3x3 as GridIcon,
-  Rows4 as StripIcon,
-} from '@cardstack/boxel-ui/icons';
-import {
-  TabbedHeader,
-  BoxelInput,
-  ViewSelector,
-  type ViewItem,
-} from '@cardstack/boxel-ui/components';
+import { TabbedHeader, BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { Listing } from './listing/listing';
 import { Category } from './listing/category';
 import { Tag } from './listing/tag';
 
-type ViewOption = 'strip' | 'grid';
 type SphereName = 'WORK' | 'PLAY' | 'LIFE' | 'LEARN' | 'BUILD';
-
-// Showcase View
-interface ShowcaseViewArgs {
-  Args: {
-    startHereListings?: CardDef[];
-    newListings?: CardDef[];
-    featuredListings?: CardDef[];
-    context?: CardContext;
-  };
-  Element: HTMLElement;
-}
-
-class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
-  <template>
-    <header class='showcase-header'>
-      <img
-        src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
-        alt='Catalog Icon'
-        class='catalog-icon'
-      />
-      <h1 class='showcase-header-title'>
-        Cardstack Catalog: Discover & Remix the Best
-      </h1>
-    </header>
-
-    <hr class='showcase-divider' />
-
-    <div class='showcase-center-div' ...attributes>
-      <div class='showcase-display-container'>
-        <CardsDisplaySection class='showcase-cards-display'>
-          <:intro>
-            <h2 class='intro-title'>Starter stack — Begin Here</h2>
-            <p class='intro-description'>These are the foundational tools we
-              think every builder should have. Whether you're just exploring or
-              setting up your workspace for serious work, start with these
-              must-haves.</p>
-          </:intro>
-          <:content>
-            <CardsIntancesGrid
-              @cards={{@startHereListings}}
-              @context={{@context}}
-            />
-          </:content>
-        </CardsDisplaySection>
-
-        <hr class='showcase-divider' />
-
-        <CardsDisplaySection class='new-this-week-cards-display'>
-          <:intro>
-            <h2 class='intro-title'>Editor's Picks – What's Hot This Week</h2>
-            <p class='intro-description'>These new entries have caught the
-              community's eye, whether for creative flair, clever utility, or
-              just plain polish.
-            </p>
-          </:intro>
-          <:content>
-            <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} />
-          </:content>
-        </CardsDisplaySection>
-
-        <hr class='showcase-divider' />
-
-        <CardsDisplaySection class='featured-cards-display'>
-          <:intro>
-            <h2 class='intro-title'>Feature Collection – Personal Organization</h2>
-            <p class='intro-description'>A hand-picked duo of focused, flexible
-              tools for personal project management.</p>
-          </:intro>
-          <:content>
-            <CardsIntancesGrid
-              @cards={{@featuredListings}}
-              @context={{@context}}
-            />
-          </:content>
-        </CardsDisplaySection>
-      </div>
-    </div>
-
-    <style scoped>
-      .showcase-header {
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .catalog-icon {
-        width: 2rem;
-        height: 2rem;
-        flex-shrink: 0;
-      }
-      .showcase-header-title {
-        font-size: 1.5rem;
-        font-weight: 600;
-        line-height: 1.2;
-        margin-block: 0;
-      }
-
-      .showcase-divider {
-        border: none;
-        height: 1px;
-        background-color: #999999;
-        margin: var(--boxel-sp-xl) 0;
-      }
-
-      .showcase-center-div {
-        display: table;
-        margin: 0 auto;
-        width: 100%;
-      }
-
-      .showcase-display-container {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        container-name: showcase-display-container;
-        container-type: inline-size;
-      }
-      .showcase-cards-display :deep(.cards.grid-view),
-      .featured-cards-display :deep(.cards.grid-view) {
-        --grid-view-height: 380px;
-        grid-template-columns: repeat(2, 1fr);
-      }
-      .new-this-week-cards-display :deep(.cards.grid-view) {
-        --grid-view-height: 380px;
-        grid-template-columns: repeat(4, 1fr);
-      }
-
-      .intro-title {
-        font: 600 var(--boxel-font-lg);
-        margin-block: 0;
-        color: var(--boxel-dark);
-      }
-      .intro-description {
-        font: 400 var(--boxel-font);
-        color: var(--boxel-dark);
-        margin-bottom: var(--boxel-sp-xl);
-      }
-
-      @container showcase-display-container (inline-size <= 768px) {
-        .new-this-week-cards-display :deep(.cards.grid-view) {
-          grid-template-columns: repeat(2, 1fr);
-        }
-
-        @container showcase-display-container (inline-size <= 500px) {
-          .showcase-cards-display :deep(.cards.grid-view),
-          .new-this-week-cards-display :deep(.cards.grid-view),
-          .featured-cards-display :deep(.cards.grid-view) {
-            grid-template-columns: 1fr;
-          }
-        }
-      }
-    </style>
-  </template>
-}
-
-// CatalogListView
-const CATALOG_VIEW_OPTIONS: ViewItem[] = [
-  { id: 'strip', icon: StripIcon },
-  { id: 'grid', icon: GridIcon },
-];
-
-interface CatalogListViewArgs {
-  Args: {
-    query: Query;
-    realms: string[];
-    context?: CardContext;
-  };
-  Element: HTMLElement;
-}
-
-class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
-  @tracked private selectedView: ViewOption = 'grid';
-
-  @action private onChangeView(id: ViewOption) {
-    this.selectedView = id;
-  }
-
-  <template>
-    <CardsDisplaySection ...attributes>
-      <:intro>
-        <header class='catalog-list-header'>
-          <ViewSelector
-            class='catalog-list-view-selector'
-            @selectedId={{this.selectedView}}
-            @onChange={{this.onChangeView}}
-            @items={{CATALOG_VIEW_OPTIONS}}
-          />
-        </header>
-      </:intro>
-      <:content>
-        <CardsGrid
-          @query={{@query}}
-          @realms={{@realms}}
-          @selectedView={{this.selectedView}}
-          @context={{@context}}
-        />
-      </:content>
-    </CardsDisplaySection>
-
-    <style scoped>
-      h2 {
-        margin-block: 0;
-        margin-bottom: var(--boxel-sp);
-      }
-      .catalog-list-header {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-sm);
-        margin-bottom: var(--boxel-sp-sm);
-      }
-      .catalog-list-view-selector {
-        margin-left: auto;
-      }
-    </style>
-  </template>
-}
 
 // Catalog App
 class Isolated extends Component<typeof Catalog> {
@@ -611,7 +376,10 @@ class Isolated extends Component<typeof Catalog> {
   getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   <template>
-    <CatalogLayout class='catalog-layout {{this.activeTabId}}'>
+    <CatalogLayout
+      data-test-catalog-app
+      class='catalog-layout {{this.activeTabId}}'
+    >
       <:header>
         <TabbedHeader
           @tabs={{this.tabFilterOptions}}
@@ -674,7 +442,7 @@ class Isolated extends Component<typeof Catalog> {
                     data-test-showcase-view
                   />
                 {{else}}
-                  <CatalogListView
+                  <ListView
                     @query={{this.query}}
                     @realms={{this.realmHrefs}}
                     @context={{@context}}
@@ -791,25 +559,6 @@ class Isolated extends Component<typeof Catalog> {
       .operator-mode .buried .add-button {
         display: none;
       }
-      .instance-error {
-        position: relative;
-      }
-      .instance-error::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(255, 0, 0, 0.1);
-      }
-      .instance-error .boundaries {
-        box-shadow: 0 0 0 1px var(--boxel-error-300);
-      }
-      .instance-error:hover .boundaries {
-        box-shadow: 0 0 0 1px var(--boxel-dark);
-      }
-
       .go-to-grid {
         font-weight: 600;
         width: 100%;

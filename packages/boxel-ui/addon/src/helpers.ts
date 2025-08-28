@@ -5,6 +5,10 @@ import cssVar from './helpers/css-var.ts';
 import currencyFormat from './helpers/currency-format.ts';
 import { dayjsFormat } from './helpers/dayjs-format.ts';
 import element from './helpers/element.ts';
+import {
+  extractCssVariables,
+  getStyleConversions,
+} from './helpers/extract-css-variables.ts';
 import formatAge from './helpers/format-age.ts';
 import formatCountdown from './helpers/format-countdown.ts';
 import formatCurrency from './helpers/format-currency.ts';
@@ -47,6 +51,7 @@ export {
   divide,
   element,
   eq,
+  extractCssVariables,
   formatAge,
   formatCountdown,
   formatCurrency,
@@ -60,6 +65,7 @@ export {
   formatPeriod,
   formatRelativeTime,
   getContrastColor,
+  getStyleConversions,
   gt,
   gte,
   lt,

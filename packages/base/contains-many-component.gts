@@ -18,7 +18,7 @@ import {
   DefaultFormatsConsumer,
   PermissionsConsumer,
 } from './field-component';
-import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
+import { IconButton } from '@cardstack/boxel-ui/components';
 import {
   getPlural,
   fields,
@@ -37,6 +37,7 @@ import {
   SortableHandleModifier as sortableHandle,
   SortableItemModifier as sortableItem,
 } from '@cardstack/boxel-ui/modifiers';
+import AddButton from './components/add-button';
 
 interface ContainsManyEditorSignature {
   Args: {
@@ -85,7 +86,6 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
                 {{#if permissions.canWrite}}
                   <IconButton
                     {{sortableHandle}}
-                    @variant='primary'
                     @icon={{FourLines}}
                     @width='18px'
                     @height='18px'
@@ -119,14 +119,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
           </ul>
         {{/if}}
         {{#if permissions.canWrite}}
-          <AddButton
-            class='add-new'
-            @variant='full-width'
-            @iconWidth='12px'
-            @iconHeight='12px'
-            {{on 'click' this.add}}
-            data-test-add-new
-          >
+          <AddButton class='add-new' {{on 'click' this.add}} data-test-add-new>
             Add
             {{getPlural @field.card.displayName}}
           </AddButton>

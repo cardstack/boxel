@@ -172,10 +172,8 @@ interface RequestForwardBody {
 
 export default function handleRequestForward({
   dbAdapter,
-  allowedProxyDestinations,
 }: {
   dbAdapter: DBAdapter;
-  allowedProxyDestinations: string;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
@@ -222,10 +220,9 @@ export default function handleRequestForward({
       }
 
       // 3. Validate proxy destination is allowed and get config
-      const destinationsConfig = AllowedProxyDestinations.getInstance(
-        allowedProxyDestinations,
-      );
-      const destinationConfig = destinationsConfig.getDestinationConfig(
+      const destinationsConfig =
+        AllowedProxyDestinations.getInstance(dbAdapter);
+      const destinationConfig = await destinationsConfig.getDestinationConfig(
         json.url,
       );
 
@@ -286,7 +283,7 @@ export default function handleRequestForward({
 
       // Handle streaming requests
       if (json.stream) {
-        if (!destinationsConfig.supportsStreaming(json.url)) {
+        if (!(await destinationsConfig.supportsStreaming(json.url))) {
           await sendResponseForBadRequest(
             ctxt,
             `Streaming is not supported for endpoint ${json.url}`,

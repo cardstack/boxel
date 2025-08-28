@@ -1,22 +1,12 @@
 import GlimmerComponent from '@glimmer/component';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { tracked } from '@glimmer/tracking';
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
-import {
-  type CardContext,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
-import { and, eq } from '@cardstack/boxel-ui/helpers';
-
-import {
-  type PrerenderedCardLike,
-  type Query,
-} from '@cardstack/runtime-common';
+import { type Query } from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import ListingFittedSkeleton from './listing-fitted-skeleton';
+import { CardWithHydration } from './card-with-hydration';
 
 interface CardsGridSignature {
   Args: {
@@ -29,23 +19,10 @@ interface CardsGridSignature {
 }
 
 export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
-  @tracked hydratedCardId: string | undefined;
-  cardResource = this.args.context?.getCard(this, () => this.hydratedCardId);
-
-  @action
-  async hydrateCard(card: PrerenderedCardLike) {
-    const cardId = removeFileExtension(card.url);
-    this.hydratedCardId = cardId;
-  }
-
   //default to rendering 10 skeletons
   get renderSkeletons() {
     return Array.from({ length: 10 }, (_, i) => i);
   }
-
-  isHydrated = (cardUrl: string) => {
-    return removeFileExtension(cardUrl) == this.hydratedCardId;
-  };
 
   <template>
     {{#let
@@ -83,47 +60,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                   class='{{@selectedView}}-view-container'
                   data-test-card-url={{card.url}}
                 >
-                  {{#if
-                    (and (this.isHydrated card.url) this.cardResource.isLoaded)
-                  }}
-                    {{#if this.cardResource.card}}
-                      {{#let
-                        (getComponent this.cardResource.card)
-                        as |Component|
-                      }}
-                        <CardContainer
-                          class='card'
-                          @displayBoundaries={{true}}
-                          data-test-cards-grid-item={{removeFileExtension
-                            card.url
-                          }}
-                          data-cards-grid-item={{removeFileExtension card.url}}
-                        >
-                          <Component />
-                        </CardContainer>
-                      {{/let}}
-                    {{/if}}
-                  {{else if card.isError}}
-                    <CardContainer
-                      class='card instance-error'
-                      @displayBoundaries={{true}}
-                      data-test-instance-error={{card.isError}}
-                      data-test-cards-grid-item={{removeFileExtension card.url}}
-                      data-cards-grid-item={{removeFileExtension card.url}}
-                    >
-                      <card.component />
-                    </CardContainer>
-                  {{else}}
-                    <CardContainer
-                      class='card'
-                      @displayBoundaries={{true}}
-                      data-test-cards-grid-item={{removeFileExtension card.url}}
-                      data-cards-grid-item={{removeFileExtension card.url}}
-                      {{on 'mouseenter' (fn this.hydrateCard card)}}
-                    >
-                      <card.component />
-                    </CardContainer>
-                  {{/if}}
+                  <CardWithHydration @card={{card}} @context={{@context}} />
                 </li>
               {{/each}}
             </ul>
@@ -180,17 +117,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         cursor: pointer;
       }
 
-      .card {
-        container-name: fitted-card;
-        container-type: size;
-        transition: ease 0.2s;
-      }
-
-      .card:hover {
-        cursor: pointer;
-        border: 1px solid var(--boxel-purple);
-      }
-
       .cards :deep(.field-component-card.fitted-format) {
         height: 100%;
       }
@@ -200,38 +126,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         text-align: left;
         padding: var(--boxel-sp-6xs);
       }
-      .instance-error {
-        --instance-error-z-index: 1;
-        position: relative;
-      }
-      .instance-error::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        z-index: var(--instance-error-z-index);
-        width: 100%;
-        height: 100%;
-        background-color: rgba(255, 0, 0, 0.1);
-      }
-      .instance-error:hover {
-        border: none;
-        transform: none;
-      }
-      .instance-error.boundaries {
-        box-shadow: 0 0 0 1px var(--boxel-error-300);
-      }
-      .instance-error.boundaries:hover {
-        box-shadow: 0 0 0 1px var(--boxel-dark);
-      }
     </style>
   </template>
-}
-
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
-}
-
-function removeFileExtension(cardUrl: string) {
-  return cardUrl?.replace(/\.[^/.]+$/, '');
 }
