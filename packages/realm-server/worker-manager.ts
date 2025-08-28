@@ -239,14 +239,21 @@ let adapter: PgAdapter;
     new URL(String(fromUrl)),
     new URL(String(toUrls[i])),
   ]);
-  adapter = new PgAdapter({ autoMigrate });
 
+  console.log('creating adapter');
+  adapter = new PgAdapter({ autoMigrate });
+  console.log('created adapter');
+
+  console.log('starting high-priority worker count: ' + highPriorityCount);
   for (let i = 0; i < highPriorityCount; i++) {
     await startWorker(userInitiatedPriority, urlMappings);
   }
+  console.log('started high-priority workers');
+  console.log('starting all-priority worker count: ' + allPriorityCount);
   for (let i = 0; i < allPriorityCount; i++) {
     await startWorker(systemInitiatedPriority, urlMappings);
   }
+  console.log('started all-priority workers');
   isReady = true;
   log.info('All workers have been started');
 })().catch((e: any) => {
