@@ -242,6 +242,7 @@ let adapter: PgAdapter;
 
   console.log('creating adapter');
   adapter = new PgAdapter({ autoMigrate });
+  await adapter.started;
   console.log('created adapter');
 
   console.log('starting high-priority worker count: ' + highPriorityCount);
