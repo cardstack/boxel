@@ -30,6 +30,7 @@
   "author": "Cardstack",
   "dependencies": {},
   "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@types/node": "^18.18.5",
     "@types/qunit": "catalog:",

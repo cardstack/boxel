@@ -782,6 +782,9 @@ importers:
         specifier: ~5.8.3
         version: 5.8.3
     devDependencies:
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       '@sinonjs/fake-timers':
         specifier: 'catalog:'
         version: 11.2.2
@@ -883,6 +886,9 @@ importers:
         specifier: 'catalog:'
         version: 17.2.1
     devDependencies:
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -2517,6 +2523,9 @@ importers:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@18.19.54)(typescript@5.1.6)
     devDependencies:
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -2545,6 +2554,9 @@ importers:
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       '@cardstack/postgres':
         specifier: workspace:*
         version: link:../postgres
@@ -2785,6 +2797,9 @@ importers:
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       '@glint/template':
         specifier: 1.3.0
         version: 1.3.0
@@ -2984,6 +2999,9 @@ importers:
       '@babel/preset-typescript':
         specifier: 'catalog:'
         version: 7.25.7(@babel/core@7.26.10)
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
@@ -3029,6 +3047,9 @@ importers:
 
   packages/workspace-sync-cli:
     devDependencies:
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
