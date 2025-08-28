@@ -83,7 +83,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await vaildateEmail(testEnv, page, 'user1@example.com', {
+    await validateEmail(testEnv, page, 'user1@example.com', {
       onEmailPage: async (page) => {
         await expect(page).toHaveScreenshot('verification-email.png', {
           mask: [page.locator('.messagelist')],
@@ -288,7 +288,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await vaildateEmail(testEnv, page, 'user1@example.com', {
+    await validateEmail(testEnv, page, 'user1@example.com', {
       sendAttempts: 2,
     });
   });
