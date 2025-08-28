@@ -19,7 +19,6 @@
           "title": "Tutorial 2",
           "description": "Inside the Boxel Environment: Navigating Workspaces, Modes, and Prompts",
           "backgroundColor": "#272330",
-          "icon": "book",
           "textColor": "#fff",
           "url": "https://boxel.ai/blog/posts/inside-boxel-environment-navigating-workspaces-modes-and-prompts"
         },
@@ -27,7 +26,7 @@
           "title": "Tutorial 3",
           "description": "Activating Advanced Design Skills and Generating Sample Data",
           "backgroundColor": "#dde2ff",
-          "icon": "card",
+          "icon": "book",
           "url": "https://boxel.ai/blog/posts/activating-advanced-design-skills-generating-sample-data"
         },
         {
