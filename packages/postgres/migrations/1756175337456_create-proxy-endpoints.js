@@ -2,7 +2,7 @@ exports.up = (pgm) => {
   pgm.createTable('proxy_endpoints', {
     id: { type: 'uuid', primaryKey: true, notNull: true },
     url: { type: 'varchar', notNull: true, unique: true },
-    api_key: { type: 'varchar', notNull: true },
+    api_key: { type: 'varchar' },
     credit_strategy: { type: 'varchar', notNull: true },
     supports_streaming: { type: 'boolean', notNull: true },
     auth_method: { type: 'varchar' },
