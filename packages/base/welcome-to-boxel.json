@@ -11,14 +11,14 @@
         {
           "title": "Tutorial 1",
           "description": "From Prompt to Prototype: One‑Shot Coding in Boxel",
-          "backgroundColor": "#fef3c7",
+          "backgroundColor": "#f0e58c",
           "icon": "card",
           "url": "https://boxel.ai/blog/posts/from-prompt-to-prototype-one-shot-coding-in-boxel"
         },
         {
           "title": "Tutorial 2",
           "description": "Inside the Boxel Environment: Navigating Workspaces, Modes, and Prompts",
-          "backgroundColor": "#374151",
+          "backgroundColor": "#272330",
           "icon": "book",
           "textColor": "#fff",
           "url": "https://boxel.ai/blog/posts/inside-boxel-environment-navigating-workspaces-modes-and-prompts"
@@ -26,14 +26,14 @@
         {
           "title": "Tutorial 3",
           "description": "Activating Advanced Design Skills and Generating Sample Data",
-          "backgroundColor": "#e9d5ff",
+          "backgroundColor": "#dde2ff",
           "icon": "card",
           "url": "https://boxel.ai/blog/posts/activating-advanced-design-skills-generating-sample-data"
         },
         {
           "title": "Tutorial 4",
           "description": "Formats Unlocked: Customizing Fitted, Embedded, Atom, Edit, and Isolated Views",
-          "backgroundColor": "#fecaca",
+          "backgroundColor": "#ff9b98",
           "icon": "code",
           "url": "https://boxel.ai/blog/posts/formats-unlocked-customizing-fitted-embedded-atom-edit-and-isolated-views"
         }
