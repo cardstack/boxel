@@ -1,8 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 
-import cn from '../../helpers/cn.ts';
-import { not } from '../../helpers/truth-helpers.ts';
+import { cn, not } from '../../helpers.ts';
+import cssVar from '../../helpers/css-var.ts';
 
 export interface Signature {
   Args: {
@@ -13,6 +14,10 @@ export interface Signature {
     id: string;
     name: string;
     onChange: () => void;
+    radioBackgroundColor?: string;
+    radioBorderColor?: string;
+    radioHighlightColor?: string;
+    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
   };
   Blocks: {
     default: [];
@@ -24,11 +29,49 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     @layer {
       .boxel-radio-option {
+        --radio-border: 1.5px solid
+          var(
+            --boxel-radio-border-color,
+            var(--radio-foreground, var(--foreground, var(--boxel-dark))),
+          );
+        --radio-border-radius: var(--boxel-border-radius, 100px);
+        --radio-background: var(
+          --boxel-radio-background-color,
+          var(--radio-background-color, var(--background, var(--boxel-light)))
+        );
+        --radio-foreground: var(
+          --boxel-radio-foreground-color,
+          var(--radio-foreground-color, var(--foreground, var(--boxel-dark)))
+        );
+        --radio-checked-background: var(
+          --boxel-radio-checked-background-color,
+          var(
+            --radio-checked-background-color,
+            var(--background, var(--boxel-highlight))
+          )
+        );
+        --radio-highlight: var(
+          --boxel-radio-highlight-color,
+          var(
+            --radio-highlight-color,
+            var(--foreground, var(--boxel-highlight))
+          )
+        );
+        --radio-disabled-border-color: var(
+          --boxel-radio-disabled-border-color,
+          var(
+            --radio-disabled-border-color,
+            var(--muted-foreground, var(--boxel-purple-300))
+          )
+        );
+
         position: relative;
         display: block;
         max-width: 100%;
+        background-color: var(--radio-background);
+        color: var(--radio-foreground);
         padding: var(--boxel-radio-input-option-padding);
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--radio-border-radius);
         box-shadow: 0 0 0 1px var(--boxel-light-400);
         transition: box-shadow var(--boxel-transition);
       }
@@ -52,7 +95,7 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
       .boxel-radio-option--checked:not(.boxel-radio-option--disabled),
       .boxel-radio-option:focus:not(.boxel-radio-option--disabled),
       .boxel-radio-option:focus-within:not(.boxel-radio-option--disabled) {
-        box-shadow: 0 0 0 var(--boxel-outline-width) var(--boxel-highlight);
+        box-shadow: 0 0 0 var(--boxel-outline-width) var(--radio-highlight);
         outline: 1px solid transparent;
       }
 
@@ -67,18 +110,17 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
         width: 1rem;
         height: 1rem;
         margin: 0;
-        border: 1.5px solid var(--boxel-dark);
-        border-radius: 100px;
-        background-color: transparent;
+        border: var(--radio-border);
+        border-radius: var(--radio-border-radius);
       }
 
       .boxel-radio-option__input--checked {
-        background-color: var(--boxel-highlight);
+        background-color: var(--radio-checked-background);
         border-width: 3px;
       }
 
       .boxel-radio-option__input:disabled {
-        border-color: var(--boxel-purple-300);
+        border-color: var(--radio-disabled-border-color);
       }
 
       .boxel-radio-option__input:focus:not(:disabled) {
@@ -98,6 +140,40 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
       /* default focus class - can be overwritten by providing @focusedClass */
       .boxel-radio-option__focused-item {
         outline: 1px solid var(--boxel-outline-color);
+      }
+
+      .variant-primary {
+        --radio-background-color: var(--primary, var(--boxel-highlight));
+        --radio-foreground-color: var(--primary-foreground, var(--boxel-dark));
+        --radio-checked-background: var(--primary, var(--boxel-highlight));
+        --radio-highlight-color: var(--boxel-dark);
+      }
+
+      .variant-secondary {
+        --radio-background-color: var(--secondary, var(--boxel-400));
+        --radio-foreground-color: var(
+          --secondary-foreground,
+          var(--boxel-dark)
+        );
+        --radio-checked-background: var(--secondary, var(--boxel-400));
+        --radio-highlight-color: var(--boxel-dark);
+      }
+
+      .variant-muted {
+        --radio-background-color: var(--muted, var(--boxel-200));
+        --radio-foreground-color: var(--muted-foreground, var(--boxel-dark));
+        --radio-checked-background: var(--muted, var(--boxel-200));
+        --radio-highlight-color: var(--boxel-300);
+      }
+
+      .variant-destructive {
+        --radio-background-color: var(--destructive, var(--boxel-danger));
+        --radio-foreground-color: var(
+          --destructive-foreground,
+          var(--boxel-dark)
+        );
+        --radio-checked-background: var(--destructive, var(--boxel-danger));
+        --radio-highlight-color: var(--boxel-dark);
       }
 
       /* stylelint-disable-next-line no-descending-specificity */
@@ -124,10 +200,16 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
   <label
     class={{cn
       'boxel-radio-option'
-      boxel-radio-option--checked=@checked
-      boxel-radio-option--disabled=@disabled
-      boxel-radio-option--hidden-border=@hideBorder
-      boxel-radio-option--has-radio=(not @hideRadio)
+      (if @checked 'boxel-radio-option--checked')
+      (if @disabled 'boxel-radio-option--disabled')
+      (if @hideBorder 'boxel-radio-option--hidden-border')
+      (if (not @hideRadio) 'boxel-radio-option--has-radio')
+      (if @variant (concat 'variant-' @variant) 'variant-default')
+    }}
+    style={{cssVar
+      boxel-radio-background-color=@radioBackgroundColor
+      boxel-radio-border-color=@radioBorderColor
+      boxel-radio-highlight-color=@radioHighlightColor
     }}
     data-test-boxel-radio-option
     data-test-boxel-radio-option-checked={{@checked}}

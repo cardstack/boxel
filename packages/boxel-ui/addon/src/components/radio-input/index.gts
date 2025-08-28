@@ -20,7 +20,11 @@ export interface Signature {
     keyName?: string;
     name: string;
     orientation?: string;
+    radioBackgroundColor?: string;
+    radioBorderColor?: string;
+    radioHighlightColor?: string;
     spacing?: string;
+    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
   };
   Blocks: {
     default: [
@@ -123,6 +127,10 @@ export default class RadioInput extends Component<Signature> {
                 )
                 hideRadio=@hideRadio
                 hideBorder=@hideBorder
+                variant=@variant
+                radioBackgroundColor=@radioBackgroundColor
+                radioBorderColor=@radioBorderColor
+                radioHighlightColor=@radioHighlightColor
               )
               data=item
               index=i
