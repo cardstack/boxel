@@ -118,7 +118,7 @@ export async function startServer(
             }
           } else {
             console.log(
-              'response not ok',
+              'response not ok port ' + workerManagerPort,
               response.status,
               response.statusText,
             );
