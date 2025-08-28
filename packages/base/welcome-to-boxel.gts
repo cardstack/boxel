@@ -16,6 +16,7 @@ import CodeIcon from '@cardstack/boxel-icons/code';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 import { on } from '@ember/modifier';
 import { concat } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 
 export class ContentItem extends FieldDef {
   static displayName = 'ContentItem';
@@ -47,17 +48,21 @@ export class ContentItem extends FieldDef {
     };
 
     <template>
-      <div
+      <button
+        type='button'
         class='content-card'
-        style={{concat 'background-color: ' @model.backgroundColor}}
+        style={{htmlSafe (concat 'background-color: ' @model.backgroundColor)}}
         {{on 'click' this.openUrl}}
       >
-        <div class='content-title' style={{concat 'color: ' @model.textColor}}>
+        <div
+          class='content-title'
+          style={{htmlSafe (concat 'color: ' @model.textColor)}}
+        >
           {{@model.title}}:
         </div>
         <div
           class='content-description'
-          style={{concat 'color: ' @model.textColor}}
+          style={{htmlSafe (concat 'color: ' @model.textColor)}}
         >
           {{@model.description}}</div>
         <div class='content-icon'>
@@ -71,7 +76,7 @@ export class ContentItem extends FieldDef {
             <CodeIcon class='icon' />
           {{/if}}
         </div>
-      </div>
+      </button>
       <style scoped>
         .content-card {
           display: flex;
@@ -85,6 +90,9 @@ export class ContentItem extends FieldDef {
           position: relative;
           overflow: hidden;
           cursor: pointer;
+          border: none;
+          box-shadow: none;
+          text-align: left;
         }
         .content-content {
           flex-grow: 1;
@@ -165,17 +173,17 @@ export class WelcomeToBoxel extends CardDef {
                 <PlayIcon class='play-icon' fill='var(--boxel-dark)' />
               </button>
             </div>
-            {{#each @fields.content as |content index|}}
+            {{#each @fields.content as |ContentItem index|}}
               {{#if (lt index 2)}}
-                <content @format='embedded' class='item-{{index}}' />
+                <ContentItem @format='embedded' class='item-{{index}}' />
               {{/if}}
             {{/each}}
           </div>
 
           <div class='remaining-items-container'>
-            {{#each @fields.content as |content index|}}
+            {{#each @fields.content as |ContentItem index|}}
               {{#if (gte index 2)}}
-                <content @format='embedded' class='item-{{index}}' />
+                <ContentItem @format='embedded' class='item-{{index}}' />
               {{/if}}
             {{/each}}
           </div>
