@@ -156,7 +156,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         top: var(--boxel-sp);
         right: var(--boxel-sp);
         width: 10rem;
-        height: 3rem;
+        height: 4rem;
         border: none;
         background: transparent;
         opacity: 1;
