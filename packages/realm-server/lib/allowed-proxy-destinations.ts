@@ -4,11 +4,15 @@ import { type DBAdapter, logger } from '@cardstack/runtime-common';
 
 const log = logger('allowed-proxy-destinations');
 
+export type AuthMethod = 'header' | 'url-parameter';
+
 export interface AllowedProxyDestination {
   url: string;
   apiKey: string;
   creditStrategy: CreditStrategy;
   supportsStreaming: boolean;
+  authMethod: AuthMethod;
+  authParameterName?: string; // For URL parameter auth, e.g., 'key' for Google, 'api_key' for others
 }
 
 interface ProxyEndpointRow {
@@ -67,6 +71,8 @@ export class AllowedProxyDestinations {
           endpoint.api_key,
         ),
         supportsStreaming: endpoint.supports_streaming,
+        authMethod: (endpoint.auth_method || 'header') as AuthMethod, // Default to header for backward compatibility
+        authParameterName: endpoint.auth_parameter_name,
       };
     }
   }
