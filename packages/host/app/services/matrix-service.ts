@@ -14,7 +14,6 @@ import {
   type EmittedEvents,
 } from 'matrix-js-sdk';
 import { Filter } from 'matrix-js-sdk';
-import { MatrixClient } from 'matrix-js-sdk';
 import {
   type SlidingSync,
   type MSC3575List,
@@ -37,7 +36,6 @@ import {
   REPLACE_MARKER,
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
-import { getPromptParts } from '@cardstack/runtime-common/ai';
 
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
@@ -155,6 +153,8 @@ export default class MatrixService extends Service {
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
 
+  @tracked private storage: Storage | undefined;
+
   profile = getMatrixProfile(this, () => this.userId);
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
@@ -236,8 +236,63 @@ export default class MatrixService extends Service {
   );
 
   private loadState = task(async () => {
+    await this.requestStorageAccess();
     await this.loadSDK();
   });
+
+  private get inIframe() {
+    return window.top !== window.self;
+  }
+
+  async requestStorageAccess() {
+    if (this.inIframe) {
+      if (await document.hasStorageAccess()) {
+        // Chrome
+        if (document['requestStorageAccessFor']) {
+          this.storage = (
+            await document.requestStorageAccess({
+              localStorage: true,
+            })
+          ).localStorage;
+        } else {
+          this.storage = window.localStorage;
+        }
+      } else {
+        try {
+          console.log(
+            'does requestStorageAccessFor exist?',
+            document['requestStorageAccessFor'],
+          );
+          const handle = document['requestStorageAccessFor']
+            ? await document.requestStorageAccess({
+                localStorage: true,
+              })
+            : await document.requestStorageAccess();
+          console.log('requestStorageAccess handle:', handle);
+          this.storage = handle?.localStorage ?? window.localStorage;
+        } catch (error) {
+          console.warn('Storage access request failed:', error);
+          console.log(error?.stack);
+        }
+      }
+    } else {
+      this.storage = window.localStorage;
+    }
+
+    return this.storage;
+  }
+
+  private saveAuth(auth: LoginResponse) {
+    this.storage?.setItem('auth', JSON.stringify(auth));
+  }
+
+  private getAuth(): LoginResponse | undefined {
+    let auth = this.storage?.getItem('auth');
+    if (!auth) {
+      return;
+    }
+    return JSON.parse(auth) as LoginResponse;
+  }
 
   private async loadSDK() {
     await this.cardAPIModule.loaded;
@@ -454,7 +509,7 @@ export default class MatrixService extends Service {
   ) {
     let { auth, refreshRoutes } = opts;
     if (!auth) {
-      auth = getAuth();
+      auth = this.getAuth();
       if (!auth) {
         return;
       }
@@ -501,7 +556,7 @@ export default class MatrixService extends Service {
     });
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
-      saveAuth(auth);
+      this.saveAuth(auth);
       this.bindEventListeners();
 
       try {
@@ -1068,7 +1123,7 @@ export default class MatrixService extends Service {
     // Reset it here rather than in the reset function of each service
     // because it is possible that
     // there are some services that are not initialized yet
-    clearLocalStorage();
+    clearLocalStorage(this.storage);
   }
 
   private bindEventListeners() {
@@ -1636,7 +1691,7 @@ export default class MatrixService extends Service {
   }
 
   private clearAuth() {
-    window.localStorage.removeItem('auth');
+    this.storage?.removeItem('auth');
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
@@ -1744,39 +1799,6 @@ export default class MatrixService extends Service {
       [0, newEndRange],
     ]);
   }
-
-  async getPromptParts(roomId: string) {
-    const roomResource = this.roomResourcesCache.get(roomId);
-    if (!roomResource) {
-      throw new Error(`Room ${roomId} not found`);
-    }
-
-    const events = roomResource.events;
-    if (!events || events.length === 0) {
-      throw new Error('No events found in the current room to summarize');
-    }
-
-    const promptParts = await getPromptParts(
-      events,
-      this.aiBotUserId,
-      this.client as unknown as MatrixClient,
-    );
-
-    return promptParts;
-  }
-}
-
-function saveAuth(auth: LoginResponse) {
-  console.log('saving auth as', auth);
-  window.localStorage.setItem('auth', JSON.stringify(auth));
-}
-
-function getAuth(): LoginResponse | undefined {
-  let auth = window.localStorage.getItem('auth');
-  if (!auth) {
-    return;
-  }
-  return JSON.parse(auth) as LoginResponse;
 }
 
 declare module '@ember/service' {
