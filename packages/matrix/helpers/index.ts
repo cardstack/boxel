@@ -80,7 +80,7 @@ export async function startUniqueTestEnvironment(
     }
 
     if (options.withSmtp) {
-      await smtpStart();
+      await smtpStart({ mailClientPort: config.smtp4DevPort });
     }
 
     return {
