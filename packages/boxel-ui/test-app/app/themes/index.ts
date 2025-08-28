@@ -9,6 +9,7 @@ import { SoftPop } from './soft-pop.ts';
 import { Candyland } from './candyland.ts';
 import { Doom64 } from './doom64.ts';
 import { StarryNight } from './starry-night.ts';
+import { Boxel } from './boxel.ts';
 
 export interface Theme {
   name: string;
@@ -22,6 +23,7 @@ export const THEMES = {
   NeoBrutalism,
   StarryNight,
   Candyland,
+  Boxel,
 };
 
 function getThemeStyles(cssString: string) {
