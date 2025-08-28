@@ -122,6 +122,7 @@ export async function startServer(
               response.status,
               response.statusText,
             );
+            console.log(JSON.stringify(await response.json(), null, 2));
           }
         } catch (e) {}
 
