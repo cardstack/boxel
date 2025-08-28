@@ -15,6 +15,7 @@ import { makeFastBootIndexRunner } from './fastboot';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+
 import 'decorator-transforms/globals';
 
 let log = logger('main');
@@ -64,8 +65,6 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
 
 const MATRIX_REGISTRATION_SHARED_SECRET =
   process.env.MATRIX_REGISTRATION_SHARED_SECRET;
-
-const ALLOWED_PROXY_DESTINATIONS = process.env.ALLOWED_PROXY_DESTINATIONS;
 
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
@@ -267,7 +266,6 @@ let autoMigrate = migrateDB || undefined;
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
-    allowedProxyDestinations: ALLOWED_PROXY_DESTINATIONS,
     dbAdapter,
     queue,
     assetsURL: dist,

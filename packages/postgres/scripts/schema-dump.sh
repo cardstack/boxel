@@ -19,6 +19,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=stripe_events \
   --exclude-table-and-children=ai_bot_event_processing \
   --exclude-table-and-children=published_realms \
+  --exclude-table-and-children=proxy_endpoints \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \
