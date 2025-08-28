@@ -8,16 +8,20 @@ export default class HostModeService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
 
   get isActive() {
+    return false;
+    // FIXME hax
     if (!this.fastboot.isFastBoot) {
-      if (this.simulatingHostMode) {
-        return true;
-      }
+      return false;
+      // FIXME hax
+      // if (this.simulatingHostMode) {
+      //   return true;
+      // }
 
-      return (
-        config.hostsOwnAssets === false &&
-        this.isRealmServerDomain === false &&
-        this.originIsNotMatrixTests
-      );
+      // return (
+      //   config.hostsOwnAssets === false &&
+      //   this.isRealmServerDomain === false &&
+      //   this.originIsNotMatrixTests
+      // );
     }
 
     return false;
