@@ -620,6 +620,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-choose-card-button]');
 
+    await waitFor('[data-test-search-field]');
+    await fillIn('[data-test-search-field]', 'Date');
+
     await waitFor(
       '[data-test-select="https://cardstack.com/base/fields/date-field"]',
     );
