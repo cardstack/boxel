@@ -67,15 +67,9 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
     */
     @media (prefers-reduced-motion: no-preference) {
       .boxel-loading-indicator :deep(svg) {
-        animation: spin 6000ms linear infinite;
+        animation: var(--boxel-infinite-spin-animation);
         width: var(--loading-indicator-size);
         height: var(--loading-indicator-size);
-      }
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
       }
     }
   </style>

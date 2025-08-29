@@ -157,6 +157,9 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
           transparent
         );
       }
+      .boxel-button:focus-visible {
+        outline-color: var(--ring, var(--boxel-highlight));
+      }
 
       .loading-indicator {
         margin-right: var(

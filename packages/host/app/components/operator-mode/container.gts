@@ -175,7 +175,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-bottom-bar-item-height: var(--container-button-size);
       }
       :global(button:focus:not(:disabled)) {
-        outline-color: var(--boxel-header-text-color, var(--boxel-highlight));
+        outline-color: var(
+          --boxel-header-text-color,
+          var(--ring, var(--boxel-highlight))
+        );
         outline-offset: -2px;
       }
       :global(button:focus:not(:focus-visible)) {

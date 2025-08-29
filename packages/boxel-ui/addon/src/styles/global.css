@@ -85,11 +85,38 @@
     outline-color: transparent;
   }
 
+  button,
+  input,
+  select,
+  textarea {
+    color: inherit;
+    background-color: transparent;
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
   input:focus,
-  select:focus,
   textarea:focus {
+    outline-width: var(--boxel-outline-width);
     outline-color: var(--boxel-highlight);
-    outline-style: var(--boxel-outline-style, solid);
+    outline-style: solid;
+  }
+
+  input:focus:not(:focus-visible),
+  textarea:focus:not(:focus-visible) {
+    outline-color: transparent;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible {
+    outline-color: var(--boxel-highlight);
   }
 }
 
@@ -118,6 +145,19 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* can be used via `--boxel-infinite-spin-animation` css-variable. example:
+    @media (prefers-reduced-motion: no-preference) {
+      .loading-icon {
+        animation: var(--boxel-infinite-spin-animation);
+      }
+    }
+  */
+  @keyframes boxel-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 }
 

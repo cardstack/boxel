@@ -80,6 +80,9 @@
   --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
   --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
 
+  /* animations */
+  --boxel-infinite-spin-animation: boxel-spin 6000ms linear infinite;
+
   /* transition */
   --boxel-transition: 0.2s ease;
   --boxel-transition-properties:
