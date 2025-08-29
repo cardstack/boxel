@@ -93,7 +93,8 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
   addMessageListener = modifier((element: HTMLElement) => {
     let messageHandler = (event: MessageEvent) => {
-      // FIXME check origin
+      // TODO if this becomes anything more significant than just showing
+      // the button, the origin should be verified.
       if (event.data === 'ready') {
         element.classList.remove('not-loaded');
       }
