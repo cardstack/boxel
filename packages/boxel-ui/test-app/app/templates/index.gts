@@ -60,7 +60,7 @@ class IndexComponent extends Component {
           <Switch
             @label='Cycle Themes'
             @isEnabled={{this.isCycleThemesEnabled}}
-            @onChange={{this.enableThemeCycles}}
+            @onChange={{this.toggleCycling}}
           />
         </FieldContainer>
       </BoxelContainer>
@@ -101,9 +101,18 @@ class IndexComponent extends Component {
       .FreestyleUsageCssVar-name {
         width: 40%;
       }
+      .FreestyleUsage-preview {
+        color: var(--foreground, var(--boxel-dark));
+        background-color: var(--background, var(--boxel-light));
+      }
+      input {
+        border-width: 1px;
+        border-style: solid;
+      }
     </style>
   </template>
 
+  private intervalId?: NodeJS.Timeout;
   private themes: Theme[] = [{ name: '<None>' }, ...Themes];
   private usageComponents = ALL_USAGE_COMPONENTS.map(([name, c]) => {
     return {
@@ -125,41 +134,50 @@ class IndexComponent extends Component {
     }
     let { cycleThemes, theme } = queryParams;
 
-    if (cycleThemes === 'true') {
-      this.isCycleThemesEnabled = true;
-      let currentTheme = this.themes.find((t) => t.name === theme);
-      if (!currentTheme) {
-        this.selectTheme(this.themes[1]);
-      } else {
-        let index = this.themes.indexOf(currentTheme);
-        let nextIndex = index === this.themes.length - 1 ? 1 : index + 1;
-        this.selectTheme(this.themes[nextIndex]);
-      }
-      return;
-    }
-
-    if (!theme) {
-      return;
-    }
     let currentTheme = this.themes.find((t) => t.name === theme);
     this.selectTheme(currentTheme);
+
+    if (cycleThemes === 'true') {
+      this.isCycleThemesEnabled = true;
+      this.maybeCycleThemes();
+    }
   }
 
   @action private selectTheme(theme?: Theme) {
-    this.theme = theme?.styles ? theme : undefined;
+    this.theme = theme;
     this.router.replaceWith('index', {
       queryParams: { theme: this.theme?.name },
     });
   }
 
-  @action private enableThemeCycles() {
+  @action private toggleCycling() {
     this.isCycleThemesEnabled = !this.isCycleThemesEnabled;
     this.router.replaceWith('index', {
       queryParams: {
         cycleThemes: this.isCycleThemesEnabled === true ? true : null,
       },
     });
+    this.maybeCycleThemes();
   }
+
+  @action private maybeCycleThemes() {
+    if (this.isCycleThemesEnabled) {
+      let index = this.theme ? this.themes.indexOf(this.theme) : 0;
+      this.cycleThemes(index + 1);
+    } else {
+      clearInterval(this.intervalId);
+    }
+  }
+
+  private cycleThemes = (i = 0) => {
+    this.intervalId = setInterval(() => {
+      if (i >= this.themes.length) {
+        i = 0;
+      }
+      this.selectTheme(this.themes[i]);
+      i++;
+    }, 2000);
+  };
 }
 
 export default RouteTemplate(IndexComponent);
