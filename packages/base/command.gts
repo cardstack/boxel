@@ -304,6 +304,14 @@ export class SummarizeSessionResult extends CardDef {
   @field summary = contains(StringField);
 }
 
+export class AskAiInput extends CardDef {
+  @field prompt = contains(StringField);
+}
+
+export class AskAiOutput extends CardDef {
+  @field response = contains(StringField);
+}
+
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,

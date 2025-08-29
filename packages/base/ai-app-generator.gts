@@ -8,13 +8,12 @@ import {
 } from './card-api';
 import StringField from './string';
 import { Button as BoxelButton } from '@cardstack/boxel-ui/components';
-import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
 
-import AskAiCommand, { AskAiInput } from './commands/ask-ai-command';
+import AskAiCommand from '@cardstack/boxel-host/commands/ask-ai';
+import { AskAiInput } from './command';
 
 export class SuggestionField extends FieldDef {
   @field title = contains(StringField);
@@ -34,7 +33,7 @@ export class AiAppGenerator extends CardDef {
     @tracked promptValue =
       'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.';
 
-    setPromptValue = (value) => {
+    setPromptValue = (value: string) => {
       this.promptValue = value;
     };
 
