@@ -116,13 +116,6 @@ export async function startServer(
               resolve();
               return;
             }
-          } else {
-            console.log(
-              'response not ok port ' + workerManagerPort,
-              response.status,
-              response.statusText,
-            );
-            console.log(JSON.stringify(await response.json(), null, 2));
           }
         } catch (e) {}
 
