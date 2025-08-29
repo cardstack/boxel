@@ -100,11 +100,6 @@
       },
       "featuredPlaylists.2": {
         "links": {
-          "self": "../../playlist/PlaylistCard/chill-vibes"
-        }
-      },
-      "featuredPlaylists.3": {
-        "links": {
           "self": "../../playlist/PlaylistCard/energy-boost"
         }
       },
