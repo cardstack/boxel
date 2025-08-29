@@ -24,7 +24,7 @@ export interface Signature {
     radioBorderColor?: string;
     radioHighlightColor?: string;
     spacing?: string;
-    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
+    variant?: 'muted' | 'default';
   };
   Blocks: {
     default: [

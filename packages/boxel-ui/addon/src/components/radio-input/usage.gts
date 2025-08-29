@@ -58,13 +58,7 @@ export default class RadioInputUsage extends Component {
   @tracked hideBorder = false;
   @tracked spacing = '';
   @tracked orientation = 'horizontal';
-  @tracked selectedVariant:
-    | undefined
-    | 'primary'
-    | 'secondary'
-    | 'muted'
-    | 'destructive'
-    | 'default' = 'default';
+  @tracked selectedVariant: undefined | 'muted' | 'default' = 'default';
   @tracked radioBackgroundColor = '';
   @tracked radioBorderColor = '';
   @tracked radioHighlightColor = '';
@@ -186,13 +180,7 @@ export default class RadioInputUsage extends Component {
           @name='variant'
           @description='Theme variant for the radio input'
           @defaultValue='default'
-          @options={{array
-            'default'
-            'primary'
-            'secondary'
-            'muted'
-            'destructive'
-          }}
+          @options={{array 'default' 'muted'}}
           @value={{this.selectedVariant}}
           @onInput={{fn (mut this.selectedVariant)}}
           @optional={{true}}

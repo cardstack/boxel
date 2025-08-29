@@ -17,7 +17,7 @@ export interface Signature {
     radioBackgroundColor?: string;
     radioBorderColor?: string;
     radioHighlightColor?: string;
-    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
+    variant?: 'muted' | 'default';
   };
   Blocks: {
     default: [];
@@ -47,15 +47,12 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
           --boxel-radio-checked-background-color,
           var(
             --radio-checked-background-color,
-            var(--background, var(--boxel-highlight))
+            var(--primary, var(--boxel-highlight))
           )
         );
         --radio-highlight: var(
           --boxel-radio-highlight-color,
-          var(
-            --radio-highlight-color,
-            var(--foreground, var(--boxel-highlight))
-          )
+          var(--radio-highlight-color, var(--primary, var(--boxel-highlight)))
         );
         --radio-disabled-border-color: var(
           --boxel-radio-disabled-border-color,
@@ -72,8 +69,8 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
         color: var(--radio-foreground);
         padding: var(--boxel-radio-input-option-padding);
         border-radius: var(--radio-border-radius);
-        box-shadow: 0 0 0 1px var(--boxel-light-400);
-        transition: box-shadow var(--boxel-transition);
+        box-shadow: 0 0 0 1px var(--border, var(--boxel-200));
+        transition: box-shadow var(--boxel-transition-properties);
       }
 
       .boxel-radio-option--hidden-border {
@@ -104,19 +101,21 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
       }
 
       .boxel-radio-option__input {
+        position: relative;
         appearance: none;
         /* stylelint-disable-next-line property-no-vendor-prefix */
         -webkit-appearance: none;
+        box-sizing: border-box;
         width: 1rem;
         height: 1rem;
         margin: 0;
         border: var(--radio-border);
-        border-radius: var(--radio-border-radius);
+        border-radius: 50%;
       }
 
       .boxel-radio-option__input--checked {
         background-color: var(--radio-checked-background);
-        border-width: 3px;
+        box-shadow: inset 0 0 0 0.1rem var(--radio-foreground);
       }
 
       .boxel-radio-option__input:disabled {
@@ -142,23 +141,6 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
         outline: 1px solid var(--boxel-outline-color);
       }
 
-      .variant-primary {
-        --radio-background-color: var(--primary, var(--boxel-highlight));
-        --radio-foreground-color: var(--primary-foreground, var(--boxel-dark));
-        --radio-checked-background: var(--primary, var(--boxel-highlight));
-        --radio-highlight-color: var(--boxel-dark);
-      }
-
-      .variant-secondary {
-        --radio-background-color: var(--secondary, var(--boxel-400));
-        --radio-foreground-color: var(
-          --secondary-foreground,
-          var(--boxel-dark)
-        );
-        --radio-checked-background: var(--secondary, var(--boxel-400));
-        --radio-highlight-color: var(--boxel-dark);
-      }
-
       .variant-muted {
         --radio-background-color: var(--muted, var(--boxel-200));
         --radio-foreground-color: var(--muted-foreground, var(--boxel-dark));
@@ -166,28 +148,18 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
         --radio-highlight-color: var(--boxel-300);
       }
 
-      .variant-destructive {
-        --radio-background-color: var(--destructive, var(--boxel-danger));
-        --radio-foreground-color: var(
-          --destructive-foreground,
-          var(--boxel-dark)
-        );
-        --radio-checked-background: var(--destructive, var(--boxel-danger));
-        --radio-highlight-color: var(--boxel-dark);
-      }
-
       /* stylelint-disable-next-line no-descending-specificity */
       .boxel-radio-input--invalid .boxel-radio-option {
-        box-shadow: 0 0 0 1px var(--boxel-error-100);
+        box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
       }
 
       .boxel-radio-input--invalid .boxel-radio-option:focus {
         outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
-        box-shadow: 0 0 0 1.5px var(--boxel-error-100);
+        box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
       }
 
       .boxel-radio-input--invalid .boxel-radio-option:hover:not(:disabled) {
-        box-shadow: 0 0 0 1px var(--boxel-error-100);
+        box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
       }
     }
   </style>
