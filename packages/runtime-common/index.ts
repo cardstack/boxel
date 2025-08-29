@@ -449,10 +449,6 @@ export interface CardActions {
   ) => void;
   editCard: (card: CardDef) => void;
   saveCard: (id: string) => void;
-  changeSubmode: (
-    url: URL,
-    submode: 'code' | 'interact',
-  ) => Promise<void> | void;
 }
 
 export interface CopyCardsWithCodeRef {

@@ -92,8 +92,6 @@ import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 
-import type { Submode } from '../submode-switcher';
-
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
 export type Stack = StackItem[];
@@ -226,13 +224,6 @@ export default class InteractSubmode extends Component {
       },
       saveCard: (id: string): void => {
         here.store.save(id);
-      },
-      changeSubmode: async (
-        url: URL,
-        submode: Submode = 'code',
-      ): Promise<void> => {
-        await here.operatorModeStateService.updateCodePath(url);
-        here.operatorModeStateService.updateSubmode(submode);
       },
     };
     return actions;
