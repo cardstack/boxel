@@ -14,6 +14,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import AskAiCommand from '@cardstack/boxel-host/commands/ask-ai';
 import { AskAiInput } from './command';
+import { tracked } from '@glimmer/tracking';
 
 export class SuggestionField extends FieldDef {
   @field title = contains(StringField);
@@ -28,13 +29,12 @@ export class AiAppGenerator extends CardDef {
   @field title = contains(StringField);
   @field description = contains(StringField);
   @field suggestions = containsMany(SuggestionField);
+  @tracked promptValue =
+    'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.';
 
   static embedded = class Embedded extends Component<typeof this> {
-    @tracked promptValue =
-      'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.';
-
     setPromptValue = (value: string) => {
-      this.promptValue = value;
+      this.args.model.promptValue = value;
     };
 
     executeAskAi = () => {
@@ -50,7 +50,7 @@ export class AiAppGenerator extends CardDef {
       let command = new AskAiCommand(commandContext);
       await command.execute(
         new AskAiInput({
-          prompt: this.promptValue,
+          prompt: this.args.model.promptValue,
         }),
       );
     });
@@ -78,7 +78,7 @@ export class AiAppGenerator extends CardDef {
               <textarea
                 id='prompt-textarea'
                 class='prompt-textarea'
-                value={{this.promptValue}}
+                value={{@model.promptValue}}
               ></textarea>
             </div>
             <div class='create-button-container'>
