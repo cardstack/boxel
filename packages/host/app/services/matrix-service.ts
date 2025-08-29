@@ -37,6 +37,7 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
+import { getPromptParts } from '@cardstack/runtime-common/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -1798,6 +1799,26 @@ export default class MatrixService extends Service {
     await this.slidingSync.setListRanges(SLIDING_SYNC_AUTH_ROOM_LIST_NAME, [
       [0, newEndRange],
     ]);
+  }
+
+  async getPromptParts(roomId: string) {
+    const roomResource = this.roomResourcesCache.get(roomId);
+    if (!roomResource) {
+      throw new Error(`Room ${roomId} not found`);
+    }
+
+    const events = roomResource.events;
+    if (!events || events.length === 0) {
+      throw new Error('No events found in the current room to summarize');
+    }
+
+    const promptParts = await getPromptParts(
+      events,
+      this.aiBotUserId,
+      this.client as unknown as MatrixClient,
+    );
+
+    return promptParts;
   }
 }
 
