@@ -12,40 +12,38 @@ import {
   login,
   getRoomId,
   sendMessage,
-  registerRealmUsers,
   getRoomEvents,
   showAllCards,
   waitUntil,
   setupUserSubscribed,
   getAgentId,
   setSkillsRedirect,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-  appURL,
-} from '../helpers/isolated-realm-server';
 
 test.describe('Commands', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
+  let appURL: string;
   let userCred: Credentials;
+
   test.beforeEach(async ({ page }) => {
     await setSkillsRedirect(page);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    userCred = await registerUser(synapse, 'user1', 'pass');
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    testEnv = await startUniqueTestEnvironment();
+    appURL = testEnv.config.testHost;
+    userCred = await registerUser(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+      false,
+      undefined,
+      appURL,
+    );
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
   });
   test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await realmServer.stop();
+    await stopTestEnvironment(testEnv);
   });
 
   test(`it includes the patch tool in message event when top-most card is writable and context is shared`, async ({
@@ -65,7 +63,7 @@ test.describe('Commands', () => {
     await sendMessage(page, room1, 'please change this card');
     let message;
     await expect(async () => {
-      message = (await getRoomEvents(synapse)).pop()!;
+      message = (await getRoomEvents(testEnv.synapse!)).pop()!;
       expect(message?.content?.msgtype).toStrictEqual(
         APP_BOXEL_MESSAGE_MSGTYPE,
       );
@@ -145,7 +143,7 @@ test.describe('Commands', () => {
     await sendMessage(page, room1, 'please change this card');
     let message;
     await expect(async () => {
-      message = (await getRoomEvents(synapse)).pop()!;
+      message = (await getRoomEvents(testEnv.synapse!)).pop()!;
       expect(message?.content?.msgtype).toStrictEqual(
         APP_BOXEL_MESSAGE_MSGTYPE,
       );
@@ -191,7 +189,7 @@ test.describe('Commands', () => {
       )
       .click();
     await putEvent(
-      synapse,
+      testEnv.synapse!,
       userCred.accessToken,
       room1,
       'm.room.message',
@@ -202,7 +200,12 @@ test.describe('Commands', () => {
     await page.locator('[data-test-command-idle]');
 
     await expect(async () => {
-      let events = await getRoomEvents(synapse, 'user1', 'pass', room1);
+      let events = await getRoomEvents(
+        testEnv.synapse!,
+        'user1',
+        'pass',
+        room1,
+      );
       let commandResultEvent = (events as any).find(
         (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
@@ -245,7 +248,7 @@ test.describe('Commands', () => {
       )
       .click();
     await putEvent(
-      synapse,
+      testEnv.synapse!,
       userCred.accessToken,
       room1,
       'm.room.message',
@@ -255,7 +258,12 @@ test.describe('Commands', () => {
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
     await expect(async () => {
-      let events = await getRoomEvents(synapse, 'user1', 'pass', room1);
+      let events = await getRoomEvents(
+        testEnv.synapse!,
+        'user1',
+        'pass',
+        room1,
+      );
       let commandResultEvent = (events as any).find(
         (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
@@ -321,13 +329,18 @@ test.describe('Commands', () => {
     await page.locator('[data-test-message-idx="0"]').waitFor();
 
     let roomId = await getRoomId(page);
-    let roomEvents = await getRoomEvents(synapse, 'user1', 'pass', roomId);
+    let roomEvents = await getRoomEvents(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+      roomId,
+    );
     let numEventsBeforeResponse = roomEvents.length;
     let agentId = getAgentId(roomEvents);
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
     await putEvent(
-      synapse,
+      testEnv.synapse!,
       userCred.accessToken,
       roomId,
       'm.room.message',
@@ -377,10 +390,13 @@ test.describe('Commands', () => {
     // verify that command result event was created correctly
     await waitUntil(
       async () =>
-        (await getRoomEvents(synapse, 'user1', 'pass', roomId)).length >
+        (await getRoomEvents(testEnv.synapse!, 'user1', 'pass', roomId))
+          .length >
         numEventsBeforeResponse + 2,
     );
-    let message = (await getRoomEvents(synapse, 'user1', 'pass', roomId))
+    let message = (
+      await getRoomEvents(testEnv.synapse!, 'user1', 'pass', roomId)
+    )
       .reverse()
       .slice(0, 5)
       .find((message) => {
@@ -408,7 +424,7 @@ test.describe('Commands', () => {
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
     await putEvent(
-      synapse,
+      testEnv.synapse!,
       userCred.accessToken,
       roomId,
       'm.room.message',

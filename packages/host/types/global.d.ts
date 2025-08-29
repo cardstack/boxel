@@ -32,10 +32,10 @@ declare global {
 }
 
 declare module '@ember/component' {
-  export function setComponentTemplate(
+  export function setComponentTemplate<T extends ComponentLike>(
     template: string,
-    Component: ComponentLike,
-  ): void;
+    Component: T,
+  ): T;
 }
 
 // runtime-common has its own global type declaration that we need to

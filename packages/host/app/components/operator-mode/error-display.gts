@@ -222,8 +222,10 @@ export default class ErrorDisplay
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
-        width: 95px;
+        width: 100px;
         justify-content: flex-end;
+        font-weight: 400;
+        border: none;
       }
 
       .toggle-details-button:hover {

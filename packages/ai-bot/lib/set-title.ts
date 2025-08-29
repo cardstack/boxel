@@ -4,14 +4,7 @@ import {
   IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import {
-  type OpenAIPromptMessage,
-  isCodePatchResultStatusApplied,
-  isCommandResultStatusApplied,
-  attachedCardsToMessage,
-  getRelevantCards,
-} from '../helpers';
-import type { MatrixClient } from './matrix/util';
+import type { MatrixClient } from 'matrix-js-sdk';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultWithOutputContent,
@@ -21,6 +14,13 @@ import type {
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { ChatCompletionMessageParam } from 'openai/resources';
+import {
+  type OpenAIPromptMessage,
+  isCodePatchResultStatusApplied,
+  isCommandResultStatusApplied,
+  attachedCardsToMessage,
+  getRelevantCards,
+} from '@cardstack/runtime-common/ai';
 import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.

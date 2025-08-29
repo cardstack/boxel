@@ -8,16 +8,20 @@ export default class HostModeService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
 
   get isActive() {
+    return false;
+    // FIXME hax
     if (!this.fastboot.isFastBoot) {
-      if (this.simulatingHostMode) {
-        return true;
-      }
+      return false;
+      // FIXME hax
+      // if (this.simulatingHostMode) {
+      //   return true;
+      // }
 
-      return (
-        config.hostsOwnAssets === false &&
-        this.isRealmServerDomain === false &&
-        this.originIsNotMatrixTests
-      );
+      // return (
+      //   config.hostsOwnAssets === false &&
+      //   this.isRealmServerDomain === false &&
+      //   this.originIsNotMatrixTests
+      // );
     }
 
     return false;
@@ -53,10 +57,12 @@ export default class HostModeService extends Service {
   }
 
   get originIsNotMatrixTests() {
-    return (
-      this.hostModeOrigin !== 'http://localhost:4202' &&
-      this.hostModeOrigin !== 'http://localhost:4205'
-    );
+    // FIXME 4205 is no longer stable, how to pass this through to host from dynamic port isolated realm server?
+    return false;
+    // return (
+    //   this.hostModeOrigin !== 'http://localhost:4202' &&
+    //   this.hostModeOrigin !== 'http://localhost:4205'
+    // );
   }
 }
 

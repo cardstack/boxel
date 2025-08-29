@@ -19,6 +19,7 @@ import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
 
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 
+import SummarizeSessionCommand from '../commands/summarize-session';
 import { Submodes } from '../components/submode-switcher';
 import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
@@ -160,9 +161,11 @@ export default class AiAssistantPanelService extends Service {
     opts: {
       addSameSkills: boolean;
       shouldCopyFileHistory: boolean;
+      shouldSummarizeSession: boolean;
     } = {
       addSameSkills: false,
       shouldCopyFileHistory: false,
+      shouldSummarizeSession: false,
     },
   ) {
     this.displayRoomError = false;
@@ -241,16 +244,15 @@ export default class AiAssistantPanelService extends Service {
     return { enabledSkills, disabledSkills };
   }
 
-  private collectFileHistoryFromCurrentRoom(): {
+  private collectFileHistory(roomId: string): {
     attachedFiles: FileDef[];
     attachedCards: CardDef[];
   } {
-    const currentRoomId = this.matrixService.currentRoomId;
-    if (!currentRoomId) {
+    if (!roomId) {
       return { attachedFiles: [], attachedCards: [] };
     }
 
-    const roomResource = this.matrixService.roomResources.get(currentRoomId);
+    const roomResource = this.matrixService.roomResources.get(roomId);
     if (!roomResource) {
       return { attachedFiles: [], attachedCards: [] };
     }
@@ -296,9 +298,11 @@ export default class AiAssistantPanelService extends Service {
       opts: {
         addSameSkills: boolean;
         shouldCopyFileHistory: boolean;
+        shouldSummarizeSession: boolean;
       },
     ) => {
-      let { addSameSkills, shouldCopyFileHistory } = opts;
+      let { addSameSkills, shouldCopyFileHistory, shouldSummarizeSession } =
+        opts;
       try {
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
@@ -324,26 +328,21 @@ export default class AiAssistantPanelService extends Service {
           );
         }
 
+        let oldRoomId = this.matrixService.currentRoomId;
         let { roomId } = await createRoomCommand.execute(input);
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
 
-        // If file history should be copied, send an initial message with the files and cards
-        if (shouldCopyFileHistory) {
-          const { attachedFiles, attachedCards } =
-            this.collectFileHistoryFromCurrentRoom();
-
-          if (attachedFiles.length > 0 || attachedCards.length > 0) {
-            await this.matrixService.sendMessage(
-              roomId,
-              'This session includes files and cards from the previous conversation for context.',
-              attachedCards,
-              attachedFiles,
-            );
-          }
-        }
-
+        // Enter room immediately
         this.enterRoom(roomId);
+
+        // Start background tasks for session preparation
+        if (oldRoomId && (shouldSummarizeSession || shouldCopyFileHistory)) {
+          this.prepareSessionContextTask.perform(oldRoomId, roomId, {
+            shouldSummarizeSession,
+            shouldCopyFileHistory,
+          });
+        }
       } catch (e) {
         console.log(e);
         this.displayRoomError = true;
@@ -352,6 +351,93 @@ export default class AiAssistantPanelService extends Service {
       return undefined;
     },
   );
+
+  // Background tasks for session preparation
+  private summarizeSessionTask = restartableTask(
+    async (oldRoomId: string, newRoomId: string) => {
+      try {
+        const summarizeCommand = new SummarizeSessionCommand(
+          this.commandService.commandContext,
+        );
+        const result = await summarizeCommand.execute({
+          roomId: oldRoomId,
+        });
+        if (!result.summary) {
+          return;
+        }
+
+        const messageContent = `This is a summary of the previous conversation that should be included as context for our discussion:\n\n${result.summary}`;
+
+        await this.matrixService.sendMessage(newRoomId, messageContent, [], []);
+      } catch (error) {
+        console.error('Failed to summarize session:', error);
+      }
+    },
+  );
+
+  private copyFileHistoryTask = restartableTask(
+    async (oldRoomId: string, roomId: string) => {
+      try {
+        const fileHistory = this.collectFileHistory(oldRoomId);
+        const { attachedCards, attachedFiles } = fileHistory;
+
+        if (attachedFiles.length > 0 || attachedCards.length > 0) {
+          const messageContent =
+            'This session includes files and cards from the previous conversation for context.';
+
+          await this.matrixService.sendMessage(
+            roomId,
+            messageContent,
+            attachedCards,
+            attachedFiles,
+          );
+        }
+      } catch (error) {
+        console.error('Failed to copy file history:', error);
+      }
+    },
+  );
+
+  private prepareSessionContextTask = restartableTask(
+    async (
+      oldRoomId: string,
+      newRoomId: string,
+      opts: {
+        shouldSummarizeSession: boolean;
+        shouldCopyFileHistory: boolean;
+      },
+    ) => {
+      const { shouldSummarizeSession, shouldCopyFileHistory } = opts;
+
+      if (shouldSummarizeSession) {
+        await this.summarizeSessionTask.perform(oldRoomId, newRoomId);
+      }
+
+      if (shouldCopyFileHistory) {
+        await this.copyFileHistoryTask.perform(oldRoomId, newRoomId);
+      }
+    },
+  );
+
+  // Public getters for task loading states
+  get isSummarizingSession() {
+    return this.summarizeSessionTask.isRunning;
+  }
+
+  get isCopyingFileHistory() {
+    return this.copyFileHistoryTask.isRunning;
+  }
+
+  get isPreparingSession() {
+    return this.isSummarizingSession || this.isCopyingFileHistory;
+  }
+
+  @action
+  skipSessionPreparation() {
+    this.summarizeSessionTask.cancelAll();
+    this.copyFileHistoryTask.cancelAll();
+    this.prepareSessionContextTask.cancelAll();
+  }
 
   get loadingRooms() {
     return this.loadRoomsTask.isRunning;

@@ -26,14 +26,14 @@ export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
   private pool: Pool;
-  private started: Promise<void>;
+  #started: Promise<void>;
   private config: Config;
 
   constructor(opts?: { autoMigrate?: true }) {
     if (opts?.autoMigrate) {
-      this.started = this.migrateDb();
+      this.#started = this.migrateDb();
     } else {
-      this.started = Promise.resolve();
+      this.#started = Promise.resolve();
     }
     this.config = config();
     let { user, host, database, password, port } = this.config;
@@ -45,6 +45,10 @@ export class PgAdapter implements DBAdapter {
       password,
       port,
     });
+  }
+
+  get started(): Promise<void> {
+    return this.#started;
   }
 
   get isClosed() {
@@ -59,7 +63,7 @@ export class PgAdapter implements DBAdapter {
   async close() {
     log.info(`closing ${this.url}`);
     this.#isClosed = true;
-    await this.started;
+    await this.#started;
     await this.pool.end();
   }
 
@@ -67,7 +71,7 @@ export class PgAdapter implements DBAdapter {
     sql: string,
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
-    await this.started;
+    await this.#started;
     let client = await this.pool.connect();
     log.debug(
       `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
@@ -96,7 +100,7 @@ export class PgAdapter implements DBAdapter {
     handler: (notification: Notification) => void,
     fn: () => Promise<void>,
   ) {
-    await this.started;
+    await this.#started;
 
     // we have found that LISTEN/NOTIFY doesn't work reliably on connections from the
     // Pool, and this is substantiated by commentary on GitHub:
@@ -121,7 +125,7 @@ export class PgAdapter implements DBAdapter {
       query: (e: Expression) => Promise<Record<string, PgPrimitive>[]>,
     ) => Promise<T>,
   ): Promise<T> {
-    await this.started;
+    await this.#started;
 
     let client = await this.pool.connect();
     let query = async (expression: Expression) => {
@@ -138,7 +142,7 @@ export class PgAdapter implements DBAdapter {
   }
 
   async getColumnNames(tableName: string): Promise<string[]> {
-    await this.started;
+    await this.#started;
 
     let result = await this.execute(
       'SELECT column_name FROM information_schema.columns WHERE table_name = $1',

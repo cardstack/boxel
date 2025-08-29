@@ -86,7 +86,9 @@ export function extractCodeData(
   let firstLineIsUrl = lines.length == 1 && lines[0].startsWith('http');
 
   let codeToDisplay = '';
-  if (
+  if (firstLineIsUrl && lines.length === 1) {
+    codeToDisplay = lines[0];
+  } else if (
     firstLineIsUrl ||
     (isBeginningOfSearchReplaceBlock && !parsedContent.searchContent)
   ) {
