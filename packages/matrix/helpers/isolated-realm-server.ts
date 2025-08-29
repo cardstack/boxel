@@ -63,7 +63,7 @@ export async function startServer(includePublishedRealm = false) {
 
   if (includePublishedRealm) {
     workerArgs = workerArgs.concat([
-      `--fromUrl='http://published.realm/'`,
+      `--fromUrl='http://published.localhost:4205/'`,
       `--toUrl='http://localhost:4205/published/'`,
     ]);
   }
@@ -117,13 +117,13 @@ export async function startServer(includePublishedRealm = false) {
     await sqlExecutor.executeSQL(`
       INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
       VALUES (
-        'http://published.realm/',
+        'http://published.localhost:4205/',
         '@node-test_realm:localhost',
         true,
         true,
         true
       ), (
-        'http://published.realm/',
+        'http://published.localhost:4205/',
         '*',
         true,
         false,
@@ -137,7 +137,7 @@ export async function startServer(includePublishedRealm = false) {
         '${publishedRealmId}',
         '@node-test_realm:localhost',
         'http://example.com',
-        'http://published.realm/'
+        'http://published.localhost:4205/'
       )
     `);
   }
@@ -165,7 +165,7 @@ export async function startServer(includePublishedRealm = false) {
 
   if (includePublishedRealm) {
     serverArgs = serverArgs.concat([
-      `--fromUrl='http://published.realm/'`,
+      `--fromUrl='http://published.localhost:4205/'`,
       `--toUrl='http://localhost:4205/published/'`,
     ]);
   }

@@ -32,7 +32,11 @@ export default class HostModeService extends Service {
       let realmServerDomain = config.realmServerDomain;
       let currentHost = window.location.hostname;
 
-      return currentHost.endsWith(`.${realmServerDomain}`);
+      return (
+        currentHost.endsWith(`.${realmServerDomain}`) &&
+        // FIXME hack for testing
+        !currentHost.startsWith('published.localhost')
+      );
     }
 
     return false;
