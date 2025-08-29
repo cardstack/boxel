@@ -73,6 +73,7 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
+  private resolvedSkillsRealmURL: string | undefined;
 
   constructor({
     serverURL,
@@ -91,6 +92,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
+    resolvedSkillsRealmURL,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -108,6 +110,7 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
+    resolvedSkillsRealmURL?: string;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -132,6 +135,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
+    this.resolvedSkillsRealmURL = resolvedSkillsRealmURL;
     this.realms = [...realms];
   }
 
@@ -259,6 +263,11 @@ export class RealmServer {
           matrixURL: this.matrixClient.matrixURL,
           realmServerDomain: this.serverURL.hostname,
         });
+
+        if (this.resolvedSkillsRealmURL) {
+          config.resolvedSkillsRealmURL = this.resolvedSkillsRealmURL;
+        }
+
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
     );

@@ -38,11 +38,11 @@ test.describe('Skills', () => {
     await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
     await setupUserSubscribed('@user2:localhost', testEnv.realmServer!);
 
-    environmentSkillCardId = `${testEnv.config.testHost}/skills/Skill/boxel-environment`;
+    environmentSkillCardId = `http://localhost:${testEnv.config.realmServerPort}/skills/Skill/boxel-environment`;
     defaultSkillCardsForCodeMode = [
-      `${testEnv.config.testHost}/skills/Skill/source-code-editing`,
-      `${testEnv.config.testHost}/skills/Skill/boxel-development`,
-      `${testEnv.config.testHost}/skills/Skill/boxel-environment`,
+      `http://localhost:${testEnv.config.realmServerPort}/skills/Skill/source-code-editing`,
+      `http://localhost:${testEnv.config.realmServerPort}/skills/Skill/boxel-development`,
+      `http://localhost:${testEnv.config.realmServerPort}/skills/Skill/boxel-environment`,
     ];
     skillCard1 = `${testEnv.config.testHost}/skill-pirate-speak`;
     skillCard2 = `${testEnv.config.testHost}/skill-seo`;

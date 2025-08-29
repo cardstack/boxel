@@ -284,6 +284,7 @@ export async function startServer(
     `--port=${realmServerPort}`,
     `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
+    `--resolvedSkillsRealmURL='http://localhost:${realmServerPort}/skills/'`,
     `--workerManagerPort=${workerManagerPort}`,
     `--useRegistrationSecretFunction`,
 

@@ -79,6 +79,7 @@ let {
   port,
   matrixURL,
   realmsRootPath,
+  resolvedSkillsRealmURL,
   serverURL = `http://localhost:${port}`,
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   path: paths,
@@ -109,6 +110,10 @@ let {
     realmsRootPath: {
       description: 'the path in which dynamically created realms are created',
       demandOption: true,
+      type: 'string',
+    },
+    resolvedSkillsRealmURL: {
+      description: 'the resolved URL of the skills realm',
       type: 'string',
     },
     serverURL: {
@@ -278,6 +283,7 @@ let autoMigrate = migrateDB || undefined;
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
+    resolvedSkillsRealmURL,
   });
 
   let httpServer = server.listen(port);
