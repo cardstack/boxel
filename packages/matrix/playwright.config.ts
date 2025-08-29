@@ -8,8 +8,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1,
   reporter: process.env.CI ? 'blob' : 'html',
+  workers: 4,
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL: 'http://localhost:4205/test',
