@@ -33,7 +33,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       --boxel-icon-button-color: var(--foreground, var(--boxel-dark));
       --icon-color: var(--boxel-icon-button-color);
       border-radius: 50%;
-      border: none;
+      border: 1px solid var(--border);
       box-shadow: var(--shadow, 0 4px 6px 0px rgb(0 0 0 / 35%));
     }
     .boxel-add-button:not(:disabled):hover {

@@ -10,6 +10,8 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import cssVar from '../../helpers/css-var.ts';
+import CardContainer from '../card-container/index.gts';
+import BoxelContainer from '../container/index.gts';
 import BoxelInput from './index.gts';
 import {
   type InputValidationState,
@@ -28,12 +30,12 @@ export default class InputUsage extends Component {
   @tracked disabled = false;
   @tracked required = false;
   @tracked optional = false;
-  @tracked placeholder = '';
-  @tracked errorMessage = '';
+  @tracked placeholder = 'Please enter';
+  @tracked errorMessage = 'There was an unknown error.';
   @tracked helperText = '';
   @tracked max = '';
   @tracked state: InputValidationState = 'initial';
-  @tracked variant: 'large' | 'default' = 'default';
+  @tracked size: 'large' | 'default' = 'default';
 
   defaultType = InputTypes.Text;
   @tracked type = this.defaultType;
@@ -85,7 +87,7 @@ export default class InputUsage extends Component {
           @state={{this.state}}
           @placeholder={{this.placeholder}}
           @bottomTreatment={{this.bottomTreatment}}
-          @variant={{this.variant}}
+          @size={{this.size}}
           @errorMessage={{this.errorMessage}}
           @helperText={{this.helperText}}
           @max={{this.max}}
@@ -168,12 +170,12 @@ export default class InputUsage extends Component {
           @defaultValue={{this.defaultBottomTreatment}}
         />
         <Args.String
-          @name='variant'
+          @name='size'
           @description='Optional larger size'
-          @onInput={{fn (mut this.variant)}}
+          @onInput={{fn (mut this.size)}}
           @options={{Array 'default' 'large'}}
-          @value={{this.variant}}
-          @defaultValue={{this.variant}}
+          @value={{this.size}}
+          @defaultValue={{this.size}}
         />
         <Args.Action
           @name='onInput'
@@ -185,14 +187,103 @@ export default class InputUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='boxel-input-height'
-          @type='dimension'
-          @description='Used to set the height of the field'
-          @defaultValue={{this.boxelInputHeight.defaults}}
-          @value={{this.boxelInputHeight.value}}
-          @onInput={{this.boxelInputHeight.update}}
+          @name='--boxel-input-height'
+          @type='min-height'
+          @description='Used to set the min-height of the field'
+        />
+        <Css.Basic
+          @name='--boxel-input-search-color'
+          @type='color'
+          @description='Search input text color'
+        />
+        <Css.Basic
+          @name='--boxel-input-search-background-color'
+          @type='background-color'
+          @description='Search input background-color'
+        />
+        <Css.Basic
+          @name='--boxel-input-search-icon-color'
+          @type='color'
+          @description='Search icon svg color'
         />
       </:cssVars>
+    </FreestyleUsage>
+
+    <FreestyleUsage class='remove-in-percy' @name='Usage on nested card'>
+      <:example>
+        <CardContainer @displayBoundaries={{true}}>
+          <BoxelContainer @display='grid'>
+            Nested card:
+            <CardContainer @displayBoundaries={{true}}>
+              <BoxelContainer @display='grid'>
+                <label for='usage-input-card' class='boxel-sr-only'>Sample label</label>
+                <BoxelInput
+                  @id='usage-input-card'
+                  @value={{this.value}}
+                  @disabled={{this.disabled}}
+                  @required={{this.required}}
+                  @optional={{this.optional}}
+                  @type={{this.type}}
+                  @state={{this.state}}
+                  @placeholder={{this.placeholder}}
+                  @bottomTreatment={{this.bottomTreatment}}
+                  @size={{this.size}}
+                  @errorMessage={{this.errorMessage}}
+                  @helperText={{this.helperText}}
+                  @onBlur={{this.validate}}
+                  {{on 'input' this.set}}
+                />
+                <label
+                  for='usage-input-card-disabled'
+                  class='boxel-sr-only'
+                >Sample label</label>
+                <BoxelInput
+                  @id='usage-input-card-disabled'
+                  @size={{this.size}}
+                  disabled
+                  @value='Disabled state'
+                />
+              </BoxelContainer>
+            </CardContainer>
+          </BoxelContainer>
+        </CardContainer>
+      </:example>
+    </FreestyleUsage>
+
+    <FreestyleUsage class='remove-in-percy' @name='Usage on sidebar'>
+      <:example>
+        <BoxelContainer
+          for='usage-input-sidebar'
+          @tag='aside'
+          @display='grid'
+          class='sidebar-container'
+        >
+          Sidebar:
+          <BoxelInput
+            @id='usage-input-sidebar'
+            @value={{this.value}}
+            @disabled={{this.disabled}}
+            @required={{this.required}}
+            @optional={{this.optional}}
+            @type={{this.type}}
+            @state={{this.state}}
+            @placeholder={{this.placeholder}}
+            @bottomTreatment={{this.bottomTreatment}}
+            @size={{this.size}}
+            @errorMessage={{this.errorMessage}}
+            @helperText={{this.helperText}}
+            @onBlur={{this.validate}}
+            {{on 'input' this.set}}
+          />
+          <label for='usage-input-sidebar-d' class='boxel-sr-only'>Sample label</label>
+          <BoxelInput
+            @id='usage-input-sidebar-d'
+            @size={{this.size}}
+            @value='Disabled state'
+            disabled
+          />
+        </BoxelContainer>
+      </:example>
     </FreestyleUsage>
 
     <FreestyleUsage
@@ -237,5 +328,18 @@ export default class InputUsage extends Component {
         />
       </:example>
     </FreestyleUsage>
+    <style scoped>
+      .card-container {
+        background-color: var(--card);
+        color: var(--card-foreground);
+      }
+      .sidebar-container {
+        background-color: var(--sidebar);
+        color: var(--sidebar-foreground);
+      }
+      :deep(.FreestyleUsageCssVar input) {
+        display: none;
+      }
+    </style>
   </template>
 }

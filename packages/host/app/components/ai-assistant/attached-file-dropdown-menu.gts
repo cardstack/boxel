@@ -137,7 +137,7 @@ export default class AttachedFileDropdownMenu extends Component<{
         rotate: 90deg;
         flex-shrink: 0;
 
-        --inner-boxel-icon-button-width: 20px;
+        --boxel-icon-button-width: 20px;
       }
 
       button.context-menu-button:hover {

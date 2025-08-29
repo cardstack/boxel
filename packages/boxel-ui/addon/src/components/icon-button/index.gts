@@ -92,13 +92,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
 
       @media (prefers-reduced-motion: no-preference) {
         .loading-icon {
-          animation: spin 6000ms linear infinite;
-        }
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
+          animation: var(--boxel-infinite-spin-animation);
         }
       }
     }
