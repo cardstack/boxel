@@ -198,22 +198,6 @@ export default class InteractSubmode extends Component {
         here.addToStack(newItem);
         return localId;
       },
-      viewCard: (
-        cardOrURL: CardDef | URL,
-        format: Format = 'isolated',
-        opts?: { openCardInRightMostStack?: boolean },
-      ): void => {
-        if (opts?.openCardInRightMostStack) {
-          stackIndex = here.stacks.length;
-        }
-        let newItem = new StackItem({
-          id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
-          format,
-          stackIndex,
-        });
-        here.addToStack(newItem);
-        here.operatorModeStateService.closeWorkspaceChooser();
-      },
       editCard(card: CardDef): void {
         let item = here.findCardInStack(card, stackIndex);
         here.operatorModeStateService.replaceItemInStack(
@@ -524,10 +508,12 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await this.publicAPI(this, this.stacks.length).viewCard(
-            url,
-            'isolated',
-          );
+          let newItem = new StackItem({
+            id: url.href,
+            format: 'isolated',
+            stackIndex: 1,
+          });
+          this.addToStack(newItem);
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
           // the rightmost stack will be REPLACED by the selection
@@ -539,8 +525,15 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.publicAPI(this, 0).viewCard(url, 'isolated');
+            // No stacks exist or rightmost stack is empty - create new card in first stack
+            let newItem = new StackItem({
+              id: url.href,
+              format: 'isolated',
+              stackIndex: 0,
+            });
+            this.addToStack(newItem);
           } else {
+            // Replace the contents of the rightmost stack with the selected card
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
               let bottomMostItem = stack[0];
@@ -550,7 +543,6 @@ export default class InteractSubmode extends Component {
                   format: 'isolated',
                   stackIndex,
                 });
-                // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(
                   stackIndex,
                   stackItem,

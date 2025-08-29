@@ -27,6 +27,8 @@ import MessageSquareIcon from '@cardstack/boxel-icons/message-square';
 import EyeIcon from '@cardstack/boxel-icons/eye';
 import { restartableTask } from 'ember-concurrency';
 
+import ViewCardCommand from '@cardstack/boxel-host/commands/view-card';
+
 interface StoryCardComponentArgs {
   Args: {
     story: Partial<Story>;
@@ -41,11 +43,21 @@ class StoryCard extends GlimmerComponent<StoryCardComponentArgs> {
   @tracked isBuryAnimating = false;
 
   @action
-  viewStory() {
-    if (!this.args.context?.actions?.viewCard) {
-      throw new Error('viewCard action is not available');
+  async viewStory() {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Command context not available. Please try again.');
     }
-    this.args.context?.actions?.viewCard?.(this.args.story as CardDef);
+
+    let cardId = (this.args.story as CardDef).id;
+    if (!cardId) {
+      throw new Error('Story card ID not available.');
+    }
+
+    await new ViewCardCommand(commandContext).execute({
+      cardId: cardId,
+      format: 'isolated',
+    });
   }
 
   get timeAgo() {

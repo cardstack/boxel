@@ -39,6 +39,7 @@ import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-wi
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
 import * as CommandUtilsModule from './utils';
+import * as ViewCardCommandModule from './view-card';
 import * as WriteTextFileCommandModule from './write-text-file';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
@@ -179,6 +180,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CommandUtilsModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/view-card',
+    ViewCardCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/write-text-file',
     WriteTextFileCommandModule,
   );
@@ -222,6 +227,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateSkillActivationCommandModule.default,
   UseAiAssistantCommandModule.default,
+  ViewCardCommandModule.default,
   WriteTextFileCommandModule.default,
   SearchGoogleImagesCommandModule.default,
   SummarizeSessionCommandModule.default,

@@ -25,6 +25,8 @@ import StringField from 'https://cardstack.com/base/string';
 import { Skill } from 'https://cardstack.com/base/skill';
 import { includes, uniqBy } from 'lodash';
 
+import ViewCardCommand from '@cardstack/boxel-host/commands/view-card';
+
 import SettingsIcon from '@cardstack/boxel-icons/settings';
 import ZapIcon from '@cardstack/boxel-icons/zap';
 
@@ -1364,10 +1366,15 @@ class Isolated extends Component<typeof Environment> {
   }
 
   @action
-  viewSkill(skill: Skill) {
-    if (this.args?.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(skill, 'isolated');
+  async viewSkill(skill: Skill) {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Command context not available. Please try again.');
     }
+    await new ViewCardCommand(commandContext).execute({
+      cardId: skill.id,
+      format: 'isolated',
+    });
   }
 
   get allShortcutsWithStatus() {
