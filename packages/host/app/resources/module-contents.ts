@@ -17,21 +17,18 @@ import {
   isInternalReference,
 } from '@cardstack/runtime-common/module-syntax';
 
-import {
-  getCardType,
-  type CardType,
-} from '@cardstack/host/resources/card-type';
-
 import { type Ready } from '@cardstack/host/resources/file';
 
 import { importResource } from '@cardstack/host/resources/import';
+import { type Type } from '@cardstack/host/services/card-type';
 
+import type CardTypeService from '@cardstack/host/services/card-type';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface CardOrField {
-  cardType: CardType;
+  cardType: Type;
   cardOrField: typeof BaseDef;
 }
 
@@ -94,6 +91,7 @@ export class ModuleContentsResource
   implements ModuleAnalysis
 {
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare cardTypeService: CardTypeService;
   @tracked moduleError:
     | { type: 'runtime' | 'compile'; message: string }
     | undefined = undefined;
@@ -147,7 +145,10 @@ export class ModuleContentsResource
       new URL(executableFile.url),
     );
     let newState = {
-      declarations: this.buildDeclarations(moduleSyntax, exportedCardsOrFields),
+      declarations: await this.buildDeclarations(
+        moduleSyntax,
+        exportedCardsOrFields,
+      ),
       url: executableFile.url,
     };
 
@@ -161,59 +162,68 @@ export class ModuleContentsResource
     this.state = newState;
   }
 
-  private buildDeclarations(
+  private async buildDeclarations(
     moduleSyntax: ModuleSyntax,
     exportedCardsOrFields: Map<string, typeof BaseDef>,
-  ): ModuleDeclaration[] {
+  ): Promise<ModuleDeclaration[]> {
     let localCardsOrFields = collectLocalCardsOrFields(
       moduleSyntax,
       exportedCardsOrFields,
     );
-    let declarations: ModuleDeclaration[] = [];
-    moduleSyntax.declarations.forEach((value: Declaration) => {
-      if (value.type === 'possibleCardOrField') {
-        let cardOrField = value.exportName
-          ? exportedCardsOrFields.get(value.exportName)
-          : localCardsOrFields.get(value);
-        if (cardOrField !== undefined) {
-          declarations.push({
-            ...value,
-            cardOrField,
-            cardType: getCardType(this, () => cardOrField as typeof BaseDef),
-          } as CardOrFieldDeclaration);
-          return;
-        }
-        // case where things statically look like cards or fields but are not
-        if (value.exportName !== undefined) {
-          declarations.push({
-            localName: value.localName,
-            exportName: value.exportName,
-            path: value.path,
-            type: 'class',
-          } as ClassDeclaration);
-        }
-      } else if (value.type === 'reexport') {
-        let cardOrField: typeof BaseDef | undefined;
-        if (value.exportName) {
-          let foundCardOrField = exportedCardsOrFields.get(value.exportName);
-          if (foundCardOrField) {
-            cardOrField = foundCardOrField;
-          }
+    let declarationPromises = moduleSyntax.declarations.map(
+      async (value: Declaration) => {
+        if (value.type === 'possibleCardOrField') {
+          let cardOrField = value.exportName
+            ? exportedCardsOrFields.get(value.exportName)
+            : localCardsOrFields.get(value);
           if (cardOrField !== undefined) {
-            declarations.push({
+            return {
               ...value,
               cardOrField,
-              cardType: getCardType(this, () => cardOrField as typeof BaseDef),
-            } as CardOrFieldReexport);
+              cardType: await this.cardTypeService.assembleType(
+                cardOrField as typeof BaseDef,
+              ),
+            } as CardOrFieldDeclaration;
+          }
+          // case where things statically look like cards or fields but are not
+          if (value.exportName !== undefined) {
+            return {
+              localName: value.localName,
+              exportName: value.exportName,
+              path: value.path,
+              type: 'class',
+            } as ClassDeclaration;
+          }
+        } else if (value.type === 'reexport') {
+          let cardOrField: typeof BaseDef | undefined;
+          if (value.exportName) {
+            let foundCardOrField = exportedCardsOrFields.get(value.exportName);
+            if (foundCardOrField) {
+              cardOrField = foundCardOrField;
+            }
+            if (cardOrField !== undefined) {
+              return {
+                ...value,
+                cardOrField,
+                cardType: await this.cardTypeService.assembleType(
+                  cardOrField as typeof BaseDef,
+                ),
+              } as CardOrFieldReexport;
+            }
+          }
+        } else if (value.type === 'class' || value.type === 'function') {
+          if (value.exportName !== undefined) {
+            return value as ModuleDeclaration;
           }
         }
-      } else if (value.type === 'class' || value.type === 'function') {
-        if (value.exportName !== undefined) {
-          declarations.push(value as ModuleDeclaration);
-        }
-      }
-    });
-    return declarations;
+        return null;
+      },
+    );
+
+    let resolvedDeclarations = await Promise.all(declarationPromises);
+    return resolvedDeclarations.filter(
+      (d): d is ModuleDeclaration => d !== null,
+    );
   }
 }
 

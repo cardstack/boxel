@@ -34,12 +34,12 @@ import {
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import {
-  getCodeRef,
-  type FieldOfType,
-} from '@cardstack/host/resources/card-type';
-
 import { Ready } from '@cardstack/host/resources/file';
+import {
+  getResolvedCodeRefFromType,
+  type FieldOfType,
+} from '@cardstack/host/services/card-type';
+
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -151,7 +151,7 @@ export default class EditFieldModal extends Component<Signature> {
       ? 'many'
       : 'one';
 
-    let ref = getCodeRef(field);
+    let ref = getResolvedCodeRefFromType(field);
 
     this.fieldCard = await loadCardDef(ref, {
       loader: this.loaderService.loader,

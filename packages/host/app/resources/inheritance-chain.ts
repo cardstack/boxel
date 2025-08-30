@@ -7,7 +7,7 @@ import { Resource } from 'ember-modify-based-class-resource';
 
 import { type Loader, loadCardDef } from '@cardstack/runtime-common';
 
-import { CardType, Type } from '@cardstack/host/resources/card-type';
+import type { CardType, Type } from '@cardstack/host/services/card-type';
 
 import LoaderService from '@cardstack/host/services/loader-service';
 

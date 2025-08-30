@@ -30,10 +30,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import {
-  getResolvedCodeRef,
-  getCardType,
-} from '@cardstack/host/resources/card-type';
+import { getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
 
 import {
@@ -42,6 +39,7 @@ import {
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
+import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -443,7 +441,7 @@ export default class DetailPanel extends Component<Signature> {
             <Divider @label='Adopts From' />
             {{#if this.cardInstanceType.type}}
               {{#let
-                (getResolvedCodeRef this.cardInstanceType.type)
+                (getResolvedCodeRefFromType this.cardInstanceType.type)
                 as |codeRef|
               }}
                 <ClickableModuleDefinitionContainer
@@ -475,7 +473,7 @@ export default class DetailPanel extends Component<Signature> {
                 />
                 {{#if this.cardType.type.super}}
                   {{#let
-                    (getResolvedCodeRef this.cardType.type.super)
+                    (getResolvedCodeRefFromType this.cardType.type.super)
                     as |codeRef|
                   }}
                     <Divider @label='Inherits From' />
@@ -492,7 +490,10 @@ export default class DetailPanel extends Component<Signature> {
                 {{/if}}
               {{else if (isReexportCardOrField @selectedDeclaration)}}
                 {{#if this.cardType.type}}
-                  {{#let (getResolvedCodeRef this.cardType.type) as |codeRef|}}
+                  {{#let
+                    (getResolvedCodeRefFromType this.cardType.type)
+                    as |codeRef|
+                  }}
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
                       @fileURL={{this.cardType.type.module}}

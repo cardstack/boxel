@@ -25,15 +25,15 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
 import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
+
+import type { Ready } from '@cardstack/host/resources/file';
+import type CardService from '@cardstack/host/services/card-service';
 import {
   type Type,
   type CodeRefType,
   type FieldOfType,
-  getResolvedCodeRef,
-} from '@cardstack/host/resources/card-type';
-
-import type { Ready } from '@cardstack/host/resources/file';
-import type CardService from '@cardstack/host/services/card-service';
+  getResolvedCodeRefFromType,
+} from '@cardstack/host/services/card-type';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -247,7 +247,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      {{#let (getResolvedCodeRef @cardType) as |codeRef|}}
+      {{#let (getResolvedCodeRefFromType @cardType) as |codeRef|}}
         <div class='header'>
           <Tooltip @placement='bottom'>
             <:trigger>
@@ -323,7 +323,7 @@ export default class CardSchemaEditor extends Component<Signature> {
               </div>
               <div class='right'>
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
-                  {{#let (getResolvedCodeRef field) as |codeRef|}}
+                  {{#let (getResolvedCodeRefFromType field) as |codeRef|}}
                     {{#if (this.isOverridden field)}}
                       <BoxelButton
                         @kind='text-only'
@@ -580,7 +580,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       return;
     }
 
-    let codeRef = getResolvedCodeRef(this.args.cardType);
+    let codeRef = getResolvedCodeRefFromType(this.args.cardType);
     if (!codeRef) {
       return undefined;
     }
