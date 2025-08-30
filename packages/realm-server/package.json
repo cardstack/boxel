@@ -8,6 +8,7 @@
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/eslint-plugin-boxel": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@koa/cors": "catalog:",

@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "name": "@cardstack/local-types",
+  "description": "Type declarations for use within this monorepo",
+  "devDependencies": {
+    "content-tag": "catalog:",
+    "ember-source": "catalog:"
+  }
+}

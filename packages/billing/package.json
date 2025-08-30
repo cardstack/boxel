@@ -9,6 +9,7 @@
     "@sentry/node": "catalog:"
   },
   "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
     "concurrently": "catalog:"
   },
   "scripts": {
