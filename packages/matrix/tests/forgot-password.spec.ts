@@ -36,20 +36,23 @@ test.describe('Forgot password', () => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 30s to the overall test timeout
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
 
     await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+      1000,
+    );
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
     await clearLocalStorage(page, appURL);
     await gotoRegistration(page, appURL);
     await registerUser(synapse, username, password);
-    await updateUser(admin.accessToken, '@user1:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
       emailAddresses: [email],
       displayname: name,
     });
@@ -127,7 +130,7 @@ test.describe('Forgot password', () => {
   test('It shows an error when email does not belong to any account', async ({
     page,
   }) => {
-    await gotoForgotPassword(page);
+    await gotoForgotPassword(page, appURL);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
@@ -166,7 +169,7 @@ test.describe('Forgot password', () => {
   test('It shows an error when password does not meet the requirement', async ({
     page,
   }) => {
-    await gotoForgotPassword(page);
+    await gotoForgotPassword(page, appURL);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
@@ -234,7 +237,7 @@ test.describe('Forgot password', () => {
   });
 
   test('it can resend email validation message', async ({ page }) => {
-    await gotoForgotPassword(page);
+    await gotoForgotPassword(page, appURL);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),

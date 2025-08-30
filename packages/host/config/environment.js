@@ -29,7 +29,6 @@ module.exports = function (environment) {
     logLevels:
       process.env.LOG_LEVELS ||
       '*=info,current-run=error,matrix=info,realm:events=debug',
-    matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,
@@ -42,6 +41,7 @@ module.exports = function (environment) {
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
+    matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     realmServerDomain: process.env.REALM_SERVER_DOMAIN || 'localhost',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
