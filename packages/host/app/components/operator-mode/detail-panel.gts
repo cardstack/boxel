@@ -28,6 +28,7 @@ import {
   isBaseDef,
   internalKeyFor,
   type ResolvedCodeRef,
+  type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import {
@@ -92,6 +93,7 @@ interface Signature {
       sourceInstance?: CardDef,
     ) => Promise<void>;
     delete: (item: CardDef | URL | null | undefined) => void;
+    cardError: CardErrorJSONAPI | undefined;
   };
 }
 
@@ -132,7 +134,10 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get showDetailsPanel() {
-    return !this.isModule && !isCardDocumentString(this.args.readyFile.content);
+    return (
+      this.args.cardError ||
+      (!this.isModule && !isCardDocumentString(this.args.readyFile.content))
+    );
   }
 
   private get cardType() {
