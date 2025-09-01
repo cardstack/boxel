@@ -5,6 +5,7 @@ import {
   SortDropdown,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import {
   Card as CardViewIcon,
   Grid3x3 as GridViewIcon,
@@ -37,7 +38,7 @@ export interface FilterOption {
   displayName: string;
   icon?: Icon | string;
   query?: Query;
-  cards?: BoxComponent & BoxComponent[];
+  cards?: BoxComponent[];
   filters?: FilterOption[];
   isExpanded?: boolean;
 }
@@ -119,30 +120,65 @@ export default class CardsGridLayout extends Component<Signature> {
           <h2 class='content-title'>
             {{@activeFilter.displayName}}
           </h2>
-          <ViewSelector
-            @items={{@viewOptions}}
-            @onChange={{@onChangeView}}
-            @selectedId={{@activeViewId}}
-          />
-          <SortDropdown
-            @options={{@sortOptions}}
-            @onSelect={{@onChangeSort}}
-            @selectedOption={{@activeSort}}
-          />
-          {{yield to='contentHeader'}}
+          {{#if this.displayActions}}
+            <ViewSelector
+              @items={{@viewOptions}}
+              @onChange={{@onChangeView}}
+              @selectedId={{@activeViewId}}
+            />
+            <SortDropdown
+              @options={{@sortOptions}}
+              @onSelect={{@onChangeSort}}
+              @selectedOption={{@activeSort}}
+            />
+            {{yield to='contentHeader'}}
+          {{/if}}
         </header>
-        <CardList
-          class='cards'
-          @context={{@context}}
-          @query={{@query}}
-          @realms={{@realms}}
-          @isLive={{@isLive}}
-          @format={{@format}}
-          @cards={{@activeFilter.cards}}
-          @viewOption={{@activeViewId}}
-          data-test-cards-grid-cards
-        />
-        {{yield to='content'}}
+        {{#if (eq @activeFilter.displayName 'Highlights')}}
+          <div class='highlights-layout'>
+            {{#if this.getAiAppGeneratorCard}}
+              <div class='highlights-section'>
+                <h3 class='section-header'>NEW FEATURE</h3>
+                <div class='highlights-card-container'>
+                  <this.getAiAppGeneratorCard @format='embedded' />
+                </div>
+
+              </div>
+            {{/if}}
+
+            {{#if this.getWelcomeToBoxelCard}}
+              <div class='highlights-section'>
+                <h3 class='section-header'>GETTING STARTED</h3>
+                <div class='highlights-card-container'>
+                  <div class='highlights-card-container'>
+                    <this.getWelcomeToBoxelCard @format='embedded' />
+                  </div>
+                </div>
+              </div>
+            {{/if}}
+
+            {{#if this.getCommunityCards}}
+              <div class='highlights-section'>
+                <this.getCommunityCards @format='embedded' />
+              </div>
+            {{/if}}
+          </div>
+        {{else}}
+          <CardList
+            class='cards'
+            @context={{@context}}
+            @query={{@query}}
+            @realms={{@realms}}
+            @isLive={{@isLive}}
+            @format={{@format}}
+            @cards={{@activeFilter.cards}}
+            @viewOption={{@activeViewId}}
+            data-test-cards-grid-cards
+          />
+        {{/if}}
+        {{#if this.displayActions}}
+          {{yield to='content'}}
+        {{/if}}
       </section>
     </section>
 
@@ -201,6 +237,50 @@ export default class CardsGridLayout extends Component<Signature> {
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
       }
+
+      .highlights-layout {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: 0 var(--padding) var(--padding) var(--padding);
+
+        width: 100%;
+      }
+
+      .highlights-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        width: 100%;
+      }
+
+      .section-header {
+        margin: 0;
+        font: 600 var(--boxel-font);
+        color: var(--boxel-dark);
+        text-transform: uppercase;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+
+      .highlights-card-container {
+        width: 100%;
+      }
     </style>
   </template>
+
+  private get displayActions() {
+    return this.args.activeFilter.displayName !== 'Highlights';
+  }
+
+  private get getWelcomeToBoxelCard() {
+    return this.args.activeFilter.cards?.[0];
+  }
+
+  private get getAiAppGeneratorCard() {
+    return this.args.activeFilter.cards?.[1];
+  }
+
+  private get getCommunityCards() {
+    return this.args.activeFilter.cards?.[2];
+  }
 }
