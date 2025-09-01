@@ -51,6 +51,7 @@ export class AiAppGenerator extends CardDef {
       await command.execute(
         new AskAiInput({
           prompt: this.args.model.promptValue,
+          llmMode: 'act',
         }),
       );
     });

@@ -150,6 +150,7 @@ export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
   @field enabledSkills = linksToMany(Skill);
   @field disabledSkills = linksToMany(Skill);
+  @field llmMode = contains(StringField); // 'gpt-4o' or 'gpt-4o-mini'
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {
@@ -306,6 +307,7 @@ export class SummarizeSessionResult extends CardDef {
 
 export class AskAiInput extends CardDef {
   @field prompt = contains(StringField);
+  @field llmMode = contains(StringField); // 'ask' or 'act'
 }
 
 export class AskAiOutput extends CardDef {

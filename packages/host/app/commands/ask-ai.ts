@@ -4,7 +4,6 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import AddSkillsToRoomCommand from './add-skills-to-room';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
@@ -34,28 +33,28 @@ export default class AskAiCommand extends HostBaseCommand<
       this.commandContext,
     );
     let openRoomCommand = new OpenAiAssistantRoomCommand(this.commandContext);
-    let addSkillsCommand = new AddSkillsToRoomCommand(this.commandContext);
     let sendMessageCommand = new SendAiAssistantMessageCommand(
       this.commandContext,
     );
 
-    let [{ roomId }, skills, openCards] = await Promise.all([
-      createRoomCommand.execute({ name: 'AI App Generator Assistant' }),
-      this.matrixService.loadDefaultSkills('interact') || Promise.resolve([]),
+    let [skills, openCards] = await Promise.all([
+      this.matrixService.loadDefaultSkills('code') || Promise.resolve([]),
       this.operatorModeStateService.getOpenCards.perform() ||
         Promise.resolve([]),
     ]);
-
-    await Promise.all([
-      addSkillsCommand.execute({ roomId, skills }),
-      sendMessageCommand.execute({
-        roomId,
-        prompt: input.prompt,
-        attachedCards: openCards,
-        openCardIds: openCards?.map((c: any) => c.id),
-        realmUrl: this.operatorModeStateService.realmURL?.href,
-      }),
-    ]);
+    console.log('input.llmMode', input.llmMode);
+    let { roomId } = await createRoomCommand.execute({
+      name: 'AI App Generator Assistant',
+      enabledSkills: skills,
+      llmMode: input.llmMode,
+    });
+    sendMessageCommand.execute({
+      roomId,
+      prompt: input.prompt,
+      attachedCards: openCards,
+      openCardIds: openCards?.map((c: any) => c.id),
+      realmUrl: this.operatorModeStateService.realmURL?.href,
+    });
 
     await openRoomCommand.execute({ roomId });
 
