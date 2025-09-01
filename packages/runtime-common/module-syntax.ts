@@ -53,7 +53,26 @@ export type {
 };
 export { isInternalReference };
 
-export class ModuleSyntax {
+export interface IModuleSyntax {
+  possibleCardsOrFields: PossibleCardOrFieldDeclaration[];
+  declarations: Declaration[];
+  code(): string;
+  addField(params: {
+    cardBeingModified: CodeRef;
+    fieldName: string;
+    fieldRef: { name: string; module: string };
+    fieldType: FieldType;
+    fieldDefinitionType: 'card' | 'field';
+    incomingRelativeTo: URL | undefined;
+    outgoingRelativeTo: URL | undefined;
+    outgoingRealmURL: URL | undefined;
+    addFieldAtIndex?: number;
+    computedFieldFunctionSourceCode?: string;
+  }): void;
+  removeField(cardBeingModified: CodeRef, fieldName: string): number;
+}
+
+export class ModuleSyntax implements IModuleSyntax {
   declare possibleCardsOrFields: PossibleCardOrFieldDeclaration[];
   declare declarations: Declaration[];
   declare private ast: t.File;
