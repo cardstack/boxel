@@ -28,12 +28,13 @@ import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-fi
 
 import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
+
 import {
   type Type,
   type CodeRefType,
   type FieldOfType,
   getResolvedCodeRefFromType,
-} from '@cardstack/host/services/card-type';
+} from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';

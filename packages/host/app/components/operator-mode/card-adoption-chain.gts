@@ -14,7 +14,7 @@ import { stripFileExtension } from '@cardstack/host/lib/utils';
 
 import type { Ready } from '@cardstack/host/resources/file';
 
-import type { Type } from '@cardstack/host/services/card-type';
+import type { Type } from '@cardstack/host/services/card-type-service';
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
 
 interface Signature {

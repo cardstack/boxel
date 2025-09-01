@@ -186,7 +186,13 @@ export function getResolvedCodeRefFromType(
 ): ResolvedCodeRef | undefined {
   let codeRef = getCodeRefFromType(t);
   if (!isResolvedCodeRef(codeRef)) {
-    return undefined;
+    return;
   }
   return codeRef;
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'card-type-service': CardTypeService;
+  }
 }

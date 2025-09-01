@@ -1,15 +1,13 @@
-import { getOwner } from '@ember/owner';
-
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { type Loader, loadCardDef } from '@cardstack/runtime-common';
+import { loadCardDef } from '@cardstack/runtime-common';
 
-import type { CardType, Type } from '@cardstack/host/services/card-type';
-
-import LoaderService from '@cardstack/host/services/loader-service';
+import type { Type } from '@cardstack/host/services/card-type-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -17,23 +15,23 @@ interface Args {
   named: {
     url: string;
     card: typeof BaseDef;
-    loader: Loader;
-    cardTypeResource?: CardType;
+    cardType?: Type;
   };
 }
 
-export type CardInheritance = {
+export type CardInheritanceItem = {
   cardType: Type;
-  card: any;
+  card: typeof BaseDef;
 };
 
 export class InheritanceChainResource extends Resource<Args> {
-  @tracked private _value: CardInheritance[] = [];
+  @tracked private _value: CardInheritanceItem[] = [];
+  @service declare private loaderService: LoaderService;
 
   modify(_positional: never[], named: Args['named']) {
-    let { cardTypeResource, card, url, loader } = named;
-    if (cardTypeResource) {
-      this.load.perform(url, card, loader, cardTypeResource);
+    let { cardType, card, url } = named;
+    if (cardType) {
+      this.load.perform(url, card, cardType);
     }
   }
 
@@ -46,20 +44,11 @@ export class InheritanceChainResource extends Resource<Args> {
   }
 
   private load = task(
-    async (
-      url: string,
-      card: typeof BaseDef,
-      loader: Loader,
-      cardTypeResource?: CardType,
-    ) => {
-      await cardTypeResource!.ready;
-      let cardType = cardTypeResource!.type;
-
+    async (url: string, card: typeof BaseDef, cardType?: Type) => {
       if (!cardType) {
         throw new Error('Card type not found');
       }
 
-      // Chain goes from most specific to least specific
       let cardInheritanceChain = [
         {
           cardType,
@@ -67,12 +56,12 @@ export class InheritanceChainResource extends Resource<Args> {
         },
       ];
 
-      while (cardType.super) {
+      while (cardType?.super) {
         cardType = cardType.super;
 
         let superCard = await loadCardDef(cardType.codeRef, {
-          loader: loader,
-          relativeTo: new URL(url), // because the module can be relative
+          loader: this.loaderService.loader,
+          relativeTo: new URL(url),
         });
 
         cardInheritanceChain.push({
@@ -89,21 +78,13 @@ export function inheritanceChain(
   parent: object,
   url: () => string,
   card: () => typeof BaseDef,
-  cardTypeResource: () => CardType | undefined,
-  loader?: () => Loader,
+  cardType: () => Type | undefined,
 ) {
   return InheritanceChainResource.from(parent, () => ({
     named: {
       url: url(),
       card: card(),
-      loader: loader
-        ? loader()
-        : (
-            (getOwner(parent) as any).lookup(
-              'service:loader-service',
-            ) as LoaderService
-          ).loader,
-      cardTypeResource: cardTypeResource(),
+      cardType: cardType(),
     },
-  })) as InheritanceChainResource;
+  }));
 }

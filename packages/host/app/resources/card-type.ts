@@ -4,11 +4,11 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
+import { type Type } from '@cardstack/host/services/card-type-service';
+
+import type CardTypeService from '@cardstack/host/services/card-type-service';
+
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
-
-import { type Type } from '../services/card-type';
-
-import type CardTypeService from '../services/card-type';
 
 interface Args {
   named: {

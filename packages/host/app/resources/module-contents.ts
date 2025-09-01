@@ -20,10 +20,10 @@ import {
 import { type Ready } from '@cardstack/host/resources/file';
 
 import { importResource } from '@cardstack/host/resources/import';
-import { type Type } from '@cardstack/host/services/card-type';
 
-import type CardTypeService from '@cardstack/host/services/card-type';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { type Type } from '@cardstack/host/services/card-type-service';
+
+import type CardTypeService from '@cardstack/host/services/card-type-service';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -90,7 +90,6 @@ export class ModuleContentsResource
   extends Resource<Args>
   implements ModuleAnalysis
 {
-  @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardTypeService: CardTypeService;
   @tracked moduleError:
     | { type: 'runtime' | 'compile'; message: string }

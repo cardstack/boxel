@@ -1,4 +1,4 @@
-import { type Type } from '@cardstack/host/services/card-type';
+import { type Type } from '@cardstack/host/services/card-type-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
