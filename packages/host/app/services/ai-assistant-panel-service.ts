@@ -179,7 +179,12 @@ export default class AiAssistantPanelService extends Service {
     },
   ) {
     this.displayRoomError = false;
-    if (this.newSessionId) {
+    if (
+      this.newSessionId &&
+      !opts.addSameSkills &&
+      !opts.shouldSummarizeSession &&
+      !opts.shouldCopyFileHistory
+    ) {
       this.enterRoom(this.newSessionId);
       return;
     }
