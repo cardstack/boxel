@@ -38,7 +38,7 @@ export class SocialMediaLink extends FieldDef {
     };
 
     <template>
-      <div class='community-card' {{on 'click' this.openLink}}>
+      <div class='community-card'>
         <div class='community-icon {{@model.platform}}-icon'>
           {{#if (eq @model.platform 'Discord')}}
             <svg viewBox='0 0 24 24' width='24' height='24'>
@@ -80,7 +80,10 @@ export class SocialMediaLink extends FieldDef {
         <div class='community-content'>
           <h4 class='community-title'>{{@model.platform}}</h4>
           <p class='community-description'>{{@model.description}}</p>
-          <div class='community-link'>{{@model.url}}</div>
+          <button
+            class='community-link'
+            {{on 'click' this.openLink}}
+          >{{@model.url}}</button>
         </div>
       </div>
 
@@ -94,7 +97,6 @@ export class SocialMediaLink extends FieldDef {
           border-radius: var(--boxel-border-radius);
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
           transition: box-shadow 0.2s ease;
-          cursor: pointer;
         }
 
         .community-card:hover {
@@ -156,6 +158,14 @@ export class SocialMediaLink extends FieldDef {
           font: 500 var(--boxel-font-sm);
           text-align: center;
           width: 100%;
+          cursor: pointer;
+          transition: background-color 0.2s ease;
+          border: none;
+          box-shadow: none;
+        }
+
+        .community-link:hover {
+          background: var(--boxel-light-300);
         }
       </style>
     </template>
