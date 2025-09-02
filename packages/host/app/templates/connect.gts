@@ -121,10 +121,10 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
         border-top-right-radius: 30px;
         border-bottom-right-radius: 30px;
 
-        padding: var(--boxel-sp-xs);
-        padding-left: var(--boxel-sp);
+        padding: var(--boxel-sp-xxs);
+        padding-left: var(--boxel-sp-sm);
 
-        gap: var(--boxel-sp);
+        gap: var(--boxel-sp-sm);
       }
     </style>
   </template>
