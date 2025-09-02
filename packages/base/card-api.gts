@@ -2690,7 +2690,7 @@ function lazilyLoadLink(
         const event = new CustomEvent('boxel-render-error', {
           detail: { reason: e },
         });
-        window.dispatchEvent(event);
+        globalThis.dispatchEvent(event);
       } finally {
         inflightLoads.delete(key);
         if (inflightLoads.size === 0) {

@@ -175,6 +175,31 @@ module('Acceptance | prerender', function (hooks) {
             },
           },
         },
+        'Person/jade.json': {
+          data: {
+            attributes: {
+              name: 'Jade',
+            },
+            relationships: {
+              'pets.0': {
+                links: {
+                  self: '../Pet/mango',
+                },
+              },
+              'pets.1': {
+                links: {
+                  self: '../Pet/missing-link',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        },
       },
     });
   });
@@ -243,11 +268,30 @@ module('Acceptance | prerender', function (hooks) {
     assert.ok(error.stack, 'stack exists in error');
   });
 
+  test('prerender can handle missing link in linksToMany field', async function (assert) {
+    let url = `${testRealmURL}Person/jade.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML', 'error');
+    let error = JSON.parse(value);
+    assert.strictEqual(error.code, 404, 'error code is correct');
+    assert.strictEqual(error.title, 'Not Found', 'error title is correct');
+    assert.strictEqual(
+      error.message,
+      'Pet/missing-link.json not found',
+      'error message is correct',
+    );
+    assert.strictEqual(
+      error.id,
+      `${testRealmURL}Pet/missing-link.json`,
+      'error id is correct',
+    );
+    assert.ok(error.stack, 'stack exists in error');
+  });
+
   // TODO test prerender compound contains field
   // TODO test prerender compound containsMany field
   // TODO test prerender compound contains field that includes a linksTo field
   // TODO test prerender compound containsMany that includes a linksTo field
-  // TODO test prerender missing link in linksToMany field
   // TODO test prerender computed that consumes linksTo
   // TODO test prerender computed that consumes linksToMany
   // TODO test prerender missing link in computed that consumes linksTo
