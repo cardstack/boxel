@@ -12,14 +12,14 @@ export const RecentFiles = 'recent-files';
 export const ScrollPositions = 'scroll-positions';
 
 export function clearLocalStorage(storage: Storage) {
-  storage.removeItem(CurrentRoomIdPersistenceKey);
-  storage.removeItem(NewSessionIdPersistenceKey);
-  storage.removeItem(AiAssistantPanelWidth);
-  storage.removeItem(CodeModePanelWidths);
-  storage.removeItem(CodeModePanelHeights);
-  storage.removeItem(ModuleInspectorSelections);
-  storage.removeItem(PlaygroundSelections);
-  storage.removeItem(RecentCards);
-  storage.removeItem(RecentFiles);
-  storage.removeItem(ScrollPositions);
+  storage?.removeItem(CurrentRoomIdPersistenceKey);
+  storage?.removeItem(NewSessionIdPersistenceKey);
+  storage?.removeItem(AiAssistantPanelWidth);
+  storage?.removeItem(CodeModePanelWidths);
+  storage?.removeItem(CodeModePanelHeights);
+  storage?.removeItem(ModuleInspectorSelections);
+  storage?.removeItem(PlaygroundSelections);
+  storage?.removeItem(RecentCards);
+  storage?.removeItem(RecentFiles);
+  storage?.removeItem(ScrollPositions);
 }
