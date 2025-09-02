@@ -2648,7 +2648,17 @@ function lazilyLoadLink(
     }
     let deferred = new Deferred<void>();
     inflightLoads.set(key, deferred.promise);
-    store.trackLoad(deferred.promise);
+    store.trackLoad(
+      // we wrap the promise with a catch that will prevent the rejections from bubbling up but
+      // not interfere with the original deferred. this prevents QUnit from being really noisy
+      // when it sees a "global error" even though that is a normal operating circumstance for
+      // the rendering when it encounters an error. this was the original deferred.promise still
+      // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit
+      deferred.promise.then(
+        () => {},
+        () => {},
+      ),
+    );
     (async () => {
       try {
         let doc = await store.loadDocument(reference);
@@ -2673,8 +2683,14 @@ function lazilyLoadLink(
         }
         deferred.fulfill();
       } catch (e) {
-        // TODO We need to handle this error in rendering....
         deferred.reject(e);
+        // We use a custom event for render errors--otherwise QUnit will report a "global error"
+        // when we use a promise rejection to signal to the prerender that there was an error
+        // even though everything is working as designed. QUnit is very noisy about these errors...
+        const event = new CustomEvent('boxel-render-error', {
+          detail: { reason: e },
+        });
+        window.dispatchEvent(event);
       } finally {
         inflightLoads.delete(key);
         if (inflightLoads.size === 0) {

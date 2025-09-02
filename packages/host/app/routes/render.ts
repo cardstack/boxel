@@ -25,25 +25,30 @@ export default class RenderRoute extends Route<Model> {
   @service declare private network: NetworkService;
 
   errorHandler = (event: Event) => {
-    // TODO capture error details in event.reason (this is shaped as a CardError)
+    let reason =
+      'reason' in event
+        ? (event as any).reason
+        : (event as CustomEvent).detail?.reason;
     let element: HTMLElement = document.querySelector('[data-prerender]')!;
     element.innerHTML = `
-      it broke
+      ${reason ? JSON.stringify(reason) : '{"message": "indexing failed"}'}
     `;
     element.dataset.prerenderStatus = 'error';
 
-    event.preventDefault();
+    event.preventDefault?.();
   };
 
   activate() {
     window.addEventListener('error', this.errorHandler);
     window.addEventListener('unhandledrejection', this.errorHandler);
+    window.addEventListener('boxel-render-error', this.errorHandler);
   }
 
   deactivate() {
     (globalThis as any)._lazilyLoadLinks = undefined;
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
+    window.removeEventListener('boxel-render-error', this.errorHandler);
   }
 
   beforeModel() {
@@ -102,7 +107,7 @@ export default class RenderRoute extends Route<Model> {
 
     let state = new TrackedMap();
     state.set('ready', false);
-    // TODO we should expose the rejected loads so we can capture in an error doc
+    // TODO we should expose the  loads so we can capture in an error doc
     await this.store.loaded();
     state.set('ready', true);
 

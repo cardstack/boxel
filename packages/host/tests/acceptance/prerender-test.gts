@@ -32,7 +32,8 @@ module('Acceptance | prerender', function (hooks) {
     let element = document.querySelector('[data-prerender]') as HTMLElement;
     let status = element.dataset.prerenderStatus as 'ready' | 'error';
     if (status === 'error') {
-      return { status, value: element.innerHTML! };
+      // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
+      return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
     } else {
       return { status, value: element.children[0][capture]! };
     }
@@ -129,6 +130,26 @@ module('Acceptance | prerender', function (hooks) {
             },
           },
         },
+        'Cat/molly.json': {
+          data: {
+            attributes: {
+              name: 'Molly',
+            },
+            relationships: {
+              petFriend: {
+                links: {
+                  self: './missing-link',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../cat',
+                name: 'Cat',
+              },
+            },
+          },
+        },
         'Person/hassan.json': {
           data: {
             attributes: {
@@ -202,11 +223,30 @@ module('Acceptance | prerender', function (hooks) {
     );
   });
 
+  test('prerender can handle missing link in linksTo field', async function (assert) {
+    let url = `${testRealmURL}Cat/molly.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML', 'error');
+    let error = JSON.parse(value);
+    assert.strictEqual(error.code, 404, 'error code is correct');
+    assert.strictEqual(error.title, 'Not Found', 'error title is correct');
+    assert.strictEqual(
+      error.message,
+      'Cat/missing-link.json not found',
+      'error message is correct',
+    );
+    assert.strictEqual(
+      error.id,
+      `${testRealmURL}Cat/missing-link.json`,
+      'error id is correct',
+    );
+    assert.ok(error.stack, 'stack exists in error');
+  });
+
   // TODO test prerender compound contains field
   // TODO test prerender compound containsMany field
   // TODO test prerender compound contains field that includes a linksTo field
   // TODO test prerender compound containsMany that includes a linksTo field
-  // TODO test prerender missing link in linksTo field
   // TODO test prerender missing link in linksToMany field
   // TODO test prerender computed that consumes linksTo
   // TODO test prerender computed that consumes linksToMany
