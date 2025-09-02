@@ -47,12 +47,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare store: StoreService;
 
   get connectUrl() {
-    // FIXME this is a hack for testing at the moment
-    if (window.location.host === 'published.localhost:4205') {
-      return 'http://localhost:4205/connect/FIXME';
-    } else {
-      return 'http://localhost:4200/connect/FIXME';
-    }
+    return 'http://localhost:4200/connect';
   }
 
   get isError() {
