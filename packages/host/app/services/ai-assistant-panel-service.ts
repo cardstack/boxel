@@ -132,6 +132,22 @@ export default class AiAssistantPanelService extends Service {
     return `Lines ${selection.startLineNumber}-${selection.endLineNumber}`;
   }
 
+  get focusPillMetaPills(): string[] {
+    const metaPills: string[] = [];
+
+    const itemType = this.focusPillItemType;
+    if (itemType) {
+      metaPills.push(itemType);
+    }
+
+    const codeRange = this.focusPillCodeRange;
+    if (codeRange) {
+      metaPills.push(codeRange);
+    }
+
+    return metaPills;
+  }
+
   @action
   openPanel() {
     this.operatorModeStateService.openAiAssistant();

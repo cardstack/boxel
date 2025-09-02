@@ -8,22 +8,19 @@ import FocusPill from './index';
 
 export default class AiAssistantFocusPillUsage extends Component {
   @tracked label = 'Crypto Portfolio Tracker';
-  @tracked itemType: string | undefined = 'Schema';
-  @tracked codeRange: string | undefined = 'Lines 51–78';
+  @tracked metaPills: string[] = ['Schema', 'Lines 51–78'];
 
   <template>
     <FreestyleUsage @name='AiAssistant::FocusPill'>
-      <:description>
+            <:description>
         A compact group of pills highlighting a focus context. The first pill
-        shows the label; optional meta pills can show an item type and a code
-        range.
+        shows the label; meta pills display additional context information.
       </:description>
       <:example>
         <div class='container-to-constrain-width'>
           <FocusPill
             @label={{this.label}}
-            @itemType={{this.itemType}}
-            @codeRange={{this.codeRange}}
+            @metaPills={{this.metaPills}}
           />
         </div>
       </:example>
@@ -34,17 +31,11 @@ export default class AiAssistantFocusPillUsage extends Component {
           @value={{this.label}}
           @onInput={{fn (mut this.label)}}
         />
-        <Args.String
-          @name='itemType'
-          @description='Optional meta pill showing an item type (e.g. “Schema”). Leave empty to hide.'
-          @value={{this.itemType}}
-          @onInput={{fn (mut this.itemType)}}
-        />
-        <Args.String
-          @name='codeRange'
-          @description='Optional meta pill showing a code range (e.g. “Lines 51–78”). Leave empty to hide.'
-          @value={{this.codeRange}}
-          @onInput={{fn (mut this.codeRange)}}
+        <Args.Object
+          @name='metaPills'
+          @description='Array of strings for meta pills (e.g. ["Schema", "Lines 51–78"]). Leave empty to hide meta pills.'
+          @value={{this.metaPills}}
+          @onInput={{fn (mut this.metaPills)}}
         />
       </:api>
     </FreestyleUsage>

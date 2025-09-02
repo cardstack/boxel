@@ -90,4 +90,93 @@ module('Unit | Service | ai-assistant-panel-service', function (hooks) {
       'returns "Line 1" for single character selection',
     );
   });
+
+  test('focusPillMetaPills returns array combining itemType and codeRange', function (assert) {
+    // Mock selection for codeRange
+    monacoService.trackedSelection = {
+      startLineNumber: 2,
+      startColumn: 10,
+      endLineNumber: 5,
+      endColumn: 20,
+    } as any;
+
+    // Test that the getter combines the existing getters correctly
+    const itemType = service.focusPillItemType;
+    const codeRange = service.focusPillCodeRange;
+    const result = service.focusPillMetaPills;
+
+    // Build expected array based on what the individual getters return
+    const expected: string[] = [];
+    if (itemType) {
+      expected.push(itemType);
+    }
+    if (codeRange) {
+      expected.push(codeRange);
+    }
+
+    assert.deepEqual(
+      result,
+      expected,
+      'returns array combining itemType and codeRange from individual getters',
+    );
+  });
+
+  test('focusPillMetaPills returns empty array when no selection', function (assert) {
+    // Mock no selection
+    monacoService.trackedSelection = null;
+
+    const result = service.focusPillMetaPills;
+
+    // When there's no selection, we should get an empty array or array with just itemType
+    assert.ok(Array.isArray(result), 'returns an array');
+
+    // If there's an itemType but no codeRange, we should get just itemType
+    const itemType = service.focusPillItemType;
+    if (itemType) {
+      assert.deepEqual(
+        result,
+        [itemType],
+        'returns array with just itemType when no selection',
+      );
+    } else {
+      assert.deepEqual(
+        result,
+        [],
+        'returns empty array when no itemType or codeRange',
+      );
+    }
+  });
+
+  test('focusPillMetaPills maintains correct order', function (assert) {
+    // Mock selection to ensure we have a codeRange
+    monacoService.trackedSelection = {
+      startLineNumber: 3,
+      startColumn: 1,
+      endLineNumber: 3,
+      endColumn: 10,
+    } as any;
+
+    const itemType = service.focusPillItemType;
+    const codeRange = service.focusPillCodeRange;
+    const metaPills = service.focusPillMetaPills;
+
+    // Verify itemType comes first if it exists
+    if (itemType !== undefined) {
+      assert.strictEqual(
+        metaPills[0],
+        itemType,
+        'itemType appears first in meta pills array',
+      );
+    }
+
+    // Verify codeRange appears in correct position
+    if (codeRange !== undefined) {
+      const expectedIndex = itemType !== undefined ? 1 : 0;
+      assert.strictEqual(
+        metaPills[expectedIndex],
+        codeRange,
+        'codeRange appears in correct position in meta pills array',
+      );
+    }
+  });
 });
