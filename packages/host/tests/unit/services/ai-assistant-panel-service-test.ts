@@ -101,23 +101,18 @@ module('Unit | Service | ai-assistant-panel-service', function (hooks) {
     } as any;
 
     // Test that the getter combines the existing getters correctly
-    const itemType = service.focusPillItemType;
-    const codeRange = service.focusPillCodeRange;
     const result = service.focusPillMetaPills;
 
-    // Build expected array based on what the individual getters return
-    const expected: string[] = [];
-    if (itemType) {
-      expected.push(itemType);
-    }
-    if (codeRange) {
-      expected.push(codeRange);
-    }
+    const expected: string[] = [
+      service.focusPillItemType,
+      service.focusPillFormat,
+      service.focusPillCodeRange,
+    ].filter((s) => s !== undefined) as string[];
 
     assert.deepEqual(
       result,
       expected,
-      'returns array combining itemType and codeRange from individual getters',
+      'returns array combining itemType, format, and codeRange',
     );
   });
 
