@@ -123,7 +123,7 @@ interface ConnectButtonSignature {
 }
 
 const ConnectButton: TemplateOnlyComponent<ConnectButtonSignature> = <template>
-  <BoxelButton class='connect' ...attributes>
+  <BoxelButton class='connect' data-test-connect ...attributes>
     <BoxelIcon name='connect' width='16' height='16' class='connect-icon' />
     Connect
   </BoxelButton>
