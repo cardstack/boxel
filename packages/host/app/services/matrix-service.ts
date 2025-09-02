@@ -2,6 +2,7 @@ import Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { dropTask, task, timeout } from 'ember-concurrency';
@@ -242,7 +243,7 @@ export default class MatrixService extends Service {
   });
 
   private get inIframe() {
-    return window.top !== window.self;
+    return !isTesting() && window.top !== window.self;
   }
 
   async requestStorageAccess() {
