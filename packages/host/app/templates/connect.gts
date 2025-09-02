@@ -78,32 +78,10 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
           />
         </section>
       {{else}}
-        <BoxelButton
-          class='connect'
-          data-test-connect
-          {{sendReadyMessage}}
-          {{on 'click' this.connect}}
-        >
-          <BoxelIcon
-            name='connect'
-            width='16'
-            height='16'
-            class='connect-icon'
-          />
-          Connect
-        </BoxelButton>
+        <ConnectButton {{on 'click' this.connect}} {{sendReadyMessage}} />
       {{/if}}
     {{else}}
-      {{! FIXME duplicate button }}
-      <BoxelButton
-        class='connect'
-        data-test-connect
-        {{sendReadyMessage}}
-        {{on 'click' this.connect}}
-      >
-        <BoxelIcon name='connect' width='16' height='16' class='connect-icon' />
-        Connect
-      </BoxelButton>
+      <ConnectButton {{on 'click' this.connect}} {{sendReadyMessage}} />
     {{/if}}
 
     <style scoped>
@@ -147,6 +125,35 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
         padding-left: var(--boxel-sp);
 
         gap: var(--boxel-sp);
+      }
+    </style>
+  </template>
+}
+
+interface ConnectButtonSignature {
+  Element: HTMLButtonElement;
+  Args: {};
+}
+
+class ConnectButton extends Component<ConnectButtonSignature> {
+  <template>
+    <BoxelButton class='connect' ...attributes>
+      <BoxelIcon name='connect' width='16' height='16' class='connect-icon' />
+      Connect
+    </BoxelButton>
+
+    <style scoped>
+      .connect {
+        position: absolute;
+        right: 0;
+
+        background-color: var(--boxel-700);
+        border-radius: var(--boxel-border-radius-sm);
+        color: var(--boxel-light);
+        display: flex;
+        gap: var(--boxel-sp-xxs);
+        font-weight: 400;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
     </style>
   </template>
