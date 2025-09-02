@@ -1318,18 +1318,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .containsText('Plant', 'FocusPill shows selected code label');
     assert
       .dom('[data-test-focus-pill-meta]')
-      .exists({ count: 2 }, 'FocusPill shows two meta pills');
+      .exists({ count: 1 }, 'FocusPill shows one meta pill');
     {
       const metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
       assert
         .dom(metaEls[0] as Element)
         .hasText('Schema', 'FocusPill shows item type "Schema"');
-      assert
-        .dom(metaEls[1] as Element)
-        .hasText(
-          'Line 3',
-          'FocusPill shows single-line selection range "Line 3"',
-        );
     }
 
     await fillIn('[data-test-message-field]', `Message - 2`);
@@ -2685,5 +2679,141 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       resizedWidth > 0,
       'AI assistant panel should still have a width after resize',
     );
+  });
+
+  test('creates new session with settings even when empty new session exists', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // 1. Create first room and add messages with files
+    await fillIn('[data-test-message-field]', 'First message with card');
+    await selectCardFromCatalog(`${testRealmURL}Person/hassan`);
+    await click('[data-test-send-message-btn]');
+
+    await fillIn('[data-test-message-field]', 'Second message with file');
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+    await click('[data-test-send-message-btn]');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'Third message with another card',
+    );
+    await selectCardFromCatalog(`${testRealmURL}Pet/mango`);
+    await click('[data-test-send-message-btn]');
+
+    // Verify first room messages
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'First message with card',
+        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Second message with file',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Third message with another card',
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+      },
+    ]);
+
+    // Get the first room ID
+    const matrixService = getService('matrix-service');
+    const firstRoomId = matrixService.currentRoomId;
+    assert.ok(firstRoomId, 'Should have first room ID');
+
+    // 2. Create second room (new session)
+    await click('[data-test-create-room-btn]');
+    await waitFor(`[data-room-settled]`);
+
+    const secondRoomId = matrixService.currentRoomId;
+    assert.ok(secondRoomId, 'Should have second room ID');
+    assert.notStrictEqual(
+      secondRoomId,
+      firstRoomId,
+      'Second room should be different from first room',
+    );
+
+    // 3. Switch back to first room with message history
+    await click('[data-test-past-sessions-button]');
+    await waitFor(`[data-test-enter-room="${firstRoomId}"]`);
+    await click(`[data-test-enter-room="${firstRoomId}"]`);
+    await waitFor(`[data-room-settled]`);
+
+    // Verify we're back in the first room
+    assert.strictEqual(
+      matrixService.currentRoomId,
+      firstRoomId,
+      'Should be back in the first room',
+    );
+
+    // Verify first room messages are still there
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'First message with card',
+        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Second message with file',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Third message with another card',
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+      },
+    ]);
+
+    // 4. Create third room with "Copy File History" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click('[data-test-new-session-settings-option="Copy File History"]');
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+
+    const thirdRoomId = matrixService.currentRoomId;
+    assert.ok(thirdRoomId, 'Should have third room ID');
+    assert.notStrictEqual(
+      thirdRoomId,
+      firstRoomId,
+      'Third room should be different from first room',
+    );
+    assert.notStrictEqual(
+      thirdRoomId,
+      secondRoomId,
+      'Third room should be different from second room',
+    );
+
+    // 5. Assert that the third room has the first message with files from the first room
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message:
+          'This session includes files and cards from the previous conversation for context.',
+        cards: [
+          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+        ],
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+    ]);
   });
 });

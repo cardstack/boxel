@@ -57,6 +57,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         disabled={{not @canSend}}
         data-test-can-send-msg={{@canSend}}
         class='send-button'
+        @variant='primary'
         @icon={{ArrowUp}}
         @height='20'
         @width='25'
@@ -144,16 +145,10 @@ export default class AiAssistantChatInput extends Component<Signature> {
         border-color: transparent;
       }
       .send-button {
-        color: var(--boxel-dark);
         width: var(--boxel-icon-med);
         height: var(--boxel-icon-med);
-        background-color: var(--boxel-highlight);
         border-radius: var(--boxel-border-radius-sm);
         margin-top: 2px;
-      }
-      .send-button:hover:not(:disabled),
-      .send-button:focus:not(:disabled) {
-        background-color: var(--boxel-highlight-hover);
       }
       .send-button:disabled {
         color: var(--boxel-450);

@@ -5,11 +5,11 @@
       "readMe": null,
       "ref": {
         "module": "../components/map-render",
-        "name": "MapRender"
+        "name": "default"
       },
-      "specType": "component",
+      "specType": "card",
       "containedExamples": [],
-      "title": "MapRender",
+      "title": "default",
       "description": null,
       "cardInfo": {
         "title": null,

@@ -8,7 +8,6 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
 import { isEqual, omit } from 'lodash';
-import { type TrackedArray } from 'tracked-built-ins';
 
 import { type Actions } from '@cardstack/runtime-common';
 
@@ -29,7 +28,7 @@ interface OverlaySignature {
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     onSelectCard?: (cardDefOrId: CardDefOrId) => void;
     toggleSelect?: (cardDefOrId: CardDefOrId) => void;
-    selectedCards?: TrackedArray<CardDefOrId>;
+    selectedCards?: Set<CardDefOrId>;
     overlayClassName?: string;
   };
   Element: HTMLElement;
@@ -178,7 +177,7 @@ export default class Overlays extends Component<OverlaySignature> {
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
   ) {
-    if (this.args.toggleSelect && this.args.selectedCards?.length) {
+    if (this.args.toggleSelect && this.args.selectedCards?.size) {
       this.args.toggleSelect(cardDefOrId);
     } else if (this.args.onSelectCard) {
       this.args.onSelectCard(cardDefOrId);
@@ -188,11 +187,12 @@ export default class Overlays extends Component<OverlaySignature> {
   }
 
   @action protected isSelected(cardDefOrId: CardDefOrId) {
-    return (
-      this.args.selectedCards?.some(
-        (card: CardDefOrId) => card === cardDefOrId,
-      ) ?? false
-    );
+    if (!this.args.selectedCards) return false;
+    if (this.args.selectedCards.has(cardDefOrId)) return true;
+    if (typeof cardDefOrId !== 'string' && cardDefOrId.id) {
+      return this.args.selectedCards.has(cardDefOrId.id);
+    }
+    return false;
   }
 
   @action protected isHovered(renderedCard: RenderedCardForOverlayActions) {

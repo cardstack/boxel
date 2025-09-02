@@ -22,6 +22,8 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { ThreeDotsHorizontal, IconCode } from '@cardstack/boxel-ui/icons';
 
+import { hasExecutableExtension } from '@cardstack/runtime-common';
+
 import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-file-modal';
 import CardService from '@cardstack/host/services/card-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -111,6 +113,7 @@ export default class AttachedFileDropdownMenu extends Component<{
       new URL(this.args.file.sourceUrl!),
       content,
       'bot-patch',
+      { resetLoader: hasExecutableExtension(this.args.file.sourceUrl!) },
     );
 
     this.isRestorePatchedFileModalOpen = false;

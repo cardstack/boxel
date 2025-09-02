@@ -1257,13 +1257,15 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
 
-    await waitUntil(() =>
-      document
-        .querySelector(`[data-test-card="${packetId}"]`)
+    await waitUntil(() => {
+      return document
+        .querySelector(
+          `[data-test-stack-item-content] >[data-test-card="${packetId}"]`,
+        )
         ?.textContent?.includes(
           'Everyone knows that Alice ran the show in the Brady household.',
-        ),
-    );
+        );
+    });
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {

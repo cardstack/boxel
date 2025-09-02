@@ -4,6 +4,7 @@ import format from 'date-fns/format';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -90,6 +91,12 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
             type: APP_BOXEL_ACTIVE_LLM,
             content: {
               model: DEFAULT_LLM,
+            },
+          },
+          {
+            type: APP_BOXEL_LLM_MODE,
+            content: {
+              mode: input.llmMode || 'ask',
             },
           },
           {

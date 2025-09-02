@@ -133,7 +133,6 @@ export default class Index extends Route<void> {
     if (hostsOwnAssets) {
       // availableRealmURLs is set in matrixService.start(), so we can use it here
       let realmUrl = this.realmServer.availableRealmURLs.find((realmUrl) => {
-        console.log(realmUrl);
         let realmPathParts = new URL(realmUrl).pathname
           .split('/')
           .filter((part) => part !== '');

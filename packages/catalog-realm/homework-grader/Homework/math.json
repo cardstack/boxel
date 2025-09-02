@@ -1,8 +1,29 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Homework",
+        "module": "../homework"
+      }
+    },
     "type": "card",
     "attributes": {
-      "instructions": "Solve the following arithmetic problems. Show your work where necessary.",
+      "grade": {
+        "overallGrade": "F",
+        "questionPoints": [
+          5,
+          0,
+          5,
+          0
+        ],
+        "overallFeedback": "### Homework Grade: F (50%)\n\n**Question-by-Question Feedback:**\n\n1. **Addition (15 + 27 = ?)**: Your answer \"42\" is **CORRECT!** ✓ (5/5 points)\n   - Excellent work! You correctly added 15 + 27 = 42.\n\n2. **Division (48 ÷ 6 = ?)**: **NO ANSWER PROVIDED** (0/5 points)\n   - The correct answer is **8**\n   - Remember: 48 ÷ 6 means \"how many groups of 6 can we make from 48?\"\n   - You can check this by multiplying: 6 × 8 = 48\n\n3. **Multiplication (13 × 4 = ?)**: Your answer \"52\" is **CORRECT!** ✓ (5/5 points)\n   - Great job! 13 × 4 = 52. You can think of this as (10 × 4) + (3 × 4) = 40 + 12 = 52.\n\n4. **Subtraction (45 - 19 = ?)**: **NO ANSWER PROVIDED** (0/5 points)\n   - The correct answer is **26**\n   - To subtract: 45 - 19. Start with 45 and take away 19.\n   - One way to think about it: 45 - 20 = 25, then add back 1 to get 26.\n\n**Total Score: 10 out of 20 points (50%)**\n\n**Areas for Improvement:**\n- Complete ALL questions - leaving questions blank means missing out on possible points\n- Practice division problems and remember the relationship between division and multiplication\n- Work on subtraction strategies and double-check your arithmetic\n- Show your work when possible to help identify where errors might occur\n\n**What You Did Well:**\n- Excellent work on the addition and multiplication problems you completed!\n- Your answers for questions 1 and 3 show you understand these operations well\n- When you attempt problems, you're getting them right!\n\n**Next Steps:**\n- Make sure to attempt every question, even if you're not completely sure\n- Practice basic division and subtraction facts\n- Remember to check your work before submitting\n\nDon't get discouraged - you clearly understand addition and multiplication well. With practice on the other operations and completing all questions, your grades will improve significantly!"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "Math Homework",
+        "description": null,
+        "thumbnailURL": null
+      },
       "questions": [
         {
           "title": "Addition",
@@ -13,42 +34,34 @@
         {
           "title": "Division",
           "questionText": "What is 48 ÷ 6?",
-          "answer": "8",
+          "answer": "",
           "maxPoints": 5
         },
         {
           "title": "Multiplication",
           "questionText": "What is 13 × 4?",
-          "answer": "40",
+          "answer": "52",
           "maxPoints": 5
         },
         {
           "title": "Subtraction",
           "questionText": "What is 45 - 19?",
-          "answer": "26",
+          "answer": "",
           "maxPoints": 5
         }
       ],
-      "grade": {
-        "overallGrade": "B",
-        "overallFeedback": "### Feedback\n\nGreat effort on your arithmetic homework! Here's how you did on each question:\n\n1. **Addition**: Your answer (42) is correct! \n2. **Division**: Your answer (8) is correct!\n3. **Multiplication**: Your answer (40) is _incorrect_. The correct answer is 52 (because 13 × 4 = 52).\n4. **Subtraction**: Your answer (26) is correct!\n\n**Tips:**\n- Double-check multiplication calculations—writing them out step-by-step can help eliminate mistakes.\n\n**Overall:** You got 3 out of 4 questions correct. Nice work! Practice multiplication for extra confidence.\n\n---\n**Total Points:** 15/20\n\nKeep practicing, you're doing well!",
-        "questionPoints": [5, 5, 0, 5]
-      },
-      "title": "Basic Arithmetic Homework",
-      "description": "Practice your basic arithmetic skills with these math problems.",
-      "thumbnailURL": null
+      "instructions": "Solve the following arithmetic problems. Show your work where necessary."
     },
     "relationships": {
       "gradingSkill": {
         "links": {
           "self": "../../Skill/homework-grader"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../homework",
-        "name": "Homework"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

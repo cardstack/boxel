@@ -11,6 +11,8 @@ import { trackedFunction } from 'reactiveweb/function';
 
 import { TrackedSet } from 'tracked-built-ins';
 
+import { CardContainer } from '@cardstack/boxel-ui/components';
+
 import {
   type Query,
   RealmPaths,
@@ -41,7 +43,11 @@ export class PrerenderedCard implements PrerenderedCardLike {
     if (data.isError && !data.html) {
       this.component = getErrorComponent(data.realmUrl, data.url);
     } else {
-      this.component = htmlComponent(data.html);
+      let extraAttributes: Record<string, string> = {};
+      if (data.isError) {
+        extraAttributes['data-is-error'] = 'true';
+      }
+      this.component = htmlComponent(data.html, extraAttributes);
     }
   }
   get url() {
@@ -57,14 +63,22 @@ export class PrerenderedCard implements PrerenderedCardLike {
 function getErrorComponent(realmURL: string, url: string) {
   let name = new RealmPaths(new URL(realmURL)).local(new URL(url));
   const DefaultErrorResultComponent: TemplateOnlyComponent<{
-    Element: Element;
+    Element: HTMLDivElement;
   }> = <template>
-    <div class='error' ...attributes>
-      <div class='thumbnail'>
-        <TriangleAlert />
+    <CardContainer
+      class='card instance-error'
+      @displayBoundaries={{true}}
+      data-test-instance-error={{true}}
+      data-test-card={{url}}
+      ...attributes
+    >
+      <div class='error'>
+        <div class='thumbnail'>
+          <TriangleAlert />
+        </div>
+        <div class='name' data-test-instance-error-name>{{name}}</div>
       </div>
-      <div class='name' data-test-instance-error-name>{{name}}</div>
-    </div>
+    </CardContainer>
     <style scoped>
       .error {
         display: flex;
@@ -96,8 +110,14 @@ function getErrorComponent(realmURL: string, url: string) {
       }
     </style>
   </template>;
-  return DefaultErrorResultComponent;
+  return DefaultErrorResultComponent as unknown as HTMLComponent;
 }
+
+const normalizeRealms = (realms: string[]) => {
+  return realms.map((r) => {
+    return new RealmPaths(new URL(r)).url;
+  });
+};
 
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
   @service declare cardService: CardService;
@@ -106,7 +126,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
   _lastCardUrls: string[] | undefined;
   _lastSearchResults: PrerenderedCard[] | undefined;
   _lastRealms: string[] | undefined;
-  realmsNeedingRefresh = new TrackedSet<string>(this.args.realms);
+  realmsNeedingRefresh = new TrackedSet<string>(
+    normalizeRealms(this.args.realms),
+  );
 
   async searchPrerendered(
     query: Query,
@@ -154,6 +176,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
 
   private runSearch = trackedFunction(this, async () => {
     let { query, format, cardUrls, realms } = this.args;
+    realms = normalizeRealms(realms);
 
     let realmsChanged = !isEqual(realms, this._lastRealms);
     let queryChanged = !isEqual(query, this._lastSearchQuery);
@@ -266,7 +289,10 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
 
   <template>
     {{#if @isLive}}
-      {{SubscribeToRealms @realms this.markRealmNeedsRefreshing}}
+      {{SubscribeToRealms
+        (normalizeRealms @realms)
+        this.markRealmNeedsRefreshing
+      }}
     {{/if}}
     {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}

@@ -809,7 +809,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'new card is rendered in isolated format',
       );
 
-      await click('[data-test-instance-chooser]');
       assert
         .dom('[data-option-index]')
         .exists({ count: 1 }, 'dropdown instance count is correct');

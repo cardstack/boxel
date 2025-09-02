@@ -1,0 +1,44 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TravelMapper",
+        "module": "../travel-mapper"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "mapConfig": {
+        "tileserverUrl": null
+      }
+    },
+    "relationships": {
+      "routes.0": {
+        "links": {
+          "self": "../../route/Route/sibu-kl"
+        }
+      },
+      "routes.1": {
+        "links": {
+          "self": "../../route/Route/china-tokyo"
+        }
+      },
+      "routes.2": {
+        "links": {
+          "self": "../../route/Route/thailand-vietnam"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

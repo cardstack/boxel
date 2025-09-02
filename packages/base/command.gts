@@ -150,6 +150,7 @@ export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
   @field enabledSkills = linksToMany(Skill);
   @field disabledSkills = linksToMany(Skill);
+  @field llmMode = contains(StringField); // 'gpt-4o' or 'gpt-4o-mini'
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {
@@ -187,6 +188,7 @@ export class UseAiAssistantInput extends CardDef {
   @field prompt = contains(StringField);
   @field clientGeneratedId = contains(StringField);
   @field openCardIds = containsMany(StringField);
+  @field requireCommandCall = contains(BooleanField); // optional: require AI to execute commands
 }
 
 export class SendAiAssistantMessageInput extends CardDef {
@@ -304,6 +306,15 @@ export class SummarizeSessionResult extends CardDef {
   @field summary = contains(StringField);
 }
 
+export class AskAiInput extends CardDef {
+  @field prompt = contains(StringField);
+  @field llmMode = contains(StringField); // 'ask' or 'act'
+}
+
+export class AskAiOutput extends CardDef {
+  @field response = contains(StringField);
+}
+
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
@@ -330,4 +341,21 @@ export class RealmMetaField extends FieldDef {
 
 export class GetAllRealmMetasResult extends CardDef {
   @field results = containsMany(RealmMetaField);
+}
+
+export class SearchGoogleImagesInput extends CardDef {
+  @field query = contains(StringField);
+  @field maxResults = contains(NumberField); // optional, default 10
+  @field startIndex = contains(NumberField); // optional, default 1, for pagination
+}
+
+export class SearchGoogleImagesResult extends CardDef {
+  @field images = containsMany(JsonField);
+  @field totalResults = contains(NumberField);
+  @field searchTime = contains(NumberField);
+  @field formattedTotalResults = contains(StringField);
+  @field formattedSearchTime = contains(StringField);
+  @field hasNextPage = contains(BooleanField);
+  @field nextPageStartIndex = contains(NumberField);
+  @field currentStartIndex = contains(NumberField);
 }

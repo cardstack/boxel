@@ -49,6 +49,7 @@ const SpecPreviewBadge: TemplateOnlyComponent<SpecPreviewBadgeSignature> =
         --boxel-button-min-height: auto;
         --boxel-button-min-width: auto;
         padding: 4px;
+        border: none;
         border-radius: var(--boxel-border-radius-xs);
       }
 

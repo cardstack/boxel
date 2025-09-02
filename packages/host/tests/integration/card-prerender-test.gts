@@ -8,6 +8,8 @@ import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-sc
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import { unwrap } from '@cardstack/host/lib/current-run';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -185,7 +187,15 @@ module('Integration | card-prerender', function (hooks) {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h3> Mango </h3>`),
+          cleanWhiteSpace(`<div
+            class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
+            data-test-boxel-card-container
+            style="--boxel-example: 1px;"
+            data-test-card="http://test-realm/test/Pet/mango"
+            data-test-card-format="isolated"
+            data-test-field-component-card>
+              <h3> Mango </h3>
+          </div>`),
           'the pre-rendered HTML is correct',
         );
       } else {
@@ -199,7 +209,15 @@ module('Integration | card-prerender', function (hooks) {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h3> Van Gogh </h3>`),
+          cleanWhiteSpace(`<div
+            class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
+            data-test-boxel-card-container
+            style="--boxel-example: 1px;"
+            data-test-card="http://test-realm/test/Pet/vangogh"
+            data-test-card-format="isolated"
+            data-test-field-component-card>
+              <h3> Van Gogh </h3>
+            </div>`),
           'the pre-rendered HTML is correct',
         );
       } else {
@@ -274,7 +292,9 @@ module('Integration | card-prerender', function (hooks) {
     ].forEach(([title, type], index) => {
       assert.strictEqual(
         cleanWhiteSpace(
-          stripScopedCSSAttributes(results.prerenderedCards[index].html!),
+          stripScopedCSSAttributes(
+            unwrap(results.prerenderedCards[index].html!),
+          ),
         ),
         cleanWhiteSpace(`
           <div class="fitted-template">

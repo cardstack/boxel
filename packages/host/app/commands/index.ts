@@ -6,6 +6,7 @@ import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-defi
 import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
 import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
+import * as AskAiCommandModule from './ask-ai';
 import * as CopyCardCommandModule from './copy-card';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
@@ -27,6 +28,7 @@ import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assista
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
+import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
@@ -48,6 +50,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/add-skills-to-room',
     AddSkillsToRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/ask-ai',
+    AskAiCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/apply-search-replace-block',
@@ -193,11 +199,16 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/get-all-realm-metas',
     GetAllRealmMetasCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/search-google-images',
+    SearchGoogleImagesCommandModule,
+  );
 }
 
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AddFieldToCardDefinitionCommandModule.default,
   AddSkillsToRoomCommandModule.default,
+  AskAiCommandModule.default,
   ApplySearchReplaceBlockCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
   GetCardCommandModule.default,
@@ -218,5 +229,6 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdateSkillActivationCommandModule.default,
   UseAiAssistantCommandModule.default,
   WriteTextFileCommandModule.default,
+  SearchGoogleImagesCommandModule.default,
   SummarizeSessionCommandModule.default,
 ];
