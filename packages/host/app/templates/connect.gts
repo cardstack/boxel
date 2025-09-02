@@ -34,27 +34,13 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
   @action
   async storeAccessPermissions() {
     this.storageAccess = await window.document.hasStorageAccess();
-    console.log('storage access response', this.storageAccess);
   }
 
   @action
   async connect() {
-    console.log('connect clicked');
-    // FIXME Chrome only
-    // let handle = await window.document.requestStorageAccess({
-    //   localStorage: true,
-    // });
-
-    // console.log('handle?', handle);
-
-    // console.log(handle.localStorage['auth']);
-
     let handle = await this.matrixService.requestStorageAccess();
-    console.log('handle?', handle);
 
     if (handle) {
-      // FIXME should Matrix service instead use the requested handle?
-      // FIXME also does the container frame even need this
       window.localStorage.setItem('auth', handle.localStorage['auth']);
     }
 
