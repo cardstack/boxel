@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -121,28 +122,26 @@ interface ConnectButtonSignature {
   Args: {};
 }
 
-class ConnectButton extends Component<ConnectButtonSignature> {
-  <template>
-    <BoxelButton class='connect' ...attributes>
-      <BoxelIcon name='connect' width='16' height='16' class='connect-icon' />
-      Connect
-    </BoxelButton>
+const ConnectButton: TemplateOnlyComponent<ConnectButtonSignature> = <template>
+  <BoxelButton class='connect' ...attributes>
+    <BoxelIcon name='connect' width='16' height='16' class='connect-icon' />
+    Connect
+  </BoxelButton>
 
-    <style scoped>
-      .connect {
-        position: absolute;
-        right: 0;
+  <style scoped>
+    .connect {
+      position: absolute;
+      right: 0;
 
-        background-color: var(--boxel-700);
-        border-radius: var(--boxel-border-radius-sm);
-        color: var(--boxel-light);
-        display: flex;
-        gap: var(--boxel-sp-xxs);
-        font-weight: 400;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-      }
-    </style>
-  </template>
-}
+      background-color: var(--boxel-700);
+      border-radius: var(--boxel-border-radius-sm);
+      color: var(--boxel-light);
+      display: flex;
+      gap: var(--boxel-sp-xxs);
+      font-weight: 400;
+      padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+    }
+  </style>
+</template>;
 
 export default RouteTemplate(ConnectComponent);
