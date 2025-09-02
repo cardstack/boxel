@@ -32,13 +32,13 @@ export const Button: TemplateOnlyComponent<ButtonSignature> = <template>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
-      transition: border-color var(--boxel-transition);
       margin: 0;
       min-height: var(--boxel-input-group-height);
       outline-offset: 0;
     }
 
     .button-accessory {
+      box-shadow: none;
       z-index: 2;
     }
 
@@ -177,6 +177,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       }
 
       .boxel-input-group__select-accessory :deep(.boxel-select) {
+        border: none;
         font-weight: 600;
       }
 
