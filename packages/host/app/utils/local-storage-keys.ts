@@ -11,7 +11,7 @@ export const RecentCards = 'recent-cards';
 export const RecentFiles = 'recent-files';
 export const ScrollPositions = 'scroll-positions';
 
-export function clearLocalStorage(storage: Storage) {
+export function clearLocalStorage(storage: Storage | undefined) {
   storage?.removeItem(CurrentRoomIdPersistenceKey);
   storage?.removeItem(NewSessionIdPersistenceKey);
   storage?.removeItem(AiAssistantPanelWidth);
