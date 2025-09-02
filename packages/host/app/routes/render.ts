@@ -107,7 +107,6 @@ export default class RenderRoute extends Route<Model> {
 
     let state = new TrackedMap();
     state.set('ready', false);
-    // TODO we should expose the  loads so we can capture in an error doc
     await this.store.loaded();
     state.set('ready', true);
 

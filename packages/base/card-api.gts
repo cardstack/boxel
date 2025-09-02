@@ -2651,9 +2651,9 @@ function lazilyLoadLink(
     store.trackLoad(
       // we wrap the promise with a catch that will prevent the rejections from bubbling up but
       // not interfere with the original deferred. this prevents QUnit from being really noisy
-      // when it sees a "global error" even though that is a normal operating circumstance for
-      // the rendering when it encounters an error. this was the original deferred.promise still
-      // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit
+      // and reporting a "global error" even though that is a normal operating circumstance for
+      // the rendering when it encounters an error. the original deferred.promise still
+      // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
       deferred.promise.then(
         () => {},
         () => {},
