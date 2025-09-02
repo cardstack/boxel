@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 import Service from '@ember/service';
 
-import { getAncestor, getField } from '@cardstack/runtime-common';
+import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
 
 import {
   ModuleSyntax,
@@ -72,8 +72,10 @@ export default class ModuleContentsService extends Service {
 
   async assembleDeclarations(
     moduleSyntax: ModuleSyntax,
-    exportedCardsOrFields: Map<string, typeof BaseDef>,
+    moduleProxy: object,
   ): Promise<ModuleDeclaration[]> {
+    let exportedCardsOrFields: Map<string, typeof BaseDef> =
+      getExportedCardsOrFields(moduleProxy);
     let localCardsOrFields = this.collectLocalCardsOrFields(
       moduleSyntax,
       exportedCardsOrFields,
@@ -97,6 +99,7 @@ export default class ModuleContentsService extends Service {
           // case where things statically look like cards or fields but are not
           if (value.exportName !== undefined) {
             return {
+              ...(value.super ? { super: value.super } : {}),
               localName: value.localName,
               exportName: value.exportName,
               path: value.path,
@@ -225,4 +228,12 @@ export default class ModuleContentsService extends Service {
       }
     }
   }
+}
+
+function getExportedCardsOrFields(moduleProxy: object) {
+  return new Map(
+    Object.entries(moduleProxy).filter(([_, declaration]) =>
+      isBaseDef(declaration),
+    ),
+  );
 }

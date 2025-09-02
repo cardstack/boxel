@@ -5,14 +5,11 @@ import { task } from 'ember-concurrency';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { isBaseDef } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import { type Ready } from '@cardstack/host/resources/file';
 
 import { importResource } from '@cardstack/host/resources/import';
-
-import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
 import ModuleContentsService, {
   type ModuleDeclaration,
@@ -29,14 +26,6 @@ export {
   type CardOrFieldDeclaration,
   type CardOrFieldReexport,
 };
-
-function getExportedCardsOrFields(moduleProxy: object) {
-  return new Map(
-    Object.entries(moduleProxy).filter(([_, declaration]) =>
-      isBaseDef(declaration),
-    ),
-  );
-}
 
 interface Args {
   named: {
@@ -107,9 +96,6 @@ export class ModuleContentsResource
     if (moduleResource.module === undefined) {
       return;
     }
-    let exportedCardsOrFields: Map<string, typeof BaseDef> =
-      getExportedCardsOrFields(moduleResource.module);
-
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
       new URL(executableFile.url),
@@ -117,7 +103,7 @@ export class ModuleContentsResource
 
     let declarations = await this.moduleContentsService.assembleDeclarations(
       moduleSyntax,
-      exportedCardsOrFields,
+      moduleResource.module,
     );
 
     let newState = {
