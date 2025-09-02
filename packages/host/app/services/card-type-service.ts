@@ -182,7 +182,7 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
   return obj && 'card' in obj;
 }
 
-function getCodeRefFromType(t: Type | FieldOfType): CodeRef {
+export function getCodeRefFromType(t: Type | FieldOfType): CodeRef {
   let codeRef: CodeRef;
   if (isFieldOfType(t)) {
     codeRef = isCodeRefType(t.card) ? t.card : (t.card as Type).codeRef;

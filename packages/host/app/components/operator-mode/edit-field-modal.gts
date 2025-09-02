@@ -37,7 +37,7 @@ import ModalContainer from '@cardstack/host/components/modal-container';
 import { Ready } from '@cardstack/host/resources/file';
 
 import {
-  getResolvedCodeRefFromType,
+  getCodeRefFromType,
   type FieldOfType,
 } from '@cardstack/host/services/card-type-service';
 import LoaderService from '@cardstack/host/services/loader-service';
@@ -151,7 +151,7 @@ export default class EditFieldModal extends Component<Signature> {
       ? 'many'
       : 'one';
 
-    let ref = getResolvedCodeRefFromType(field);
+    let ref = getCodeRefFromType(field);
 
     if (ref) {
       this.fieldCard = await loadCardDef(ref, {
