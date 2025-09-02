@@ -4,10 +4,10 @@ import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
-import window from 'ember-window-mock';
 
 import { consume, provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
+import window from 'ember-window-mock';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
