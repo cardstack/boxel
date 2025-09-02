@@ -23,6 +23,7 @@ import {
 import type { CardContext, BoxComponent } from '../card-api';
 
 import CardList from './card-list';
+import { htmlSafe } from '@ember/template';
 
 export interface ViewOption {
   id: string;
@@ -87,6 +88,7 @@ interface Signature {
   Args: {
     context?: CardContext;
     format: Format;
+    icon?: string | Icon;
     query?: Query;
     realms: string[];
     isLive?: boolean;
@@ -117,6 +119,18 @@ export default class CardsGridLayout extends Component<Signature> {
       </aside>
       <section class='content scroll-container' tabindex='0'>
         <header class='content-header' aria-label={{@activeFilter.displayName}}>
+          {{#if @activeFilter.icon}}
+            <div class='content-icon'>
+              {{#if (this.isIconString @activeFilter.icon)}}
+                {{htmlSafe @activeFilter.icon}}
+              {{else}}
+                <@activeFilter.icon
+                  class='filter-list__icon'
+                  role='presentation'
+                />
+              {{/if}}
+            </div>
+          {{/if}}
           <h2 class='content-title'>
             {{@activeFilter.displayName}}
           </h2>
@@ -229,11 +243,36 @@ export default class CardsGridLayout extends Component<Signature> {
         flex-wrap: wrap;
         column-gap: var(--boxel-sp-lg);
         row-gap: var(--boxel-sp-xs);
-        padding: var(--padding);
+        padding: var(--padding) 0;
+        margin: 0 var(--padding);
+        border-bottom: 1px solid #e2e2e2;
       }
+      .content-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+
+      .filter-icon-svg {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .filter-icon-svg svg {
+        width: 24px;
+        height: 24px;
+      }
+
       .content-title {
         flex-grow: 1;
         margin-block: 0;
+        margin-left: calc(-1 * var(--boxel-sp-sm));
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
       }
@@ -282,5 +321,9 @@ export default class CardsGridLayout extends Component<Signature> {
 
   private get getCommunityCards() {
     return this.args.activeFilter.cards?.[2];
+  }
+
+  private isIconString(icon: Icon | string | undefined): icon is string {
+    return typeof icon === 'string';
   }
 }

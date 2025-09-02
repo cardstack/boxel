@@ -6,11 +6,11 @@ import { restartableTask } from 'ember-concurrency';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { HighlightIcon } from '@cardstack/boxel-ui/icons';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
 import AllCardsIcon from '@cardstack/boxel-icons/square-stack';
-import StarIcon from '@cardstack/boxel-icons/star';
 
 import {
   chooseCard,
@@ -99,7 +99,7 @@ class Isolated extends Component<typeof CardsGrid> {
   private filterOptions: FilterOption[] = [
     {
       displayName: 'Highlights',
-      icon: StarIcon,
+      icon: HighlightIcon,
       cards: this.highlightsCards,
     },
     {

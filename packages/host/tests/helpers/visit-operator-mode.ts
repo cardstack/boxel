@@ -3,6 +3,7 @@ import { visit } from '@ember/test-helpers';
 import stringify from 'safe-stable-stringify';
 
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import { click } from '@ember/test-helpers';
 
 export default async function visitOperatorMode({
   stacks,
@@ -14,7 +15,8 @@ export default async function visitOperatorMode({
   moduleInspector,
   workspaceChooserOpened,
   trail,
-}: Partial<SerializedState>) {
+  selectAllCardsFilter = true,
+}: Partial<SerializedState> & { selectAllCardsFilter?: boolean }) {
   let operatorModeState = {
     stacks: stacks || [],
     submode: submode || 'interact',
@@ -34,4 +36,11 @@ export default async function visitOperatorMode({
   await visit(
     `/?&operatorModeState=${encodeURIComponent(operatorModeStateParam)}`,
   );
+
+  let allCardsFilter = document.querySelector(
+    '[data-test-boxel-filter-list-button="All Cards"]',
+  );
+  if (allCardsFilter && selectAllCardsFilter) {
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+  }
 }
