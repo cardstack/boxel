@@ -14,6 +14,7 @@ import {
   type RoomMember,
   type EmittedEvents,
 } from 'matrix-js-sdk';
+import { MatrixClient } from 'matrix-js-sdk';
 import { Filter } from 'matrix-js-sdk';
 import {
   type SlidingSync,
