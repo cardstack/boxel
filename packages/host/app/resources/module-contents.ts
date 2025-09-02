@@ -101,10 +101,11 @@ export class ModuleContentsResource
       new URL(executableFile.url),
     );
 
-    let declarations = await this.moduleContentsService.assembleDeclarations(
-      moduleSyntax,
-      moduleResource.module,
-    );
+    let declarations =
+      await this.moduleContentsService.assembleFromModuleSyntax(
+        moduleSyntax,
+        moduleResource.module,
+      );
 
     let newState = {
       declarations,
