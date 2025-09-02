@@ -89,9 +89,8 @@ export default class ModuleContentsService extends Service {
       moduleProxy = await this.loaderService.loader.import(url);
     } catch (e) {
       // If we can't load the module, we'll work with syntax only
-      console.warn(
-        `Could not load module ${moduleUrl} for runtime analysis:`,
-        e,
+      throw new Error(
+        `Could not load module ${moduleUrl} for runtime analysis: ${e}`,
       );
     }
     return this.assembleFromModuleSyntax(moduleSyntax, moduleProxy);
