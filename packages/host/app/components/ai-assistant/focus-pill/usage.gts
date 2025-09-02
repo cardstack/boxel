@@ -12,16 +12,13 @@ export default class AiAssistantFocusPillUsage extends Component {
 
   <template>
     <FreestyleUsage @name='AiAssistant::FocusPill'>
-            <:description>
+      <:description>
         A compact group of pills highlighting a focus context. The first pill
         shows the label; meta pills display additional context information.
       </:description>
       <:example>
         <div class='container-to-constrain-width'>
-          <FocusPill
-            @label={{this.label}}
-            @metaPills={{this.metaPills}}
-          />
+          <FocusPill @label={{this.label}} @metaPills={{this.metaPills}} />
         </div>
       </:example>
       <:api as |Args|>
