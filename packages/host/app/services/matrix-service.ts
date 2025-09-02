@@ -248,35 +248,7 @@ export default class MatrixService extends Service {
 
   async requestStorageAccess() {
     if (this.inIframe) {
-      if (await document.hasStorageAccess()) {
-        // Chrome
-        if (document['requestStorageAccessFor']) {
-          this.storage = (
-            await document.requestStorageAccess({
-              localStorage: true,
-            })
-          ).localStorage;
-        } else {
-          this.storage = window.localStorage;
-        }
-      } else {
-        try {
-          console.log(
-            'does requestStorageAccessFor exist?',
-            document['requestStorageAccessFor'],
-          );
-          const handle = document['requestStorageAccessFor']
-            ? await document.requestStorageAccess({
-                localStorage: true,
-              })
-            : await document.requestStorageAccess();
-          console.log('requestStorageAccess handle:', handle);
-          this.storage = handle?.localStorage ?? window.localStorage;
-        } catch (error) {
-          console.warn('Storage access request failed:', error);
-          console.log(error?.stack);
-        }
-      }
+      this.storage = await getStorage();
     } else {
       this.storage = window.localStorage;
     }
@@ -1821,6 +1793,31 @@ export default class MatrixService extends Service {
 
     return promptParts;
   }
+}
+
+async function getStorage() {
+  let storage;
+
+  try {
+    // Chrome requires finer-grained permissions requests
+    // @ts-expect-error our Typescript version doesn’t know about this API
+    if (document['requestStorageAccessFor']) {
+      let requestOptions = {
+        localStorage: true,
+      };
+
+      storage = // @ts-expect-error nor about passing options and getting a handle back
+        (await document.requestStorageAccess(requestOptions)).localStorage;
+    } else {
+      await document.requestStorageAccess();
+      storage = window.localStorage;
+    }
+  } catch (e) {
+    console.error('Error accessing storage', e);
+    storage = window.localStorage;
+  }
+
+  return storage;
 }
 
 declare module '@ember/service' {
