@@ -34,8 +34,8 @@ export default class HostModeService extends Service {
 
       return (
         currentHost.endsWith(`.${realmServerDomain}`) &&
-        // FIXME hack for testing
-        !currentHost.startsWith('published.localhost')
+        // Using a submdomain of localhost indicates host mode
+        !currentHost.endsWith('.localhost')
       );
     }
 
