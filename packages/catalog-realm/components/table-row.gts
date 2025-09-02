@@ -3,13 +3,16 @@ import GlimmerComponent from '@glimmer/component';
 import {
   getFields,
   type CardDef,
+  type CardContext,
 } from 'https://cardstack.com/base/card-api';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { Pill } from '@cardstack/boxel-ui/components';
 
 interface TableRowSignature {
   Args: {
     instance: CardDef;
     fieldColumns: string[];
+    context?: CardContext;
   };
   Element: HTMLTableRowElement;
 }
@@ -20,25 +23,25 @@ export class TableRow extends GlimmerComponent<TableRowSignature> {
       includeComputeds: false,
       usedLinksToFieldsOnly: false,
     });
-    
+
     return this.args.fieldColumns.map((fieldName) => {
       const field = fields[fieldName];
       const value = (this.args.instance as any)[fieldName];
-      
+
       console.log(`Field ${fieldName}:`, {
         value,
         fieldType: field?.fieldType,
         field: field,
         hasComponent: !!field?.component,
       });
-      
+
       if (field?.component) {
         console.log(`Field ${fieldName} component:`, field.component);
       }
-      
-      return { 
-        fieldName, 
-        value, 
+
+      return {
+        fieldName,
+        value,
         fieldType: field?.fieldType,
         field,
       };
@@ -52,15 +55,38 @@ export class TableRow extends GlimmerComponent<TableRowSignature> {
           {{#if (eq fieldInfo.fieldType 'contains')}}
             {{fieldInfo.value}}
           {{else if (eq fieldInfo.fieldType 'linksTo')}}
-            {{#if fieldInfo.value.name}}
-              {{fieldInfo.value.name}}
-            {{else}}
-              [linked card]
+            {{#if fieldInfo.value}}
+              <Pill
+                {{this.args.context.cardComponentModifier
+                  cardId=fieldInfo.value.id
+                  format='data'
+                  fieldType='linksTo'
+                  fieldName=fieldInfo.fieldName
+                }}
+              >
+                {{#if fieldInfo.value.name}}
+                  {{fieldInfo.value.name}}
+                {{else}}
+                  [linked card]
+                {{/if}}
+              </Pill>
             {{/if}}
           {{else if (eq fieldInfo.fieldType 'containsMany')}}
-            [{{fieldInfo.value.length}} items]
+            [{{fieldInfo.value.length}}
+            items]
           {{else if (eq fieldInfo.fieldType 'linksToMany')}}
-            [{{fieldInfo.value.length}} links]
+            {{#each fieldInfo.value as |linkedCard|}}
+              <Pill
+                {{this.args.context.cardComponentModifier
+                  cardId=linkedCard.id
+                  format='data'
+                  fieldType='linksToMany'
+                  fieldName=fieldInfo.fieldName
+                }}
+              >
+                {{linkedCard.name}}
+              </Pill>
+            {{/each}}
           {{else}}
             {{fieldInfo.value}}
           {{/if}}
@@ -81,10 +107,12 @@ export class TableRow extends GlimmerComponent<TableRowSignature> {
       .field-cell {
         padding: var(--boxel-sp-sm) var(--boxel-sp);
         vertical-align: middle;
-        max-width: 200px;
+        height: 60px;
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
+        white-space: normal;
+        word-wrap: break-word;
+        max-width: 20%;
       }
     </style>
   </template>

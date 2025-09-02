@@ -7,7 +7,7 @@ import {
   type CardContext,
   getFields,
 } from 'https://cardstack.com/base/card-api';
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq, add } from '@cardstack/boxel-ui/helpers';
 
 import { type Query } from '@cardstack/runtime-common';
@@ -97,37 +97,40 @@ export class Table extends GlimmerComponent<TableSignature> {
         </div>
       </div>
 
-      <table class='table'>
-        <thead>
-          <tr>
-            {{#each this.fieldColumns as |fieldName|}}
-              <th>{{fieldName}}</th>
-            {{/each}}
-          </tr>
-        </thead>
-        <tbody>
-          {{#if this.cardsData.isLoading}}
-            <tr>
-              <td colspan={{this.fieldColumns.length}} class='loading-cell'>
-                Loading...
-              </td>
-            </tr>
-          {{else if this.cardsData.instances}}
-            {{#each this.cardsData.instances as |instance|}}
-              <TableRow
-                @instance={{instance}}
-                @fieldColumns={{this.fieldColumns}}
-              />
-            {{/each}}
-          {{else}}
-            <tr>
-              <td colspan={{this.fieldColumns.length}} class='empty-cell'>
-                No data found
-              </td>
-            </tr>
-          {{/if}}
-        </tbody>
-      </table>
+      {{#if this.cardsData.isLoading}}
+        <div class='loading-indicator'>
+          <LoadingIndicator />
+        </div>
+      {{else}}
+        <div class='table-scroll'>
+          <table class='table'>
+            <thead>
+              <tr>
+                {{#each this.fieldColumns as |fieldName|}}
+                  <th>{{fieldName}}</th>
+                {{/each}}
+              </tr>
+            </thead>
+            <tbody>
+              {{#if this.cardsData.instances}}
+                {{#each this.cardsData.instances as |instance|}}
+                  <TableRow
+                    @instance={{instance}}
+                    @fieldColumns={{this.fieldColumns}}
+                    @context={{@context}}
+                  />
+                {{/each}}
+              {{else}}
+                <tr>
+                  <td colspan={{this.fieldColumns.length}} class='empty-cell'>
+                    No data found
+                  </td>
+                </tr>
+              {{/if}}
+            </tbody>
+          </table>
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       .table-container {
@@ -135,6 +138,9 @@ export class Table extends GlimmerComponent<TableSignature> {
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
         box-shadow: var(--boxel-box-shadow);
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
       }
 
       .table-controls {
@@ -158,11 +164,19 @@ export class Table extends GlimmerComponent<TableSignature> {
         padding: 0 var(--boxel-sp-sm);
       }
 
+      .table-scroll {
+        overflow-x: auto;
+        overflow-y: auto;
+        flex: 1;
+      }
+
       .table {
         width: 100%;
         border-collapse: collapse;
         border-spacing: 0;
         background: var(--boxel-light);
+        min-width: 120vw;
+        table-layout: fixed;
       }
 
       .table thead {
@@ -176,9 +190,17 @@ export class Table extends GlimmerComponent<TableSignature> {
         font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         color: var(--boxel-dark);
+        width: 20%;
       }
 
-      .loading-cell,
+      .loading-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        height: 100%;
+      }
+
       .empty-cell {
         padding: var(--boxel-sp) var(--boxel-sp-lg);
         text-align: center;
