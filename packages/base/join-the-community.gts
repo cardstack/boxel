@@ -38,8 +38,11 @@ export class SocialMediaLink extends FieldDef {
     };
 
     <template>
-      <div class='community-card'>
-        <div class='community-icon {{@model.platform}}-icon'>
+      <div class='community-card' data-test-community-card={{@model.platform}}>
+        <div
+          class='community-icon {{@model.platform}}-icon'
+          data-test-community-icon={{@model.platform}}
+        >
           {{#if (eq @model.platform 'Discord')}}
             <svg viewBox='0 0 24 24' width='24' height='24'>
               <path
@@ -78,10 +81,17 @@ export class SocialMediaLink extends FieldDef {
           {{/if}}
         </div>
         <div class='community-content'>
-          <h4 class='community-title'>{{@model.platform}}</h4>
-          <p class='community-description'>{{@model.description}}</p>
+          <h4
+            class='community-title'
+            data-test-community-title={{@model.platform}}
+          >{{@model.platform}}</h4>
+          <p
+            class='community-description'
+            data-test-community-description={{@model.platform}}
+          >{{@model.description}}</p>
           <button
             class='community-link'
+            data-test-community-link={{@model.platform}}
             {{on 'click' this.openLink}}
           >{{@model.url}}</button>
         </div>
@@ -181,7 +191,7 @@ export class JoinTheCommunity extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='community-cards'>
+      <div class='community-cards' data-test-community-cards>
         {{#each @fields.socialMediaLinks as |SocialMediaLink|}}
           <SocialMediaLink @format='embedded' />
         {{/each}}

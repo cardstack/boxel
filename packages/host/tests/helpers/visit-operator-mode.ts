@@ -1,9 +1,10 @@
 import { visit } from '@ember/test-helpers';
 
+import { click } from '@ember/test-helpers';
+
 import stringify from 'safe-stable-stringify';
 
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
-import { click } from '@ember/test-helpers';
 
 export default async function visitOperatorMode({
   stacks,

@@ -258,9 +258,6 @@ test.describe('Commands', () => {
     await login(page, 'user1', 'pass', { url: appURL });
 
     // create a skill card
-    await page
-      .locator('[data-test-boxel-filter-list-button="All Cards"]')
-      .click();
     await page.locator('[data-test-create-new-card-button]').click();
     await page
       .locator('[data-test-select="https://cardstack.com/base/cards/skill"]')

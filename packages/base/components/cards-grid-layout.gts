@@ -149,11 +149,20 @@ export default class CardsGridLayout extends Component<Signature> {
           {{/if}}
         </header>
         {{#if (eq @activeFilter.displayName 'Highlights')}}
-          <div class='highlights-layout'>
+          <div class='highlights-layout' data-test-highlights-layout>
             {{#if this.getAiAppGeneratorCard}}
-              <div class='highlights-section'>
-                <h3 class='section-header'>NEW FEATURE</h3>
-                <div class='highlights-card-container'>
+              <div
+                class='highlights-section'
+                data-test-highlights-section='new-feature'
+              >
+                <h3
+                  class='section-header'
+                  data-test-section-header='new-feature'
+                >NEW FEATURE</h3>
+                <div
+                  class='highlights-card-container'
+                  data-test-highlights-card-container='ai-app-generator'
+                >
                   <this.getAiAppGeneratorCard @format='embedded' />
                 </div>
 
@@ -161,9 +170,18 @@ export default class CardsGridLayout extends Component<Signature> {
             {{/if}}
 
             {{#if this.getWelcomeToBoxelCard}}
-              <div class='highlights-section'>
-                <h3 class='section-header'>GETTING STARTED</h3>
-                <div class='highlights-card-container'>
+              <div
+                class='highlights-section'
+                data-test-highlights-section='getting-started'
+              >
+                <h3
+                  class='section-header'
+                  data-test-section-header='getting-started'
+                >GETTING STARTED</h3>
+                <div
+                  class='highlights-card-container'
+                  data-test-highlights-card-container='welcome-to-boxel'
+                >
                   <div class='highlights-card-container'>
                     <this.getWelcomeToBoxelCard @format='embedded' />
                   </div>
@@ -172,7 +190,10 @@ export default class CardsGridLayout extends Component<Signature> {
             {{/if}}
 
             {{#if this.getCommunityCards}}
-              <div class='highlights-section'>
+              <div
+                class='highlights-section'
+                data-test-highlights-section='join-community'
+              >
                 <this.getCommunityCards @format='embedded' />
               </div>
             {{/if}}
