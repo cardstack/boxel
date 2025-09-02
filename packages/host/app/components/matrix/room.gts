@@ -223,8 +223,7 @@ export default class Room extends Component<Signature> {
               {{#if this.aiAssistantPanelService.isFocusPillVisible}}
                 <FocusPill
                   @label={{this.aiAssistantPanelService.focusPillLabel}}
-                  @itemType={{this.aiAssistantPanelService.focusPillItemType}}
-                  @codeRange={{this.aiAssistantPanelService.focusPillCodeRange}}
+                  @metaPills={{this.aiAssistantPanelService.focusPillMetaPills}}
                   class='pill-row'
                 />
               {{/if}}

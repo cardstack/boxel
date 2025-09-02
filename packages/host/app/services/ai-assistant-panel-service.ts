@@ -11,7 +11,7 @@ import window from 'ember-window-mock';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import * as CommandModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -97,18 +97,39 @@ export default class AiAssistantPanelService extends Service {
   }
 
   get focusPillLabel() {
+    if (this.operatorModeStateService.state.submode !== Submodes.Code) {
+      return undefined;
+    }
     let selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
     if (selectedCodeRef?.name) {
       return selectedCodeRef?.name;
+    }
+    if (this.operatorModeStateService.isViewingCardInCodeMode) {
+      return 'Card';
     }
     return undefined;
   }
 
   get focusPillItemType() {
+    if (this.operatorModeStateService.isViewingCardInCodeMode) {
+      return undefined;
+    }
+
     return titleize(
       this.operatorModeStateService.state.moduleInspector ??
         DEFAULT_MODULE_INSPECTOR_VIEW,
     );
+  }
+
+  get focusPillFormat(): string | undefined {
+    const format: Format | undefined =
+      this.operatorModeStateService.currentViewingFormat;
+    if (!format) {
+      return undefined;
+    }
+
+    // Capitalize the format name for display
+    return titleize(format);
   }
 
   get focusPillCodeRange() {
@@ -130,6 +151,28 @@ export default class AiAssistantPanelService extends Service {
       return `Line ${selection.startLineNumber}`;
     }
     return `Lines ${selection.startLineNumber}-${selection.endLineNumber}`;
+  }
+
+  get focusPillMetaPills(): string[] {
+    const metaPills: string[] = [];
+
+    const itemType = this.focusPillItemType;
+    if (itemType) {
+      metaPills.push(itemType);
+    }
+
+    // Add format information when viewing cards
+    const format = this.focusPillFormat;
+    if (format) {
+      metaPills.push(format);
+    }
+
+    const codeRange = this.focusPillCodeRange;
+    if (codeRange) {
+      metaPills.push(codeRange);
+    }
+
+    return metaPills;
   }
 
   @action
