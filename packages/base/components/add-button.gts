@@ -51,7 +51,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
         --icon-color: var(--add-button-icon-color, currentColor);
       }
       .base-add-button:not(:disabled):hover {
-        box-shadow: var(--shadow, var(--boxel-box-shadow));
+        filter: brightness(0.95);
       }
       .icon {
         color: var(--icon-color);
@@ -73,6 +73,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
         display: flex;
         justify-content: center;
         gap: var(--_ab-gap);
+        box-shadow: var(--shadow);
       }
     }
   </style>
