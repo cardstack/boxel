@@ -62,7 +62,7 @@ export default class CardTypeService extends Service {
 
   private typeCache: Map<string, Type> = new Map();
   private moduleInfoCache: Map<string, ModuleInfo> = new Map();
-  private loaderNonce: object | undefined;
+  private loader: object | undefined; //keeps track of the current used loader so cache is reset after a loader reset
 
   invalidateAllCaches(): void {
     this.typeCache.clear();
@@ -71,9 +71,9 @@ export default class CardTypeService extends Service {
 
   async assembleType(definition: typeof BaseDef): Promise<Type> {
     // This should go away when we move to an architecture where NO loader reset is required
-    if (this.loaderNonce !== this.loaderService.loader) {
+    if (this.loader !== this.loaderService.loader) {
       this.invalidateAllCaches();
-      this.loaderNonce = this.loaderService.loader;
+      this.loader = this.loaderService.loader;
     }
     let maybeType = await this.toType(definition, this.loaderService.loader);
     if (isCodeRefType(maybeType)) {

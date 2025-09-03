@@ -13,7 +13,6 @@ import {
   isInternalReference,
 } from '@cardstack/runtime-common/module-syntax';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type CardTypeService from '@cardstack/host/services/card-type-service';
 import { type Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -71,38 +70,14 @@ export function findDeclarationByName(
 
 export default class ModuleContentsService extends Service {
   @service declare private cardTypeService: CardTypeService;
-  @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
 
-  async assemble(url: string): Promise<ModuleDeclaration[]> {
-    const moduleUrl = new URL(url);
-    let r = await this.cardService.getSource(moduleUrl);
-    if (r.status !== 200) {
-      throw new Error(`Failed to fetch module source from ${url}: ${r.status}`);
-    }
-    const moduleSource = r.content;
-    const moduleSyntax = new ModuleSyntax(moduleSource, moduleUrl);
-
-    // Try to load the module to get runtime information
-    let moduleProxy: object = {};
-    try {
-      moduleProxy = await this.loaderService.loader.import(url);
-    } catch (e) {
-      // If we can't load the module, we'll work with syntax only
-      throw new Error(
-        `Could not load module ${moduleUrl} for runtime analysis: ${e}`,
-      );
-    }
-    return this.assembleFromModuleSyntax(moduleSyntax, moduleProxy);
-  }
-
-  // Perhaps this can be removed in favor of assemble? There is a design that makes import a resource which I am not too sure about
-  async assembleFromModuleSyntax(
+  async assemble(
     moduleSyntax: ModuleSyntax,
-    moduleProxy: object,
+    module: object,
   ): Promise<ModuleDeclaration[]> {
     let exportedCardsOrFields: Map<string, typeof BaseDef> =
-      getExportedCardsOrFields(moduleProxy);
+      getExportedCardsOrFields(module);
     let localCardsOrFields = this.collectLocalCardsOrFields(
       moduleSyntax,
       exportedCardsOrFields,
@@ -257,10 +232,8 @@ export default class ModuleContentsService extends Service {
   }
 }
 
-function getExportedCardsOrFields(moduleProxy: object) {
+function getExportedCardsOrFields(module: object) {
   return new Map(
-    Object.entries(moduleProxy).filter(([_, declaration]) =>
-      isBaseDef(declaration),
-    ),
+    Object.entries(module).filter(([_, declaration]) => isBaseDef(declaration)),
   );
 }

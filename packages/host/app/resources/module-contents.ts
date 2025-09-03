@@ -9,15 +9,15 @@ import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import { type Ready } from '@cardstack/host/resources/file';
 
-import { importResource } from '@cardstack/host/resources/import';
-
+import type LoaderService from '@cardstack/host/services/loader-service';
 import ModuleContentsService, {
   type ModuleDeclaration,
   type CardOrFieldDeclaration,
   type CardOrFieldReexport,
   isCardOrFieldDeclaration,
   isReexportCardOrField,
-} from '../services/module-contents-service';
+} from '@cardstack/host/services/module-contents-service';
+import type NetworkService from '@cardstack/host/services/network';
 
 export {
   isCardOrFieldDeclaration,
@@ -50,7 +50,9 @@ export class ModuleContentsResource
   extends Resource<Args>
   implements ModuleAnalysis
 {
-  @service declare moduleContentsService: ModuleContentsService;
+  @service declare private moduleContentsService: ModuleContentsService;
+  @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
   @tracked moduleError:
     | { type: 'runtime' | 'compile'; message: string }
     | undefined = undefined;
@@ -89,24 +91,15 @@ export class ModuleContentsResource
     if (executableFile === undefined) {
       return;
     }
-    let moduleResource = importResource(this, () => executableFile.url);
-    await moduleResource.loaded; // we need to await this otherwise, it will go into an infinite loop
-
-    this.moduleError = moduleResource.error;
-    if (moduleResource.module === undefined) {
-      return;
-    }
+    let module = await this.loadModule(executableFile.url);
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
       new URL(executableFile.url),
     );
-
-    let declarations =
-      await this.moduleContentsService.assembleFromModuleSyntax(
-        moduleSyntax,
-        moduleResource.module,
-      );
-
+    let declarations = await this.moduleContentsService.assemble(
+      moduleSyntax,
+      module,
+    );
     let newState = {
       declarations,
       url: executableFile.url,
@@ -120,6 +113,34 @@ export class ModuleContentsResource
       this.onModuleEdit?.(newState);
     }
     this.state = newState;
+  }
+
+  private async loadModule(url: string) {
+    let module: object = {};
+    try {
+      module = await this.loaderService.loader.import(url);
+    } catch (err: any) {
+      let errResponse = await this.network.authedFetch(url, {
+        headers: { 'content-type': 'text/javascript' },
+      });
+      if (!errResponse.ok) {
+        this.moduleError = {
+          type: 'compile',
+          message: err.responseText ?? (await errResponse.text()),
+        };
+      } else {
+        this.moduleError = {
+          type: 'runtime',
+          message: `Encountered error while evaluating
+${url}:
+
+${err}
+
+Check console log for more details`,
+        };
+      }
+    }
+    return module;
   }
 }
 
