@@ -14,7 +14,7 @@ export default class HostModeService extends Service {
       }
 
       return (
-        config.hostsOwnAssets === false &&
+        !config.hostsOwnAssets &&
         this.isRealmServerDomain === false &&
         this.originIsNotMatrixTests
       );
@@ -24,7 +24,10 @@ export default class HostModeService extends Service {
   }
 
   get isRealmServerDomain() {
-    if (this.simulatingHostMode) {
+    if (
+      this.simulatingHostMode ||
+      (config.environment !== 'production' && config.environment !== 'staging')
+    ) {
       return false;
     }
 

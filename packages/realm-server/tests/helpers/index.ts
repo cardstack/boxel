@@ -34,12 +34,13 @@ import {
   Subscription,
   Plan,
   RealmAdapter,
+  PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import { PUBLISHED_DIRECTORY_NAME, RealmServer } from '../../server';
+import { RealmServer } from '../../server';
 
 import {
   PgAdapter,

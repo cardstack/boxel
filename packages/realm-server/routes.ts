@@ -11,6 +11,7 @@ import handleCreateRealmRequest from './handlers/handle-create-realm';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
 import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
+import handlePublishRealm from './handlers/handle-publish-realm';
 import {
   healthCheck,
   jwtMiddleware,
@@ -37,6 +38,14 @@ export type CreateRoutesArgs = {
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
+  realmsRootPath: string;
+  getMatrixRegistrationSecret: () => Promise<string>;
+  createAndMountRealm: (
+    path: string,
+    url: string,
+    username: string,
+    copiedFromRealm?: URL,
+  ) => Realm;
   createRealm: ({
     ownerUserId,
     endpoint,
@@ -53,6 +62,7 @@ export type CreateRoutesArgs = {
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   sendEvent: (user: string, eventType: string) => Promise<void>;
+  defaultPublishedRealmDomain?: string;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -90,6 +100,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleRequestForward({
       dbAdapter: args.dbAdapter,
     }),
+  );
+  router.post(
+    '/_publish-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePublishRealm(args),
   );
 
   // it's awkward that these are GET's but we are working around grafana's limitations

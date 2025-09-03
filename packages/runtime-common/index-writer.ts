@@ -12,6 +12,7 @@ import {
   unixTime,
   logger,
 } from './index';
+import { isResolvedCodeRef } from './code-ref';
 import { transpileJS } from './transpile';
 import {
   type Expression,
@@ -763,19 +764,24 @@ export class Batch {
     fieldDefinitions: Definition['fields'],
   ): Definition['fields'] {
     return Object.fromEntries(
-      Object.entries(fieldDefinitions).map(([fieldName, fieldDefinition]) => [
-        fieldName,
-        {
-          ...fieldDefinition,
-          fieldOrCard: {
-            module: this.copiedRealmURL(
-              fromRealm,
-              new URL(fieldDefinition.fieldOrCard.module),
-            ).href,
-            name: fieldDefinition.fieldOrCard.name,
+      Object.entries(fieldDefinitions)
+        // TODO: This filter need to be re-evaluated when this ticket is done: CS-9361
+        .filter(([_, fieldDefinition]) =>
+          isResolvedCodeRef(fieldDefinition.fieldOrCard),
+        )
+        .map(([fieldName, fieldDefinition]) => [
+          fieldName,
+          {
+            ...fieldDefinition,
+            fieldOrCard: {
+              module: this.copiedRealmURL(
+                fromRealm,
+                new URL(fieldDefinition.fieldOrCard.module),
+              ).href,
+              name: fieldDefinition.fieldOrCard.name,
+            },
           },
-        },
-      ]),
+        ]),
     );
   }
 

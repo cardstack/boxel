@@ -11,7 +11,8 @@ import {
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
-  type RealmPermissions,
+  DEFAULT_PERMISSIONS,
+  PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -44,14 +45,6 @@ import {
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
-const DEFAULT_PERMISSIONS = Object.freeze([
-  'read',
-  'write',
-  'realm-owner',
-]) as RealmPermissions['user'];
-
-export const PUBLISHED_DIRECTORY_NAME = '_published';
-
 export class RealmServer {
   private log = logger('realm-server');
   private realms: Realm[];
@@ -73,6 +66,7 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
+  private defaultPublishedRealmDomain: string | undefined;
 
   constructor({
     serverURL,
@@ -90,6 +84,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
+    defaultPublishedRealmDomain,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -106,6 +101,7 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
+    defaultPublishedRealmDomain?: string;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -130,6 +126,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
+    this.defaultPublishedRealmDomain = defaultPublishedRealmDomain;
     this.realms = [...realms];
   }
 
@@ -182,6 +179,10 @@ export class RealmServer {
           sendEvent: this.sendEvent,
           queue: this.queue,
           realms: this.realms,
+          realmsRootPath: this.realmsRootPath,
+          getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
+          createAndMountRealm: this.createAndMountRealm,
+          defaultPublishedRealmDomain: this.defaultPublishedRealmDomain,
         }),
       )
       .use(this.serveIndex)
@@ -337,10 +338,6 @@ export class RealmServer {
 
     let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
-    let adapter = new NodeAdapter(
-      resolve(String(realmPath)),
-      this.enableFileWatcher,
-    );
 
     let username = `realm/${ownerUsername}_${endpoint}`;
     let { userId } = await registerUser({
@@ -374,19 +371,32 @@ export class RealmServer {
       },
     });
 
-    let realm = new Realm({
-      url,
-      adapter,
-      secretSeed: this.realmSecretSeed,
-      virtualNetwork: this.virtualNetwork,
-      dbAdapter: this.dbAdapter,
-      queue: this.queue,
-      matrix: {
-        url: this.matrixClient.matrixURL,
-        username,
+    return this.createAndMountRealm(realmPath, url, username);
+  };
+
+  private createAndMountRealm = (
+    path: string,
+    url: string,
+    username: string,
+    copiedFromRealm?: URL,
+  ) => {
+    let adapter = new NodeAdapter(resolve(path), this.enableFileWatcher);
+    let realm = new Realm(
+      {
+        url,
+        adapter,
+        secretSeed: this.realmSecretSeed,
+        virtualNetwork: this.virtualNetwork,
+        dbAdapter: this.dbAdapter,
+        queue: this.queue,
+        matrix: {
+          url: new URL(this.matrixClient.matrixURL),
+          username,
+        },
+        realmServerMatrixClient: this.matrixClient,
       },
-      realmServerMatrixClient: this.matrixClient,
-    });
+      copiedFromRealm ? { copiedFromRealm } : undefined,
+    );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
     return realm;
@@ -624,7 +634,7 @@ export class RealmServer {
   // client tests leverage a synapse instance that changes multiple times per
   // realm lifespan, and each new synapse instance has a unique registration
   // secret
-  private async getMatrixRegistrationSecret() {
+  private getMatrixRegistrationSecret = async () => {
     if (this.getRegistrationSecret) {
       let secret = await this.getRegistrationSecret();
       if (!secret) {
@@ -640,7 +650,7 @@ export class RealmServer {
     }
 
     throw new Error(`Can not determine the matrix registration secret`);
-  }
+  };
 }
 
 function detectRealmCollision(realms: Realm[]): void {

@@ -1,5 +1,5 @@
 import { RealmPaths } from './paths';
-import { baseRealm } from './index';
+import { baseRealm, isNode } from './index';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
@@ -8,6 +8,7 @@ import {
 } from './package-shim-handler';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
+
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
@@ -19,7 +20,7 @@ export class VirtualNetwork {
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
 
-  constructor(nativeFetch = globalThis.fetch.bind(globalThis)) {
+  constructor(nativeFetch = createEnvironmentAwareFetch()) {
     this.nativeFetch = nativeFetch;
     this.mount(this.packageShimHandler.handle);
   }
@@ -210,6 +211,90 @@ export function isUrlLike(moduleIdentifier: string): boolean {
     moduleIdentifier.startsWith('http://') ||
     moduleIdentifier.startsWith('https://')
   );
+}
+
+/**
+ * Creates a fetch implementation that's appropriate for the current environment.
+ * In Node.js, it enhances localhost subdomain resolution using Undici dispatcher.
+ * In browsers, it uses native fetch.
+ */
+function createEnvironmentAwareFetch(): typeof globalThis.fetch {
+  if (!isNode) {
+    // Browser environment - use native fetch
+    return globalThis.fetch.bind(globalThis);
+  }
+
+  // Node.js environment - create enhanced fetch with Undici dispatcher
+  try {
+    // Check if we're in a browser-like environment (even if isNode is true)
+    if (
+      typeof window !== 'undefined' ||
+      typeof globalThis.fetch === 'undefined'
+    ) {
+      // Browser environment or no fetch available - use native fetch
+      return globalThis.fetch.bind(globalThis);
+    }
+
+    // Check if undici is available at runtime
+    let undici: any;
+    try {
+      undici = eval('require')('undici');
+    } catch (e) {
+      // Undici not available - fallback to native fetch
+      return globalThis.fetch.bind(globalThis);
+    }
+
+    const { Agent, setGlobalDispatcher } = undici;
+
+    // Create a custom agent with localhost subdomain resolution
+    const agent = new Agent({
+      connect: {
+        // This replaces dns.lookup for sockets created by this Agent
+        lookup(hostname: string, options: any, cb: any) {
+          if (hostname?.endsWith('.localhost')) {
+            console.log(
+              `[Undici Dispatcher] Resolving ${hostname} to 127.0.0.1`,
+            );
+
+            if (options.all) {
+              // Return array format if options.all is true
+              return cb(null, [{ address: '127.0.0.1', family: 4 }], null);
+            } else {
+              // Return standard format otherwise
+              return cb(null, '127.0.0.1', 4);
+            }
+          }
+          // Use default DNS lookup for all other hostnames
+          // Use a lazy-loaded function to avoid bundler issues
+          const performDNSLookup = () => {
+            try {
+              const dns = eval('require')('dns');
+              return dns.lookup(hostname, options, cb);
+            } catch (e) {
+              return cb(new Error('DNS lookup failed'), null, null);
+            }
+          };
+          return performDNSLookup();
+        },
+      },
+    });
+
+    // Set this as the global dispatcher for all fetch calls
+    setGlobalDispatcher(agent);
+    console.log(
+      '[Boxel Undici] Global dispatcher set for localhost subdomain resolution',
+    );
+
+    // Return the native fetch (now using our custom dispatcher)
+    return globalThis.fetch.bind(globalThis);
+  } catch (e) {
+    console.warn(
+      '[Boxel Undici] Failed to set up custom dispatcher, falling back to native fetch:',
+      (e as Error).message,
+    );
+    // Fallback to native fetch if undici setup fails
+    return globalThis.fetch.bind(globalThis);
+  }
 }
 
 // This is to handle a very mysterious situation in our CI environment where

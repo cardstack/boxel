@@ -12,6 +12,7 @@ import {
   type SingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
+  DEFAULT_PERMISSIONS,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
@@ -99,6 +100,7 @@ module(basename(__filename), function () {
         let request2: SuperTest<Test>;
         let testRealmDir: string;
         let virtualNetwork = createVirtualNetwork();
+        let ownerUserId = '@mango:localhost';
 
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -128,6 +130,10 @@ module(basename(__filename), function () {
             publisher,
             runner,
             matrixURL,
+            permissions: {
+              '*': ['read', 'write'],
+              [ownerUserId]: DEFAULT_PERMISSIONS,
+            },
           }));
           request2 = supertest(testRealmHttpServer2);
         }
@@ -1500,6 +1506,92 @@ module(basename(__filename), function () {
           assert.deepEqual(response.body, {
             data: [],
           });
+        });
+
+        test('POST /_publish-realm can publish realm successfully', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+              }),
+            );
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.body.data.type, 'published_realm');
+          assert.ok(response.body.data.id, 'published realm has an ID');
+          assert.strictEqual(
+            response.body.data.attributes.sourceRealmURL,
+            testRealm2.url,
+            'source realm URL is correct',
+          );
+          assert.ok(
+            response.body.data.attributes.publishedRealmURL,
+            'published realm URL is present',
+          );
+          assert.ok(
+            response.body.data.attributes.lastPublishedAt,
+            'last published at timestamp is present',
+          );
+        });
+
+        test('POST /_publish-realm returns bad request for missing sourceRealmURL', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(JSON.stringify({}));
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          assert.strictEqual(
+            response.text,
+            '{"errors":["sourceRealmURL"]}',
+            'Error message is correct',
+          );
+        });
+
+        test('POST /_publish-realm returns forbidden for user without realm-owner permission', async function (assert) {
+          let ownerUserId = '@non-realm-owner:localhost';
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+              }),
+            );
+
+          assert.strictEqual(response.status, 403, 'HTTP 403 status');
+          assert.true(
+            response.text.includes(
+              'does not have enough permission to publish this realm',
+            ),
+            'Error message is correct',
+          );
         });
       });
 
