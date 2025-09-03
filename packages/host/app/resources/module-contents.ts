@@ -92,6 +92,9 @@ export class ModuleContentsResource
       return;
     }
     let module = await this.loadModule(executableFile.url);
+    if (this.moduleError) {
+      return;
+    }
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
       new URL(executableFile.url),
