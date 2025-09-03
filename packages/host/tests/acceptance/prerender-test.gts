@@ -74,6 +74,7 @@ module('Acceptance | prerender', function (hooks) {
       static displayName = 'Person';
       @field name = contains(StringField);
       @field pets = linksToMany(() => Pet);
+      @field friends = linksToMany(() => Person);
       @field title = contains(StringField, {
         computeVia(this: Person) {
           return this.name;
@@ -236,6 +237,56 @@ module('Acceptance | prerender', function (hooks) {
             },
           },
         },
+        'Person/germaine.json': {
+          data: {
+            attributes: {
+              name: 'Germaine',
+            },
+            relationships: {
+              'friends.0': {
+                links: {
+                  self: '../Person/queenzy',
+                },
+              },
+              'friends.1': {
+                links: {
+                  self: '../Person/hassan',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/queenzy.json': {
+          data: {
+            attributes: {
+              name: 'Queenzy',
+            },
+            relationships: {
+              'friends.0': {
+                links: {
+                  self: '../Person/germaine',
+                },
+              },
+              'friends.1': {
+                links: {
+                  self: '../Person/hassan',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        },
       },
     });
   });
@@ -331,6 +382,16 @@ module('Acceptance | prerender', function (hooks) {
     assert.ok(
       /data-test-field="petFriend"?.*Beatrice/s.test(value),
       'failed to find "Beatrice" field value in isolated HTML',
+    );
+  });
+
+  test('can prerender instance with a cycle in a linksToMany field', async function (assert) {
+    let url = `${testRealmURL}Person/germaine.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="friends"?.*Queenzy?.*Hassan/s.test(value),
+      `failed to find "Queenzy" and "Hassan" field value in isolated HTML`,
     );
   });
 
