@@ -116,6 +116,42 @@ module('Acceptance | prerender', function (hooks) {
             },
           },
         },
+        'Pet/pet-a.json': {
+          data: {
+            attributes: { name: 'Allen' },
+            relationships: {
+              petFriend: {
+                links: {
+                  self: './pet-b',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/pet-b.json': {
+          data: {
+            attributes: { name: 'Beatrice' },
+            relationships: {
+              petFriend: {
+                links: {
+                  self: './pet-a',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
         'Cat/paper.json': {
           data: {
             attributes: {
@@ -288,6 +324,16 @@ module('Acceptance | prerender', function (hooks) {
     assert.ok(error.stack, 'stack exists in error');
   });
 
+  test('can prerender instance with a cycle in a linksTo field', async function (assert) {
+    let url = `${testRealmURL}Pet/pet-a.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="petFriend"?.*Beatrice/s.test(value),
+      'failed to find "Beatrice" field value in isolated HTML',
+    );
+  });
+
   // TODO test prerender compound contains field
   // TODO test prerender compound containsMany field
   // TODO test prerender compound contains field that includes a linksTo field
@@ -296,7 +342,6 @@ module('Acceptance | prerender', function (hooks) {
   // TODO test prerender computed that consumes linksToMany
   // TODO test prerender missing link in computed that consumes linksTo
   // TODO test prerender missing link in computed that consumes linksToMany
-  // TODO test prerender linksTo cycle
   // TODO test prerender linksToMany cycle
   // TODO make tests for search docs. use existing search doc tests as the template
 });
