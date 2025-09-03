@@ -70,7 +70,7 @@
     "@typescript-eslint/parser": "catalog:",
     "babel-plugin-ember-template-compilation": "catalog:",
     "concurrently": "catalog:",
-    "ember-source": "~5.4.0",
+    "ember-source": "catalog:",
     "ember-template-imports": "^4.1.1",
     "ember-template-lint": "catalog:",
     "ember-template-lint-plugin-prettier": "^5.0.0",
@@ -89,7 +89,7 @@
   },
   "peerDependencies": {
     "@glint/environment-ember-loose": "1.3.0",
-    "ember-source": "^5.4.0",
+    "ember-source": "catalog:",
     "typescript": "^5.1.6"
   },
   "engines": {
