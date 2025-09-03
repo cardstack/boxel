@@ -1,19 +1,26 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "title": null,
-      "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
-        "notes": null
-      }
-    },
     "meta": {
       "adoptsFrom": {
-        "module": "../app/listing-table",
-        "name": "ListingsTable"
+        "name": "ListingsTable",
+        "module": "../app/listing-table"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "showComputedFields": false
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

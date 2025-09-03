@@ -1,4 +1,9 @@
-import { Component } from 'https://cardstack.com/base/card-api';
+import {
+  Component,
+  field,
+  contains,
+} from 'https://cardstack.com/base/card-api';
+import BooleanField from 'https://cardstack.com/base/boolean';
 import { realmURL } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common';
 
@@ -27,12 +32,14 @@ class IsolatedTemplate extends Component<typeof ListingsTable> {
       @query={{this.listingsQuery}}
       @realms={{this.realms}}
       @context={{@context}}
+      @showComputedFields={{@model.showComputedFields}}
     />
   </template>
 }
 
 export class ListingsTable extends AppCard {
   static displayName = 'Listings Table';
+  @field showComputedFields = contains(BooleanField);
 
   static isolated = IsolatedTemplate;
 }

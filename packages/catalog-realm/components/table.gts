@@ -31,7 +31,7 @@ interface TableSignature {
     query: Query;
     realms: string[];
     context?: CardContext;
-    ignoreCardInfo?: boolean;
+    showComputedFields?: boolean;
   };
   Element: HTMLElement;
 }
@@ -42,6 +42,7 @@ class TableRow extends GlimmerComponent<TableRowSignature> {
       includeComputeds: false,
       usedLinksToFieldsOnly: false,
     });
+    console.log('=== fieldInfo ===');
 
     return this.args.fieldColumns.map((fieldName) => {
       const field = fields[fieldName];
@@ -54,9 +55,9 @@ class TableRow extends GlimmerComponent<TableRowSignature> {
         hasComponent: !!field?.component,
       });
 
-      if (field?.component) {
-        console.log(`Field ${fieldName} component:`, field.component);
-      }
+      // if (field?.component) {
+      //   console.log(`Field ${fieldName} component:`, field.component);
+      // }
 
       return {
         fieldName,
@@ -174,19 +175,16 @@ export class Table extends GlimmerComponent<TableSignature> {
   get fieldColumns() {
     if (this.cardsData?.instances?.length) {
       const firstInstance = this.cardsData.instances[0];
+      console.log('showcomputedFields', this.args.showComputedFields);
       const instanceFields = getFields(firstInstance.constructor, {
-        includeComputeds: false,
+        includeComputeds: this.args.showComputedFields ?? false,
         usedLinksToFieldsOnly: false,
       });
 
-      const excludedFields = ['id'];
-      if (this.args.ignoreCardInfo !== false) {
-        excludedFields.push('cardInfo');
-      }
-
-      return Object.keys(instanceFields).filter(
-        (key) => !excludedFields.includes(key),
-      );
+      const excludedFields = ['id', 'cardInfo'];
+      return Object.keys(instanceFields)
+        .filter((key) => !excludedFields.includes(key))
+        .sort();
     }
     return [];
   }
