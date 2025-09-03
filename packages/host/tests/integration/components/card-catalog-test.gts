@@ -262,7 +262,7 @@ module('Integration | card-catalog', function (hooks) {
     test('can paginate results from a realm', async function (assert) {
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-show-more-cards]`)
-        .doesNotExist("don't show pagination button for base realm");
+        .exists('show pagination button for base realm');
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
         .exists('show pagination button for test realm');

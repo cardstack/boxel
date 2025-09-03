@@ -826,6 +826,13 @@ module('Acceptance | code submode tests', function (_hooks) {
         .hasText(
           'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
         );
+
+      assert.dom('[data-test-definition-header]').includesText('File');
+
+      assert
+        .dom('[data-test-definition-realm-name]')
+        .hasText('in Test Workspace B');
+      assert.dom('[data-test-action-button="Delete"]').exists();
     });
 
     test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {

@@ -32,17 +32,7 @@
     }
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
-    "transform": {
-      "include": [
-        "../experiments-realm/**",
-        "../catalog-realm/**/*",
-        "../base/**",
-        "app/**",
-        "tests/**",
-        "types/**/*"
-      ]
-    }
+    "environment": ["ember-loose", "ember-template-imports"]
   },
   "include": [
     "../base/**/*",

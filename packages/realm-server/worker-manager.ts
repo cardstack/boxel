@@ -431,7 +431,10 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
   if (worker.stderr) {
     worker.stderr.on('data', (data: Buffer) => {
       let message = data.toString();
-      log.error(`[worker ${name} priority ${priority}]: ${message}`);
+      let maybeLogUrl = currentState?.url ? ` (for ${currentState.url})` : '';
+      log.error(
+        `[worker ${name} priority ${priority}]${maybeLogUrl}: ${message}`,
+      );
       if (message.includes('FATAL ERROR')) {
         (async () => {
           if (currentState?.url && currentState?.realm) {

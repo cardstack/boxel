@@ -1,3 +1,5 @@
+import type { MenuDivider } from '@cardstack/boxel-ui/helpers.ts';
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
@@ -10,11 +12,17 @@ import { and } from '../../helpers/truth-helpers.ts';
 import { bool, or } from '../../helpers/truth-helpers.ts';
 import { IconPencil, IconX, ThreeDotsHorizontal } from '../../icons.gts';
 import setCssVar from '../../modifiers/set-css-var.ts';
+import Button from '../button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import IconButton from '../icon-button/index.gts';
 import Menu from '../menu/index.gts';
 import RealmIcon, { type RealmDisplayInfo } from '../realm-icon/index.gts';
 import Tooltip from '../tooltip/index.gts';
+
+export interface CardHeaderUtilityMenu {
+  menuItems: (MenuItem | MenuDivider)[];
+  triggerText: string;
+}
 
 interface Signature {
   Args: {
@@ -30,6 +38,7 @@ interface Signature {
     onEdit?: () => void;
     onFinishEditing?: () => void;
     realmInfo?: RealmDisplayInfo;
+    utilityMenu?: CardHeaderUtilityMenu;
   };
   Element: HTMLElement;
 }
@@ -105,6 +114,30 @@ export default class CardHeader extends Component<Signature> {
       </div>
 
       <div class='actions' data-test-boxel-card-header-actions>
+        {{#if @utilityMenu}}
+          <div class='utility-menu-positioner'>
+            <BoxelDropdown @autoClose={{true}}>
+              <:trigger as |ddModifier|>
+                <Button class='utility-menu-trigger' {{ddModifier}}>
+                  <span>
+                    {{@utilityMenu.triggerText}}
+                  </span>
+                  <DropdownArrowDown
+                    class='utility-menu-dropdown-arrow'
+                    width='13px'
+                    height='13px'
+                  />
+                </Button>
+              </:trigger>
+              <:content as |dd|>
+                <Menu
+                  @items={{@utilityMenu.menuItems}}
+                  @closeMenu={{dd.close}}
+                />
+              </:content>
+            </BoxelDropdown>
+          </div>
+        {{/if}}
         {{#if @onEdit}}
           <Tooltip @placement='top'>
             <:trigger>
@@ -335,6 +368,30 @@ export default class CardHeader extends Component<Signature> {
 
         header .icon-save:hover {
           --icon-color: var(--boxel-dark);
+        }
+        .utility-menu-positioner {
+          --utility-menu-trigger-height: 26px;
+          position: relative;
+          margin-right: var(--boxel-sp);
+          width: 1px;
+          height: var(--utility-menu-trigger-height);
+        }
+        .utility-menu-trigger {
+          --boxel-button-min-height: var(--utility-menu-trigger-height);
+          --boxel-button-padding: 0 var(--boxel-sp-xxs);
+          --boxel-button-border-radius: calc(var(--boxel-border-radius) - 4px);
+          --boxel-button-font: var(--boxel-font-sm);
+          --boxel-button-box-shadow: 0 3px 3px 0 rgba(0, 0, 0, 0.5);
+          --boxel-button-border: solid 1px rgba(0, 0, 0, 0.35);
+
+          position: absolute;
+          top: 0;
+          right: 0;
+          width: max-content;
+        }
+        .utility-menu-dropdown-arrow {
+          margin-left: var(--boxel-sp-xl);
+          vertical-align: middle;
         }
       }
     </style>

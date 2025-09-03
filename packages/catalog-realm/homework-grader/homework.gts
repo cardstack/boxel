@@ -1,4 +1,5 @@
 import { add } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import {
   contains,
   containsMany,
@@ -16,45 +17,36 @@ import { Skill } from 'https://cardstack.com/base/skill';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 
-// Import commands for AI interaction
-import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
-import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
-import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
+import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
+import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
 
 class GradeField extends FieldDef {
   @field overallGrade = contains(StringField);
   @field overallFeedback = contains(MarkdownField);
   @field questionPoints = containsMany(NumberField);
 
-  @field overallPoints = contains(StringField, {
+  @field overallPoints = contains(NumberField, {
     computeVia: function (this: GradeField) {
       return this.questionPoints.reduce((acc, num) => acc + (num || 0), 0);
     },
   });
 
   static embedded = class Embedded extends Component<typeof GradeField> {
-    // ⁽¹⁾ Helper to determine grade colors based on letter grade
     get gradeColor() {
       const grade = this.args.model?.overallGrade?.toUpperCase();
       if (!grade) return '#6b7280';
 
       switch (grade) {
-        case 'A+':
         case 'A':
           return '#059669'; // Green for A grades
-        case 'A-':
-        case 'B+':
         case 'B':
           return '#0891b2'; // Blue for B grades
-        case 'B-':
-        case 'C+':
         case 'C':
           return '#d97706'; // Orange for C grades
-        case 'C-':
-        case 'D+':
         case 'D':
           return '#dc2626'; // Red for D grades
+        case 'E':
+          return '#dc2626'; // Red for E grades (same as D)
         case 'F':
           return '#991b1b'; // Dark red for F
         default:
@@ -107,7 +99,7 @@ class GradeField extends FieldDef {
         .grade-layout {
           display: flex;
           align-items: flex-start;
-          gap: 2.5rem;
+          gap: 1.5rem;
         }
 
         .grade-column {
@@ -132,51 +124,67 @@ class GradeField extends FieldDef {
 
         .feedback-section {
           display: flex;
-          align-items: flex-start;
           gap: 0.75rem;
           padding: 0.5rem 0;
+        }
+
+        .feedback-content {
+          flex: 1;
+          line-height: 1.5;
+        }
+
+        .feedback-content :deep(.markdown-content h3),
+        .feedback-content :deep(.markdown-content h4),
+        .feedback-content :deep(.markdown-content p) {
+          margin-top: 0;
         }
 
         .grade-label,
         .points-label,
         .feedback-label {
-          font-weight: 600;
+          font-weight: 700;
           color: #374151;
-          font-size: 0.875rem;
+          font-size: 1.2rem;
           white-space: nowrap;
           min-width: fit-content;
+          width: 120px;
         }
 
         .grade-value {
           font-size: 1.75rem;
           font-weight: bold;
+          width: 3rem;
+          height: 3rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.125rem 0.5rem;
+          border-radius: 50%;
+          color: white;
         }
 
-        .grade-A-plus,
         .grade-A {
-          color: #059669;
+          background: #059669;
         }
 
-        .grade-A-minus,
-        .grade-B-plus,
         .grade-B {
-          color: #0891b2;
+          background: #0891b2;
         }
 
-        .grade-B-minus,
-        .grade-C-plus,
         .grade-C {
-          color: #d97706;
+          background: #d97706;
         }
 
-        .grade-C-minus,
-        .grade-D-plus,
         .grade-D {
-          color: #dc2626;
+          background: #dc2626;
+        }
+
+        .grade-E {
+          background: #dc2626;
         }
 
         .grade-F {
-          color: #991b1b;
+          background: #991b1b;
         }
 
         .points-value {
@@ -186,11 +194,6 @@ class GradeField extends FieldDef {
           padding: 0.125rem 0.5rem;
           background: #e0e7ff;
           border-radius: 0.375rem;
-        }
-
-        .feedback-content {
-          flex: 1;
-          line-height: 1.5;
         }
       </style>
     </template>
@@ -313,32 +316,28 @@ class HomeworkIsolated extends Component<typeof Homework> {
       throw new Error('In wrong mode');
     }
 
-    if (!this.roomId) {
-      let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
-        commandContext,
-      );
-      let { roomId } = await createAIAssistantRoomCommand.execute({
-        name: `Grading: ${this.args.model.title}`,
-      });
-      if (!this.args.model.gradingSkill) {
-        throw new Error('No grading skill is lon');
-      }
-
-      let addSkillsToRoomCommand = new AddSkillsToRoomCommand(commandContext);
-      await addSkillsToRoomCommand.execute({
-        roomId,
-        skills: [this.args.model.gradingSkill],
-      });
-
-      this.roomId = roomId;
+    if (!this.args.model.gradingSkill) {
+      throw new Error('No grading skill is linked');
     }
 
-    let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
-      commandContext,
-    );
-    await openAiAssistantRoomCommand.execute({
-      roomId: this.roomId,
-    });
+    if (!this.roomId) {
+      let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
+      let result = await useAiAssistantCommand.execute({
+        roomName: `Grading: ${this.args.model.title}`,
+        openRoom: true,
+        skillCards: [this.args.model.gradingSkill],
+        attachedCards: [this.args.model as CardDef],
+        prompt: 'Please grade this homework assignment.',
+      });
+
+      this.roomId = result.roomId;
+
+      let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
+      await setActiveLLMCommand.execute({
+        roomId: this.roomId,
+        mode: 'act',
+      });
+    }
 
     return this.roomId;
   };
@@ -361,19 +360,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
       if (!this.roomId) {
         throw new Error('Room setup failed');
       }
-      let sendMessageCommand = new SendAiAssistantMessageCommand(
-        commandContext,
-      );
-
-      await sendMessageCommand.execute({
-        roomId: this.roomId,
-        prompt: 'Please grade this homework assignment',
-        requireCommandCall: true,
-        attachedCards: [
-          this.args.model as CardDef,
-          this.args.model.gradingSkill,
-        ],
-      });
     } catch (error) {
       console.error('Error grading homework:', error);
       alert('There was an error grading your homework. Please try again.');
@@ -390,18 +376,19 @@ class HomeworkIsolated extends Component<typeof Homework> {
       </div>
       <div class='header-actions'>
         {{#if @model.gradingSkill}}
-          <button
-            type='button'
+          <BoxelButton
+            @kind='primary-dark'
+            @size='base'
+            @loading={{this.isGrading}}
+            @disabled={{this.isGrading}}
             {{on 'click' this.grade}}
-            disabled={{this.isGrading}}
-            class='grade-button'
           >
             {{if
               this.isGrading
               '⏳ Grading...'
               (if this.hasGrade '🔄 Re-grade' '🎯 Grade Homework')
             }}
-          </button>
+          </BoxelButton>
         {{/if}}
       </div>
     </header>
@@ -505,35 +492,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
         display: flex;
         align-items: center;
         flex-shrink: 0;
-      }
-
-      .grade-button {
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        border: none;
-        color: white;
-        padding: 0.75rem 1.5rem;
-        font-size: 0.875rem;
-        font-weight: 500;
-        cursor: pointer;
-        border-radius: 0.75rem;
-        box-shadow:
-          0 4px 6px -1px rgba(0, 0, 0, 0.1),
-          0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        transition: all 0.2s ease-in-out;
-      }
-
-      .grade-button:hover:not(:disabled) {
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-        box-shadow:
-          0 6px 8px -1px rgba(0, 0, 0, 0.15),
-          0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        transform: translateY(-1px);
-      }
-
-      .grade-button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none;
       }
 
       .instructions {
@@ -680,6 +638,231 @@ class HomeworkIsolated extends Component<typeof Homework> {
   </template>
 }
 
+class HomeworkFitted extends Component<typeof Homework> {
+  get hasGrade() {
+    return this.args.model?.grade?.overallGrade;
+  }
+
+  get questionsCount() {
+    return this.args.model?.questions?.length ?? 0;
+  }
+
+  get totalPoints() {
+    if (!this.args.model?.grade?.questionPoints) return 0;
+    return this.args.model.grade.questionPoints.reduce(
+      (sum, points) => sum + (points || 0),
+      0,
+    );
+  }
+
+  get maxPoints() {
+    if (!this.args.model?.questions) return 0;
+    return this.args.model.questions.reduce(
+      (sum, q) => sum + (q.maxPoints || 0),
+      0,
+    );
+  }
+
+  <template>
+    <div class='fitted-homework'>
+      <header class='homework-header'>
+        <h3 class='homework-title'>{{if
+            @model.title
+            @model.title
+            'Untitled Homework'
+          }}</h3>
+        {{#if this.hasGrade}}
+          <div
+            class='grade-badge {{@model.grade.overallGrade}}'
+          >{{@model.grade.overallGrade}}</div>
+        {{else}}
+          <div class='grade-badge ungraded'>Not Graded</div>
+        {{/if}}
+      </header>
+
+      <div class='homework-stats'>
+        <div class='stat-item'>
+          <span class='stat-label'>Questions:</span>
+          <span class='stat-value'>{{this.questionsCount}}</span>
+        </div>
+
+        {{#if this.hasGrade}}
+          <div class='stat-item'>
+            <span class='stat-label'>Score:</span>
+            <span
+              class='stat-value'
+            >{{this.totalPoints}}/{{this.maxPoints}}</span>
+          </div>
+        {{else}}
+          <div class='stat-item'>
+            <span class='stat-label'>Max Points:</span>
+            <span class='stat-value'>{{this.maxPoints}}</span>
+          </div>
+        {{/if}}
+      </div>
+
+      <div class='status-section'>
+        {{#if this.hasGrade}}
+          <div class='status-item graded'>
+            <span class='status-label'>Graded</span>
+          </div>
+        {{else}}
+          <div class='status-item ungraded'>
+            <span class='status-label'>Not Graded</span>
+          </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <style scoped>
+      .fitted-homework {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        padding: 1rem;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s ease;
+      }
+
+      .fitted-homework:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-color: #d1d5db;
+      }
+
+      .homework-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .homework-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #111827;
+        margin: 0;
+        line-height: 1.3;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .grade-badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-align: center;
+        min-width: 2.5rem;
+        flex-shrink: 0;
+      }
+
+      .grade-badge.A {
+        background: #dcfce7;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+      }
+
+      .grade-badge.B {
+        background: #dbeafe;
+        color: #1e40af;
+        border: 1px solid #bfdbfe;
+      }
+
+      .grade-badge.C {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+      }
+
+      .grade-badge.D {
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+      }
+
+      .grade-badge.E {
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+      }
+
+      .grade-badge.F {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
+      }
+
+      .grade-badge.ungraded {
+        background: #f3f4f6;
+        color: #4b5563;
+        border: 1px solid #d1d5db;
+      }
+
+      .homework-stats {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .stat-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+      }
+
+      .stat-label {
+        font-size: 0.6875rem;
+        color: #6b7280;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+      }
+
+      .stat-value {
+        font-size: 0.875rem;
+        color: #374151;
+        font-weight: 600;
+      }
+
+      .status-section {
+        margin-top: auto;
+        padding-top: 0.5rem;
+      }
+
+      .status-item {
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-align: center;
+        border: 1px solid;
+      }
+
+      .status-item.graded {
+        background: #f0fdf4;
+        color: #166534;
+        border-color: #bbf7d0;
+      }
+
+      .status-item.ungraded {
+        background: #f3f4f6;
+        color: #4b5563;
+        border-color: #d1d5db;
+      }
+
+      .status-label {
+        font-weight: 600;
+      }
+    </style>
+  </template>
+}
 export class Homework extends CardDef {
   static displayName = 'Homework';
 
@@ -689,230 +872,5 @@ export class Homework extends CardDef {
   @field gradingSkill = linksTo(() => Skill);
 
   static isolated = HomeworkIsolated;
-
-  static fitted = class Fitted extends Component<typeof Homework> {
-    get hasGrade() {
-      return this.args.model?.grade?.overallGrade;
-    }
-
-    get questionsCount() {
-      return this.args.model?.questions?.length ?? 0;
-    }
-
-    get totalPoints() {
-      if (!this.args.model?.grade?.questionPoints) return 0;
-      return this.args.model.grade.questionPoints.reduce(
-        (sum, points) => sum + (points || 0),
-        0,
-      );
-    }
-
-    get maxPoints() {
-      if (!this.args.model?.questions) return 0;
-      return this.args.model.questions.reduce(
-        (sum, q) => sum + (q.maxPoints || 0),
-        0,
-      );
-    }
-
-    <template>
-      <div class='fitted-homework'>
-        <header class='homework-header'>
-          <h3 class='homework-title'>{{if
-              @model.title
-              @model.title
-              'Untitled Homework'
-            }}</h3>
-          {{#if this.hasGrade}}
-            <div
-              class='grade-badge {{@model.grade.overallGrade}}'
-            >{{@model.grade.overallGrade}}</div>
-          {{else}}
-            <div class='grade-badge ungraded'>Not Graded</div>
-          {{/if}}
-        </header>
-
-        <div class='homework-stats'>
-          <div class='stat-item'>
-            <span class='stat-label'>Questions:</span>
-            <span class='stat-value'>{{this.questionsCount}}</span>
-          </div>
-
-          {{#if this.hasGrade}}
-            <div class='stat-item'>
-              <span class='stat-label'>Score:</span>
-              <span
-                class='stat-value'
-              >{{this.totalPoints}}/{{this.maxPoints}}</span>
-            </div>
-          {{else}}
-            <div class='stat-item'>
-              <span class='stat-label'>Max Points:</span>
-              <span class='stat-value'>{{this.maxPoints}}</span>
-            </div>
-          {{/if}}
-        </div>
-
-        <div class='status-section'>
-          {{#if this.hasGrade}}
-            <div class='status-item graded'>
-              <span class='status-label'>Graded</span>
-            </div>
-          {{else}}
-            <div class='status-item ungraded'>
-              <span class='status-label'>Not Graded</span>
-            </div>
-          {{/if}}
-        </div>
-      </div>
-
-      <style scoped>
-        .fitted-homework {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          padding: 1rem;
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 0.75rem;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-          transition: all 0.2s ease;
-        }
-
-        .fitted-homework:hover {
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-          border-color: #d1d5db;
-        }
-
-        .homework-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 0.75rem;
-          margin-bottom: 0.75rem;
-        }
-
-        .homework-title {
-          font-size: 0.875rem;
-          font-weight: 600;
-          color: #111827;
-          margin: 0;
-          line-height: 1.3;
-          flex: 1;
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .grade-badge {
-          padding: 0.25rem 0.5rem;
-          border-radius: 0.375rem;
-          font-size: 0.75rem;
-          font-weight: 600;
-          text-align: center;
-          min-width: 2.5rem;
-          flex-shrink: 0;
-        }
-
-        .grade-badge.A,
-        .grade-badge.A-plus {
-          background: #dcfce7;
-          color: #166534;
-          border: 1px solid #bbf7d0;
-        }
-
-        .grade-badge.B,
-        .grade-badge.B-plus,
-        .grade-badge.A-minus {
-          background: #dbeafe;
-          color: #1e40af;
-          border: 1px solid #bfdbfe;
-        }
-
-        .grade-badge.C,
-        .grade-badge.C-plus,
-        .grade-badge.B-minus {
-          background: #fef3c7;
-          color: #92400e;
-          border: 1px solid #fde68a;
-        }
-
-        .grade-badge.D,
-        .grade-badge.C-minus {
-          background: #fee2e2;
-          color: #dc2626;
-          border: 1px solid #fecaca;
-        }
-
-        .grade-badge.F {
-          background: #fef2f2;
-          color: #991b1b;
-          border: 1px solid #fca5a5;
-        }
-
-        .grade-badge.ungraded {
-          background: #f3f4f6;
-          color: #4b5563;
-          border: 1px solid #d1d5db;
-        }
-
-        .homework-stats {
-          display: flex;
-          gap: 1rem;
-          margin-bottom: 0.75rem;
-        }
-
-        .stat-item {
-          display: flex;
-          flex-direction: column;
-          gap: 0.125rem;
-        }
-
-        .stat-label {
-          font-size: 0.6875rem;
-          color: #6b7280;
-          font-weight: 500;
-          text-transform: uppercase;
-          letter-spacing: 0.025em;
-        }
-
-        .stat-value {
-          font-size: 0.875rem;
-          color: #374151;
-          font-weight: 600;
-        }
-
-        .status-section {
-          margin-top: auto;
-          padding-top: 0.5rem;
-        }
-
-        .status-item {
-          padding: 0.375rem 0.75rem;
-          border-radius: 0.375rem;
-          font-size: 0.75rem;
-          font-weight: 500;
-          text-align: center;
-          border: 1px solid;
-        }
-
-        .status-item.graded {
-          background: #f0fdf4;
-          color: #166534;
-          border-color: #bbf7d0;
-        }
-
-        .status-item.ungraded {
-          background: #f3f4f6;
-          color: #4b5563;
-          border-color: #d1d5db;
-        }
-
-        .status-label {
-          font-weight: 600;
-        }
-      </style>
-    </template>
-  };
+  static fitted = HomeworkFitted;
 }

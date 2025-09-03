@@ -172,10 +172,8 @@ interface RequestForwardBody {
 
 export default function handleRequestForward({
   dbAdapter,
-  allowedProxyDestinations,
 }: {
   dbAdapter: DBAdapter;
-  allowedProxyDestinations: string;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
@@ -204,19 +202,27 @@ export default function handleRequestForward({
       }
 
       // Validate required fields
-      if (!json.url || !json.method || !json.requestBody) {
+      if (!json.url || !json.method) {
         await sendResponseForBadRequest(
           ctxt,
-          'Request body must include url, method, and requestBody fields',
+          'Request body must include url and method fields',
+        );
+        return;
+      }
+
+      // requestBody is required for non-GET requests
+      if (json.method !== 'GET' && !json.requestBody) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'Request body must include requestBody field for non-GET requests',
         );
         return;
       }
 
       // 3. Validate proxy destination is allowed and get config
-      const destinationsConfig = AllowedProxyDestinations.getInstance(
-        allowedProxyDestinations,
-      );
-      const destinationConfig = destinationsConfig.getDestinationConfig(
+      const destinationsConfig =
+        AllowedProxyDestinations.getInstance(dbAdapter);
+      const destinationConfig = await destinationsConfig.getDestinationConfig(
         json.url,
       );
 
@@ -245,22 +251,39 @@ export default function handleRequestForward({
 
       // 5. Forward request to external endpoint
       let requestBody;
-      try {
-        requestBody = JSON.parse(json.requestBody);
-      } catch (e) {
-        await sendResponseForBadRequest(ctxt, 'requestBody must be valid JSON');
-        return;
+      if (json.requestBody) {
+        try {
+          requestBody = JSON.parse(json.requestBody);
+        } catch (e) {
+          await sendResponseForBadRequest(
+            ctxt,
+            'requestBody must be valid JSON',
+          );
+          return;
+        }
       }
 
+      // Build headers and URL based on authentication method
+      let finalUrl = json.url;
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${destinationConfig.apiKey}`,
         ...json.headers,
       };
 
+      // Add authentication based on the configured method
+      if (destinationConfig.authMethod === 'url-parameter') {
+        const paramName = destinationConfig.authParameterName || 'key';
+        const url = new URL(json.url);
+        url.searchParams.set(paramName, destinationConfig.apiKey);
+        finalUrl = url.toString();
+      } else {
+        // Default to header authentication
+        headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
+      }
+
       // Handle streaming requests
       if (json.stream) {
-        if (!destinationsConfig.supportsStreaming(json.url)) {
+        if (!(await destinationsConfig.supportsStreaming(json.url))) {
           await sendResponseForBadRequest(
             ctxt,
             `Streaming is not supported for endpoint ${json.url}`,
@@ -270,7 +293,7 @@ export default function handleRequestForward({
 
         await handleStreamingRequest(
           ctxt,
-          json.url,
+          finalUrl,
           json.method,
           headers,
           requestBody,
@@ -282,11 +305,17 @@ export default function handleRequestForward({
       }
 
       // Handle non-streaming requests
-      const externalResponse = await fetch(json.url, {
+      const fetchOptions: RequestInit = {
         method: json.method,
         headers,
-        body: JSON.stringify(requestBody),
-      });
+      };
+
+      // Only add body for non-GET requests or when requestBody is provided
+      if (json.method !== 'GET' && requestBody !== undefined) {
+        fetchOptions.body = JSON.stringify(requestBody);
+      }
+
+      const externalResponse = await fetch(finalUrl, fetchOptions);
 
       const responseData = await externalResponse.json();
 

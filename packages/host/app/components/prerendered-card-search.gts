@@ -113,6 +113,12 @@ function getErrorComponent(realmURL: string, url: string) {
   return DefaultErrorResultComponent as unknown as HTMLComponent;
 }
 
+const normalizeRealms = (realms: string[]) => {
+  return realms.map((r) => {
+    return new RealmPaths(new URL(r)).url;
+  });
+};
+
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
@@ -120,7 +126,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
   _lastCardUrls: string[] | undefined;
   _lastSearchResults: PrerenderedCard[] | undefined;
   _lastRealms: string[] | undefined;
-  realmsNeedingRefresh = new TrackedSet<string>(this.args.realms);
+  realmsNeedingRefresh = new TrackedSet<string>(
+    normalizeRealms(this.args.realms),
+  );
 
   async searchPrerendered(
     query: Query,
@@ -168,6 +176,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
 
   private runSearch = trackedFunction(this, async () => {
     let { query, format, cardUrls, realms } = this.args;
+    realms = normalizeRealms(realms);
 
     let realmsChanged = !isEqual(realms, this._lastRealms);
     let queryChanged = !isEqual(query, this._lastSearchQuery);
@@ -280,7 +289,10 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
 
   <template>
     {{#if @isLive}}
-      {{SubscribeToRealms @realms this.markRealmNeedsRefreshing}}
+      {{SubscribeToRealms
+        (normalizeRealms @realms)
+        this.markRealmNeedsRefreshing
+      }}
     {{/if}}
     {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}

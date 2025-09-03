@@ -34,7 +34,6 @@ export type CreateRoutesArgs = {
   realmServerSecretSeed: string;
   grafanaSecret: string;
   realmSecretSeed: string;
-  allowedProxyDestinations?: string;
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
@@ -90,7 +89,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
-      allowedProxyDestinations: args.allowedProxyDestinations ?? '[]',
     }),
   );
 
