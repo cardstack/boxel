@@ -169,7 +169,8 @@ export default class InputGroup extends Component<Signature> {
         --boxel-input-group-padding-x: var(--boxel-sp-sm);
         --boxel-input-group-padding-y: var(--boxel-sp-xxs);
         --boxel-input-group-border-color: var(
-          --boxel-form-control-border-color
+          --border,
+          var(--boxel-form-control-border-color)
         );
         --boxel-input-group-border-radius: var(
           --boxel-form-control-border-radius
@@ -185,10 +186,6 @@ export default class InputGroup extends Component<Signature> {
 
         border-radius: var(--boxel-input-group-border-radius);
         cursor: text;
-        font-family: var(--boxel-font-family);
-        font-size: var(--boxel-font-size);
-        line-height: var(--boxel-ratio);
-        letter-spacing: var(--boxel-lsp-xs);
         position: relative;
         display: flex;
         flex-wrap: wrap;
@@ -202,14 +199,9 @@ export default class InputGroup extends Component<Signature> {
         --boxel-button-min-height: var(--boxel-input-group-height);
       }
 
-      .boxel-input-group:not(:focus-within):not(
-          .boxel-input-group--invalid
-        ):not(.boxel-input-group--disabled):hover {
-        outline: 1px solid var(--boxel-dark) !important;
-      }
-
       .boxel-input-group:not(.boxel-input-group--invalid):focus-within {
-        outline: 2px solid var(--boxel-highlight);
+        outline: 1px solid var(--ring, var(--boxel-highlight));
+        --boxel-input-group-border-color: var(--ring, var(--boxel-highlight));
       }
 
       .boxel-input-group--disabled :deep(.form-control),
@@ -217,7 +209,6 @@ export default class InputGroup extends Component<Signature> {
       .boxel-input-group--disabled :deep(.icon-button-accessory),
       .boxel-input-group--disabled :deep(.button-accessory) {
         border-color: var(--boxel-input-group-border-color);
-        color: rgb(0 0 0 / 50%);
         opacity: 0.5;
       }
 
@@ -247,13 +238,13 @@ export default class InputGroup extends Component<Signature> {
       .helper-text {
         margin-top: var(--boxel-sp-xs);
         margin-left: var(--boxel-sp-xs);
-        color: rgb(0 0 0 / 75%);
-        font: var(--boxel-font-sm);
+        opacity: 0.75;
+        font-size: var(--boxel-font-size-sm);
         letter-spacing: var(--boxel-lsp);
       }
 
       .boxel-input-group--invalid:not(.boxel-input-group--disabled) {
-        box-shadow: 0 0 0 1px var(--boxel-error-100);
+        box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
       }
 
       .boxel-input-group--invalid:not(.boxel-input-group--disabled)
@@ -266,7 +257,7 @@ export default class InputGroup extends Component<Signature> {
         :deep(.icon-button-accessory),
       .boxel-input-group--invalid:not(.boxel-input-group--disabled)
         :deep(.button-accessory) {
-        border-color: var(--boxel-error-100);
+        border-color: var(--destructive, var(--boxel-error-100));
       }
 
       .boxel-input-group--disabled ~ .error-message,
@@ -277,8 +268,9 @@ export default class InputGroup extends Component<Signature> {
       .error-message {
         margin-top: var(--boxel-sp-xxxs);
         margin-left: calc(var(--boxel-sp-sm) + 1px);
-        color: var(--boxel-error-200);
-        font: 500 var(--boxel-font-sm);
+        color: var(--destructive, var(--boxel-error-200));
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 500;
         letter-spacing: var(--boxel-lsp);
       }
 
@@ -289,9 +281,6 @@ export default class InputGroup extends Component<Signature> {
         justify-content: center;
         user-select: none;
         width: var(--boxel-input-group-icon-length);
-      }
-      .validation-icon-container.valid {
-        --icon-color: var(--boxel-dark-green);
       }
     </style>
   </template>
