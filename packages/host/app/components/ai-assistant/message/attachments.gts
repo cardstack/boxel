@@ -8,13 +8,23 @@ import FilePill from '@cardstack/host/components/file-pill';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     items?: (ReturnType<getCardCollection> | FileDef)[];
+    attachedCardsAsFiles?: FileDef[] | undefined;
     downloadFile?: (file: FileDef) => Promise<void>;
   };
+}
+
+function findAttachedCardAsFile(
+  attachedCardsAsFiles: FileDef[] | undefined,
+  card: CardDef,
+) {
+  debugger;
+  return attachedCardsAsFiles?.find((file) => file.sourceUrl === card.id);
 }
 
 const Attachments: TemplateOnlyComponent<Signature> = <template>
@@ -23,11 +33,18 @@ const Attachments: TemplateOnlyComponent<Signature> = <template>
       {{#if (isCardCollectionResource item)}}
         {{#each item.cards as |card|}}
           <li>
-            <CardPill
-              @cardId={{card.id}}
-              @borderType='solid'
-              @urlForRealmLookup={{urlForRealmLookup card}}
-            />
+            {{#let
+              (findAttachedCardAsFile @attachedCardsAsFiles card)
+              as |file|
+            }}
+              <CardPill
+                @cardId={{card.id}}
+                @file={{file}}
+                @borderType='solid'
+                @urlForRealmLookup={{urlForRealmLookup card}}
+                @fileActionsEnabled={{if file true false}}
+              />
+            {{/let}}
           </li>
         {{/each}}
       {{else}}

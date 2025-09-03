@@ -95,7 +95,8 @@ export default class AttachedFileDropdownMenu extends Component<{
         disabled:
           !this.args.file?.sourceUrl ||
           this.args.isNewFile ||
-          this.args.codePatchStatus !== 'applied',
+          (this.args.codePatchStatus != null &&
+            this.args.codePatchStatus !== 'applied'),
       }),
     ];
 
@@ -137,7 +138,7 @@ export default class AttachedFileDropdownMenu extends Component<{
         rotate: 90deg;
         flex-shrink: 0;
 
-        --inner-boxel-icon-button-width: 20px;
+        --boxel-icon-button-width: 20px;
       }
 
       button.context-menu-button:hover {

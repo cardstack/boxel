@@ -13,7 +13,7 @@ import {
   LoadingIndicator,
   IconButton,
 } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
@@ -21,6 +21,8 @@ import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import RealmService from '../services/realm';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
 
 interface CardPillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
@@ -31,6 +33,8 @@ interface CardPillSignature {
     onClick?: () => void;
     onRemove?: () => void;
     isEnabled?: boolean;
+    fileActionsEnabled?: boolean;
+    file?: FileDef;
   };
 }
 
@@ -42,10 +46,6 @@ export default class CardPill extends Component<CardPillSignature> {
   private makeCardResource = () => {
     this.cardResource = this.getCard(this, () => this.args.cardId);
   };
-
-  private get hideIconRight() {
-    return !this.args.onRemove;
-  }
 
   private get cardTitle() {
     return this.card?.title || this.cardError?.meta.cardTitle;
@@ -93,16 +93,13 @@ export default class CardPill extends Component<CardPillSignature> {
 
   <template>
     {{consumeContext this.makeCardResource}}
+
     {{#if this.isCreating}}
       <LoadingIndicator />
     {{else}}
       <Pill
         @kind={{this.pillKind}}
-        class={{cn
-          'card-pill'
-          this.borderClass
-          hide-icon-right=this.hideIconRight
-        }}
+        class={{cn 'card-pill' this.borderClass}}
         data-test-attached-card={{@cardId}}
         {{on 'click' this.handleCardClick}}
         ...attributes
@@ -114,6 +111,7 @@ export default class CardPill extends Component<CardPillSignature> {
           <div class='card-content' title={{this.cardTitle}}>
             {{this.cardTitle}}
           </div>
+
         </:default>
         <:iconRight>
           {{#if @onRemove}}
@@ -125,6 +123,10 @@ export default class CardPill extends Component<CardPillSignature> {
               {{on 'click' this.handleRemoveClick}}
               data-test-remove-card-btn
             />
+          {{/if}}
+
+          {{#if @file}}
+            <AttachedFileDropdownMenu @file={{@file}} @isNewFile={{false}} />
           {{/if}}
         </:iconRight>
       </Pill>
@@ -143,9 +145,6 @@ export default class CardPill extends Component<CardPillSignature> {
       }
       .border-solid {
         border-style: solid;
-      }
-      .hide-icon-right :deep(figure.icon):last-child {
-        display: none;
       }
       .card-content {
         max-width: 100px;

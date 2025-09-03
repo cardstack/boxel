@@ -159,6 +159,7 @@ export default class MessageBuilder {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
       message.attachedCardIds = this.attachedCardIds;
+      message.attachedCardsAsFiles = this.event.content.data?.attachedCards;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
         message.setCommands(await this.buildMessageCommands(message));
       }
