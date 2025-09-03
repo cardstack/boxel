@@ -53,6 +53,7 @@ class TableRow extends GlimmerComponent<TableRowSignature> {
         fieldType: field?.fieldType,
         field: field,
         hasComponent: !!field?.component,
+        component: field?.component,
       });
 
       // if (field?.component) {
@@ -303,6 +304,9 @@ export class Table extends GlimmerComponent<TableSignature> {
       .table thead {
         background: var(--boxel-100);
         border-bottom: 2px solid var(--boxel-400);
+        position: sticky;
+        top: 0;
+        z-index: 1;
       }
 
       .table th {
