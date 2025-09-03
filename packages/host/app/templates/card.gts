@@ -47,7 +47,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare store: StoreService;
 
   get connectUrl() {
-    return `${assetsURL}/connect`;
+    return `${config.assetsURL}/connect`;
   }
 
   get isError() {
