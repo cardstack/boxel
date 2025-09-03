@@ -277,27 +277,39 @@ export default class BoxelInputGroupUsage extends Component {
       class='boxel-input-usage-examples'
     >
       <:example>
-        <BoxelInputGroup @placeholder='Username'>
+        <BoxelInputGroup
+          @placeholder='Username'
+          @state={{this.state}}
+          @disabled={{this.disabled}}
+        >
           <:before as |Accessories|>
             <Accessories.Text>@</Accessories.Text>
           </:before>
         </BoxelInputGroup>
 
-        <BoxelInputGroup @placeholder="Recipient's username">
+        <BoxelInputGroup
+          @placeholder="Recipient's username"
+          @state={{this.state}}
+          @disabled={{this.disabled}}
+        >
           <:after as |Accessories|>
             <Accessories.Text>@example.com</Accessories.Text>
           </:after>
         </BoxelInputGroup>
 
         <BoxelField @tag='label' @label='Your vanity URL' @vertical={{true}}>
-          <BoxelInputGroup>
+          <BoxelInputGroup @state={{this.state}} @disabled={{this.disabled}}>
             <:before as |Accessories|>
               <Accessories.Text>https://example.com/users/</Accessories.Text>
             </:before>
           </BoxelInputGroup>
         </BoxelField>
 
-        <BoxelInputGroup @placeholder='Amount'>
+        <BoxelInputGroup
+          @placeholder='Amount'
+          @state={{this.state}}
+          @disabled={{this.disabled}}
+        >
           <:before as |Accessories|>
             <Accessories.Text>$</Accessories.Text>
           </:before>
@@ -306,7 +318,7 @@ export default class BoxelInputGroupUsage extends Component {
           </:after>
         </BoxelInputGroup>
 
-        <BoxelInputGroup>
+        <BoxelInputGroup @state={{this.state}} @disabled={{this.disabled}}>
           <:default as |Controls Accessories|>
             <Controls.Input @placeholder='Username' />
             <Accessories.Text>@</Accessories.Text>
@@ -316,7 +328,7 @@ export default class BoxelInputGroupUsage extends Component {
 
         <label>Example overriding default block to use a textarea instead of a
           text input<br />
-          <BoxelInputGroup>
+          <BoxelInputGroup @state={{this.state}} @disabled={{this.disabled}}>
             <:default as |Controls Accessories inputGroup|>
               <Accessories.Text>With textarea</Accessories.Text>
               <Controls.Textarea id={{inputGroup.elementId}} />
@@ -325,7 +337,7 @@ export default class BoxelInputGroupUsage extends Component {
         </label>
 
         <label>Example showing multiple accessories before the input<br />
-          <BoxelInputGroup>
+          <BoxelInputGroup @state={{this.state}} @disabled={{this.disabled}}>
             <:before as |Accessories|>
               <Accessories.Text>$</Accessories.Text>
               <Accessories.Text>0.00</Accessories.Text>
@@ -334,7 +346,7 @@ export default class BoxelInputGroupUsage extends Component {
         </label>
 
         <label>Example showing multiple accessories after the input<br />
-          <BoxelInputGroup>
+          <BoxelInputGroup @state={{this.state}} @disabled={{this.disabled}}>
             <:after as |Accessories|>
               <Accessories.Text>$</Accessories.Text>
               <Accessories.Text>0.00</Accessories.Text>
@@ -343,45 +355,66 @@ export default class BoxelInputGroupUsage extends Component {
         </label>
 
         <label>Example showing a button accessories after the input<br />
-          <BoxelInputGroup>
+          <BoxelInputGroup @state={{this.state}} @disabled={{this.disabled}}>
             <:before as |Accessories|>
               <Accessories.Button>Button</Accessories.Button>
             </:before>
           </BoxelInputGroup>
         </label>
 
-        <BoxelInputGroup @placeholder="Recipient's username">
+        <BoxelInputGroup
+          @placeholder="Recipient's username"
+          @state={{this.state}}
+          @disabled={{this.disabled}}
+        >
           <:after as |Accessories|>
             <Accessories.Button>Button</Accessories.Button>
           </:after>
         </BoxelInputGroup>
 
-        <BoxelInputGroup @placeholder="The button has a 'kind' of 'primary'">
+        <BoxelInputGroup
+          @placeholder="The button has a 'kind' of 'primary'"
+          @state={{this.state}}
+          @disabled={{this.disabled}}
+        >
           <:after as |Accessories|>
             <Accessories.Button @kind='primary'>Button</Accessories.Button>
           </:after>
         </BoxelInputGroup>
 
-        <BoxelInputGroup @placeholder='Example with two buttons before'>
+        <BoxelInputGroup
+          @placeholder='Example with two buttons before'
+          @state={{this.state}}
+          @disabled={{this.disabled}}
+        >
           <:before as |Accessories|>
             <Accessories.Button>Button</Accessories.Button>
             <Accessories.Button>Button</Accessories.Button>
           </:before>
         </BoxelInputGroup>
 
-        <BoxelInputGroup @placeholder='Example with two buttons after'>
+        <BoxelInputGroup
+          @placeholder='Example with two buttons after'
+          @state={{this.state}}
+          @disabled={{this.disabled}}
+        >
           <:after as |Accessories|>
             <Accessories.Button>Button</Accessories.Button>
             <Accessories.Button>Button</Accessories.Button>
           </:after>
         </BoxelInputGroup>
-        <BoxelInputGroup @placeholder='Input with a select menu'>
+        <BoxelInputGroup
+          @placeholder='Input with a select menu'
+          @state={{this.state}}
+          @disabled={{this.disabled}}
+        >
           <:after as |Accessories|>
             <Accessories.Select
               @placeholder={{this.selectExamplePlaceholder}}
               @selected={{this.selectExampleSelectedItem}}
               @onChange={{this.selectExampleOnSelectItem}}
               @options={{this.selectExampleItems}}
+              @disabled={{this.disabled}}
               @dropdownClass='boxel-select-usage-dropdown'
               aria-label='Select an item'
               as |item|
