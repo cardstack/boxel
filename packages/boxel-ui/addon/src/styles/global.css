@@ -89,8 +89,6 @@
   input,
   select,
   textarea {
-    color: inherit;
-    background-color: transparent;
     font: inherit;
     letter-spacing: inherit;
   }
@@ -100,13 +98,6 @@
   textarea:disabled {
     opacity: 0.5;
     pointer-events: none;
-  }
-
-  input:focus,
-  textarea:focus {
-    outline-width: var(--boxel-outline-width);
-    outline-color: var(--boxel-highlight);
-    outline-style: solid;
   }
 
   input:focus:not(:focus-visible),
