@@ -13,7 +13,7 @@ import {
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
-import CodeRef from './code-ref';
+import { AbsoluteCodeRefField } from './code-ref';
 import MarkdownField from './markdown';
 import {
   FieldContainer,
@@ -887,7 +887,7 @@ export class Spec extends CardDef {
   static icon = BoxModel;
   @field readMe = contains(MarkdownField);
 
-  @field ref = contains(CodeRef);
+  @field ref = contains(AbsoluteCodeRefField);
   @field specType = contains(SpecTypeField);
 
   @field isField = contains(BooleanField, {

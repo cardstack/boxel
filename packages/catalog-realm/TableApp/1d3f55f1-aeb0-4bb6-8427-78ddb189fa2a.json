@@ -2,12 +2,20 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "ListingsTable",
-        "module": "../app/listing-table"
+        "name": "TableApp",
+        "module": "../app/table"
       }
     },
     "type": "card",
     "attributes": {
+      "query": {
+        "type": {
+          "codeRef": {
+            "name": "Author",
+            "module": "http://localhost:4201/catalog/blog-app/author"
+          }
+        }
+      },
       "cardInfo": {
         "notes": null,
         "title": null,

@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "showComputedFields": false,
+      "query": {
+        "type": {
+          "codeRef": null
+        }
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../app/table",
+        "name": "TableApp"
+      }
+    }
+  }
+}
