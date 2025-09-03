@@ -25,7 +25,7 @@ import {
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-
+import config from '@cardstack/host/config/environment';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -47,7 +47,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare store: StoreService;
 
   get connectUrl() {
-    return 'http://localhost:4200/connect';
+    return `${assetsURL}/connect`;
   }
 
   get isError() {
