@@ -32,7 +32,11 @@ export default class HostModeService extends Service {
       let realmServerDomain = config.realmServerDomain;
       let currentHost = window.location.hostname;
 
-      return currentHost.endsWith(`.${realmServerDomain}`);
+      return (
+        currentHost.endsWith(`.${realmServerDomain}`) &&
+        // Using a submdomain of localhost indicates host mode
+        !currentHost.endsWith('.localhost')
+      );
     }
 
     return false;

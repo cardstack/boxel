@@ -2,10 +2,12 @@ import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
 
 import { consume, provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
+import window from 'ember-window-mock';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
@@ -23,7 +25,7 @@ import {
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-
+import config from '@cardstack/host/config/environment';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -43,6 +45,10 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   private declare getCardCollection: getCardCollection;
 
   @service private declare store: StoreService;
+
+  get connectUrl() {
+    return `${config.assetsURL}/connect`;
+  }
 
   get isError() {
     return isCardErrorJSONAPI(this.args.model);
@@ -80,6 +86,22 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
     };
   }
 
+  addMessageListener = modifier((element: HTMLElement) => {
+    let messageHandler = (event: MessageEvent) => {
+      // TODO if this becomes anything more significant than just showing
+      // the button, the origin should be verified.
+      if (event.data === 'ready') {
+        element.classList.remove('not-loaded');
+      }
+    };
+
+    window.addEventListener('message', messageHandler);
+
+    return () => {
+      window.removeEventListener('message', messageHandler);
+    };
+  });
+
   <template>
     {{pageTitle this.title}}
     {{#if this.isError}}
@@ -88,6 +110,12 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         {{@model.id}}
       </div>
     {{else}}
+      <iframe
+        class='connect not-loaded'
+        title='connect'
+        src={{this.connectUrl}}
+        {{this.addMessageListener}}
+      />
       <section
         class='host-mode-container'
         style={{this.backgroundImageStyle}}
@@ -117,6 +145,23 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
       .card {
         width: 50rem;
+      }
+
+      .connect {
+        position: fixed;
+        top: var(--boxel-sp);
+        right: var(--boxel-sp);
+        width: 10rem;
+        height: 4rem;
+        border: none;
+        background: transparent;
+        opacity: 1;
+        transition: opacity 0.2s ease-in-out;
+      }
+
+      .connect.not-loaded {
+        width: 0;
+        opacity: 0;
       }
     </style>
   </template>
