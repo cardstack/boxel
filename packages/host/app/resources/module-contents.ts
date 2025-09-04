@@ -8,6 +8,7 @@ import { Resource } from 'ember-modify-based-class-resource';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import { type Ready } from '@cardstack/host/resources/file';
+import { loadModule } from '@cardstack/host/resources/import';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import ModuleContentsService, {
@@ -18,6 +19,7 @@ import ModuleContentsService, {
   isReexportCardOrField,
 } from '@cardstack/host/services/module-contents-service';
 import type NetworkService from '@cardstack/host/services/network';
+import { isTesting } from '@embroider/macros';
 
 export {
   isCardOrFieldDeclaration,
@@ -91,8 +93,16 @@ export class ModuleContentsResource
     if (executableFile === undefined) {
       return;
     }
-    let module = await this.loadModule(executableFile.url);
-    if (this.moduleError) {
+    if (isTesting() && (globalThis as any).__disableLoaderMonitoring) {
+      return;
+    }
+    const result = await loadModule(
+      executableFile.url,
+      this.loaderService.loader,
+      this.network.authedFetch,
+    );
+    if ('error' in result) {
+      this.moduleError = result.error;
       return;
     }
     let moduleSyntax = new ModuleSyntax(
@@ -101,7 +111,7 @@ export class ModuleContentsResource
     );
     let declarations = await this.moduleContentsService.assemble(
       moduleSyntax,
-      module,
+      result.module,
     );
     let newState = {
       declarations,
@@ -116,34 +126,6 @@ export class ModuleContentsResource
       this.onModuleEdit?.(newState);
     }
     this.state = newState;
-  }
-
-  private async loadModule(url: string) {
-    let module: object = {};
-    try {
-      module = await this.loaderService.loader.import(url);
-    } catch (err: any) {
-      let errResponse = await this.network.authedFetch(url, {
-        headers: { 'content-type': 'text/javascript' },
-      });
-      if (!errResponse.ok) {
-        this.moduleError = {
-          type: 'compile',
-          message: err.responseText ?? (await errResponse.text()),
-        };
-      } else {
-        this.moduleError = {
-          type: 'runtime',
-          message: `Encountered error while evaluating
-${url}:
-
-${err}
-
-Check console log for more details`,
-        };
-      }
-    }
-    return module;
   }
 }
 

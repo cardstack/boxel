@@ -17,6 +17,46 @@ interface Args {
   named: { url: string; loader: Loader };
 }
 
+export type LoadResult =
+  | { module: object }
+  | { error: { type: 'runtime' | 'compile'; message: string } };
+
+export async function loadModule(
+  url: string,
+  loader: Loader,
+  fetch: (url: string, options?: RequestInit) => Promise<Response>,
+): Promise<LoadResult> {
+  try {
+    let m = await loader.import<object>(url);
+    return { module: m };
+  } catch (err: any) {
+    let errResponse = await fetch(url, {
+      headers: { 'content-type': 'text/javascript' },
+    });
+    if (!errResponse.ok) {
+      return {
+        error: {
+          type: 'compile',
+          message: err.responseText ?? (await errResponse.text()),
+        },
+      };
+    } else {
+      log.error(err);
+      return {
+        error: {
+          type: 'runtime',
+          message: `Encountered error while evaluating
+${url}:
+
+${err}
+
+Check console log for more details`,
+        },
+      };
+    }
+  }
+}
+
 const log = logger('resource:import');
 
 export class ImportResource extends Resource<Args> {
@@ -43,30 +83,11 @@ export class ImportResource extends Resource<Args> {
   }
 
   private load = task(async (url: string, loader: Loader) => {
-    try {
-      let m = await loader.import<object>(url);
-      this.module = m;
-    } catch (err: any) {
-      let errResponse = await this.network.authedFetch(url, {
-        headers: { 'content-type': 'text/javascript' },
-      });
-      if (!errResponse.ok) {
-        this.error = {
-          type: 'compile',
-          message: err.responseText ?? (await errResponse.text()),
-        };
-      } else {
-        this.error = {
-          type: 'runtime',
-          message: `Encountered error while evaluating
-${url}:
-
-${err}
-
-Check console log for more details`,
-        };
-        log.error(err);
-      }
+    const result = await loadModule(url, loader, this.network.authedFetch);
+    if ('module' in result) {
+      this.module = result.module;
+    } else {
+      this.error = result.error;
     }
   });
 }
