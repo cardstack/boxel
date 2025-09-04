@@ -86,16 +86,16 @@ export class ModuleContentsResource
     this.executableFile = executableFile;
     this.moduleError = undefined;
     this.onModuleEdit = onModuleEdit;
-    this.load.perform(this.executableFile);
-  }
-
-  private load = task(async (executableFile: Ready | undefined) => {
-    if (executableFile === undefined) {
-      return;
-    }
     if (isTesting() && (globalThis as any).__disableLoaderMonitoring) {
       return;
     }
+    if (this.executableFile === undefined) {
+      return;
+    }
+    this.load.perform(this.executableFile);
+  }
+
+  private load = task(async (executableFile: Ready) => {
     const result = await loadModule(
       executableFile.url,
       this.loaderService.loader,
