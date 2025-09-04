@@ -41,6 +41,7 @@ export default class AttachedFileDropdownMenu extends Component<{
     isNewFile: boolean;
     version?: 'diff-editor';
     codePatchStatus?: CodePatchStatus | 'applying' | 'ready';
+    isCardInstance?: boolean;
   };
 }> {
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -111,7 +112,11 @@ export default class AttachedFileDropdownMenu extends Component<{
     let content = this.fileContent!;
 
     await this.cardService.saveSource(
-      new URL(this.args.file.sourceUrl!),
+      new URL(
+        this.args.isCardInstance && !this.args.file.sourceUrl!.endsWith('.json')
+          ? this.args.file.sourceUrl! + '.json'
+          : this.args.file.sourceUrl!,
+      ),
       content,
       'bot-patch',
       { resetLoader: hasExecutableExtension(this.args.file.sourceUrl!) },

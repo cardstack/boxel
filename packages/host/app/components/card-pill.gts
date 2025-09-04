@@ -128,7 +128,11 @@ export default class CardPill extends Component<CardPillSignature> {
           {{/if}}
 
           {{#if @file}}
-            <AttachedFileDropdownMenu @file={{@file}} @isNewFile={{false}} />
+            <AttachedFileDropdownMenu
+              @file={{@file}}
+              @isNewFile={{false}}
+              @isCardInstance={{true}}
+            />
           {{/if}}
         </:iconRight>
       </Pill>
