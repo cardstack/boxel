@@ -215,7 +215,7 @@ export function isUrlLike(moduleIdentifier: string): boolean {
 
 /**
  * Creates a fetch implementation that's appropriate for the current environment.
- * In Node.js, it enhances localhost subdomain resolution using Undici dispatcher.
+ * In Node.js, it enhances localhost subdomain resolution using Undici agent.
  * In browsers, it uses native fetch.
  */
 function createEnvironmentAwareFetch(): typeof globalThis.fetch {
@@ -245,7 +245,7 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
       return globalThis.fetch.bind(globalThis);
     }
 
-    const { Agent, setGlobalDispatcher } = undici;
+    const { Agent } = undici;
 
     // Create a custom agent with localhost subdomain resolution
     const agent = new Agent({
@@ -281,17 +281,21 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
       },
     });
 
-    // Set this as the global dispatcher for all fetch calls
-    setGlobalDispatcher(agent);
     console.log(
-      '[Boxel Undici] Global dispatcher set for localhost subdomain resolution',
+      '[Boxel Undici] Custom agent created for localhost subdomain resolution',
     );
 
-    // Return the native fetch (now using our custom dispatcher)
-    return globalThis.fetch.bind(globalThis);
+    // Create a custom fetch function that uses our agent
+    return async (input: RequestInfo | URL, init?: RequestInit) => {
+      let fetch = globalThis.fetch.bind(globalThis);
+      return fetch(input, {
+        ...init,
+        dispatcher: agent,
+      } as any);
+    };
   } catch (e) {
     console.warn(
-      '[Boxel Undici] Failed to set up custom dispatcher, falling back to native fetch:',
+      '[Boxel Undici] Failed to set up custom agent, falling back to native fetch:',
       (e as Error).message,
     );
     // Fallback to native fetch if undici setup fails
