@@ -24,7 +24,7 @@ export function compareCurrentChecksum() {
   let previousChecksum = '';
   let filePath = path.join(
     process.cwd(),
-    '/../../persistent/boxel-ui-checksum.txt',
+    '/../../../persistent/boxel-ui-checksum.txt',
   );
   try {
     previousChecksum = fs.readFileSync(filePath, 'utf8');
@@ -35,7 +35,7 @@ export function compareCurrentChecksum() {
   }
 
   return {
-    previousChecksum: previousChecksum,
-    currentChecksum: currentChecksum,
+    previousChecksum,
+    currentChecksum,
   };
 }
