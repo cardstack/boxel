@@ -242,7 +242,7 @@ export default class SearchSheet extends Component<Signature> {
       {{else}}
         <BoxelInput
           @type='search'
-          @variant='large'
+          @size='large'
           @bottomTreatment={{this.inputBottomTreatment}}
           @value={{this.searchKey}}
           @state={{this.inputValidationState}}

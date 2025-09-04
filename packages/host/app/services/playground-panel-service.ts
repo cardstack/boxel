@@ -36,7 +36,7 @@ export default class PlaygroundPanelService extends Service {
   @service declare private cardService: CardService;
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  private playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
+  playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
   private selectionsForNewInstances = new Map<
     string,
     {

@@ -58,6 +58,10 @@ export default class RadioInputUsage extends Component {
   @tracked hideBorder = false;
   @tracked spacing = '';
   @tracked orientation = 'horizontal';
+  @tracked selectedVariant: undefined | 'muted' | 'default' = 'default';
+  @tracked radioBackgroundColor = '';
+  @tracked radioBorderColor = '';
+  @tracked radioHighlightColor = '';
 
   @action onChangeItems(id: string): void {
     this.checkedIdItems = id;
@@ -75,6 +79,10 @@ export default class RadioInputUsage extends Component {
   cssClassName = 'boxel-radio-input';
   @cssVariable declare boxelRadioInputOptionPadding: CSSVariableInfo;
   @cssVariable declare boxelRadioInputOptionGap: CSSVariableInfo;
+  @cssVariable declare boxelRadioBorderColor: CSSVariableInfo;
+  @cssVariable declare boxelRadioHighlightColor: CSSVariableInfo;
+  @cssVariable declare boxelRadioOptionBorderColor: CSSVariableInfo;
+  @cssVariable declare boxelRadioOptionHoverColor: CSSVariableInfo;
 
   <template>
     <FreestyleUsage @name='Radio'>
@@ -92,9 +100,12 @@ export default class RadioInputUsage extends Component {
           @spacing={{this.spacing}}
           @hideRadio={{this.hideRadio}}
           @hideBorder={{this.hideBorder}}
+          @variant={{this.selectedVariant}}
           style={{cssVar
             boxel-radio-input-option-padding=this.boxelRadioInputOptionPadding.value
             boxel-radio-input-option-gap=this.boxelRadioInputOptionGap.value
+            boxel-radio-border-color=this.boxelRadioBorderColor.value
+            boxel-radio-highlight-color=this.boxelRadioHighlightColor.value
           }}
           as |item|
         >
@@ -165,6 +176,36 @@ export default class RadioInputUsage extends Component {
         <Args.Yield
           @description='Yields an object with the default component to use (RadioInput::Item), the data for the item passed in, and whether that item is selected'
         />
+        <Args.String
+          @name='variant'
+          @description='Theme variant for the radio input'
+          @defaultValue='default'
+          @options={{array 'default' 'muted'}}
+          @value={{this.selectedVariant}}
+          @onInput={{fn (mut this.selectedVariant)}}
+          @optional={{true}}
+        />
+        <Args.String
+          @name='radioBackgroundColor'
+          @description='Custom background color for the radio input (overrides theme)'
+          @value={{this.radioBackgroundColor}}
+          @onInput={{fn (mut this.radioBackgroundColor)}}
+          @optional={{true}}
+        />
+        <Args.String
+          @name='radioBorderColor'
+          @description='Custom border color for the radio input (overrides theme)'
+          @value={{this.radioBorderColor}}
+          @onInput={{fn (mut this.radioBorderColor)}}
+          @optional={{true}}
+        />
+        <Args.String
+          @name='radioHighlightColor'
+          @description='Custom highlight color for the radio input (overrides theme)'
+          @value={{this.radioHighlightColor}}
+          @onInput={{fn (mut this.radioHighlightColor)}}
+          @optional={{true}}
+        />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
@@ -201,6 +242,8 @@ export default class RadioInputUsage extends Component {
           style={{cssVar
             boxel-radio-input-option-padding=this.boxelRadioInputOptionPadding.value
             boxel-radio-input-option-gap=this.boxelRadioInputOptionGap.value
+            boxel-radio-border-color=this.boxelRadioBorderColor.value
+            boxel-radio-highlight-color=this.boxelRadioHighlightColor.value
           }}
           as |item|
         >

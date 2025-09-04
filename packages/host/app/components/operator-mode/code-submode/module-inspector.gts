@@ -478,7 +478,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         @file={{@readyFile}}
         @moduleAnalysis={{@moduleAnalysis}}
         @card={{@selectedCardOrField.cardOrField}}
-        @cardTypeResource={{@selectedCardOrField.cardType}}
+        @cardType={{@selectedCardOrField.cardType}}
         @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
         @isReadOnly={{@isReadOnly}}
         as |SchemaEditorBadge SchemaEditorPanel|

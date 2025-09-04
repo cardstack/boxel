@@ -8,8 +8,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     label?: string;
-    itemType?: string; // e.g. "Schema"
-    codeRange?: string; // e.g. "Lines 51–78"
+    metaPills?: string[]; // e.g. ["Schema", "Lines 51–78"]
   };
 }
 
@@ -24,17 +23,11 @@ let FocusPill: TemplateOnlyComponent<Signature> = <template>
       </:default>
     </Pill>
 
-    {{#if @itemType}}
+    {{#each @metaPills as |metaPill|}}
       <Pill class='meta' data-test-focus-pill-meta>
-        {{@itemType}}
+        {{metaPill}}
       </Pill>
-    {{/if}}
-
-    {{#if @codeRange}}
-      <Pill class='meta' data-test-focus-pill-meta>
-        {{@codeRange}}
-      </Pill>
-    {{/if}}
+    {{/each}}
   </div>
 
   <style scoped>
