@@ -22,11 +22,9 @@ import {
   type getCards,
   type getCard,
   type Query,
-  isCardDef,
   isCardDocumentString,
   isFieldDef,
   internalKeyFor,
-  loadCardDef,
   CodeRef,
   CardErrorJSONAPI,
   GetCardsContextName,
@@ -35,11 +33,8 @@ import {
   specRef,
   localId,
 } from '@cardstack/runtime-common';
-import {
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-} from '@cardstack/runtime-common/code-ref';
 
+import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
@@ -63,6 +58,7 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
+import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
@@ -78,7 +74,7 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -113,6 +109,7 @@ interface ModuleInspectorSignature {
 }
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
+  @service private declare commandService: CommandService;
   @service private declare loaderService: LoaderService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -357,36 +354,27 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return this.cardResource?.card as Spec;
   }
 
-  private createSpecTask = task(
-    async (ref: ResolvedCodeRef, specType: SpecType) => {
-      let relativeTo = new URL(ref.module);
-      let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
-      if (isResolvedCodeRef(maybeAbsoluteRef)) {
-        ref = maybeAbsoluteRef;
-      }
-      try {
-        let SpecKlass = await loadCardDef(specRef, {
-          loader: this.loaderService.loader,
-        });
-        let spec = new SpecKlass({
-          specType,
-          ref,
-          title: ref.name,
-        }) as Spec;
-        let currentRealm = this.operatorModeStateService.realmURL;
-        await this.store.add(spec, {
-          realm: currentRealm.href,
-          doNotWaitForPersist: true,
-        });
+  private createSpecTask = task(async (ref: ResolvedCodeRef) => {
+    try {
+      const createSpecCommand = new CreateSpecCommand(
+        this.commandService.commandContext,
+      );
+      let currentRealm = this.operatorModeStateService.realmURL;
+      const result = await createSpecCommand.execute({
+        codeRef: ref,
+        targetRealm: currentRealm.href,
+      });
+      const spec = result.specs?.[0];
+      if (spec) {
         this.specPanelService.setSelection(spec[localId]);
         if (this.activePanel !== 'spec') {
           this.setActivePanel('spec');
         }
-      } catch (e: any) {
-        console.log('Error saving', e);
       }
-    },
-  );
+    } catch (e: any) {
+      console.log('Error saving', e);
+    }
+  });
 
   @action private async createSpec(event: MouseEvent) {
     event.stopPropagation();
@@ -396,43 +384,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     if (!this.selectedDeclarationAsCodeRef) {
       throw new Error('bug: no code ref');
     }
-    let specType = await this.guessSpecType(this.args.selectedDeclaration);
-    this.createSpecTask.perform(this.selectedDeclarationAsCodeRef, specType);
-  }
-
-  private async guessSpecType(
-    selectedDeclaration: ModuleDeclaration,
-  ): Promise<SpecType> {
-    if (isCardOrFieldDeclaration(selectedDeclaration)) {
-      if (isCardDef(selectedDeclaration.cardOrField)) {
-        if (this.isApp(selectedDeclaration)) {
-          return 'app';
-        }
-        return 'card';
-      }
-      if (isFieldDef(selectedDeclaration.cardOrField)) {
-        return 'field';
-      }
-    }
-    throw new Error('Unidentified spec');
-  }
-
-  //TODO: Improve identification of isApp
-  //We have good primitives to identify card and field but not for app
-  //Here we are trying our best based upon schema analyses what is an app
-  //We don't try to capture deep ancestry of app
-  private isApp(selectedDeclaration: CardOrFieldDeclaration) {
-    if (selectedDeclaration.exportName === 'AppCard') {
-      return true;
-    }
-    if (
-      selectedDeclaration.super &&
-      selectedDeclaration.super.type === 'external' &&
-      selectedDeclaration.super.name === 'AppCard'
-    ) {
-      return true;
-    }
-    return false;
+    this.createSpecTask.perform(this.selectedDeclarationAsCodeRef);
   }
 
   private get canWrite() {

@@ -13,6 +13,7 @@ import BooleanField from './boolean';
 import NumberField from './number';
 import ResponseField from './response-field';
 import { Skill } from './skill';
+import { Spec } from './spec';
 import {
   JsonField,
   QueryField,
@@ -358,4 +359,14 @@ export class SearchGoogleImagesResult extends CardDef {
   @field hasNextPage = contains(BooleanField);
   @field nextPageStartIndex = contains(NumberField);
   @field currentStartIndex = contains(NumberField);
+}
+
+export class CreateSpecsInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field module = contains(StringField);
+  @field targetRealm = contains(StringField);
+}
+
+export class CreateSpecsResult extends CardDef {
+  @field specs = linksToMany(Spec);
 }

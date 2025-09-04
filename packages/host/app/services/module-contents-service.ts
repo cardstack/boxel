@@ -13,11 +13,15 @@ import {
   isInternalReference,
 } from '@cardstack/runtime-common/module-syntax';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type CardTypeService from '@cardstack/host/services/card-type-service';
 import { type Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
+
+import { loadModule } from '../resources/import';
 
 export interface CardOrField {
   cardType: Type;
@@ -71,8 +75,31 @@ export function findDeclarationByName(
 export default class ModuleContentsService extends Service {
   @service declare private cardTypeService: CardTypeService;
   @service declare private loaderService: LoaderService;
+  @service declare private cardService: CardService;
+  @service declare private network: NetworkService;
 
-  async assemble(
+  async assemble(url: string): Promise<ModuleDeclaration[]> {
+    const result = await loadModule(
+      url,
+      this.loaderService.loader,
+      this.network.authedFetch,
+    );
+    const moduleUrl = new URL(url);
+    let r = await this.cardService.getSource(moduleUrl);
+    if (r.status !== 200) {
+      throw new Error(`Failed to fetch module source from ${url}: ${r.status}`);
+    }
+    let source = r.content;
+    let moduleSyntax = new ModuleSyntax(source, moduleUrl);
+    if ('error' in result) {
+      throw new Error(
+        `Error loading module at ${url}: ${result.error.message}`,
+      );
+    }
+    return this.assembleFromModuleSyntax(moduleSyntax, result.module);
+  }
+
+  async assembleFromModuleSyntax(
     moduleSyntax: ModuleSyntax,
     module: object,
   ): Promise<ModuleDeclaration[]> {
