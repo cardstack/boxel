@@ -23,7 +23,6 @@ function findAttachedCardAsFile(
   attachedCardsAsFiles: FileDef[] | undefined,
   card: CardDef,
 ) {
-  debugger;
   return attachedCardsAsFiles?.find((file) => file.sourceUrl === card.id);
 }
 
