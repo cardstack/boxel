@@ -129,12 +129,12 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       border-radius: var(--boxel-border-radius-xxl);
     }
     .error-container {
-      background-color: var(--boxel-650);
-      color: var(--boxel-light);
+      background-color: var(--destructive, var(--boxel-650));
+      color: var(--destructive-foreground, var(--boxel-light));
     }
     .warning-container {
-      background-color: var(--boxel-warning-200);
-      color: var(--boxel-dark);
+      background-color: var(--accent, var(--boxel-warning-200));
+      color: var(--accent-foreground, var(--boxel-dark));
     }
 
     .alert-container > :deep(* + *) {
