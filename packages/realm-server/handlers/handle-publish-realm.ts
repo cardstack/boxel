@@ -13,6 +13,7 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   type PublishedRealmTable,
   fetchUserPermissions,
+  uuidv4,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, copySync } from 'fs-extra';
 import { resolve, join } from 'path';
@@ -86,8 +87,11 @@ export default function handlePublishRealm({
       ]);
       publishedRealmData.last_published_at = lastPublishedAt;
     } else {
+      let publishedRealmId = uuidv4();
+      realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
       let { valueExpressions, nameExpressions } = asExpressions({
-        owner_username: getMatrixUsername(ownerUserId),
+        id: publishedRealmId,
+        owner_username: realmUsername,
         source_realm_url: sourceRealmURL,
         published_realm_url: publishedRealmURL,
         last_published_at: new Date(),
@@ -106,7 +110,6 @@ export default function handlePublishRealm({
       >[];
       publishedRealmData = results[0];
 
-      realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
       let { userId: newUserId } = await registerUser({
         matrixURL: matrixClient.matrixURL,
         displayname: realmUsername,

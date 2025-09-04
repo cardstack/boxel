@@ -238,7 +238,8 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
     // Check if undici is available at runtime
     let undici: any;
     try {
-      undici = eval('require')('undici');
+      //@ts-ignore undici must exists in node
+      undici = require('undici');
     } catch (e) {
       // Undici not available - fallback to native fetch
       return globalThis.fetch.bind(globalThis);
@@ -268,7 +269,8 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
           // Use a lazy-loaded function to avoid bundler issues
           const performDNSLookup = () => {
             try {
-              const dns = eval('require')('dns');
+              //@ts-ignore dns must exists in node
+              const dns = require('dns');
               return dns.lookup(hostname, options, cb);
             } catch (e) {
               return cb(new Error('DNS lookup failed'), null, null);
