@@ -2,37 +2,22 @@ import { service } from '@ember/service';
 
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
-import { uniqBy } from 'lodash';
-
 import {
   isCardInstance,
-  loadCardDef,
-  specRef,
-  ResolvedCodeRef,
   LooseSingleCardDocument,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 
-import {
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-} from '@cardstack/runtime-common/code-ref';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-
-import {
-  type CardOrFieldDeclaration,
-  type ModuleDeclaration,
-} from '@cardstack/host/resources/module-contents';
-
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 import { skillCardURL } from '../lib/utils';
 
 import UseAiAssistantCommand from './ai-assistant';
+import CreateSpecCommand from './create-specs';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
@@ -40,11 +25,33 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-const listingTypes: Record<'card' | 'app' | 'skill', string> = {
+type ListingType = 'card' | 'app' | 'skill';
+const listingSubClass: Record<'card' | 'app' | 'skill', string> = {
   card: 'CardListing',
   app: 'AppListing',
   skill: 'SkillListing',
 };
+
+class ListingTypeGuessser {
+  constructor(private specs: Spec[]) {}
+
+  get type(): ListingType {
+    if (this.isSkillListing) {
+      return 'skill';
+    }
+    if (this.isAppListing) {
+      return 'app';
+    }
+    return 'card';
+  }
+
+  get isSkillListing() {
+    return this.specs.length == 0;
+  }
+  get isAppListing() {
+    return Boolean(this.specs.find((s) => s.specType === 'app'));
+  }
+}
 
 export default class ListingCreateCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingCreateInput
@@ -81,77 +88,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
   }
 
   requireInputFields = ['openCardId'];
-
-  async createSpecTask(
-    ref: ResolvedCodeRef,
-    specType: SpecType,
-    realm: string,
-  ): Promise<Spec | undefined> {
-    let relativeTo = new URL(ref.module);
-    let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
-    if (isResolvedCodeRef(maybeAbsoluteRef)) {
-      ref = maybeAbsoluteRef;
-    }
-    try {
-      let SpecKlass = await loadCardDef(specRef, {
-        loader: this.loaderService.loader,
-      });
-      let spec = new SpecKlass({
-        specType,
-        ref,
-        title: ref.name,
-      }) as Spec;
-      return (await this.store.add(spec, {
-        realm,
-      })) as Spec;
-    } catch (e) {
-      console.log('Error saving', e);
-      return undefined;
-    }
-  }
-
-  private isApp(selectedDeclaration: CardOrFieldDeclaration) {
-    if (selectedDeclaration.exportName === 'AppCard') {
-      return true;
-    }
-    if (
-      selectedDeclaration.super &&
-      selectedDeclaration.super.type === 'external' &&
-      selectedDeclaration.super.name === 'AppCard'
-    ) {
-      return true;
-    }
-    return false;
-  }
-
-  private async guessSpecType(
-    selectedDeclaration: ModuleDeclaration,
-  ): Promise<SpecType | undefined> {
-    if (
-      selectedDeclaration.type === 'possibleCardOrField' &&
-      selectedDeclaration.super?.type === 'external'
-    ) {
-      if (selectedDeclaration.super.name === 'CardDef') {
-        if (this.isApp(selectedDeclaration)) {
-          return 'app';
-        }
-        return 'card';
-      }
-      if (selectedDeclaration.super.name === 'FieldDef') {
-        return 'field';
-      }
-      if (
-        selectedDeclaration.super.module === '@glimmer/component' ||
-        (selectedDeclaration.super.name === 'Component' &&
-          selectedDeclaration.super.module ===
-            'https://cardstack.com/base/card-api')
-      ) {
-        return 'component';
-      }
-      return 'card';
-    }
-    return undefined;
-  }
 
   private sanitizeDeps(deps: string[]) {
     return deps.filter((dep) => {
@@ -209,65 +145,25 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const deps = (await response.json()) as string[];
     const sanitizedDeps = this.sanitizeDeps(deps ?? []);
 
-    let guessListingType: keyof typeof listingTypes = 'card';
-    let moduleRefs: {
-      fromModule: string;
-      codeRefName: string;
-      specType: SpecType;
-    }[] = [];
+    const createSpecCommand = new CreateSpecCommand(this.commandContext);
     let specIds: string[] = [];
-    let relationships = {} as Record<string, { links: { self: string } }>;
-
+    let specs: Spec[] = [];
     for (const dep of sanitizedDeps) {
-      const url = new URL(dep);
-      let moduleSource = (await this.cardService.getSource(url)).content;
-      let moduleSyntax = new ModuleSyntax(moduleSource, url);
-
-      const moduleDeclarations = moduleSyntax.declarations.filter(
-        (declaration) => declaration.exportName !== undefined,
-      );
-
-      for (const moduleDeclaration of moduleDeclarations) {
-        const specType = await this.guessSpecType(
-          moduleDeclaration as CardOrFieldDeclaration,
-        );
-        if (moduleDeclaration && specType) {
-          moduleRefs.push({
-            fromModule: dep,
-            codeRefName: moduleDeclaration.exportName || '',
-            specType,
-          });
+      const result = await createSpecCommand.execute({
+        module: dep,
+        targetRealm,
+      });
+      for (const spec of result.specs ?? []) {
+        if (spec.id) {
+          specIds.push(spec.id);
+          specs.push(spec);
         }
       }
     }
-    // create spec from gts
-    await Promise.all(
-      moduleRefs.map(async (moduleRef) => {
-        const spec = await this.createSpecTask(
-          {
-            module: moduleRef.fromModule,
-            name: moduleRef.codeRefName || '',
-          },
-          moduleRef.specType,
-          targetRealm,
-        );
-        if (spec !== undefined) {
-          specIds.push(spec.id || '');
-        }
-      }),
-    );
 
-    // dedupe same module refs to identify the listing type
-    const dedupedModuleRefs = uniqBy(moduleRefs, 'fromModule');
+    const listingType = new ListingTypeGuessser(specs).type;
 
-    // guess listing type
-    // if there is no gts to install, we assume it's a skill
-    if (dedupedModuleRefs.length === 0) {
-      guessListingType = 'skill';
-    }
-    if (dedupedModuleRefs.length > 1) {
-      guessListingType = 'app';
-    }
+    let relationships = {} as Record<string, { links: { self: string } }>;
 
     if (specIds.length > 0) {
       specIds.forEach((id, index) => {
@@ -296,7 +192,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         meta: {
           adoptsFrom: {
             module: `${this.catalogRealm}catalog-app/listing/listing`,
-            name: listingTypes[guessListingType],
+            name: listingSubClass[listingType],
           },
         },
       },

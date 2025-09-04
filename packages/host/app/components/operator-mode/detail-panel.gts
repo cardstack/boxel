@@ -31,10 +31,7 @@ import {
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
-import {
-  getResolvedCodeRef,
-  getCardType,
-} from '@cardstack/host/resources/card-type';
+import { getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
 
 import {
@@ -43,6 +40,7 @@ import {
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
+import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -103,6 +101,10 @@ export default class DetailPanel extends Component<Signature> {
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
+  // it is ad-hoc that cardInstanceType is loaded as a resource here
+  // the reason for it,
+  // for modules, we do module analysis and do not want to re-compute that information so its passed down thru args
+  // for card instances, we don't have that information at hand so we load it here
   @use private cardInstanceType = resource(() => {
     if (this.args.cardInstance !== undefined) {
       let cardDefinition = this.args.cardInstance.constructor as typeof BaseDef;
@@ -154,14 +156,6 @@ export default class DetailPanel extends Component<Signature> {
   private get isLoading() {
     return (
       this.args.moduleAnalysis.isLoadingNewModule ||
-      this.declarations.some((dec) => {
-        if (isCardOrFieldDeclaration(dec)) {
-          return dec.cardType?.isLoading;
-        } else {
-          return false;
-        }
-      }) ||
-      this.cardType?.isLoading ||
       this.cardInstanceType?.isLoading
     );
   }
@@ -448,7 +442,7 @@ export default class DetailPanel extends Component<Signature> {
             <Divider @label='Adopts From' />
             {{#if this.cardInstanceType.type}}
               {{#let
-                (getResolvedCodeRef this.cardInstanceType.type)
+                (getResolvedCodeRefFromType this.cardInstanceType.type)
                 as |codeRef|
               }}
                 <ClickableModuleDefinitionContainer
@@ -471,41 +465,44 @@ export default class DetailPanel extends Component<Signature> {
 
                 <ModuleDefinitionContainer
                   @title={{definitionTitle}}
-                  @fileURL={{this.cardType.type.module}}
-                  @name={{this.cardType.type.displayName}}
-                  @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                  @fileURL={{this.cardType.module}}
+                  @name={{this.cardType.displayName}}
+                  @fileExtension={{this.cardType.moduleInfo.extension}}
                   @infoText={{this.lastModified.value}}
                   @isActive={{true}}
                   @actions={{this.definitionActions}}
                 />
-                {{#if this.cardType.type.super}}
+                {{#if this.cardType.super}}
                   {{#let
-                    (getResolvedCodeRef this.cardType.type.super)
+                    (getResolvedCodeRefFromType this.cardType.super)
                     as |codeRef|
                   }}
                     <Divider @label='Inherits From' />
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
-                      @fileURL={{this.cardType.type.super.module}}
-                      @name={{this.cardType.type.super.displayName}}
-                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @fileURL={{this.cardType.super.module}}
+                      @name={{this.cardType.super.displayName}}
+                      @fileExtension={{this.cardType.super.moduleInfo.extension}}
                       @goToDefinition={{@goToDefinition}}
                       @codeRef={{codeRef}}
-                      @localName={{this.cardType.type.super.localName}}
+                      @localName={{this.cardType.super.localName}}
                     />
                   {{/let}}
                 {{/if}}
               {{else if (isReexportCardOrField @selectedDeclaration)}}
-                {{#if this.cardType.type}}
-                  {{#let (getResolvedCodeRef this.cardType.type) as |codeRef|}}
+                {{#if this.cardType}}
+                  {{#let
+                    (getResolvedCodeRefFromType this.cardType)
+                    as |codeRef|
+                  }}
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
-                      @fileURL={{this.cardType.type.module}}
-                      @name={{this.cardType.type.displayName}}
-                      @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                      @fileURL={{this.cardType.module}}
+                      @name={{this.cardType.displayName}}
+                      @fileExtension={{this.cardType.moduleInfo.extension}}
                       @goToDefinition={{@goToDefinition}}
                       @codeRef={{codeRef}}
-                      @localName={{this.cardType.type.localName}}
+                      @localName={{this.cardType.localName}}
                     />
                   {{/let}}
                 {{/if}}

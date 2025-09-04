@@ -29,6 +29,7 @@ export interface FunctionDeclaration extends BaseDeclaration {
 export interface ClassDeclaration extends BaseDeclaration {
   type: 'class';
   path: NodePath<t.ClassDeclaration>;
+  super?: ClassReference;
 }
 
 export interface PossibleCardOrFieldDeclaration extends BaseDeclaration {

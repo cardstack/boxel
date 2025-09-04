@@ -269,11 +269,20 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  await openRoot(page, opts?.url);
+  let credentials = await loginUser(username, password);
 
-  await page.locator('[data-test-username-field]').fill(username);
-  await page.locator('[data-test-password-field]').fill(password);
-  await page.locator('[data-test-login-btn]').click();
+  let localStorageAuth = {
+    access_token: credentials.accessToken,
+    user_id: credentials.userId,
+    device_id: credentials.deviceId,
+    home_server: credentials.homeServer,
+  };
+
+  await page.context().addInitScript((authData) => {
+    window.localStorage.setItem('auth', JSON.stringify(authData));
+  }, localStorageAuth);
+
+  await openRoot(page, opts?.url);
 }
 
 export async function enterWorkspace(
