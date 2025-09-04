@@ -253,7 +253,7 @@ export class RealmServer {
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
-          realmServerDomain: this.serverURL.hostname,
+          realmServerURL: this.serverURL.href,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
