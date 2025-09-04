@@ -30,14 +30,12 @@ import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
-import {
-  type ModuleDeclaration,
-  findDeclarationByName,
-} from '@cardstack/host/resources/module-contents';
+import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
 import { type ModuleAnalysis } from '@cardstack/host/resources/module-contents';
 import type { SaveType } from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+import { findDeclarationByName } from '@cardstack/host/services/module-contents-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';

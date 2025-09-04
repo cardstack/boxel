@@ -36,9 +36,9 @@ export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityD
       ...attributes
     >
       {{#if (has-block 'thumbnail')}}
-        <aside class='entity-thumbnail'>
+        <div class='entity-thumbnail'>
           {{yield to='thumbnail'}}
-        </aside>
+        </div>
       {{/if}}
 
       <div class='entity-info'>

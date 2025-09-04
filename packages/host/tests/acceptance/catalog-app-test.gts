@@ -113,6 +113,28 @@ const contactLinkFieldSource = `
   }
 `;
 
+const appCardSource = `
+  import { CardDef } from 'https://cardstack.com/base/card-api';
+
+  export class AppCard extends CardDef {
+    static displayName = 'App Card';
+    static prefersWideFormat = true;
+  }
+`;
+
+const blogAppCardSource = `
+  import { field, contains, containsMany } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+  import { AppCard } from '../app-card';
+  import { BlogPost } from '../blog-post/blog-post';
+
+  export class BlogApp extends AppCard {
+    static displayName = 'Blog App';
+    @field title = contains(StringField);
+    @field posts = containsMany(BlogPost);
+  }
+`;
+
 let matrixRoomId: string;
 module('Acceptance | Catalog | catalog app tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -140,6 +162,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         'author/author.gts': authorCardSource,
         'blog-post/blog-post.gts': blogPostCardSource,
         'fields/contact-link.gts': contactLinkFieldSource,
+        'app-card.gts': appCardSource,
+        'blog-app/blog-app.gts': blogAppCardSource,
         'author/Author/example.json': {
           data: {
             type: 'card',
@@ -174,6 +198,20 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               adoptsFrom: {
                 module: `${mockCatalogURL}blog-post/blog-post`,
                 name: 'BlogPost',
+              },
+            },
+          },
+        },
+        'blog-app/BlogApp/example.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'My Blog App',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${mockCatalogURL}blog-app/blog-app`,
+                name: 'BlogApp',
               },
             },
           },
@@ -1456,8 +1494,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         }
       });
 
-      test('app listing with multiple dependency modules', async function (assert) {
-        const cardId = mockCatalogURL + 'blog-post/BlogPost/example';
+      test('app listing', async function (assert) {
+        const cardId = mockCatalogURL + 'blog-app/BlogApp/example';
         const commandService = getService('command-service');
         const command = new ListingCreateCommand(commandService.commandContext);
         await command.execute({
@@ -1483,16 +1521,18 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert.ok(listing, 'Listing should be created');
           assert.strictEqual(
             listing.specs.length,
-            3,
-            'Listing should have three specs',
+            5,
+            'Listing should have five specs',
           );
-          ['Author', 'AuthorCompany', 'BlogPost'].forEach((specName) => {
-            assert.strictEqual(
-              listing.specs.some((spec) => spec.ref.name === specName),
-              true,
-              `Listing should have a ${specName} spec`,
-            );
-          });
+          ['Author', 'AuthorCompany', 'BlogPost', 'BlogApp', 'AppCard'].forEach(
+            (specName) => {
+              assert.strictEqual(
+                listing.specs.some((spec) => spec.ref.name === specName),
+                true,
+                `Listing should have a ${specName} spec`,
+              );
+            },
+          );
           assert.strictEqual(
             listing.examples.length,
             1,

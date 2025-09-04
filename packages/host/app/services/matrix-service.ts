@@ -2,6 +2,7 @@ import Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { dropTask, task, timeout } from 'ember-concurrency';
@@ -13,8 +14,8 @@ import {
   type RoomMember,
   type EmittedEvents,
 } from 'matrix-js-sdk';
-import { Filter } from 'matrix-js-sdk';
 import { MatrixClient } from 'matrix-js-sdk';
+import { Filter } from 'matrix-js-sdk';
 import {
   type SlidingSync,
   type MSC3575List,
@@ -37,8 +38,8 @@ import {
   REPLACE_MARKER,
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
-import { getPromptParts } from '@cardstack/runtime-common/ai';
 
+import { getPromptParts } from '@cardstack/runtime-common/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -155,6 +156,8 @@ export default class MatrixService extends Service {
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
 
+  @tracked private storage: Storage | undefined;
+
   profile = getMatrixProfile(this, () => this.userId);
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
@@ -236,8 +239,35 @@ export default class MatrixService extends Service {
   );
 
   private loadState = task(async () => {
+    await this.requestStorageAccess();
     await this.loadSDK();
   });
+
+  private get inIframe() {
+    return !isTesting() && window.top !== window.self;
+  }
+
+  async requestStorageAccess() {
+    if (this.inIframe) {
+      this.storage = await getStorage();
+    } else {
+      this.storage = window.localStorage;
+    }
+
+    return this.storage;
+  }
+
+  private saveAuth(auth: LoginResponse) {
+    this.storage?.setItem('auth', JSON.stringify(auth));
+  }
+
+  private getAuth(): LoginResponse | undefined {
+    let auth = this.storage?.getItem('auth');
+    if (!auth) {
+      return;
+    }
+    return JSON.parse(auth) as LoginResponse;
+  }
 
   private async loadSDK() {
     await this.cardAPIModule.loaded;
@@ -454,7 +484,7 @@ export default class MatrixService extends Service {
   ) {
     let { auth, refreshRoutes } = opts;
     if (!auth) {
-      auth = getAuth();
+      auth = this.getAuth();
       if (!auth) {
         return;
       }
@@ -501,7 +531,7 @@ export default class MatrixService extends Service {
     });
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
-      saveAuth(auth);
+      this.saveAuth(auth);
       this.bindEventListeners();
 
       try {
@@ -1068,7 +1098,7 @@ export default class MatrixService extends Service {
     // Reset it here rather than in the reset function of each service
     // because it is possible that
     // there are some services that are not initialized yet
-    clearLocalStorage();
+    clearLocalStorage(this.storage);
   }
 
   private bindEventListeners() {
@@ -1636,7 +1666,7 @@ export default class MatrixService extends Service {
   }
 
   private clearAuth() {
-    window.localStorage.removeItem('auth');
+    this.storage?.removeItem('auth');
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
@@ -1766,16 +1796,29 @@ export default class MatrixService extends Service {
   }
 }
 
-function saveAuth(auth: LoginResponse) {
-  window.localStorage.setItem('auth', JSON.stringify(auth));
-}
+async function getStorage() {
+  let storage;
 
-function getAuth(): LoginResponse | undefined {
-  let auth = window.localStorage.getItem('auth');
-  if (!auth) {
-    return;
+  try {
+    // Chrome requires finer-grained permissions requests
+    // @ts-expect-error our Typescript version doesn’t know about this API
+    if (document['requestStorageAccessFor']) {
+      let requestOptions = {
+        localStorage: true,
+      };
+
+      storage = // @ts-expect-error nor about passing options and getting a handle back
+        (await document.requestStorageAccess(requestOptions)).localStorage;
+    } else {
+      await document.requestStorageAccess();
+      storage = window.localStorage;
+    }
+  } catch (e) {
+    console.error('Error accessing storage', e);
+    storage = window.localStorage;
   }
-  return JSON.parse(auth) as LoginResponse;
+
+  return storage;
 }
 
 declare module '@ember/service' {
