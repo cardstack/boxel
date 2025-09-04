@@ -245,7 +245,9 @@ module('Integration | card-catalog', function (hooks) {
       await click(`[data-test-boxel-menu-item-text="Local Workspace"]`); // Unselect Local Workspace
       assert
         .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: Base Workspace, Cardstack Catalog, Boxel Skills`);
+        .hasText(
+          `Workspace: Base Workspace, Cardstack Catalog, Cardstack Skills`,
+        );
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
         .exists();
