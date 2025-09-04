@@ -15,7 +15,7 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-module('Acceptance | prerender', function (hooks) {
+module('Acceptance | prerender | isolated html', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
