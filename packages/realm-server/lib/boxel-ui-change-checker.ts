@@ -22,18 +22,16 @@ export function compareCurrentChecksum() {
 
   // Read from file, don't throw if it doesn't exist
   let previousChecksum = '';
+  let filePath = path.join(
+    process.cwd(),
+    '/../../persistent/boxel-ui-checksum.txt',
+  );
   try {
-    previousChecksum = fs.readFileSync(
-      path.join(process.cwd(), 'boxel-ui-checksum.txt'),
-      'utf8',
-    );
+    previousChecksum = fs.readFileSync(filePath, 'utf8');
   } catch (error) {
     // File doesn't exist or can't be read
     // Create file with the checksum
-    fs.writeFileSync(
-      path.join(process.cwd(), 'boxel-ui-checksum.txt'),
-      currentChecksum,
-    );
+    fs.writeFileSync(filePath, currentChecksum);
   }
 
   return {
