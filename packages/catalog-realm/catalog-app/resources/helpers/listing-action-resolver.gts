@@ -4,6 +4,7 @@ import { Listing } from '../../listing/listing';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
+import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 
 // Typed available actions mapped to function signatures
 
@@ -100,12 +101,25 @@ export class BaseListingAdapter {
   }
   async preview(listing: Listing): Promise<void> {
     if (!listing.examples?.length) throw new Error('No examples available');
-    this.context.actions?.viewCard?.(listing.examples[0]);
+    const commandContext = this.context.commandContext;
+    if (!commandContext) {
+      return;
+    }
+    await new ShowCardCommand(commandContext).execute({
+      cardId: listing.examples[0].id,
+    });
   }
 
   async view(listing: Listing): Promise<void> {
     if (!listing.id) throw new Error('No listing id available');
-    this.context.actions?.viewCard?.(new URL(listing.id), 'isolated');
+    const commandContext = this.context.commandContext;
+    if (!commandContext) {
+      return;
+    }
+    await new ShowCardCommand(commandContext).execute({
+      cardId: listing.id,
+      format: 'isolated',
+    });
   }
 }
 
