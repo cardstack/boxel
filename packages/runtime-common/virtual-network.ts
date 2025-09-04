@@ -252,6 +252,9 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
       connect: {
         // This replaces dns.lookup for sockets created by this Agent
         lookup(hostname: string, options: any, cb: any) {
+          console.log(
+            `[Undici Dispatcher] Mapping hostname ${hostname} to 127.0.0.1 if needed`,
+          );
           if (hostname?.endsWith('.localhost')) {
             console.log(
               `[Undici Dispatcher] Resolving ${hostname} to 127.0.0.1`,
