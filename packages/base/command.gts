@@ -368,5 +368,6 @@ export class CreateSpecsInput extends CardDef {
 }
 
 export class CreateSpecsResult extends CardDef {
-  @field specs = linksToMany(Spec);
+  @field newSpecs = linksToMany(Spec); // only newly created specs
+  @field specs = linksToMany(Spec); // all specs newly created and pre-existing ones
 }

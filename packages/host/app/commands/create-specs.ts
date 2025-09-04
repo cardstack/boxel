@@ -115,6 +115,11 @@ class SpecTypeGuesser {
   }
 }
 
+interface CreateSpecResult {
+  spec: Spec;
+  new: boolean;
+}
+
 export default class CreateSpecCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateSpecsInput,
   typeof BaseCommandModule.CreateSpecsResult
@@ -138,7 +143,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     targetRealm: string,
     SpecKlass: typeof BaseDef,
     createIfExists: boolean = false,
-  ): Promise<Spec | null> {
+  ): Promise<CreateSpecResult> {
     const title = codeRef.name;
     const specType = new SpecTypeGuesser(declaration).type;
 
@@ -160,7 +165,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
 
       if (existingSpecs.length > 0) {
         console.warn(`Spec already exists for ${title}, skipping`);
-        return null;
+        return { spec: existingSpecs[0] as Spec, new: false };
       }
     }
 
@@ -174,7 +179,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
       realm: targetRealm,
     })) as Spec;
 
-    return savedSpec;
+    return { spec: savedSpec, new: true };
   }
 
   protected async run(
@@ -206,6 +211,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     });
 
     let specs: Spec[] = [];
+    let newSpecs: Spec[] = [];
 
     if (codeRef?.name) {
       // Single spec generation when codeRef.name is provided
@@ -227,9 +233,10 @@ export default class CreateSpecCommand extends HostBaseCommand<
         SpecKlass,
       );
 
-      if (savedSpec) {
-        specs.push(savedSpec);
+      if (savedSpec.new) {
+        newSpecs.push(savedSpec.spec);
       }
+      specs.push(savedSpec.spec);
     } else {
       // Multiple specs generation when codeRef.name is not provided
       const specPromises = declarations.map(async (declaration) => {
@@ -258,18 +265,21 @@ export default class CreateSpecCommand extends HostBaseCommand<
         }
       });
 
-      const promiseResults = await Promise.all(specPromises);
-      const createdSpecs: Spec[] = promiseResults.filter(
-        (spec): spec is Spec => spec !== null,
+      const promises = await Promise.all(specPromises);
+      const successfulPromises = promises.filter(
+        (p): p is CreateSpecResult => p !== null,
       );
-
-      specs.push(...createdSpecs);
+      newSpecs.push(
+        ...successfulPromises.filter((r) => r?.new).map((r) => r.spec),
+      );
+      specs.push(...successfulPromises.map((r) => r.spec));
     }
 
     try {
       let commandModule = await this.loadCommandModule();
       const { CreateSpecsResult } = commandModule;
       return new CreateSpecsResult({
+        newSpecs,
         specs,
       });
     } catch (e) {

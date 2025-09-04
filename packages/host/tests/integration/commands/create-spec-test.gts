@@ -88,12 +88,12 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
     });
 
-    assert.ok(result.specs?.[0], 'Spec was created');
-    assert.ok(result.specs[0].id, 'Spec has an ID');
+    assert.ok(result.newSpecs?.[0], 'Spec was created');
+    assert.ok(result.newSpecs[0].id, 'Spec has an ID');
 
     // Get the spec from store to verify its properties
     const store = getService('store');
-    const savedSpec = (await store.get(result.specs[0].id!)) as Spec;
+    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
 
     assert.strictEqual(savedSpec.specType, 'card', 'Spec type is card');
     assert.strictEqual(
@@ -122,10 +122,10 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
     });
 
-    assert.ok(result.specs?.[0], 'Spec was created');
+    assert.ok(result.newSpecs?.[0], 'Spec was created');
 
     const store = getService('store');
-    const savedSpec = (await store.get(result.specs[0].id!)) as Spec;
+    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
 
     assert.strictEqual(savedSpec.specType, 'field', 'Spec type is field');
   });
@@ -139,10 +139,10 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
     });
 
-    assert.ok(result.specs?.[0], 'Spec was created');
+    assert.ok(result.newSpecs?.[0], 'Spec was created');
 
     const store = getService('store');
-    const savedSpec = (await store.get(result.specs[0].id!)) as Spec;
+    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
 
     assert.strictEqual(savedSpec.specType, 'app', 'Spec type is app');
   });
@@ -156,10 +156,10 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
     });
 
-    assert.ok(result.specs?.[0], 'Spec was created');
+    assert.ok(result.newSpecs?.[0], 'Spec was created');
 
     const store = getService('store');
-    const savedSpec = (await store.get(result.specs[0].id!)) as Spec;
+    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
 
     assert.strictEqual(
       savedSpec.specType,
@@ -177,10 +177,10 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
     });
 
-    assert.ok(result.specs?.[0], 'Spec was created');
+    assert.ok(result.newSpecs?.[0], 'Spec was created');
 
     const store = getService('store');
-    const savedSpec = (await store.get(result.specs[0].id!)) as Spec;
+    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
 
     assert.strictEqual(savedSpec.specType, 'command', 'Spec type is command');
   });
@@ -212,12 +212,14 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
     });
 
+    assert.ok(result.newSpecs, 'New specs array was created');
+    assert.ok(result.newSpecs.length > 0, 'At least one new spec was created');
     assert.ok(result.specs, 'Specs array was created');
     assert.ok(result.specs.length > 0, 'At least one spec was created');
 
     // Verify each spec was created correctly
     const store = getService('store');
-    for (const spec of result.specs) {
+    for (const spec of result.newSpecs) {
       assert.ok(spec.id, 'Spec has an ID');
       const savedSpec = (await store.get(spec.id!)) as Spec;
       assert.ok(savedSpec.specType, 'Spec has a type');
@@ -238,7 +240,7 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
     });
 
-    assert.ok(result1.specs?.[0], 'First spec was created');
+    assert.ok(result1.newSpecs?.[0], 'First spec was created');
 
     // Second creation with same code ref should return empty array
     const result2 = await createSpecCommand.execute({
@@ -247,9 +249,9 @@ export default class TestCommand extends Command {
     });
 
     assert.strictEqual(
-      result2.specs.length,
+      result2.newSpecs.length,
       0,
-      'Second creation returns no specs',
+      'Second creation returns no new specs',
     );
   });
 
@@ -260,7 +262,7 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
     });
 
-    assert.ok(result1.specs.length > 0, 'First creation created specs');
+    assert.ok(result1.newSpecs.length > 0, 'First creation created new specs');
 
     // Second creation with same module should return empty array
     const result2 = await createSpecCommand.execute({
@@ -269,9 +271,9 @@ export default class TestCommand extends Command {
     });
 
     assert.strictEqual(
-      result2.specs.length,
+      result2.newSpecs.length,
       0,
-      'Second creation returns no specs',
+      'Second creation returns no new specs',
     );
   });
 });
