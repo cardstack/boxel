@@ -8,9 +8,9 @@ import {
 import Koa from 'koa';
 import {
   createResponse,
+  DEFAULT_PERMISSIONS,
   logger,
   Realm,
-  RealmPermissions,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
@@ -29,11 +29,6 @@ interface RealmCreationJSON {
 }
 
 const log = logger('realm-server');
-const DEFAULT_PERMISSIONS = Object.freeze([
-  'read',
-  'write',
-  'realm-owner',
-]) as RealmPermissions['user'];
 
 export default function handleCreateRealmRequest({
   createRealm,

@@ -74,6 +74,9 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
 
+const DEFAULT_PUBLISHED_REALM_DOMAIN =
+  process.env.DEFAULT_PUBLISHED_REALM_DOMAIN;
+
 let {
   port,
   matrixURL,
@@ -273,6 +276,7 @@ let autoMigrate = migrateDB || undefined;
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     enableFileWatcher: ENABLE_FILE_WATCHER,
+    defaultPublishedRealmDomain: DEFAULT_PUBLISHED_REALM_DOMAIN,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
