@@ -40,6 +40,10 @@ module('Acceptance | prerender | isolated html', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
+    // these tests result in a really large index definitions object because of all the
+    // circularity, so to speed up the tests we prune the definitions object as we don't
+    // really care about it.
+    (globalThis as any).__boxel_definitions_recursing_depth = 0;
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -496,6 +500,7 @@ module('Acceptance | prerender | isolated html', function (hooks) {
 
   hooks.afterEach(function () {
     delete (globalThis as any).__lazilyLoadLinks;
+    delete (globalThis as any).__boxel_definitions_recursing_depth;
   });
 
   test('can prerender instance with contains field', async function (assert) {
