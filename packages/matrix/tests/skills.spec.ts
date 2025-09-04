@@ -362,7 +362,7 @@ test.describe('Skills', () => {
   test('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: appURL, showAllCards: true });
 
     // create a skill card
     await page.locator('[data-test-create-new-card-button]').click();

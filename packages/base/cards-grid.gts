@@ -6,6 +6,7 @@ import { restartableTask } from 'ember-concurrency';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { HighlightIcon } from '@cardstack/boxel-ui/icons';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
@@ -38,6 +39,7 @@ import {
   realmInfo,
   realmURL,
   type BaseDef,
+  type BoxComponent,
 } from './card-api';
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
@@ -93,7 +95,13 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   private cardTypeFilters: FilterOption[] = new TrackedArray();
+  private highlightsCards: BoxComponent[] = new TrackedArray();
   private filterOptions: FilterOption[] = [
+    {
+      displayName: 'Highlights',
+      icon: HighlightIcon,
+      cards: this.highlightsCards,
+    },
     {
       displayName: 'All Cards',
       icon: AllCardsIcon,
@@ -120,6 +128,7 @@ class Isolated extends Component<typeof CardsGrid> {
   constructor(owner: any, args: any) {
     super(owner, args);
     this.loadFilterList.perform();
+    this.loadHighlightsCards.perform();
     let unsubscribe = subscribeToRealm(this.realms[0], this.refreshFilterList);
 
     registerDestructor(this, unsubscribe);
@@ -272,6 +281,55 @@ class Isolated extends Component<typeof CardsGrid> {
       this.loadFilterList.perform();
     }
   };
+
+  private loadHighlightsCards = restartableTask(async () => {
+    if (!this.args.context?.store) {
+      return;
+    }
+
+    try {
+      // Load the welcome-to-boxel card
+      const welcomeCardUrl = `https://cardstack.com/base/welcome-to-boxel.json`;
+      const welcomeCard = (await this.args.context.store.get(
+        welcomeCardUrl,
+      )) as BaseDef;
+
+      // Load the ai-app-generator card
+      const aiAppGeneratorUrl = `https://cardstack.com/base/ai-app-generator.json`;
+      const aiAppGeneratorCard = (await this.args.context.store.get(
+        aiAppGeneratorUrl,
+      )) as BaseDef;
+
+      // Load the community cards
+      const communityCardsUrl = `https://cardstack.com/base/join-the-community.json`;
+      const communityCards = (await this.args.context.store.get(
+        communityCardsUrl,
+      )) as BaseDef;
+
+      // Clear existing cards and add the new ones
+      this.highlightsCards.splice(0, this.highlightsCards.length);
+
+      if (welcomeCard) {
+        this.highlightsCards.push(
+          welcomeCard.constructor.getComponent(welcomeCard),
+        );
+      }
+
+      if (aiAppGeneratorCard) {
+        this.highlightsCards.push(
+          aiAppGeneratorCard.constructor.getComponent(aiAppGeneratorCard),
+        );
+      }
+
+      if (communityCards) {
+        this.highlightsCards.push(
+          communityCards.constructor.getComponent(communityCards),
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to load highlights cards:', error);
+    }
+  });
 }
 
 export class CardsGrid extends CardDef {

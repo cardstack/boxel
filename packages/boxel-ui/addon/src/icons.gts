@@ -32,6 +32,7 @@ import Folder from './icons/folder.gts';
 import FourLines from './icons/four-lines.gts';
 import Grid3x3 from './icons/grid-3x3.gts';
 import Group from './icons/group.gts';
+import HighlightIcon from './icons/highlight-icon.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
 import IconCode from './icons/icon-code.gts';
@@ -101,6 +102,7 @@ export const ALL_ICON_COMPONENTS = [
   FourLines,
   Grid3x3,
   Group,
+  HighlightIcon,
   IconCircle,
   IconCircleSelected,
   IconCode,
@@ -171,6 +173,7 @@ export {
   FourLines,
   Grid3x3,
   Group,
+  HighlightIcon,
   IconCircle,
   IconCircleSelected,
   IconCode,

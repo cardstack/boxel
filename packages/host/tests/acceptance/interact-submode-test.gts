@@ -46,6 +46,7 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   type TestContextWithSave,
+  assertMessages,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -2130,6 +2131,105 @@ module('Acceptance | interact submode tests', function (hooks) {
       await waitFor('[data-test-workspace-chooser]');
       assert.dom('[data-test-workspace-chooser]').exists();
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+    });
+
+    test('displays highlights filter with special layout and community cards', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+        selectAllCardsFilter: false,
+      });
+
+      assert.dom('[data-test-selected-filter="Highlights"]').exists();
+      assert.dom('[data-test-highlights-layout]').exists();
+
+      // Verify the NEW FEATURE section with AI App Generator
+      assert
+        .dom('[data-test-section-header="new-feature"]')
+        .containsText('NEW FEATURE');
+      assert
+        .dom('[data-test-highlights-card-container="ai-app-generator"]')
+        .exists();
+      assert
+        .dom(
+          '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+        )
+        .hasValue(
+          'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.',
+        );
+      await click('[data-test-boxel-button][title="About Me"]');
+      assert
+        .dom(
+          '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+        )
+        .hasValue(
+          'Build a personal portfolio page with your background, skills, and contact information',
+        );
+      await click('[data-test-create-this-for-me]');
+      await waitFor('[data-test-room-settled]');
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message:
+            'Build a personal portfolio page with your background, skills, and contact information',
+          cards: [{ id: `${testRealmURL}index`, title: 'Test Workspace B' }],
+        },
+      ]);
+      assert
+        .dom('[data-test-llm-mode-option="act"]')
+        .hasClass('selected', 'LLM mode starts in act mode');
+
+      // Verify the GETTING STARTED section with Welcome to Boxel
+      assert
+        .dom('[data-test-section-header="getting-started"]')
+        .containsText('GETTING STARTED');
+      assert
+        .dom('[data-test-highlights-card-container="welcome-to-boxel"]')
+        .exists();
+
+      // Verify the JOIN THE COMMUNITY section
+      assert.dom('[data-test-highlights-section="join-community"]').exists();
+
+      // Verify that the specific sections are displayed
+      assert.dom('[data-test-highlights-section]').exists({ count: 3 });
+      assert.dom('[data-test-highlights-card-container]').exists({ count: 2 }); // AI App Generator and Welcome to Boxel
+
+      // Verify social media links exist
+      assert.dom('[data-test-community-link]').exists({ count: 4 }); // Discord, Twitter, YouTube, Reddit
+
+      // Take a snapshot of the highlights layout
+      await percySnapshot(assert);
+
+      // Verify the community cards have the correct content
+      assert
+        .dom('[data-test-community-title="Discord"]')
+        .containsText('Discord');
+      assert
+        .dom('[data-test-community-title="Twitter"]')
+        .containsText('Twitter');
+      assert
+        .dom('[data-test-community-title="YouTube"]')
+        .containsText('YouTube');
+      assert.dom('[data-test-community-title="Reddit"]').containsText('Reddit');
+
+      // Verify the filter icon is displayed
+      assert.dom('.content-icon').exists();
+
+      // Verify the content header has the border bottom
+      assert
+        .dom('.content-header')
+        .hasStyle({ 'border-bottom': '1px solid rgb(226, 226, 226)' });
+
+      // Test switching to "All Cards" filter to verify highlights layout is hidden
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      assert.dom('[data-test-highlights-layout]').doesNotExist();
+      assert.dom('[data-test-section-header]').doesNotExist();
+      assert.dom('[data-test-community-link]').doesNotExist();
+
+      // Switch back to Highlights filter
+      await click('[data-test-boxel-filter-list-button="Highlights"]');
+      assert.dom('[data-test-highlights-layout]').exists();
+      assert.dom('[data-test-section-header]').exists({ count: 2 }); // NEW FEATURE, GETTING STARTED
+      assert.dom('[data-test-community-link]').exists({ count: 4 });
     });
   });
 });

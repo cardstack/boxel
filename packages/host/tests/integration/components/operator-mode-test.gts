@@ -1083,6 +1083,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
       assert.dom(`[data-test-stack-card-index="0"]`).exists();
 
+      await click(`[data-test-boxel-filter-list-button="All Cards"]`);
       await click('[data-test-create-new-card-button]');
       assert
         .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
@@ -1168,6 +1169,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
 
     await click('[data-test-create-new-card-button]');
     await waitFor(
@@ -3229,7 +3231,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -3243,7 +3245,7 @@ module('Integration | operator-mode', function (hooks) {
     await fillIn('[data-test-field="title"] input', 'New Skill');
     await click('[data-test-close-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -3253,12 +3255,12 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-confirm-delete-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
     assert
-      .dom(`[data-test-filter-list-item="All Cards"] > span`)
+      .dom(`[data-test-filter-list-item="Highlights"] > span`)
       .hasClass('is-selected');
-    assert.dom(`[data-test-selected-filter="All Cards"]`).exists({ count: 1 });
+    assert.dom(`[data-test-selected-filter="Highlights"]`).exists({ count: 1 });
   });
 
   test('edit card and finish editing should not animate', async function (assert) {
