@@ -150,6 +150,12 @@ export default class MessageBuilder {
     return errorMessage;
   }
 
+  get attachedCardsAsFiles() {
+    return (this.event.content as CardMessageContent).data?.attachedCards?.map(
+      (card) => this.matrixService.fileAPI.createFileDef(card),
+    );
+  }
+
   async buildMessage(): Promise<Message> {
     let { event } = this;
     let message = this.coreMessageArgs;
@@ -159,7 +165,7 @@ export default class MessageBuilder {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
       message.attachedCardIds = this.attachedCardIds;
-      message.attachedCardsAsFiles = this.event.content.data?.attachedCards;
+      message.attachedCardsAsFiles = this.attachedCardsAsFiles;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
         message.setCommands(await this.buildMessageCommands(message));
       }

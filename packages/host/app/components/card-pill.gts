@@ -13,15 +13,17 @@ import {
   LoadingIndicator,
   IconButton,
 } from '@cardstack/boxel-ui/components';
-import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
-import RealmService from '../services/realm';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
+
+import RealmService from '../services/realm';
+
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
 
 interface CardPillSignature {

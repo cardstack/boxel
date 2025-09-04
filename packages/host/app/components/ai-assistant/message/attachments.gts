@@ -7,8 +7,8 @@ import FilePill from '@cardstack/host/components/file-pill';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 interface Signature {
   Element: HTMLDivElement;
