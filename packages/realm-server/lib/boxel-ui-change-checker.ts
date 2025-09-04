@@ -7,7 +7,7 @@ function calculateDirectoryChecksum(dirPath: string): string {
   const shaCommand = os.platform() === 'darwin' ? 'shasum -a 256' : 'sha256sum';
   const command = `cd "${dirPath}" && find . -type f -exec ${shaCommand} {} \\; | sort | ${shaCommand}`;
   const result = execSync(command, { encoding: 'utf8' });
-  return result.split(' ')[0]; // Extract just the checksum part
+  return result.split(' ')[0].trim(); // Extract just the checksum part and remove newlines
 }
 
 export function compareCurrentChecksum() {
