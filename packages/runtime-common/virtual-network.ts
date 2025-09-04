@@ -235,11 +235,12 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
       return globalThis.fetch.bind(globalThis);
     }
 
-    // Check if undici is available at runtime
+    // Check if undici and dns are available at runtime
     let undici: any;
+    let dns: any;
     try {
-      //@ts-ignore undici must exists in node
       undici = require('undici');
+      dns = require('dns');
     } catch (e) {
       // Undici not available - fallback to native fetch
       return globalThis.fetch.bind(globalThis);
@@ -252,14 +253,7 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
       connect: {
         // This replaces dns.lookup for sockets created by this Agent
         lookup(hostname: string, options: any, cb: any) {
-          console.log(
-            `[Undici Dispatcher] Mapping hostname ${hostname} to 127.0.0.1 if needed`,
-          );
           if (hostname?.endsWith('.localhost')) {
-            console.log(
-              `[Undici Dispatcher] Resolving ${hostname} to 127.0.0.1`,
-            );
-
             if (options.all) {
               // Return array format if options.all is true
               return cb(null, [{ address: '127.0.0.1', family: 4 }], null);
@@ -270,23 +264,17 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
           }
           // Use default DNS lookup for all other hostnames
           // Use a lazy-loaded function to avoid bundler issues
-          const performDNSLookup = () => {
+          function performDNSLookup() {
             try {
-              //@ts-ignore dns must exists in node
-              const dns = require('dns');
               return dns.lookup(hostname, options, cb);
             } catch (e) {
               return cb(new Error('DNS lookup failed'), null, null);
             }
-          };
+          }
           return performDNSLookup();
         },
       },
     });
-
-    console.log(
-      '[Boxel Undici] Custom agent created for localhost subdomain resolution',
-    );
 
     // Create a custom fetch function that uses our agent
     return async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -297,10 +285,6 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
       } as any);
     };
   } catch (e) {
-    console.warn(
-      '[Boxel Undici] Failed to set up custom agent, falling back to native fetch:',
-      (e as Error).message,
-    );
     // Fallback to native fetch if undici setup fails
     return globalThis.fetch.bind(globalThis);
   }
