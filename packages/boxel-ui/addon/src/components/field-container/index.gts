@@ -90,7 +90,6 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
     .content {
       max-width: 100%;
-      overflow: hidden;
       padding: var(
         --boxel-field-content-padding,
         var(--boxel-outline-width)
