@@ -1416,7 +1416,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
-      lazilyLoadLink(instance, this, value.reference, { value, index: 0 });
+      lazilyLoadLink(instance, this, value.reference, { value });
       return this.emptyValue as BaseInstanceType<FieldT>;
     }
 
@@ -1440,8 +1440,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, notLoadedRefs, this.name);
       }
-      for (let [index, reference] of notLoadedRefs.entries()) {
-        lazilyLoadLink(instance, this, reference, { value, index });
+      for (let reference of notLoadedRefs) {
+        lazilyLoadLink(instance, this, reference, { value });
       }
     }
 
@@ -2630,7 +2630,7 @@ function lazilyLoadLink(
   instance: CardDef,
   field: Field,
   link: string,
-  pluralArgs?: { value: any[]; index: number },
+  pluralArgs?: { value: any[] },
 ) {
   if ((globalThis as any).__lazilyLoadLinks) {
     let inflightLoads = inflightLinkLoads.get(instance);
@@ -2676,8 +2676,23 @@ function lazilyLoadLink(
           },
         )) as CardDef;
         if (pluralArgs) {
-          let { value, index } = pluralArgs;
-          value[index] = fieldValue;
+          let { value } = pluralArgs;
+          let indices: number[] = [];
+          for (let [index, item] of value.entries()) {
+            if (!isNotLoadedValue(item)) {
+              continue;
+            }
+            let notLoadedRef = new URL(
+              item.reference,
+              instance.id ?? instance[relativeTo],
+            ).href;
+            if (reference === notLoadedRef) {
+              indices.push(index);
+            }
+          }
+          for (let index of indices) {
+            value[index] = fieldValue;
+          }
         } else {
           (instance as any)[field.name] = fieldValue;
         }
