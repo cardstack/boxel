@@ -51,13 +51,66 @@ module('Acceptance | prerender', function (hooks) {
       linksTo,
       linksToMany,
       CardDef,
+      FieldDef,
       StringField,
+      Component,
     } = cardApi;
+
+    class PetLicense extends FieldDef {
+      static displayName = 'Pet License';
+      @field city = contains(StringField);
+      @field owner = linksTo(() => Person);
+      static embedded = class Embedded extends Component<typeof PetLicense> {
+        <template>
+          <@fields.city />
+          <@fields.owner />
+        </template>
+      };
+    }
+
+    class EmergencyContacts extends FieldDef {
+      @field notes = contains(StringField);
+      @field contacts = linksToMany(() => Person);
+      static embedded = class Embedded extends Component<
+        typeof EmergencyContacts
+      > {
+        <template>
+          <@fields.notes />
+          <@fields.contacts />
+        </template>
+      };
+    }
+
+    class PetSitter extends FieldDef {
+      @field phone = contains(StringField);
+      @field sitter = linksTo(() => Person);
+      static embedded = class Embedded extends Component<typeof PetSitter> {
+        <template>
+          <@fields.sitter />
+          <@fields.phone />
+        </template>
+      };
+    }
+
+    class PetClique extends FieldDef {
+      @field name = contains(StringField);
+      @field members = linksToMany(() => Pet);
+      static embedded = class Embedded extends Component<typeof PetClique> {
+        <template>
+          <@fields.name />
+          <@fields.members />
+        </template>
+      };
+    }
 
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
       @field petFriend = linksTo(() => Pet);
+      @field license = contains(PetLicense);
+      @field emergencyContacts = contains(EmergencyContacts);
+      @field sitters = containsMany(PetSitter);
+      @field cliques = containsMany(PetClique);
       @field title = contains(StringField, {
         computeVia(this: Pet) {
           return `${this.name}`;
@@ -142,6 +195,112 @@ module('Acceptance | prerender', function (hooks) {
               petFriend: {
                 links: {
                   self: './pet-a',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/pet-c.json': {
+          data: {
+            attributes: { name: 'Clive', license: { city: 'Scarsdale' } },
+            relationships: {
+              'license.owner': {
+                links: {
+                  self: '../Person/hassan',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/pet-d.json': {
+          data: {
+            attributes: {
+              name: 'Delancy',
+              emergencyContacts: { notes: 'Very timid' },
+            },
+            relationships: {
+              'emergencyContacts.contacts.0': {
+                links: {
+                  self: '../Person/jade',
+                },
+              },
+              'emergencyContacts.contacts.1': {
+                links: {
+                  self: '../Person/germaine',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/pet-e.json': {
+          data: {
+            attributes: {
+              name: 'Erskine',
+              sitters: [{ phone: '01234' }, { phone: '56789' }],
+            },
+            relationships: {
+              'sitters.0.sitter': {
+                links: {
+                  self: '../Person/jade',
+                },
+              },
+              'sitters.1.sitter': {
+                links: {
+                  self: '../Person/germaine',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/pet-f.json': {
+          data: {
+            attributes: {
+              name: 'Ferdinand',
+              cliques: [{ name: 'Ball Fetchers' }, { name: 'Power Nappers' }],
+            },
+            relationships: {
+              'cliques.0.members.0': {
+                links: {
+                  self: './pet-a',
+                },
+              },
+              'cliques.0.members.1': {
+                links: {
+                  self: './pet-b',
+                },
+              },
+              'cliques.1.members.0': {
+                links: {
+                  self: './pet-c',
+                },
+              },
+              'cliques.1.members.1': {
+                links: {
+                  self: './pet-d',
                 },
               },
             },
@@ -391,18 +550,55 @@ module('Acceptance | prerender', function (hooks) {
     let { value } = await captureResult('innerHTML');
     assert.ok(
       /data-test-field="friends"?.*Queenzy?.*Hassan/s.test(value),
-      `failed to find "Queenzy" and "Hassan" field value in isolated HTML`,
+      `failed to find "Queenzy" and "Hassan" field values in isolated HTML`,
     );
   });
 
-  // TODO test prerender compound contains field
-  // TODO test prerender compound containsMany field
-  // TODO test prerender compound contains field that includes a linksTo field
-  // TODO test prerender compound containsMany that includes a linksTo field
+  test('can prerender instance with compound contains field that includes a linksTo field', async function (assert) {
+    let url = `${testRealmURL}Pet/pet-c.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="license"?.*Scarsdale?.*Hassan/s.test(value),
+      'failed to find "Scarsdale" and "Hassan" field values in isolated HTML',
+    );
+  });
+
+  test('can prerender instance with compound contains field that includes a linksToMany field', async function (assert) {
+    let url = `${testRealmURL}Pet/pet-d.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="emergencyContact"?.*Jade?.*Germaine/s.test(value),
+      'failed to find "Jade" and "Germaine" field values in isolated HTML',
+    );
+  });
+
+  test('can prerender instance with compound containsMany field that includes a linksTo field', async function (assert) {
+    let url = `${testRealmURL}Pet/pet-e.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="sitters"?.*Jade?.*Germaine/s.test(value),
+      'failed to find "Jade" and "Germaine" field values in isolated HTML',
+    );
+  });
+
+  test('can prerender instance with compound containsMany field that includes a linksToMany field', async function (assert) {
+    let url = `${testRealmURL}Pet/pet-f.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="cliques"?.*Allen?.*Beatrice?.*Clive?.*Delancy/s.test(
+        value,
+      ),
+      'failed to find "Allen", "Beatrice", "Clive", and "Delancy" field values in isolated HTML',
+    );
+  });
+
   // TODO test prerender computed that consumes linksTo
   // TODO test prerender computed that consumes linksToMany
   // TODO test prerender missing link in computed that consumes linksTo
   // TODO test prerender missing link in computed that consumes linksToMany
-  // TODO test prerender linksToMany cycle
   // TODO make tests for search docs. use existing search doc tests as the template
 });
