@@ -1,4 +1,3 @@
-import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
@@ -14,7 +13,7 @@ import NetworkService from '../services/network';
 import type LoaderService from '../services/loader-service';
 
 interface Args {
-  named: { url: string; loader: Loader };
+  named: { url: string };
 }
 
 export type LoadResult =
@@ -61,12 +60,13 @@ const log = logger('resource:import');
 
 export class ImportResource extends Resource<Args> {
   @service declare private network: NetworkService;
+  @service declare private loaderService: LoaderService;
   @tracked module: object | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
   #loaded!: Promise<void>; // modifier runs at init so we will always have a value
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, loader } = named;
+    let { url } = named;
     // The loader service is shared between the realm server and the host. this
     // resource can interfere with indexing in the browser by caching modules in
     // the loader that we are trying to change in our index. you can use the
@@ -75,7 +75,7 @@ export class ImportResource extends Resource<Args> {
     if (isTesting() && (globalThis as any).__disableLoaderMonitoring) {
       return;
     }
-    this.#loaded = this.load.perform(url, loader);
+    this.#loaded = this.load.perform(url, this.loaderService.loader);
   }
 
   get loaded() {
@@ -92,21 +92,10 @@ export class ImportResource extends Resource<Args> {
   });
 }
 
-export function importResource(
-  parent: object,
-  url: () => string,
-  loader?: () => Loader,
-) {
+export function importResource(parent: object, url: () => string) {
   return ImportResource.from(parent, () => ({
     named: {
       url: url(),
-      loader: loader
-        ? loader()
-        : (
-            (getOwner(parent) as any).lookup(
-              'service:loader-service',
-            ) as LoaderService
-          ).loader,
     },
   })) as ImportResource;
 }

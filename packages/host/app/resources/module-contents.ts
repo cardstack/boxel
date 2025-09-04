@@ -1,4 +1,5 @@
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
@@ -19,7 +20,6 @@ import ModuleContentsService, {
   isReexportCardOrField,
 } from '@cardstack/host/services/module-contents-service';
 import type NetworkService from '@cardstack/host/services/network';
-import { isTesting } from '@embroider/macros';
 
 export {
   isCardOrFieldDeclaration,
