@@ -155,7 +155,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
 
       const existingSpecs = await this.store.search(
         existingSpecsQuery,
-        // new URL(targetRealm),
+        new URL(targetRealm),
       );
 
       if (existingSpecs.length > 0) {
