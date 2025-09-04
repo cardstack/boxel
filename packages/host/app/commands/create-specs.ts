@@ -6,6 +6,7 @@ import {
   type ResolvedCodeRef,
   isCardDef,
   isFieldDef,
+  type Query,
 } from '@cardstack/runtime-common';
 
 import {
@@ -13,6 +14,7 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
@@ -122,6 +124,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
   @service declare private moduleContentsService: ModuleContentsService;
 
   static actionVerb = 'Create';
+  requireInputFields = ['targetRealm'];
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -129,10 +132,59 @@ export default class CreateSpecCommand extends HostBaseCommand<
     return CreateSpecsInput;
   }
 
+  private async createSpec(
+    declaration: ModuleDeclaration,
+    codeRef: ResolvedCodeRef,
+    targetRealm: string,
+    SpecKlass: typeof BaseDef,
+    createIfExists: boolean = false,
+  ): Promise<Spec | null> {
+    const title = codeRef.name;
+    const specType = new SpecTypeGuesser(declaration).type;
+
+    if (!createIfExists) {
+      // Check if a spec already exists for this code ref
+      const existingSpecsQuery: Query = {
+        filter: {
+          on: specRef,
+          eq: {
+            ref: codeRef,
+          },
+        },
+      };
+
+      const existingSpecs = await this.store.search(
+        existingSpecsQuery,
+        // new URL(targetRealm),
+      );
+
+      if (existingSpecs.length > 0) {
+        console.warn(`Spec already exists for ${title}, skipping`);
+        return null;
+      }
+    }
+
+    let spec = new SpecKlass({
+      specType,
+      ref: codeRef,
+      title,
+    }) as Spec;
+
+    let savedSpec = (await this.store.add<Spec>(spec, {
+      realm: targetRealm,
+    })) as Spec;
+
+    return savedSpec;
+  }
+
   protected async run(
     input: BaseCommandModule.CreateSpecsInput,
   ): Promise<BaseCommandModule.CreateSpecsResult> {
     let { codeRef, targetRealm, module } = input;
+
+    if (!targetRealm) {
+      throw new Error('targetRealm is required');
+    }
 
     let url: string;
     if (codeRef) {
@@ -168,49 +220,50 @@ export default class CreateSpecCommand extends HostBaseCommand<
         );
       }
 
-      let specType = new SpecTypeGuesser(declaration).type;
-      let spec = new SpecKlass({
-        specType,
-        ref: codeRef,
-        title: codeRef.name,
-      }) as Spec;
+      const savedSpec = await this.createSpec(
+        declaration,
+        codeRef,
+        targetRealm,
+        SpecKlass,
+      );
 
-      let savedSpec = (await this.store.add<Spec>(spec, {
-        realm: targetRealm,
-      })) as Spec;
-      specs.push(savedSpec);
+      if (savedSpec) {
+        specs.push(savedSpec);
+      }
     } else {
       // Multiple specs generation when codeRef.name is not provided
-      for (const declaration of declarations) {
-        let specType = new SpecTypeGuesser(declaration).type;
-        if (specType) {
-          let name = declaration.exportName || declaration.localName;
-          if (!name) {
-            throw new Error('declaration no name');
-          }
-          let specCodeRef: ResolvedCodeRef = {
-            module: url,
-            name,
-          };
-          let spec = new SpecKlass({
-            specType,
-            ref: specCodeRef,
-            title: declaration.exportName || declaration.localName,
-          }) as Spec;
-
-          try {
-            let savedSpec = (await this.store.add<Spec>(spec, {
-              realm: targetRealm,
-            })) as Spec;
-            specs.push(savedSpec);
-          } catch (e) {
-            console.warn(
-              `Failed to create spec for ${declaration.exportName || declaration.localName}:`,
-              e,
-            );
-          }
+      const specPromises = declarations.map(async (declaration) => {
+        let name = declaration.exportName || declaration.localName;
+        if (!name) {
+          throw new Error('declaration no name');
         }
-      }
+        let specCodeRef: ResolvedCodeRef = {
+          module: url.replace('.gts', ''), // Remember to remove .gts extension
+          name,
+        };
+
+        try {
+          return await this.createSpec(
+            declaration,
+            specCodeRef,
+            targetRealm,
+            SpecKlass,
+          );
+        } catch (e) {
+          console.warn(
+            `Failed to create spec for ${declaration.exportName || declaration.localName}:`,
+            e,
+          );
+          return null;
+        }
+      });
+
+      const promiseResults = await Promise.all(specPromises);
+      const createdSpecs: Spec[] = promiseResults.filter(
+        (spec): spec is Spec => spec !== null,
+      );
+
+      specs.push(...createdSpecs);
     }
 
     try {

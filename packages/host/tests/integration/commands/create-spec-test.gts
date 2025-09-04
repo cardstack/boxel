@@ -20,6 +20,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Command | create-specs', function (hooks) {
   setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
   const realmName = 'Create Spec Test Realm';
   let loader: Loader;
   let createSpecCommand: CreateSpecCommand;
@@ -36,7 +37,6 @@ module('Integration | Command | create-specs', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
   });
-  setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -206,27 +206,6 @@ export default class TestCommand extends Command {
     }
   });
 
-  test('uses current realm when targetRealm is not provided', async function (assert) {
-    const result = await createSpecCommand.execute({
-      codeRef: {
-        module: `${testRealmURL}test-card.gts`,
-        name: 'TestCard',
-      },
-      // No targetRealm provided
-    });
-
-    assert.ok(result.specs?.[0], 'Spec was created');
-    assert.ok(result.specs[0].id, 'Spec has an ID');
-
-    // Verify the spec was created in the current realm
-    const store = getService('store');
-    const savedSpec = (await store.get(result.specs[0].id!)) as Spec;
-    assert.ok(
-      savedSpec.id?.startsWith(testRealmURL),
-      'Spec was created in the current realm',
-    );
-  });
-
   test('creates multiple specs when codeRef.name is not provided', async function (assert) {
     const result = await createSpecCommand.execute({
       module: `${testRealmURL}test-card.gts`,
@@ -245,5 +224,54 @@ export default class TestCommand extends Command {
       assert.ok(savedSpec.title, 'Spec has a title');
       assert.ok(savedSpec.ref?.module, 'Spec has a module reference');
     }
+  });
+
+  test('returns empty specs array when trying to create spec with duplicate code ref', async function (assert) {
+    const codeRef = {
+      module: `${testRealmURL}test-card`, // remember NO .gts extension
+      name: 'TestCard',
+    };
+
+    // First creation should succeed
+    const result1 = await createSpecCommand.execute({
+      codeRef,
+      targetRealm: testRealmURL,
+    });
+
+    assert.ok(result1.specs?.[0], 'First spec was created');
+
+    // Second creation with same code ref should return empty array
+    const result2 = await createSpecCommand.execute({
+      codeRef,
+      targetRealm: testRealmURL,
+    });
+
+    assert.strictEqual(
+      result2.specs.length,
+      0,
+      'Second creation returns no specs',
+    );
+  });
+
+  test('returns empty specs array when trying to create duplicate specs without specific name', async function (assert) {
+    // First creation should succeed
+    const result1 = await createSpecCommand.execute({
+      module: `${testRealmURL}test-card`,
+      targetRealm: testRealmURL,
+    });
+
+    assert.ok(result1.specs.length > 0, 'First creation created specs');
+
+    // Second creation with same module should return empty array
+    const result2 = await createSpecCommand.execute({
+      module: `${testRealmURL}test-card.gts`,
+      targetRealm: testRealmURL,
+    });
+
+    assert.strictEqual(
+      result2.specs.length,
+      0,
+      'Second creation returns no specs',
+    );
   });
 });
