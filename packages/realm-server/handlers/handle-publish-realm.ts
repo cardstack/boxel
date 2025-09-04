@@ -43,119 +43,6 @@ export default function handlePublishRealm({
   createAndMountRealm,
   defaultPublishedRealmDomain,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
-  async function publishRealm({
-    ownerUserId,
-    sourceRealmURL,
-    publishedRealmURL,
-  }: {
-    ownerUserId: string;
-    sourceRealmURL: string;
-    publishedRealmURL: string;
-  }) {
-    let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
-    if (!sourceRealm) {
-      throw new Error(`Source realm ${sourceRealmURL} not found`);
-    }
-    let existingPublishedRealm = realms.find(
-      (r) => r.url === publishedRealmURL,
-    );
-
-    let userId;
-    let realmUsername;
-    let publishedRealmData: PublishedRealmTable | undefined;
-    if (existingPublishedRealm) {
-      let results = (await query(dbAdapter, [
-        `SELECT * FROM published_realms WHERE published_realm_url =`,
-        param(publishedRealmURL),
-      ])) as Pick<
-        PublishedRealmTable,
-        | 'id'
-        | 'owner_username'
-        | 'source_realm_url'
-        | 'published_realm_url'
-        | 'last_published_at'
-      >[];
-      publishedRealmData = results[0];
-      realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
-
-      let lastPublishedAt = new Date().toISOString();
-      await query(dbAdapter, [
-        `UPDATE published_realms SET last_published_at =`,
-        param(lastPublishedAt),
-        `WHERE published_realm_url =`,
-        param(publishedRealmURL),
-      ]);
-      publishedRealmData.last_published_at = lastPublishedAt;
-    } else {
-      let publishedRealmId = uuidv4();
-      realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
-      let { valueExpressions, nameExpressions } = asExpressions({
-        id: publishedRealmId,
-        owner_username: realmUsername,
-        source_realm_url: sourceRealmURL,
-        published_realm_url: publishedRealmURL,
-        last_published_at: new Date(),
-      });
-
-      let results = (await query(
-        dbAdapter,
-        insert('published_realms', nameExpressions, valueExpressions),
-      )) as Pick<
-        PublishedRealmTable,
-        | 'id'
-        | 'owner_username'
-        | 'source_realm_url'
-        | 'published_realm_url'
-        | 'last_published_at'
-      >[];
-      publishedRealmData = results[0];
-
-      let { userId: newUserId } = await registerUser({
-        matrixURL: matrixClient.matrixURL,
-        displayname: realmUsername,
-        username: realmUsername,
-        password: await passwordFromSeed(realmUsername, realmSecretSeed),
-        registrationSecret: await getMatrixRegistrationSecret(),
-      });
-      userId = newUserId;
-
-      await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-        [userId]: DEFAULT_PERMISSIONS,
-        [ownerUserId]: DEFAULT_PERMISSIONS,
-        '*': ['read'],
-      });
-    }
-    log.debug(
-      `created realm bot user '${userId}' for new realm ${publishedRealmURL}`,
-    );
-
-    let pathNameParts = new URL(sourceRealmURL).pathname
-      .split('/')
-      .filter((p) => p);
-    if (pathNameParts.length < 1) {
-      throw new Error('Could not determine source realm folder');
-    }
-    let sourceRealmPath = resolve(join(realmsRootPath, ...pathNameParts));
-    let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-    let publishedRealmPath = join(publishedDir, publishedRealmData.id);
-    copySync(sourceRealmPath, publishedRealmPath);
-    ensureDirSync(publishedRealmPath);
-
-    if (existingPublishedRealm) {
-      virtualNetwork.unmount(existingPublishedRealm.handle);
-    }
-    let realm = createAndMountRealm(
-      publishedRealmPath,
-      publishedRealmURL,
-      realmUsername,
-      new URL(sourceRealmURL),
-    );
-    return {
-      realm,
-      ...publishedRealmData,
-    };
-  }
-
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
     if (!token) {
@@ -222,23 +109,116 @@ export default function handlePublishRealm({
     }
 
     try {
-      let result = await publishRealm({
-        ownerUserId,
-        sourceRealmURL,
+      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
+      if (!sourceRealm) {
+        throw new Error(`Source realm ${sourceRealmURL} not found`);
+      }
+      let existingPublishedRealm = realms.find(
+        (r) => r.url === publishedRealmURL,
+      );
+
+      let userId;
+      let realmUsername;
+      let publishedRealmData: PublishedRealmTable | undefined;
+      if (existingPublishedRealm) {
+        let results = (await query(dbAdapter, [
+          `SELECT * FROM published_realms WHERE published_realm_url =`,
+          param(publishedRealmURL),
+        ])) as Pick<
+          PublishedRealmTable,
+          | 'id'
+          | 'owner_username'
+          | 'source_realm_url'
+          | 'published_realm_url'
+          | 'last_published_at'
+        >[];
+        publishedRealmData = results[0];
+        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
+
+        let lastPublishedAt = new Date().toISOString();
+        await query(dbAdapter, [
+          `UPDATE published_realms SET last_published_at =`,
+          param(lastPublishedAt),
+          `WHERE published_realm_url =`,
+          param(publishedRealmURL),
+        ]);
+        publishedRealmData.last_published_at = lastPublishedAt;
+      } else {
+        let publishedRealmId = uuidv4();
+        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
+        let { valueExpressions, nameExpressions } = asExpressions({
+          id: publishedRealmId,
+          owner_username: realmUsername,
+          source_realm_url: sourceRealmURL,
+          published_realm_url: publishedRealmURL,
+          last_published_at: new Date(),
+        });
+
+        let results = (await query(
+          dbAdapter,
+          insert('published_realms', nameExpressions, valueExpressions),
+        )) as Pick<
+          PublishedRealmTable,
+          | 'id'
+          | 'owner_username'
+          | 'source_realm_url'
+          | 'published_realm_url'
+          | 'last_published_at'
+        >[];
+        publishedRealmData = results[0];
+
+        let { userId: newUserId } = await registerUser({
+          matrixURL: matrixClient.matrixURL,
+          displayname: realmUsername,
+          username: realmUsername,
+          password: await passwordFromSeed(realmUsername, realmSecretSeed),
+          registrationSecret: await getMatrixRegistrationSecret(),
+        });
+        userId = newUserId;
+
+        await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
+          [userId]: DEFAULT_PERMISSIONS,
+          [ownerUserId]: DEFAULT_PERMISSIONS,
+          '*': ['read'],
+        });
+      }
+      log.debug(
+        `created realm bot user '${userId}' for new realm ${publishedRealmURL}`,
+      );
+
+      let pathNameParts = new URL(sourceRealmURL).pathname
+        .split('/')
+        .filter((p) => p);
+      if (pathNameParts.length < 1) {
+        throw new Error('Could not determine source realm folder');
+      }
+      let sourceRealmPath = resolve(join(realmsRootPath, ...pathNameParts));
+      let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
+      let publishedRealmPath = join(publishedDir, publishedRealmData.id);
+      copySync(sourceRealmPath, publishedRealmPath);
+      ensureDirSync(publishedRealmPath);
+
+      if (existingPublishedRealm) {
+        virtualNetwork.unmount(existingPublishedRealm.handle);
+      }
+      let realm = createAndMountRealm(
+        publishedRealmPath,
         publishedRealmURL,
-      });
-      await result.realm.start();
+        realmUsername,
+        new URL(sourceRealmURL),
+      );
+      await realm.start();
 
       let response = createResponse({
         body: JSON.stringify(
           {
             data: {
               type: 'published_realm',
-              id: result.id,
+              id: publishedRealmData.id,
               attributes: {
-                sourceRealmURL: result.source_realm_url,
-                publishedRealmURL: result.published_realm_url,
-                lastPublishedAt: result.last_published_at,
+                sourceRealmURL: publishedRealmData.source_realm_url,
+                publishedRealmURL: publishedRealmData.published_realm_url,
+                lastPublishedAt: publishedRealmData.last_published_at,
               },
             },
           },
@@ -252,7 +232,7 @@ export default function handlePublishRealm({
           },
         },
         requestContext: {
-          realm: result.realm,
+          realm: realm,
           permissions: {
             [ownerUserId]: DEFAULT_PERMISSIONS,
           },
