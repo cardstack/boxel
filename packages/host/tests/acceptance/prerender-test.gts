@@ -123,7 +123,7 @@ module('Acceptance | prerender', function (hooks) {
       });
       @field friendOfFriend = linksTo(() => Pet, {
         computeVia(this: Pet) {
-          return this.petFriend.petFriend;
+          return this.petFriend?.petFriend;
         },
       });
     }
@@ -150,7 +150,7 @@ module('Acceptance | prerender', function (hooks) {
       });
       @field friendsOfFriend = linksToMany(() => Person, {
         computeVia(this: Person) {
-          if (this && Array.isArray(this.friends)) {
+          if (Array.isArray(this.friends) && this.friends.length > 0) {
             return this.friends[0].friends;
           }
           return [];
