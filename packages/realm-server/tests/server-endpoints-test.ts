@@ -13,6 +13,7 @@ import {
   type QueuePublisher,
   type QueueRunner,
   DEFAULT_PERMISSIONS,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
@@ -99,7 +100,7 @@ module(basename(__filename), function () {
         let runner: QueueRunner;
         let request2: SuperTest<Test>;
         let testRealmDir: string;
-        let virtualNetwork = createVirtualNetwork();
+        let virtualNetwork: VirtualNetwork;
         let ownerUserId = '@mango:localhost';
 
         setupPermissionedRealm(hooks, {
@@ -114,9 +115,7 @@ module(basename(__filename), function () {
           publisher: QueuePublisher,
           runner: QueueRunner,
         ) {
-          if (testRealm2) {
-            virtualNetwork.unmount(testRealm2.handle);
-          }
+          virtualNetwork = createVirtualNetwork();
           ({
             testRealm: testRealm2,
             testRealmServer: testRealmServer2,
@@ -1504,8 +1503,6 @@ module(basename(__filename), function () {
           assert.deepEqual(response.body, {
             data: [],
           });
-
-          virtualNetwork.unmount(failedRealmInfoMock);
         });
 
         test('POST /_publish-realm can publish realm successfully', async function (assert) {
@@ -1541,6 +1538,72 @@ module(basename(__filename), function () {
           assert.ok(
             response.body.data.attributes.lastPublishedAt,
             'last published at timestamp is present',
+          );
+        });
+
+        test('POST /_publish-realm can republish realm with updated timestamp', async function (assert) {
+          // First publish
+          let firstResponse = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+              }),
+            );
+
+          assert.strictEqual(
+            firstResponse.status,
+            201,
+            'First publish succeeds',
+          );
+          let firstTimestamp =
+            firstResponse.body.data.attributes.lastPublishedAt;
+
+          // Wait a bit to ensure timestamp difference
+          await new Promise((resolve) => setTimeout(resolve, 10));
+
+          // Republish
+          let secondResponse = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+              }),
+            );
+
+          assert.strictEqual(secondResponse.status, 201, 'Republish succeeds');
+          assert.strictEqual(
+            secondResponse.body.data.id,
+            firstResponse.body.data.id,
+            'Same published realm ID',
+          );
+          assert.strictEqual(
+            secondResponse.body.data.attributes.publishedRealmURL,
+            firstResponse.body.data.attributes.publishedRealmURL,
+            'Same published realm URL',
+          );
+          assert.notEqual(
+            secondResponse.body.data.attributes.lastPublishedAt,
+            firstTimestamp,
+            'Timestamp is updated on republish',
           );
         });
 

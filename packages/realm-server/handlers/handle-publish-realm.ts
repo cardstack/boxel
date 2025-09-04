@@ -283,11 +283,8 @@ function createPublishedRealmURL(
 
   let serverURL = new URL(_serverURL);
   let hostname = defaultPublishedRealmDomain || serverURL.hostname;
-  // Use localhost instead of 127.0.0.1 for subdomain compatibility
-  let displayHostname = hostname === '127.0.0.1' ? 'localhost' : hostname;
-  let isLocalhost =
-    displayHostname === 'localhost' || displayHostname === '127.0.0.1';
+  let isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
   return isLocalhost
-    ? `${serverURL.protocol}//${ownerUsername}.${displayHostname}:${serverURL.port}/${sourceRealmName}/`
-    : `${serverURL.protocol}//${ownerUsername}.${displayHostname}/${sourceRealmName}/`;
+    ? `${serverURL.protocol}//${ownerUsername}.${hostname}:${serverURL.port}/${sourceRealmName}/`
+    : `${serverURL.protocol}//${ownerUsername}.${hostname}/${sourceRealmName}/`;
 }
