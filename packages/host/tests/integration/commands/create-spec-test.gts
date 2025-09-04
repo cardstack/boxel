@@ -69,7 +69,7 @@ export class AppCard extends CardDef {
 export default class TestComponent extends Component {
   static displayName = 'Test Component';
 }`,
-        'test-command.gts': `import { Command } from 'https://cardstack.com/base/command';
+        'test-command.gts': `import { Command } from '@cardstack/runtime-common';
 
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
