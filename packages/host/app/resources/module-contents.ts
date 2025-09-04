@@ -84,7 +84,6 @@ export class ModuleContentsResource
   modify(_positional: never[], named: Args['named']) {
     let { executableFile, onModuleEdit } = named;
     this.executableFile = executableFile;
-    this.moduleError = undefined;
     this.onModuleEdit = onModuleEdit;
     if (isTesting() && (globalThis as any).__disableLoaderMonitoring) {
       return;
@@ -104,6 +103,10 @@ export class ModuleContentsResource
     if ('error' in result) {
       this.moduleError = result.error;
       return;
+    } else {
+      //reset moduleError only upon successful load
+      //this prevents unnecessary flickering of errors
+      this.moduleError = undefined;
     }
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
