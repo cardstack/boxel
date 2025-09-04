@@ -112,10 +112,11 @@ export class ModuleContentsResource
       executableFile.content,
       new URL(executableFile.url),
     );
-    let declarations = await this.moduleContentsService.assemble(
-      moduleSyntax,
-      result.module,
-    );
+    let declarations =
+      await this.moduleContentsService.assembleFromModuleSyntax(
+        moduleSyntax,
+        result.module,
+      );
     let newState = {
       declarations,
       url: executableFile.url,
