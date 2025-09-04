@@ -14,7 +14,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 // we are only recursing 3 levels deep when we see a card def that we have already encountered,
 // we capture this: Person -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person)
 // we do not capture this: Person -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person)
-const RECURSING_DEPTH = 0;
+const RECURSING_DEPTH = 3;
 
 function recursingDepth(): number {
   return (globalThis as any).__boxel_definitions_recursing_depth != null
