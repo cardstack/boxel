@@ -1,10 +1,16 @@
+import { action } from '@ember/object';
 import Route from '@ember/routing/route';
 import RouterService from '@ember/routing/router-service';
+import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  formattedError,
+  type CardErrorsJSONAPI,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -79,31 +85,34 @@ export default class RenderRoute extends Route<Model> {
 
     let realmURL = response.headers.get('x-boxel-realm-url')!;
     let lastModified = new Date(response.headers.get('last-modified')!);
-    let doc: LooseSingleCardDocument = await response.json();
+    let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
+      await response.json();
+    let instance: CardDef | undefined;
+    if ('errors' in doc) {
+      throw new Error(JSON.stringify(doc.errors[0], null, 2));
+    } else {
+      await this.realm.ensureRealmMeta(realmURL);
 
-    await this.realm.ensureRealmMeta(realmURL);
-
-    let enhancedDoc: LooseSingleCardDocument = {
-      ...doc,
-      data: {
-        ...doc.data,
-        id,
-        type: 'card',
-        meta: {
-          ...doc.data.meta,
-          lastModified: lastModified.getTime(),
-          realmURL,
-          realmInfo: { ...this.realm.info(id) },
+      let enhancedDoc: LooseSingleCardDocument = {
+        ...doc,
+        data: {
+          ...doc.data,
+          id: id.replace(/\.json$/, ''),
+          type: 'card',
+          meta: {
+            ...doc.data.meta,
+            lastModified: lastModified.getTime(),
+            realmURL,
+            realmInfo: { ...this.realm.info(id) },
+          },
         },
-      },
-    };
+      };
 
-    // TODO we'll need a try/catch here to handle serialization errors which
-    // should get rendered into the DOM
-    let instance = await this.store.add(enhancedDoc, {
-      relativeTo: new URL(id),
-      doNotPersist: true,
-    });
+      instance = await this.store.add(enhancedDoc, {
+        relativeTo: new URL(id),
+        doNotPersist: true,
+      });
+    }
 
     let state = new TrackedMap();
     state.set('ready', false);
@@ -116,5 +125,31 @@ export default class RenderRoute extends Route<Model> {
         return Boolean(state.get('ready'));
       },
     };
+  }
+
+  @action
+  error(error: any, transition: Transition) {
+    transition.abort();
+    let serializedError: string;
+    try {
+      JSON.parse(error.message);
+      serializedError = error.message;
+    } catch (e) {
+      let current: Transition['to'] | null = transition?.to;
+      let id: string | undefined;
+      do {
+        id = current?.params?.id as string | undefined;
+        if (!id) {
+          current = current?.parent;
+        }
+      } while (current && !id);
+      serializedError = JSON.stringify(
+        formattedError(id, error).errors[0],
+        null,
+        2,
+      );
+    }
+    this.router.transitionTo('render-error', serializedError);
+    return false;
   }
 }
