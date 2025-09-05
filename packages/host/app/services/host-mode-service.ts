@@ -28,8 +28,8 @@ export default class HostModeService extends Service {
       return false;
     }
 
-    if (config.realmServerDomain) {
-      let realmServerDomain = config.realmServerDomain;
+    if (config.realmServerURL) {
+      let realmServerDomain = new URL(config.realmServerURL).hostname;
       let currentHost = window.location.hostname;
 
       return (
