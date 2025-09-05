@@ -23,20 +23,19 @@ test.describe('Realm URLs in Matrix account data', () => {
   let user: { accessToken: string };
 
   test.beforeEach(async () => {
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     user = await registerUser(synapse, 'user1', 'pass');
-    await updateUser(admin.accessToken, '@user1:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
     });
     realmServer = await startRealmServer();
     await smtpStart();
 
     await updateAccountData(
+      synapse,
       '@user1:localhost',
       user.accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,
@@ -65,6 +64,7 @@ test.describe('Realm URLs in Matrix account data', () => {
     ).toHaveCount(0);
 
     await updateAccountData(
+      synapse,
       '@user1:localhost',
       user.accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,

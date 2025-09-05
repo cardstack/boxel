@@ -258,7 +258,7 @@ test.describe('Room creation', () => {
   test('it can delete a room', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
-    let roomsBeforeDeletion = await getRoomsFromSync();
+    let roomsBeforeDeletion = await getRoomsFromSync(synapse, 'user1', 'pass');
 
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
@@ -299,7 +299,7 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     // For asserting the result of the forget matrix API
-    let roomsAfterDeletion = await getRoomsFromSync();
+    let roomsAfterDeletion = await getRoomsFromSync(synapse, 'user1', 'pass');
     let roomsAfterDeletionKeys = Object.keys(roomsAfterDeletion.join);
     let roomsBeforeDeletionKeys = Object.keys(roomsBeforeDeletion.join);
     expect(roomsAfterDeletionKeys.length).toEqual(

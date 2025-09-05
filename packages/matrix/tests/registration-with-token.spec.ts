@@ -38,9 +38,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(60_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await smtpStart();
     realmServer = await startRealmServer();
@@ -57,7 +55,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerUser(synapse, 'user2', 'pass');
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await clearLocalStorage(page, serverIndexUrl);
     await gotoRegistration(page, serverIndexUrl);
 
@@ -254,8 +256,9 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
-    let auth = await loginUser(`user1`, 'mypassword1!');
+    let auth = await loginUser(synapse, `user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(
+      synapse,
       auth.userId,
       auth.accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,
@@ -268,7 +271,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   test(`it can resend email validation message`, async ({ page }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await clearLocalStorage(page, appURL);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await gotoRegistration(page, appURL);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
@@ -289,29 +296,16 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
   });
-});
-
-test.describe('User Registration w/ Token', () => {
-  let synapse: SynapseInstance;
-
-  test.beforeEach(async () => {
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    await smtpStart();
-  });
-
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-  });
 
   test('it shows an error when the username is already taken', async ({
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page);
 
@@ -353,7 +347,11 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await clearLocalStorage(page);
 
     await gotoRegistration(page);
@@ -394,7 +392,11 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await clearLocalStorage(page);
 
     await gotoRegistration(page);
@@ -435,7 +437,11 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await clearLocalStorage(page);
 
     await gotoRegistration(page);

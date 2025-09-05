@@ -9,6 +9,8 @@ let password = process.env.MATRIX_PASSWORD || adminPassword;
 let isAdmin = process.env.MATRIX_IS_ADMIN;
 
 (async () => {
+  let synapseInstance = { port: 8008 } as any;
+
   return new Promise<string>((resolve, reject) => {
     const command = `docker exec boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${username} -p ${password} ${
       isAdmin === 'TRUE' ? `--admin` : `--no-admin`
@@ -16,7 +18,7 @@ let isAdmin = process.env.MATRIX_IS_ADMIN;
     childProcess.exec(command, async (err, stdout) => {
       if (err) {
         if (stdout.includes('User ID already taken')) {
-          let cred = await loginUser(username, password);
+          let cred = await loginUser(synapseInstance, username, password);
           if (!cred.userId) {
             reject(
               `User ${username} already exists, but the password does not match`,

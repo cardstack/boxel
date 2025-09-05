@@ -29,19 +29,21 @@ test.describe('Login using email', () => {
 
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
     await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
     await clearLocalStorage(page, appURL);
     await gotoRegistration(page, appURL);
     await registerUser(synapse, 'user1', 'mypassword1!');
-    await updateUser(admin.accessToken, '@user1:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@example.com'],
       displayname: 'Test User',
     });

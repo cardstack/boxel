@@ -26,9 +26,7 @@ test.describe('Auth rooms', () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
     await smtpStart();
 
     await registerRealmUsers(synapse);
@@ -50,12 +48,12 @@ test.describe('Auth rooms', () => {
   test.skip('auth rooms have a retention policy', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
 
-    let roomIds = await getJoinedRooms(user.accessToken);
+    let roomIds = await getJoinedRooms(synapse, user.accessToken);
 
     let roomIdToMembers = new Map<string, any>();
 
     for (let room of roomIds) {
-      let members = await getRoomMembers(room, user.accessToken);
+      let members = await getRoomMembers(synapse, room, user.accessToken);
       roomIdToMembers.set(room, members);
     }
 
@@ -69,6 +67,7 @@ test.describe('Auth rooms', () => {
 
     for (let room of realmRoomIds) {
       let retentionPolicy = await getRoomRetentionPolicy(
+        synapse,
         user.accessToken,
         room,
       );
