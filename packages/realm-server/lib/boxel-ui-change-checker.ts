@@ -13,8 +13,7 @@ function calculateDirectoryChecksum(dirPath: string): string {
 // This function is used to compare the current checksum of the boxel-ui
 // directory with the previous checksum. We use it to detect whether a reindex
 // is needed after the deploy pipeline has finished. This is to make sure the
-// prerendered content is up to date with components, helpers,... imported from
-// boxel-ui.
+// prerendered content is up to date with anything imported from boxel-ui.
 export function compareCurrentBoxelUIChecksum() {
   const boxelUiPath = path.join(
     process.cwd(),
