@@ -42,7 +42,7 @@ export function compareCurrentChecksum() {
     '/../../../persistent/boxel-ui-checksum.txt',
   );
   try {
-    previousChecksum = fs.readFileSync(filePath, 'utf8');
+    previousChecksum = fs.readFileSync(filePath, 'utf8').trim();
   } catch (error) {
     // File doesn't exist or can't be read
     // Create file with the checksum
