@@ -75,6 +75,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-pill-gap, var(--pill-gap));
+        max-width: 100%;
         padding: var(--boxel-pill-padding, var(--pill-padding));
         background-color: var(
           --boxel-pill-background-color,
@@ -165,6 +166,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
 
       .icon {
         --icon-color: var(--pill-font-color, currentColor);
+        flex-shrink: 0;
         display: inline-flex;
         min-width: var(
           --boxel-pill-icon-size,

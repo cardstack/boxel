@@ -3,7 +3,6 @@ import {
   identifyCard,
   primitive,
   fieldSerializer,
-  type ResolvedCodeRef,
   type Definition,
   type SerializerName,
 } from './index';
@@ -23,10 +22,7 @@ export function getFieldDefinitions(
   prefix = '',
   visited: string[] = [],
 ) {
-  let cardKey = internalKeyFor(
-    identifyCard(cardDef) as ResolvedCodeRef,
-    undefined,
-  );
+  let cardKey = internalKeyFor(identifyCard(cardDef)!, undefined);
   let fields = api.getFields(cardDef, { includeComputeds: true });
   for (let [fieldName, field] of Object.entries(fields)) {
     let fullFieldName = `${prefix ? prefix + '.' : ''}${fieldName}`;
@@ -35,7 +31,7 @@ export function getFieldDefinitions(
       type: field.fieldType,
       isPrimitive,
       isComputed: Boolean(field.computeVia),
-      fieldOrCard: identifyCard(field.card) as ResolvedCodeRef,
+      fieldOrCard: identifyCard(field.card)!,
       serializerName:
         fieldSerializer in field.card
           ? (field.card[fieldSerializer] as SerializerName)
