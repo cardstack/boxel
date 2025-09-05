@@ -15,7 +15,7 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-module('Acceptance | prerender', function (hooks) {
+module('Acceptance | prerender | isolated html', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -40,6 +40,10 @@ module('Acceptance | prerender', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
+    // these tests result in a really large index definitions object because of all the
+    // circularity, so to speed up the tests we prune the definitions object as we don't
+    // really care about it.
+    (globalThis as any).__boxel_definitions_recursing_depth = 0;
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -116,6 +120,16 @@ module('Acceptance | prerender', function (hooks) {
           return `${this.name}`;
         },
       });
+      @field friendName = contains(StringField, {
+        computeVia(this: Pet) {
+          return this.petFriend?.name;
+        },
+      });
+      @field friendOfFriend = linksTo(() => Pet, {
+        computeVia(this: Pet) {
+          return this.petFriend?.petFriend;
+        },
+      });
     }
 
     class Cat extends Pet {
@@ -131,6 +145,19 @@ module('Acceptance | prerender', function (hooks) {
       @field title = contains(StringField, {
         computeVia(this: Person) {
           return this.name;
+        },
+      });
+      @field numberOfPets = contains(StringField, {
+        computeVia(this: Person) {
+          return String(this.pets ? this.pets.length : 0);
+        },
+      });
+      @field friendsOfFriend = linksToMany(() => Person, {
+        computeVia(this: Person) {
+          if (Array.isArray(this.friends) && this.friends.length > 0) {
+            return this.friends[0].friends;
+          }
+          return [];
         },
       });
     }
@@ -162,6 +189,13 @@ module('Acceptance | prerender', function (hooks) {
         'Pet/vangogh.json': {
           data: {
             attributes: { name: 'Van Gogh' },
+            relationships: {
+              petFriend: {
+                links: {
+                  self: '../Cat/paper',
+                },
+              },
+            },
             meta: {
               adoptsFrom: {
                 module: '../pet',
@@ -312,6 +346,20 @@ module('Acceptance | prerender', function (hooks) {
             },
           },
         },
+        'Pet/pet-g.json': {
+          data: {
+            attributes: {
+              name: 'Gregory',
+              friendId: `${testRealmURL}Pet/mango`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
         'Cat/paper.json': {
           data: {
             attributes: {
@@ -404,12 +452,12 @@ module('Acceptance | prerender', function (hooks) {
             relationships: {
               'friends.0': {
                 links: {
-                  self: '../Person/queenzy',
+                  self: './queenzy',
                 },
               },
               'friends.1': {
                 links: {
-                  self: '../Person/hassan',
+                  self: './hassan',
                 },
               },
             },
@@ -429,12 +477,12 @@ module('Acceptance | prerender', function (hooks) {
             relationships: {
               'friends.0': {
                 links: {
-                  self: '../Person/germaine',
+                  self: './germaine',
                 },
               },
               'friends.1': {
                 links: {
-                  self: '../Person/hassan',
+                  self: './hassan',
                 },
               },
             },
@@ -452,6 +500,7 @@ module('Acceptance | prerender', function (hooks) {
 
   hooks.afterEach(function () {
     delete (globalThis as any).__lazilyLoadLinks;
+    delete (globalThis as any).__boxel_definitions_recursing_depth;
   });
 
   test('can prerender instance with contains field', async function (assert) {
@@ -596,9 +645,45 @@ module('Acceptance | prerender', function (hooks) {
     );
   });
 
-  // TODO test prerender computed that consumes linksTo
-  // TODO test prerender computed that consumes linksToMany
-  // TODO test prerender missing link in computed that consumes linksTo
-  // TODO test prerender missing link in computed that consumes linksToMany
+  test('can prerender instance with computed that consumes linksTo', async function (assert) {
+    let url = `${testRealmURL}Pet/mango.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="friendName"?.*Van Gogh/s.test(value),
+      'failed to find "Van Gogh" field value in isolated HTML',
+    );
+  });
+
+  test('can prerender instance with computed that consumes linksToMany', async function (assert) {
+    let url = `${testRealmURL}Person/hassan.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="numberOfPets"?.*2/s.test(value),
+      'failed to find "2" field value in isolated HTML',
+    );
+  });
+
+  test('can prerender instance with computed linksTo', async function (assert) {
+    let url = `${testRealmURL}Pet/mango.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="friendOfFriend"?.*Paper/s.test(value),
+      'failed to find "Paper" field value in isolated HTML',
+    );
+  });
+
+  test('can prerender instance with computed linksToMany', async function (assert) {
+    let url = `${testRealmURL}Person/germaine.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="friendsOfFriend"?.*Germaine?.*Hassan/s.test(value),
+      `failed to find "Germaine" and "Hassan" field values in isolated HTML`,
+    );
+  });
+
   // TODO make tests for search docs. use existing search doc tests as the template
 });
