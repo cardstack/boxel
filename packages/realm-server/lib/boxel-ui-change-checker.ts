@@ -5,7 +5,7 @@ import os from 'os';
 
 function calculateDirectoryChecksum(dirPath: string): string {
   const shaCommand = os.platform() === 'darwin' ? 'shasum -a 256' : 'sha256sum';
-  const command = `cd "${dirPath}" && find . -type f -exec ${shaCommand} {} \\; | sort | ${shaCommand}`;
+  const command = `cd "${dirPath}" && find . -type f -print0 | sort -z | xargs -0 cat | ${shaCommand}`;
   const result = execSync(command, { encoding: 'utf8' });
   return result.split(' ')[0].trim(); // Extract just the checksum part and remove newlines
 }
@@ -15,7 +15,7 @@ function calculateDirectoryChecksum(dirPath: string): string {
 // is needed after the deploy pipeline has finished. This is to make sure the
 // prerendered content is up to date with components, helpers,... imported from
 // boxel-ui.
-export function compareCurrentChecksum() {
+export function compareCurrentBoxelUIChecksum() {
   const boxelUiPath = path.join(
     process.cwd(),
     '/../host/node_modules/@cardstack/boxel-ui/src',

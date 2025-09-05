@@ -2,7 +2,7 @@ import Koa from 'koa';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
-import { compareCurrentChecksum } from '../lib/boxel-ui-change-checker';
+import { compareCurrentBoxelUIChecksum } from '../lib/boxel-ui-change-checker';
 
 export default function handlePostDeployment({}: CreateRoutesArgs): (
   ctxt: Koa.Context,
@@ -10,7 +10,7 @@ export default function handlePostDeployment({}: CreateRoutesArgs): (
 ) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     // TODO: add auth before this
-    let boxelUiChangeCheckerResult = compareCurrentChecksum();
+    let boxelUiChangeCheckerResult = compareCurrentBoxelUIChecksum();
 
     // TODO: schedule a reindex job if the checksum has changed
     await setContextResponse(
