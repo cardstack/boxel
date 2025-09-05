@@ -373,7 +373,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
         },
       },
     };
-    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
+    await this.args.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
       doc,
     });
@@ -543,7 +543,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     if (!this.args.model.id) {
       throw new Error('No card id');
     }
-    this.args.context?.actions?.editCard?.(this.args.model as CardDef);
+    this.args.editCard?.(this.args.model as CardDef);
   }
 
   <template>
@@ -579,7 +579,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           />
           {{this.activeFilter.displayName}}
         </h2>
-        {{#if @context.actions.createCard}}
+        {{#if @createCard}}
           <BoxelButton
             class='sidebar-create-button content-header-row-1'
             @kind='primary'

@@ -144,7 +144,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
               },
             };
 
-            await this.args.context?.actions?.createCard?.(
+            await this.args.createCard?.(
               this.config.taskSource,
               new URL(this.config.taskSource.module),
               {
@@ -174,7 +174,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
               (value) => value.label === targetColumn.title,
             );
             cardInNewCol.status = new SprintTaskStatusField(statusValue);
-            await this.args.context?.actions?.saveCard?.(cardInNewCol);
+            await this.args.saveCard?.(cardInNewCol);
           }
         },
       },
@@ -210,7 +210,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
     if (!this.args.model.id) {
       throw new Error('No card id');
     }
-    this.args.context?.actions?.editCard?.(this.args.model as CardDef);
+    this.args.editCard?.(this.args.model as CardDef);
   }
 
   <template>

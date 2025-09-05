@@ -215,7 +215,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
       },
     };
 
-    await this.args.context?.actions?.createCard?.(
+    await this.args.createCard?.(
       productSource,
       new URL('./online-store', import.meta.url),
       {
@@ -246,7 +246,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
       },
     };
 
-    await this.args.context?.actions?.createCard?.(
+    await this.args.createCard?.(
       orderSource,
       new URL('./online-store', import.meta.url),
       {
@@ -276,7 +276,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
       },
     };
 
-    await this.args.context?.actions?.createCard?.(
+    await this.args.createCard?.(
       customerSource,
       new URL('./online-store', import.meta.url),
       {

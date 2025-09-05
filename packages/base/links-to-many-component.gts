@@ -10,6 +10,8 @@ import {
   type Field,
   type FieldDef,
   type Format,
+  CreateCardFn,
+  CardCrudFunctions,
 } from './card-api';
 import {
   BoxComponentSignature,
@@ -34,6 +36,7 @@ import {
   isCardInstance,
   type ResolvedCodeRef,
   uuidv4,
+  CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -61,11 +64,14 @@ interface Signature {
     ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
     typeConstraint?: ResolvedCodeRef;
+    createCard?: CreateCardFn;
   };
 }
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  declare cardCrudFunctions: CardCrudFunctions;
   @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
@@ -122,7 +128,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           realmURL: this.realmURL,
         },
         multiSelect: true,
-        createNewCard: this.cardContext?.actions?.createCard,
+        createNewCard: this.cardCrudFunctions?.createCard,
         consumingRealm: this.realmURL,
       },
     );

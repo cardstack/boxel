@@ -4,6 +4,7 @@ import {
   contains,
   Component,
   type CardContext,
+  ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 import StringField from 'https://cardstack.com/base/string';
@@ -31,6 +32,7 @@ interface StoryCardComponentArgs {
   Args: {
     story: Partial<Story>;
     context?: CardContext;
+    viewCard?: ViewCardFn;
   };
 }
 
@@ -42,10 +44,10 @@ class StoryCard extends GlimmerComponent<StoryCardComponentArgs> {
 
   @action
   viewStory() {
-    if (!this.args.context?.actions?.viewCard) {
+    if (!this.args.viewCard) {
       throw new Error('viewCard action is not available');
     }
-    this.args.context?.actions?.viewCard?.(this.args.story as CardDef);
+    this.args.viewCard?.(this.args.story as CardDef);
   }
 
   get timeAgo() {
@@ -927,7 +929,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
       },
     };
 
-    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
+    await this.args.createCard?.(ref, currentRealm, {
       realmURL: currentRealm, // the realm to create the card in
       doc,
     });
@@ -993,7 +995,11 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
             <ul class='stories-list'>
               {{#each this.storiesSearch.instances as |story|}}
                 <li class='story-item-wrapper'>
-                  <StoryCard @story={{story}} @context={{@context}} />
+                  <StoryCard
+                    @story={{story}}
+                    @context={{@context}}
+                    @viewCard={{@viewCard}}
+                  />
                 </li>
               {{/each}}
             </ul>
