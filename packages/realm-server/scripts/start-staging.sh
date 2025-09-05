@@ -6,6 +6,7 @@ pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
+  LOG_LEVELS='*=debug' \
   ts-node \
   --transpileOnly main \
   --port=3000 \
