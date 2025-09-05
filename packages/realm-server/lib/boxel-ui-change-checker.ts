@@ -10,18 +10,33 @@ function calculateDirectoryChecksum(dirPath: string): string {
   return result.split(' ')[0].trim(); // Extract just the checksum part and remove newlines
 }
 
+// This function is used to compare the current checksum of the boxel-ui
+// directory with the previous checksum. We use it to detect whether a reindex
+// is needed after the deploy pipeline has finished. This is to make sure the
+// prerendered content is up to date with components, helpers,... imported from
+// boxel-ui.
 export function compareCurrentChecksum() {
-  console.log('__dirname:', __dirname);
-  console.log('process.cwd():', process.cwd());
-
   const boxelUiPath = path.join(
     process.cwd(),
     '/../host/node_modules/@cardstack/boxel-ui/src',
   );
+
+  if (!fs.existsSync(boxelUiPath)) {
+    throw new Error(
+      `The boxel-ui change checker failed to find the boxel-ui path: ${boxelUiPath}`,
+    );
+  }
+
   const currentChecksum = calculateDirectoryChecksum(boxelUiPath);
 
-  // Read from file, don't throw if it doesn't exist
   let previousChecksum = '';
+
+  let persistentPath = path.join(process.cwd(), '/../../../persistent');
+  if (!fs.existsSync(persistentPath)) {
+    throw new Error(
+      `The boxel-ui change checker expects 'persistent' path to exist but it doesn't: ${persistentPath}`,
+    );
+  }
   let filePath = path.join(
     process.cwd(),
     '/../../../persistent/boxel-ui-checksum.txt',
