@@ -152,6 +152,8 @@ export default class PillMenu extends Component<Signature> {
 
       .detail-close-button {
         border: none;
+        padding: 0;
+        background: none;
       }
 
       .expandable-header-button {
