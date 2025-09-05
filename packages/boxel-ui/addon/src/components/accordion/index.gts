@@ -13,7 +13,7 @@ interface Signature {
 }
 
 const Accordion: TemplateOnlyComponent<Signature> = <template>
-  <div class='accordion test-delete-me' ...attributes>
+  <div class='accordion' ...attributes>
     {{yield (hash Item=(component AccordionItem className='item'))}}
   </div>
   <style scoped>
