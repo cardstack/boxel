@@ -703,8 +703,12 @@ module('Unit | index-writer', function (hooks) {
                 isPrimitive: true,
                 isComputed: false,
                 fieldOrCard: {
-                  module: `${testRealmURL}fancy-string`,
-                  name: 'StringField',
+                  card: {
+                    module: `${testRealmURL}fancy-string`,
+                    name: 'StringField',
+                  },
+                  type: 'fieldOf',
+                  field: 'fancy',
                 },
               },
             },
@@ -859,8 +863,12 @@ module('Unit | index-writer', function (hooks) {
               isPrimitive: true,
               isComputed: false,
               fieldOrCard: {
-                module: `${testRealmURL2}fancy-string`,
-                name: 'StringField',
+                card: {
+                  module: `${testRealmURL2}fancy-string`,
+                  name: 'StringField',
+                },
+                type: 'fieldOf',
+                field: 'fancy',
               },
             },
           },

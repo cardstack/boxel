@@ -5,14 +5,15 @@ import {
   type CardResource,
   type RealmInfo,
   type JobInfo,
+  type CodeRef,
   jobIdentity,
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
   unixTime,
   logger,
+  isUrlLike,
 } from './index';
-import { isResolvedCodeRef } from './code-ref';
 import { transpileJS } from './transpile';
 import {
   type Expression,
@@ -250,13 +251,10 @@ export class Batch {
         ? {
             type: entry.definition.type,
             displayName: entry.definition.displayName,
-            codeRef: {
-              module: this.copiedRealmURL(
-                sourceRealmURL,
-                new URL(entry.definition.codeRef.module),
-              ).href,
-              name: entry.definition.codeRef.name,
-            },
+            codeRef: this.copiedCodeRef(
+              sourceRealmURL,
+              entry.definition.codeRef,
+            ),
             fields: this.fieldDefinitionsWithCopiedCodeRefs(
               sourceRealmURL,
               entry.definition.fields,
@@ -764,25 +762,32 @@ export class Batch {
     fieldDefinitions: Definition['fields'],
   ): Definition['fields'] {
     return Object.fromEntries(
-      Object.entries(fieldDefinitions)
-        // TODO: This filter need to be re-evaluated when this ticket is done: CS-9361
-        .filter(([_, fieldDefinition]) =>
-          isResolvedCodeRef(fieldDefinition.fieldOrCard),
-        )
-        .map(([fieldName, fieldDefinition]) => [
-          fieldName,
-          {
-            ...fieldDefinition,
-            fieldOrCard: {
-              module: this.copiedRealmURL(
-                fromRealm,
-                new URL(fieldDefinition.fieldOrCard.module),
-              ).href,
-              name: fieldDefinition.fieldOrCard.name,
-            },
-          },
-        ]),
+      Object.entries(fieldDefinitions).map(([fieldName, fieldDefinition]) => [
+        fieldName,
+        {
+          ...fieldDefinition,
+          fieldOrCard: this.copiedCodeRef(
+            fromRealm,
+            fieldDefinition.fieldOrCard,
+          ),
+        },
+      ]),
     );
+  }
+
+  private copiedCodeRef(fromRealm: URL, codeRef: CodeRef): CodeRef {
+    if (!('type' in codeRef)) {
+      if (isUrlLike(codeRef.module)) {
+        let module = this.copiedRealmURL(
+          fromRealm,
+          new URL(codeRef.module),
+        ).href;
+        return { ...codeRef, module };
+      } else {
+        return { ...codeRef };
+      }
+    }
+    return { ...codeRef, card: this.copiedCodeRef(fromRealm, codeRef.card) };
   }
 
   private updateIds(obj: any, fromRealm: URL) {
