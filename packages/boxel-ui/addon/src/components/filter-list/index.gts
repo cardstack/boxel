@@ -101,7 +101,7 @@ export class ListItem extends Component<ListItemSignature> {
           {{else if @filter.icon}}
             <@filter.icon class='filter-list__icon' role='presentation' />
           {{/if}}
-          <span class='filter-name ellipsize'>
+          <span class='filter-name boxel-ellipsize'>
             {{@filter.displayName}}
           </span>
         </Button>
@@ -131,17 +131,54 @@ export class ListItem extends Component<ListItemSignature> {
         .list-item-buttons {
           display: flex;
           border-radius: var(--boxel-border-radius-sm);
-          color: var(--boxel-dark);
-          background-color: var(--boxel-light);
-        }
-        .list-item-buttons:not(.is-selected):hover {
-          background-color: var(--boxel-200);
-        }
-        .list-item-buttons.is-selected {
-          filter: invert(1);
+          color: inherit;
+          background-color: inherit;
         }
         .list-item-buttons.is-expanded {
-          background-color: var(--boxel-100);
+          background-color: var(
+            --boxel-filter-expanded-background,
+            color-mix(
+              in oklab,
+              var(--accent, var(--boxel-200)) 30%,
+              transparent
+            )
+          );
+          color: var(--boxel-filter-expanded-foreground, var(--foreground));
+        }
+        .list-item-buttons:not(.is-selected):hover {
+          background-color: var(
+            --boxel-filter-hover-background,
+            color-mix(
+              in oklab,
+              var(--accent, var(--boxel-200)) 95%,
+              transparent
+            )
+          );
+          color: var(--boxel-filter-hover-foreground, var(--accent-foreground));
+        }
+        .list-item-buttons.is-selected {
+          background-color: var(
+            --boxel-filter-selected-background,
+            var(--foreground, var(--boxel-dark))
+          );
+          color: var(
+            --boxel-filter-selected-foreground,
+            var(--background, var(--boxel-light))
+          );
+        }
+        .list-item-buttons.is-selected:hover {
+          background-color: var(
+            --boxel-filter-selected-hover-background,
+            color-mix(
+              in oklab,
+              var(--foreground, var(--boxel-dark)) 90%,
+              transparent
+            )
+          );
+          color: var(
+            --boxel-filter-selected-hover-foreground,
+            var(--background, var(--boxel-light))
+          );
         }
         .dropdown-toggle {
           --boxel-icon-button-width: 2rem;
@@ -158,29 +195,28 @@ export class ListItem extends Component<ListItemSignature> {
           justify-content: flex-start;
           gap: var(--boxel-sp-xs);
           font: 500 var(--boxel-font-sm);
+          font-family: inherit;
           letter-spacing: var(--boxel-lsp-xs);
           border-radius: var(--boxel-border-radius-sm);
           max-width: 100%;
           overflow: hidden;
           text-align: left;
-          transition: none;
         }
         .filter-list__button:hover,
         .filter-list__button:focus {
           color: inherit;
-          background-color: inherit;
+          background-color: transparent;
+        }
+        .dropdown-toggle,
+        .filter-list__button {
+          border: none;
+          transition: none;
         }
         :deep(.filter-list__icon) {
           flex-shrink: 0;
           width: var(--boxel-icon-xs);
           height: var(--boxel-icon-xs);
           vertical-align: top;
-        }
-        .ellipsize {
-          white-space: nowrap;
-          text-overflow: ellipsis;
-          overflow: hidden;
-          max-width: 100%;
         }
       }
     </style>
