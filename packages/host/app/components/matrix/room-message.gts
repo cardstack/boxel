@@ -157,6 +157,7 @@ export default class RoomMessage extends Component<Signature> {
         }}
         @collectionResource={{this.attachedCardCollection}}
         @files={{this.message.attachedFiles}}
+        @attachedCardsAsFiles={{this.message.attachedCardsAsFiles}}
         @errorMessage={{this.errorMessage}}
         @isDebugMessage={{this.message.isDebugMessage}}
         @isStreaming={{@isStreaming}}
