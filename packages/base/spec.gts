@@ -723,7 +723,7 @@ class Edit extends Component<typeof Spec> {
           </div>
           <BoxelButton
             @kind='primary'
-            @size='small'
+            @size='extra-small'
             @loading={{this.generateReadmeTask.isRunning}}
             {{on 'click' this.generateReadme}}
             data-test-generate-readme
