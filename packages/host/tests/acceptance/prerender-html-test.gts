@@ -116,11 +116,27 @@ module('Acceptance | prerender | html', function (hooks) {
           return this.petFriend?.petFriend;
         },
       });
+      static embedded = class Embedded extends Component<typeof Pet> {
+        <template>
+          Pet component
+          <div data-test-card-title>
+            <@fields.name />
+          </div>
+        </template>
+      };
     }
 
     class Cat extends Pet {
       static displayName = 'Cat';
       @field aliases = containsMany(StringField);
+      static embedded = class Embedded extends Component<typeof Cat> {
+        <template>
+          Cat component
+          <div data-test-card-title>
+            <@fields.name />
+          </div>
+        </template>
+      };
     }
 
     class Person extends CardDef {
@@ -489,6 +505,72 @@ module('Acceptance | prerender | html', function (hooks) {
     delete (globalThis as any).__boxel_definitions_recursing_depth;
   });
 
+  test('prerender isolated html', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="title"]`,
+      )
+      .containsText('Paper', 'isolated format is rendered');
+  });
+
+  test('prerender embedded html', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/embedded/0`);
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="embedded"] [data-test-card-title]`,
+      )
+      .containsText('Paper', 'embedded format is rendered');
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="embedded"]`,
+      )
+      .includesText('Cat component', 'html renders default type component');
+  });
+
+  test('prerender atom html', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/atom/0`);
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="atom"]`,
+      )
+      .containsText('Paper', 'embedded format is rendered');
+  });
+
+  test('prerender fitted html', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/fitted/0`);
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="fitted"] [data-test-card-title]`,
+      )
+      .containsText('Paper', 'fitted format is rendered');
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="fitted"] [data-test-card-display-name]`,
+      )
+      .containsText('Cat', 'fitted format renders at default type level');
+  });
+
+  test('prerender icon html', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(`/render/${encodeURIComponent(url)}/icon`);
+    assert.dom('[data-prerender] > svg').exists('icon rendered');
+  });
+
+  test('prerender ancestor html', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/embedded/1`);
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="embedded"]`,
+      )
+      .includesText('Pet component', 'html renders ancestor component');
+  });
+
   test('can prerender instance with contains field', async function (assert) {
     let url = `${testRealmURL}Pet/vangogh.json`;
     await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
@@ -691,6 +773,4 @@ module('Acceptance | prerender | html', function (hooks) {
       'error is correct',
     );
   });
-
-  // TODO make tests for fitted and embedded formats
 });
