@@ -1199,14 +1199,6 @@ module('Acceptance | Spec preview', function (hooks) {
 
       await click('[data-test-module-inspector-view="spec"]');
 
-      await click('[data-test-view-spec-instance]');
-
-      await waitFor(
-        `[data-test-card="${testRealmURL}person-entry"][data-test-card-format="isolated"]`,
-      );
-
-      await click('[data-test-edit-button]');
-
       await waitFor(
         `[data-test-card="${testRealmURL}person-entry"][data-test-card-format="edit"]`,
       );
