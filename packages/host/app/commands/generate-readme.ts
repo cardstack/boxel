@@ -123,8 +123,7 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : 'No file content available.'}
       }
 
       const responseData = await result.response.json();
-      const readme =
-        responseData.choices?.[0]?.message?.content || 'No README generated';
+      const readme = responseData.choices?.[0]?.message?.content || null;
 
       return new GenerateReadmeResult({
         readme: readme,

@@ -641,7 +641,7 @@ class Edit extends Component<typeof Spec> {
         commandContext,
       );
       const result = await generateReadmeSpecCommand.execute({
-        spec: this.args.model,
+        spec: this.args.model as Spec,
       });
 
       console.log('Generated README:', result.readme);

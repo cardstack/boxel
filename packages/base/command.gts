@@ -9,7 +9,6 @@ import {
   linksToMany,
 } from './card-api';
 import CodeRefField, { AbsoluteCodeRefField } from './code-ref';
-import { Spec } from './spec';
 import BooleanField from './boolean';
 import MarkdownField from './markdown';
 import NumberField from './number';
@@ -312,13 +311,11 @@ export class SummarizeSessionResult extends CardDef {
 export class AskAiInput extends CardDef {
   @field prompt = contains(StringField);
   @field llmMode = contains(StringField); // 'ask' or 'act'
-  }
-  
+}
 
 export class AskAiOutput extends CardDef {
   @field response = contains(StringField);
 }
-
 
 export {
   SearchCardsByQueryInput,
