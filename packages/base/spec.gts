@@ -167,15 +167,6 @@ class Isolated extends Component<typeof Spec> {
             <BookOpenText width='20' height='20' role='presentation' />
             <h2 id='readme'>Read Me</h2>
           </div>
-          <BoxelButton
-            @kind='primary'
-            @size='small'
-            @loading={{this.generateReadmeTask.isRunning}}
-            {{on 'click' this.generateReadme}}
-            data-test-generate-readme
-          >
-            Generate README
-          </BoxelButton>
         </header>
         <div data-test-readme>
           <@fields.readMe />
