@@ -210,6 +210,21 @@ export interface TestContextWithSave extends TestContext {
   unregisterOnSave: () => void;
 }
 
+export async function capturePrerenderResult(
+  capture: 'textContent' | 'innerHTML' | 'outerHTML',
+  expectedStatus: 'ready' | 'error' = 'ready',
+): Promise<{ status: 'ready' | 'error'; value: string }> {
+  await waitFor(`[data-prerender-status="${expectedStatus}"]`);
+  let element = document.querySelector('[data-prerender]') as HTMLElement;
+  let status = element.dataset.prerenderStatus as 'ready' | 'error';
+  if (status === 'error') {
+    // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
+    return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
+  } else {
+    return { status, value: element.children[0][capture]! };
+  }
+}
+
 async function makeRenderer() {
   // This emulates the application.hbs
   await renderComponent(
