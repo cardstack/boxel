@@ -168,11 +168,11 @@ class Isolated extends Component<typeof Spec> {
             <h2 id='readme'>Read Me</h2>
           </div>
           <BoxelButton
-            @kind='secondary-light'
+            @kind='primary'
             @size='small'
             @loading={{this.generateReadmeTask.isRunning}}
             {{on 'click' this.generateReadme}}
-            data-test-generate-readme-2
+            data-test-generate-readme
           >
             Generate README
           </BoxelButton>
@@ -731,7 +731,7 @@ class Edit extends Component<typeof Spec> {
             <h2 id='readme'>Read Me</h2>
           </div>
           <BoxelButton
-            @kind='secondary-light'
+            @kind='primary'
             @size='small'
             @loading={{this.generateReadmeTask.isRunning}}
             {{on 'click' this.generateReadme}}
