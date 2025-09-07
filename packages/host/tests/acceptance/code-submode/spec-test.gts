@@ -5,7 +5,6 @@ import {
   find,
   settled,
   waitFor,
-  waitUntil,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
