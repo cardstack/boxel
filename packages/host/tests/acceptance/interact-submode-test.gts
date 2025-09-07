@@ -1268,6 +1268,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-menu-item-text="New Card of This Type"]')
