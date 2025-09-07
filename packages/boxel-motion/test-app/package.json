@@ -76,7 +76,7 @@
     "ember-qunit": "catalog:",
     "ember-resolver": "^11.0.1",
     "ember-resources": "catalog:",
-    "ember-source": "^5.4.0",
+    "ember-source": "catalog:",
     "ember-source-channel-url": "^3.0.0",
     "ember-template-imports": "^4.1.1",
     "ember-template-lint": "catalog:",

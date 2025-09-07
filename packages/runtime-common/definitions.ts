@@ -3,7 +3,6 @@ import {
   identifyCard,
   primitive,
   fieldSerializer,
-  type ResolvedCodeRef,
   type Definition,
   type SerializerName,
 } from './index';
@@ -16,6 +15,12 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 // we do not capture this: Person -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person)
 const RECURSING_DEPTH = 3;
 
+function recursingDepth(): number {
+  return (globalThis as any).__boxel_definitions_recursing_depth != null
+    ? (globalThis as any).__boxel_definitions_recursing_depth
+    : RECURSING_DEPTH;
+}
+
 export function getFieldDefinitions(
   api: typeof CardAPI,
   cardDef: typeof BaseDef,
@@ -23,10 +28,7 @@ export function getFieldDefinitions(
   prefix = '',
   visited: string[] = [],
 ) {
-  let cardKey = internalKeyFor(
-    identifyCard(cardDef) as ResolvedCodeRef,
-    undefined,
-  );
+  let cardKey = internalKeyFor(identifyCard(cardDef)!, undefined);
   let fields = api.getFields(cardDef, { includeComputeds: true });
   for (let [fieldName, field] of Object.entries(fields)) {
     let fullFieldName = `${prefix ? prefix + '.' : ''}${fieldName}`;
@@ -35,14 +37,14 @@ export function getFieldDefinitions(
       type: field.fieldType,
       isPrimitive,
       isComputed: Boolean(field.computeVia),
-      fieldOrCard: identifyCard(field.card) as ResolvedCodeRef,
+      fieldOrCard: identifyCard(field.card)!,
       serializerName:
         fieldSerializer in field.card
           ? (field.card[fieldSerializer] as SerializerName)
           : undefined,
     };
     if (!isPrimitive) {
-      if (visited.filter((v) => v === cardKey).length > RECURSING_DEPTH) {
+      if (visited.filter((v) => v === cardKey).length > recursingDepth()) {
         return results;
       }
       getFieldDefinitions(api, field.card, results, fullFieldName, [

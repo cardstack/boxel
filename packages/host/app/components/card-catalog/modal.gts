@@ -120,7 +120,7 @@ export default class CardCatalogModal extends Component<Signature> {
             <BoxelInput
               class='card-catalog-search'
               @type='search'
-              @variant='large'
+              @size='large'
               @value={{this.state.searchKey}}
               @onInput={{this.setSearchKey}}
               @onKeyPress={{this.onSearchFieldKeypress}}

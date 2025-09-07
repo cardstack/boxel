@@ -255,7 +255,8 @@ test.describe('Commands', () => {
   test('an autoexecuted command does not run again when the message is re-rendered', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL, showAllCards: true });
+    await login(page, 'user1', 'pass', { url: appURL });
+    await showAllCards(page);
 
     // create a skill card
     await page.locator('[data-test-create-new-card-button]').click();

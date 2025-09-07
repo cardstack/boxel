@@ -25,9 +25,9 @@ import {
   moduleContentsResource,
   type State,
   type ModuleDeclaration,
-  findDeclarationByName,
   isCardOrFieldDeclaration,
 } from '../resources/module-contents';
+import { findDeclarationByName } from '../services/module-contents-service';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';

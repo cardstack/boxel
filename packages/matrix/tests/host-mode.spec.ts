@@ -6,10 +6,16 @@ import {
   registerUser,
 } from '../docker/synapse';
 import {
+  appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import { registerRealmUsers } from '../helpers';
+import {
+  assertLoggedIn,
+  login,
+  registerRealmUsers,
+  waitUntil,
+} from '../helpers';
 
 test.describe('Host mode', () => {
   let synapse: SynapseInstance;
@@ -32,12 +38,41 @@ test.describe('Host mode', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('card in a published realm renders in host mode', async ({ page }) => {
-    await page.goto('http://published.realm/mango.json');
+  test('card in a published realm renders in host mode with a connect button', async ({
+    page,
+  }) => {
+    await page.goto('http://published.localhost:4205/mango.json');
 
     await expect(
-      page.locator('[data-test-card="http://published.realm/mango"]'),
+      page.locator('[data-test-card="http://published.localhost:4205/mango"]'),
     ).toBeVisible();
     await expect(page.locator('h1:first-of-type')).toHaveText('Mango');
+
+    let connectIframe = page.frameLocator('iframe');
+    await expect(connectIframe.locator('[data-test-connect]')).toBeVisible();
+  });
+
+  // Doesn’t work reliably in CI
+  test.skip('connect button shows session when logged in', async ({ page }) => {
+    let serverIndexUrl = new URL(appURL).origin;
+    await login(page, 'user1', 'pass', {
+      url: serverIndexUrl,
+    });
+
+    await assertLoggedIn(page);
+
+    await page.goto('http://published.localhost:4205/mango.json');
+
+    await waitUntil(() => page.locator('iframe').isVisible());
+
+    let connectIframe = page.frameLocator('iframe');
+
+    if (await connectIframe.locator('[data-test-connect]').isVisible()) {
+      await connectIframe.locator('[data-test-connect]').click();
+    }
+
+    await expect(connectIframe.locator('[data-test-session]')).toHaveText(
+      '@user1:localhost',
+    );
   });
 });

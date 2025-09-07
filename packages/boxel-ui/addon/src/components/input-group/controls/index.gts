@@ -39,23 +39,19 @@ export const Input: TemplateOnlyComponent<InputSignature> = <template>
       -webkit-appearance: none;
       appearance: none;
       background-clip: padding-box;
-      background-color: var(--boxel-light);
-      color: var(--boxel-text-dark);
       display: block;
       flex: 1 1 auto;
-      font: var(--boxel-font-sm);
-      font-weight: 400;
-      letter-spacing: var(--boxel-lsp-xs);
       margin: 0;
       min-width: 0;
       padding: var(--boxel-input-group-padding-y)
         var(--boxel-input-group-padding-x);
       position: relative;
       width: 1%;
-      border: 1px solid var(--boxel-form-control-border-color);
+      border: 1px solid var(--border, var(--boxel-form-control-border-color));
     }
     .form-control:focus {
       outline: none;
+      border-color: var(--ring, var(--boxel-highlight));
     }
   </style>
 </template>;
@@ -77,13 +73,8 @@ export const Textarea: TemplateOnlyComponent<TextareaSignature> = <template>
       -webkit-appearance: none;
       appearance: none;
       background-clip: padding-box;
-      background-color: var(--boxel-light);
-      color: var(--boxel-text-dark);
       display: block;
       flex: 1 1 auto;
-      font: var(--boxel-font-sm);
-      font-weight: 400;
-      letter-spacing: var(--boxel-lsp-xs);
       margin: 0;
       min-width: 0;
       padding: var(--boxel-input-group-padding-y)
@@ -93,9 +84,8 @@ export const Textarea: TemplateOnlyComponent<TextareaSignature> = <template>
     }
 
     .form-control {
-      border: 1px solid var(--boxel-form-control-border-color);
+      border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
-      transition: border-color var(--boxel-transition);
       margin: 0;
       min-height: var(--boxel-input-group-height);
       outline-offset: 0;
@@ -107,8 +97,7 @@ export const Textarea: TemplateOnlyComponent<TextareaSignature> = <template>
     }
 
     .form-control:disabled {
-      background-color: var(--boxel-light);
-      color: rgb(0 0 0 / 50%);
+      opacity: 0.5;
     }
   </style>
 </template>;

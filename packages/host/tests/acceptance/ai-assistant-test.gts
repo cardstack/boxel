@@ -44,6 +44,7 @@ import {
   setupRealmServerEndpoints,
   type TestContextWithSave,
   delay,
+  getMonacoContent,
 } from '../helpers';
 
 import {
@@ -77,6 +78,7 @@ let countryDefinition = `import { field, contains, CardDef } from 'https://cards
   }`;
 
 let matrixRoomId: string;
+let mockedFileContent = 'Hello, world!';
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -364,6 +366,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         },
       },
     });
+
+    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+      return new Response(mockedFileContent);
+    };
   });
 
   test('attaches a card in a conversation multiple times', async function (assert) {
@@ -679,6 +685,55 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         cards: [{ id, title: 'new card' }],
       },
     ]);
+  });
+
+  test('can open attached card dropdown menu', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+    );
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    await fillIn('[data-test-message-field]', `Message with updated card`);
+    await click('[data-test-send-message-btn]');
+
+    mockedFileContent = 'test card content';
+
+    await click('[data-test-attached-file-dropdown-button="Fadhlan"]');
+
+    assert.dom('[data-test-boxel-menu-item-text="Open in Code Mode"]').exists();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Submitted Content"]')
+      .exists();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Submitted Content"]')
+      .exists();
+
+    await waitFor('[data-test-copy-file-content="test card content"]');
+    await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+
+    await waitUntil(
+      () =>
+        getMonacoContent().startsWith(
+          '{"data":{"type":"card","id":"http://test-realm/test/Person/fadhlan"',
+        ),
+      {
+        timeout: 5000,
+      },
+    );
   });
 
   test('can open attach file modal', async function (assert) {
@@ -1231,10 +1286,24 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
-    // Focus pill should be hidden initially when no code reference is selected
+    assert.dom('[data-test-focus-pill-main]').containsText('Card');
     assert
-      .dom('[data-test-focus-pill-main]')
-      .doesNotExist('FocusPill is hidden when no selected code ref');
+      .dom('[data-test-focus-pill-meta]')
+      .exists({ count: 1 }, 'FocusPill shows one meta pill');
+    let metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[0] as Element)
+      .hasText('Isolated', 'FocusPill shows item type "Format"');
+
+    await click('[data-test-format-chooser="embedded"]');
+    assert
+      .dom('[data-test-focus-pill-meta]')
+      .exists({ count: 1 }, 'FocusPill shows one meta pill');
+    metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[0] as Element)
+      .hasText('Embedded', 'FocusPill shows item type "Format"');
+
     await fillIn('[data-test-message-field]', `Message - 1`);
     await click('[data-test-send-message-btn]');
 
@@ -1282,7 +1351,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode!.previewPanelSelection,
       {
         cardId: `${testRealmURL}Plant/highbush-blueberry`,
-        format: 'isolated',
+        format: 'embedded',
       },
       'Context sent with message contains correct previewPanelSelection',
     );
@@ -1319,12 +1388,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom('[data-test-focus-pill-meta]')
       .exists({ count: 1 }, 'FocusPill shows one meta pill');
-    {
-      const metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
-      assert
-        .dom(metaEls[0] as Element)
-        .hasText('Schema', 'FocusPill shows item type "Schema"');
-    }
+    metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[0] as Element)
+      .hasText('Schema', 'FocusPill shows item type "Schema"');
 
     await fillIn('[data-test-message-field]', `Message - 2`);
     await click('[data-test-send-message-btn]');
@@ -1454,7 +1521,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       });
     }
 
-    // FocusPill should reflect Preview item type and multi-line selection range
+    // FocusPill should reflect Preview item type, format, and multi-line selection range
     await waitFor('[data-test-focus-pill-main]');
     await delay(20); // editor selection updates are debounced
     assert
@@ -1462,19 +1529,26 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .containsText('Plant', 'FocusPill still shows selected code label');
     assert
       .dom('[data-test-focus-pill-meta]')
-      .exists({ count: 2 }, 'FocusPill shows two meta pills');
-    {
-      const metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
-      assert
-        .dom(metaEls[0] as Element)
-        .hasText('Preview', 'FocusPill shows item type "Preview"');
-      assert
-        .dom(metaEls[1] as Element)
-        .hasText(
-          'Lines 3-6',
-          'FocusPill shows multi-line selection range "Lines 3-6"',
-        );
-    }
+      .exists({ count: 3 }, 'FocusPill shows three meta pills');
+    metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[0] as Element)
+      .hasText('Preview', 'FocusPill shows item type "Preview"');
+    assert
+      .dom(metaEls[1] as Element)
+      .hasText('Isolated', 'FocusPill shows format "Isolated"');
+    assert
+      .dom(metaEls[2] as Element)
+      .hasText(
+        'Lines 3-6',
+        'FocusPill shows multi-line selection range "Lines 3-6"',
+      );
+
+    await click('[data-test-format-chooser="fitted"]');
+    metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[1] as Element)
+      .hasText('Fitted', 'FocusPill shows format "Fitted"');
 
     await fillIn('[data-test-message-field]', `Message - 3`);
     await click('[data-test-send-message-btn]');
@@ -1522,7 +1596,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode!.previewPanelSelection,
       {
         cardId: `${testRealmURL}Plant/highbush-blueberry`,
-        format: 'isolated',
+        format: 'fitted',
       },
       'Context sent with message contains correct previewPanelSelection',
     );
