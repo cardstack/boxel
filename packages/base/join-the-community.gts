@@ -8,6 +8,7 @@ import {
 } from './card-api';
 import StringField from './string';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
 
 export class SocialMediaLink extends FieldDef {
@@ -38,7 +39,14 @@ export class SocialMediaLink extends FieldDef {
     };
 
     <template>
-      <div class='community-card' data-test-community-card={{@model.platform}}>
+      <BoxelButton
+        @as='button'
+        @kind='secondary'
+        @size='auto'
+        class='community-card'
+        data-test-community-card={{@model.platform}}
+        {{on 'click' this.openLink}}
+      >
         <div
           class='community-icon {{@model.platform}}-icon'
           data-test-community-icon={{@model.platform}}
@@ -89,28 +97,36 @@ export class SocialMediaLink extends FieldDef {
             class='community-description'
             data-test-community-description={{@model.platform}}
           >{{@model.description}}</p>
-          <button
+          <span
             class='community-link'
             data-test-community-link={{@model.platform}}
-            {{on 'click' this.openLink}}
-          >{{@model.url}}</button>
+          >{{@model.url}}</span>
         </div>
-      </div>
+      </BoxelButton>
 
       <style scoped>
         .community-card {
+          /* Override BoxelButton styles to make it look like a card */
+          --boxel-button-padding: var(--boxel-sp);
+          --boxel-button-min-width: auto;
+          --boxel-button-min-height: auto;
+          --boxel-button-border-radius: var(--boxel-border-radius);
+          --boxel-button-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          --boxel-button-transition: box-shadow 0.2s ease;
+
           display: flex;
           align-items: center;
           gap: var(--boxel-sp);
-          padding: var(--boxel-sp);
-          background: white;
-          border-radius: var(--boxel-border-radius);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          transition: box-shadow 0.2s ease;
+          width: 100%;
+          text-align: left;
+          justify-content: flex-start;
+          border: none;
+          box-shadow: none;
         }
 
         .community-card:hover {
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+          border: none;
         }
 
         .community-icon {
@@ -168,10 +184,7 @@ export class SocialMediaLink extends FieldDef {
           font: 500 var(--boxel-font-sm);
           text-align: center;
           width: 100%;
-          cursor: pointer;
           transition: background-color 0.2s ease;
-          border: none;
-          box-shadow: none;
         }
 
         .community-link:hover {
