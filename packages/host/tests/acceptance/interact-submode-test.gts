@@ -859,6 +859,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         deferred.fulfill();
       });
 
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       assert
         .dom('[data-test-card-catalog-item-selected]')
@@ -903,6 +904,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         id = url.href;
       });
 
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       assert
         .dom('[data-test-card-catalog-item-selected]')
@@ -934,6 +936,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
 
       assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       assert.dom('[data-test-card-catalog-item]').exists();
       await click('[data-test-card-catalog-cancel-button]');
@@ -1052,6 +1055,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       assert.dom('[data-test-attached-card]').doesNotExist();
       // Press the + button to create a new card instance
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       // Select a card from catalog entries
       await click(
@@ -1076,6 +1080,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       await click(
         `[data-test-select="https://cardstack.com/base/cards/skill"]`,
@@ -1161,6 +1166,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       await click(
         `[data-test-select="https://cardstack.com/base/cards/skill"]`,
