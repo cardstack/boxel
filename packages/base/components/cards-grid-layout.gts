@@ -194,6 +194,10 @@ export default class CardsGridLayout extends Component<Signature> {
                 class='highlights-section'
                 data-test-highlights-section='join-community'
               >
+                <h3
+                  class='section-header'
+                  data-test-section-header='join-the-community'
+                >JOIN THE COMMUNITY</h3>
                 <this.getCommunityCards @format='embedded' />
               </div>
             {{/if}}
