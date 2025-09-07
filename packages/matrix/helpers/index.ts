@@ -270,7 +270,6 @@ export async function login(
   password: string,
   opts: LoginOptions = {
     url: undefined,
-    showAllCards: true,
   },
 ) {
   let credentials = await loginUser(username, password);
