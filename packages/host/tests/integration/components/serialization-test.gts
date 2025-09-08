@@ -3765,32 +3765,35 @@ module('Integration | serialization', function (hooks) {
       serialized,
       undefined,
     );
-    
+
     if (deserializedArticle instanceof Article) {
-      assert.strictEqual(deserializedArticle.title, 'How to Test Nested Fields');
+      assert.strictEqual(
+        deserializedArticle.title,
+        'How to Test Nested Fields',
+      );
       let { category } = deserializedArticle;
-      
+
       if (category instanceof Category) {
         assert.strictEqual(category.title, 'Programming');
         assert.strictEqual(category.priority, 1);
         assert.strictEqual(category.tags.length, 3, 'correct number of tags');
-        
+
         // Check first tag (PriorityTag)
-        let tag0 = category.tags[0];
+        let tag0 = category.tags[0] as PriorityTag;
         assert.ok(tag0 instanceof PriorityTag, 'first tag is PriorityTag');
         assert.strictEqual(tag0.name, 'javascript');
         assert.strictEqual(tag0.color, 'yellow');
         assert.strictEqual(tag0.priority, 5);
-        
+
         // Check second tag (StatusTag)
-        let tag1 = category.tags[1];
+        let tag1 = category.tags[1] as StatusTag;
         assert.ok(tag1 instanceof StatusTag, 'second tag is StatusTag');
         assert.strictEqual(tag1.name, 'testing');
         assert.strictEqual(tag1.color, 'green');
         assert.strictEqual(tag1.isActive, 1);
-        
+
         // Check third tag (base Tag)
-        let tag2 = category.tags[2];
+        let tag2 = category.tags[2] as Tag;
         assert.ok(tag2 instanceof Tag, 'third tag is base Tag');
         assert.strictEqual(tag2.name, 'serialization');
         assert.strictEqual(tag2.color, 'blue');
