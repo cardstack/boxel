@@ -85,7 +85,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       for (const card of sourceCards) {
         await new CopyCardCommand(this.commandContext).execute({
           sourceCard: card,
-          realm: realmUrl,
+          targetRealm: realmUrl,
           localDir,
         });
       }
@@ -96,7 +96,7 @@ export default class ListingUseCommand extends HostBaseCommand<
         listing.skills.map((skill: Skill) =>
           new CopyCardCommand(this.commandContext).execute({
             sourceCard: skill,
-            realm: realmUrl,
+            targetRealm: realmUrl,
             localDir,
           }),
         ),

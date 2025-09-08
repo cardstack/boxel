@@ -350,19 +350,17 @@ export default class InteractSubmode extends Component {
           );
         }
         let destinationRealmURL = destinationIndexCard[realmURLSymbol];
-        if (!destinationRealmURL) {
-          throw new Error('Could not determine the copy destination realm');
-        }
-        let realmURL = destinationRealmURL;
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCardId: string | undefined;
         let newCardId: string | undefined;
+        let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
           ({ newCardId } = await new CopyCardCommand(
             this.commandService.commandContext,
           ).execute({
             sourceCard: card,
-            realm: realmURL.href,
+            targetRealm: destinationRealmURL?.href,
+            targetStackIndex,
           }));
           if (index === 0) {
             scrollToCardId = newCardId; // we scroll to the first card lexically by title

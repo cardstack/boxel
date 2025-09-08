@@ -1,10 +1,6 @@
 import { service } from '@ember/service';
 
-import {
-  isCardInstance,
-  isResolvedCodeRef,
-  realmURL,
-} from '@cardstack/runtime-common';
+import { isCardInstance, realmURL } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -42,19 +38,16 @@ export default class CopyCardCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CopyCardInput,
   ): Promise<BaseCommandModule.CopyCardResult> {
-    let realm = await this.determineTargetRealm(input);
+    let realmToCopyTo = await this.determineTargetRealm(input);
+    if (!realmToCopyTo) {
+      throw new Error('Cannot determine target realm to copy card to');
+    }
     let doc = await this.cardService.serializeCard(input.sourceCard, {
       useAbsoluteURL: true,
     });
     delete doc.data.id;
-    if (input.codeRef) {
-      if (!isResolvedCodeRef(input.codeRef)) {
-        throw new Error('codeRef is not resolved');
-      }
-      doc.data.meta.adoptsFrom = input.codeRef;
-    }
     let newCardId = await this.store.create(doc, {
-      realm,
+      realm: realmToCopyTo,
       localDir: input.localDir,
     });
     if (typeof newCardId !== 'string') {
@@ -73,34 +66,33 @@ export default class CopyCardCommand extends HostBaseCommand<
 
   private async determineTargetRealm({
     targetStackIndex,
-    realm,
+    targetRealm,
   }: BaseCommandModule.CopyCardInput) {
-    if (realm !== undefined && targetStackIndex !== undefined) {
-      console.warn(
-        'Both targetStackIndex and targetRealmUrl are set; only one should be set; using targetRealmUrl',
+    if (targetRealm == undefined && targetStackIndex == undefined) {
+      throw new Error(
+        'Both targetStackIndex and targetRealm are set; only one should be set -- using targetRealm',
       );
     }
-    if (realm) {
-      return realm;
+    if (targetRealm) {
+      return targetRealm;
     }
-    if (targetStackIndex !== undefined) {
-      // use existing card in stack to determine realm url,
-      let item =
-        this.operatorModeStateService.topMostStackItems()[targetStackIndex];
-      if (item.id) {
-        let topCard = await this.store.get(item.id);
-        if (isCardInstance(topCard)) {
-          let url = topCard[realmURL];
-          // open card might be from a realm in which we don't have write permissions
-          if (url && this.realm.canWrite(url.href)) {
-            return url.href;
-          }
-        }
+    // use existing card in stack to determine realm url,
+    let item =
+      this.operatorModeStateService.topMostStackItems()[targetStackIndex];
+    if (!item) {
+      throw new Error('Cannot find topmost card in target stack');
+    }
+    if (!item.id) {
+      throw new Error('Topmost item in target stack has no id');
+    }
+    let topCard = await this.store.get(item.id);
+    if (isCardInstance(topCard)) {
+      let url = topCard[realmURL];
+      // open card might be from a realm in which we don't have write permissions
+      if (url && this.realm.canWrite(url.href)) {
+        return url.href;
       }
     }
-    if (!this.realm.defaultWritableRealm) {
-      throw new Error('Could not find a writable realm');
-    }
-    return this.realm.defaultWritableRealm.path;
+    return;
   }
 }

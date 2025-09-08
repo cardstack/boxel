@@ -755,7 +755,7 @@ export class ${className} extends ${exportName} {
       this.commandService.commandContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
-      realm: this.selectedRealmURL.href,
+      targetRealm: this.selectedRealmURL.href,
     });
     this.currentRequest.newFileDeferred.fulfill(new URL(`${newCardId}.json`));
   });
