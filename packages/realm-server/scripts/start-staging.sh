@@ -6,6 +6,7 @@ pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
+  VALID_PUBLISHED_REALM_DOMAINS=".staging.boxel.build" \
   ts-node \
   --transpileOnly main \
   --port=3000 \
