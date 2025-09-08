@@ -31,11 +31,15 @@ export default class HostModeService extends Service {
       return false;
     }
 
-    if (config.realmServerDomain) {
-      let realmServerDomain = config.realmServerDomain;
+    if (config.realmServerURL) {
+      let realmServerDomain = new URL(config.realmServerURL).hostname;
       let currentHost = window.location.hostname;
 
-      return currentHost.endsWith(`.${realmServerDomain}`);
+      return (
+        currentHost.endsWith(`.${realmServerDomain}`) &&
+        // Using a submdomain of localhost indicates host mode
+        !currentHost.endsWith('.localhost')
+      );
     }
 
     return false;

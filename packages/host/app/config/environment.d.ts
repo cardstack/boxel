@@ -14,7 +14,7 @@ declare const config: {
   matrixURL: string;
   matrixServerName: string;
 
-  realmServerDomain: string;
+  realmServerURL: string;
   resolvedBaseRealmURL: string;
   resolvedSkillsRealmURL: string;
   hostsOwnAssets: boolean;

@@ -213,11 +213,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                           <span data-test-spec-selector-item-path>
                             {{data.localPath}}
                           </span>
-                        {{else}}
-                          <LoadingIndicator />
-                          <span data-test-spec-item-path-creating>
-                            Creating...
-                          </span>
                         {{/if}}
                       </div>
                     {{/if}}

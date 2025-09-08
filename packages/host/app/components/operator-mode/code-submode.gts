@@ -681,6 +681,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
                           @createFile={{perform this.createFile}}
                           @openSearch={{search.openSearchToResults}}
+                          @cardError={{this.cardError}}
                         />
                       {{else if this.isLoading}}
                         <LoadingIndicator class='loading-indicator' />

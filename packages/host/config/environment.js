@@ -42,7 +42,7 @@ module.exports = function (environment) {
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
-    realmServerDomain: process.env.REALM_SERVER_DOMAIN || 'localhost',
+    realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
     resolvedSkillsRealmURL:
@@ -73,7 +73,7 @@ module.exports = function (environment) {
     ENV.autoSaveDelayMs = 0;
     ENV.monacoDebounceMs = 0;
     ENV.monacoCursorDebounceMs = 0;
-    ENV.realmServerDomain = 'test-realm';
+    ENV.realmServerURL = 'http://test-realm';
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;

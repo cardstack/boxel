@@ -1416,7 +1416,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
-      lazilyLoadLink(instance, this, value.reference, { value, index: 0 });
+      lazilyLoadLink(instance, this, value.reference, { value });
       return this.emptyValue as BaseInstanceType<FieldT>;
     }
 
@@ -1440,8 +1440,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, notLoadedRefs, this.name);
       }
-      for (let [index, reference] of notLoadedRefs.entries()) {
-        lazilyLoadLink(instance, this, reference, { value, index });
+      for (let reference of notLoadedRefs) {
+        lazilyLoadLink(instance, this, reference, { value });
       }
     }
 
@@ -2630,7 +2630,7 @@ function lazilyLoadLink(
   instance: CardDef,
   field: Field,
   link: string,
-  pluralArgs?: { value: any[]; index: number },
+  pluralArgs?: { value: any[] },
 ) {
   if ((globalThis as any).__lazilyLoadLinks) {
     let inflightLoads = inflightLinkLoads.get(instance);
@@ -2648,7 +2648,17 @@ function lazilyLoadLink(
     }
     let deferred = new Deferred<void>();
     inflightLoads.set(key, deferred.promise);
-    store.trackLoad(deferred.promise);
+    store.trackLoad(
+      // we wrap the promise with a catch that will prevent the rejections from bubbling up but
+      // not interfere with the original deferred. this prevents QUnit from being really noisy
+      // and reporting a "global error" even though that is a normal operating circumstance for
+      // the rendering when it encounters an error. the original deferred.promise still
+      // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
+      deferred.promise.then(
+        () => {},
+        () => {},
+      ),
+    );
     (async () => {
       try {
         let doc = await store.loadDocument(reference);
@@ -2666,15 +2676,36 @@ function lazilyLoadLink(
           },
         )) as CardDef;
         if (pluralArgs) {
-          let { value, index } = pluralArgs;
-          value[index] = fieldValue;
+          let { value } = pluralArgs;
+          let indices: number[] = [];
+          for (let [index, item] of value.entries()) {
+            if (!isNotLoadedValue(item)) {
+              continue;
+            }
+            let notLoadedRef = new URL(
+              item.reference,
+              instance.id ?? instance[relativeTo],
+            ).href;
+            if (reference === notLoadedRef) {
+              indices.push(index);
+            }
+          }
+          for (let index of indices) {
+            value[index] = fieldValue;
+          }
         } else {
           (instance as any)[field.name] = fieldValue;
         }
         deferred.fulfill();
       } catch (e) {
-        // TODO We need to handle this error in rendering....
         deferred.reject(e);
+        // We use a custom event for render errors--otherwise QUnit will report a "global error"
+        // when we use a promise rejection to signal to the prerender that there was an error
+        // even though everything is working as designed. QUnit is very noisy about these errors...
+        const event = new CustomEvent('boxel-render-error', {
+          detail: { reason: e },
+        });
+        globalThis.dispatchEvent(event);
       } finally {
         inflightLoads.delete(key);
         if (inflightLoads.size === 0) {

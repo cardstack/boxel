@@ -66,6 +66,7 @@ export class Message implements RoomMessageInterface {
 
   attachedCardIds?: string[] | null;
   attachedFiles?: FileDef[];
+  attachedCardsAsFiles?: FileDef[];
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;

@@ -49,10 +49,7 @@ import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
 
-import {
-  ModuleInspectorSelections,
-  PlaygroundSelections,
-} from '../utils/local-storage-keys';
+import { ModuleInspectorSelections } from '../utils/local-storage-keys';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -438,6 +435,29 @@ export default class OperatorModeStateService extends Service {
       this._state.submode === Submodes.Code &&
       this.codePathString?.endsWith('.json')
     );
+  }
+
+  /**
+   * Determines if we're currently viewing a card in the playground panel
+   */
+  get isViewingCardInPlaygroundPanel(): boolean {
+    return (
+      this._state.submode === Submodes.Code &&
+      this.moduleInspectorPanel === 'preview' &&
+      !!this.playgroundPanelSelection?.cardId
+    );
+  }
+
+  /**
+   * Gets the current format being viewed for focus pill display
+   */
+  get currentViewingFormat(): Format | undefined {
+    if (this.isViewingCardInCodeMode) {
+      return this._state.cardPreviewFormat ?? 'isolated';
+    } else if (this.isViewingCardInPlaygroundPanel) {
+      return this.playgroundPanelSelection?.format ?? 'isolated';
+    }
+    return undefined;
   }
 
   getOpenCardIds(): string[] {
@@ -1114,9 +1134,8 @@ export default class OperatorModeStateService extends Service {
 
   get playgroundPanelSelection(): PlaygroundSelection | undefined {
     if (this.moduleInspectorPanel === 'preview') {
-      let playgroundSelections = JSON.parse(
-        window.localStorage.getItem(PlaygroundSelections) ?? '{}',
-      );
+      let playgroundSelections =
+        this.playgroundPanelService.playgroundSelections ?? {};
       if (this.codePathString && playgroundSelections[this.codePathString]) {
         return playgroundSelections[this.codePathString];
       }
@@ -1178,14 +1197,14 @@ export default class OperatorModeStateService extends Service {
         codeMode.moduleInspectorPanel = 'preview';
         codeMode.previewPanelSelection = {
           cardId: this.codePathString!.replace(/\.json$/, ''),
-          format: this._state.cardPreviewFormat ?? 'isolated',
+          format: this.currentViewingFormat ?? 'isolated',
         };
       } else {
         codeMode.moduleInspectorPanel = this.moduleInspectorPanel;
         codeMode.previewPanelSelection = this.playgroundPanelSelection
           ? {
               cardId: this.playgroundPanelSelection.cardId,
-              format: this.playgroundPanelSelection.format,
+              format: this.currentViewingFormat!,
             }
           : undefined;
         codeMode.selectedCodeRef = this.codeSemanticsService.selectedCodeRef;

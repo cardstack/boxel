@@ -132,7 +132,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       }
       .contains-many-editor
         :deep(.compound-field.edit-format .add-button--full-width) {
-        border: var(--boxel-border);
+        border: 1px solid var(--border, var(--boxel-border-color));
       }
       .list {
         list-style: none;
@@ -149,20 +149,17 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       .editor.can-write {
         grid-template-columns: var(--boxel-icon-lg) 1fr var(--remove-icon-size);
       }
-      .editor :deep(.boxel-input:hover) {
-        border-color: var(--boxel-form-control-border-color);
-      }
       .editor + .editor {
         margin-top: var(--boxel-sp-xs);
       }
       .item-container {
         padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
+        background-color: var(--muted, var(--boxel-100));
         border-radius: var(--boxel-form-control-border-radius);
         transition: background-color var(--boxel-transition);
       }
       .remove {
-        --icon-color: var(--boxel-dark);
+        --icon-color: currentColor;
         --icon-stroke-width: 1.5px;
         align-self: auto;
         outline: 0;
@@ -170,12 +167,18 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       }
       .remove:focus,
       .remove:hover {
-        --icon-color: var(--boxel-red);
+        --icon-color: var(--destructive, var(--boxel-danger));
         outline: 0;
       }
       .remove:focus + .item-container,
-      .remove:hover + .item-container {
-        background-color: var(--boxel-200);
+      .remove:hover + .item-container,
+      .sort:active ~ .item-container,
+      .sort:hover ~ .item-container {
+        background-color: var(--accent, var(--boxel-200));
+        color: var(--accent-foreground);
+      }
+      .sort:active ~ .item-container {
+        box-shadow: var(--boxel-box-shadow-hover);
       }
       .add-new {
         width: calc(100% - var(--boxel-icon-xxl));
@@ -188,10 +191,6 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       }
       .sort:active {
         cursor: grabbing;
-      }
-      .sort:active + .item-container,
-      .sort:hover + .item-container {
-        background-color: var(--boxel-200);
       }
       :deep(.is-dragging) {
         z-index: 99;
@@ -337,7 +336,7 @@ export function getContainsManyComponent({
         @layer {
           .containsMany-field.edit-format {
             padding: var(--boxel-sp-sm);
-            background-color: var(--boxel-100);
+            background-color: var(--muted, var(--boxel-100));
             border: none !important;
             border-radius: var(--boxel-border-radius);
           }

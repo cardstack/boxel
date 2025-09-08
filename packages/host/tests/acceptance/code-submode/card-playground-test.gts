@@ -1654,21 +1654,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .hasText('This card contains an error.');
       assert.dom('[data-test-error-message]').hasText('Boom!');
 
-      await withoutLoaderMonitoring(async () => {
-        // The loader service is shared between the indexer and the host.
-        // need to reset the loader to pick up the changed module in the indexer
-        getService('loader-service').resetLoader();
-        // fix error
-        await realm.write(
-          'boom-pet.gts',
-          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+      getService('loader-service').resetLoader();
+      // fix error
+      await realm.write(
+        'boom-pet.gts',
+        `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
             export class BoomPet extends CardDef {
               static displayName = 'Boom Pet';
               @field boom = contains(StringField);
             }
           `,
-        );
-      });
+      );
       await waitFor(`[data-test-error-container]`, {
         count: 0,
         timeout: 5_000,
