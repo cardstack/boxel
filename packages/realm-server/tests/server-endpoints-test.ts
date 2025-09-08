@@ -91,7 +91,7 @@ module(basename(__filename), function () {
         copySync(join(__dirname, 'cards'), dir.name);
       });
 
-      module.only('various other realm tests', function (hooks) {
+      module('various other realm tests', function (hooks) {
         let testRealmHttpServer2: Server;
         let testRealmServer2: RealmServer;
         let testRealm2: Realm;
@@ -1738,6 +1738,114 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
           assert.strictEqual(response.body.data.type, 'published_realm');
+        });
+
+        test('POST /_publish-realm sets read-only permissions for published realm', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL:
+                  'http://testuser.localhost/test-realm-permissions/',
+              }),
+            );
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+
+          // Get the published realm URL from the response
+          let publishedRealmURL =
+            response.body.data.attributes.publishedRealmURL;
+
+          // Query the database to check the permissions
+          let results = await dbAdapter.execute(
+            `SELECT * FROM realm_user_permissions WHERE realm_url = '${publishedRealmURL}'`,
+          );
+
+          assert.ok(
+            results.length > 0,
+            'Permissions should exist for published realm',
+          );
+
+          let realmPermissions = results.map((r) => ({
+            username: r.username,
+            read: r.read,
+            write: r.write,
+            realm_owner: r.realm_owner,
+          }));
+
+          // Check that owner has only read permissions
+          let ownerPermissions = realmPermissions.find(
+            (r) => r.username === ownerUserId,
+          );
+          assert.ok(ownerPermissions, 'Owner permissions should exist');
+          assert.strictEqual(
+            ownerPermissions!.read,
+            true,
+            'Owner should have read permission',
+          );
+          assert.strictEqual(
+            ownerPermissions!.write,
+            false,
+            'Owner should not have write permission',
+          );
+          assert.strictEqual(
+            ownerPermissions!.realm_owner,
+            false,
+            'Owner should not have realm_owner permission',
+          );
+
+          // Check that public users have only read permissions
+          let publicPermissions = realmPermissions.find(
+            (r) => r.username === '*',
+          );
+          assert.ok(publicPermissions, 'Public permissions should exist');
+          assert.strictEqual(
+            publicPermissions!.read,
+            true,
+            'Public users should have read permission',
+          );
+          assert.strictEqual(
+            publicPermissions!.write,
+            false,
+            'Public users should not have write permission',
+          );
+          assert.strictEqual(
+            publicPermissions!.realm_owner,
+            false,
+            'Public users should not have realm_owner permission',
+          );
+
+          // Find the realm bot user (should be the only other user with permissions)
+          let botPermissions = realmPermissions.find(
+            (r) => r.username !== ownerUserId && r.username !== '*',
+          );
+
+          assert.ok(botPermissions, 'Realm bot user should exist');
+          assert.strictEqual(
+            botPermissions!.read,
+            true,
+            'Realm bot user should have read permission',
+          );
+          assert.strictEqual(
+            botPermissions!.write,
+            false,
+            'Realm bot user should not have write permission',
+          );
+          assert.strictEqual(
+            botPermissions!.realm_owner,
+            false,
+            'Realm bot user should not have realm_owner permission',
+          );
         });
       });
 

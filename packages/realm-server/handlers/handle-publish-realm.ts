@@ -4,7 +4,6 @@ import {
   SupportedMimeType,
   logger,
   createResponse,
-  DEFAULT_PERMISSIONS,
   insertPermissions,
   insert,
   asExpressions,
@@ -186,8 +185,8 @@ export default function handlePublishRealm({
         userId = newUserId;
 
         await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-          [userId]: DEFAULT_PERMISSIONS,
-          [ownerUserId]: DEFAULT_PERMISSIONS,
+          [userId]: ['read'],
+          [ownerUserId]: ['read'],
           '*': ['read'],
         });
       }
@@ -243,7 +242,7 @@ export default function handlePublishRealm({
         requestContext: {
           realm: realm,
           permissions: {
-            [ownerUserId]: DEFAULT_PERMISSIONS,
+            [ownerUserId]: ['read'],
           },
         },
       });
