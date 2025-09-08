@@ -6,9 +6,9 @@ import { pageTitle } from 'ember-page-title';
 
 import RouteTemplate from 'ember-route-template';
 
-import { HostModeComponent, HostModeComponentSignature } from './card';
-
 import OperatorModeContainer from '../components/operator-mode/container';
+
+import { HostModeComponent, HostModeComponentSignature } from './card';
 
 import type HostModeService from '../services/host-mode-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
