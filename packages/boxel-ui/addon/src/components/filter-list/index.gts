@@ -38,7 +38,7 @@ const FilterList: TemplateOnlyComponent<Signature> = <template>
     {{/each}}
   </ul>
   <style scoped>
-    @layer {
+    @layer boxelComponentL2 {
       .filter-list {
         display: flex;
         flex-direction: column;
@@ -127,7 +127,7 @@ export class ListItem extends Component<ListItemSignature> {
       {{/if}}
     </li>
     <style scoped>
-      @layer {
+      @layer boxelComponentL2 {
         .list-item-buttons {
           display: flex;
           border-radius: var(--boxel-border-radius-sm);
