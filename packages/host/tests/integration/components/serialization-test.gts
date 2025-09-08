@@ -3665,6 +3665,143 @@ module('Integration | serialization', function (hooks) {
     }
   });
 
+  test('can serialize polymorphic containsMany fields nested within a field', async function (assert) {
+    class Tag extends FieldDef {
+      @field name = contains(StringField);
+      @field color = contains(StringField);
+    }
+
+    class PriorityTag extends Tag {
+      @field priority = contains(NumberField);
+    }
+
+    class StatusTag extends Tag {
+      @field isActive = contains(NumberField);
+    }
+
+    class Category extends FieldDef {
+      @field title = contains(StringField);
+      @field tags = containsMany(Tag);
+      @field priority = contains(NumberField);
+    }
+
+    class Article extends CardDef {
+      @field title = contains(StringField);
+      @field category = contains(Category);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Tag, PriorityTag, StatusTag, Category, Article },
+      },
+    });
+
+    let article = new Article({
+      title: 'How to Test Nested Fields',
+      category: new Category({
+        title: 'Programming',
+        priority: 1,
+        tags: [
+          new PriorityTag({ name: 'javascript', color: 'yellow', priority: 5 }),
+          new StatusTag({ name: 'testing', color: 'green', isActive: 1 }),
+          new Tag({ name: 'serialization', color: 'blue' }),
+        ],
+      }),
+    });
+
+    let serialized = serializeCard(article, { includeUnrenderedFields: true });
+
+    assert.deepEqual(serialized, {
+      data: {
+        lid: article[localId],
+        type: 'card',
+        attributes: {
+          title: 'How to Test Nested Fields',
+          category: {
+            title: 'Programming',
+            priority: 1,
+            tags: [
+              { name: 'javascript', color: 'yellow', priority: 5 },
+              { name: 'testing', color: 'green', isActive: 1 },
+              { name: 'serialization', color: 'blue' },
+            ],
+          },
+          cardInfo,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Article',
+          },
+          fields: {
+            category: {
+              fields: {
+                tags: [
+                  {
+                    adoptsFrom: {
+                      module: `${testRealmURL}test-cards`,
+                      name: 'PriorityTag',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: `${testRealmURL}test-cards`,
+                      name: 'StatusTag',
+                    },
+                  },
+                  {},
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Test deserialization roundtrip
+    let deserializedArticle = await createFromSerialized(
+      serialized.data,
+      serialized,
+      undefined,
+    );
+    
+    if (deserializedArticle instanceof Article) {
+      assert.strictEqual(deserializedArticle.title, 'How to Test Nested Fields');
+      let { category } = deserializedArticle;
+      
+      if (category instanceof Category) {
+        assert.strictEqual(category.title, 'Programming');
+        assert.strictEqual(category.priority, 1);
+        assert.strictEqual(category.tags.length, 3, 'correct number of tags');
+        
+        // Check first tag (PriorityTag)
+        let tag0 = category.tags[0];
+        assert.ok(tag0 instanceof PriorityTag, 'first tag is PriorityTag');
+        assert.strictEqual(tag0.name, 'javascript');
+        assert.strictEqual(tag0.color, 'yellow');
+        assert.strictEqual(tag0.priority, 5);
+        
+        // Check second tag (StatusTag)
+        let tag1 = category.tags[1];
+        assert.ok(tag1 instanceof StatusTag, 'second tag is StatusTag');
+        assert.strictEqual(tag1.name, 'testing');
+        assert.strictEqual(tag1.color, 'green');
+        assert.strictEqual(tag1.isActive, 1);
+        
+        // Check third tag (base Tag)
+        let tag2 = category.tags[2];
+        assert.ok(tag2 instanceof Tag, 'third tag is base Tag');
+        assert.strictEqual(tag2.name, 'serialization');
+        assert.strictEqual(tag2.color, 'blue');
+      } else {
+        assert.ok(false, 'category field is not an instance of Category');
+      }
+    } else {
+      assert.ok(false, 'deserialized card is not an instance of Article');
+    }
+  });
+
   test('can deserialize polymorphic containsMany with nested polymorphic values', async function (assert) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
