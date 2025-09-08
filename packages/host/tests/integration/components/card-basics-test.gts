@@ -2314,6 +2314,72 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-customer-billAmount]').containsText('100');
     });
 
+    test('can render a card with polymorphic primitive containsMany field', async function (assert) {
+      class CustomerGroup extends CardDef {
+        @field names = containsMany(FieldDef);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            Customer Names:
+            <div data-test-customer-names><@fields.names /></div>
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        CustomerGroup,
+      });
+
+      let group = new CustomerGroup({
+        people: ['Mango', 'Van Gogh'],
+        [fields]: {
+          'names.0': StringField,
+          'names.1': StringField,
+        },
+      });
+      await renderCard(loader, group, 'isolated');
+      // await this.pauseTest();
+      assert.dom('[data-test-customer-names]').containsText('Mango');
+      assert.dom('[data-test-customer-names]').containsText('Van Gogh');
+    });
+
+    test('can render a card with polymorphic primitive contains field', async function (assert) {
+      class SpecialStringEmbedded extends Component<typeof SpecialString> {
+        <template>
+          <span data-test-polymorphic='special-string'>{{@model}}</span>
+        </template>
+      }
+      class SpecialString extends StringField {
+        static displayName = 'SpecialString';
+        static embedded = SpecialStringEmbedded;
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = contains(FieldDef);
+        static isolated = class Isolated extends Component<typeof TestCard> {
+          <template>
+            Special Field:
+            <@fields.specialField />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        SpecialString,
+        TestCard,
+      });
+
+      let card = new TestCard({
+        specialField: 'Mango',
+        [fields]: {
+          specialField: SpecialString,
+        },
+      });
+
+      await renderCard(loader, card, 'isolated');
+      // await this.pauseTest();
+      assert.dom('[data-test-polymorphic="special-string"]').hasText('Mango');
+    });
+
     test('re-renders a card with polymorphic primitive contains field', async function (assert) {
       class SpecialStringAEmbedded extends Component<typeof SpecialStringA> {
         <template>

@@ -48,9 +48,6 @@ class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
 }
 
-const PRIMITIVE_INCOMPATIBILITY_MESSAGE =
-  'Examples are not currently supported for primitive fields';
-
 class Isolated extends Component<typeof Spec> {
   get defaultIcon() {
     if (!this.args.model) {
@@ -141,16 +138,7 @@ class Isolated extends Component<typeof Spec> {
           <h2 id='examples'>Examples</h2>
         </header>
         {{#if (eq @model.specType 'field')}}
-          {{#if this.isPrimitiveField}}
-            <p
-              class='spec-example-incompatible-message'
-              data-test-spec-example-incompatible-primitives
-            >
-              <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
-            </p>
-          {{else}}
-            <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
-          {{/if}}
+          <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
         {{/if}}
       </section>
       <section class='module section'>
@@ -657,16 +645,7 @@ class Edit extends Component<typeof Spec> {
           <h2 id='examples'>Examples</h2>
         </header>
         {{#if (eq @model.specType 'field')}}
-          {{#if this.isPrimitiveField}}
-            <p
-              class='spec-example-incompatible-message'
-              data-test-spec-example-incompatible-primitives
-            >
-              <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
-            </p>
-          {{else}}
-            <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
-          {{/if}}
+          <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
         {{else}}
           <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
         {{/if}}

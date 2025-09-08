@@ -69,7 +69,7 @@ interface Signature {
 
 export default class Playground extends Component<Signature> {
   private get playgroundPanelArgs() {
-    if (!this.args.codeRef || isPrimitive(this.args.cardOrField)) {
+    if (!this.args.codeRef) {
       return undefined;
     }
     return {

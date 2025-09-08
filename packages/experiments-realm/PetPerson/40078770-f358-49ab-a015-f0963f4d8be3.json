@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PetPerson",
+        "module": "../pet-person"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "petName": {
+        "name": "Marco"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "nickname": "Pete",
+      "firstName": "Peter"
+    },
+    "relationships": {
+      "pets": {
+        "links": {
+          "self": null
+        }
+      },
+      "friend": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

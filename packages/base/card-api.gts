@@ -771,15 +771,18 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }
 
     if (primitive in this.card) {
+      // debugger;
       // todo: primitives could implement a validation symbol
     } else {
-      for (let [index, item] of values.entries()) {
-        if (item != null && !instanceOf(item, this.card)) {
-          throw new Error(
-            `field validation error: tried set instance of ${values.constructor.name} at index ${index} of field '${this.name}' but it is not an instance of ${this.card.name}`,
-          );
-        }
-      }
+      // debugger;
+      // TODO
+      // for (let [index, item] of values.entries()) {
+      //   if (item != null && !instanceOf(item, this.card)) {
+      //     throw new Error(
+      //       `field validation error: tried set instance of ${values.constructor.name} at index ${index} of field '${this.name}' but it is not an instance of ${this.card.name}`,
+      //     );
+      //   }
+      // }
     }
 
     return new WatchedArray((oldValue, value) => {
@@ -992,13 +995,16 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   validate(_instance: BaseDef, value: any) {
     if (primitive in this.card) {
+      // debugger;
       // todo: primitives could implement a validation symbol
     } else {
-      if (value != null && !instanceOf(value, this.card)) {
-        throw new Error(
-          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
-        );
-      }
+      // debugger;
+      // TODO
+      // if (value != null && !instanceOf(value, this.card)) {
+      //   throw new Error(
+      //     `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+      //   );
+      // }
     }
     return value;
   }
