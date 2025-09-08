@@ -6,12 +6,12 @@ import { pageTitle } from 'ember-page-title';
 
 import RouteTemplate from 'ember-route-template';
 
+import { HostModeComponent, HostModeComponentSignature } from './card';
+
 import OperatorModeContainer from '../components/operator-mode/container';
 
 import type HostModeService from '../services/host-mode-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
-
-import { HostModeComponent, HostModeComponentSignature } from './card';
 
 class IndexComponent extends Component<HostModeComponentSignature> {
   @service private declare hostModeService: HostModeService;
