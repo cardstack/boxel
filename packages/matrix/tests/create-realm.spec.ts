@@ -65,7 +65,7 @@ test.describe('Create Realm via Dashboard', () => {
     ).toBeVisible();
     await expect(
       page.locator(`[data-test-boxel-filter-list-button]`),
-    ).toHaveCount(1);
+    ).toHaveCount(2);
 
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(

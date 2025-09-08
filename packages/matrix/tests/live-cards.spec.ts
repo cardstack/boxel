@@ -151,7 +151,7 @@ test.describe('Live Cards', () => {
         },
       },
     });
-
+    await showAllCards(page);
     await expect(
       page.locator(`[data-test-cards-grid-item="${newCardURL}"]`),
     ).toHaveCount(1);
