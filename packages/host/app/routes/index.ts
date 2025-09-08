@@ -23,7 +23,7 @@ import type StoreService from '../services/store';
 
 const { hostsOwnAssets } = ENV;
 
-export default class Index extends Route<void> {
+export default class Index extends Route {
   queryParams = {
     operatorModeState: {
       refreshModel: true, // Enabled so that back-forward navigation works in operator mode
@@ -55,7 +55,7 @@ export default class Index extends Route<void> {
     cardPath?: string;
     path: string;
     operatorModeState: string;
-  }): Promise<void | ReturnType<typeof CardService.prototype.get>> {
+  }) {
     if (this.hostModeService.isActive) {
       // Duplicated from routes/card
       await this.realmServer.ready;
@@ -136,6 +136,8 @@ export default class Index extends Route<void> {
       await this.operatorModeStateService.restore(
         operatorModeStateObject || { stacks: [] },
       );
+
+      return;
     }
   }
 
