@@ -2235,7 +2235,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Switch back to Highlights filter
       await click('[data-test-boxel-filter-list-button="Highlights"]');
       assert.dom('[data-test-highlights-layout]').exists();
-      assert.dom('[data-test-section-header]').exists({ count: 2 }); // NEW FEATURE, GETTING STARTED
+      assert.dom('[data-test-section-header]').exists({ count: 3 });
       assert.dom('[data-test-community-link]').exists({ count: 4 });
     });
   });
