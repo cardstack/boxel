@@ -15,7 +15,7 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import CopyCardCommand from './copy-card';
+import CopyCardToRealmCommand from './copy-card-to-realm';
 import SaveCardCommand from './save-card';
 
 import type RealmServerService from '../services/realm-server';
@@ -83,7 +83,7 @@ export default class ListingUseCommand extends HostBaseCommand<
         (example) => example,
       );
       for (const card of sourceCards) {
-        await new CopyCardCommand(this.commandContext).execute({
+        await new CopyCardToRealmCommand(this.commandContext).execute({
           sourceCard: card,
           targetRealm: realmUrl,
           localDir,
@@ -94,7 +94,7 @@ export default class ListingUseCommand extends HostBaseCommand<
     if ('skills' in listing && Array.isArray(listing.skills)) {
       await Promise.all(
         listing.skills.map((skill: Skill) =>
-          new CopyCardCommand(this.commandContext).execute({
+          new CopyCardToRealmCommand(this.commandContext).execute({
             sourceCard: skill,
             targetRealm: realmUrl,
             localDir,

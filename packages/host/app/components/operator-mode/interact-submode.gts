@@ -40,7 +40,6 @@ import {
   CardError,
   loadCardDef,
   localId as localIdSymbol,
-  realmURL as realmURLSymbol,
   specRef,
   type getCard,
   type getCards,
@@ -54,7 +53,7 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
-import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -349,17 +348,15 @@ export default class InteractSubmode extends Component {
             `destination index card ${destinationIndexCardUrl} is not a card`,
           );
         }
-        let destinationRealmURL = destinationIndexCard[realmURLSymbol];
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCardId: string | undefined;
         let newCardId: string | undefined;
         let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
-          ({ newCardId } = await new CopyCardCommand(
+          ({ newCardId } = await new CopyCardToStackCommand(
             this.commandService.commandContext,
           ).execute({
             sourceCard: card,
-            targetRealm: destinationRealmURL?.href,
             targetStackIndex,
           }));
           if (index === 0) {

@@ -24,7 +24,7 @@ import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card-to-realm';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
@@ -145,7 +145,9 @@ export default class RoomMessageCommand extends Component<Signature> {
     if (!defaultWritableRealm) {
       throw new Error('No writable realm available to copy card to');
     }
-    const { newCardId } = await new CopyCardCommand(commandContext).execute({
+    const { newCardId } = await new CopyCardToRealmCommand(
+      commandContext,
+    ).execute({
       sourceCard: this.commandResultCard.card as CardDef,
       targetRealm: defaultWritableRealm.path,
     });
