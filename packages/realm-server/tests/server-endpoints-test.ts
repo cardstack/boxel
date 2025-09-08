@@ -1788,19 +1788,16 @@ module(basename(__filename), function () {
             (r) => r.username === ownerUserId,
           );
           assert.ok(ownerPermissions, 'Owner permissions should exist');
-          assert.strictEqual(
+          assert.true(
             ownerPermissions!.read,
-            true,
             'Owner should have read permission',
           );
-          assert.strictEqual(
+          assert.false(
             ownerPermissions!.write,
-            false,
             'Owner should not have write permission',
           );
-          assert.strictEqual(
+          assert.true(
             ownerPermissions!.realm_owner,
-            false,
             'Owner should not have realm_owner permission',
           );
 
@@ -1809,19 +1806,16 @@ module(basename(__filename), function () {
             (r) => r.username === '*',
           );
           assert.ok(publicPermissions, 'Public permissions should exist');
-          assert.strictEqual(
+          assert.true(
             publicPermissions!.read,
-            true,
             'Public users should have read permission',
           );
-          assert.strictEqual(
+          assert.false(
             publicPermissions!.write,
-            false,
             'Public users should not have write permission',
           );
-          assert.strictEqual(
+          assert.false(
             publicPermissions!.realm_owner,
-            false,
             'Public users should not have realm_owner permission',
           );
 
@@ -1831,19 +1825,16 @@ module(basename(__filename), function () {
           );
 
           assert.ok(botPermissions, 'Realm bot user should exist');
-          assert.strictEqual(
+          assert.true(
             botPermissions!.read,
-            true,
             'Realm bot user should have read permission',
           );
-          assert.strictEqual(
+          assert.false(
             botPermissions!.write,
-            false,
             'Realm bot user should not have write permission',
           );
-          assert.strictEqual(
+          assert.true(
             botPermissions!.realm_owner,
-            false,
             'Realm bot user should not have realm_owner permission',
           );
         });

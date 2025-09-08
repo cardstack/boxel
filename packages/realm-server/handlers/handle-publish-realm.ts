@@ -185,8 +185,8 @@ export default function handlePublishRealm({
         userId = newUserId;
 
         await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-          [userId]: ['read'],
-          [ownerUserId]: ['read'],
+          [userId]: ['read', 'realm-owner'],
+          [ownerUserId]: ['read', 'realm-owner'],
           '*': ['read'],
         });
       }
