@@ -14,7 +14,6 @@ import {
   logger,
   isUrlLike,
 } from './index';
-import { isResolvedCodeRef } from './code-ref';
 import { transpileJS } from './transpile';
 import {
   type Expression,
