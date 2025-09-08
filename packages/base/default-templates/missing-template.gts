@@ -6,6 +6,7 @@ import { identifyCard, isCardDef, moduleFrom } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { Button } from '@cardstack/boxel-ui/components';
+// @ts-ignore can't include this in tuntime-common tsconfig until we
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 
 export default class MissingTemplate extends GlimmerComponent<{
