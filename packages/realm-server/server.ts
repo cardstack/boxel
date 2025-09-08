@@ -66,7 +66,7 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
-  private defaultPublishedRealmDomain: string | undefined;
+  private validPublishedRealmDomains: string[] | undefined;
 
   constructor({
     serverURL,
@@ -84,7 +84,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
-    defaultPublishedRealmDomain,
+    validPublishedRealmDomains,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -101,7 +101,7 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
-    defaultPublishedRealmDomain?: string;
+    validPublishedRealmDomains?: string[];
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -126,7 +126,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
-    this.defaultPublishedRealmDomain = defaultPublishedRealmDomain;
+    this.validPublishedRealmDomains = validPublishedRealmDomains;
     this.realms = [...realms];
   }
 
@@ -182,7 +182,7 @@ export class RealmServer {
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           createAndMountRealm: this.createAndMountRealm,
-          defaultPublishedRealmDomain: this.defaultPublishedRealmDomain,
+          validPublishedRealmDomains: this.validPublishedRealmDomains,
         }),
       )
       .use(this.serveIndex)

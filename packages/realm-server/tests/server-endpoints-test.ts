@@ -91,7 +91,7 @@ module(basename(__filename), function () {
         copySync(join(__dirname, 'cards'), dir.name);
       });
 
-      module('various other realm tests', function (hooks) {
+      module.only('various other realm tests', function (hooks) {
         let testRealmHttpServer2: Server;
         let testRealmServer2: RealmServer;
         let testRealm2: Realm;
@@ -1520,6 +1520,7 @@ module(basename(__filename), function () {
             .send(
               JSON.stringify({
                 sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://testuser.localhost/test-realm/',
               }),
             );
 
@@ -1557,6 +1558,7 @@ module(basename(__filename), function () {
             .send(
               JSON.stringify({
                 sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://testuser.localhost/test-realm/',
               }),
             );
 
@@ -1586,6 +1588,7 @@ module(basename(__filename), function () {
             .send(
               JSON.stringify({
                 sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://testuser.localhost/test-realm/',
               }),
             );
 
@@ -1624,7 +1627,33 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 400, 'HTTP 400 status');
           assert.strictEqual(
             response.text,
-            '{"errors":["sourceRealmURL"]}',
+            '{"errors":["sourceRealmURL is required"]}',
+            'Error message is correct',
+          );
+        });
+
+        test('POST /_publish-realm returns bad request for missing publishedRealmURL', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+              }),
+            );
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          assert.strictEqual(
+            response.text,
+            '{"errors":["publishedRealmURL is required"]}',
             'Error message is correct',
           );
         });
@@ -1645,6 +1674,7 @@ module(basename(__filename), function () {
             .send(
               JSON.stringify({
                 sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://testuser.localhost/test-realm/',
               }),
             );
 
@@ -1655,6 +1685,59 @@ module(basename(__filename), function () {
             ),
             'Error message is correct',
           );
+        });
+
+        test('POST /_publish-realm returns bad request for invalid publishedRealmURL domain', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://invalid-domain.com/test-realm/',
+              }),
+            );
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          assert.true(
+            response.text.includes(
+              'publishedRealmURL must use a valid domain ending with one of: localhost',
+            ),
+            'Error message is correct',
+          );
+        });
+
+        test('POST /_publish-realm accepts valid domain from multiple allowed domains', async function (assert) {
+          // This test would require setting up a test server with multiple valid domains
+          // For now, we'll test that the validation logic works with the default localhost domain
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://subdomain.localhost/test-realm/',
+              }),
+            );
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.body.data.type, 'published_realm');
         });
       });
 

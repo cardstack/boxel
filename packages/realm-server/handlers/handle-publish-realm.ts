@@ -5,7 +5,6 @@ import {
   logger,
   createResponse,
   DEFAULT_PERMISSIONS,
-  getMatrixUsername,
   insertPermissions,
   insert,
   asExpressions,
@@ -32,7 +31,6 @@ import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 const log = logger('handle-publish');
 
 export default function handlePublishRealm({
-  serverURL,
   dbAdapter,
   matrixClient,
   realmSecretSeed,
@@ -41,7 +39,7 @@ export default function handlePublishRealm({
   realmsRootPath,
   getMatrixRegistrationSecret,
   createAndMountRealm,
-  defaultPublishedRealmDomain,
+  validPublishedRealmDomains,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -67,17 +65,44 @@ export default function handlePublishRealm({
     }
 
     if (!json.sourceRealmURL) {
-      await sendResponseForBadRequest(ctxt, 'sourceRealmURL');
+      await sendResponseForBadRequest(ctxt, 'sourceRealmURL is required');
+      return;
+    }
+
+    if (!json.publishedRealmURL) {
+      await sendResponseForBadRequest(ctxt, 'publishedRealmURL is required');
       return;
     }
 
     let sourceRealmURL = json.sourceRealmURL.endsWith('/')
       ? json.sourceRealmURL
       : `${json.sourceRealmURL}/`;
-    let publishedRealmURL =
-      json.publishedRealmURL && !json.publishedRealmURL.endsWith('/')
-        ? `${json.publishedRealmURL}/`
-        : json.publishedRealmURL;
+    let publishedRealmURL = json.publishedRealmURL.endsWith('/')
+      ? json.publishedRealmURL
+      : `${json.publishedRealmURL}/`;
+
+    // Validate publishedRealmURL domain
+    try {
+      let publishedURL = new URL(publishedRealmURL);
+      if (validPublishedRealmDomains && validPublishedRealmDomains.length > 0) {
+        let isValidDomain = validPublishedRealmDomains.some((domain) =>
+          publishedURL.hostname.endsWith(domain),
+        );
+        if (!isValidDomain) {
+          await sendResponseForBadRequest(
+            ctxt,
+            `publishedRealmURL must use a valid domain ending with one of: ${validPublishedRealmDomains.join(', ')}`,
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      await sendResponseForBadRequest(
+        ctxt,
+        'publishedRealmURL is not a valid URL',
+      );
+      return;
+    }
 
     let { user: ownerUserId } = token;
     let permissions = await fetchUserPermissions(
@@ -89,22 +114,6 @@ export default function handlePublishRealm({
         ctxt,
         `${ownerUserId} does not have enough permission to publish this realm`,
       );
-      return;
-    }
-
-    let ownerUsername = getMatrixUsername(ownerUserId);
-
-    try {
-      publishedRealmURL =
-        publishedRealmURL ??
-        createPublishedRealmURL(
-          ownerUsername,
-          new URL(serverURL),
-          new URL(sourceRealmURL),
-          defaultPublishedRealmDomain,
-        );
-    } catch (e: any) {
-      await sendResponseForBadRequest(ctxt, e.message);
       return;
     }
 
@@ -245,26 +254,4 @@ export default function handlePublishRealm({
       await sendResponseForSystemError(ctxt, error.message);
     }
   };
-}
-
-function createPublishedRealmURL(
-  ownerUsername: string,
-  _serverURL: URL,
-  sourceRealmURL: URL,
-  defaultPublishedRealmDomain?: string,
-) {
-  let sourceRealmName = sourceRealmURL.pathname
-    .split('/')
-    .filter((p) => p !== '')
-    .pop();
-  if (!sourceRealmName) {
-    throw new Error('Could not determine source realm name');
-  }
-
-  let serverURL = new URL(_serverURL);
-  let hostname = defaultPublishedRealmDomain || serverURL.hostname;
-  let isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-  return isLocalhost
-    ? `${serverURL.protocol}//${ownerUsername}.${hostname}:${serverURL.port}/${sourceRealmName}/`
-    : `${serverURL.protocol}//${ownerUsername}.${hostname}/${sourceRealmName}/`;
 }
