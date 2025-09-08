@@ -3,6 +3,11 @@ import path from 'path';
 import { execSync } from 'child_process';
 import os from 'os';
 
+const fileChecksumPath = path.join(
+  process.cwd(),
+  '/../../../persistent/boxel-ui-checksum.txt',
+);
+
 function calculateDirectoryChecksum(dirPath: string): string {
   const shaCommand = os.platform() === 'darwin' ? 'shasum -a 256' : 'sha256sum';
   const command = `cd "${dirPath}" && find . -type f -print0 | sort -z | xargs -0 cat | ${shaCommand}`;
@@ -36,20 +41,21 @@ export function compareCurrentBoxelUIChecksum() {
       `The boxel-ui change checker expects 'persistent' path to exist but it doesn't: ${persistentPath}`,
     );
   }
-  let filePath = path.join(
-    process.cwd(),
-    '/../../../persistent/boxel-ui-checksum.txt',
-  );
+
   try {
-    previousChecksum = fs.readFileSync(filePath, 'utf8').trim();
+    previousChecksum = fs.readFileSync(fileChecksumPath, 'utf8').trim();
   } catch (error) {
     // File doesn't exist or can't be read
     // Create file with the checksum
-    fs.writeFileSync(filePath, currentChecksum);
+    writeCurrentBoxelUIChecksum(currentChecksum);
   }
 
   return {
     previousChecksum,
     currentChecksum,
   };
+}
+
+export function writeCurrentBoxelUIChecksum(checksum: string) {
+  fs.writeFileSync(fileChecksumPath, checksum);
 }

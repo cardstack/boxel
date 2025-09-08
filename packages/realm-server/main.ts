@@ -6,6 +6,7 @@ import {
   logger,
   RunnerOptionsManager,
   Deferred,
+  systemInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -17,6 +18,11 @@ import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
+import {
+  compareCurrentBoxelUIChecksum,
+  writeCurrentBoxelUIChecksum,
+} from 'lib/boxel-ui-change-checker';
+import { reindex } from 'handlers/handle-reindex';
 
 let log = logger('main');
 if (process.env.NODE_ENV === 'test') {
@@ -340,6 +346,25 @@ let autoMigrate = migrateDB || undefined;
 
   if (process.send) {
     process.send('ready');
+  }
+
+  // TODO: wrap this in a job
+  let boxelUiChangeCheckerResult = compareCurrentBoxelUIChecksum();
+  if (
+    boxelUiChangeCheckerResult.currentChecksum !==
+    boxelUiChangeCheckerResult.previousChecksum
+  ) {
+    log.info('Boxel UI has changed, reindexing...');
+
+    for (let realm of realms) {
+      await reindex({
+        realm,
+        queue,
+        dbAdapter,
+        priority: systemInitiatedPriority,
+      });
+    }
+    writeCurrentBoxelUIChecksum(boxelUiChangeCheckerResult.currentChecksum);
   }
 })().catch((e: any) => {
   Sentry.captureException(e);
