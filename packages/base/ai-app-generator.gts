@@ -89,6 +89,7 @@ export class AiAppGenerator extends CardDef {
                 @size='base'
                 {{on 'click' this.executeAskAi}}
                 disabled={{this.askAi.isRunning}}
+                data-test-create-this-for-me
               >
                 {{if this.askAi.isRunning 'Creating...' 'Create this for me'}}
               </BoxelButton>
@@ -101,7 +102,7 @@ export class AiAppGenerator extends CardDef {
                 <BoxelButton
                   @kind='secondary'
                   @size='small'
-                  title={{suggestion.description}}
+                  title={{suggestion.title}}
                   {{on 'click' (fn this.setPromptValue suggestion.description)}}
                 >
                   {{suggestion.title}}

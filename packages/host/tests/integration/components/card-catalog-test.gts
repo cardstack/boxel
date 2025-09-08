@@ -199,6 +199,7 @@ module('Integration | card-catalog', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
     await waitFor('[data-test-realm="Local Workspace"]');
     await waitFor('[data-test-realm="Base Workspace"]');

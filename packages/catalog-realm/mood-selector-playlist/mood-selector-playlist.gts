@@ -94,8 +94,8 @@ class MoodSelectorPlaylistEmbedded extends Component<
       console.log(`Opening playlist: ${mood.name}`);
       this.isAnimating = false;
 
-      if (mood.playlist && this.args.context?.actions?.viewCard) {
-        this.args.context.actions.viewCard(mood.playlist, 'isolated');
+      if (mood.playlist && this.args.viewCard) {
+        this.args.viewCard(mood.playlist, 'isolated');
       }
     }, 1500);
   }
@@ -111,11 +111,8 @@ class MoodSelectorPlaylistEmbedded extends Component<
     event.stopPropagation();
     event.preventDefault();
 
-    if (this.selectedMood?.playlist && this.args.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(
-        this.selectedMood.playlist,
-        'isolated',
-      );
+    if (this.selectedMood?.playlist && this.args.viewCard) {
+      this.args.viewCard(this.selectedMood.playlist, 'isolated');
     }
   }
 
@@ -436,8 +433,8 @@ class MoodSelectorPlaylistIsolated extends Component<
       console.log(`Opening playlist: ${mood.name}`);
       this.isAnimating = false;
 
-      if (mood.playlist && this.args.context?.actions?.viewCard) {
-        this.args.context.actions.viewCard(mood.playlist, 'isolated');
+      if (mood.playlist && this.args.viewCard) {
+        this.args.viewCard(mood.playlist, 'isolated');
       }
     }, 1500);
   }
@@ -453,11 +450,8 @@ class MoodSelectorPlaylistIsolated extends Component<
     event.stopPropagation();
     event.preventDefault();
 
-    if (this.selectedMood?.playlist && this.args.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(
-        this.selectedMood.playlist,
-        'isolated',
-      );
+    if (this.selectedMood?.playlist && this.args.viewCard) {
+      this.args.viewCard(this.selectedMood.playlist, 'isolated');
     }
   }
 

@@ -4,7 +4,7 @@ import {
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './document-types';
-import { type CardResource } from './resource-types';
+import { isMeta, type CardResource } from './resource-types';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
@@ -2670,7 +2670,16 @@ export class Realm {
   ): Promise<void> {
     for (const [fieldName, fieldValue] of Object.entries(fields)) {
       const fieldPath = basePath ? `${basePath}.${fieldName}` : fieldName;
-
+      if (isMeta(fieldValue) && fieldValue?.fields) {
+        // if we have nested fields, we need to recurse into them
+        await this.buildCustomFieldDefinitions(
+          fieldValue.fields,
+          fieldPath,
+          customFieldDefinitions,
+          relativeTo,
+        );
+        continue;
+      }
       if (Array.isArray(fieldValue)) {
         for (const item of fieldValue) {
           if (item.adoptsFrom) {

@@ -39,6 +39,7 @@ export const isBaseInstance = Symbol.for('isBaseInstance');
 export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
+export const CardCrudFunctionsContextName = 'card-crud-functions-context';
 export const CommandContextName = 'command-context';
 export const DefaultFormatsContextName = 'default-format-context';
 export const GetCardContextName = 'get-card-context';

@@ -14,7 +14,11 @@ import { type Actions } from '@cardstack/runtime-common';
 import type CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  Format,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 
 import { CardDefOrId } from './stack-item';
 
@@ -25,6 +29,7 @@ interface OverlaySignature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
     publicAPI?: Actions;
+    viewCard?: ViewCardFn;
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     onSelectCard?: (cardDefOrId: CardDefOrId) => void;
     toggleSelect?: (cardDefOrId: CardDefOrId) => void;
@@ -221,8 +226,8 @@ export default class Overlays extends Component<OverlaySignature> {
         typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
       let canWrite = this.realm.canWrite(cardId);
       format = canWrite ? format : 'isolated';
-      if (this.args.publicAPI) {
-        await this.args.publicAPI.viewCard(new URL(cardId), format, {
+      if (this.args.viewCard) {
+        await this.args.viewCard(new URL(cardId), format, {
           fieldType,
           fieldName,
         });
