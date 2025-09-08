@@ -1,5 +1,6 @@
 import {
   CardDef,
+  Component,
   FieldDef,
   StringField,
   contains,
@@ -21,6 +22,7 @@ import {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
 } from './commands/search-card-result';
+import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -370,4 +372,56 @@ export class CreateSpecsInput extends CardDef {
 export class CreateSpecsResult extends CardDef {
   @field newSpecs = linksToMany(Spec); // only newly created specs
   @field specs = linksToMany(Spec); // all specs newly created and pre-existing ones
+}
+
+export class PatchFieldsInput extends CardDef {
+  static displayName = 'Patch Fields Input';
+
+  @field cardId = contains(StringField);
+  @field fieldUpdates = contains(JsonField); // Dynamic field mapping as JSON object
+}
+
+export class PatchFieldsOutput extends CardDef {
+  static displayName = 'Patch Fields Result';
+
+  @field success = contains(BooleanField);
+  @field updatedFields = containsMany(StringField); // Array of successfully updated field paths
+  @field errors = contains(JsonField); // Field path to error message mapping
+
+  static embedded = class Embedded extends Component<typeof PatchFieldsOutput> {
+    get updatedFieldsCount(): number {
+      return this.args.model.updatedFields?.length ?? 0;
+    }
+    get commaSepUpdatedFields(): string {
+      return (this.args.model.updatedFields ?? []).join(', ');
+    }
+    get commaSepErrors(): string {
+      let errors = this.args.model.errors ?? {};
+      return Object.entries(errors)
+        .map(([field, message]) => `${field}: ${message}`)
+        .join('; ');
+    }
+    <template>
+      <div class='wrapper'>
+        {{#if (gt this.updatedFieldsCount 0)}}
+          Updated
+          {{this.updatedFieldsCount}}
+          field{{unless (eq this.updatedFieldsCount 1) 's'}}:
+          {{this.commaSepUpdatedFields}}.
+          {{#if @model.errors.length}}
+            Errors:
+            {{this.commaSepErrors}}.
+          {{/if}}
+        {{else}}
+          No fields were updated. Errors:
+          {{this.commaSepErrors}}.
+        {{/if}}
+      </div>
+      <style scoped>
+        .wrapper {
+          padding: var(--boxel-sp-sm);
+        }
+      </style>
+    </template>
+  };
 }

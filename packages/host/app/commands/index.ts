@@ -24,6 +24,7 @@ import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
+import * as PatchFieldsCommandModule from './patch-fields';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
@@ -111,6 +112,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-code',
     PatchCodeCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/patch-fields',
+    PatchFieldsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/preview-format',
@@ -218,6 +223,9 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   CreateAIAssistantRoomCommandModule.default,
   CreateSpecCommandModule.default,
   GetCardCommandModule.default,
+  OpenAiAssistantRoomCommandModule.default,
+  OpenWorkspaceCommandModule.default,
+  PatchFieldsCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
   SaveCardCommandModule.default,
