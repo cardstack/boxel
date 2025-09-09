@@ -182,7 +182,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           @element='header'
           aria-label='Sidebar Header'
         />
-        {{#if @context.actions.createCard}}
+        {{#if @createCard}}
           <BoxelButton
             class='sidebar-create-button'
             @kind='primary'
@@ -407,7 +407,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         },
       },
     };
-    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
+    await this.args.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
       doc,
     });

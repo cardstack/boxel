@@ -8,6 +8,8 @@ import start from 'ember-exam/test-support/start';
 import { useTestWaiters } from '@cardstack/runtime-common';
 import * as TestWaiters from '@ember/test-waiters';
 
+QUnit.dump.maxDepth = 20;
+
 useTestWaiters(TestWaiters);
 setApplication(Application.create(config.APP));
 

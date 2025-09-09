@@ -201,13 +201,9 @@ class Isolated extends Component<typeof CardsGrid> {
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
-      await this.args.context?.actions?.createCard?.(
-        spec.ref,
-        new URL(spec.id!),
-        {
-          realmURL: this.args.model[realmURL],
-        },
-      );
+      await this.args.createCard?.(spec.ref, new URL(spec.id!), {
+        realmURL: this.args.model[realmURL],
+      });
     }
   });
 

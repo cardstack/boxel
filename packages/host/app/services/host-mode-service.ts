@@ -14,7 +14,7 @@ export default class HostModeService extends Service {
       }
 
       return (
-        config.hostsOwnAssets === false &&
+        !config.hostsOwnAssets &&
         this.isRealmServerDomain === false &&
         this.originIsNotMatrixTests
       );
