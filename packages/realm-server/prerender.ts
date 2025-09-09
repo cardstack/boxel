@@ -1,5 +1,10 @@
-import type { PrerenderMeta } from '@cardstack/runtime-common';
+import {
+  type PrerenderMeta,
+  type DBAdapter,
+  fetchUserPermissions,
+} from '@cardstack/runtime-common';
 import puppeteer, { type Page } from 'puppeteer';
+import { createJWT } from './jwt';
 
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string;
@@ -9,7 +14,35 @@ export interface RenderResponse extends PrerenderMeta {
   iconHTML: string;
 }
 
-export async function prerenderCard(url: string): Promise<RenderResponse> {
+export async function prerenderCard({
+  url,
+  userId,
+  secretSeed,
+  dbAdapter,
+}: {
+  url: string;
+  userId: string;
+  secretSeed: string;
+  dbAdapter: DBAdapter;
+}): Promise<RenderResponse> {
+  let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, userId);
+  if (!permissionsForAllRealms) {
+    throw new Error(`Cannot determine permissions for user ${userId}`);
+  }
+  let sessions: { [realm: string]: string } = {};
+  for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
+    sessions[realm] = createJWT(
+      {
+        user: userId,
+        realm: realm,
+        permissions,
+        sessionRoom: '',
+      },
+      '1d',
+      secretSeed,
+    );
+  }
+  let auth = JSON.stringify(sessions);
   const browser = await puppeteer.launch({
     headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
     args: process.env.CI ? ['--no-sandbox'] : [],
@@ -17,27 +50,22 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   try {
-    if (process.env.BOXEL_SESSION) {
-      // Run this in browser to copy your own session into here:
-      // console.log(`export BOXEL_SESSION="${btoa(localStorage.getItem("boxel-session"))}"`)
-      const auth = atob(process.env.BOXEL_SESSION!);
-      page.evaluateOnNewDocument((auth) => {
-        localStorage.setItem('boxel-session', auth);
-      }, auth);
-    }
+    page.evaluateOnNewDocument((auth) => {
+      localStorage.setItem('boxel-session', auth);
+    }, auth);
 
+    // We need to render the isolated HTML view first, as the template will pull
+    // on the linked fields. Otherwise the linked fields will not be loaded.
     await page.goto(
-      `http://localhost:4200/render/${encodeURIComponent(url)}/meta`,
+      `http://localhost:4200/render/${encodeURIComponent(url)}/html/isolated/0`,
     );
-    let result = await captureResult(page, 'textContent');
+    let result = await captureResult(page, 'innerHTML');
     if (result.status === 'error') {
-      throw new Error('todo: make error doc');
+      throw new Error('todo: error doc');
     }
-
-    const meta: PrerenderMeta = JSON.parse(result.value);
-
-    const isolatedHTML = await renderHTML(page, 'isolated', 0);
+    const isolatedHTML = result.value;
     const atomHTML = await renderHTML(page, 'atom', 0);
+    const meta = await renderMeta(page);
     const embeddedHTML = await renderAncestors(page, 'embedded', meta.types);
     const fittedHTML = await renderAncestors(page, 'fitted', meta.types);
     const iconHTML = await renderIcon(page);
@@ -78,6 +106,16 @@ async function renderAncestors(page: Page, format: string, types: string[]) {
   return html;
 }
 
+async function renderMeta(page: Page): Promise<PrerenderMeta> {
+  await transitionTo(page, 'render.meta');
+  let result = await captureResult(page, 'textContent');
+  if (result.status === 'error') {
+    throw new Error('todo: make error doc');
+  }
+  const meta: PrerenderMeta = JSON.parse(result.value);
+  return meta;
+}
+
 async function renderHTML(
   page: Page,
   format: string,
@@ -113,7 +151,9 @@ async function captureResult(
       let element = document.querySelector('[data-prerender]') as HTMLElement;
       let status = element.dataset.prerenderStatus as 'ready' | 'error';
       if (status === 'error') {
-        return { status, value: element.innerHTML! };
+        // there is a strange <anonymous> tag that is being appended to the
+        // innerHTML that this strips out
+        return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
       } else {
         return { status, value: element.children[0][capture]! };
       }

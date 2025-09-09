@@ -13,17 +13,15 @@ import {
   testRealm,
   setupBaseRealmServer,
   setupDB,
-  runTestRealmServer,
   createVirtualNetwork,
   matrixURL,
-  closeServer,
+  setupPermissionedRealms,
   cleanWhiteSpace,
   testRealmServerMatrixUserId,
   cardDefinition,
   cardInfo,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
-import { Server } from 'http';
 import { basename } from 'path';
 
 function trimCardContainer(text: string) {
@@ -2433,17 +2431,9 @@ module(basename(__filename), function () {
   module('permissioned realm', function (hooks) {
     setupBaseRealmServer(hooks, matrixURL);
 
-    // We want 2 different realm users to test authorization between them - these
-    // names are selected because they are already available in the test
-    // environment (via register-realm-users.ts)
-    let matrixUser1 = 'test_realm';
-    let matrixUser2 = 'node-test_realm';
-    let testRealm1URL = new URL('http://127.0.0.1:4447/');
-    let testRealm2URL = new URL('http://127.0.0.1:4448/');
-
+    let testRealm1URL = 'http://127.0.0.1:4447/';
+    let testRealm2URL = 'http://127.0.0.1:4448/';
     let testRealm2: Realm;
-    let testRealmServer1: Server;
-    let testRealmServer2: Server;
 
     function setupRealms(
       hooks: NestedHooks,
@@ -2452,74 +2442,47 @@ module(basename(__filename), function () {
         provider: RealmPermissions;
       },
     ) {
-      setupDB(hooks, {
-        beforeEach: async (dbAdapter, publisher, runner) => {
-          ({ testRealmHttpServer: testRealmServer1 } = await runTestRealmServer(
-            {
-              virtualNetwork: await createVirtualNetwork(),
-              testRealmDir: dirSync().name,
-              realmsRootPath: dirSync().name,
-              realmURL: testRealm1URL,
-              fileSystem: {
-                'article.gts': `
+      setupPermissionedRealms(hooks, {
+        // provider
+        realm1: {
+          realmURL: testRealm1URL,
+          permissions: permissions.provider,
+          fileSystem: {
+            'article.gts': `
               import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
               export class Article extends CardDef {
                 @field title = contains(StringField);
               }
             `,
-              },
-              permissions: permissions.provider,
-              matrixURL,
-              matrixConfig: {
-                url: matrixURL,
-                username: matrixUser1,
-              },
-              dbAdapter,
-              publisher,
-              runner,
-            },
-          ));
-
-          ({ testRealmHttpServer: testRealmServer2, testRealm: testRealm2 } =
-            await runTestRealmServer({
-              virtualNetwork: await createVirtualNetwork(),
-              testRealmDir: dirSync().name,
-              realmsRootPath: dirSync().name,
-              realmURL: testRealm2URL,
-              fileSystem: {
-                'website.gts': `
-                import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-                import { Article } from "${testRealm1URL.href}article" // importing from another realm;
-                export class Website extends CardDef {
-                  @field linkedArticle = linksTo(Article);
-                }`,
-                'website-1.json': {
-                  data: {
-                    attributes: {},
-                    meta: {
-                      adoptsFrom: {
-                        module: './website',
-                        name: 'Website',
-                      },
-                    },
+          },
+        },
+        // consumer
+        realm2: {
+          realmURL: testRealm2URL,
+          permissions: permissions.consumer,
+          fileSystem: {
+            'website.gts': `
+              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import { Article } from "${testRealm1URL}article" // importing from another realm;
+              export class Website extends CardDef {
+                @field linkedArticle = linksTo(Article);
+              }`,
+            'website-1.json': {
+              data: {
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './website',
+                    name: 'Website',
                   },
                 },
               },
-              permissions: permissions.consumer,
-              matrixURL,
-              matrixConfig: {
-                url: matrixURL,
-                username: matrixUser2,
-              },
-              dbAdapter,
-              publisher,
-              runner,
-            }));
+            },
+          },
         },
-        afterEach: async () => {
-          await closeServer(testRealmServer1);
-          await closeServer(testRealmServer2);
+        onRealmSetup({ realm2 }) {
+          testRealm2 = realm2.realm;
         },
       });
     }
