@@ -27,7 +27,7 @@ export async function prerenderCard({
 }): Promise<RenderResponse> {
   let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, userId);
   if (!permissionsForAllRealms) {
-    throw new Error('TODO what do we do here?');
+    throw new Error(`Cannot determine permissions for user ${userId}`);
   }
   let sessions: { [realm: string]: string } = {};
   for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
