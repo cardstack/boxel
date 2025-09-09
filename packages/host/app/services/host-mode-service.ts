@@ -24,10 +24,7 @@ export default class HostModeService extends Service {
   }
 
   get isRealmServerDomain() {
-    if (
-      this.simulatingHostMode ||
-      (config.environment !== 'production' && config.environment !== 'staging')
-    ) {
+    if (this.simulatingHostMode) {
       return false;
     }
 

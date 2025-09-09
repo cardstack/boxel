@@ -1540,6 +1540,21 @@ module(basename(__filename), function () {
             response.body.data.attributes.lastPublishedAt,
             'last published at timestamp is present',
           );
+
+          // Verify that the correct directory within _published was created
+          let publishedRealmId = response.body.data.id;
+          let publishedDir = join(dir.name, 'realm_server_2', '_published');
+          let publishedRealmPath = join(publishedDir, publishedRealmId);
+
+          assert.ok(existsSync(publishedDir), '_published directory exists');
+          assert.ok(
+            existsSync(publishedRealmPath),
+            'published realm directory exists',
+          );
+          assert.ok(
+            existsSync(join(publishedRealmPath, 'index.json')),
+            'published realm has index.json',
+          );
         });
 
         test('POST /_publish-realm can republish realm with updated timestamp', async function (assert) {
@@ -1713,31 +1728,6 @@ module(basename(__filename), function () {
             ),
             'Error message is correct',
           );
-        });
-
-        test('POST /_publish-realm accepts valid domain from multiple allowed domains', async function (assert) {
-          // This test would require setting up a test server with multiple valid domains
-          // For now, we'll test that the validation logic works with the default localhost domain
-          let response = await request2
-            .post('/_publish-realm')
-            .set('Accept', 'application/vnd.api+json')
-            .set('Content-Type', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            )
-            .send(
-              JSON.stringify({
-                sourceRealmURL: testRealm2.url,
-                publishedRealmURL: 'http://subdomain.localhost/test-realm/',
-              }),
-            );
-
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
-          assert.strictEqual(response.body.data.type, 'published_realm');
         });
 
         test('POST /_publish-realm sets read-only permissions for published realm', async function (assert) {
