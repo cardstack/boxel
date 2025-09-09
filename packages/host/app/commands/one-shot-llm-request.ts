@@ -24,7 +24,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
 
-  static actionVerb = 'One-Shot LLM Request';
+  static actionVerb = 'Request';
   description = 'Execute a one-shot LLM request with custom prompts';
 
   async getInputType() {
