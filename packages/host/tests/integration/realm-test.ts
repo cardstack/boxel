@@ -3159,6 +3159,11 @@ module('Integration | realm', function (hooks) {
           },
         },
       ],
+      meta: {
+        page: {
+          total: 3,
+        },
+      },
     });
   });
 
