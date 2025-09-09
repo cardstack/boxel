@@ -805,6 +805,7 @@ export class BlogPost extends CardDef {
           overflow: hidden;
         }
         .blog {
+          height: 65px;
           background-color: inherit;
         }
         .blog + .featured-image {

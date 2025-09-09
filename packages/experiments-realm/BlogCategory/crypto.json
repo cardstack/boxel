@@ -6,9 +6,11 @@
       "shortName": "Crypto",
       "slug": "crypto",
       "pillColor": "#FA2200",
-      "description": "News about cryptocurrencies, price predictions, charts and everything about Satoshi Nakamoto",
-      "title": "Cryptocurrency",
-      "thumbnailURL": null
+      "cardInfo": {
+        "description": "News about cryptocurrencies, price predictions, charts and everything about Satoshi Nakamoto",
+        "title": "Cryptocurrency",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "blog": {

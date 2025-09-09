@@ -5,7 +5,12 @@
       "website": "ramped.com",
       "title": "Ramped",
       "description": "Urban insights",
-      "thumbnailURL": "https://boxel-images.boxel.ai/icons/ramped.png"
+      "thumbnailURL": "https://boxel-images.boxel.ai/icons/ramped.png",
+      "cardInfo": {
+        "title": "Ramped",
+        "description": "Urban insights",
+        "thumbnailURL": "https://boxel-images.boxel.ai/icons/ramped.png"
+      }
     },
     "meta": {
       "adoptsFrom": {

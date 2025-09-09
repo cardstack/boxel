@@ -36,16 +36,16 @@ export class CardList extends GlimmerComponent<CardListSignature> {
           </:loading>
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
-              <li
-                class='card-list-item'
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
-              >
-                <card.component />
+              <li class='card-list-item'>
+                <card.component
+                  {{@context.cardComponentModifier
+                    cardId=card.url
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
+                  class='card'
+                />
                 {{#if (has-block 'meta')}}
                   {{yield card to='meta'}}
                 {{/if}}

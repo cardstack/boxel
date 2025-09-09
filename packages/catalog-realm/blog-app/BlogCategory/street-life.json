@@ -6,9 +6,11 @@
       "shortName": "Streets",
       "slug": "street-life",
       "pillColor": "#39B1FF",
-      "description": "Discovering the stories of streets and public spaces.",
-      "title": "Street Life",
-      "thumbnailURL": null
+      "cardInfo": {
+        "description": "Discovering the stories of streets and public spaces.",
+        "title": "Street Life",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "blog": {
