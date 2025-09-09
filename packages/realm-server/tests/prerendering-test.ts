@@ -7,12 +7,16 @@ import {
   setupBaseRealmServer,
   setupPermissionedRealm,
   matrixURL,
+  realmSecretSeed,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { DBAdapter } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
   module('prerender', function (hooks) {
     let realmURL: string;
+    let dbAdapter: DBAdapter;
+    const testUserId = '@user1:localhost';
 
     hooks.before(() => {
       execSync('pnpm puppeteer browsers install chrome');
@@ -22,11 +26,12 @@ module(basename(__filename), function () {
 
     setupPermissionedRealm(hooks, {
       mode: 'before',
-      onRealmSetup: ({ testRealm }) => {
+      onRealmSetup: ({ testRealm, dbAdapter: _dbAdapter }) => {
         realmURL = testRealm.url;
+        dbAdapter = _dbAdapter;
       },
       permissions: {
-        '*': ['read'],
+        [testUserId]: ['read', 'write', 'realm-owner'],
       },
       subscribeToRealmEvents: true,
       fileSystem: {
@@ -90,7 +95,13 @@ module(basename(__filename), function () {
 
       hooks.before(async () => {
         const testCardURL = `${realmURL}1`;
-        result = await prerenderCard(testCardURL);
+        result = await prerenderCard({
+          url: testCardURL,
+          realm: realmURL,
+          userId: testUserId,
+          secretSeed: realmSecretSeed,
+          dbAdapter,
+        });
       });
 
       test('embedded HTML', function (assert) {
@@ -149,7 +160,13 @@ module(basename(__filename), function () {
         const testCardURL = `${realmURL}2`;
         assert.rejects(
           (async () => {
-            await prerenderCard(testCardURL);
+            await prerenderCard({
+              url: testCardURL,
+              realm: realmURL,
+              userId: testUserId,
+              secretSeed: realmSecretSeed,
+              dbAdapter,
+            });
           })(),
           /todo: error doc/,
         );

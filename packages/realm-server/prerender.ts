@@ -1,5 +1,10 @@
-import type { PrerenderMeta } from '@cardstack/runtime-common';
+import {
+  type PrerenderMeta,
+  type DBAdapter,
+  fetchUserPermissions,
+} from '@cardstack/runtime-common';
 import puppeteer, { type Page } from 'puppeteer';
+import { createJWT } from './jwt';
 
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string;
@@ -9,7 +14,36 @@ export interface RenderResponse extends PrerenderMeta {
   iconHTML: string;
 }
 
-export async function prerenderCard(url: string): Promise<RenderResponse> {
+export async function prerenderCard({
+  url,
+  realm,
+  userId,
+  secretSeed,
+  dbAdapter,
+}: {
+  url: string;
+  realm: string;
+  userId: string;
+  secretSeed: string;
+  dbAdapter: DBAdapter;
+}): Promise<RenderResponse> {
+  let permissions = (await fetchUserPermissions(dbAdapter, new URL(realm)))[
+    userId
+  ];
+  if (!permissions) {
+    throw new Error('TODO what do we do here?');
+  }
+  let token = createJWT(
+    {
+      user: userId,
+      realm,
+      permissions,
+      sessionRoom: '',
+    },
+    '1d',
+    secretSeed,
+  );
+  let auth = JSON.stringify({ [realm]: token });
   const browser = await puppeteer.launch({
     headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
     args: process.env.CI ? ['--no-sandbox'] : [],
@@ -17,15 +51,13 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   try {
-    if (process.env.BOXEL_SESSION) {
-      // Run this in browser to copy your own session into here:
-      // console.log(`export BOXEL_SESSION="${btoa(localStorage.getItem("boxel-session"))}"`)
-      const auth = atob(process.env.BOXEL_SESSION!);
-      page.evaluateOnNewDocument((auth) => {
-        localStorage.setItem('boxel-session', auth);
-      }, auth);
-    }
+    page.evaluateOnNewDocument((auth) => {
+      localStorage.setItem('boxel-session', auth);
+    }, auth);
 
+    // TODO this seems backwards, we need to render HTML first in order to pull
+    // on the linked fields to trigger them to load. after that then we can
+    // render meta
     await page.goto(
       `http://localhost:4200/render/${encodeURIComponent(url)}/meta`,
     );
@@ -77,6 +109,9 @@ async function renderAncestors(page: Page, format: string, types: string[]) {
   }
   return html;
 }
+
+// TODO
+async function renderMeta() {}
 
 async function renderHTML(
   page: Page,
