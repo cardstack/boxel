@@ -3,8 +3,11 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
+import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import { meta } from '@cardstack/runtime-common/constants';
 
@@ -18,6 +21,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import SubmodeLayout from './submode-layout';
+import PublishSiteModal from './publish-site-modal';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;
@@ -27,6 +31,8 @@ interface HostSubmodeSignature {
 export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
+
+  @tracked isPublishSiteModalOpen = false;
 
   get currentCardId() {
     return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
@@ -77,8 +83,14 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return 'host-mode-content';
   }
 
-  get containerClass() {
-    return 'container';
+  @action
+  openPublishSiteModal() {
+    this.isPublishSiteModalOpen = true;
+  }
+
+  @action
+  closePublishSiteModal() {
+    this.isPublishSiteModalOpen = false;
   }
 
   <template>
@@ -89,12 +101,19 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     >
       <div class='host-submode' style={{this.backgroundImageStyle}}>
         <div class='host-mode-top-bar'>
+          <BoxelButton
+            @kind='primary'
+            @size='tall'
+            class='publish-site-button'
+            {{on 'click' this.openPublishSiteModal}}
+            data-test-publish-site-button
+          >
+            <PublishSiteIcon width='22' height='22' class='publish-icon' />
+            Publish Site
+          </BoxelButton>
         </div>
         <div class={{this.hostModeContentClass}}>
-          <CardContainer
-            @displayBoundaries={{true}}
-            class={{this.containerClass}}
-          >
+          <CardContainer @displayBoundaries={{true}} class='container'>
             {{#if this.operatorModeStateService.currentRealmInfo.publishable}}
               {{#if this.currentCard}}
                 <CardContainer class='card'>
@@ -128,7 +147,18 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       </div>
     </SubmodeLayout>
 
+    <PublishSiteModal
+      @isOpen={{this.isPublishSiteModalOpen}}
+      @onClose={{this.closePublishSiteModal}}
+    />
+
     <style scoped>
+      .host-submode-layout {
+        --submode-bar-item-border-radius: var(--boxel-border-radius);
+        --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
+        --submode-bar-item-outline: var(--boxel-border-flexible);
+      }
+
       .host-submode-layout :deep(.submode-switcher),
       .host-submode-layout :deep(.workspace-button) {
         border: 1px solid #ffffff59;
@@ -145,16 +175,42 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       .host-mode-top-bar {
         background-color: var(--boxel-700);
-        padding: var(--boxel-sp);
+        padding: var(--operator-mode-spacing);
         border-bottom: 1px solid var(--boxel-600);
         flex-shrink: 0;
         height: 60px;
+
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding-left: calc(
+          var(--operator-mode-left-column) -
+            var(--submode-new-file-button-width)
+        );
       }
 
       .host-mode-top-bar-content {
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
+        padding-left: calc(
+          var(--operator-mode-left-column) + var(--submode-switcher-width) +
+            var(--operator-mode-spacing)
+        );
+      }
+
+      .publish-site-button {
+        border: none;
+        border-radius: var(--submode-bar-item-border-radius);
+        box-shadow: var(--submode-bar-item-box-shadow);
+        outline: var(--submode-bar-item-outline);
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+
+      .publish-icon {
+        flex-shrink: 0;
       }
 
       .host-mode-title {
@@ -217,6 +273,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       .host-submode :deep(.boxel-card-container) {
         overflow: auto;
+      }
+
+      .host-mode-content.is-wide :deep(.boxel-card-container) {
+        border-radius: 0;
       }
     </style>
   </template>
