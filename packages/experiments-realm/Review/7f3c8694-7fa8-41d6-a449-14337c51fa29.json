@@ -25,8 +25,10 @@
         "height": 400,
         "width": null
       },
-      "description": "In an era hungry for originality, \"Singularity’s Echo\" emerges as a luminous beacon in the cosmic darkness—an audacious journey that redefines what viewers can expect from the genre. Directed by the elusive auteur Oruni Kilrain, this film harnesses the raw power of interstellar wonder and transforms it into a multilayered narrative tapestry. Blending heart-stirring drama with disorienting visuals, \"Singularity’s Echo\" reminds us that true cinematic frontiers remain ripe for exploration, stretching beyond the gravitational pull of safe storytelling.",
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/blog-posts/space-movie-thumb.jpeg"
+      "cardInfo": {
+        "description": "In an era hungry for originality, \"Singularity’s Echo\" emerges as a luminous beacon in the cosmic darkness—an audacious journey that redefines what viewers can expect from the genre. Directed by the elusive auteur Oruni Kilrain, this film harnesses the raw power of interstellar wonder and transforms it into a multilayered narrative tapestry. Blending heart-stirring drama with disorienting visuals, \"Singularity’s Echo\" reminds us that true cinematic frontiers remain ripe for exploration, stretching beyond the gravitational pull of safe storytelling.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/blog-posts/space-movie-thumb.jpeg"
+      }
     },
     "relationships": {
       "authors.0": {

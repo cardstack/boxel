@@ -6,9 +6,11 @@
       "shortName": "TV",
       "slug": "tv-series",
       "pillColor": "#fff500",
-      "description": null,
-      "title": "TV Series",
-      "thumbnailURL": null
+      "cardInfo": {
+        "description": null,
+        "title": "TV Series",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "blog": {
