@@ -7,7 +7,6 @@ import { provide } from 'ember-provide-consume-context';
 
 import {
   CardCrudFunctionsContextName,
-  type Actions,
   type CommandContext,
 } from '@cardstack/runtime-common';
 
@@ -32,7 +31,6 @@ interface Signature {
     tag?: keyof HTMLElementTagNameMap;
     stackItems: StackItem[];
     stackIndex: number;
-    publicAPI: Actions;
     createCard: CreateCardFn;
     viewCard: ViewCardFn;
     editCard: EditCardFn;
@@ -112,7 +110,6 @@ export default class OperatorModeStack extends Component<Signature> {
             @item={{item}}
             @index={{i}}
             @stackItems={{@stackItems}}
-            @publicAPI={{@publicAPI}}
             @requestDeleteCard={{@requestDeleteCard}}
             @commandContext={{@commandContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}

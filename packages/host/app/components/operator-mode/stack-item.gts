@@ -34,7 +34,6 @@ import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
-  type Actions,
   type Permissions,
   type getCard,
   type getCards,
@@ -91,7 +90,6 @@ interface Signature {
     item: StackItem;
     stackItems: StackItem[];
     index: number;
-    publicAPI: Actions;
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     commandContext: CommandContext;
     close: (item: StackItem) => void;
@@ -266,7 +264,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
-      actions: this.args.publicAPI, //we put this last to overwrite card context so stackIndex is correct
     };
   }
 
@@ -820,7 +817,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-              @publicAPI={{@publicAPI}}
               @requestDeleteCard={{@requestDeleteCard}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
