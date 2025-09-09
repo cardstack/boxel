@@ -17,6 +17,7 @@ export interface SingleCardDocument<Identity extends Unsaved = Saved> {
 export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>[];
   included?: CardResource<Saved>[];
+  meta: QueryResultsMeta;
 }
 
 export interface PrerenderedCardCollectionDocument {
@@ -104,16 +105,23 @@ export function transformResultsToPrerenderedCardsDoc(results: {
   prerenderedCards: PrerenderedCard[];
   scopedCssUrls: string[];
   meta: QueryResultsMeta & { scopedCssUrls?: string[]; realmInfo?: RealmInfo };
-}) {
+}): PrerenderedCardCollectionDocument {
   let { prerenderedCards, scopedCssUrls, meta } = results;
 
   let data = prerenderedCards.map((card) => ({
-    type: 'prerendered-card',
+    type: 'prerendered-card' as const,
     id: card.url,
     attributes: {
-      html: card.html,
-      usedRenderType: card.usedRenderType,
+      html: card.html || '',
       ...(card.isError ? { isError: true as const } : {}),
+    },
+    relationships: {
+      'prerendered-card-css': {
+        data: [],
+      },
+    },
+    meta: {
+      adoptsFrom: card.usedRenderType,
     },
   }));
 
