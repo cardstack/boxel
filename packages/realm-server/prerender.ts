@@ -16,34 +16,33 @@ export interface RenderResponse extends PrerenderMeta {
 
 export async function prerenderCard({
   url,
-  realm,
   userId,
   secretSeed,
   dbAdapter,
 }: {
   url: string;
-  realm: string;
   userId: string;
   secretSeed: string;
   dbAdapter: DBAdapter;
 }): Promise<RenderResponse> {
-  let permissions = (await fetchUserPermissions(dbAdapter, new URL(realm)))[
-    userId
-  ];
-  if (!permissions) {
+  let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, userId);
+  if (!permissionsForAllRealms) {
     throw new Error('TODO what do we do here?');
   }
-  let token = createJWT(
-    {
-      user: userId,
-      realm,
-      permissions,
-      sessionRoom: '',
-    },
-    '1d',
-    secretSeed,
-  );
-  let auth = JSON.stringify({ [realm]: token });
+  let sessions: { [realm: string]: string } = {};
+  for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
+    sessions[realm] = createJWT(
+      {
+        user: userId,
+        realm: realm,
+        permissions,
+        sessionRoom: '',
+      },
+      '1d',
+      secretSeed,
+    );
+  }
+  let auth = JSON.stringify(sessions);
   const browser = await puppeteer.launch({
     headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
     args: process.env.CI ? ['--no-sandbox'] : [],
@@ -55,21 +54,18 @@ export async function prerenderCard({
       localStorage.setItem('boxel-session', auth);
     }, auth);
 
-    // TODO this seems backwards, we need to render HTML first in order to pull
-    // on the linked fields to trigger them to load. after that then we can
-    // render meta
+    // We need to render the isolated HTML view first, as the template will pull
+    // on the linked fields. Otherwise the linked fields will not be loaded.
     await page.goto(
-      `http://localhost:4200/render/${encodeURIComponent(url)}/meta`,
+      `http://localhost:4200/render/${encodeURIComponent(url)}/html/isolated/0`,
     );
-    let result = await captureResult(page, 'textContent');
+    let result = await captureResult(page, 'innerHTML');
     if (result.status === 'error') {
-      throw new Error('todo: make error doc');
+      throw new Error('todo: error doc');
     }
-
-    const meta: PrerenderMeta = JSON.parse(result.value);
-
-    const isolatedHTML = await renderHTML(page, 'isolated', 0);
+    const isolatedHTML = result.value;
     const atomHTML = await renderHTML(page, 'atom', 0);
+    const meta = await renderMeta(page);
     const embeddedHTML = await renderAncestors(page, 'embedded', meta.types);
     const fittedHTML = await renderAncestors(page, 'fitted', meta.types);
     const iconHTML = await renderIcon(page);
@@ -110,8 +106,15 @@ async function renderAncestors(page: Page, format: string, types: string[]) {
   return html;
 }
 
-// TODO
-async function renderMeta() {}
+async function renderMeta(page: Page): Promise<PrerenderMeta> {
+  await transitionTo(page, 'render.meta');
+  let result = await captureResult(page, 'textContent');
+  if (result.status === 'error') {
+    throw new Error('todo: make error doc');
+  }
+  const meta: PrerenderMeta = JSON.parse(result.value);
+  return meta;
+}
 
 async function renderHTML(
   page: Page,
@@ -148,7 +151,9 @@ async function captureResult(
       let element = document.querySelector('[data-prerender]') as HTMLElement;
       let status = element.dataset.prerenderStatus as 'ready' | 'error';
       if (status === 'error') {
-        return { status, value: element.innerHTML! };
+        // there is a strange <anonymous> tag that is being appended to the
+        // innerHTML that this strips out
+        return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
       } else {
         return { status, value: element.children[0][capture]! };
       }

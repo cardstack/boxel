@@ -7,7 +7,7 @@ import { copySync, existsSync, ensureDirSync, readJSONSync } from 'fs-extra';
 import {
   Deferred,
   Realm,
-  fetchUserPermissions,
+  fetchRealmPermissions,
   baseCardRef,
   type SingleCardDocument,
   type QueuePublisher,
@@ -212,7 +212,7 @@ module(basename(__filename), function () {
             existsSync(join(realmPath, 'index.json')),
             'seed file index.json exists',
           );
-          let permissions = await fetchUserPermissions(
+          let permissions = await fetchRealmPermissions(
             dbAdapter,
             new URL(json.data.id),
           );

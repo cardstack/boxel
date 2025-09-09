@@ -23,7 +23,7 @@ import {
   hasExecutableExtension,
   isNode,
   logger,
-  fetchUserPermissions,
+  fetchRealmPermissions,
   insertPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
@@ -933,7 +933,7 @@ export class Realm {
   };
 
   async getRealmOwnerUserId(): Promise<string> {
-    let permissions = await fetchUserPermissions(
+    let permissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
@@ -2482,7 +2482,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let permissions = await fetchUserPermissions(
+    let permissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
@@ -2532,7 +2532,7 @@ export class Realm {
       });
     }
 
-    let currentPermissions = await fetchUserPermissions(
+    let currentPermissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
@@ -2777,7 +2777,7 @@ export class Realm {
   private async createRequestContext(): Promise<RequestContext> {
     let permissions = {
       [this.#realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
-      ...(await fetchUserPermissions(this.#dbAdapter, new URL(this.url))),
+      ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
     };
     return {
       realm: this,
@@ -2791,7 +2791,7 @@ export class Realm {
     }
 
     this.visibilityPromise = (async () => {
-      let permissions = await fetchUserPermissions(
+      let permissions = await fetchRealmPermissions(
         this.#dbAdapter,
         new URL(this.url),
       );
