@@ -42,7 +42,7 @@ const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
   {{#each @messages as |message i|}}
     <div class='alert'>
       {{#if (eq @type 'error')}}
-        <FailureBordered class='alert-icon' />
+        <FailureBordered class='alert-icon failure-icon' />
       {{else if (eq @type 'warning')}}
         <Warning class='alert-icon' />
       {{/if}}
@@ -67,6 +67,10 @@ const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
       min-width: 20px;
       height: 20px;
       --icon-background-color: var(--boxel-error-400);
+    }
+    .failure-icon {
+      --icon-background-color: var(--destructive, var(--boxel-error-400));
+      --icon-color: var(--destructive-foreground, var(--boxel-light));
     }
     .message {
       align-self: center;
@@ -129,8 +133,8 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       border-radius: var(--boxel-border-radius-xxl);
     }
     .error-container {
-      background-color: var(--destructive, var(--boxel-650));
-      color: var(--destructive-foreground, var(--boxel-light));
+      background-color: var(--destructive-foreground, var(--boxel-650));
+      color: var(--destructive, var(--boxel-light));
     }
     .warning-container {
       background-color: var(--accent, var(--boxel-warning-200));
