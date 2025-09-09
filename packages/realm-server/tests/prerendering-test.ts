@@ -32,7 +32,6 @@ module(basename(__filename), function () {
         permissions: {
           [testUserId]: ['read', 'write', 'realm-owner'],
         },
-        subscribeToRealmEvents: true,
         fileSystem: {
           'person.gts': `
             import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
@@ -67,7 +66,6 @@ module(basename(__filename), function () {
         permissions: {
           [testUserId]: ['read', 'write', 'realm-owner'],
         },
-        subscribeToRealmEvents: true,
         fileSystem: {
           'cat.gts': `
             import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';

@@ -833,13 +833,11 @@ export function setupPermissionedRealms(
       realmURL: string;
       permissions: RealmPermissions;
       fileSystem?: Record<string, string | LooseSingleCardDocument>;
-      subscribeToRealmEvents?: boolean;
     };
     realm2: {
       realmURL: string;
       permissions: RealmPermissions;
       fileSystem?: Record<string, string | LooseSingleCardDocument>;
-      subscribeToRealmEvents?: boolean;
     };
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
@@ -896,7 +894,6 @@ export function setupPermissionedRealms(
           realmURL: new URL(argsRealm1.realmURL),
           fileSystem: argsRealm1.fileSystem,
           permissions: argsRealm1.permissions,
-          enableFileWatcher: !!argsRealm1.subscribeToRealmEvents,
           matrixURL,
           matrixConfig: {
             url: matrixURL,
@@ -927,7 +924,6 @@ export function setupPermissionedRealms(
           realmURL: new URL(argsRealm2.realmURL),
           fileSystem: argsRealm2.fileSystem,
           permissions: argsRealm2.permissions,
-          enableFileWatcher: !!argsRealm2.subscribeToRealmEvents,
           matrixURL,
           matrixConfig: {
             url: matrixURL,
