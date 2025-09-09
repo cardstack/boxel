@@ -111,7 +111,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(json.data.length, 1, 'first page has 1 result');
           assert.ok(json.meta, 'response includes meta');
           assert.ok(json.meta.page, 'meta includes page info');
-          assert.strictEqual(json.meta.page.total, 2, 'total count is correct');
+          assert.strictEqual(json.meta.page.total, 3, 'total count is correct');
 
           // Get the second page
           paginationQuery.page = { number: 1, size: 1 };
@@ -129,7 +129,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(json2.data.length, 1, 'second page has 1 result');
           assert.strictEqual(
             json2.meta.page.total,
-            2,
+            3,
             'total count is correct',
           );
 
