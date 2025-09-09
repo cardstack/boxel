@@ -6,14 +6,14 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import HostBaseCommand from '../lib/host-base-command';
 import { skillCardURL } from '../lib/utils';
 
-import GenerateReadmeCommand from './generate-readme';
+import OneShotLlmRequestCommand from './one-shot-llm-request';
 import PatchCardInstanceCommand from './patch-card-instance';
 
 import type CommandService from '../services/command-service';
 
 export default class GenerateReadmeSpecCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateReadmeSpecInput,
-  typeof BaseCommandModule.GenerateReadmeResult
+  typeof BaseCommandModule.GenerateReadmeSpecResult
 > {
   @service declare private commandService: CommandService;
 
@@ -49,13 +49,13 @@ If skill cards are provided, use them for context but don't reference them in th
 
   protected async run(
     input: BaseCommandModule.GenerateReadmeSpecInput,
-  ): Promise<BaseCommandModule.GenerateReadmeResult> {
+  ): Promise<BaseCommandModule.GenerateReadmeSpecResult> {
     if (!input.spec) {
       throw new Error('Spec is required');
     }
 
     // Generate the README using the existing command
-    const generateReadmeCommand = new GenerateReadmeCommand(
+    const generateReadmeCommand = new OneShotLlmRequestCommand(
       this.commandService.commandContext,
     );
 
@@ -82,7 +82,7 @@ If skill cards are provided, use them for context but don't reference them in th
           cardId: input.spec.id,
           patch: {
             attributes: {
-              readMe: result.readme,
+              readMe: result.output,
             },
           },
         });
@@ -94,6 +94,11 @@ If skill cards are provided, use them for context but don't reference them in th
       }
     }
 
-    return result;
+    let commandModule = await this.loadCommandModule();
+    const { GenerateReadmeSpecResult } = commandModule;
+
+    return new GenerateReadmeSpecResult({
+      readme: result.output,
+    });
   }
 }

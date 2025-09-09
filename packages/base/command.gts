@@ -373,7 +373,15 @@ export class CreateSpecsResult extends CardDef {
   @field specs = linksToMany(Spec); // all specs newly created and pre-existing ones
 }
 
-export class GenerateReadmeInput extends CardDef {
+export class GenerateReadmeSpecResult extends CardDef {
+  @field readme = contains(MarkdownField);
+}
+
+export class GenerateReadmeSpecInput extends CardDef {
+  @field spec = linksTo(Spec);
+}
+
+export class OneShotLLMRequestInput extends CardDef {
   @field codeRef = contains(AbsoluteCodeRefField);
   @field userPrompt = contains(StringField);
   @field systemPrompt = contains(StringField);
@@ -381,10 +389,6 @@ export class GenerateReadmeInput extends CardDef {
   @field skillCardIds = containsMany(StringField);
 }
 
-export class GenerateReadmeResult extends CardDef {
-  @field readme = contains(MarkdownField);
-}
-
-export class GenerateReadmeSpecInput extends CardDef {
-  @field spec = linksTo(Spec);
+export class OneShotLLMRequestResult extends CardDef {
+  @field output = contains(StringField);
 }

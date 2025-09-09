@@ -21,6 +21,7 @@ import * as ListingCreateCommandModule from './listing-create';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
+import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
@@ -213,6 +214,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/search-google-images',
     SearchGoogleImagesCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/one-shot-llm-request',
+    OneShotLlmRequestCommandModule,
+  );
 }
 
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
@@ -242,4 +247,5 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   WriteTextFileCommandModule.default,
   SearchGoogleImagesCommandModule.default,
   SummarizeSessionCommandModule.default,
+  OneShotLlmRequestCommandModule.default,
 ];

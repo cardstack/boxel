@@ -15,29 +15,29 @@ import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-export default class GenerateReadmeCommand extends HostBaseCommand<
-  typeof BaseCommandModule.GenerateReadmeInput,
-  typeof BaseCommandModule.GenerateReadmeResult
+export default class OneShotLlmRequestCommand extends HostBaseCommand<
+  typeof BaseCommandModule.OneShotLLMRequestInput,
+  typeof BaseCommandModule.OneShotLLMRequestResult
 > {
   @service declare private matrixService: MatrixService;
   @service declare private commandService: CommandService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
 
-  static actionVerb = 'Generate README';
-  description = 'Generate a README based on the current context';
+  static actionVerb = 'One-Shot LLM Request';
+  description = 'Execute a one-shot LLM request with custom prompts';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { GenerateReadmeInput } = commandModule;
-    return GenerateReadmeInput;
+    const { OneShotLLMRequestInput } = commandModule;
+    return OneShotLLMRequestInput;
   }
 
   protected async run(
-    input: BaseCommandModule.GenerateReadmeInput,
-  ): Promise<BaseCommandModule.GenerateReadmeResult> {
+    input: BaseCommandModule.OneShotLLMRequestInput,
+  ): Promise<BaseCommandModule.OneShotLLMRequestResult> {
     const commandModule = await this.loadCommandModule();
-    const { GenerateReadmeResult } = commandModule;
+    const { OneShotLLMRequestResult } = commandModule;
 
     if (!input.systemPrompt) {
       throw new Error('systemPrompt is required');
@@ -60,7 +60,7 @@ export default class GenerateReadmeCommand extends HostBaseCommand<
       }
 
       if (!fileContent) {
-        throw new Error('No file content available to generate README');
+        throw new Error('No file content available for LLM request');
       }
 
       // Load skill cards from IDs if provided
@@ -118,18 +118,18 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : 'No file content available.'}
 
       if (!result.response.ok) {
         throw new Error(
-          `Failed to generate README: ${result.response.statusText}`,
+          `Failed to execute LLM request: ${result.response.statusText}`,
         );
       }
 
       const responseData = await result.response.json();
-      const readme = responseData.choices?.[0]?.message?.content || null;
+      const output = responseData.choices?.[0]?.message?.content || null;
 
-      return new GenerateReadmeResult({
-        readme: readme,
+      return new OneShotLLMRequestResult({
+        output: output,
       });
     } catch (error) {
-      console.error('README generation error:', error);
+      console.error('LLM request error:', error);
       throw error;
     }
   }
