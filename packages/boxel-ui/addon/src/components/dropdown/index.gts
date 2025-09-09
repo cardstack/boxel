@@ -242,7 +242,7 @@ class BoxelDropdown extends Component<Signature> {
           );
           --dropdown-border-color: var(
             --boxel-dropdown-border-color,
-            var(--border, var(--boxel-border-color))
+            var(--border)
           );
           --dropdown-text-color: var(
             --boxel-dropdown-text-color,
@@ -253,10 +253,7 @@ class BoxelDropdown extends Component<Signature> {
             --boxel-dropdown-highlight-color,
             var(--theme-highlight, var(--boxel-highlight))
           );
-          --dropdown-highlight-hover-color: var(
-            --boxel-dropdown-hover-color,
-            var(--theme-highlight-hover, var(--boxel-highlight))
-          );
+
           --dropdown-hover-color: var(
             --boxel-dropdown-hover-color,
             var(--theme-hover, var(--boxel-light-100))
@@ -270,13 +267,10 @@ class BoxelDropdown extends Component<Signature> {
         }
 
         /* Menu styling cater for dropdown */
-        .boxel-dropdown__content :deep(.boxel-menu) {
+        .boxel-dropdown__content :deep(.boxel-menu:not(.themeless)) {
           --boxel-menu-color: var(--dropdown-background-color) !important;
           --boxel-menu-text-color: var(--dropdown-text-color) !important;
           --boxel-menu-hover-color: var(--dropdown-hover-color) !important;
-          --boxel-menu-selected-background-color: var(
-            --dropdown-highlight-color
-          ) !important;
           --boxel-menu-current-color: var(--dropdown-hover-color) !important;
           --boxel-menu-selected-font-color: var(
             --dropdown-text-color
@@ -284,22 +278,22 @@ class BoxelDropdown extends Component<Signature> {
         }
 
         .boxel-dropdown__content
-          :deep(.boxel-menu__item:not(.boxel-menu__item--disabled):hover) {
+          :deep(
+            .boxel-menu:not(.themeless)
+              .boxel-menu__item:not(.boxel-menu__item--disabled):hover
+          ) {
           color: var(--dropdown-selected-text-color) !important;
         }
 
-        .boxel-dropdown__content :deep(.boxel-menu__separator) {
-          border-bottom-color: var(--dropdown-border-color);
+        .boxel-dropdown__content
+          :deep(.boxel-menu:not(.themeless) .boxel-menu__separator) {
+          border-bottom-color: var(--dropdown-border-color) !important;
         }
 
         .boxel-dropdown__content[class*='variant-'] {
           --dropdown-highlight-color: var(
             --boxel-dropdown-highlight-color,
             var(--theme-highlight, var(--boxel-highlight))
-          );
-          --dropdown-highlight-hover-color: var(
-            --boxel-dropdown-hover-color,
-            var(--theme-highlight-hover, var(--boxel-light-100))
           );
           --dropdown-hover-color: var(
             --boxel-dropdown-hover-color,
@@ -310,10 +304,6 @@ class BoxelDropdown extends Component<Signature> {
         .boxel-dropdown__content.variant-primary {
           --dropdown-highlight-color: var(
             --boxel-dropdown-highlight-color,
-            var(--primary, var(--boxel-600))
-          );
-          --dropdown-highlight-hover-color: var(
-            --boxel-dropdown-hover-color,
             var(--primary, var(--boxel-600))
           );
           --dropdown-hover-color: var(
@@ -333,10 +323,6 @@ class BoxelDropdown extends Component<Signature> {
         .boxel-dropdown__content.variant-secondary {
           --dropdown-highlight-color: var(
             --boxel-dropdown-highlight-color,
-            var(--secondary, var(--boxel-400))
-          );
-          --dropdown-highlight-hover-color: var(
-            --boxel-dropdown-hover-color,
             var(--secondary, var(--boxel-400))
           );
           --dropdown-hover-color: var(
