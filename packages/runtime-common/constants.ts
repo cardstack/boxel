@@ -1,5 +1,6 @@
 import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
+import { RealmPermissions } from './realm';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
@@ -38,6 +39,7 @@ export const isBaseInstance = Symbol.for('isBaseInstance');
 export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
+export const CardCrudFunctionsContextName = 'card-crud-functions-context';
 export const CommandContextName = 'command-context';
 export const DefaultFormatsContextName = 'default-format-context';
 export const GetCardContextName = 'get-card-context';
@@ -68,3 +70,11 @@ export const EXTRA_TOKENS_PRICING: Record<number, number> = {
 };
 
 export const maxLinkDepth = 5;
+
+export const DEFAULT_PERMISSIONS = Object.freeze([
+  'read',
+  'write',
+  'realm-owner',
+]) as RealmPermissions['user'];
+
+export const PUBLISHED_DIRECTORY_NAME = '_published';

@@ -1,4 +1,9 @@
-import { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  CardContext,
+  CreateCardFn,
+  SaveCardFn,
+} from 'https://cardstack.com/base/card-api';
 import { CRMTaskStatusField } from './shared';
 import GlimmerComponent from '@glimmer/component';
 import { TaskPlanner, TaskCard } from './components/base-task-planner';
@@ -24,6 +29,8 @@ interface CRMTaskPlannerArgs {
     searchFilter?: Filter[];
     taskFilter?: Filter[];
     sort?: TaskSort;
+    createCard?: CreateCardFn;
+    saveCard?: SaveCardFn;
   };
   Element: HTMLElement;
 }
@@ -222,7 +229,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
             },
           };
 
-          await this.args.context?.actions?.createCard?.(
+          await this.args.createCard?.(
             this.config.taskSource,
             new URL(this.config.taskSource.module),
             {
@@ -250,7 +257,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
               (value) => value.label === targetColumn.title,
             );
             cardInNewCol.status = new CRMTaskStatusField(statusValue);
-            await this.args.context?.actions?.saveCard?.(cardInNewCol);
+            await this.args.saveCard?.(cardInNewCol);
           }
         },
         orderBy: this.getOrderBy(),

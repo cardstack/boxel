@@ -15,6 +15,7 @@ import {
   type Box,
   type Field,
   type CardContext,
+  CreateCardFn,
 } from './card-api';
 import {
   chooseCard,
@@ -39,6 +40,7 @@ interface Signature {
     model: Box<CardDef | null>;
     field: Field<typeof CardDef>;
     typeConstraint?: ResolvedCodeRef;
+    createCard?: CreateCardFn;
   };
 }
 
@@ -164,7 +166,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
           relativeTo: undefined,
           realmURL: this.realmURL,
         },
-        createNewCard: this.cardContext?.actions?.createCard,
+        createNewCard: this.args.createCard,
         consumingRealm: this.realmURL,
       },
     );

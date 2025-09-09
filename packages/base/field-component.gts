@@ -14,6 +14,7 @@ import {
   isCompoundField,
   formats,
   FieldFormats,
+  CardCrudFunctions,
 } from './card-api';
 import {
   CardContextName,
@@ -25,6 +26,7 @@ import {
   type CodeRef,
   type Permissions,
   ResolvedCodeRef,
+  CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -62,6 +64,10 @@ interface CardContextConsumerSignature {
   Blocks: { default: [CardContext] };
 }
 
+interface CardCrudFunctionsConsumerSignature {
+  Blocks: { default: [CardCrudFunctions] };
+}
+
 // cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
 const DEFAULT_CARD_CONTEXT = {
   cardComponentModifier: class NoOpModifier extends Modifier<any> {
@@ -86,6 +92,15 @@ export class CardContextConsumer extends Component<CardContextConsumerSignature>
 
   <template>
     {{yield this.context}}
+  </template>
+}
+
+export class CardCrudFunctionsConsumer extends Component<CardCrudFunctionsConsumerSignature> {
+  @consume(CardCrudFunctionsContextName)
+  declare cardCrudFunctions: CardCrudFunctions;
+
+  <template>
+    {{yield this.cardCrudFunctions}}
   </template>
 }
 
@@ -237,73 +252,103 @@ export function getBoxComponent(
     };
   }> = <template>
     <CardContextConsumer as |context|>
-      <PermissionsConsumer as |permissions|>
-        <DefaultFormatsConsumer as |defaultFormats|>
-          {{#let
-            (determineFormats @format defaultFormats)
-            as |effectiveFormats|
-          }}
+      <CardCrudFunctionsConsumer as |cardCrudFunctions|>
+        <PermissionsConsumer as |permissions|>
+          <DefaultFormatsConsumer as |defaultFormats|>
             {{#let
-              (lookupComponents
-                (if
-                  (isCard model.value)
-                  effectiveFormats.cardDef
-                  effectiveFormats.fieldDef
-                )
-              )
-              (if (eq @displayContainer false) false true)
-              as |c displayContainer|
+              (determineFormats @format defaultFormats)
+              as |effectiveFormats|
             }}
-              {{#if (isCard model.value)}}
-                {{#let model.value as |card|}}
+              {{#let
+                (lookupComponents
+                  (if
+                    (isCard model.value)
+                    effectiveFormats.cardDef
+                    effectiveFormats.fieldDef
+                  )
+                )
+                (if (eq @displayContainer false) false true)
+                as |c displayContainer|
+              }}
+                {{#if (isCard model.value)}}
+                  {{#let model.value as |card|}}
+                    <DefaultFormatsProvider
+                      @value={{defaultFieldFormats effectiveFormats.cardDef}}
+                    >
+                      <CardContainer
+                        @displayBoundaries={{displayContainer}}
+                        class={{cn
+                          'field-component-card'
+                          (concat effectiveFormats.cardDef '-format')
+                          (concat 'display-container-' displayContainer)
+                        }}
+                        {{context.cardComponentModifier
+                          card=card
+                          format=effectiveFormats.cardDef
+                          fieldType=field.fieldType
+                          fieldName=field.name
+                        }}
+                        style={{getThemeStyles model.value}}
+                        data-test-card={{card.id}}
+                        data-test-card-format={{effectiveFormats.cardDef}}
+                        data-test-field-component-card
+                        ...attributes
+                      >
+                        <c.CardOrFieldFormatComponent
+                          @cardOrField={{cardOrField}}
+                          @model={{card}}
+                          @fields={{c.fields}}
+                          @format={{effectiveFormats.cardDef}}
+                          @set={{model.set}}
+                          @fieldName={{model.name}}
+                          @context={{context}}
+                          @createCard={{cardCrudFunctions.createCard}}
+                          @viewCard={{cardCrudFunctions.viewCard}}
+                          @saveCard={{cardCrudFunctions.saveCard}}
+                          @editCard={{cardCrudFunctions.editCard}}
+                          @canEdit={{and
+                            (not field.computeVia)
+                            permissions.canWrite
+                          }}
+                          @typeConstraint={{@typeConstraint}}
+                        />
+                      </CardContainer>
+                    </DefaultFormatsProvider>
+                  {{/let}}
+                {{else if (isCompoundField model.value)}}
                   <DefaultFormatsProvider
-                    @value={{defaultFieldFormats effectiveFormats.cardDef}}
+                    @value={{defaultFieldFormats effectiveFormats.fieldDef}}
                   >
-                    <CardContainer
-                      @displayBoundaries={{displayContainer}}
-                      class={{cn
-                        'field-component-card'
-                        (concat effectiveFormats.cardDef '-format')
-                        (concat 'display-container-' displayContainer)
-                      }}
-                      {{context.cardComponentModifier
-                        card=card
-                        format=effectiveFormats.cardDef
-                        fieldType=field.fieldType
-                        fieldName=field.name
-                      }}
-                      style={{getThemeStyles model.value}}
-                      data-test-card={{card.id}}
-                      data-test-card-format={{effectiveFormats.cardDef}}
-                      data-test-field-component-card
+                    <div
+                      class='compound-field
+                        {{effectiveFormats.fieldDef}}-format'
+                      data-test-compound-field-format={{effectiveFormats.fieldDef}}
+                      data-test-compound-field-component
                       ...attributes
                     >
                       <c.CardOrFieldFormatComponent
                         @cardOrField={{cardOrField}}
-                        @model={{card}}
+                        @model={{model.value}}
                         @fields={{c.fields}}
-                        @format={{effectiveFormats.cardDef}}
+                        @format={{effectiveFormats.fieldDef}}
                         @set={{model.set}}
                         @fieldName={{model.name}}
                         @context={{context}}
+                        @createCard={{cardCrudFunctions.createCard}}
+                        @viewCard={{cardCrudFunctions.viewCard}}
+                        @saveCard={{cardCrudFunctions.saveCard}}
+                        @editCard={{cardCrudFunctions.editCard}}
                         @canEdit={{and
                           (not field.computeVia)
                           permissions.canWrite
                         }}
                         @typeConstraint={{@typeConstraint}}
                       />
-                    </CardContainer>
+                    </div>
                   </DefaultFormatsProvider>
-                {{/let}}
-              {{else if (isCompoundField model.value)}}
-                <DefaultFormatsProvider
-                  @value={{defaultFieldFormats effectiveFormats.fieldDef}}
-                >
-                  <div
-                    class='compound-field {{effectiveFormats.fieldDef}}-format'
-                    data-test-compound-field-format={{effectiveFormats.fieldDef}}
-                    data-test-compound-field-component
-                    ...attributes
+                {{else}}
+                  <DefaultFormatsProvider
+                    @value={{defaultFieldFormats effectiveFormats.fieldDef}}
                   >
                     <c.CardOrFieldFormatComponent
                       @cardOrField={{cardOrField}}
@@ -313,36 +358,24 @@ export function getBoxComponent(
                       @set={{model.set}}
                       @fieldName={{model.name}}
                       @context={{context}}
+                      @createCard={{cardCrudFunctions.createCard}}
+                      @viewCard={{cardCrudFunctions.viewCard}}
+                      @saveCard={{cardCrudFunctions.saveCard}}
+                      @editCard={{cardCrudFunctions.editCard}}
                       @canEdit={{and
                         (not field.computeVia)
                         permissions.canWrite
                       }}
                       @typeConstraint={{@typeConstraint}}
+                      ...attributes
                     />
-                  </div>
-                </DefaultFormatsProvider>
-              {{else}}
-                <DefaultFormatsProvider
-                  @value={{defaultFieldFormats effectiveFormats.fieldDef}}
-                >
-                  <c.CardOrFieldFormatComponent
-                    @cardOrField={{cardOrField}}
-                    @model={{model.value}}
-                    @fields={{c.fields}}
-                    @format={{effectiveFormats.fieldDef}}
-                    @set={{model.set}}
-                    @fieldName={{model.name}}
-                    @context={{context}}
-                    @canEdit={{and (not field.computeVia) permissions.canWrite}}
-                    @typeConstraint={{@typeConstraint}}
-                    ...attributes
-                  />
-                </DefaultFormatsProvider>
-              {{/if}}
+                  </DefaultFormatsProvider>
+                {{/if}}
+              {{/let}}
             {{/let}}
-          {{/let}}
-        </DefaultFormatsConsumer>
-      </PermissionsConsumer>
+          </DefaultFormatsConsumer>
+        </PermissionsConsumer>
+      </CardCrudFunctionsConsumer>
     </CardContextConsumer>
     <style scoped>
       .field-component-card.isolated-format {
@@ -353,8 +386,9 @@ export function getBoxComponent(
         background-color: var(--muted, var(--boxel-100));
       }
 
-      .field-component-card.fitted-format {
-        /*
+      @layer baseComponent {
+        .field-component-card.fitted-format {
+          /*
         The cards themselves need to be in charge of the styles within the card boundary
         in order for the container queries to make sense--otherwise we need to do style
         math to figure out what the actual breakpoints are. please resist the urge to add
@@ -364,13 +398,14 @@ export function getBoxComponent(
         works if we use up all the space horizontally and vertically that is available
         to the card since some of our queries are height queries
       */
-        width: 100%;
-        height: 100%;
-        min-height: 40px;
-        max-height: 600px;
-        container-name: fitted-card;
-        container-type: size;
-        overflow: hidden;
+          width: 100%;
+          height: 100%;
+          min-height: 40px;
+          max-height: 600px;
+          container-name: fitted-card;
+          container-type: size;
+          overflow: hidden;
+        }
       }
 
       .field-component-card.embedded-format {

@@ -8,6 +8,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
+  CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
 } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
@@ -56,7 +57,6 @@ import {
   type LooseSingleCardDocument,
   type CardDocument,
   type CardResource,
-  type Actions,
   type CardResourceMeta,
   type ResolvedCodeRef,
   type getCard,
@@ -68,6 +68,7 @@ import {
   isCardError,
   SingleCardDocument,
   loadDocument,
+  LocalPath,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -162,7 +163,6 @@ interface NotLoadedValue {
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
-  actions?: Actions;
   commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
     Args: {
@@ -1338,24 +1338,33 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       Blocks: {};
     }> {
       <template>
-        <DefaultFormatsConsumer as |defaultFormats|>
-          {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
-            <LinksToEditor
-              @model={{(getInnerModel)}}
-              @field={{linksToField}}
-              @typeConstraint={{@typeConstraint}}
-              ...attributes
-            />
-          {{else}}
-            {{#let (fieldComponent linksToField model) as |FieldComponent|}}
-              <FieldComponent
-                @format={{getChildFormat @format defaultFormats.cardDef model}}
-                @displayContainer={{@displayContainer}}
+        <CardCrudFunctionsConsumer as |cardCrudFunctions|>
+          <DefaultFormatsConsumer as |defaultFormats|>
+            {{#if
+              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
+            }}
+              <LinksToEditor
+                @model={{(getInnerModel)}}
+                @field={{linksToField}}
+                @typeConstraint={{@typeConstraint}}
+                @createCard={{cardCrudFunctions.createCard}}
                 ...attributes
               />
-            {{/let}}
-          {{/if}}
-        </DefaultFormatsConsumer>
+            {{else}}
+              {{#let (fieldComponent linksToField model) as |FieldComponent|}}
+                <FieldComponent
+                  @format={{getChildFormat
+                    @format
+                    defaultFormats.cardDef
+                    model
+                  }}
+                  @displayContainer={{@displayContainer}}
+                  ...attributes
+                />
+              {{/let}}
+            {{/if}}
+          </DefaultFormatsConsumer>
+        </CardCrudFunctionsConsumer>
       </template>
     };
   }
@@ -2167,6 +2176,39 @@ export class Component<
   CardT extends BaseDefConstructor,
 > extends GlimmerComponent<SignatureFor<CardT>> {}
 
+export type CreateCardFn = (
+  ref: CodeRef,
+  relativeTo: URL | undefined,
+  opts?: {
+    closeAfterCreating?: boolean;
+    realmURL?: URL; // the realm to create the card in
+    localDir?: LocalPath; // the local directory path within the realm to create the card file
+    doc?: LooseSingleCardDocument; // initial data for the card
+    cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
+  },
+) => Promise<string | undefined>;
+
+export type ViewCardFn = (
+  cardOrURL: CardDef | URL,
+  format?: Format,
+  opts?: {
+    openCardInRightMostStack?: boolean;
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+    fieldName?: string;
+  },
+) => void;
+
+export type EditCardFn = (card: CardDef) => void;
+
+export type SaveCardFn = (id: string) => void;
+
+export interface CardCrudFunctions {
+  createCard: CreateCardFn;
+  saveCard: SaveCardFn;
+  editCard: EditCardFn;
+  viewCard: ViewCardFn;
+}
+
 export type BaseDefComponent = ComponentLike<{
   Blocks: {};
   Element: any;
@@ -2180,6 +2222,10 @@ export type BaseDefComponent = ComponentLike<{
     context?: CardContext;
     canEdit?: boolean;
     typeConstraint?: ResolvedCodeRef;
+    createCard: CreateCardFn;
+    viewCard: ViewCardFn;
+    editCard: EditCardFn;
+    saveCard: SaveCardFn;
   };
 }>;
 
@@ -3495,6 +3541,10 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    createCard?: CreateCardFn;
+    viewCard?: ViewCardFn;
+    editCard?: EditCardFn;
+    saveCard?: SaveCardFn;
     canEdit?: boolean;
   };
 };

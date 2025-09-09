@@ -1,10 +1,10 @@
+import Card from '@cardstack/boxel-icons/card-credit';
+import File from '@cardstack/boxel-icons/file';
+import Star from '@cardstack/boxel-icons/star';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import Card from '../../icons/card.gts';
-import File from '../../icons/file.gts';
-import Star from '../../icons/star.gts';
 import FilterList, { type Filter } from './index.gts';
 
 export default class FilterListUsage extends Component {
@@ -96,12 +96,57 @@ export default class FilterListUsage extends Component {
           @defaultValue='undefined'
         />
       </:api>
+      <:cssVars as |Css|>
+        <Css.Basic
+          @name='--boxel-filter-expanded-background'
+          @type='background-color'
+          @description='background-color for expanded list toggle button'
+        />
+        <Css.Basic
+          @name='--boxel-filter-expanded-foreground'
+          @type='color'
+          @description='font color for expanded list item'
+        />
+        <Css.Basic
+          @name='--boxel-filter-hover-background'
+          @type='background-color'
+          @description='hover state background-color for list button'
+        />
+        <Css.Basic
+          @name='--boxel-filter-hover-foreground'
+          @type='color'
+          @description='hover state font color'
+        />
+        <Css.Basic
+          @name='--boxel-filter-selected-background'
+          @type='background-color'
+          @description='selected (active) state background-color for list button'
+        />
+        <Css.Basic
+          @name='--boxel-filter-selected-foreground'
+          @type='color'
+          @description='selected (active) state font color'
+        />
+        <Css.Basic
+          @name='--boxel-filter-selected-hover-background'
+          @type='background-color'
+          @description='background-color for hover state of selected list button'
+        />
+        <Css.Basic
+          @name='--boxel-filter-selected-hover-foreground'
+          @type='color'
+          @description='color for hover state of selected list button'
+        />
+      </:cssVars>
     </FreestyleUsage>
     <style scoped>
       .filter-usage {
         display: grid;
         grid-template-columns: 250px 1fr;
         gap: var(--boxel-sp-sm);
+      }
+      :deep(.FreestyleUsageCssVar input) {
+        display: none;
       }
     </style>
   </template>

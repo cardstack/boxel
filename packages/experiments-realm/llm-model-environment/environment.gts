@@ -1365,9 +1365,7 @@ class Isolated extends Component<typeof Environment> {
 
   @action
   viewSkill(skill: Skill) {
-    if (this.args?.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(skill, 'isolated');
-    }
+    this.args.viewCard?.(skill, 'isolated');
   }
 
   get allShortcutsWithStatus() {

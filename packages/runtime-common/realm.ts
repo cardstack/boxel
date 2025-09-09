@@ -4,7 +4,7 @@ import {
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './document-types';
-import { type CardResource } from './resource-types';
+import { isMeta, type CardResource } from './resource-types';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
@@ -246,6 +246,7 @@ export class Realm {
   #fullIndexOnStartup = false;
   #realmServerMatrixUserId: string;
   #definitionsCache: DefinitionsCache;
+  #copiedFromRealm: URL | undefined;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -311,6 +312,7 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
     let _fetch = fetcher(virtualNetwork.fetch, [
       // when we run cards directly in node we do so under the authority of the
@@ -896,19 +898,28 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     let startTime = Date.now();
-    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    if (isNewIndex || this.#fullIndexOnStartup) {
-      let promise = this.#realmIndexUpdater.fullIndex();
-      if (isNewIndex) {
-        // we only await the full indexing at boot if this is a brand new index
-        await promise;
-      }
-      // not sure how useful this event is--nothing is currently listening for
-      // it, and it may happen during or after the full index...
+    if (this.#copiedFromRealm) {
+      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
       this.broadcastRealmEvent({
         eventName: 'index',
-        indexType: 'full',
+        indexType: 'copy',
+        sourceRealmURL: this.#copiedFromRealm.href,
       });
+    } else {
+      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      if (isNewIndex || this.#fullIndexOnStartup) {
+        let promise = this.#realmIndexUpdater.fullIndex();
+        if (isNewIndex) {
+          // we only await the full indexing at boot if this is a brand new index
+          await promise;
+        }
+        // not sure how useful this event is--nothing is currently listening for
+        // it, and it may happen during or after the full index...
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'full',
+        });
+      }
     }
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
@@ -2659,7 +2670,16 @@ export class Realm {
   ): Promise<void> {
     for (const [fieldName, fieldValue] of Object.entries(fields)) {
       const fieldPath = basePath ? `${basePath}.${fieldName}` : fieldName;
-
+      if (isMeta(fieldValue) && fieldValue?.fields) {
+        // if we have nested fields, we need to recurse into them
+        await this.buildCustomFieldDefinitions(
+          fieldValue.fields,
+          fieldPath,
+          customFieldDefinitions,
+          relativeTo,
+        );
+        continue;
+      }
       if (Array.isArray(fieldValue)) {
         for (const item of fieldValue) {
           if (item.adoptsFrom) {

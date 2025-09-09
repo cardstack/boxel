@@ -12,6 +12,8 @@ import {
   type SingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
+  DEFAULT_PERMISSIONS,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
@@ -98,7 +100,8 @@ module(basename(__filename), function () {
         let runner: QueueRunner;
         let request2: SuperTest<Test>;
         let testRealmDir: string;
-        let virtualNetwork = createVirtualNetwork();
+        let virtualNetwork: VirtualNetwork;
+        let ownerUserId = '@mango:localhost';
 
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -112,9 +115,7 @@ module(basename(__filename), function () {
           publisher: QueuePublisher,
           runner: QueueRunner,
         ) {
-          if (testRealm2) {
-            virtualNetwork.unmount(testRealm2.handle);
-          }
+          virtualNetwork = createVirtualNetwork();
           ({
             testRealm: testRealm2,
             testRealmServer: testRealmServer2,
@@ -128,6 +129,10 @@ module(basename(__filename), function () {
             publisher,
             runner,
             matrixURL,
+            permissions: {
+              '*': ['read', 'write'],
+              [ownerUserId]: DEFAULT_PERMISSIONS,
+            },
           }));
           request2 = supertest(testRealmHttpServer2);
         }
@@ -1480,18 +1485,16 @@ module(basename(__filename), function () {
         });
 
         test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {
-          virtualNetwork.mount(
-            async (req: Request) => {
-              if (req.url.includes('_info')) {
-                return new Response('Failed to fetch realm info', {
-                  status: 500,
-                  statusText: 'Internal Server Error',
-                });
-              }
-              return null;
-            },
-            { prepend: true },
-          );
+          let failedRealmInfoMock = async (req: Request) => {
+            if (req.url.includes('_info')) {
+              return new Response('Failed to fetch realm info', {
+                status: 500,
+                statusText: 'Internal Server Error',
+              });
+            }
+            return null;
+          };
+          virtualNetwork.mount(failedRealmInfoMock, { prepend: true });
           let response = await request2
             .get('/_catalog-realms')
             .set('Accept', 'application/json');
@@ -1500,6 +1503,330 @@ module(basename(__filename), function () {
           assert.deepEqual(response.body, {
             data: [],
           });
+        });
+
+        test('POST /_publish-realm can publish realm successfully', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              }),
+            );
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.body.data.type, 'published_realm');
+          assert.ok(response.body.data.id, 'published realm has an ID');
+          assert.strictEqual(
+            response.body.data.attributes.sourceRealmURL,
+            testRealm2.url,
+            'source realm URL is correct',
+          );
+          assert.ok(
+            response.body.data.attributes.publishedRealmURL,
+            'published realm URL is present',
+          );
+          assert.ok(
+            response.body.data.attributes.lastPublishedAt,
+            'last published at timestamp is present',
+          );
+
+          // Verify that the correct directory within _published was created
+          let publishedRealmId = response.body.data.id;
+          let publishedDir = join(dir.name, 'realm_server_2', '_published');
+          let publishedRealmPath = join(publishedDir, publishedRealmId);
+
+          assert.ok(existsSync(publishedDir), '_published directory exists');
+          assert.ok(
+            existsSync(publishedRealmPath),
+            'published realm directory exists',
+          );
+          assert.ok(
+            existsSync(join(publishedRealmPath, 'index.json')),
+            'published realm has index.json',
+          );
+        });
+
+        test('POST /_publish-realm can republish realm with updated timestamp', async function (assert) {
+          // First publish
+          let firstResponse = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              }),
+            );
+
+          assert.strictEqual(
+            firstResponse.status,
+            201,
+            'First publish succeeds',
+          );
+          let firstTimestamp =
+            firstResponse.body.data.attributes.lastPublishedAt;
+
+          // Wait a bit to ensure timestamp difference
+          await new Promise((resolve) => setTimeout(resolve, 10));
+
+          // Republish
+          let secondResponse = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              }),
+            );
+
+          assert.strictEqual(secondResponse.status, 201, 'Republish succeeds');
+          assert.strictEqual(
+            secondResponse.body.data.id,
+            firstResponse.body.data.id,
+            'Same published realm ID',
+          );
+          assert.strictEqual(
+            secondResponse.body.data.attributes.publishedRealmURL,
+            firstResponse.body.data.attributes.publishedRealmURL,
+            'Same published realm URL',
+          );
+          assert.notEqual(
+            secondResponse.body.data.attributes.lastPublishedAt,
+            firstTimestamp,
+            'Timestamp is updated on republish',
+          );
+        });
+
+        test('POST /_publish-realm returns bad request for missing sourceRealmURL', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(JSON.stringify({}));
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          assert.strictEqual(
+            response.text,
+            '{"errors":["sourceRealmURL is required"]}',
+            'Error message is correct',
+          );
+        });
+
+        test('POST /_publish-realm returns bad request for missing publishedRealmURL', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+              }),
+            );
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          assert.strictEqual(
+            response.text,
+            '{"errors":["publishedRealmURL is required"]}',
+            'Error message is correct',
+          );
+        });
+
+        test('POST /_publish-realm returns forbidden for user without realm-owner permission', async function (assert) {
+          let ownerUserId = '@non-realm-owner:localhost';
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              }),
+            );
+
+          assert.strictEqual(response.status, 403, 'HTTP 403 status');
+          assert.true(
+            response.text.includes(
+              'does not have enough permission to publish this realm',
+            ),
+            'Error message is correct',
+          );
+        });
+
+        test('POST /_publish-realm returns bad request for invalid publishedRealmURL domain', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL: 'http://invalid-domain.com/test-realm/',
+              }),
+            );
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          assert.true(
+            response.text.includes(
+              'publishedRealmURL must use a valid domain ending with one of: localhost',
+            ),
+            'Error message is correct',
+          );
+        });
+
+        test('POST /_publish-realm sets read-only permissions for published realm', async function (assert) {
+          let response = await request2
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: testRealm2.url,
+                publishedRealmURL:
+                  'http://testuser.localhost/test-realm-permissions/',
+              }),
+            );
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+
+          // Get the published realm URL from the response
+          let publishedRealmURL =
+            response.body.data.attributes.publishedRealmURL;
+
+          // Query the database to check the permissions
+          let results = await dbAdapter.execute(
+            `SELECT * FROM realm_user_permissions WHERE realm_url = '${publishedRealmURL}'`,
+          );
+
+          assert.ok(
+            results.length > 0,
+            'Permissions should exist for published realm',
+          );
+
+          let realmPermissions = results.map((r) => ({
+            username: r.username,
+            read: r.read,
+            write: r.write,
+            realm_owner: r.realm_owner,
+          }));
+
+          // Check that owner has only read permissions
+          let ownerPermissions = realmPermissions.find(
+            (r) => r.username === ownerUserId,
+          );
+          assert.ok(ownerPermissions, 'Owner permissions should exist');
+          assert.true(
+            ownerPermissions!.read,
+            'Owner should have read permission',
+          );
+          assert.false(
+            ownerPermissions!.write,
+            'Owner should not have write permission',
+          );
+          assert.true(
+            ownerPermissions!.realm_owner,
+            'Owner should not have realm_owner permission',
+          );
+
+          // Check that public users have only read permissions
+          let publicPermissions = realmPermissions.find(
+            (r) => r.username === '*',
+          );
+          assert.ok(publicPermissions, 'Public permissions should exist');
+          assert.true(
+            publicPermissions!.read,
+            'Public users should have read permission',
+          );
+          assert.false(
+            publicPermissions!.write,
+            'Public users should not have write permission',
+          );
+          assert.false(
+            publicPermissions!.realm_owner,
+            'Public users should not have realm_owner permission',
+          );
+
+          // Find the realm bot user (should be the only other user with permissions)
+          let botPermissions = realmPermissions.find(
+            (r) => r.username !== ownerUserId && r.username !== '*',
+          );
+
+          assert.ok(botPermissions, 'Realm bot user should exist');
+          assert.true(
+            botPermissions!.read,
+            'Realm bot user should have read permission',
+          );
+          assert.false(
+            botPermissions!.write,
+            'Realm bot user should not have write permission',
+          );
+          assert.true(
+            botPermissions!.realm_owner,
+            'Realm bot user should not have realm_owner permission',
+          );
         });
       });
 
