@@ -15,7 +15,7 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import CopyCardToRealmCommand from './copy-card-to-realm';
+import CopyCardToRealmCommand from './copy-card';
 import SaveCardCommand from './save-card';
 
 import type RealmServerService from '../services/realm-server';

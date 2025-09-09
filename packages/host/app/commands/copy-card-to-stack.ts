@@ -6,7 +6,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import CopyCardToRealmCommand from './copy-card-to-realm';
+import CopyCardToRealmCommand from './copy-card';
 
 import type CardService from '../services/card-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';

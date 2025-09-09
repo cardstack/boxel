@@ -47,7 +47,7 @@ import {
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
-import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card-to-realm';
+import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 
 import type RealmService from '@cardstack/host/services/realm';
 

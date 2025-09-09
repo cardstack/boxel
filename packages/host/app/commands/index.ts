@@ -7,7 +7,7 @@ import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
 import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
-import * as CopyCardToRealmModule from './copy-card-to-realm';
+import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
@@ -62,7 +62,7 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ApplySearchReplaceBlockCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/copy-card-to-realm',
+    '@cardstack/boxel-host/commands/copy-card',
     CopyCardToRealmModule,
   );
   virtualNetwork.shimModule(

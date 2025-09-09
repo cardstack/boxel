@@ -24,7 +24,7 @@ import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card-to-realm';
+import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
