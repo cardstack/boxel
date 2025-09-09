@@ -47,7 +47,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare store: StoreService;
 
   get connectUrl() {
-    return `${config.assetsURL}/connect`;
+    return `${config.realmServerURL}connect`;
   }
 
   get isError() {

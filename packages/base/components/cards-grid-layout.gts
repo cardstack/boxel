@@ -5,6 +5,7 @@ import {
   SortDropdown,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import {
   Card as CardViewIcon,
   Grid3x3 as GridViewIcon,
@@ -22,6 +23,7 @@ import {
 import type { CardContext, BoxComponent } from '../card-api';
 
 import CardList from './card-list';
+import { htmlSafe } from '@ember/template';
 
 export interface ViewOption {
   id: string;
@@ -37,7 +39,7 @@ export interface FilterOption {
   displayName: string;
   icon?: Icon | string;
   query?: Query;
-  cards?: BoxComponent & BoxComponent[];
+  cards?: BoxComponent[];
   filters?: FilterOption[];
   isExpanded?: boolean;
 }
@@ -86,6 +88,7 @@ interface Signature {
   Args: {
     context?: CardContext;
     format: Format;
+    icon?: string | Icon;
     query?: Query;
     realms: string[];
     isLive?: boolean;
@@ -116,33 +119,105 @@ export default class CardsGridLayout extends Component<Signature> {
       </aside>
       <section class='content scroll-container' tabindex='0'>
         <header class='content-header' aria-label={{@activeFilter.displayName}}>
+          {{#if @activeFilter.icon}}
+            <div class='content-icon'>
+              {{#if (this.isIconString @activeFilter.icon)}}
+                {{htmlSafe @activeFilter.icon}}
+              {{else}}
+                <@activeFilter.icon
+                  class='filter-list__icon'
+                  role='presentation'
+                />
+              {{/if}}
+            </div>
+          {{/if}}
           <h2 class='content-title'>
             {{@activeFilter.displayName}}
           </h2>
-          <ViewSelector
-            @items={{@viewOptions}}
-            @onChange={{@onChangeView}}
-            @selectedId={{@activeViewId}}
-          />
-          <SortDropdown
-            @options={{@sortOptions}}
-            @onSelect={{@onChangeSort}}
-            @selectedOption={{@activeSort}}
-          />
-          {{yield to='contentHeader'}}
+          {{#if this.displayActions}}
+            <ViewSelector
+              @items={{@viewOptions}}
+              @onChange={{@onChangeView}}
+              @selectedId={{@activeViewId}}
+            />
+            <SortDropdown
+              @options={{@sortOptions}}
+              @onSelect={{@onChangeSort}}
+              @selectedOption={{@activeSort}}
+            />
+            {{yield to='contentHeader'}}
+          {{/if}}
         </header>
-        <CardList
-          class='cards'
-          @context={{@context}}
-          @query={{@query}}
-          @realms={{@realms}}
-          @isLive={{@isLive}}
-          @format={{@format}}
-          @cards={{@activeFilter.cards}}
-          @viewOption={{@activeViewId}}
-          data-test-cards-grid-cards
-        />
-        {{yield to='content'}}
+        {{#if (eq @activeFilter.displayName 'Highlights')}}
+          <div class='highlights-layout' data-test-highlights-layout>
+            {{#if this.getAiAppGeneratorCard}}
+              <div
+                class='highlights-section'
+                data-test-highlights-section='new-feature'
+              >
+                <h3
+                  class='section-header'
+                  data-test-section-header='new-feature'
+                >NEW FEATURE</h3>
+                <div
+                  class='highlights-card-container'
+                  data-test-highlights-card-container='ai-app-generator'
+                >
+                  <this.getAiAppGeneratorCard @format='embedded' />
+                </div>
+
+              </div>
+            {{/if}}
+
+            {{#if this.getWelcomeToBoxelCard}}
+              <div
+                class='highlights-section'
+                data-test-highlights-section='getting-started'
+              >
+                <h3
+                  class='section-header'
+                  data-test-section-header='getting-started'
+                >GETTING STARTED</h3>
+                <div
+                  class='highlights-card-container'
+                  data-test-highlights-card-container='welcome-to-boxel'
+                >
+                  <div class='highlights-card-container'>
+                    <this.getWelcomeToBoxelCard @format='embedded' />
+                  </div>
+                </div>
+              </div>
+            {{/if}}
+
+            {{#if this.getCommunityCards}}
+              <div
+                class='highlights-section'
+                data-test-highlights-section='join-community'
+              >
+                <h3
+                  class='section-header'
+                  data-test-section-header='join-the-community'
+                >JOIN THE COMMUNITY</h3>
+                <this.getCommunityCards @format='embedded' />
+              </div>
+            {{/if}}
+          </div>
+        {{else}}
+          <CardList
+            class='cards'
+            @context={{@context}}
+            @query={{@query}}
+            @realms={{@realms}}
+            @isLive={{@isLive}}
+            @format={{@format}}
+            @cards={{@activeFilter.cards}}
+            @viewOption={{@activeViewId}}
+            data-test-cards-grid-cards
+          />
+        {{/if}}
+        {{#if this.displayActions}}
+          {{yield to='content'}}
+        {{/if}}
       </section>
     </section>
 
@@ -193,14 +268,87 @@ export default class CardsGridLayout extends Component<Signature> {
         flex-wrap: wrap;
         column-gap: var(--boxel-sp-lg);
         row-gap: var(--boxel-sp-xs);
-        padding: var(--padding);
+        padding: var(--padding) 0;
+        margin: 0 var(--padding);
+        border-bottom: 1px solid #e2e2e2;
       }
+      .content-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+
+      .filter-icon-svg {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .filter-icon-svg svg {
+        width: 24px;
+        height: 24px;
+      }
+
       .content-title {
         flex-grow: 1;
         margin-block: 0;
+        margin-left: calc(-1 * var(--boxel-sp-sm));
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp-xxs);
       }
+
+      .highlights-layout {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        padding: 0 var(--padding) var(--padding) var(--padding);
+
+        width: 100%;
+      }
+
+      .highlights-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        width: 100%;
+      }
+
+      .section-header {
+        margin: 0;
+        font: 600 var(--boxel-font);
+        color: var(--boxel-dark);
+        text-transform: uppercase;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+
+      .highlights-card-container {
+        width: 100%;
+      }
     </style>
   </template>
+
+  private get displayActions() {
+    return this.args.activeFilter.displayName !== 'Highlights';
+  }
+
+  private get getWelcomeToBoxelCard() {
+    return this.args.activeFilter.cards?.[0];
+  }
+
+  private get getAiAppGeneratorCard() {
+    return this.args.activeFilter.cards?.[1];
+  }
+
+  private get getCommunityCards() {
+    return this.args.activeFilter.cards?.[2];
+  }
+
+  private isIconString(icon: Icon | string | undefined): icon is string {
+    return typeof icon === 'string';
+  }
 }

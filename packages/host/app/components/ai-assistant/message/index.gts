@@ -47,6 +47,7 @@ interface Signature {
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
+    attachedCardsAsFiles?: FileDef[] | undefined;
     index: number;
     roomId: string;
     eventId: string;
@@ -263,6 +264,7 @@ export default class AiAssistantMessage extends Component<Signature> {
             {{#if this.hasItems}}
               <Attachments
                 @items={{this.items}}
+                @attachedCardsAsFiles={{@attachedCardsAsFiles}}
                 @downloadFile={{if @isDebugMessage this.downloadFile}}
               />
             {{/if}}

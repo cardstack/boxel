@@ -34,12 +34,13 @@ import {
   Subscription,
   Plan,
   RealmAdapter,
+  PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import { PUBLISHED_DIRECTORY_NAME, RealmServer } from '../../server';
+import { RealmServer } from '../../server';
 
 import {
   PgAdapter,
@@ -393,6 +394,7 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
+  validPublishedRealmDomains = ['localhost'],
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -406,6 +408,7 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
+  validPublishedRealmDomains?: string[];
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -455,6 +458,7 @@ export async function runTestRealmServer({
     grafanaSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    validPublishedRealmDomains,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();

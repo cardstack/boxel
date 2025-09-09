@@ -15,7 +15,7 @@ interface Signature {
     realms: string[];
     isLive?: boolean;
     format: Format;
-    cards?: BoxComponent & BoxComponent[];
+    cards?: BoxComponent[];
     viewOption?: string;
   };
   Element: HTMLElement;

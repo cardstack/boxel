@@ -283,14 +283,10 @@ class IsolatedTemplate extends Component<typeof Deal> {
       },
     };
 
-    await this.args.context?.actions?.createCard?.(
-      taskSource,
-      new URL(taskSource.module),
-      {
-        realmURL: this.realmURL,
-        doc,
-      },
-    );
+    await this.args.createCard?.(taskSource, new URL(taskSource.module), {
+      realmURL: this.realmURL,
+      doc,
+    });
   });
 
   createNewTask = () => {

@@ -249,6 +249,8 @@ export default class BoxelInput extends Component<Signature> {
         max-width: 100%;
         min-height: var(--boxel-input-height);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background-color: var(--background, var(--boxel-light));
+        color: var(--foreground, var(--boxel-dark));
         border: 1px solid var(--border, var(--boxel-form-control-border-color));
         border-radius: var(--boxel-form-control-border-radius);
         box-shadow: var(--shadow);
@@ -274,13 +276,6 @@ export default class BoxelInput extends Component<Signature> {
       .boxel-input:focus-visible {
         outline-color: var(--ring, var(--boxel-highlight));
         border-color: var(--ring, var(--boxel-highlight));
-      }
-      .boxel-input:focus-visible:not(.search) {
-        background-color: color-mix(
-          in oklab,
-          var(--background, var(--boxel-light)) 20%,
-          transparent
-        );
       }
 
       .boxel-input::placeholder {
