@@ -387,6 +387,7 @@ export class OneShotLLMRequestInput extends CardDef {
   @field systemPrompt = contains(StringField);
   @field llmModel = contains(StringField);
   @field skillCardIds = containsMany(StringField);
+  @field attachedFileURLs = containsMany(StringField);
 }
 
 export class OneShotLLMRequestResult extends CardDef {

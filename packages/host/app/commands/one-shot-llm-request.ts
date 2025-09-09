@@ -59,7 +59,33 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         fileContent = fileContents.content;
       }
 
-      if (!fileContent) {
+      // Read attached file contents
+      let attachedFilesContent = '';
+      if (input.attachedFileURLs && input.attachedFileURLs.length > 0) {
+        const readTextFileCommand = new ReadTextFileCommand(
+          this.commandService.commandContext,
+        );
+
+        const attachedFilePromises = input.attachedFileURLs.map(
+          async (fileUrl) => {
+            try {
+              const fileContents = await readTextFileCommand.execute({
+                path: fileUrl,
+              });
+              const fileName = fileUrl.split('/').pop() || fileUrl;
+              return `\n\n--- ${fileName} ---\n${fileContents.content}`;
+            } catch (error) {
+              console.warn(`Failed to read attached file ${fileUrl}:`, error);
+              return `\n\n--- ${fileUrl} ---\n[Error reading file: ${error}]`;
+            }
+          },
+        );
+
+        const attachedFileResults = await Promise.all(attachedFilePromises);
+        attachedFilesContent = attachedFileResults.join('');
+      }
+
+      if (!fileContent && !attachedFilesContent) {
         throw new Error('No file content available for LLM request');
       }
 
@@ -99,7 +125,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
           role: 'user' as const,
           content: `${input.userPrompt}
 
-${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : 'No file content available.'}`,
+${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? attachedFilesContent : ''}${!fileContent && !attachedFilesContent ? 'No file content available.' : ''}`,
         },
       ];
 
