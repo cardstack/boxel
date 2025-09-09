@@ -15,7 +15,7 @@ import cssVar from '../../helpers/css-var.ts';
 import { MenuItem } from '../../helpers/menu-item.ts';
 import { IconLink, IconTrash } from '../../icons.gts';
 import CardContainer from '../card-container/index.gts';
-import CardHeader, { CardHeaderUtilityMenu } from './index.gts';
+import CardHeader, { type CardHeaderUtilityMenu } from './index.gts';
 
 interface CardTypeIconSignature {
   Element: SVGElement;

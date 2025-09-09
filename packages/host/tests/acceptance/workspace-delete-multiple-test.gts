@@ -120,7 +120,8 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       ],
     });
 
-    // Wait for cards to load
+    // Select All Cards filter and wait for cards to load
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor('[data-test-cards-grid-item]');
 
     let cards = findAll('[data-test-cards-grid-item]');
@@ -181,7 +182,8 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       ],
     });
 
-    // Wait for cards to load
+    // Select All Cards filter and wait for cards to load
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor('[data-test-cards-grid-item]');
 
     let cards = findAll('[data-test-cards-grid-item]');
@@ -223,7 +225,8 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       ],
     });
 
-    // Wait for cards to load
+    // Select All Cards filter and wait for cards to load
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor('[data-test-cards-grid-item]');
 
     let cards = findAll('[data-test-cards-grid-item]');
@@ -277,7 +280,8 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       ],
     });
 
-    // Wait for cards to load
+    // Select All Cards filter and wait for cards to load
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor('[data-test-cards-grid-item]');
 
     let cards = findAll('[data-test-cards-grid-item]');

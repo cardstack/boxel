@@ -69,7 +69,6 @@ export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
-      transition: border-color var(--boxel-transition);
       margin: 0;
       min-height: var(--boxel-input-group-height);
       outline-offset: 0;
@@ -98,7 +97,6 @@ export const Text: TemplateOnlyComponent<TextSignature> = <template>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
-      transition: border-color var(--boxel-transition);
       margin: 0;
       min-height: var(--boxel-input-group-height);
       outline-offset: 0;
@@ -166,7 +164,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       .boxel-input-group__accessory {
         border: 1px solid var(--boxel-input-group-border-color);
         border-radius: var(--boxel-input-group-border-radius);
-        transition: border-color var(--boxel-transition);
         margin: 0;
         min-height: var(--boxel-input-group-height);
         outline-offset: 0;

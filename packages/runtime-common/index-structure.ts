@@ -1,8 +1,4 @@
-import {
-  ResolvedCodeRef,
-  type CardResource,
-  type SerializerName,
-} from './index';
+import { type CardResource, type SerializerName, type CodeRef } from './index';
 import { type SerializedError } from './error';
 import { type PgPrimitive } from './expression';
 import { type FieldType } from 'https://cardstack.com/base/card-api';
@@ -61,13 +57,13 @@ export interface FieldDefinition {
   type: FieldType;
   isPrimitive: boolean;
   isComputed: boolean;
-  fieldOrCard: ResolvedCodeRef;
+  fieldOrCard: CodeRef;
   serializerName?: SerializerName;
 }
 
 export interface Definition {
   type: 'card-def' | 'field-def';
-  codeRef: ResolvedCodeRef;
+  codeRef: CodeRef;
   displayName: string | null;
   fields: {
     [fieldName: string]: FieldDefinition;
@@ -90,3 +86,11 @@ export const coerceTypes = Object.freeze({
   indexed_at: 'VARCHAR',
   value: 'JSON',
 });
+
+export interface PublishedRealmTable {
+  id: string;
+  owner_username: string;
+  source_realm_url: string;
+  published_realm_url: string;
+  last_published_at: string;
+}

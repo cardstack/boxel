@@ -10,6 +10,8 @@ import {
   type Field,
   type FieldDef,
   type Format,
+  CreateCardFn,
+  CardCrudFunctions,
 } from './card-api';
 import {
   BoxComponentSignature,
@@ -34,6 +36,7 @@ import {
   isCardInstance,
   type ResolvedCodeRef,
   uuidv4,
+  CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -61,11 +64,14 @@ interface Signature {
     ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
     typeConstraint?: ResolvedCodeRef;
+    createCard?: CreateCardFn;
   };
 }
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  declare cardCrudFunctions: CardCrudFunctions;
   @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
@@ -122,7 +128,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           realmURL: this.realmURL,
         },
         multiSelect: true,
-        createNewCard: this.cardContext?.actions?.createCard,
+        createNewCard: this.cardCrudFunctions?.createCard,
         consumingRealm: this.realmURL,
       },
     );
@@ -255,23 +261,25 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         grid-template-columns: var(--boxel-icon-lg) 1fr var(--boxel-icon-lg);
       }
       .remove {
-        --icon-color: var(--boxel-light);
-        --icon-border: var(--boxel-dark);
-        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--background, var(--boxel-light));
+        --icon-border: var(--foreground, var(--boxel-dark));
+        --icon-bg: var(--foreground, var(--boxel-dark));
         align-self: auto;
         outline: 0;
         order: 1;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
+        --icon-bg: var(--primary, var(--boxel-highlight));
+        --icon-border: var(--primary, var(--boxel-highlight));
       }
-      .remove:focus + :deep(.boxel-card-container.fitted-format),
-      .remove:hover + :deep(.boxel-card-container.fitted-format) {
+      .remove:focus + :deep(.boxel-card-container),
+      .remove:hover + :deep(.boxel-card-container),
+      .sort:focus ~ :deep(.boxel-card-container),
+      .sort:hover ~ :deep(.boxel-card-container) {
         box-shadow:
-          0 0 0 1px var(--boxel-light-500),
-          var(--boxel-box-shadow-hover);
+          0 0 0 1px var(--border, var(--boxel-300)),
+          var(--shadow-lg, var(--boxel-box-shadow));
       }
       .add-new {
         width: calc(100% - var(--boxel-icon-xxl));
@@ -284,6 +292,11 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .sort:active {
         cursor: grabbing;
+      }
+      .sort:active ~ :deep(.boxel-card-container) {
+        box-shadow:
+          0 0 0 1px var(--border, var(--boxel-300)),
+          var(--boxel-box-shadow-hover);
       }
       :deep(.is-dragging) {
         z-index: 99;
@@ -351,9 +364,8 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-form-control-border-color);
+        padding: var(--boxel-sp-xs);
+        border: 1px solid var(--border, var(--boxel-form-control-border-color));
         border-radius: var(--boxel-form-control-border-radius);
       }
       .remove-item-button {
@@ -363,15 +375,21 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         align-items: center;
       }
       .remove-item-button:hover {
-        --icon-color: var(--boxel-600);
-        color: var(--boxel-600);
+        --icon-color: var(--card-foreground, var(--boxel-600));
+        color: var(--card-foreground, var(--boxel-600));
       }
       .item-pill :deep(.atom-default-template:hover) {
         text-decoration: underline;
+        cursor: pointer;
+      }
+      .item-pill {
+        --pill-background-color: var(--card);
+        --pill-font-color: var(--card-foreground);
       }
       .item-pill:has(button:hover) {
-        color: var(--boxel-600);
-        border-color: var(--boxel-600);
+        --icon-color: var(--muted-foreground, var(--boxel-600));
+        --pill-font-color: var(--muted-foreground, var(--boxel-600));
+        --pill-border-color: var(--muted-foreground, var(--boxel-600));
       }
     </style>
   </template>

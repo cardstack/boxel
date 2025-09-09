@@ -10,11 +10,12 @@ import { type CodeRef } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
-import { CardType, Type } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
 import { inheritanceChain } from '@cardstack/host/resources/inheritance-chain';
 import type { ModuleAnalysis } from '@cardstack/host/resources/module-contents';
+import { type Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
+
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
 import { BaseDef } from 'https://cardstack.com/base/card-api';
@@ -26,7 +27,7 @@ interface Signature {
   Args: {
     file: Ready;
     moduleAnalysis: ModuleAnalysis;
-    cardTypeResource?: CardType;
+    cardType?: Type;
     card: typeof BaseDef;
     isReadOnly: boolean;
     goToDefinition: (
@@ -99,7 +100,7 @@ export default class SchemaEditor extends Component<Signature> {
     this,
     () => this.args.file.url,
     () => this.args.card,
-    () => this.args.cardTypeResource,
+    () => this.args.cardType,
   );
 
   get totalFields() {

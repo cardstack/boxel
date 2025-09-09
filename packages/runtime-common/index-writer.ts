@@ -5,12 +5,14 @@ import {
   type CardResource,
   type RealmInfo,
   type JobInfo,
+  type CodeRef,
   jobIdentity,
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
   unixTime,
   logger,
+  isUrlLike,
 } from './index';
 import { transpileJS } from './transpile';
 import {
@@ -249,13 +251,10 @@ export class Batch {
         ? {
             type: entry.definition.type,
             displayName: entry.definition.displayName,
-            codeRef: {
-              module: this.copiedRealmURL(
-                sourceRealmURL,
-                new URL(entry.definition.codeRef.module),
-              ).href,
-              name: entry.definition.codeRef.name,
-            },
+            codeRef: this.copiedCodeRef(
+              sourceRealmURL,
+              entry.definition.codeRef,
+            ),
             fields: this.fieldDefinitionsWithCopiedCodeRefs(
               sourceRealmURL,
               entry.definition.fields,
@@ -767,16 +766,28 @@ export class Batch {
         fieldName,
         {
           ...fieldDefinition,
-          fieldOrCard: {
-            module: this.copiedRealmURL(
-              fromRealm,
-              new URL(fieldDefinition.fieldOrCard.module),
-            ).href,
-            name: fieldDefinition.fieldOrCard.name,
-          },
+          fieldOrCard: this.copiedCodeRef(
+            fromRealm,
+            fieldDefinition.fieldOrCard,
+          ),
         },
       ]),
     );
+  }
+
+  private copiedCodeRef(fromRealm: URL, codeRef: CodeRef): CodeRef {
+    if (!('type' in codeRef)) {
+      if (isUrlLike(codeRef.module)) {
+        let module = this.copiedRealmURL(
+          fromRealm,
+          new URL(codeRef.module),
+        ).href;
+        return { ...codeRef, module };
+      } else {
+        return { ...codeRef };
+      }
+    }
+    return { ...codeRef, card: this.copiedCodeRef(fromRealm, codeRef.card) };
   }
 
   private updateIds(obj: any, fromRealm: URL) {

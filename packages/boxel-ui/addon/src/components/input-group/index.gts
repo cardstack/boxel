@@ -192,6 +192,8 @@ export default class InputGroup extends Component<Signature> {
         align-items: stretch;
         width: 100%;
         min-height: var(--boxel-input-group-height);
+        background-color: var(--background, var(--boxel-light));
+        color: var(--foreground, var(--boxel-dark));
       }
 
       .boxel-input-group :deep(.boxel-button--size-base) {
