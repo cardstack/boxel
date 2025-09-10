@@ -30,8 +30,8 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
     return `YOU ARE a proficient Boxel developer creating GitHub-style documentation for ${ref.name} from ${ref.module}. Use this structure:
 
 • **Import**: Show how to es6 import the component/field/card/command. The code ref is (${ref.name} from ${ref.module}). Do not include .gts extension.
-• **Link**: Show how to link or define it in a card (e.g., @field myCard = linksTo(CardName) for cards, @field myField = contains(FieldName) for fields)
-• **Template**: Show how to call it in templates using the fields API with format arguments (e.g., <@fields.myField @format='atom'/>)
+• **Link**: Only for card or field, show how to link or define it in a card (e.g., @field myCard = linksTo(CardName) for cards, @field myField = contains(FieldName) for fields)
+• **Template**: Only for card or field, show how to call it in templates using the fields API with format arguments (e.g., <@fields.myField @format='atom'/>)
 • **Dependencies**: Describe the special dependencies of this code (We only want KEY dependencies). Try to include import of other specs and/or extenrnal cdn 
 • **Usage and Examples**: Show the primary way to use the code (Include the MOST obvious way to use). Keep it SIMPLE.
 
