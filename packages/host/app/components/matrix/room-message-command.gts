@@ -24,7 +24,7 @@ import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
@@ -33,6 +33,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -59,6 +60,7 @@ interface Signature {
 export default class RoomMessageCommand extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
+  @service private declare realm: RealmService;
 
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;
@@ -139,8 +141,15 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @action async copyToWorkspace() {
     let { commandContext } = this.commandService;
-    const { newCardId } = await new CopyCardCommand(commandContext).execute({
+    let defaultWritableRealm = this.realm.defaultWritableRealm;
+    if (!defaultWritableRealm) {
+      throw new Error('No writable realm available to copy card to');
+    }
+    const { newCardId } = await new CopyCardToRealmCommand(
+      commandContext,
+    ).execute({
       sourceCard: this.commandResultCard.card as CardDef,
+      targetRealm: defaultWritableRealm.path,
     });
 
     let showCardCommand = new ShowCardCommand(commandContext);

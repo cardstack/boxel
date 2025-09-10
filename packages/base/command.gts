@@ -30,12 +30,16 @@ export class SaveCardInput extends CardDef {
   @field localDir = contains(StringField);
 }
 
-export class CopyCardInput extends CardDef {
+export class CopyCardToRealmInput extends CardDef {
+  @field sourceCard = linksTo(CardDef);
+  @field targetRealm = contains(StringField);
+  @field localDir = contains(StringField);
+}
+
+export class CopyCardToStackInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
   @field targetStackIndex = contains(NumberField);
-  @field realm = contains(StringField);
   @field localDir = contains(StringField);
-  @field codeRef = contains(CodeRefField);
 }
 
 export class CopyCardResult extends CardDef {
