@@ -6,7 +6,6 @@ import {
   logger,
   RunnerOptionsManager,
   Deferred,
-  systemInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -18,11 +17,6 @@ import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
-import {
-  compareCurrentBoxelUIChecksum,
-  writeCurrentBoxelUIChecksum,
-} from 'lib/boxel-ui-change-checker';
-import { reindex } from 'handlers/handle-reindex';
 
 let log = logger('main');
 if (process.env.NODE_ENV === 'test') {

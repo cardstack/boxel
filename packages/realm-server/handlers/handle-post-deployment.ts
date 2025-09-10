@@ -19,7 +19,6 @@ export default function handlePostDeployment({
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     // TODO: add auth before this
-    // TODO: wrap this in a job
 
     let boxelUiChangeCheckerResult =
       await compareCurrentBoxelUIChecksum(assetsURL);
