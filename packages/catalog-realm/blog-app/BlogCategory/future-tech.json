@@ -6,9 +6,11 @@
       "shortName": "Tech",
       "slug": "future-tech",
       "pillColor": "#000000",
-      "description": "Highlighting technology shaping tomorrow’s cities.",
-      "title": "Future Tech",
-      "thumbnailURL": null
+      "cardInfo": {
+        "description": "Highlighting technology shaping tomorrow’s cities.",
+        "title": "Future Tech",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "blog": {

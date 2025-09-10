@@ -12,12 +12,14 @@ import {
 import RadioInput from '../radio-input/index.gts';
 
 export interface ViewItem {
+  disabled?: boolean;
   icon: ComponentLike;
   id: string;
 }
 
 interface Signature {
   Args: {
+    disabled?: boolean;
     items?: ViewItem[];
     onChange: (id: string) => void;
     selectedId: string | undefined;
@@ -42,7 +44,7 @@ export default class ViewSelector extends Component<Signature> {
   }
 
   <template>
-    <div class='view-options-group' ...attributes>
+    <div class={{cn 'view-options-group' is-disabled=@disabled}} ...attributes>
       {{! TODO: refactor styling of RadioInput component to display legend instead of repeating it here }}
       View as
       <RadioInput
@@ -60,9 +62,15 @@ export default class ViewSelector extends Component<Signature> {
             class={{cn 'view-option' is-selected=(eq this.selectedId id)}}
             @checked={{eq this.selectedId id}}
             @onChange={{fn @onChange id}}
+            @disabled={{if @disabled @disabled item.data.disabled}}
+            aria-label={{id}}
           >
-            <span class='boxel-sr-only'>{{id}}</span>
-            <item.data.icon width='20' height='20' alt={{id}} />
+            <item.data.icon
+              width='20'
+              height='20'
+              alt={{id}}
+              role='presentation'
+            />
           </item.component>
         {{/let}}
       </RadioInput>
@@ -73,27 +81,81 @@ export default class ViewSelector extends Component<Signature> {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          column-gap: var(--boxel-sp-sm);
+          column-gap: var(
+            --boxel-view-option-group-column-gap,
+            var(--boxel-sp-sm)
+          );
+          row-gap: var(--boxel-view-option-group-row-gap);
           text-wrap: nowrap;
         }
         .view-options {
           display: flex;
-          column-gap: var(--boxel-sp-6xs);
+          column-gap: var(--boxel-view-option-column-gap, var(--boxel-sp-6xs));
+          row-gap: var(--boxel-view-option-row-gap);
         }
         .view-option {
           display: flex;
-          color: var(--boxel-450);
-          box-shadow: none;
-          transition: none;
+          background-color: var(--boxel-view-option-background, transparent);
+          color: var(
+            --boxel-view-option-foreground,
+            color-mix(
+              in oklab,
+              var(--foreground, var(--boxel-dark)) 42%,
+              transparent
+            )
+          );
+          border-radius: var(
+            --boxel-view-option-radius,
+            var(--boxel-border-radius-sm)
+          );
+          box-shadow: var(--boxel-view-option-shadow, none);
+          transition: var(--boxel-view-option-transition, none);
           flex-shrink: 0;
         }
         .view-options > :deep(div),
         .view-option > :deep(div) {
           display: contents;
         }
-        .view-option:hover,
+        .view-option:not(:has(:disabled)):hover {
+          background-color: var(
+            --boxel-view-option-hover-background,
+            transparent
+          );
+          color: var(--boxel-view-option-hover-foreground, var(--foreground));
+        }
         .view-option.is-selected {
-          color: var(--boxel-dark);
+          background-color: var(
+            --boxel-view-option-selected-background,
+            transparent
+          );
+          color: var(
+            --boxel-view-option-selected-foreground,
+            var(--foreground, var(--boxel-dark))
+          );
+        }
+        .view-option.is-selected:hover {
+          background-color: var(
+            --boxel-view-option-selected-hover-background,
+            transparent
+          );
+          color: var(
+            --boxel-view-option-selected-hover-foreground,
+            color-mix(
+              in oklab,
+              var(--foreground, var(--boxel-dark)) 90%,
+              transparent
+            )
+          );
+        }
+        .view-option:focus-within:has(input:focus-visible) {
+          outline: 2px solid var(--ring, var(--boxel-highlight));
+        }
+        .view-option:has(:disabled) {
+          opacity: 0.5;
+          pointer-events: none;
+        }
+        .is-disabled {
+          opacity: 0.5;
         }
       }
     </style>

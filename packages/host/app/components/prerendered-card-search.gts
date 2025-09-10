@@ -19,6 +19,7 @@ import {
   type PrerenderedCardLike,
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
+  QueryResultsMeta,
 } from '@cardstack/runtime-common';
 import {
   PrerenderedCardCollectionDocument,
@@ -119,12 +120,17 @@ const normalizeRealms = (realms: string[]) => {
   });
 };
 
+interface SearchResult {
+  instances: PrerenderedCard[];
+  meta: QueryResultsMeta;
+}
+
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
   _lastCardUrls: string[] | undefined;
-  _lastSearchResults: PrerenderedCard[] | undefined;
+  _lastSearchResults: SearchResult | undefined;
   _lastRealms: string[] | undefined;
   realmsNeedingRefresh = new TrackedSet<string>(
     normalizeRealms(this.args.realms),
@@ -135,7 +141,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     format: Format,
     cardUrls: string[],
     realmURL: string,
-  ): Promise<PrerenderedCard[]> {
+  ): Promise<SearchResult> {
     let json = (await this.cardService.fetchJSON(
       `${realmURL}_search-prerendered`,
       {
@@ -164,14 +170,17 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       ),
     );
 
-    return json.data.filter(Boolean).map((r) => {
-      return new PrerenderedCard({
-        url: r.id,
-        realmUrl: realmURL,
-        html: r.attributes?.html,
-        isError: !!r.attributes?.isError,
-      });
-    });
+    return {
+      instances: json.data.filter(Boolean).map((r) => {
+        return new PrerenderedCard({
+          url: r.id,
+          realmUrl: realmURL,
+          html: r.attributes?.html,
+          isError: !!r.attributes?.isError,
+        });
+      }),
+      meta: json.meta,
+    };
   }
 
   private runSearch = trackedFunction(this, async () => {
@@ -182,9 +191,14 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     let queryChanged = !isEqual(query, this._lastSearchQuery);
     let cardUrlsChanged = !isEqual(cardUrls, this._lastSearchQuery);
     if (realmsChanged) {
-      this._lastSearchResults = this._lastSearchResults?.filter((r) =>
-        realms.includes(r.realmUrl),
-      );
+      if (this._lastSearchResults) {
+        this._lastSearchResults = {
+          instances: this._lastSearchResults.instances.filter((r) =>
+            realms.some((realm) => r.url.startsWith(realm)),
+          ),
+          meta: this._lastSearchResults.meta,
+        };
+      }
       this.realmsNeedingRefresh = new TrackedSet(realms);
     }
     this._lastRealms = realms;
@@ -202,6 +216,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
         this.runSearchTask.lastSuccessful?.value ?? {
           instances: [],
           isLoading: true,
+          meta: {
+            page: { total: 0 },
+          },
         }
       );
     }
@@ -221,6 +238,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       this.runSearchTask.lastSuccessful?.value ?? {
         instances: [],
         isLoading: true,
+        meta: {
+          page: { total: 0 },
+        },
       }
     );
   });
@@ -234,7 +254,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       this._lastCardUrls = cardUrls;
     }
 
-    let results = [...(this._lastSearchResults || [])];
+    let results = this._lastSearchResults?.instances || [];
     let realmsNeedingRefresh = Array.from(this.realmsNeedingRefresh);
     let token = waiter.beginAsync();
     try {
@@ -256,16 +276,31 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
               `Failed to search prerendered for realm ${realm}:`,
               error,
             );
-            return [];
+            return { instances: [], meta: { page: { total: 0 } } };
           }
         },
       );
 
       const searchResults = await Promise.all(searchPromises);
-      results.push(...flatMap(searchResults));
+      const allInstances = flatMap(
+        searchResults,
+        (result) => result.instances || [],
+      );
+      results.push(...allInstances);
 
-      this._lastSearchResults = results;
-      return { instances: results, isLoading: false };
+      const combinedMeta: QueryResultsMeta = searchResults.reduce(
+        (acc, result) => {
+          if (result.meta?.page?.total !== undefined) {
+            acc.page = acc.page || { total: 0 };
+            acc.page.total = (acc.page.total || 0) + result.meta.page.total;
+          }
+          return acc;
+        },
+        { page: { total: 0 } } as QueryResultsMeta,
+      );
+
+      this._lastSearchResults = { instances: results, meta: combinedMeta };
+      return { instances: results, isLoading: false, meta: combinedMeta };
     } finally {
       waiter.endAsync(token);
     }
@@ -275,9 +310,13 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     if (this.runSearch.value) {
       return this.runSearch.value;
     } else if (this._lastSearchResults) {
-      return { instances: this._lastSearchResults, isLoading: false };
+      return {
+        instances: this._lastSearchResults.instances,
+        isLoading: false,
+        meta: this._lastSearchResults.meta,
+      };
     } else {
-      return { instances: [], isLoading: true };
+      return { instances: [], isLoading: true, meta: { page: { total: 0 } } };
     }
   }
 
@@ -298,6 +337,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       {{yield to='loading'}}
     {{else}}
       {{yield this.searchResults.instances to='response'}}
+      {{#if this.searchResults.meta}}
+        {{yield this.searchResults.meta to='meta'}}
+      {{/if}}
     {{/if}}
   </template>
 }

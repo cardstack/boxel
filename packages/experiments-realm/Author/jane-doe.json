@@ -31,8 +31,10 @@
         "height": null,
         "width": null
       },
-      "description": "Senior Managing Editor at Ramped.com",
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1481214110143-ed630356e1bb.jpeg"
+      "cardInfo": {
+        "description": "Senior Managing Editor at Ramped.com",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1481214110143-ed630356e1bb.jpeg"
+      }
     },
     "relationships": {
       "blog": {

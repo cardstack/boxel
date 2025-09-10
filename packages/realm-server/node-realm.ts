@@ -30,12 +30,12 @@ import type {
   RequestContext,
   FileWriteResult,
 } from '@cardstack/runtime-common/realm';
-import jwt from 'jsonwebtoken';
 import type {
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { createJWT, verifyJWT } from './jwt';
 
 const realmEventsLog = logger('realm:events');
 
@@ -213,8 +213,7 @@ export class NodeAdapter implements RealmAdapter {
   }
 
   createJWT(claims: TokenClaims, expiration: string, secret: string): string {
-    let token = jwt.sign(claims, secret, { expiresIn: expiration });
-    return token;
+    return createJWT(claims, expiration, secret);
   }
 
   verifyJWT(
@@ -222,7 +221,7 @@ export class NodeAdapter implements RealmAdapter {
     secret: string,
   ): TokenClaims & { iat: number; exp: number } {
     // throws TokenExpiredError and JsonWebTokenError
-    return jwt.verify(token, secret) as TokenClaims & {
+    return verifyJWT(token, secret) as TokenClaims & {
       iat: number;
       exp: number;
     };

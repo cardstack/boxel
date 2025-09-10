@@ -3,9 +3,11 @@
     "type": "card",
     "attributes": {
       "website": "www.cinereview.com",
-      "title": "CineReview",
-      "description": null,
-      "thumbnailURL": null
+      "cardInfo": {
+        "title": "CineReview",
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "meta": {
       "adoptsFrom": {
