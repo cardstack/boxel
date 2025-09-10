@@ -29,7 +29,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
   {{#let (element (if (eq @kind 'button') 'button' @tag)) as |Tag|}}
     <Tag
       class={{cn
-        'pill'
+        'pill pill-test'
         (if (eq @kind 'button') 'button-pill')
         (if @variant (concat 'variant-' @variant) 'variant-default')
       }}
