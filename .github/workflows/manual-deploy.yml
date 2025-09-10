@@ -166,6 +166,29 @@ jobs:
     needs: [deploy-realm-server]
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Starting post-deployment steps..."
-      - run: sleep 180
-      - run: echo "Post-deployment steps completed!"
+      - name: Call post-deployment endpoint on realm server
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            URL="https://app.boxel.ai/_post-deployment"
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            URL="https://realms-staging.stack.cards/_post-deployment"
+          else
+            echo "Unknown environment: ${{ inputs.environment }}"
+            exit 1
+          fi
+
+          echo "Calling post-deployment endpoint: $URL"
+
+          # Capture both response body and status code
+          response_body=$(curl -s -X POST "$URL")
+          response_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL")
+
+          echo "Response status code: $response_code"
+          echo "Response body: $response_body"
+
+          if [ "$response_code" != "200" ]; then
+            echo "Post-deployment endpoint returned $response_code, expected 200"
+            echo "Response body: $response_body"
+            exit 1
+          fi
+          echo "Post-deployment endpoint call successful!"
