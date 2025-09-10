@@ -1,5 +1,5 @@
 import { DBAdapter } from './db';
-import { RealmPermissions } from './realm';
+import { RealmAction, type RealmPermissions } from './realm';
 import { query, asExpressions, param, upsert } from './expression';
 
 async function insertPermission(
@@ -80,7 +80,7 @@ export async function permissionsExist(dbAdapter: DBAdapter, realmURL: URL) {
   )[0].has_rows;
 }
 
-export async function fetchUserPermissions(
+export async function fetchRealmPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
 ): Promise<RealmPermissions> {
@@ -110,6 +110,40 @@ export async function fetchUserPermissions(
       return permissionsAcc;
     },
     {} as RealmPermissions,
+  );
+}
+export async function fetchUserPermissions(
+  dbAdapter: DBAdapter,
+  userId: string,
+): Promise<{
+  [realm: string]: RealmAction[];
+}> {
+  let permissions = (await query(dbAdapter, [
+    `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
+    param(userId),
+  ])) as {
+    realm_url: string;
+    read: boolean;
+    write: boolean;
+    realm_owner: boolean;
+  }[];
+
+  return permissions.reduce(
+    (permissionsAcc, { realm_url, read, write, realm_owner }) => {
+      let userPermissions: RealmAction[] = [];
+      if (read) {
+        userPermissions.push('read');
+      }
+      if (write) {
+        userPermissions.push('write');
+      }
+      if (realm_owner) {
+        userPermissions.push('realm-owner');
+      }
+      permissionsAcc[realm_url as string] = userPermissions;
+      return permissionsAcc;
+    },
+    {} as { [realm: string]: RealmAction[] },
   );
 }
 

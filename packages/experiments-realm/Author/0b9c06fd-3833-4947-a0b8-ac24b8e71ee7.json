@@ -31,8 +31,10 @@
         "height": null,
         "width": null
       },
-      "description": "Senior Film Critic & Cultural Commentator",
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1556474835-b0f3ac40d4d1.jpeg"
+      "cardInfo": {
+        "description": "Senior Film Critic & Cultural Commentator",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1556474835-b0f3ac40d4d1.jpeg"
+      }
     },
     "relationships": {
       "blog": {

@@ -6,9 +6,11 @@
       "shortName": "Work",
       "slug": "urban-work",
       "pillColor": "#A6F4CA",
-      "description": "Exploring work trends in the evolving city landscape.",
-      "title": "Work",
-      "thumbnailURL": null
+      "cardInfo": {
+        "description": "Exploring work trends in the evolving city landscape.",
+        "title": "Work",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "blog": {

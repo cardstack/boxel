@@ -10,7 +10,7 @@ import {
   param,
   PUBLISHED_DIRECTORY_NAME,
   type PublishedRealmTable,
-  fetchUserPermissions,
+  fetchRealmPermissions,
   uuidv4,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, copySync } from 'fs-extra';
@@ -104,7 +104,7 @@ export default function handlePublishRealm({
     }
 
     let { user: ownerUserId } = token;
-    let permissions = await fetchUserPermissions(
+    let permissions = await fetchRealmPermissions(
       dbAdapter,
       new URL(sourceRealmURL),
     );
