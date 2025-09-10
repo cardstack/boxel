@@ -159,4 +159,13 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-realm-server-${{ inputs.environment }}"
       image: ${{ needs.build-realm-server.outputs.image }}
-      wait-for-service-stability: false
+      wait-for-service-stability: true
+
+  post-deploy-realm-server:
+    name: Extra steps for realm server after stable deployment
+    needs: [deploy-realm-server]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Starting post-deployment steps..."
+      - run: sleep 180
+      - run: echo "Post-deployment steps completed!"
