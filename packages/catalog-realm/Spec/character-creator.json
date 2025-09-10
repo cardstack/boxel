@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "An avatar creation system using the Avataaars library with AI-powered character suggestions. Create customizable characters with detailed visual features and personalities.\n\n**Visual Customization:**\n- Hair styles (long, short, curly, straight, dreads, etc.)\n- Hair colors (natural and fantasy colors like pastel pink, blue)\n- Facial expressions (happy, surprised, wink, serious, etc.)\n- Eyebrow styles (natural, angry, raised, unibrow, etc.)\n- Mouth expressions (smile, concerned, tongue, grimace, etc.)\n- Skin tones (pale to dark brown, including fantasy colors)\n- Clothing options (blazers, hoodies, graphic shirts, v-necks, etc.)\n\n**AI Character Suggestions:**\nBuilt-in AI skill that suggests character feature combinations based on your preferences (casual, professional, fun, etc.) with reasoning for why features work well together.\n\n**Usage:**\nCreate characters by selecting from dozens of visual options or ask the AI for suggestions. Perfect for games, storytelling, profile avatars, or any project needing diverse character representations.",
+      "ref": {
+        "module": "../character-creator/character-creator",
+        "name": "CharacterCreator"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "CharacterCreator",
+      "description": "Spec of CharacterCreator",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
