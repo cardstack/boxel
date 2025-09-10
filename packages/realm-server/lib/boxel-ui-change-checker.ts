@@ -1,37 +1,29 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
-import os from 'os';
 
 const fileChecksumPath = path.join(
   process.cwd(),
-  '/../../../persistent/boxel-ui-checksum.txt',
+  '/../../../persistent/boxel-ui-checksum.txt', // A folder that persists between deployments (AWS EFS)
 );
 
-function calculateDirectoryChecksum(dirPath: string): string {
-  const shaCommand = os.platform() === 'darwin' ? 'shasum -a 256' : 'sha256sum';
-  const command = `cd "${dirPath}" && find . -type f -print0 | sort -z | xargs -0 cat | ${shaCommand}`;
-  const result = execSync(command, { encoding: 'utf8' });
-  return result.split(' ')[0].trim(); // Extract just the checksum part and remove newlines
+async function fetchCurrentBoxelUIChecksum(distURL: URL): Promise<string> {
+  const response = await fetch(new URL('/boxel-ui-checksum.txt', distURL));
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch boxel-ui checksum: ${response.statusText}`,
+    );
+  }
+
+  return await response.text();
 }
 
 // This function is used to compare the current checksum of the boxel-ui
 // directory with the previous checksum. We use it to detect whether a reindex
 // is needed after the deploy pipeline has finished. This is to make sure the
 // prerendered content is up to date with anything imported from boxel-ui.
-export function compareCurrentBoxelUIChecksum() {
-  const boxelUiPath = path.join(
-    process.cwd(),
-    '/../host/node_modules/@cardstack/boxel-ui/src',
-  );
-
-  if (!fs.existsSync(boxelUiPath)) {
-    throw new Error(
-      `The boxel-ui change checker failed to find the boxel-ui path: ${boxelUiPath}`,
-    );
-  }
-
-  const currentChecksum = calculateDirectoryChecksum(boxelUiPath);
+export async function compareCurrentBoxelUIChecksum(distURL: URL) {
+  const currentChecksum = await fetchCurrentBoxelUIChecksum(distURL);
 
   let previousChecksum = '';
 

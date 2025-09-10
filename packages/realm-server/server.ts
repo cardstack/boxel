@@ -182,6 +182,7 @@ export class RealmServer {
           sendEvent: this.sendEvent,
           queue: this.queue,
           realms: this.realms,
+          assetsURL: this.assetsURL,
         }),
       )
       .use(this.serveIndex)
