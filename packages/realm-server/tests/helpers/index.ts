@@ -821,6 +821,141 @@ export function setupPermissionedRealm(
   });
 }
 
+export function setupPermissionedRealms(
+  hooks: NestedHooks,
+  {
+    mode = 'beforeEach',
+    realm1: argsRealm1,
+    realm2: argsRealm2,
+    onRealmSetup,
+  }: {
+    mode?: 'beforeEach' | 'before';
+    realm1: {
+      realmURL: string;
+      permissions: RealmPermissions;
+      fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    };
+    realm2: {
+      realmURL: string;
+      permissions: RealmPermissions;
+      fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    };
+    onRealmSetup?: (args: {
+      dbAdapter: PgAdapter;
+      realm1: {
+        realm: Realm;
+        realmPath: string;
+        realmHttpServer: Server;
+        realmAdapter: RealmAdapter;
+      };
+      realm2: {
+        realm: Realm;
+        realmPath: string;
+        realmHttpServer: Server;
+        realmAdapter: RealmAdapter;
+      };
+    }) => void;
+  },
+) {
+  // We want 2 different realm users to test authorization between them - these
+  // names are selected because they are already available in the test
+  // environment (via register-realm-users.ts)
+  let matrixUser1 = 'test_realm';
+  let matrixUser2 = 'node-test_realm';
+  let realm1: {
+    realm: Realm;
+    realmPath: string;
+    realmHttpServer: Server;
+    realmAdapter: RealmAdapter;
+  };
+  let realm2: {
+    realm: Realm;
+    realmPath: string;
+    realmHttpServer: Server;
+    realmAdapter: RealmAdapter;
+  };
+  let _dbAdapter: PgAdapter;
+  setupDB(hooks, {
+    [mode]: async (
+      dbAdapter: PgAdapter,
+      publisher: QueuePublisher,
+      runner: QueueRunner,
+    ) => {
+      _dbAdapter = dbAdapter;
+      {
+        let {
+          testRealmDir: realmPath,
+          testRealm: realm,
+          testRealmHttpServer: realmHttpServer,
+          testRealmAdapter: realmAdapter,
+        } = await runTestRealmServer({
+          virtualNetwork: await createVirtualNetwork(),
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
+          realmURL: new URL(argsRealm1.realmURL),
+          fileSystem: argsRealm1.fileSystem,
+          permissions: argsRealm1.permissions,
+          matrixURL,
+          matrixConfig: {
+            url: matrixURL,
+            username: matrixUser1,
+          },
+          dbAdapter,
+          publisher,
+          runner,
+        });
+        realm1 = {
+          realm,
+          realmPath,
+          realmHttpServer,
+          realmAdapter,
+        };
+      }
+
+      {
+        let {
+          testRealmDir: realmPath,
+          testRealm: realm,
+          testRealmHttpServer: realmHttpServer,
+          testRealmAdapter: realmAdapter,
+        } = await runTestRealmServer({
+          virtualNetwork: await createVirtualNetwork(),
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
+          realmURL: new URL(argsRealm2.realmURL),
+          fileSystem: argsRealm2.fileSystem,
+          permissions: argsRealm2.permissions,
+          matrixURL,
+          matrixConfig: {
+            url: matrixURL,
+            username: matrixUser2,
+          },
+          dbAdapter,
+          publisher,
+          runner,
+        });
+        realm2 = {
+          realm,
+          realmPath,
+          realmHttpServer,
+          realmAdapter,
+        };
+      }
+
+      onRealmSetup?.({
+        dbAdapter: _dbAdapter!,
+        realm1: realm1!,
+        realm2: realm2!,
+      });
+    },
+  });
+
+  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
+    await closeServer(realm1.realmHttpServer);
+    await closeServer(realm2.realmHttpServer);
+  });
+}
+
 export function createJWT(
   realm: Realm,
   user: string,

@@ -6,9 +6,11 @@
       "shortName": "Productivity",
       "slug": "productivity",
       "pillColor": "#9D00FF",
-      "description": "Tips and tricks for better organization and effectiveness at work",
-      "title": "Productivity",
-      "thumbnailURL": null
+      "cardInfo": {
+        "description": "Tips and tricks for better organization and effectiveness at work",
+        "title": "Productivity",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "blog": {

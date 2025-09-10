@@ -118,7 +118,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
   {{/let}}
   <style scoped>
-    @layer {
+    @layer boxelComponentL1 {
       /* Button */
       .boxel-button {
         --boxel-loading-indicator-size: var(
