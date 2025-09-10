@@ -347,25 +347,6 @@ let autoMigrate = migrateDB || undefined;
   if (process.send) {
     process.send('ready');
   }
-
-  // TODO: wrap this in a job
-  let boxelUiChangeCheckerResult = compareCurrentBoxelUIChecksum();
-  if (
-    boxelUiChangeCheckerResult.currentChecksum !==
-    boxelUiChangeCheckerResult.previousChecksum
-  ) {
-    log.info('Boxel UI has changed, reindexing...');
-
-    for (let realm of realms) {
-      await reindex({
-        realm,
-        queue,
-        dbAdapter,
-        priority: systemInitiatedPriority,
-      });
-    }
-    writeCurrentBoxelUIChecksum(boxelUiChangeCheckerResult.currentChecksum);
-  }
 })().catch((e: any) => {
   Sentry.captureException(e);
   console.error(
