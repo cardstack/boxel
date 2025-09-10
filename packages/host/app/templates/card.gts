@@ -46,19 +46,16 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare store: StoreService;
 
   @provide(GetCardContextName)
-  // @ts-ignore "getCard" is declared but not used
   private get getCard() {
     return getCard;
   }
 
   @provide(GetCardsContextName)
-  // @ts-ignore "getCards" is declared but not used
   private get getCards() {
     return getSearch;
   }
 
   @provide(GetCardCollectionContextName)
-  // @ts-ignore "getCardCollection" is declared but not used
   private get getCardCollection() {
     return getCardCollection;
   }
