@@ -9,6 +9,7 @@ const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
 const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 const withSideWatch = require('./lib/with-side-watch');
 const Funnel = require('broccoli-funnel');
+const { BoxelUIChecksumPlugin } = require('./lib/build/package-dist-checksums');
 
 module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
@@ -84,6 +85,8 @@ module.exports = function (defaults) {
               // 'en' is built into moment and cannot be removed. This strips the others.
               localesToKeep: [],
             }),
+            // boxel-ui packages dist checksum needed for the realm server to figure out if boxel-ui changed, and trigger a reindex of cards that use it (to update cards' prerendered HTML)
+            new BoxelUIChecksumPlugin(__dirname),
           ],
           externals: {
             'content-tag': 'ContentTagGlobal',
