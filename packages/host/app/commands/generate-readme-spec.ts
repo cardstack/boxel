@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { SpecType } from 'https://cardstack.com/base/spec';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -23,15 +24,26 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
   }) {
     return `Create README documentation for this spec (${ref.name} from ${ref.module}) with a brief description and usage examples.`;
   }
-  private static getGenerateReadmeSystemPrompt(ref: {
-    name: string;
-    module: string;
-  }) {
-    return `YOU ARE a proficient Boxel developer creating GitHub-style documentation for ${ref.name} from ${ref.module}. Use this structure:
+  private static getGenerateReadmeSystemPrompt(
+    ref: {
+      name: string;
+      module: string;
+    },
+    specType: SpecType,
+  ) {
+    return `YOU ARE a proficient Boxel developer creating GitHub-style documentation for a code ${ref.name} imported from ${ref.module}. You are dealing with "code" of ${specType}
 
-• **Import**: Show how to es6 import the component/field/card/command. The code ref is (${ref.name} from ${ref.module}). Do not include .gts extension.
-• **Link**: Only for card or field, show how to link or define it in a card (e.g., @field myCard = linksTo(CardName) for cards, @field myField = contains(FieldName) for fields)
-• **Template**: Only for card or field, show how to call it in templates using the fields API with format arguments (e.g., <@fields.myField @format='atom'/>)
+    Our spec describes different types of "code" or otherwise (referred to as "specType")
+    - Card
+    - Field
+    - Command
+    - Component
+
+    Use this structure to develop the documentation for these different types:
+
+• **Import**: Show how to es6 import the code in module scope based upon the code ref (${ref.name} imported from ${ref.module}). Do not include .gts extension.
+• **Define Field**: Only for card or field, show how we would link the card or field inside a consuming card (e.g., @field myCard = linksTo(CardName) for cards, @field myField = contains(FieldName) for fields)
+• **Invoke Template**: Only for card or field, show how to call it in templates using the fields API with format arguments (e.g., <@fields.myField @format='atom'/>)
 • **Dependencies**: Describe the special dependencies of this code (We only want KEY dependencies). Try to include import of other specs and/or extenrnal cdn 
 • **Usage and Examples**: Show the primary way to use the code (Include the MOST obvious way to use). Keep it SIMPLE.
 
@@ -73,6 +85,7 @@ Additional Notes:
     );
     let systemPrompt = GenerateReadmeSpecCommand.getGenerateReadmeSystemPrompt(
       input.spec.ref,
+      input.spec.specType as SpecType,
     );
 
     const result = await generateReadmeCommand.execute({
