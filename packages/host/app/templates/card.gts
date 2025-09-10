@@ -95,7 +95,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   @provide(CardContextName)
-  // @ts-ignore "context" is declared but not used
+  // @ts-expect-error 'context' is declared but not used
   private get context(): CardContext {
     return {
       getCard: this.getCard,
