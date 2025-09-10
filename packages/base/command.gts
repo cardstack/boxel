@@ -8,8 +8,9 @@ import {
   linksTo,
   linksToMany,
 } from './card-api';
-import CodeRefField from './code-ref';
+import CodeRefField, { AbsoluteCodeRefField } from './code-ref';
 import BooleanField from './boolean';
+import MarkdownField from './markdown';
 import NumberField from './number';
 import ResponseField from './response-field';
 import { Skill } from './skill';
@@ -374,4 +375,25 @@ export class CreateSpecsInput extends CardDef {
 export class CreateSpecsResult extends CardDef {
   @field newSpecs = linksToMany(Spec); // only newly created specs
   @field specs = linksToMany(Spec); // all specs newly created and pre-existing ones
+}
+
+export class GenerateReadmeSpecResult extends CardDef {
+  @field readme = contains(MarkdownField);
+}
+
+export class GenerateReadmeSpecInput extends CardDef {
+  @field spec = linksTo(Spec);
+}
+
+export class OneShotLLMRequestInput extends CardDef {
+  @field codeRef = contains(AbsoluteCodeRefField);
+  @field userPrompt = contains(StringField);
+  @field systemPrompt = contains(StringField);
+  @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
+  @field attachedFileURLs = containsMany(StringField);
+}
+
+export class OneShotLLMRequestResult extends CardDef {
+  @field output = contains(StringField);
 }

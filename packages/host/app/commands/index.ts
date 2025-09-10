@@ -12,6 +12,7 @@ import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
+import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
@@ -21,6 +22,7 @@ import * as ListingCreateCommandModule from './listing-create';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
+import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
@@ -202,6 +204,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     UseAiAssistantCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/generate-readme-spec',
+    GenerateReadmeSpecCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-card',
     GetCardCommandModule,
   );
@@ -212,6 +218,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/search-google-images',
     SearchGoogleImagesCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/one-shot-llm-request',
+    OneShotLlmRequestCommandModule,
   );
 }
 
@@ -243,4 +253,5 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   WriteTextFileCommandModule.default,
   SearchGoogleImagesCommandModule.default,
   SummarizeSessionCommandModule.default,
+  OneShotLlmRequestCommandModule.default,
 ];
