@@ -148,9 +148,51 @@ let { data: matching } = await indexer.search({
 });
 ```
 
-### Pagination -- Future feature
+### Pagination
 
-This doesn't exist yet and we will likely tackle this when we build a database-backed index.
+The Query object may have a `page` property, which controls pagination of search results. This allows you to retrieve results in smaller chunks for better performance and user experience.
+
+The `page` object has the following properties:
+- `number`: The page number (0-based indexing)
+- `size`: The number of results per page. If not provided, there is no default size and will just behave like a regular search. 
+
+The search response includes a `meta` object with pagination information:
+- `meta.page.total`: The total number of results across all pages
+
+#### Examples
+
+```ts
+// Get the first page with 10 results
+let { data: matching, meta } = await indexer.search({
+  filter: {
+    type: { module: `https://my.realm/article`, name: 'Article' },
+  },
+  page: {
+    number: 0,
+    size: 10,
+  },
+});
+```
+
+```ts
+// Get the second page
+let { data: matching, meta } = await indexer.search({
+  filter: {
+    type: { module: `https://my.realm/article`, name: 'Article' },
+  },
+  page: {
+    number: 1,
+    size: 10,
+  },
+  sort: [
+    {
+      by: 'title',
+      on: { module: `https://my.realm/article`, name: 'Article' },
+      direction: 'asc',
+    },
+  ],
+});
+```
 
 ## HTTP API
 
