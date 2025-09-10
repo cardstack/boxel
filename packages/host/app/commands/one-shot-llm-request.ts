@@ -72,8 +72,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
               const fileContents = await readTextFileCommand.execute({
                 path: fileUrl,
               });
-              const fileName = fileUrl.split('/').pop() || fileUrl;
-              return `\n\n--- ${fileName} ---\n${fileContents.content}`;
+              return `\n\n--- ${fileUrl} ---\n${fileContents.content}`;
             } catch (error) {
               console.warn(`Failed to read attached file ${fileUrl}:`, error);
               return `\n\n--- ${fileUrl} ---\n[Error reading file: ${error}]`;

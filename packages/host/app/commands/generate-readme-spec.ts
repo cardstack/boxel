@@ -17,25 +17,34 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
 > {
   @service declare private commandService: CommandService;
 
-  private static readonly GENERATE_README_USER_PROMPT = `Create README documentation for this spec with a brief description and usage examples.`;
-  private static readonly GENERATE_README_SYSTEM_PROMPT = `YOU ARE a proficient Boxel developer creating GitHub-style documentation. Use this structure:
+  private static getGenerateReadmeUserPrompt(ref: {
+    name: string;
+    module: string;
+  }) {
+    return `Create README documentation for this spec (${ref.name} from ${ref.module}) with a brief description and usage examples.`;
+  }
+  private static getGenerateReadmeSystemPrompt(ref: {
+    name: string;
+    module: string;
+  }) {
+    return `YOU ARE a proficient Boxel developer creating GitHub-style documentation for ${ref.name} from ${ref.module}. Use this structure:
 
-• **Import**: Show how to import the component/field/card/command
+• **Import**: Show how to es6 import the component/field/card/command. The code ref is (${ref.name} from ${ref.module}). Do not include .gts extension.
 • **Link**: Show how to link or define it in a card (e.g., @field myCard = linksTo(CardName) for cards, @field myField = contains(FieldName) for fields)
 • **Template**: Show how to call it in templates using the fields API with format arguments (e.g., <@fields.myField @format='atom'/>)
-• **Command**: Show how to instantiate and execute commands (e.g., new CommandName(context).execute(input))
-• **Component**: Show how to use components in templates (e.g., <MyComponent @arg="value" />)
+• **Dependencies**: Describe the special dependencies of this code (We only want KEY dependencies). Try to include import of other specs and/or extenrnal cdn 
+• **Usage and Examples**: Show the primary way to use the code (Include the MOST obvious way to use). Keep it SIMPLE.
 
-Code examples:
-- Cards: show linksTo() usage
-- Fields: show contains() and new FieldName() instantiation
-- Commands: show instantiation and execution patterns
-- Components: show template usage with arguments
-- Include template usage with format options (atom, embedded, edit)
+  Here are some examples you can offer based upon the type of the spec:
+  - Card: show linksTo() and new CardDefName() instantiation 
+  - Field: show contains() and new FieldName() instantiation
+  - Command: show how to instantiate and execute commands (e.g., new CommandName(context).execute(input))
+  - Component: show how to use glimmer component in templates (e.g., <MyComponent />) 
 
-Keep examples minimal but complete. Return ONLY markdown content.
-
-If skill cards are provided, use them for context but don't reference them in the output.`;
+Additional Notes:
+- DO NOT include the title header inside of the readme. 
+- If skill cards are provided, use them for context but don't reference them in the output.`;
+  }
 
   static actionVerb = 'Generate README for Spec';
   description =
@@ -59,13 +68,20 @@ If skill cards are provided, use them for context but don't reference them in th
       this.commandService.commandContext,
     );
 
+    let userPrompt = GenerateReadmeSpecCommand.getGenerateReadmeUserPrompt(
+      input.spec.ref,
+    );
+    let systemPrompt = GenerateReadmeSpecCommand.getGenerateReadmeSystemPrompt(
+      input.spec.ref,
+    );
+
     const result = await generateReadmeCommand.execute({
       codeRef: {
         name: input.spec.ref.name,
         module: input.spec.moduleHref,
       },
-      userPrompt: GenerateReadmeSpecCommand.GENERATE_README_USER_PROMPT,
-      systemPrompt: GenerateReadmeSpecCommand.GENERATE_README_SYSTEM_PROMPT,
+      userPrompt,
+      systemPrompt,
       llmModel: 'anthropic/claude-3-haiku',
       skillCardIds: [skillCardURL('boxel-development')],
     });
