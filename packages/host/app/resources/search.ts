@@ -184,24 +184,27 @@ export class SearchResource extends Resource<Args> {
           let instances = collectionDoc.data
             .map((r) => this.store.peek(r.id!)) // all results will have id's
             .filter((i) => isCardInstance(i)) as CardDef[];
-          
+
           return {
             instances,
-            meta: collectionDoc.meta
+            meta: collectionDoc.meta,
           };
         }),
       );
 
-      let results = flatMap(searchResults, result => result.instances);
-      
+      let results = flatMap(searchResults, (result) => result.instances);
+
       // Combine metadata from all realms
-      this._meta = searchResults.reduce((acc, result) => {
-        if (result.meta?.page?.total !== undefined) {
-          acc.page = acc.page || { total: 0 };
-          acc.page.total = (acc.page.total || 0) + result.meta.page.total;
-        }
-        return acc;
-      }, { page: { total: 0 } } as QueryResultsMeta);
+      this._meta = searchResults.reduce(
+        (acc, result) => {
+          if (result.meta?.page?.total !== undefined) {
+            acc.page = acc.page || { total: 0 };
+            acc.page.total = (acc.page.total || 0) + result.meta.page.total;
+          }
+          return acc;
+        },
+        { page: { total: 0 } } as QueryResultsMeta,
+      );
 
       // Please note 3 things there:
       // 1. we are mutating this._instances, not replacing it
