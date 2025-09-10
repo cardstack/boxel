@@ -190,7 +190,6 @@ import type {
   CardDef,
   FieldDef,
   BaseDef,
-  Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmInfo } from './realm';
@@ -381,25 +380,6 @@ export interface CardCreator {
   ): Promise<string>;
 }
 
-export async function createNewCard(
-  ref: CodeRef,
-  relativeTo: URL | undefined,
-  opts?: {
-    realmURL?: URL;
-    doc?: LooseSingleCardDocument;
-  },
-): Promise<string> {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CREATE_NEW_CARD) {
-    throw new Error(
-      `no cardstack card creator is available in this environment`,
-    );
-  }
-  let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
-
-  return await cardCreator.create(ref, relativeTo, opts);
-}
-
 export interface RealmSubscribe {
   subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void;
 }
@@ -426,41 +406,10 @@ export interface SearchQuery {
   isLoading: boolean;
 }
 
-export interface CardActions {
-  createCard: (
-    ref: CodeRef,
-    relativeTo: URL | undefined,
-    opts?: {
-      closeAfterCreating?: boolean;
-      realmURL?: URL; // the realm to create the card in
-      localDir?: LocalPath; // the local directory path within the realm to create the card file
-      doc?: LooseSingleCardDocument; // initial data for the card
-      cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
-    },
-  ) => Promise<string | undefined>;
-  viewCard: (
-    cardOrURL: CardDef | URL,
-    format?: Format,
-    opts?: {
-      openCardInRightMostStack?: boolean;
-      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
-      fieldName?: string;
-    },
-  ) => void;
-  editCard: (card: CardDef) => void;
-  saveCard: (id: string) => void;
-  changeSubmode: (
-    url: URL,
-    submode: 'code' | 'interact',
-  ) => Promise<void> | void;
-}
-
 export interface CopyCardsWithCodeRef {
   sourceCard: CardDef;
   codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
 }
-
-export type Actions = CardActions;
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {

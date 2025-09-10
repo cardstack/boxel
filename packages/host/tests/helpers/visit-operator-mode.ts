@@ -14,7 +14,7 @@ export default async function visitOperatorMode({
   moduleInspector,
   workspaceChooserOpened,
   trail,
-}: Partial<SerializedState>) {
+}: Partial<SerializedState> & { selectAllCardsFilter?: boolean }) {
   let operatorModeState = {
     stacks: stacks || [],
     submode: submode || 'interact',

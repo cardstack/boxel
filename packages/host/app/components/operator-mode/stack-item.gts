@@ -34,7 +34,6 @@ import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
-  type Actions,
   type Permissions,
   type getCard,
   type getCards,
@@ -50,6 +49,7 @@ import {
   realmURL,
   identifyCard,
   CardContextName,
+  CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
@@ -57,7 +57,11 @@ import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardCrudFunctions,
+  CardDef,
+} from 'https://cardstack.com/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
@@ -86,7 +90,6 @@ interface Signature {
     item: StackItem;
     stackItems: StackItem[];
     index: number;
-    publicAPI: Actions;
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     commandContext: CommandContext;
     close: (item: StackItem) => void;
@@ -115,6 +118,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
   @consume(CardContextName) private declare cardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  private declare cardCrudFunctions: CardCrudFunctions;
 
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -259,7 +264,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
-      actions: this.args.publicAPI, //we put this last to overwrite card context so stackIndex is correct
     };
   }
 
@@ -477,7 +481,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             if (!ref) {
               return;
             }
-            this.args.publicAPI.createCard(ref, undefined, {
+            this.cardCrudFunctions.createCard(ref, undefined, {
               realmURL: this.operatorModeStateService.getWritableRealmURL(),
             });
           },
@@ -768,7 +772,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{realmInfo}}
               @utilityMenu={{this.utilityMenu}}
-              @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
+              @onEdit={{if
+                this.canEdit
+                (fn this.cardCrudFunctions.editCard this.card)
+              }}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
               @onClose={{unless this.isBuried this.closeItem}}
               class='stack-item-header'
@@ -810,10 +817,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-              @publicAPI={{@publicAPI}}
               @requestDeleteCard={{@requestDeleteCard}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
+              @viewCard={{this.cardCrudFunctions.viewCard}}
             />
           </div>
         {{/if}}

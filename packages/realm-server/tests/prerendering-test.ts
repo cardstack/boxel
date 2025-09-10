@@ -5,14 +5,19 @@ import { execSync } from 'child_process';
 
 import {
   setupBaseRealmServer,
-  setupPermissionedRealm,
+  setupPermissionedRealms,
   matrixURL,
+  realmSecretSeed,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { DBAdapter } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
   module('prerender', function (hooks) {
-    let realmURL: string;
+    let realmURL1 = 'http://127.0.0.1:4447/';
+    let realmURL2 = 'http://127.0.0.1:4448/';
+    let dbAdapter: DBAdapter;
+    const testUserId = '@user1:localhost';
 
     hooks.before(() => {
       execSync('pnpm puppeteer browsers install chrome');
@@ -20,68 +25,111 @@ module(basename(__filename), function () {
 
     setupBaseRealmServer(hooks, matrixURL);
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealms(hooks, {
       mode: 'before',
-      onRealmSetup: ({ testRealm }) => {
-        realmURL = testRealm.url;
-      },
-      permissions: {
-        '*': ['read'],
-      },
-      subscribeToRealmEvents: true,
-      fileSystem: {
-        'cat.gts': `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-          import { Component } from 'https://cardstack.com/base/card-api';
-          export class Cat extends CardDef {
-            @field name = contains(StringField);
-            static displayName = "Cat";
-            static embedded = <template>{{@fields.name}} says Meow</template>
-          }
-        `,
-        '1.json': {
-          data: {
-            attributes: {
-              name: 'Maple',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './cat',
-                name: 'Cat',
-              },
-            },
-          },
+      realm1: {
+        realmURL: realmURL1,
+        permissions: {
+          [testUserId]: ['read', 'write', 'realm-owner'],
         },
-        'intentional-error.gts': `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-          import { Component } from 'https://cardstack.com/base/card-api';
-          export class IntentionalError extends CardDef {
-            @field name = contains(StringField);
-            static displayName = "Intentional Error";
-            static isolated = class extends Component {
-              get message() {
-                if (this.args.model.name === 'Intentional Error') {
-                  throw new Error('intentional failure during render')
-                }
-                return this.args.model.name;
-              }
-              <template>{{this.message}}</template>
+        fileSystem: {
+          'person.gts': `
+            import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+            import { Component } from 'https://cardstack.com/base/card-api';
+            export class Person extends CardDef {
+              static displayName = "Person";
+              @field name = contains(StringField);
+              @field title = contains(StringField, {
+                computeVia(this: Person) {
+                  return this.name;
+                },
+              });
             }
-          }
-        `,
-        '2.json': {
-          data: {
-            attributes: {
-              name: 'Intentional Error',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './intentional-error',
-                name: 'IntentionalError',
+          `,
+          '1.json': {
+            data: {
+              attributes: {
+                name: 'Hassan',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
               },
             },
           },
         },
+      },
+      realm2: {
+        realmURL: realmURL2,
+        permissions: {
+          [testUserId]: ['read', 'write', 'realm-owner'],
+        },
+        fileSystem: {
+          'cat.gts': `
+            import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
+            import { Component } from 'https://cardstack.com/base/card-api';
+            import { Person } from '${realmURL1}person';
+            export class Cat extends CardDef {
+              @field name = contains(StringField);
+              @field owner = linksTo(Person);
+              static displayName = "Cat";
+              static embedded = <template>{{@fields.name}} says Meow</template>
+            }
+          `,
+          '1.json': {
+            data: {
+              attributes: {
+                name: 'Maple',
+              },
+              relationships: {
+                owner: {
+                  links: { self: `${realmURL1}1` },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './cat',
+                  name: 'Cat',
+                },
+              },
+            },
+          },
+          'intentional-error.gts': `
+            import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+            import { Component } from 'https://cardstack.com/base/card-api';
+            export class IntentionalError extends CardDef {
+              @field name = contains(StringField);
+              static displayName = "Intentional Error";
+              static isolated = class extends Component {
+                get message() {
+                  if (this.args.model.name === 'Intentional Error') {
+                    throw new Error('intentional failure during render')
+                  }
+                  return this.args.model.name;
+                }
+                <template>{{this.message}}</template>
+              }
+            }
+          `,
+          '2.json': {
+            data: {
+              attributes: {
+                name: 'Intentional Error',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './intentional-error',
+                  name: 'IntentionalError',
+                },
+              },
+            },
+          },
+        },
+      },
+      onRealmSetup: ({ dbAdapter: _dbAdapter }) => {
+        dbAdapter = _dbAdapter;
       },
     });
 
@@ -89,13 +137,20 @@ module(basename(__filename), function () {
       let result: RenderResponse;
 
       hooks.before(async () => {
-        const testCardURL = `${realmURL}1`;
-        result = await prerenderCard(testCardURL);
+        const testCardURL = `${realmURL2}1`;
+        result = await prerenderCard({
+          url: testCardURL,
+          userId: testUserId,
+          secretSeed: realmSecretSeed,
+          dbAdapter,
+        });
       });
 
       test('embedded HTML', function (assert) {
         assert.ok(
-          /Maple\s+says\s+Meow/.test(result.embeddedHTML[`${realmURL}cat/Cat`]),
+          /Maple\s+says\s+Meow/.test(
+            result.embeddedHTML[`${realmURL2}cat/Cat`],
+          ),
           `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
         );
       });
@@ -133,7 +188,7 @@ module(basename(__filename), function () {
 
       test('types', function (assert) {
         assert.deepEqual(result.types, [
-          `${realmURL}cat/Cat`,
+          `${realmURL2}cat/Cat`,
           'https://cardstack.com/base/card-api/CardDef',
         ]);
       });
@@ -141,15 +196,30 @@ module(basename(__filename), function () {
       test('searchDoc', function (assert) {
         assert.strictEqual(result.searchDoc.name, 'Maple');
         assert.strictEqual(result.searchDoc._cardType, 'Cat');
+        assert.deepEqual(
+          result.searchDoc.owner,
+          {
+            id: `${realmURL1}1`,
+            name: 'Hassan',
+            title: 'Hassan',
+            cardInfo: { theme: null },
+          },
+          'linked field search doc is correct',
+        );
       });
     });
 
     module('errors', function () {
       test('error during render', async function (assert) {
-        const testCardURL = `${realmURL}2`;
+        const testCardURL = `${realmURL2}2`;
         assert.rejects(
           (async () => {
-            await prerenderCard(testCardURL);
+            await prerenderCard({
+              url: testCardURL,
+              userId: testUserId,
+              secretSeed: realmSecretSeed,
+              dbAdapter,
+            });
           })(),
           /todo: error doc/,
         );

@@ -596,6 +596,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
 
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
       '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
     );
@@ -629,6 +630,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
 
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
       '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
     );
@@ -664,6 +666,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     assert.dom('[data-test-attached-card]').doesNotExist();
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
     await click(`[data-test-select="https://cardstack.com/base/types/card"]`);
 
@@ -701,6 +704,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
 
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
       '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
     );
@@ -952,6 +956,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
@@ -1067,6 +1072,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
@@ -1115,6 +1121,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
@@ -1175,6 +1182,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
@@ -1248,6 +1256,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);

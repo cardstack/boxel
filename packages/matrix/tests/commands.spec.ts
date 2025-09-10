@@ -256,6 +256,7 @@ test.describe('Commands', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
+    await showAllCards(page);
 
     // create a skill card
     await page.locator('[data-test-create-new-card-button]').click();

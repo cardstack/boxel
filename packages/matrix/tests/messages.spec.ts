@@ -295,6 +295,7 @@ test.describe('Room messages', () => {
 
   test('currently viewed file is auto-attached', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
+    await showAllCards(page);
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
     await page
@@ -346,6 +347,7 @@ test.describe('Room messages', () => {
 
   test('ensure attached files are sent with the message', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
+    await showAllCards(page);
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
     await expect(

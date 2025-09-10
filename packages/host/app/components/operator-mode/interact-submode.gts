@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { provide, consume } from 'ember-provide-consume-context';
+import { consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
@@ -45,8 +45,6 @@ import {
   type getCard,
   type getCards,
   type getCardCollection,
-  type Actions,
-  type CardActions,
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
@@ -91,8 +89,6 @@ import type Realm from '../../services/realm';
 import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
-
-import type { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -151,92 +147,83 @@ export default class InteractSubmode extends Component {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  // The public API is wrapped in a closure so that whatever calls its methods
-  // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
-  // to which stack the cards will be added to, or from which stack the cards will be removed from.
-  private publicAPI(here: InteractSubmode, stackIndex: number): Actions {
-    let actions: CardActions = {
-      createCard: async (
-        ref: CodeRef,
-        relativeTo: URL | undefined,
-        opts?: {
-          realmURL?: URL;
-          localDir?: LocalPath;
-          closeAfterCreating?: boolean;
-          doc?: LooseSingleCardDocument; // fill in card data with values
-          cardModeAfterCreation?: Format;
+  private createCard = async (
+    stackIndex: number,
+    ref: CodeRef,
+    relativeTo: URL | undefined,
+    opts?: {
+      realmURL?: URL;
+      localDir?: LocalPath;
+      closeAfterCreating?: boolean;
+      doc?: LooseSingleCardDocument; // fill in card data with values
+      cardModeAfterCreation?: Format;
+    },
+  ): Promise<string | undefined> => {
+    let instance: CardDef;
+    if (opts?.doc) {
+      instance = await this.store.add(opts.doc, {
+        doNotWaitForPersist: true,
+        realm: opts?.realmURL?.href,
+      });
+    } else {
+      let CardKlass = await loadCardDef(
+        codeRefWithAbsoluteURL(ref, relativeTo),
+        {
+          loader: this.loaderService.loader,
         },
-      ): Promise<string | undefined> => {
-        let instance: CardDef;
-        if (opts?.doc) {
-          instance = await here.store.add(opts.doc, {
-            doNotWaitForPersist: true,
-            realm: opts?.realmURL?.href,
-          });
-        } else {
-          let CardKlass = await loadCardDef(
-            codeRefWithAbsoluteURL(ref, relativeTo),
-            {
-              loader: here.loaderService.loader,
-            },
-          );
-          instance = new CardKlass() as CardDef;
-          await here.store.add(instance, {
-            doNotWaitForPersist: true,
-            realm: opts?.realmURL?.href,
-            localDir: opts?.localDir,
-          });
-        }
-        let localId = instance[localIdSymbol];
-        let newItem = new StackItem({
-          id: localId,
-          format: opts?.cardModeAfterCreation ?? 'edit',
-          request: new Deferred(),
-          closeAfterSaving: opts?.closeAfterCreating,
-          stackIndex,
-        });
-        here.addToStack(newItem);
-        return localId;
-      },
-      viewCard: (
-        cardOrURL: CardDef | URL,
-        format: Format = 'isolated',
-        opts?: { openCardInRightMostStack?: boolean },
-      ): void => {
-        if (opts?.openCardInRightMostStack) {
-          stackIndex = here.stacks.length;
-        }
-        let newItem = new StackItem({
-          id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
-          format,
-          stackIndex,
-        });
-        here.addToStack(newItem);
-        here.operatorModeStateService.closeWorkspaceChooser();
-      },
-      editCard(card: CardDef): void {
-        let item = here.findCardInStack(card, stackIndex);
-        here.operatorModeStateService.replaceItemInStack(
-          item,
-          item.clone({
-            request: new Deferred(),
-            format: 'edit',
-          }),
-        );
-      },
-      saveCard: (id: string): void => {
-        here.store.save(id);
-      },
-      changeSubmode: async (
-        url: URL,
-        submode: Submode = 'code',
-      ): Promise<void> => {
-        await here.operatorModeStateService.updateCodePath(url);
-        here.operatorModeStateService.updateSubmode(submode);
-      },
-    };
-    return actions;
-  }
+      );
+      instance = new CardKlass() as CardDef;
+      await this.store.add(instance, {
+        doNotWaitForPersist: true,
+        realm: opts?.realmURL?.href,
+        localDir: opts?.localDir,
+      });
+    }
+    let localId = instance[localIdSymbol];
+    let newItem = new StackItem({
+      id: localId,
+      format: opts?.cardModeAfterCreation ?? 'edit',
+      request: new Deferred(),
+      closeAfterSaving: opts?.closeAfterCreating,
+      stackIndex,
+    });
+    this.addToStack(newItem);
+    return localId;
+  };
+
+  private viewCard = (
+    stackIndex: number,
+    cardOrURL: CardDef | URL,
+    format: Format = 'isolated',
+    opts?: { openCardInRightMostStack?: boolean },
+  ): void => {
+    if (opts?.openCardInRightMostStack) {
+      stackIndex = this.stacks.length;
+    }
+    let newItem = new StackItem({
+      id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
+      format,
+      stackIndex,
+    });
+    this.addToStack(newItem);
+    this.operatorModeStateService.closeWorkspaceChooser();
+  };
+
+  private editCard = (stackIndex: number, card: CardDef): void => {
+    let item = this.findCardInStack(card, stackIndex);
+    this.operatorModeStateService.replaceItemInStack(
+      item,
+      item.clone({
+        request: new Deferred(),
+        format: 'edit',
+      }),
+    );
+  };
+
+  private saveCard = (id: string): void => {
+    this.store.save(id);
+  };
+
   stackBackgroundsState = stackBackgroundsResource(this);
 
   private get backgroundImageStyle() {
@@ -524,10 +511,7 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await this.publicAPI(this, this.stacks.length).viewCard(
-            url,
-            'isolated',
-          );
+          await this.viewCard(this.stacks.length, url, 'isolated');
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
           // the rightmost stack will be REPLACED by the selection
@@ -539,7 +523,7 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.publicAPI(this, 0).viewCard(url, 'isolated');
+            await this.viewCard(0, url, 'isolated');
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
@@ -587,7 +571,7 @@ export default class InteractSubmode extends Component {
   }
 
   private getRecentCardCollection = () => {
-    this.recentCardCollection = this.context?.getCardCollection(
+    this.recentCardCollection = this.cardContext?.getCardCollection(
       this,
       () => this.recentCardsService.recentCardIds,
     );
@@ -687,29 +671,24 @@ export default class InteractSubmode extends Component {
       throw new Error(`"${specId}" is not a card instance.`);
     }
 
-    await this.context.actions?.createCard?.(spec.ref, new URL(specId), {
+    // assumption: take actions in the right-most stack
+    await this.createCard(this.rightMostStackIndex, spec.ref, new URL(specId), {
       realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });
 
   private createNewFromRecentType = restartableTask(
     async (codeRef: ResolvedCodeRef) => {
-      this.context.actions?.createCard(codeRef, undefined, {
+      // assumption: take actions in the right-most stack
+      this.createCard(this.rightMostStackIndex, codeRef, undefined, {
         realmURL: this.operatorModeStateService.getWritableRealmURL(),
       });
     },
   );
-
-  // TODO: after actions is removed, this is not needed
-  @provide(CardContextName)
-  private get context(): CardContext {
+  get rightMostStackIndex() {
     // assumption: take actions in the right-most stack
     let stackCount = this.operatorModeStateService.numberOfStacks();
-    let rightMostStackIndex = stackCount > 0 ? stackCount - 1 : 0;
-    return {
-      ...this.cardContext,
-      actions: this.publicAPI(this, rightMostStackIndex), //TODO: This is to be removed
-    };
+    return stackCount > 0 ? stackCount - 1 : 0;
   }
 
   <template>
@@ -762,7 +741,10 @@ export default class InteractSubmode extends Component {
                 }}
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
-                @publicAPI={{this.publicAPI this stackIndex}}
+                @createCard={{fn this.createCard stackIndex}}
+                @viewCard={{fn this.viewCard stackIndex}}
+                @saveCard={{this.saveCard}}
+                @editCard={{fn this.editCard stackIndex}}
                 @requestDeleteCard={{this.requestDeleteCard}}
                 @commandContext={{this.commandService.commandContext}}
                 @close={{this.close}}

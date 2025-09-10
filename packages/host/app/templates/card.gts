@@ -32,13 +32,13 @@ import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 type HostModeCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
 
-interface HostModeComponentSignature {
+export interface HostModeComponentSignature {
   Args: {
     model: CardDef | CardErrorJSONAPI;
   };
 }
 
-class HostModeComponent extends Component<HostModeComponentSignature> {
+export class HostModeComponent extends Component<HostModeComponentSignature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
@@ -47,7 +47,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare store: StoreService;
 
   get connectUrl() {
-    return `${config.assetsURL}/connect`;
+    return `${config.realmServerURL}connect`;
   }
 
   get isError() {

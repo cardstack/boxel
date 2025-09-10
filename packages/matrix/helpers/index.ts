@@ -24,6 +24,7 @@ interface ProfileAssertions {
 }
 interface LoginOptions {
   url?: string;
+  showAllCards?: boolean; //default true
 }
 
 export async function setSkillsRedirect(page: Page) {
@@ -267,10 +268,14 @@ export async function login(
   page: Page,
   username: string,
   password: string,
-  opts?: LoginOptions,
+  opts: LoginOptions = {
+    url: undefined,
+  },
 ) {
   let credentials = await loginUser(username, password);
-
+  if (opts.showAllCards) {
+    await showAllCards(page);
+  }
   let localStorageAuth = {
     access_token: credentials.accessToken,
     user_id: credentials.userId,
@@ -293,9 +298,13 @@ export async function enterWorkspace(
 }
 
 export async function showAllCards(page: Page) {
-  await page
-    .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-    .click();
+  try {
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
+  } catch (e) {
+    console.warn('all cards filter is not found');
+  }
 }
 
 export async function logout(page: Page) {

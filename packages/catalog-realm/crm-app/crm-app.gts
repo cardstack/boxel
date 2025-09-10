@@ -107,12 +107,33 @@ const TASK_SORT_OPTIONS: SortOption[] = [
   },
 ];
 
+const DEAL_CARD_REF = {
+  name: 'Deal',
+  module: new URL('./deal', import.meta.url).href,
+};
+
+const ACCOUNT_CARD_REF = {
+  name: 'Account',
+  module: new URL('./account', import.meta.url).href,
+};
+
+const TASK_CARD_REF = {
+  name: 'CRMTask',
+  module: new URL('./task', import.meta.url).href,
+};
+
+const CONTACT_CARD_REF = {
+  name: 'Contact',
+  module: new URL('./contact', import.meta.url).href,
+};
+
 const CONTACT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Contacts',
     icon: ContactIcon,
     cardTypeName: 'Contact',
     createNewButtonText: 'Create Contact',
+    cardRef: CONTACT_CARD_REF,
     sortOptions: [
       {
         id: 'cardTitleAsc',
@@ -125,33 +146,39 @@ const CONTACT_FILTERS: LayoutFilter[] = [
     displayName: 'Leads',
     icon: TargetArrowIcon,
     cardTypeName: 'Lead',
+    cardRef: CONTACT_CARD_REF,
     createNewButtonText: 'Create Lead',
   },
   {
     displayName: 'Customers',
     icon: HeartHandshakeIcon,
     cardTypeName: 'Customer',
+    cardRef: CONTACT_CARD_REF,
     createNewButtonText: 'Create Customer',
   },
   {
     displayName: 'Representatives',
     icon: PresentationAnalytics,
     cardTypeName: 'Representative',
+    cardRef: CONTACT_CARD_REF,
     createNewButtonText: 'Create Representative',
   },
 ];
+
 const DEAL_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Deals',
     icon: ContactIcon,
     cardTypeName: 'Deal',
     createNewButtonText: 'Create Deal',
+    cardRef: DEAL_CARD_REF,
   },
   ...DEAL_STATUS_VALUES.map((status) => ({
     displayName: status.label,
     icon: status.icon,
     cardTypeName: 'Deal',
     createNewButtonText: 'Create Deal',
+    cardRef: DEAL_CARD_REF,
   })),
 ];
 // Map with urgencyTagValues array from crm/account.gts
@@ -161,12 +188,14 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
     icon: CalendarExclamation,
     cardTypeName: 'Account',
     createNewButtonText: 'Create Account',
+    cardRef: ACCOUNT_CARD_REF,
   },
   ...URGENCY_TAG_VALUES.map((tag) => ({
     displayName: tag.label,
     icon: tag.icon,
     cardTypeName: 'Account', // without cardTypeName, the filter is not applied
     createNewButtonText: 'Create Account',
+    cardRef: ACCOUNT_CARD_REF,
   })),
 ];
 const TASK_FILTERS: LayoutFilter[] = [
@@ -176,6 +205,7 @@ const TASK_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Task',
     createNewButtonText: 'Create Task',
     sortOptions: TASK_SORT_OPTIONS,
+    cardRef: TASK_CARD_REF,
   },
   ...taskStatusValues.map((status) => ({
     displayName: status.label,
@@ -183,6 +213,7 @@ const TASK_FILTERS: LayoutFilter[] = [
     cardTypeName: 'CRM Task',
     createNewButtonText: 'Create Task',
     sortOptions: TASK_SORT_OPTIONS,
+    cardRef: TASK_CARD_REF,
   })),
 ];
 
@@ -285,30 +316,16 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       let err = await CardError.fromFetchResponse(url, response);
       throw err;
     }
-    let cardTypeSummaries = (await response.json()).data as {
-      id: string;
-      attributes: { displayName: string; total: number };
-    }[];
 
     for (let tab of TABS) {
       let tabId = tab.tabId;
       let filters = this.filterMap.get(tabId);
       if (filters) {
         for (let filter of filters) {
-          let summary = cardTypeSummaries.find(
-            (s) => s.attributes.displayName === filter.cardTypeName,
-          );
-          if (!summary) {
-            return;
+          if (filter.cardRef) {
+            filter.query = { filter: { type: filter.cardRef } };
+            this.filterMap.set(tabId, filters);
           }
-          const lastIndex = summary.id.lastIndexOf('/');
-          let cardRef = {
-            module: summary.id.substring(0, lastIndex),
-            name: summary.id.substring(lastIndex + 1),
-          };
-          filter.cardRef = cardRef;
-          filter.query = { filter: { type: cardRef } };
-          this.filterMap.set(tabId, filters);
         }
       }
     }
@@ -373,7 +390,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
         },
       },
     };
-    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
+    await this.args.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
       doc,
     });
@@ -543,7 +560,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     if (!this.args.model.id) {
       throw new Error('No card id');
     }
-    this.args.context?.actions?.editCard?.(this.args.model as CardDef);
+    this.args.editCard?.(this.args.model as CardDef);
   }
 
   <template>
@@ -579,7 +596,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           />
           {{this.activeFilter.displayName}}
         </h2>
-        {{#if @context.actions.createCard}}
+        {{#if @createCard}}
           <BoxelButton
             class='sidebar-create-button content-header-row-1'
             @kind='primary'

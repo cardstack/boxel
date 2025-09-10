@@ -3,11 +3,22 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import type { Actions, CommandContext } from '@cardstack/runtime-common';
+import { provide } from 'ember-provide-consume-context';
+
+import {
+  CardCrudFunctionsContextName,
+  type CommandContext,
+} from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  CreateCardFn,
+  EditCardFn,
+  SaveCardFn,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 
 import OperatorModeStackItem, {
   type StackItemComponentAPI,
@@ -20,7 +31,10 @@ interface Signature {
     tag?: keyof HTMLElementTagNameMap;
     stackItems: StackItem[];
     stackIndex: number;
-    publicAPI: Actions;
+    createCard: CreateCardFn;
+    viewCard: ViewCardFn;
+    editCard: EditCardFn;
+    saveCard: SaveCardFn;
     commandContext: CommandContext;
     close: (stackItem: StackItem) => void;
     onSelectedCards: (
@@ -41,6 +55,17 @@ export default class OperatorModeStack extends Component<Signature> {
     StackItem,
     StackItemComponentAPI
   >();
+
+  @provide(CardCrudFunctionsContextName)
+  // @ts-ignore "cardCrudFunctions" is declared but not used
+  private get cardCrudFunctions(): CardCrudFunctions {
+    return {
+      createCard: this.args.createCard,
+      saveCard: this.args.saveCard,
+      editCard: this.args.editCard,
+      viewCard: this.args.viewCard,
+    };
+  }
 
   dismissStackedCardsAbove = task(async (itemIndex: number) => {
     let itemsToDismiss: StackItem[] = [];
@@ -85,7 +110,6 @@ export default class OperatorModeStack extends Component<Signature> {
             @item={{item}}
             @index={{i}}
             @stackItems={{@stackItems}}
-            @publicAPI={{@publicAPI}}
             @requestDeleteCard={{@requestDeleteCard}}
             @commandContext={{@commandContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}

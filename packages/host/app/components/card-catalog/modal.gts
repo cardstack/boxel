@@ -19,7 +19,6 @@ import { eq, not } from '@cardstack/boxel-ui/helpers';
 import {
   type CodeRef,
   type CreateNewCard,
-  createNewCard,
   baseRealm,
   Deferred,
   Loader,
@@ -595,7 +594,7 @@ export default class CardCatalogModal extends Component<Signature> {
           },
         );
       } else {
-        newCardId = await createNewCard(ref, relativeTo, { realmURL });
+        throw new Error('createNewCard method not provided');
       }
       return newCardId;
     },
