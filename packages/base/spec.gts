@@ -728,7 +728,11 @@ class Edit extends Component<typeof Spec> {
             {{on 'click' this.generateReadme}}
             data-test-generate-readme
           >
-            Generate README
+            {{#if this.generateReadmeTask.isRunning}}
+              Generating...
+            {{else}}
+              Generate README
+            {{/if}}
           </BoxelButton>
         </header>
         <div data-test-readme>
