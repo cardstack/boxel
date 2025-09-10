@@ -5,32 +5,35 @@ import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
 
-import { consume, provide } from 'ember-provide-consume-context';
+import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 import window from 'ember-window-mock';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
 import {
-  type getCard,
-  type getCards,
-  type getCardCollection,
   type CardErrorJSONAPI,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
   isCardErrorJSONAPI,
   CardContextName,
+  CommandContextName,
 } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 import config from '@cardstack/host/config/environment';
+
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
+import { getCard } from '@cardstack/host/resources/card-resource';
+import { getSearch } from '@cardstack/host/resources/search';
+
+import type CommandService from '@cardstack/host/services/command-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
-
-type HostModeCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
 
 export interface HostModeComponentSignature {
   Args: {
@@ -39,12 +42,31 @@ export interface HostModeComponentSignature {
 }
 
 export class HostModeComponent extends Component<HostModeComponentSignature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
-  @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
-
+  @service private declare commandService: CommandService;
   @service private declare store: StoreService;
+
+  @provide(GetCardContextName)
+  // @ts-ignore "getCard" is declared but not used
+  private get getCard() {
+    return getCard;
+  }
+
+  @provide(GetCardsContextName)
+  // @ts-ignore "getCards" is declared but not used
+  private get getCards() {
+    return getSearch;
+  }
+
+  @provide(GetCardCollectionContextName)
+  // @ts-ignore "getCardCollection" is declared but not used
+  private get getCardCollection() {
+    return getCardCollection;
+  }
+
+  @provide(CommandContextName)
+  private get commandContext() {
+    return this.commandService.commandContext;
+  }
 
   get connectUrl() {
     return `${config.realmServerURL}connect`;
@@ -77,12 +99,14 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
-  private get context(): HostModeCardContext {
+  private get context(): CardContext {
     return {
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       store: this.store,
+      commandContext: this.commandContext,
+      prerenderedCardSearchComponent: PrerenderedCardSearch,
     };
   }
 
