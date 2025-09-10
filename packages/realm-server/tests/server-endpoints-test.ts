@@ -1505,6 +1505,19 @@ module(basename(__filename), function () {
           });
         });
 
+        test('GET /_realm-info returns lastPublishedAt as null for unpublished realm', async function (assert) {
+          let response = await request2
+            .get('/test/_info')
+            .set('Accept', 'application/vnd.api+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.data.attributes.lastPublishedAt,
+            null,
+            'unpublished realm has lastPublishedAt as null',
+          );
+        });
+
         test('POST /_publish-realm can publish realm successfully', async function (assert) {
           let response = await request2
             .post('/_publish-realm')
@@ -1554,6 +1567,77 @@ module(basename(__filename), function () {
           assert.ok(
             existsSync(join(publishedRealmPath, 'index.json')),
             'published realm has index.json',
+          );
+
+          // Test that source realm info includes lastPublishedAt as an object
+          let sourceRealmInfoResponse = await request2
+            .get('/test/_info')
+            .set('Accept', 'application/vnd.api+json');
+
+          assert.strictEqual(
+            sourceRealmInfoResponse.status,
+            200,
+            'source realm info HTTP 200 status',
+          );
+          assert.ok(
+            sourceRealmInfoResponse.body.data.attributes.lastPublishedAt,
+            'source realm has lastPublishedAt field',
+          );
+
+          // For source realm, lastPublishedAt should be an object
+          let sourceLastPublishedAt =
+            sourceRealmInfoResponse.body.data.attributes.lastPublishedAt;
+          assert.strictEqual(
+            typeof sourceLastPublishedAt,
+            'object',
+            'source realm lastPublishedAt is an object',
+          );
+
+          // Verify the object contains the published realm URL
+          let publishedRealmURL =
+            response.body.data.attributes.publishedRealmURL;
+          assert.ok(
+            sourceLastPublishedAt[publishedRealmURL],
+            'source realm lastPublishedAt contains published realm URL',
+          );
+
+          // Test that published realm info includes lastPublishedAt as a string
+          let publishedRealmInfoResponse = await request2
+            .get('/test-realm/_info')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Host', new URL(publishedRealmURL).host)
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            );
+
+          assert.strictEqual(
+            publishedRealmInfoResponse.status,
+            200,
+            'published realm info HTTP 200 status',
+          );
+          assert.ok(
+            publishedRealmInfoResponse.body.data.attributes.lastPublishedAt,
+            'published realm has lastPublishedAt field',
+          );
+
+          // For published realm, lastPublishedAt should be a string
+          let publishedLastPublishedAt =
+            publishedRealmInfoResponse.body.data.attributes.lastPublishedAt;
+          assert.strictEqual(
+            typeof publishedLastPublishedAt,
+            'string',
+            'published realm lastPublishedAt is a string',
+          );
+
+          // Verify the timestamp matches what was returned from the publish response
+          assert.strictEqual(
+            publishedLastPublishedAt,
+            response.body.data.attributes.lastPublishedAt,
+            'published realm lastPublishedAt matches publish response timestamp',
           );
         });
 
