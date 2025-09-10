@@ -3328,6 +3328,7 @@ posts/ignore-me.gts
             showAsCatalog: null,
             visibility: 'public',
             publishable: null,
+            lastPublishedAt: null,
           },
         },
       },
