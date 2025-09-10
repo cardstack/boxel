@@ -57,7 +57,6 @@ import {
   type LooseSingleCardDocument,
   type CardDocument,
   type CardResource,
-  type Actions,
   type CardResourceMeta,
   type ResolvedCodeRef,
   type getCard,
@@ -164,7 +163,6 @@ interface NotLoadedValue {
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
-  actions?: Actions;
   commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
     Args: {

@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { provide, consume } from 'ember-provide-consume-context';
+import { consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
@@ -40,12 +40,10 @@ import {
   CardError,
   loadCardDef,
   localId as localIdSymbol,
-  realmURL as realmURLSymbol,
   specRef,
   type getCard,
   type getCards,
   type getCardCollection,
-  type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
@@ -53,7 +51,7 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
-import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -90,8 +88,6 @@ import type Realm from '../../services/realm';
 import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
-
-import type { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -227,21 +223,6 @@ export default class InteractSubmode extends Component {
     this.store.save(id);
   };
 
-  // The public API is wrapped in a closure so that whatever calls its methods
-  // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
-  // to which stack the cards will be added to, or from which stack the cards will be removed from.
-  private publicAPI(here: InteractSubmode): Actions {
-    let actions: Actions = {
-      changeSubmode: async (
-        url: URL,
-        submode: Submode = 'code',
-      ): Promise<void> => {
-        await here.operatorModeStateService.updateCodePath(url);
-        here.operatorModeStateService.updateSubmode(submode);
-      },
-    };
-    return actions;
-  }
   stackBackgroundsState = stackBackgroundsResource(this);
 
   private get backgroundImageStyle() {
@@ -354,20 +335,16 @@ export default class InteractSubmode extends Component {
             `destination index card ${destinationIndexCardUrl} is not a card`,
           );
         }
-        let destinationRealmURL = destinationIndexCard[realmURLSymbol];
-        if (!destinationRealmURL) {
-          throw new Error('Could not determine the copy destination realm');
-        }
-        let realmURL = destinationRealmURL;
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCardId: string | undefined;
         let newCardId: string | undefined;
+        let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
-          ({ newCardId } = await new CopyCardCommand(
+          ({ newCardId } = await new CopyCardToStackCommand(
             this.commandService.commandContext,
           ).execute({
             sourceCard: card,
-            realm: realmURL.href,
+            targetStackIndex,
           }));
           if (index === 0) {
             scrollToCardId = newCardId; // we scroll to the first card lexically by title
@@ -589,7 +566,7 @@ export default class InteractSubmode extends Component {
   }
 
   private getRecentCardCollection = () => {
-    this.recentCardCollection = this.context?.getCardCollection(
+    this.recentCardCollection = this.cardContext?.getCardCollection(
       this,
       () => this.recentCardsService.recentCardIds,
     );
@@ -709,15 +686,6 @@ export default class InteractSubmode extends Component {
     return stackCount > 0 ? stackCount - 1 : 0;
   }
 
-  // TODO: after actions is removed, this is not needed
-  @provide(CardContextName)
-  private get context(): CardContext {
-    return {
-      ...this.cardContext,
-      actions: this.publicAPI(this), //TODO: This is to be removed once we remove changeSubmode
-    };
-  }
-
   <template>
     {{consumeContext this.getRecentCardCollection}}
     <SubmodeLayout
@@ -768,7 +736,6 @@ export default class InteractSubmode extends Component {
                 }}
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
-                @publicAPI={{this.publicAPI this}}
                 @createCard={{fn this.createCard stackIndex}}
                 @viewCard={{fn this.viewCard stackIndex}}
                 @saveCard={{this.saveCard}}

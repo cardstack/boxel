@@ -23,7 +23,7 @@ import {
   hasExecutableExtension,
   isNode,
   logger,
-  fetchUserPermissions,
+  fetchRealmPermissions,
   insertPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
@@ -246,6 +246,7 @@ export class Realm {
   #fullIndexOnStartup = false;
   #realmServerMatrixUserId: string;
   #definitionsCache: DefinitionsCache;
+  #copiedFromRealm: URL | undefined;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -311,6 +312,7 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
     let _fetch = fetcher(virtualNetwork.fetch, [
       // when we run cards directly in node we do so under the authority of the
@@ -896,19 +898,28 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     let startTime = Date.now();
-    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    if (isNewIndex || this.#fullIndexOnStartup) {
-      let promise = this.#realmIndexUpdater.fullIndex();
-      if (isNewIndex) {
-        // we only await the full indexing at boot if this is a brand new index
-        await promise;
-      }
-      // not sure how useful this event is--nothing is currently listening for
-      // it, and it may happen during or after the full index...
+    if (this.#copiedFromRealm) {
+      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
       this.broadcastRealmEvent({
         eventName: 'index',
-        indexType: 'full',
+        indexType: 'copy',
+        sourceRealmURL: this.#copiedFromRealm.href,
       });
+    } else {
+      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      if (isNewIndex || this.#fullIndexOnStartup) {
+        let promise = this.#realmIndexUpdater.fullIndex();
+        if (isNewIndex) {
+          // we only await the full indexing at boot if this is a brand new index
+          await promise;
+        }
+        // not sure how useful this event is--nothing is currently listening for
+        // it, and it may happen during or after the full index...
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'full',
+        });
+      }
     }
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
@@ -933,7 +944,7 @@ export class Realm {
   };
 
   async getRealmOwnerUserId(): Promise<string> {
-    let permissions = await fetchUserPermissions(
+    let permissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
@@ -2482,7 +2493,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let permissions = await fetchUserPermissions(
+    let permissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
@@ -2532,7 +2543,7 @@ export class Realm {
       });
     }
 
-    let currentPermissions = await fetchUserPermissions(
+    let currentPermissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
@@ -2786,7 +2797,7 @@ export class Realm {
   private async createRequestContext(): Promise<RequestContext> {
     let permissions = {
       [this.#realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
-      ...(await fetchUserPermissions(this.#dbAdapter, new URL(this.url))),
+      ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
     };
     return {
       realm: this,
@@ -2800,7 +2811,7 @@ export class Realm {
     }
 
     this.visibilityPromise = (async () => {
-      let permissions = await fetchUserPermissions(
+      let permissions = await fetchRealmPermissions(
         this.#dbAdapter,
         new URL(this.url),
       );

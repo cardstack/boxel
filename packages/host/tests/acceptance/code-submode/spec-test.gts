@@ -21,6 +21,7 @@ import {
   percySnapshot,
   type TestContextWithSave,
   setupOnSave,
+  setupRealmServerEndpoints,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -1153,5 +1154,64 @@ module('Acceptance | Spec preview', function (hooks) {
     assert
       .dom('[data-test-boxel-input-id="spec-title"]')
       .hasValue('PersonField');
+  });
+
+  module('Commands that depend on Proxy endpoints', function (hooks) {
+    // Setup realm server endpoints for proxy mock
+    setupRealmServerEndpoints(hooks, [
+      {
+        route: '_request-forward',
+        getResponse: async (req: Request) => {
+          const body = await req.json();
+
+          // Handle README generation requests
+          if (body.url === 'https://openrouter.ai/api/v1/chat/completions') {
+            const mockReadmeResponse = {
+              choices: [
+                {
+                  message: {
+                    content:
+                      "# Person Card\n\nThis is a Person card that represents an individual with first and last name fields.\n\n## Fields\n- **firstName**: The person's first name\n- **lastName**: The person's last name\n- **title**: Computed field combining first and last name",
+                  },
+                },
+              ],
+            };
+            return new Response(JSON.stringify(mockReadmeResponse), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          // Default response for other requests
+          return new Response(JSON.stringify({ error: 'Unknown endpoint' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    ]);
+    test('generate readme button populates readme field via proxy command', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}person.gts`,
+      });
+
+      await click('[data-test-module-inspector-view="spec"]');
+
+      await waitFor(
+        `[data-test-card="${testRealmURL}person-entry"][data-test-card-format="edit"]`,
+      );
+
+      await waitFor('[data-test-generate-readme]');
+      assert.dom('[data-test-generate-readme]').exists();
+
+      assert.dom('[data-test-readme] textarea').hasValue('');
+
+      await click('[data-test-generate-readme]');
+
+      assert.dom('[data-test-readme] textarea').hasValue(/Person Card/);
+      assert.dom('[data-test-readme] textarea').hasValue(/firstName/);
+      assert.dom('[data-test-readme] textarea').hasValue(/lastName/);
+    });
   });
 });

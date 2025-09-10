@@ -48,7 +48,7 @@ export default class CopyButton extends Component<Signature> {
       {{#if this.topMostCardCollection.isLoaded}}
         {{#if this.state}}
           <BoxelButton
-            class='copy-button'
+            class='copy-button {{if @isCopying "copying"}}'
             @kind={{this.buttonKind}}
             @loading={{@isCopying}}
             @size='tall'
@@ -107,6 +107,9 @@ export default class CopyButton extends Component<Signature> {
       }
       .arrow-icon {
         --icon-color: var(--boxel-dark);
+      }
+      .copying {
+        color: var(--boxel-light);
       }
     </style>
   </template>

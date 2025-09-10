@@ -9,8 +9,9 @@ import {
   linksTo,
   linksToMany,
 } from './card-api';
-import CodeRefField from './code-ref';
+import CodeRefField, { AbsoluteCodeRefField } from './code-ref';
 import BooleanField from './boolean';
+import MarkdownField from './markdown';
 import NumberField from './number';
 import ResponseField from './response-field';
 import { Skill } from './skill';
@@ -32,12 +33,16 @@ export class SaveCardInput extends CardDef {
   @field localDir = contains(StringField);
 }
 
-export class CopyCardInput extends CardDef {
+export class CopyCardToRealmInput extends CardDef {
+  @field sourceCard = linksTo(CardDef);
+  @field targetRealm = contains(StringField);
+  @field localDir = contains(StringField);
+}
+
+export class CopyCardToStackInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
   @field targetStackIndex = contains(NumberField);
-  @field realm = contains(StringField);
   @field localDir = contains(StringField);
-  @field codeRef = contains(CodeRefField);
 }
 
 export class CopyCardResult extends CardDef {
@@ -424,4 +429,25 @@ export class PatchFieldsOutput extends CardDef {
       </style>
     </template>
   };
+}
+
+export class GenerateReadmeSpecResult extends CardDef {
+  @field readme = contains(MarkdownField);
+}
+
+export class GenerateReadmeSpecInput extends CardDef {
+  @field spec = linksTo(Spec);
+}
+
+export class OneShotLLMRequestInput extends CardDef {
+  @field codeRef = contains(AbsoluteCodeRefField);
+  @field userPrompt = contains(StringField);
+  @field systemPrompt = contains(StringField);
+  @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
+  @field attachedFileURLs = containsMany(StringField);
+}
+
+export class OneShotLLMRequestResult extends CardDef {
+  @field output = contains(StringField);
 }

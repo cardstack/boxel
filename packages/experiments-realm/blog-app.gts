@@ -186,7 +186,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           <BoxelButton
             class='sidebar-create-button'
             @kind='primary'
-            @size='large'
             @disabled={{this.activeFilter.isCreateNewDisabled}}
             @loading={{this.createCard.isRunning}}
             {{on 'click' this.createNew}}

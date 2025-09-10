@@ -17,6 +17,7 @@ import {
   subscribeToRealm,
   isCardCollectionDocument,
   isCardInstance,
+  QueryResultsMeta,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
@@ -52,6 +53,7 @@ export class SearchResource extends Resource<Args> {
   private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<CardDef>();
+  @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
   #isLive = false;
   #doWhileRefreshing: (() => void) | undefined;
   #previousQuery: Query | undefined;
@@ -141,6 +143,11 @@ export class SearchResource extends Resource<Args> {
       .filter((r) => r.cards.length > 0);
   }
 
+  @cached
+  get meta() {
+    return this._meta;
+  }
+
   private search = restartableTask(async (query: Query) => {
     let oldReferences = this._instances.map((i) => i.id);
 
@@ -149,37 +156,54 @@ export class SearchResource extends Resource<Args> {
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
     try {
-      let results = flatMap(
-        await Promise.all(
-          this.realmsToSearch.map(async (realm) => {
-            let json = await this.cardService.fetchJSON(`${realm}_search`, {
-              method: 'QUERY',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(query),
-            });
-            if (!isCardCollectionDocument(json)) {
-              throw new Error(
-                `The realm search response was not a card collection document:
+      let searchResults = await Promise.all(
+        this.realmsToSearch.map(async (realm) => {
+          let json = await this.cardService.fetchJSON(`${realm}_search`, {
+            method: 'QUERY',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(query),
+          });
+          if (!isCardCollectionDocument(json)) {
+            throw new Error(
+              `The realm search response was not a card collection document:
         ${JSON.stringify(json, null, 2)}`,
+            );
+          }
+          let collectionDoc = json;
+          for (let data of collectionDoc.data) {
+            let maybeInstance = this.store.peek(data.id!);
+            if (!maybeInstance) {
+              await this.store.add(
+                { data },
+                { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
               );
             }
-            let collectionDoc = json;
-            for (let data of collectionDoc.data) {
-              let maybeInstance = this.store.peek(data.id!);
-              if (!maybeInstance) {
-                await this.store.add(
-                  { data },
-                  { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
-                );
-              }
-            }
-            return collectionDoc.data
-              .map((r) => this.store.peek(r.id!)) // all results will have id's
-              .filter((i) => isCardInstance(i)) as CardDef[];
-          }),
-        ),
+          }
+          let instances = collectionDoc.data
+            .map((r) => this.store.peek(r.id!)) // all results will have id's
+            .filter((i) => isCardInstance(i)) as CardDef[];
+
+          return {
+            instances,
+            meta: collectionDoc.meta,
+          };
+        }),
+      );
+
+      let results = flatMap(searchResults, (result) => result.instances);
+
+      // Combine metadata from all realms
+      this._meta = searchResults.reduce(
+        (acc, result) => {
+          if (result.meta?.page?.total !== undefined) {
+            acc.page = acc.page || { total: 0 };
+            acc.page.total = (acc.page.total || 0) + result.meta.page.total;
+          }
+          return acc;
+        },
+        { page: { total: 0 } } as QueryResultsMeta,
       );
 
       // Please note 3 things there:
