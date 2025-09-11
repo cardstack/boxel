@@ -52,6 +52,29 @@ test.describe('Host mode', () => {
     await expect(connectIframe.locator('[data-test-connect]')).toBeVisible();
   });
 
+  test('clicking connect button logs in on main site and redirects back to host mode', async ({
+    page,
+  }) => {
+    await page.goto('http://published.localhost:4205/mango.json');
+
+    await waitUntil(() => page.locator('iframe').isVisible());
+
+    let connectIframe = page.frameLocator('iframe');
+    await connectIframe.locator('[data-test-connect]').click();
+
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-login-btn]').click();
+
+    await expect(page).toHaveURL('http://published.localhost:4205/mango.json');
+
+    await expect(
+      connectIframe.locator(
+        '[data-test-profile-icon-userid="@user1:localhost"]',
+      ),
+    ).toBeVisible();
+  });
+
   // Doesn’t work reliably in CI
   test.skip('connect button shows session when logged in', async ({ page }) => {
     let serverIndexUrl = new URL(appURL).origin;
