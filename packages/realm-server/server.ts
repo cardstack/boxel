@@ -302,14 +302,18 @@ export class RealmServer {
     backgroundURL?: string;
     iconURL?: string;
   }): Promise<Realm> => {
-    let conflictingRealm = this.realms.find(
-      (r) => new URL(r.url).href.replace(/\/$/, '') === new URL(r.url).origin,
-    );
-    if (conflictingRealm) {
-      this.log.error(`Realm mounted at origin ${conflictingRealm.url}`);
+    let realmAtServerRoot = this.realms.find((r) => {
+      let realmUrl = new URL(r.url);
+
+      return (
+        realmUrl.href.replace(/\/$/, '') === realmUrl.origin &&
+        realmUrl.hostname === this.serverURL.hostname
+      );
+    });
+    if (realmAtServerRoot) {
       throw errorWithStatus(
         400,
-        `Cannot create a realm: a realm is already mounted at the origin of this server`,
+        `Cannot create a realm: a realm is already mounted at the origin of this server: ${realmAtServerRoot.url}`,
       );
     }
     if (!endpoint.match(/^[a-z0-9-]+$/)) {
