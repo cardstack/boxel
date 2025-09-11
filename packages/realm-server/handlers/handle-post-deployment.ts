@@ -3,7 +3,10 @@ import {
   SupportedMimeType,
   systemInitiatedPriority,
 } from '@cardstack/runtime-common';
-import { setContextResponse } from '../middleware';
+import {
+  sendResponseForUnauthorizedRequest,
+  setContextResponse,
+} from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
 import {
   compareCurrentBoxelUIChecksum,
@@ -18,7 +21,11 @@ export default function handlePostDeployment({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    // TODO: add auth before this
+    if (
+      ctxt.request.headers.authorization !== process.env.REALM_SERVER_SECRET
+    ) {
+      sendResponseForUnauthorizedRequest(ctxt, 'Unauthorized');
+    }
 
     let boxelUiChangeCheckerResult =
       await compareCurrentBoxelUIChecksum(assetsURL);
