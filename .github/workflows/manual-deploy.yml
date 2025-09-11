@@ -162,7 +162,7 @@ jobs:
       wait-for-service-stability: true
 
   post-deploy-realm-server:
-    name: Steps for realm server after stable deployment
+    name: After realm server stable deployment
     needs: [deploy-realm-server]
     runs-on: ubuntu-latest
     steps:
