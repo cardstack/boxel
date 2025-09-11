@@ -118,7 +118,7 @@ export function formattedError(
     errors: [
       {
         id: url,
-        status: errorStatus ?? '500',
+        status: errorStatus ?? 500,
         title: err?.title ?? status.message[errorStatus] ?? errorMessage,
         message: errorMessage,
         realm: err?.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),

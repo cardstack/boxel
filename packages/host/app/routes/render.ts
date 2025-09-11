@@ -8,6 +8,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   formattedError,
+  isCardErrorJSONAPI,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -31,13 +32,15 @@ export default class RenderRoute extends Route<Model> {
   @service declare private network: NetworkService;
 
   errorHandler = (event: Event) => {
+    let [_a, _b, encodedId] = (this.router.currentURL ?? '').split('/');
+    let id = encodedId ? decodeURIComponent(encodedId) : undefined;
     let reason =
       'reason' in event
         ? (event as any).reason
         : (event as CustomEvent).detail?.reason;
     let element: HTMLElement = document.querySelector('[data-prerender]')!;
     element.innerHTML = `
-      ${reason ? JSON.stringify(reason) : '{"message": "indexing failed"}'}
+      ${reason ? JSON.stringify(isCardErrorJSONAPI(reason) ? reason : formattedError(id, reason).errors[0]) : '{"message": "indexing failed"}'}
     `;
     element.dataset.prerenderStatus = 'error';
 
