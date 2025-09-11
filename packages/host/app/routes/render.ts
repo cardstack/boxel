@@ -67,6 +67,7 @@ export default class RenderRoute extends Route<Model> {
 
   deactivate() {
     (globalThis as any)._lazilyLoadLinks = undefined;
+    (globalThis as any)._boxelRenderContext = undefined;
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
     window.removeEventListener('boxel-render-error', this.errorHandler);
@@ -76,6 +77,7 @@ export default class RenderRoute extends Route<Model> {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__lazilyLoadLinks = true;
+    (globalThis as any).__boxelRenderContext = true;
   }
 
   async model({ id }: { id: string }) {
