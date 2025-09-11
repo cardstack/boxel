@@ -1210,9 +1210,3 @@ export default class Room extends Component<Signature> {
     await this.matrixService.sendStopGeneratingEvent(this.args.roomId);
   });
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Room {
-    'Matrix::Room': typeof Room;
-  }
-}
