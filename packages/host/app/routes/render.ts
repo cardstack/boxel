@@ -22,7 +22,6 @@ import RealmService from '../services/realm';
 import RealmServerService from '../services/realm-server';
 import StoreService from '../services/store';
 
-// TODO double check that we only load instance from card-src in store
 export type Model = { instance: CardDef; ready: boolean };
 
 export default class RenderRoute extends Route<Model> {
