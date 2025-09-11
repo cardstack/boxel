@@ -127,21 +127,21 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
           'controller:index',
         ) as IndexController;
 
-        let transitionQueryParameters = {
+        let transitionQueryParameters = new URLSearchParams({
           authRedirect: window.location.href,
-        };
+        });
 
         if (indexController.hostModeOrigin) {
-          transitionQueryParameters.hostModeOrigin =
-            indexController.hostModeOrigin;
+          transitionQueryParameters.set(
+            'hostModeOrigin',
+            indexController.hostModeOrigin,
+          );
         }
 
         await this.matrixService.ready;
 
         let loginUrl = new URL(config.realmServerURL);
-        loginUrl.search = new URLSearchParams(
-          transitionQueryParameters,
-        ).toString();
+        loginUrl.search = transitionQueryParameters.toString();
         window.location.href = loginUrl.toString();
       }
     };
