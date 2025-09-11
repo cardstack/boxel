@@ -76,6 +76,7 @@ test.describe('Host mode', () => {
   });
 
   // Doesn’t work reliably in CI
+  // FIXME can probably be removed, sufficiently covered above?
   test.skip('connect button shows session when logged in', async ({ page }) => {
     let serverIndexUrl = new URL(appURL).origin;
     await login(page, 'user1', 'pass', {

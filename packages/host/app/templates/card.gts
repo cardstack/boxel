@@ -4,6 +4,8 @@ import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { isDevelopingApp } from '@embroider/macros';
+
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
 
@@ -117,9 +119,20 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 
   addMessageListener = modifier((element: HTMLElement) => {
     let messageHandler = async (event: MessageEvent) => {
-      // TODO if this becomes anything more significant than just showing
-      // the button, the origin should be verified.
-      // FIXME this is probably now!
+      if (eventHasInvalidOrigin(event)) {
+        console.log(
+          'ignoring message from invalid origin',
+          event.data,
+          event.origin,
+        );
+        return;
+      } else {
+        console.log(
+          'received message, origin validated',
+          event.data,
+          event.origin,
+        );
+      }
       if (event.data === 'ready') {
         element.classList.remove('not-loaded');
       } else if (event.data === 'login') {
@@ -219,3 +232,21 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 }
 
 export default RouteTemplate(HostModeComponent);
+
+function eventHasInvalidOrigin(event: MessageEvent) {
+  if (isDevelopingApp()) {
+    // During development, allow messages from any origin
+    return false;
+  }
+
+  if (!config.validPublishedRealmDomains) {
+    // If no valid domains are configured, reject all messages
+    return true;
+  }
+
+  let validDomainRoots = config.validPublishedRealmDomains.split(',');
+
+  return validDomainRoots.some((domainRoot) => {
+    return new URL(event.origin).hostname.endsWith(domainRoot.trim());
+  });
+}

@@ -255,6 +255,9 @@ export class RealmServer {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
+          validPublishedRealmDomains: this.validPublishedRealmDomains
+            ? this.validPublishedRealmDomains.join(',')
+            : undefined,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
