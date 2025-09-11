@@ -310,6 +310,7 @@ export class RealmServer {
         realmUrl.hostname === this.serverURL.hostname
       );
     });
+
     if (realmAtServerRoot) {
       throw errorWithStatus(
         400,
