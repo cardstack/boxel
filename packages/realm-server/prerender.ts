@@ -7,6 +7,8 @@ import {
 import puppeteer, { type Page } from 'puppeteer';
 import { createJWT } from './jwt';
 
+const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
+
 interface RenderError extends CardErrorJSONAPI {
   error: string;
 }
@@ -64,8 +66,7 @@ export async function prerenderCard({
     // We need to render the isolated HTML view first, as the template will pull
     // on the linked fields. Otherwise the linked fields will not be loaded.
     await page.goto(
-      // TODO this is an env specific URL
-      `http://localhost:4200/render/${encodeURIComponent(url)}/html/isolated/0`,
+      `${boxelHostURL}/render/${encodeURIComponent(url)}/html/isolated/0`,
     );
     let result = await captureResult(page, 'innerHTML');
     if (result.status === 'error') {
