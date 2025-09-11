@@ -27,9 +27,9 @@ import { meta } from '@cardstack/runtime-common/constants';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
-import type IndexController from '@cardstack/host/controllers/index';
-
 import config from '@cardstack/host/config/environment';
+
+import type IndexController from '@cardstack/host/controllers/index';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
