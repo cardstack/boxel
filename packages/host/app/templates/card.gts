@@ -1,6 +1,9 @@
+import { getOwner } from '@ember/owner';
+import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
@@ -23,7 +26,11 @@ import {
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import Auth from '@cardstack/host/components/matrix/auth';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
+
+import type IndexController from '@cardstack/host/controllers/index';
+
 import config from '@cardstack/host/config/environment';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
@@ -31,6 +38,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -43,7 +51,11 @@ export interface HostModeComponentSignature {
 
 export class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare commandService: CommandService;
+  @service private declare matrixService: MatrixService;
+  @service private declare router: RouterService;
   @service private declare store: StoreService;
+
+  @tracked loggingIn = false;
 
   @provide(GetCardContextName)
   private get getCard() {
@@ -108,11 +120,33 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   addMessageListener = modifier((element: HTMLElement) => {
-    let messageHandler = (event: MessageEvent) => {
+    let messageHandler = async (event: MessageEvent) => {
       // TODO if this becomes anything more significant than just showing
       // the button, the origin should be verified.
+      // FIXME this is probably now!
       if (event.data === 'ready') {
         element.classList.remove('not-loaded');
+      } else if (event.data === 'login') {
+        let indexController = getOwner(this)!.lookup(
+          'controller:index',
+        ) as IndexController;
+
+        let transitionQueryParameters = {
+          authRedirect: window.location.href,
+        };
+
+        if (indexController.hostModeOrigin) {
+          transitionQueryParameters.hostModeOrigin =
+            indexController.hostModeOrigin;
+        }
+
+        await this.matrixService.ready;
+
+        let loginUrl = new URL(config.realmServerURL);
+        loginUrl.search = new URLSearchParams(
+          transitionQueryParameters,
+        ).toString();
+        window.location.href = loginUrl.toString();
       }
     };
 
@@ -125,32 +159,36 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 
   <template>
     {{pageTitle this.title}}
-    {{#if this.isError}}
-      <div data-test-error='not-found'>
-        Card not found:
-        {{@model.id}}
-      </div>
+    {{#if this.loggingIn}}
+      <Auth />
     {{else}}
-      <iframe
-        class='connect not-loaded'
-        title='connect'
-        src={{this.connectUrl}}
-        {{this.addMessageListener}}
-      />
-      <section
-        class='host-mode-container'
-        style={{this.backgroundImageStyle}}
-        data-test-host-mode-container
-      >
-        <CardContainer class='card'>
-          <CardRenderer
-            class='stack-item-preview'
-            @card={{this.card}}
-            @format='isolated'
-          />
+      {{#if this.isError}}
+        <div data-test-error='not-found'>
+          Card not found:
+          {{@model.id}}
+        </div>
+      {{else}}
+        <iframe
+          class='connect not-loaded'
+          title='connect'
+          src={{this.connectUrl}}
+          {{this.addMessageListener}}
+        />
+        <section
+          class='host-mode-container'
+          style={{this.backgroundImageStyle}}
+          data-test-host-mode-container
+        >
+          <CardContainer class='card'>
+            <CardRenderer
+              class='stack-item-preview'
+              @card={{this.card}}
+              @format='isolated'
+            />
 
-        </CardContainer>
-      </section>
+          </CardContainer>
+        </section>
+      {{/if}}
     {{/if}}
 
     <style scoped>

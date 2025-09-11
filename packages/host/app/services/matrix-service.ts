@@ -1,4 +1,4 @@
-import Owner from '@ember/owner';
+import Owner, { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -74,6 +74,8 @@ import {
   Submodes,
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+
+import type IndexController from '@cardstack/host/controllers/index';
 
 import Room, { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
@@ -564,7 +566,17 @@ export default class MatrixService extends Service {
         await this.logout();
       }
 
-      if (refreshRoutes) {
+      let indexController = getOwner(this)!.lookup(
+        'controller:index',
+      ) as IndexController;
+
+      // FIXME is it true that refreshRoutes should be ignored in this case?
+      if (indexController.authRedirect) {
+        console.log(
+          'authRedirect exists, redirecting to ' + indexController.authRedirect,
+        );
+        window.location.href = indexController.authRedirect;
+      } else if (refreshRoutes) {
         await this.router.refresh();
       }
     }
