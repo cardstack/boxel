@@ -787,6 +787,7 @@ export default class StoreService extends Service implements StoreInterface {
         | SingleCardDocument
         | undefined;
       if (!doc) {
+        // TODO if in rendering context get instance via card source
         let json = await this.cardService.fetchJSON(url);
         if (!isSingleCardDocument(json)) {
           throw new Error(
@@ -826,17 +827,19 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  // this function is used to determine if the instance will be auto-saved or not
-  // this is a temporary function that is likely to go away with the creation of completion emphemeral state solution of the store/realm
-  // the only use-case for this function is determining if a preview instance in catalog realm (which is a read-only),
-  // st a card can be mutable without persisting to the server
+  // this function is used to determine if the instance will be auto-saved or
+  // not this is a temporary function that is likely to go away with the
+  // creation of completion ephemeral state solution of the store/realm the
+  // only use-case for this function is determining if a preview instance in
+  // catalog realm (which is a read-only), st a card can be mutable without
+  // persisting to the server
   private useEphemeralState(instance: CardDef | undefined): boolean {
     if (!instance) {
       return false;
     }
     let realmURL = instance[realmURLSymbol];
     if (!realmURL) {
-      // if a proper cannot derived, I just revert to the default behaviour of auto-save
+      // if a proper cannot derived, I just revert to the default behavior of auto-save
       return false;
     }
     let permissionToWrite = this.realm.permissions(realmURL.href).canWrite;

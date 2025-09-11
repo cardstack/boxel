@@ -9,6 +9,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import {
   formattedError,
   isCardErrorJSONAPI,
+  isCardError,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -21,6 +22,7 @@ import RealmService from '../services/realm';
 import RealmServerService from '../services/realm-server';
 import StoreService from '../services/store';
 
+// TODO double check that we only load instance from card-src in store
 export type Model = { instance: CardDef; ready: boolean };
 
 export default class RenderRoute extends Route<Model> {
@@ -40,7 +42,17 @@ export default class RenderRoute extends Route<Model> {
         : (event as CustomEvent).detail?.reason;
     let element: HTMLElement = document.querySelector('[data-prerender]')!;
     element.innerHTML = `
-      ${reason ? JSON.stringify(isCardErrorJSONAPI(reason) ? reason : formattedError(id, reason).errors[0]) : '{"message": "indexing failed"}'}
+      ${
+        reason
+          ? JSON.stringify(
+              isCardErrorJSONAPI(reason)
+                ? reason
+                : isCardError(reason)
+                  ? reason
+                  : formattedError(id, reason).errors[0],
+            )
+          : '{"message": "indexing failed"}'
+      }
     `;
     element.dataset.prerenderStatus = 'error';
 
