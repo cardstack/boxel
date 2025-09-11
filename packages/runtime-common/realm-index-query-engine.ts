@@ -77,7 +77,7 @@ export class RealmIndexQueryEngine {
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
     let doc: CardCollectionDocument;
-    let { cards: data, meta: _meta } = await this.#indexQueryEngine.search(
+    let { cards: data, meta } = await this.#indexQueryEngine.search(
       new URL(this.#realm.url),
       query,
       opts,
@@ -87,6 +87,7 @@ export class RealmIndexQueryEngine {
         ...resource,
         ...{ links: { self: resource.id } },
       })),
+      meta,
     };
 
     let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
