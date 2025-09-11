@@ -29,12 +29,12 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
   }
   private static SYSTEM_PROMPT = `YOU ARE creating practical usage documentation for specs. 
 
-Reference the Spec Documentation inside boxel-development skill for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with this structure:
+Reference the Spec Documentation inside boxel-development skill for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with these 4 sections:
 
 • **Summary**: Brief summary of what the spec does 
-• **Import**: Show ES6 import statement. Omit .gts extension.
-• **Usage in Consuming Card**: Show how to use code within another card as a field
-• **Template Usage**: Show how to invoke code inside a template 
+• **Import**: Show the ES6 import statmenet of the spec. Omit .gts extension.
+• **Usage**: Show how to use the spec as a field within a consuming card/field 
+• **Template Usage**: Show how to invoke the spec inside a template within a consuming card/field
 
 Requirements:
 - Keep examples simple and practical
