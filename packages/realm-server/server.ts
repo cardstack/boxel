@@ -302,11 +302,11 @@ export class RealmServer {
     backgroundURL?: string;
     iconURL?: string;
   }): Promise<Realm> => {
-    if (
-      this.realms.find(
-        (r) => new URL(r.url).href.replace(/\/$/, '') === new URL(r.url).origin,
-      )
-    ) {
+    let conflictingRealm = this.realms.find(
+      (r) => new URL(r.url).href.replace(/\/$/, '') === new URL(r.url).origin,
+    );
+    if (conflictingRealm) {
+      this.log.error(`Realm mounted at origin ${conflictingRealm.url}`);
       throw errorWithStatus(
         400,
         `Cannot create a realm: a realm is already mounted at the origin of this server`,
