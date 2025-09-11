@@ -843,7 +843,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // this function is used to determine if the instance will be auto-saved or
-  // not this is a temporary function that is likely to go away with the
+  // note this is a temporary function that is likely to go away with the
   // creation of completion ephemeral state solution of the store/realm the
   // only use-case for this function is determining if a preview instance in
   // catalog realm (which is a read-only), st a card can be mutable without
