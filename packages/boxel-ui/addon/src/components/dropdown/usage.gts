@@ -10,7 +10,10 @@ import BoxelMenu from '../menu/index.gts';
 import BoxelDropdown from './index.gts';
 
 export default class BoxelDropdownUsage extends Component {
+  dropdownVariants = ['default', 'primary', 'secondary'];
+
   @tracked shouldDropdownAutoClose = false;
+  @tracked variant: undefined | 'primary' | 'secondary' | 'default' = undefined;
 
   @action log(string: string): void {
     console.log(string);
@@ -30,7 +33,10 @@ export default class BoxelDropdownUsage extends Component {
         open.
       </:description>
       <:example>
-        <BoxelDropdown @autoClose={{this.shouldDropdownAutoClose}}>
+        <BoxelDropdown
+          @autoClose={{this.shouldDropdownAutoClose}}
+          @variant={{this.variant}}
+        >
           <:trigger as |bindings|>
             <BoxelButton {{bindings}}>
               Trigger
@@ -70,6 +76,14 @@ export default class BoxelDropdownUsage extends Component {
           @name='contentClass'
           @description='CSS Class to apply to the dropdown content div'
           @hideControls={{true}}
+        />
+        <Args.String
+          @name='variant'
+          @optional={{true}}
+          @description='Theme-based variant for consistent styling'
+          @options={{this.dropdownVariants}}
+          @onInput={{fn (mut this.variant)}}
+          @value={{this.variant}}
         />
         <Args.Bool
           @name='matchTriggerWidth'
