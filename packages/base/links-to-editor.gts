@@ -130,7 +130,9 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
-  remove = () => {
+  remove = (ev: Event) => {
+    ev.preventDefault();
+    ev.stopPropagation();
     this.args.model.value = null;
   };
 

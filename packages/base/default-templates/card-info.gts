@@ -26,7 +26,6 @@ class CardInfoImageContainer extends GlimmerComponent<{
       class='cardInfo-image-container thumbnail'
       style={{setBackgroundImage @thumbnailURL}}
       role='presentation'
-      data-test-field='thumbnailURL'
       ...attributes
     >
       {{#unless @thumbnailURL}}
@@ -70,10 +69,14 @@ export default class CardInfo extends GlimmerComponent<{
       class='image-container'
       @thumbnailURL={{@thumbnailURL}}
       @icon={{@icon}}
+      data-test-cardInfo-field='thumbnail-url'
     />
     <div class='info'>
-      <h2 class='card-info-title' data-test-field='title'>{{@title}}</h2>
-      <p class='card-info-description' data-test-field='description'>
+      <h2
+        class='card-info-title'
+        data-test-cardInfo-field='name'
+      >{{@title}}</h2>
+      <p class='card-info-description' data-test-cardInfo-field='summary'>
         {{@description}}
       </p>
     </div>
@@ -119,12 +122,14 @@ export class CardInfoEditor extends GlimmerComponent<{
             class='cardInfo-thumbnail-preview'
             @thumbnailURL={{@thumbnailURL}}
             @icon={{@icon}}
+            data-test-thumbnail-image
           />
           <Button
             class='cardInfo-thumbnail-popup-toggle'
             @size='extra-small'
             @kind='secondary-light'
             {{on 'click' this.toggleThumbnailEditor}}
+            data-test-toggle-thumbnail-editor
           >
             Change URL
           </Button>
@@ -138,6 +143,7 @@ export class CardInfoEditor extends GlimmerComponent<{
                   @width='20px'
                   @height='20px'
                   aria-label='Close thumbnail url input'
+                  data-test-close-thumbnail-editor
                 />
                 {{yield to='thumbnailEditor'}}
               </div>

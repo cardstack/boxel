@@ -2383,7 +2383,7 @@ class CardInfoEditTemplate extends Component<typeof CardInfoField> {
         @labelFontSize='default'
         @icon={{CardInfoNameIcon}}
         @vertical={{true}}
-        data-test-field='title'
+        data-test-cardInfo-field='name'
       >
         <@fields.title />
       </FieldContainer>
@@ -2394,7 +2394,7 @@ class CardInfoEditTemplate extends Component<typeof CardInfoField> {
         @labelFontSize='default'
         @icon={{CardInfoSummaryIcon}}
         @vertical={{true}}
-        data-test-field='description'
+        data-test-cardInfo-field='summary'
       >
         <@fields.description />
       </FieldContainer>
@@ -2404,7 +2404,7 @@ class CardInfoEditTemplate extends Component<typeof CardInfoField> {
         @tag='label'
         @labelFontSize='default'
         @icon={{ThemeIcon}}
-        data-test-field='theme'
+        data-test-cardInfo-field='theme'
       >
         <@fields.theme />
       </FieldContainer>

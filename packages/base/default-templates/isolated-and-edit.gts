@@ -102,7 +102,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
                 @tag='label'
                 @vertical={{true}}
                 @labelFontSize='small'
-                data-test-field='thumbnail-url'
+                data-test-cardInfo-field='thumbnail-url'
               >
                 {{! @glint-ignore "thumbnailURL" does not exist }}
                 <@fields.cardInfo.thumbnailURL />
@@ -147,7 +147,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         <FieldContainer
           @label='Notes'
           @icon={{getFieldIcon @model.cardInfo 'notes'}}
-          data-test-field='notes'
+          data-test-cardInfo-field='notes'
         >
           {{! @glint-ignore "notes" does not exist }}
           <@fields.cardInfo.notes />
