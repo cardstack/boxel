@@ -97,9 +97,3 @@ export default class UserProfile extends Component {
     this.displayName = displayName;
   });
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface UserProfile {
-    'Matrix::UserProfile': typeof UserProfile;
-  }
-}
