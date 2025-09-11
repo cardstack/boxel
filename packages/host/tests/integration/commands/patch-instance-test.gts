@@ -85,6 +85,9 @@ module('Integration | commands | patch-instance', function (hooks) {
       new URL(`${testRealmURL}Person/hassan`),
     );
     if (result && 'instance' in result) {
+      console.log(
+        `actual: ${JSON.stringify(result.instance?.attributes, null, 2)}`,
+      );
       assert.deepEqual(
         result.instance?.attributes,
         {
