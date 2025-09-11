@@ -33,7 +33,7 @@ Reference the Spec Documentation inside boxel-development skill for understandin
 
 • **Summary**: Brief summary of what the spec does 
 • **Import**: Show the ES6 import statmenet of the spec. Omit .gts extension.
-• **Usage as a Field**: Show how to use the spec as a field within a consuming card/field. Only show for relevant specTypes.
+• **Usage as a Field**: Show how to use the spec as a field within a consuming card/field. Only show for card or field.
 • **Template Usage**: Show how to invoke the spec inside a template within a consuming card/field
 
 Requirements:
