@@ -202,7 +202,7 @@ module(basename(__filename), function () {
             id: `${realmURL1}1`,
             name: 'Hassan',
             title: 'Hassan',
-            cardInfo: { theme: null },
+            cardInfo: {},
           },
           'linked field search doc is correct',
         );
