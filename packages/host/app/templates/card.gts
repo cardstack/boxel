@@ -3,7 +3,6 @@ import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
@@ -26,7 +25,6 @@ import {
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import Auth from '@cardstack/host/components/matrix/auth';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import type IndexController from '@cardstack/host/controllers/index';
@@ -54,8 +52,6 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare matrixService: MatrixService;
   @service private declare router: RouterService;
   @service private declare store: StoreService;
-
-  @tracked loggingIn = false;
 
   @provide(GetCardContextName)
   private get getCard() {
@@ -159,36 +155,32 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 
   <template>
     {{pageTitle this.title}}
-    {{#if this.loggingIn}}
-      <Auth />
+    {{#if this.isError}}
+      <div data-test-error='not-found'>
+        Card not found:
+        {{@model.id}}
+      </div>
     {{else}}
-      {{#if this.isError}}
-        <div data-test-error='not-found'>
-          Card not found:
-          {{@model.id}}
-        </div>
-      {{else}}
-        <iframe
-          class='connect not-loaded'
-          title='connect'
-          src={{this.connectUrl}}
-          {{this.addMessageListener}}
-        />
-        <section
-          class='host-mode-container'
-          style={{this.backgroundImageStyle}}
-          data-test-host-mode-container
-        >
-          <CardContainer class='card'>
-            <CardRenderer
-              class='stack-item-preview'
-              @card={{this.card}}
-              @format='isolated'
-            />
+      <iframe
+        class='connect not-loaded'
+        title='connect'
+        src={{this.connectUrl}}
+        {{this.addMessageListener}}
+      />
+      <section
+        class='host-mode-container'
+        style={{this.backgroundImageStyle}}
+        data-test-host-mode-container
+      >
+        <CardContainer class='card'>
+          <CardRenderer
+            class='stack-item-preview'
+            @card={{this.card}}
+            @format='isolated'
+          />
 
-          </CardContainer>
-        </section>
-      {{/if}}
+        </CardContainer>
+      </section>
     {{/if}}
 
     <style scoped>
