@@ -46,6 +46,7 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
       if (handle?.localStorage?.getItem('auth')) {
         window.localStorage.setItem('auth', handle.localStorage['auth']);
       } else {
+        // FIXME this should have an origin
         window.top?.postMessage('login', '*');
       }
     }
