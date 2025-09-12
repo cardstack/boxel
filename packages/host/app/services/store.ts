@@ -275,13 +275,17 @@ export default class StoreService extends Service implements StoreInterface {
 
     if (opts?.doNotWaitForPersist) {
       // intentionally not awaiting
-      this.persistAndUpdate(instance, { realm: opts?.realm });
+      this.persistAndUpdate(instance, {
+        realm: opts?.realm,
+        localDir: opts?.localDir,
+      });
     } else if (!opts?.doNotPersist) {
       if (instance.id) {
         this.save(instance.id);
       } else {
         return (await this.persistAndUpdate(instance, {
           realm: opts?.realm,
+          localDir: opts?.localDir,
         })) as T | CardErrorJSONAPI;
       }
     }
