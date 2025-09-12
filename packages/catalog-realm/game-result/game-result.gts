@@ -14,10 +14,6 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn, concat } from '@ember/helper';
 import { AbsoluteCodeRefField } from 'https://cardstack.com/base/code-ref';
-import {
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-} from '@cardstack/runtime-common';
 import GitBranch from '@cardstack/boxel-icons/git-branch';
 
 export class GameStatusEdit extends Component<typeof GameStatusField> {
@@ -70,20 +66,13 @@ export class GameResult extends CardDef {
   @field game = linksTo(() => CardDef);
   @field status = contains(GameStatusField);
   @field ref = contains(AbsoluteCodeRefField);
+  @field title = contains(StringField, {
+    computeVia: function (this: GameResult) {
+      return this.game.title ?? 'Untitled Game Result';
+    },
+  });
 
   static isolated = class Isolated extends Component<typeof GameResult> {
-    get absoluteRef() {
-      if (!this.args.model.ref || !this.args.model.id) {
-        return undefined;
-      }
-      let url = new URL(this.args.model.id);
-      let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
-      if (!isResolvedCodeRef(ref)) {
-        throw new Error('ref is not a resolved code ref');
-      }
-      return ref;
-    }
-
     get statusColors() {
       const status = this.args.model.status?.label?.toLowerCase();
       switch (status) {
@@ -203,14 +192,14 @@ export class GameResult extends CardDef {
                 <div
                   class='code-value'
                   data-test-module-href
-                >{{this.absoluteRef.module}}</div>
+                >{{this.args.model.ref.module}}</div>
               </div>
               <div class='code-item'>
                 <span class='code-label'>NAME:</span>
                 <div
                   class='code-value'
                   data-test-exported-name
-                >{{this.absoluteRef.name}}</div>
+                >{{this.args.model.ref.name}}</div>
               </div>
             </div>
           </div>
@@ -732,18 +721,6 @@ export class GameResult extends CardDef {
   };
 
   static edit = class Edit extends Component<typeof GameResult> {
-    get absoluteRef() {
-      if (!this.args.model.ref || !this.args.model.id) {
-        return undefined;
-      }
-      let url = new URL(this.args.model.id);
-      let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
-      if (!isResolvedCodeRef(ref)) {
-        throw new Error('ref is not a resolved code ref');
-      }
-      return ref;
-    }
-
     <template>
       <article class='container'>
         <section class='game section'>
@@ -775,14 +752,14 @@ export class GameResult extends CardDef {
             <FieldContainer @label='URL' @vertical={{true}}>
               <div class='code-ref-row'>
                 <span class='code-ref-value' data-test-module-href>
-                  {{this.absoluteRef.module}}
+                  {{this.args.model.ref.module}}
                 </span>
               </div>
             </FieldContainer>
             <FieldContainer @label='Module Name' @vertical={{true}}>
               <div class='code-ref-row'>
                 <div class='code-ref-value' data-test-exported-name>
-                  {{this.absoluteRef.name}}
+                  {{this.args.model.ref.name}}
                 </div>
               </div>
             </FieldContainer>

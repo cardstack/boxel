@@ -461,8 +461,8 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     const game = this.args.model;
 
     const codeRef = {
-      module: '../blackjack/blackjack',
-      name: 'Blackjack',
+      module: new URL('../blackjack/blackjack', import.meta.url).href,
+      name: 'BlackjackGame',
     };
 
     const gameResult = new GameResult({
@@ -1102,6 +1102,12 @@ export class BlackjackGame extends CardDef {
   @field dealerHand = containsMany(PlayingCardField);
   @field playerHand = containsMany(PlayingCardField);
   @field casinoName = contains(StringField);
+
+  @field title = contains(StringField, {
+    computeVia: function (this: BlackjackGame) {
+      return 'Blackjack';
+    },
+  });
 
   static isolated = IsolatedTemplate;
 
