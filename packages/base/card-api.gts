@@ -2485,7 +2485,7 @@ export class CardDef extends BaseDef {
   }
 }
 
-class ImportURL extends StringField {
+export class ImportURL extends StringField {
   static displayName = 'Import Url';
   static icon = ImportIcon;
 }
