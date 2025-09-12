@@ -1505,7 +1505,7 @@ module(basename(__filename), function () {
           });
         });
 
-        test('GET /_realm-info returns lastPublishedAt as null for unpublished realm', async function (assert) {
+        test('GET /_info returns lastPublishedAt as null for unpublished realm', async function (assert) {
           let response = await request2
             .get('/test/_info')
             .set('Accept', 'application/vnd.api+json');
