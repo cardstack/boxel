@@ -56,6 +56,8 @@ export default class RenderRoute extends Route<Model> {
     element.dataset.prerenderStatus = 'error';
 
     event.preventDefault?.();
+    (globalThis as any)._lazilyLoadLinks = undefined;
+    (globalThis as any)._boxelRenderContext = undefined;
   };
 
   activate() {
