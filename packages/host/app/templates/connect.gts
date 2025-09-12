@@ -12,6 +12,7 @@ import window from 'ember-window-mock';
 import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
+import config from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface ConnectComponentSignature {
@@ -45,7 +46,7 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
       if (handle?.localStorage?.getItem('auth')) {
         window.localStorage.setItem('auth', handle.localStorage['auth']);
       } else {
-        // FIXME this should have an origin
+        // TODO Add true origin in CS-9412
         window.top?.postMessage('login', '*');
       }
     }
