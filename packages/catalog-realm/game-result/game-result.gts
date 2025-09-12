@@ -12,7 +12,8 @@ import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { RadioInput, FieldContainer } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { fn, concat } from '@ember/helper';
+import { fn } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import { AbsoluteCodeRefField } from 'https://cardstack.com/base/code-ref';
 import GitBranch from '@cardstack/boxel-icons/git-branch';
 
@@ -135,31 +136,31 @@ export class GameResult extends CardDef {
       }
     }
 
+    get gamePanelStyle() {
+      return htmlSafe(
+        `background: ${this.statusColors.bg}; border-color: ${this.statusColors.border}; box-shadow: 0 8px 32px ${this.statusColors.glow};`,
+      );
+    }
+
+    get statusIconStyle() {
+      return htmlSafe(`color: ${this.statusColors.stars}`);
+    }
+
     <template>
       <div class='game-result-panel'>
-        <!-- Decorative Stars -->
+        {{! Decorative Stars }}
         <div class='stars-decoration'>
           ⭐ ⭐ ⭐ ⭐ ⭐
         </div>
 
-        <!-- Main Game Panel -->
-        <div
-          class='game-panel'
-          style={{concat
-            'background: '
-            this.statusColors.bg
-            '; border-color: '
-            this.statusColors.border
-            '; box-shadow: 0 8px 32px '
-            this.statusColors.glow
-          }}
-        >
+        {{! Main Game Panel }}
+        <div class='game-panel' style={{this.gamePanelStyle}}>
 
-          <!-- Status Header with Status Badge -->
+          {{! Status Header with Status Badge }}
           <div class='status-header'>
             <div
               class='status-icon'
-              style={{concat 'color: ' this.statusColors.stars}}
+              style={{this.statusIconStyle}}
             >{{this.statusIcon}}</div>
             <div class='status-badge' data-test-status>
               <span class='status-text'>{{@model.status.label}}</span>
@@ -167,7 +168,7 @@ export class GameResult extends CardDef {
             <div class='decorative-line'></div>
           </div>
 
-          <!-- Game Info Section -->
+          {{! Game Info Section }}
           <div class='game-info-section'>
             <div class='game-badge'>
               <GamepadIcon class='game-icon' />
@@ -180,7 +181,7 @@ export class GameResult extends CardDef {
             </div>
           </div>
 
-          <!-- Code Reference Panel -->
+          {{! Code Reference Panel }}
           <div class='code-panel'>
             <div class='panel-header'>
               <GitBranch class='code-icon' />
@@ -192,20 +193,20 @@ export class GameResult extends CardDef {
                 <div
                   class='code-value'
                   data-test-module-href
-                >{{this.args.model.ref.module}}</div>
+                >{{@model.ref.module}}</div>
               </div>
               <div class='code-item'>
                 <span class='code-label'>NAME:</span>
                 <div
                   class='code-value'
                   data-test-exported-name
-                >{{this.args.model.ref.name}}</div>
+                >{{@model.ref.name}}</div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Bottom Stars -->
+        {{! Bottom Stars }}
         <div class='stars-decoration bottom'>
           ⭐ ⭐ ⭐ ⭐ ⭐
         </div>
@@ -752,14 +753,14 @@ export class GameResult extends CardDef {
             <FieldContainer @label='URL' @vertical={{true}}>
               <div class='code-ref-row'>
                 <span class='code-ref-value' data-test-module-href>
-                  {{this.args.model.ref.module}}
+                  {{@model.ref.module}}
                 </span>
               </div>
             </FieldContainer>
             <FieldContainer @label='Module Name' @vertical={{true}}>
               <div class='code-ref-row'>
                 <div class='code-ref-value' data-test-exported-name>
-                  {{this.args.model.ref.name}}
+                  {{@model.ref.name}}
                 </div>
               </div>
             </FieldContainer>
