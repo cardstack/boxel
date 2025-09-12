@@ -4,6 +4,8 @@ import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
+import window from 'ember-window-mock';
+
 import stringify from 'safe-stable-stringify';
 
 import ENV from '@cardstack/host/config/environment';
@@ -52,6 +54,7 @@ export default class Index extends Route {
   // care about the back button, see note at bottom). Because of that make sure
   // that there is as little async as possible in this model hook.
   async model(params: {
+    authRedirect?: string;
     cardPath?: string;
     path: string;
     operatorModeState: string;
@@ -75,6 +78,11 @@ export default class Index extends Route {
 
     if (!this.matrixService.isLoggedIn) {
       return; // Show login component
+    }
+
+    if (params.authRedirect) {
+      window.location.href = params.authRedirect;
+      return;
     }
 
     if (!isTesting()) {
