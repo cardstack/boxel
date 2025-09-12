@@ -85,6 +85,7 @@ import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
+import ImportIcon from '@cardstack/boxel-icons/import';
 
 interface CardOrFieldTypeIconSignature {
   Element: Element;
@@ -2484,12 +2485,17 @@ export class CardDef extends BaseDef {
   }
 }
 
+class ImportURL extends StringField {
+  static displayName = 'Import Url';
+  static icon = ImportIcon;
+}
+
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
   @field title = contains(StringField);
   @field cssVariables = contains(CSSField);
-  @field cssImports = containsMany(StringField);
+  @field cssImports = containsMany(ImportURL);
 }
 
 export type BaseDefConstructor = typeof BaseDef;
