@@ -145,12 +145,10 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
 
   <template>
     <div class='dashboard-arena'>
-      <!-- Animated background -->
       <div class='bg-matrix'></div>
       <div class='bg-grid'></div>
       <div class='bg-glow'></div>
 
-      <!-- Floating particles -->
       <div class='particles'>
         <div class='particle'></div>
         <div class='particle'></div>
@@ -159,7 +157,6 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
         <div class='particle'></div>
       </div>
 
-      <!-- Header section -->
       <header class='command-center'>
         <div class='status-bar'>
           <div class='status-indicator active'></div>
@@ -180,7 +177,6 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
         </div>
       </header>
 
-      <!-- Stats overview -->
       <section class='stats-grid'>
         {{#if this.selectedGame}}
           <div class='stats-header'>
@@ -221,7 +217,6 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
         </div>
       </section>
 
-      <!-- Main content area -->
       <main class='data-terminal'>
         <div class='terminal-header'>
           <div class='terminal-tabs'>
