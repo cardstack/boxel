@@ -107,6 +107,7 @@ export const testRealmInfo = {
   visibility: 'public',
   realmUserId: testMatrix.username,
   publishable: null,
+  lastPublishedAt: null,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
