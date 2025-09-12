@@ -100,7 +100,7 @@ module('Integration | commands | patch-instance', function (hooks) {
       assert.deepEqual(
         result.instance?.relationships,
         {
-          bestFriend: {
+          bestFriendx: {
             links: {
               self: null,
             },
