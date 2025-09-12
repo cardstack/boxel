@@ -1,14 +1,14 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { sanitizeHtml } from '@cardstack/runtime-common';
 
 import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
+import { sanitizeHtml } from '../../helpers/sanitize-html.ts';
 
 interface Signature {
   Args: {
+    cssImports?: string[];
     displayBoundaries?: boolean;
     tag?: keyof HTMLElementTagNameMap;
-    cssImports?: string[];
   };
   Blocks: {
     default: [];
