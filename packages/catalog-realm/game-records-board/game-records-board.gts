@@ -39,6 +39,10 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
     return [...new Set(titles)].sort();
   }
 
+  get gameTitlesLoading() {
+    return this.gameTitlesData?.isLoading;
+  }
+
   get statsQuery() {
     const baseQuery = {
       filter: {
@@ -239,6 +243,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
               @onChange={{this.onGameSelect}}
               @options={{this.gameTitles}}
               @searchEnabled={{true}}
+              @disabled={{this.gameTitlesLoading}}
               class='game-selector'
               aria-label='Filter by game'
               as |gameTitle|
