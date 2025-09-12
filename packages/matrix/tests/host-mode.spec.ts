@@ -74,29 +74,4 @@ test.describe('Host mode', () => {
       ),
     ).toBeVisible();
   });
-
-  // Doesn’t work reliably in CI
-  // FIXME can probably be removed, sufficiently covered above?
-  test.skip('connect button shows session when logged in', async ({ page }) => {
-    let serverIndexUrl = new URL(appURL).origin;
-    await login(page, 'user1', 'pass', {
-      url: serverIndexUrl,
-    });
-
-    await assertLoggedIn(page);
-
-    await page.goto('http://published.localhost:4205/mango.json');
-
-    await waitUntil(() => page.locator('iframe').isVisible());
-
-    let connectIframe = page.frameLocator('iframe');
-
-    if (await connectIframe.locator('[data-test-connect]').isVisible()) {
-      await connectIframe.locator('[data-test-connect]').click();
-    }
-
-    await expect(connectIframe.locator('[data-test-session]')).toHaveText(
-      '@user1:localhost',
-    );
-  });
 });
