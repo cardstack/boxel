@@ -2573,22 +2573,22 @@ export class Realm {
     string | Record<string, string> | null
   > {
     try {
-      // // First check if this realm is a published realm
-      // let publishedRealmData = await this.queryPublishedRealm();
-      // if (publishedRealmData) {
-      //   return publishedRealmData.last_published_at;
-      // }
+      // First check if this realm is a published realm
+      let publishedRealmData = await this.queryPublishedRealm();
+      if (publishedRealmData) {
+        return publishedRealmData.last_published_at;
+      }
 
-      // // If not published, check if this is a source realm with published versions
-      // let publishedVersions = await this.querySourceRealmPublications();
-      // if (publishedVersions.length > 0) {
-      //   return Object.fromEntries(
-      //     publishedVersions.map((p) => [
-      //       p.published_realm_url,
-      //       p.last_published_at,
-      //     ]),
-      //   );
-      // }
+      // If not published, check if this is a source realm with published versions
+      let publishedVersions = await this.querySourceRealmPublications();
+      if (publishedVersions.length > 0) {
+        return Object.fromEntries(
+          publishedVersions.map((p) => [
+            p.published_realm_url,
+            p.last_published_at,
+          ]),
+        );
+      }
 
       return null; // Never published
     } catch (error) {
