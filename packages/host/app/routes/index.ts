@@ -80,10 +80,7 @@ export default class Index extends Route {
       return; // Show login component
     }
 
-    console.log('auth redirect?', params.authRedirect);
-
     if (params.authRedirect) {
-      console.log('redirecting');
       window.location.href = params.authRedirect;
       return;
     }

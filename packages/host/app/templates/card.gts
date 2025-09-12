@@ -119,19 +119,21 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   addMessageListener = modifier((element: HTMLElement) => {
     let messageHandler = async (event: MessageEvent) => {
       if (eventHasInvalidOrigin(event)) {
-        console.log(
+        console.debug(
           'ignoring message from invalid origin',
           event.data,
           event.origin,
         );
+
         return;
       } else {
-        console.log(
+        console.debug(
           'received message, origin validated',
           event.data,
           event.origin,
         );
       }
+
       if (event.data === 'ready') {
         element.classList.remove('not-loaded');
       } else if (event.data === 'login') {

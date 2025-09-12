@@ -42,7 +42,6 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
     let handle = await this.matrixService.requestStorageAccess();
 
     if (handle) {
-      console.log('handle', handle);
       if (handle?.localStorage?.getItem('auth')) {
         window.localStorage.setItem('auth', handle.localStorage['auth']);
       } else {
