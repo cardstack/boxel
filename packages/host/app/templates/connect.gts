@@ -12,7 +12,6 @@ import window from 'ember-window-mock';
 import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
-import config from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface ConnectComponentSignature {

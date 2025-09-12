@@ -6,16 +6,10 @@ import {
   registerUser,
 } from '../docker/synapse';
 import {
-  appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import {
-  assertLoggedIn,
-  login,
-  registerRealmUsers,
-  waitUntil,
-} from '../helpers';
+import { registerRealmUsers, waitUntil } from '../helpers';
 
 test.describe('Host mode', () => {
   let synapse: SynapseInstance;
