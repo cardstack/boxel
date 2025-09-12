@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { sanitizeHtml } from '@cardstack/runtime-common';
 
 import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
@@ -7,6 +8,7 @@ interface Signature {
   Args: {
     displayBoundaries?: boolean;
     tag?: keyof HTMLElementTagNameMap;
+    cssImports?: string[];
   };
   Blocks: {
     default: [];
@@ -27,6 +29,16 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       {{yield}}
     </Tag>
   {{/let}}
+
+  {{#if @cssImports.length}}
+    {{! template-lint-disable require-scoped-style  }}
+    <style>
+      {{#each @cssImports as |url|}}
+        @import url('{{sanitizeHtml url}}');
+      {{/each}}
+    </style>
+    {{! template-lint-enable require-scoped-style  }}
+  {{/if}}
 
   {{! Note: styles for this component use :global to avoid issues with
       cached HTML if this component changes. This is important because it

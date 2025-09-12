@@ -94,6 +94,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
         --boxel-field-content-padding,
         var(--boxel-outline-width)
       ); /* necessary for our various overlays utilizing box-shadow */
+      word-break: break-word;
     }
 
     .horizontal {

@@ -2489,6 +2489,7 @@ export class Theme extends CardDef {
   static icon = ThemeIcon;
   @field title = contains(StringField);
   @field cssVariables = contains(CSSField);
+  @field cssImports = containsMany(StringField);
 }
 
 export type BaseDefConstructor = typeof BaseDef;
