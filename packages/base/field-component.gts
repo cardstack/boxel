@@ -243,6 +243,14 @@ export function getBoxComponent(
     );
   }
 
+  function getCssImports(card?: CardDef) {
+    // for Theme card and its descendants, directly use the `cssImports` field;
+    // for all other cards, get imports via the Theme card linked from cardInfo
+    return card && 'cssImports' in card
+      ? (card as Theme).cssImports
+      : card?.cardInfo?.theme?.cssImports;
+  }
+
   let component: TemplateOnlyComponent<{
     Element: HTMLElement;
     Args: {
@@ -277,6 +285,7 @@ export function getBoxComponent(
                     >
                       <CardContainer
                         @displayBoundaries={{displayContainer}}
+                        @cssImports={{getCssImports card}}
                         class={{cn
                           'field-component-card'
                           (concat effectiveFormats.cardDef '-format')
