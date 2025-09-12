@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import * as Sentry from '@sentry/node';
+import { reportError } from 'index';
 
 const fileChecksumPath = path.join(
   process.cwd(),
@@ -40,7 +40,7 @@ export async function compareCurrentBoxelUIChecksum(distURL: URL) {
   } catch (error) {
     // File doesn't exist or can't be read
     // Create file with the checksum
-    Sentry.captureException(error); // This error is expected to happen on first run of the checker, but if it happens again, it's a problem and we should investigate
+    reportError(error as Error); // This error is expected to happen on first run of the checker, but if it happens again, it's a problem and we should investigate
     writeCurrentBoxelUIChecksum(currentChecksum);
   }
 

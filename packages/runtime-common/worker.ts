@@ -21,9 +21,18 @@ import {
   type ResponseWithNodeStream,
   type RealmInfo,
   type LintArgs,
+  systemInitiatedPriority,
+  Realm,
+  QueuePublisher,
+  DBAdapter,
 } from '.';
 import { MatrixClient } from './matrix-client';
 import { lintFix } from './lint';
+import { enqueueReindexRealmJob } from 'jobs/reindex-realm';
+import {
+  compareCurrentBoxelUIChecksum,
+  writeCurrentBoxelUIChecksum,
+} from 'helpers/boxel-ui-change-checker';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -57,6 +66,13 @@ export interface StatusArgs {
   realm?: string;
   url?: string;
   deps?: string[];
+}
+
+export interface PostRealmServerDeploymentArgs {
+  assetsURL: URL;
+  realms: Realm[];
+  queue: QueuePublisher;
+  dbAdapter: DBAdapter;
 }
 
 export type RunnerRegistration = (
@@ -206,6 +222,10 @@ export class Worker {
       this.#queue.register(`incremental-index`, this.incremental),
       this.#queue.register(`copy-index`, this.copy),
       this.#queue.register(`lint-source`, this.lintSource),
+      this.#queue.register(
+        `post-realm-server-deployment`,
+        this.postRealmServerDeployment,
+      ),
     ]);
     await this.#queue.start();
   }
@@ -339,6 +359,34 @@ export class Worker {
     );
     this.reportStatus(args.jobInfo, 'finish');
     return result;
+  };
+
+  private postRealmServerDeployment = async (
+    args: PostRealmServerDeploymentArgs & { jobInfo?: JobInfo },
+  ) => {
+    this.#log.debug(
+      `${jobIdentity(args.jobInfo)} starting post-realm-server-deployment for job: ${JSON.stringify(args)}`,
+    );
+    this.reportStatus(args.jobInfo, 'start');
+    let { assetsURL, realms, queue, dbAdapter } = args;
+    let boxelUiChangeCheckerResult =
+      await compareCurrentBoxelUIChecksum(assetsURL);
+
+    if (
+      boxelUiChangeCheckerResult.currentChecksum !==
+      boxelUiChangeCheckerResult.previousChecksum
+    ) {
+      for (let realm of realms) {
+        await enqueueReindexRealmJob(
+          realm,
+          queue,
+          dbAdapter,
+          systemInitiatedPriority,
+        );
+      }
+      writeCurrentBoxelUIChecksum(boxelUiChangeCheckerResult.currentChecksum);
+    }
+    this.reportStatus(args.jobInfo, 'finish');
   };
 
   private copy = async (args: CopyArgs & { jobInfo?: JobInfo }) => {

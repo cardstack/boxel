@@ -1,18 +1,15 @@
 import Koa from 'koa';
 import {
   type FromScratchResult,
-  type FromScratchArgs,
   type QueuePublisher,
   type Job,
-  type Expression,
   type Realm,
-  query as _query,
-  param,
   userInitiatedPriority,
   SupportedMimeType,
   RealmPaths,
   DBAdapter,
 } from '@cardstack/runtime-common';
+import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
@@ -79,27 +76,5 @@ export async function reindex({
   dbAdapter: DBAdapter;
   priority?: number;
 }) {
-  let realmUsername = await realm.getRealmOwnerUsername();
-  let args: FromScratchArgs = {
-    realmURL: realm.url,
-    realmUsername,
-  };
-  await query(dbAdapter, [
-    `UPDATE boxel_index SET last_modified = NULL WHERE realm_url =`,
-    param(realm.url),
-  ]);
-  let job = await queue.publish<FromScratchResult>({
-    jobType: `from-scratch-index`,
-    concurrencyGroup: `indexing:${realm.url}`,
-    // allow this to run longer than normal as we are forcing all files to be
-    // revisited regardless of mtime
-    timeout: 6 * 60,
-    priority,
-    args,
-  });
-  return job;
-}
-
-async function query(dbAdapter: DBAdapter, expression: Expression) {
-  return await _query(dbAdapter, expression);
+  return await enqueueReindexRealmJob(realm, queue, dbAdapter, priority);
 }
