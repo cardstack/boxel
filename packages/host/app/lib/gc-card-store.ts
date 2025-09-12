@@ -147,6 +147,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   async loaded() {
+    await Promise.resolve();
     await Promise.allSettled(this.#inFlight);
   }
 
