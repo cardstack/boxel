@@ -28,6 +28,8 @@ import {
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
   internalKeyFor,
+  query,
+  param,
   isValidPrerenderedHtmlFormat,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -118,6 +120,7 @@ export type RealmInfo = {
   visibility: RealmVisibility;
   realmUserId?: string;
   publishable: boolean | null;
+  lastPublishedAt: string | Record<string, string> | null;
 };
 
 export interface FileRef {
@@ -2566,6 +2569,66 @@ export class Realm {
     return await this.getRealmPermissions(request, requestContext);
   }
 
+  private async getLastPublishedAt(): Promise<
+    string | Record<string, string> | null
+  > {
+    try {
+      // First check if this realm is a published realm
+      let publishedRealmData = await this.queryPublishedRealm();
+      if (publishedRealmData) {
+        return publishedRealmData.last_published_at;
+      }
+
+      // If not published, check if this is a source realm with published versions
+      let publishedVersions = await this.querySourceRealmPublications();
+      if (publishedVersions.length > 0) {
+        return Object.fromEntries(
+          publishedVersions.map((p) => [
+            p.published_realm_url,
+            p.last_published_at,
+          ]),
+        );
+      }
+
+      return null; // Never published
+    } catch (error) {
+      this.#log.warn(`Failed to get lastPublishedAt: ${error}`);
+      return null;
+    }
+  }
+
+  private async queryPublishedRealm(): Promise<{
+    last_published_at: string;
+  } | null> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
+        param(this.url),
+      ])) as { last_published_at: string }[];
+
+      return results.length > 0 ? results[0] : null;
+    } catch (error) {
+      this.#log.warn(`Failed to query published realm: ${error}`);
+      return null;
+    }
+  }
+
+  private async querySourceRealmPublications(): Promise<
+    { published_realm_url: string; last_published_at: string }[]
+  > {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT published_realm_url, last_published_at FROM published_realms WHERE source_realm_url =`,
+        param(this.url),
+      ])) as { published_realm_url: string; last_published_at: string }[];
+
+      return results;
+    } catch (error) {
+      this.#log.warn(`Failed to query source realm publications: ${error}`);
+      return [];
+    }
+  }
+
   private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
@@ -2579,6 +2642,7 @@ export class Realm {
       realmUserId:
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
       publishable: null,
+      lastPublishedAt: await this.getLastPublishedAt(),
     };
     if (!realmConfig) {
       return realmInfo;
