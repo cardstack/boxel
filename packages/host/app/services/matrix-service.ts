@@ -570,7 +570,6 @@ export default class MatrixService extends Service {
         'controller:index',
       ) as IndexController;
 
-      // FIXME is it true that refreshRoutes should be ignored in this case?
       if (indexController.authRedirect) {
         console.log(
           'authRedirect exists, redirecting to ' + indexController.authRedirect,
