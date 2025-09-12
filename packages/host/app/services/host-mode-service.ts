@@ -14,7 +14,7 @@ export default class HostModeService extends Service {
       }
 
       return (
-        config.hostsOwnAssets === false &&
+        !config.hostsOwnAssets &&
         this.isRealmServerDomain === false &&
         this.originIsNotMatrixTests
       );
@@ -33,7 +33,7 @@ export default class HostModeService extends Service {
       let currentHost = window.location.hostname;
 
       return (
-        currentHost.endsWith(`.${realmServerDomain}`) &&
+        currentHost.endsWith(realmServerDomain) &&
         // Using a submdomain of localhost indicates host mode
         !currentHost.endsWith('.localhost')
       );

@@ -68,9 +68,3 @@ export default class Auth extends Component {
     this.resetPasswordParams = undefined;
   }
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Login {
-    'Matrix::Login': typeof Login;
-  }
-}

@@ -1,17 +1,37 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Solitaire",
-      "summary": "Classic Klondike Solitaire with authentic casino-green felt interface - track game statistics, time management, and win rates while experiencing traditional card gameplay with premium visual animations. Features full deck shuffling, foundation auto-completion, cascading tableau mechanics, waste pile cycling, golden selection highlights, and victory celebration modals for sophisticated desktop card gaming entertainment.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/solitaire-listing/screenshot_01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/solitaire-listing/thumbnail.png"
+      "summary": "Classic Klondike Solitaire with authentic casino-green felt interface - track game statistics, time management, and win rates while experiencing traditional card gameplay with premium visual animations. Features full deck shuffling, foundation auto-completion, cascading tableau mechanics, waste pile cycling, golden selection highlights, and victory celebration modals for sophisticated desktop card gaming entertainment.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
+      "tags.0": {
+        "links": {
+          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -26,31 +46,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../solitaire/Solitaire/1ca34cd3-17e2-4b1c-932f-a40e3627a700"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/video-games-interactive"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../solitaire/Solitaire/1ca34cd3-17e2-4b1c-932f-a40e3627a700"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }

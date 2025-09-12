@@ -6,9 +6,11 @@
       "shortName": "Home Decor",
       "slug": "home",
       "pillColor": "#FCF8A6",
-      "description": "Articles about the aesthetic side of home building and renovation",
-      "title": "Home decoration & interior design",
-      "thumbnailURL": null
+      "cardInfo": {
+        "description": "Articles about the aesthetic side of home building and renovation",
+        "title": "Home decoration & interior design",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "blog": {

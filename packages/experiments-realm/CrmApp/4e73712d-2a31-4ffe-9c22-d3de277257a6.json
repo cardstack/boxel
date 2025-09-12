@@ -4,7 +4,12 @@
     "attributes": {
       "title": "Vibeverse",
       "description": "Feel the moment",
-      "thumbnailURL": "https://boxel-images.boxel.ai/icons/vibeverse.jpg"
+      "thumbnailURL": "https://boxel-images.boxel.ai/icons/vibeverse.jpg",
+      "cardInfo": {
+        "title": "Vibeverse",
+        "description": "Feel the moment",
+        "thumbnailURL": "https://boxel-images.boxel.ai/icons/vibeverse.jpg"
+      }
     },
     "meta": {
       "adoptsFrom": {

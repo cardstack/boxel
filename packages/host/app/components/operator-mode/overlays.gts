@@ -9,8 +9,6 @@ import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
 import { isEqual, omit } from 'lodash';
 
-import { type Actions } from '@cardstack/runtime-common';
-
 import type CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
 
@@ -28,7 +26,6 @@ import type { MiddlewareState } from '@floating-ui/dom';
 interface OverlaySignature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
-    publicAPI?: Actions;
     viewCard?: ViewCardFn;
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     onSelectCard?: (cardDefOrId: CardDefOrId) => void;

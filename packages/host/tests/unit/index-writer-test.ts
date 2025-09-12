@@ -34,6 +34,7 @@ const testRealmInfo: RealmInfo = {
   showAsCatalog: null,
   visibility: 'public',
   publishable: null,
+  lastPublishedAt: null,
 };
 
 module('Unit | index-writer', function (hooks) {

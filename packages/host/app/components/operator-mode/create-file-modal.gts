@@ -47,7 +47,7 @@ import {
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
-import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -751,11 +751,11 @@ export class ${className} extends ${exportName} {
         `Cannot duplicateCardInstance where where is no selected realm URL`,
       );
     }
-    let { newCardId } = await new CopyCardCommand(
+    let { newCardId } = await new CopyCardToRealmCommand(
       this.commandService.commandContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
-      realm: this.selectedRealmURL.href,
+      targetRealm: this.selectedRealmURL.href,
     });
     this.currentRequest.newFileDeferred.fulfill(new URL(`${newCardId}.json`));
   });

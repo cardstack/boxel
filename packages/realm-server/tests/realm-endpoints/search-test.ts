@@ -76,6 +76,69 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             `${testRealmHref}person-1`,
             'card ID is correct',
           );
+          assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
+        });
+
+        test('can paginate search results', async function (assert) {
+          // Query for all persons to get multiple results
+          let paginationQuery: Query = {
+            filter: {
+              type: {
+                module: `${testRealmHref}person`,
+                name: 'Person',
+              },
+            },
+            page: {
+              number: 0,
+              size: 1,
+            },
+            sort: [
+              {
+                by: 'firstName',
+                on: { module: `${testRealmHref}person`, name: 'Person' },
+                direction: 'asc',
+              },
+            ],
+          };
+
+          let response = await request
+            .get(`/_search?${stringify(paginationQuery)}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+
+          assert.strictEqual(json.data.length, 1, 'first page has 1 result');
+          assert.ok(json.meta, 'response includes meta');
+          assert.ok(json.meta.page, 'meta includes page info');
+          assert.strictEqual(json.meta.page.total, 3, 'total count is correct');
+
+          // Get the second page
+          paginationQuery.page = { number: 1, size: 1 };
+          response = await request
+            .get(`/_search?${stringify(paginationQuery)}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'HTTP 200 status for second page',
+          );
+          let json2 = response.body;
+
+          assert.strictEqual(json2.data.length, 1, 'second page has 1 result');
+          assert.strictEqual(
+            json2.meta.page.total,
+            3,
+            'total count is correct',
+          );
+
+          // Ensure different results on different pages
+          assert.notStrictEqual(
+            json.data[0].id,
+            json2.data[0].id,
+            'different pages should return different results',
+          );
         });
       });
 
@@ -177,6 +240,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             `${testRealmHref}person-1`,
             'card ID is correct',
           );
+          assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
         });
 
         test('handles complex queries in request body', async function (assert) {
@@ -209,6 +273,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let json = response.body;
           assert.ok(json.data, 'response has data');
+          assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
         });
       });
 

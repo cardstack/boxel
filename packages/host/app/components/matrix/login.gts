@@ -234,9 +234,3 @@ export function extractMatrixErrorMessage(e: MatrixError) {
     return `Unknown error ${e.httpStatus}: ${e.data.error}`;
   }
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Login {
-    'Matrix::Login': typeof Login;
-  }
-}

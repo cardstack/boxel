@@ -62,6 +62,7 @@ let Component: (typeof CardAPIModule)['Component'];
 let FieldDef: (typeof CardAPIModule)['FieldDef'];
 let contains: (typeof CardAPIModule)['contains'];
 let containsMany: (typeof CardAPIModule)['containsMany'];
+let isCard: (typeof CardAPIModule)['isCard'];
 let linksTo: (typeof CardAPIModule)['linksTo'];
 let linksToMany: (typeof CardAPIModule)['linksToMany'];
 let MaybeBase64Field: (typeof CardAPIModule)['MaybeBase64Field'];
@@ -150,6 +151,7 @@ async function initialize() {
     FieldDef,
     contains,
     containsMany,
+    isCard,
     linksTo,
     linksToMany,
     ensureLinksLoaded,
@@ -194,6 +196,7 @@ export {
   FieldDef,
   contains,
   containsMany,
+  isCard,
   linksTo,
   linksToMany,
   ensureLinksLoaded,

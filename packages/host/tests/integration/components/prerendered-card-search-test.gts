@@ -333,6 +333,9 @@ module(`Integration | prerendered-card-search`, function (hooks) {
             <card.component />
           {{/each}}
         </:response>
+        <:meta as |meta|>
+          <div data-test-meta-page-total={{meta.page.total}}></div>
+        </:meta>
       </PrerenderedCardSearch>
     </template>);
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
@@ -351,6 +354,9 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('#ember-testing > [data-test-boxel-card-container] .author')
       .hasStyle({ color: 'rgb(0, 0, 255)' });
+    assert
+      .dom('[data-test-meta-page-total="2"]')
+      .exists('meta.page.total is correct');
   });
 
   test(`can include last known good state for instances in error state`, async function (assert) {
@@ -418,6 +424,9 @@ module(`Integration | prerendered-card-search`, function (hooks) {
             <card.component />
           {{/each}}
         </:response>
+        <:meta as |meta|>
+          <div data-test-meta-page-total={{meta.page.total}}></div>
+        </:meta>
       </PrerenderedCardSearch>
     </template>);
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
@@ -446,6 +455,9 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('#ember-testing > [data-test-boxel-card-container] .author')
       .hasStyle({ color: 'rgb(0, 0, 255)' });
+    assert
+      .dom('[data-test-meta-page-total="2"]')
+      .exists('meta.page.total is correct even with error state');
   });
 
   test(`refreshes when a queried realm changes when configured to perform live search`, async function (assert) {
@@ -467,6 +479,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       ],
     };
     let realms = [testRealmURL];
+
     await render(<template>
       <PrerenderedCardSearch
         @query={{query}}
@@ -482,6 +495,9 @@ module(`Integration | prerendered-card-search`, function (hooks) {
             <card.component />
           {{/each}}
         </:response>
+        <:meta as |meta|>
+          <div data-test-meta-page-total={{meta.page.total}}></div>
+        </:meta>
       </PrerenderedCardSearch>
 
       {{! to support incremental indexing }}
@@ -491,6 +507,9 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('#ember-testing > [data-test-boxel-card-container]')
       .exists({ count: 2 });
+    assert
+      .dom('[data-test-meta-page-total="2"]')
+      .exists('initial meta.page.total is correct');
 
     let cardService = getService('card-service');
     await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
@@ -508,6 +527,9 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(1)')
       .containsText('Cardy Stackington Jr. III');
+    assert
+      .dom('[data-test-meta-page-total="1"]')
+      .exists('meta.page.total updated after deletion');
   });
 
   test(`normalizes realm URLs that are provided with a missing trailing slash`, async function (assert) {
@@ -544,6 +566,9 @@ module(`Integration | prerendered-card-search`, function (hooks) {
             <card.component />
           {{/each}}
         </:response>
+        <:meta as |meta|>
+          <div data-test-meta-page-total={{meta.page.total}}></div>
+        </:meta>
       </PrerenderedCardSearch>
     </template>);
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
@@ -562,5 +587,133 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('#ember-testing > [data-test-boxel-card-container] .author')
       .hasStyle({ color: 'rgb(0, 0, 255)' });
+    assert
+      .dom('[data-test-meta-page-total="2"]')
+      .exists('meta.page.total works with normalized realm URLs');
+  });
+
+  test(`can paginate search results and returns correct meta.page.total`, async function (assert) {
+    let query: Query = {
+      filter: {
+        type: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+      },
+      page: {
+        number: 0,
+        size: 2,
+      },
+      sort: [
+        {
+          by: 'author.firstName',
+          on: { module: `${testRealmURL}book`, name: 'Book' },
+          direction: 'asc',
+        },
+      ],
+    };
+    let realms = [testRealmURL];
+
+    await render(<template>
+      <PrerenderedCardSearch
+        @query={{query}}
+        @format='fitted'
+        @realms={{realms}}
+      >
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          {{#each cards as |card|}}
+            <card.component />
+          {{/each}}
+        </:response>
+        <:meta as |meta|>
+          <div data-test-meta-page-total={{meta.page.total}}></div>
+        </:meta>
+      </PrerenderedCardSearch>
+    </template>);
+
+    await waitFor('#ember-testing > [data-test-boxel-card-container]');
+
+    // First page should have 2 results
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]')
+      .exists({ count: 2 });
+
+    // Total should be 5 (all books: card-1, card-2, books/1, books/2, books/3)
+    assert
+      .dom('[data-test-meta-page-total="5"]')
+      .exists('meta.page.total shows total count across all pages');
+
+    // Test second page
+    query.page = { number: 1, size: 2 };
+
+    await render(<template>
+      <PrerenderedCardSearch
+        @query={{query}}
+        @format='fitted'
+        @realms={{realms}}
+      >
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          {{#each cards as |card|}}
+            <card.component />
+          {{/each}}
+        </:response>
+        <:meta as |meta|>
+          <div data-test-meta-page-total={{meta.page.total}}></div>
+        </:meta>
+      </PrerenderedCardSearch>
+    </template>);
+
+    await waitFor('#ember-testing > [data-test-boxel-card-container]');
+
+    // Second page should also have 2 results
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]')
+      .exists({ count: 2 });
+
+    // Total should still be 5
+    assert
+      .dom('[data-test-meta-page-total="5"]')
+      .exists('meta.page.total consistent across pages');
+
+    // Test third page (should have 1 result)
+    query.page = { number: 2, size: 2 };
+
+    await render(<template>
+      <PrerenderedCardSearch
+        @query={{query}}
+        @format='fitted'
+        @realms={{realms}}
+      >
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          {{#each cards as |card|}}
+            <card.component />
+          {{/each}}
+        </:response>
+        <:meta as |meta|>
+          <div data-test-meta-page-total={{meta.page.total}}></div>
+        </:meta>
+      </PrerenderedCardSearch>
+    </template>);
+
+    await waitFor('#ember-testing > [data-test-boxel-card-container]');
+
+    // Third page should have 1 result (the remaining book)
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]')
+      .exists({ count: 1 });
+
+    // Total should still be 5
+    assert
+      .dom('[data-test-meta-page-total="5"]')
+      .exists('meta.page.total remains correct on last page');
   });
 });

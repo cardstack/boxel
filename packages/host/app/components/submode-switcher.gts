@@ -75,7 +75,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
         </:trigger>
         <:content as |dd|>
           <Menu
-            class='submode-switcher-dropdown-menu'
+            class='submode-switcher-dropdown-menu themeless'
             @closeMenu={{dd.close}}
             @items={{this.buildMenuItems}}
           />
