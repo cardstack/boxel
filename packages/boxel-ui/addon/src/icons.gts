@@ -70,6 +70,7 @@ import SuccessBordered from './icons/success-bordered.gts';
 import ThreeDotsHorizontal from './icons/three-dots-horizontal.gts';
 import TriangleLeft from './icons/triangle-left.gts';
 import TriangleRight from './icons/triangle-right.gts';
+import UndoArrow from './icons/undo-arrow.gts';
 import Upload from './icons/upload.gts';
 import Warning from './icons/warning.gts';
 
@@ -141,6 +142,7 @@ export const ALL_ICON_COMPONENTS = [
   ThreeDotsHorizontal,
   TriangleLeft,
   TriangleRight,
+  UndoArrow,
   Upload,
   Warning,
 ];
@@ -213,6 +215,7 @@ export {
   ThreeDotsHorizontal,
   TriangleLeft,
   TriangleRight,
+  UndoArrow,
   Upload,
   Warning,
 };

@@ -6,12 +6,18 @@ import { service } from '@ember/service';
 
 import { BoxelButton, RealmIcon } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+import { UndoArrow } from '@cardstack/boxel-ui/icons';
+import ExternalLink from '@cardstack/boxel-icons/external-link';
+import { formatDistanceToNow, parseISO } from 'date-fns';
+
+import config from '@cardstack/host/config/environment';
 
 import ModalContainer from '../modal-container';
 import WithLoadedRealm from '../with-loaded-realm';
 
 import type RealmService from '../../services/realm';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type MatrixService from '../../services/matrix-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -24,9 +30,45 @@ interface Signature {
 export default class PublishSiteModal extends Component<Signature> {
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
 
   @tracked selectedDomains: string[] = [];
-  @tracked publishSuccess = false;
+
+  get isRealmPublished() {
+    const realmInfo = this.operatorModeStateService.currentRealmInfo;
+    if (
+      !realmInfo?.lastPublishedAt ||
+      typeof realmInfo.lastPublishedAt !== 'object'
+    ) {
+      return false;
+    }
+
+    const publishedUrl = this.generatedUrl;
+    return realmInfo.lastPublishedAt[publishedUrl];
+  }
+
+  get lastPublishedTime() {
+    const realmInfo = this.operatorModeStateService.currentRealmInfo;
+    if (!this.isRealmPublished || !realmInfo?.lastPublishedAt) {
+      return null;
+    }
+
+    const publishedUrl = this.generatedUrl;
+    const publishedAtString = realmInfo.lastPublishedAt[publishedUrl];
+
+    if (!publishedAtString) {
+      return null;
+    }
+
+    try {
+      // Use parseISO for better ISO 8601 string parsing
+      const publishedAt = parseISO(publishedAtString);
+      return formatDistanceToNow(publishedAt, { addSuffix: true });
+    } catch (error) {
+      console.warn('Failed to parse published date:', publishedAtString, error);
+      return null;
+    }
+  }
 
   get isDefaultDomainSelected() {
     return this.selectedDomains.includes('default-domain');
@@ -37,8 +79,67 @@ export default class PublishSiteModal extends Component<Signature> {
   }
 
   get generatedUrl() {
-    // This will be replaced with actual URL generation logic
-    return 'https://your-realm.boxel.space';
+    const protocol = this.getProtocol();
+    const matrixUsername = this.getMatrixUsername();
+    const domain = this.getDefaultPublishedRealmDomain();
+    const realmName = this.getRealmName();
+
+    return `${protocol}://${matrixUsername}.${domain}/${realmName}/`;
+  }
+
+  get urlParts() {
+    const protocol = this.getProtocol();
+    const matrixUsername = this.getMatrixUsername();
+    const domain = this.getDefaultPublishedRealmDomain();
+    const realmName = this.getRealmName();
+
+    return {
+      baseUrl: `${protocol}://${matrixUsername}.${domain}/`,
+      realmName: realmName,
+    };
+  }
+
+  private getProtocol(): string {
+    const environment = config.environment;
+    return environment === 'development' || environment === 'test'
+      ? 'http'
+      : 'https';
+  }
+
+  private getMatrixUsername(): string {
+    const userName = this.matrixService.userName;
+    if (!userName) {
+      throw new Error('Matrix username is not available');
+    }
+    return userName;
+  }
+
+  private getDefaultPublishedRealmDomain(): string {
+    return config.defaultPublishedRealmDomain;
+  }
+
+  private getRealmName(): string {
+    const realmUrl = this.currentRealmUrl;
+    if (!realmUrl) {
+      throw new Error('Current realm URL is not available');
+    }
+
+    try {
+      const url = new URL(realmUrl);
+      const pathSegments = url.pathname.split('/').filter((segment) => segment);
+      const lastSegment = pathSegments[pathSegments.length - 1];
+
+      if (!lastSegment) {
+        throw new Error('Could not extract realm name from URL path');
+      }
+
+      return lastSegment.toLowerCase();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Failed to parse realm URL: ${error.message}`);
+      }
+      throw new Error('Failed to parse realm URL');
+    }
   }
 
   @action
@@ -54,7 +155,8 @@ export default class PublishSiteModal extends Component<Signature> {
 
   @action
   handlePublish() {
-    this.publishSuccess = true;
+    // TODO: Implement actual publish functionality
+    console.log('Publishing to selected domains:', this.selectedDomains);
   }
 
   @action
@@ -101,8 +203,32 @@ export default class PublishSiteModal extends Component<Signature> {
               <WithLoadedRealm @realmURL={{this.currentRealmUrl}} as |realm|>
                 <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
               </WithLoadedRealm>
-              <span class='generated-url'>{{this.generatedUrl}}</span>
-              {{#if this.publishSuccess}}
+              <div class='domain-url-container'>
+                <span class='domain-url'>
+                  <span class='url-base'>{{this.urlParts.baseUrl}}</span><span
+                    class='url-realm-name'
+                  >{{this.urlParts.realmName}}/</span>
+                </span>
+                {{#if this.isRealmPublished}}
+                  <div class='domain-info'>
+                    <span class='last-published-at'>Published
+                      {{this.lastPublishedTime}}</span>
+                    <BoxelButton
+                      @kind='text-only'
+                      @size='extra-small'
+                      class='unpublish-button'
+                    >
+                      <UndoArrow
+                        width='11'
+                        height='11'
+                        class='unpublish-icon'
+                      />
+                      Unpublish
+                    </BoxelButton>
+                  </div>
+                {{/if}}
+              </div>
+              {{#if this.isRealmPublished}}
                 <BoxelButton
                   @kind='secondary-light'
                   @size='small'
@@ -110,6 +236,11 @@ export default class PublishSiteModal extends Component<Signature> {
                   class='open-site-button'
                   data-test-open-site-button
                 >
+                  <ExternalLink
+                    width='16'
+                    height='16'
+                    class='external-link-icon'
+                  />
                   Open Site
                 </BoxelButton>
               {{/if}}
@@ -184,9 +315,7 @@ export default class PublishSiteModal extends Component<Signature> {
       }
 
       .domain-option {
-        border: 1px solid var(--boxel-300);
         border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-lg);
         background-color: var(--boxel-50);
       }
 
@@ -202,8 +331,7 @@ export default class PublishSiteModal extends Component<Signature> {
       }
 
       .domain-name {
-        font-size: var(--boxel-font-size-md);
-        font-weight: 500;
+        font: 600 var(--boxel-font);
         color: var(--boxel-dark);
       }
 
@@ -212,6 +340,7 @@ export default class PublishSiteModal extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-sm);
         padding-left: calc(var(--boxel-sp-lg) + var(--boxel-sp-sm));
+        margin-top: var(--boxel-sp);
       }
 
       .realm-icon {
@@ -219,18 +348,71 @@ export default class PublishSiteModal extends Component<Signature> {
         --boxel-realm-icon-size: 30px;
       }
 
-      .generated-url {
+      .domain-url-container {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .domain-url {
         flex: 1;
         font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-600);
-        font-family: var(--boxel-font-family-mono);
-        background-color: var(--boxel-100);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius-sm);
-        border: 1px solid var(--boxel-200);
+      }
+
+      .url-base {
+        color: var(--boxel-450);
+      }
+
+      .url-realm-name {
+        color: var(--boxel-dark);
+        font-weight: 500;
+      }
+
+      .domain-info {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+
+      .last-published-at {
+        font: normal var(--boxel-font-xs);
+        color: #00ac00;
+        position: relative;
+        padding-left: calc(var(--boxel-sp-xxxs) + 6px);
+      }
+
+      .last-published-at::before {
+        content: '•';
+        position: absolute;
+        left: 0;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+
+      .unpublish-button {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+
+      .unpublish-icon {
+        flex-shrink: 0;
+      }
+
+      .unpublish-button:hover {
+        color: var(--boxel-dark);
+        background-color: transparent;
+        border-color: transparent;
       }
 
       .open-site-button {
+        flex-shrink: 0;
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        font-size: var(--boxel-font-size-xs);
+      }
+
+      .external-link-icon {
         flex-shrink: 0;
       }
 
