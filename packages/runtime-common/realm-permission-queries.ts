@@ -48,6 +48,16 @@ async function removePermissions(
   ]);
 }
 
+export async function removeRealmPermissions(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+) {
+  await query(dbAdapter, [
+    'DELETE from realm_user_permissions WHERE realm_url =',
+    param(realmURL.href),
+  ]);
+}
+
 export async function insertPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
