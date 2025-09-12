@@ -6,8 +6,11 @@ import {
   containsMany,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
+import RecordGameResultCommand from '../commands/record-game-result';
+import { GameResult, GameStatusField } from '../game-result/game-result';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { task } from 'ember-concurrency';
 import type Owner from '@ember/owner';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -15,6 +18,7 @@ import { eq, not } from '@cardstack/boxel-ui/helpers';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
+import { realmURL } from '@cardstack/runtime-common';
 
 class PlayingCardField extends FieldDef {
   static displayName = 'Playing Card';
@@ -152,13 +156,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       throw new Error('No card to draw');
     }
     card.faceUp = faceUp;
-    console.log(
-      'Card drawn:',
-      card.value,
-      'of',
-      card.suit,
-      faceUp ? '(face up)' : '(face down)',
-    );
     return card;
   }
 
@@ -210,6 +207,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       this.gameState = 'gameOver';
       this.gameMessage = 'Push! Both have Blackjack.';
       this.saveGameState();
+
+      // Record the game result
+      this.recordGameResult();
       return true;
     } else if (playerHasBlackjack) {
       // Player wins with blackjack (pays 3:2)
@@ -220,6 +220,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       this.statistics.wins += 1;
       this.statistics.earnings += this.currentBet * 1.5;
       this.saveGameState();
+
+      // Record the game result
+      this.recordGameResult();
       return true;
     } else if (dealerHasBlackjack) {
       // Dealer wins with blackjack
@@ -229,6 +232,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       this.statistics.losses += 1;
       this.statistics.earnings -= this.currentBet;
       this.saveGameState();
+
+      // Record the game result
+      this.recordGameResult();
       return true;
     }
 
@@ -244,6 +250,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       this.statistics.losses += 1;
       this.statistics.earnings -= this.currentBet;
       this.saveGameState();
+
+      // Record the game result
+      this.recordGameResult();
       return true;
     }
     return false;
@@ -251,31 +260,22 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
 
   // Dealer's turn
   dealerPlay() {
-    console.log('Dealer playing...');
-
     // Reveal dealer's hole card
     const newDealerHand = [...this.dealerHand];
     newDealerHand.forEach((card) => (card.faceUp = true));
 
-    console.log('Dealer hand with cards face up:', newDealerHand);
     this.dealerHand = newDealerHand;
 
     // Dealer draws until 17 or higher
     while (this.calculatedDealerScore < 17) {
       const newCard = this.drawCard();
-      console.log('Dealer drawing card:', newCard);
 
       this.dealerHand = [...this.dealerHand, newCard];
-      console.log('Updated dealer hand:', this.dealerHand);
     }
 
     // Determine the outcome
     const playerScore = this.calculatedPlayerScore;
     const dealerScore = this.calculatedDealerScore;
-
-    console.log(
-      `Final scores - Player: ${playerScore}, Dealer: ${dealerScore}`,
-    );
 
     if (dealerScore > 21) {
       // Dealer busts
@@ -302,6 +302,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
 
     this.gameState = 'gameOver';
     this.saveGameState();
+
+    // Record the game result
+    this.recordGameResult();
   }
 
   // Action handlers
@@ -321,8 +324,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       return;
     }
 
-    console.log('Dealing new hand...');
-
     // Reset hands
     this.playerHand = [];
     this.dealerHand = [];
@@ -341,15 +342,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     playerHand.push(playerCard2);
     dealerHand.push(dealerCard2);
 
-    console.log('Player hand:', playerHand);
-    console.log('Dealer hand:', dealerHand);
-
     // Create new array references to trigger reactivity
     this.playerHand = [...playerHand];
     this.dealerHand = [...dealerHand];
-
-    console.log('After assignment - Player hand:', this.playerHand);
-    console.log('After assignment - Dealer hand:', this.dealerHand);
 
     // Update scores and check for blackjack
     if (this.checkForBlackjack()) {
@@ -364,17 +359,12 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   @action hit() {
     if (this.gameState !== 'playerTurn') return;
 
-    console.log('Player hitting...');
-
     // Draw a card for the player and create a new array reference
     const newCard = this.drawCard();
-    console.log('New card:', newCard);
 
     const newHand = [...this.playerHand, newCard];
-    console.log('New hand before assignment:', newHand);
 
     this.playerHand = newHand;
-    console.log('New hand after assignment:', this.playerHand);
 
     // Check if player busts
     if (this.checkForBust()) {
@@ -398,18 +388,14 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     if (this.gameState !== 'playerTurn' || this.playerHand.length !== 2) return;
     if (this.playerChips < this.currentBet) return;
 
-    console.log('Player doubling down...');
-
     // Double the bet
     this.currentBet *= 2;
     this.gameMessage = 'Double Down! Drawing one card then standing.';
 
     // Draw one card then stand with a new array reference
     const newCard = this.drawCard();
-    console.log('Double down card:', newCard);
 
     this.playerHand = [...this.playerHand, newCard];
-    console.log('Hand after double down:', this.playerHand);
 
     // Check if player busts
     if (this.checkForBust()) {
@@ -422,8 +408,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
 
   @action newGame() {
     if (this.gameState !== 'gameOver') return;
-
-    console.log('Starting new game...');
 
     // If the deck is running low, create a new shuffled deck
     if (this.deck.length < 10) {
@@ -442,10 +426,66 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     this.saveGameState();
   }
 
+  // Determine game outcome from game message
+  determineGameOutcome(): 'Win' | 'Lose' | 'Draw' {
+    if (
+      this.gameMessage?.includes('You win') ||
+      this.gameMessage?.includes('Blackjack!') ||
+      this.gameMessage?.includes('Dealer busts')
+    ) {
+      return 'Win';
+    } else if (
+      this.gameMessage?.includes('You lose') ||
+      this.gameMessage?.includes('Bust!') ||
+      this.gameMessage?.includes('Dealer wins') ||
+      this.gameMessage?.includes('Dealer has Blackjack')
+    ) {
+      return 'Lose';
+    } else {
+      return 'Draw'; // Push/tie
+    }
+  }
+
+  get currentRealm() {
+    return this.args.model[realmURL];
+  }
+
+  // Record game result when game ends - following daily-report pattern
+  recordGameResult() {
+    if (this.gameState !== 'gameOver') return;
+    this._recordGameResult.perform();
+  }
+
+  _recordGameResult = task(async () => {
+    const outcome = this.determineGameOutcome();
+    const game = this.args.model;
+
+    const codeRef = {
+      module: '../blackjack/blackjack',
+      name: 'Blackjack',
+    };
+
+    const gameResult = new GameResult({
+      game,
+      status: new GameStatusField({
+        label: outcome,
+      }),
+      ref: codeRef,
+    });
+
+    const commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Command context not available. Please try again.');
+    }
+
+    await new RecordGameResultCommand(commandContext).execute({
+      card: gameResult,
+      realm: this.currentRealm!.href,
+    });
+  });
+
   // Save game state back to model for persistence
   saveGameState() {
-    console.log('Saving game state...');
-
     // Update the model's properties with our current state
     this.args.model.playerChips = this.playerChips;
     this.args.model.currentBet = this.currentBet;
@@ -479,8 +519,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       });
       this.args.model.dealerHand?.push(playingCard);
     });
-
-    console.log('Game state saved to model');
   }
 
   // Score getter for convenience
