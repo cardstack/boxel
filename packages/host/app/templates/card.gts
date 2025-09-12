@@ -2,9 +2,8 @@ import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import Component from '@glimmer/component';
-
 import { isDevelopingApp } from '@embroider/macros';
+import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
