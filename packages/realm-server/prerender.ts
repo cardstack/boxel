@@ -3,14 +3,20 @@ import {
   type DBAdapter,
   type CardErrorJSONAPI,
   fetchUserPermissions,
+  delay,
 } from '@cardstack/runtime-common';
 import puppeteer, { type Page } from 'puppeteer';
 import { createJWT } from './jwt';
 
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
+const renderTimeoutMs = 15_000;
 
 interface RenderError extends CardErrorJSONAPI {
   error: string;
+}
+interface RenderCapture {
+  status: 'ready' | 'error';
+  value: string;
 }
 
 export interface RenderResponse extends PrerenderMeta {
@@ -27,11 +33,16 @@ export async function prerenderCard({
   userId,
   secretSeed,
   dbAdapter,
+  opts,
 }: {
   url: string;
   userId: string;
   secretSeed: string;
   dbAdapter: DBAdapter;
+  opts?: {
+    timeoutMs?: number;
+    simulateTimeoutMs?: number;
+  };
 }): Promise<RenderResponse> {
   let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, userId);
   if (!permissionsForAllRealms) {
@@ -65,19 +76,31 @@ export async function prerenderCard({
 
     // We need to render the isolated HTML view first, as the template will pull
     // on the linked fields. Otherwise the linked fields will not be loaded.
-    await page.goto(
-      `${boxelHostURL}/render/${encodeURIComponent(url)}/html/isolated/0`,
+    let result = await withTimeout(
+      page,
+      async () => {
+        await page.goto(
+          `${boxelHostURL}/render/${encodeURIComponent(url)}/html/isolated/0`,
+        );
+        return await captureResult(page, 'innerHTML', opts);
+      },
+      opts?.timeoutMs,
     );
-    let result = await captureResult(page, 'innerHTML');
     if (result.status === 'error') {
       error = JSON.parse(result.value) as CardErrorJSONAPI;
+    } else if (isRenderError(result)) {
+      error = result;
     }
     const isolatedHTML = result.status === 'ready' ? result.value : null;
     // TODO consider breaking out rendering search doc into its own route so
     // that we ran fully understand all the linked fields that are used in all
     // the html formats and generate a search doc that is well populated. Right
     // now we only consider linked fields used in the isolated template.
-    let metaMaybeError = await renderMeta(page);
+    let metaMaybeError = await withTimeout(
+      page,
+      () => renderMeta(page),
+      opts?.timeoutMs,
+    );
     // TODO also consider introducing a mechanism in the API to track and reset
     // field usage for an instance recursively so that the depth that an
     // instance is loaded from a different rendering context in the same realm
@@ -102,10 +125,22 @@ export async function prerenderCard({
       fittedHTML: Record<string, string> | null = null;
     if (meta?.types) {
       let results = [
-        await renderAncestors(page, 'fitted', meta.types),
-        await renderAncestors(page, 'embedded', meta.types),
-        await renderHTML(page, 'atom', 0),
-        await renderIcon(page),
+        await withTimeout(
+          page,
+          () => renderAncestors(page, 'fitted', meta.types!),
+          opts?.timeoutMs,
+        ),
+        await withTimeout(
+          page,
+          () => renderAncestors(page, 'embedded', meta.types!),
+          opts?.timeoutMs,
+        ),
+        await withTimeout(
+          page,
+          () => renderHTML(page, 'atom', 0),
+          opts?.timeoutMs,
+        ),
+        await withTimeout(page, () => renderIcon(page), opts?.timeoutMs),
       ];
       let maybeError = results.find((r) => isRenderError(r)) as
         | RenderError
@@ -205,26 +240,70 @@ async function renderIcon(page: Page): Promise<string | RenderError> {
 async function captureResult(
   page: Page,
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
-): Promise<
-  { status: 'ready'; value: string } | { status: 'error'; value: string }
-> {
+  opts?: { simulateTimeoutMs?: number },
+): Promise<RenderCapture> {
   await page.waitForSelector(
     '[data-prerender-status="ready"], [data-prerender-status="error"]',
   );
-  return await page.evaluate(
+  let result = await page.evaluate(
     (capture: 'textContent' | 'innerHTML' | 'outerHTML') => {
       let element = document.querySelector('[data-prerender]') as HTMLElement;
       let status = element.dataset.prerenderStatus as 'ready' | 'error';
       if (status === 'error') {
         // there is a strange <anonymous> tag that is being appended to the
         // innerHTML that this strips out
-        return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
+        return {
+          status,
+          value: element.innerHTML!.replace(/}[^}]*?<\/anonymous>$/, '}'),
+        };
       } else {
         return { status, value: element.children[0][capture]! };
       }
     },
     capture,
   );
+  if (opts?.simulateTimeoutMs) {
+    await delay(opts?.simulateTimeoutMs);
+  }
+  return result;
+}
+
+async function withTimeout<T>(
+  page: Page,
+  fn: () => Promise<T>,
+  timeoutMs = renderTimeoutMs,
+): Promise<T | RenderError> {
+  let result = await Promise.race([
+    fn(),
+    new Promise<{ timeout: true }>((r) =>
+      setTimeout(() => {
+        r({ timeout: true });
+      }, timeoutMs),
+    ),
+  ]);
+  if (result && typeof result == 'object' && 'timeout' in result) {
+    let message = `Render timed-out after ${timeoutMs} ms`;
+    let url = new URL(page.url());
+    let [_a, _b, encodedId] = url.pathname.split('/');
+    let id = encodedId ? decodeURIComponent(encodedId) : undefined;
+
+    return {
+      error: message,
+      id,
+      status: 504,
+      title: 'Render timeout',
+      message,
+      realm: undefined,
+      meta: {
+        lastKnownGoodHtml: null,
+        cardTitle: null,
+        scopedCssUrls: [],
+        stack: null,
+      },
+    };
+  } else {
+    return result;
+  }
 }
 
 function isRenderError(value: any): value is RenderError {
