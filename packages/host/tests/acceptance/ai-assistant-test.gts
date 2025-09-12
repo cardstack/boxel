@@ -675,7 +675,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitUntil(() => id);
     id = id!;
 
-    await fillIn('[data-test-field="title"] input', 'new card');
+    await fillIn('[data-test-field="cardInfo-name"] input', 'new card');
     assert.dom(`[data-test-attached-card]`).containsText('new card');
 
     await fillIn('[data-test-message-field]', `Message with updated card`);

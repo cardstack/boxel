@@ -1782,16 +1782,26 @@ module('Integration | card-basics', function (hooks) {
       });
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').exists();
-      assert.dom('[data-test-field="title"]').hasText(title);
-      assert.dom('[data-test-field="description"]').hasText(description);
-      assert.dom('[data-test-field="notes"]').containsText('Meeting Notes');
+      assert.dom('[data-test-field="cardTitle"]').hasText(title);
+      assert.dom('[data-test-field="cardDescription"]').hasText(description);
+      assert
+        .dom('[data-test-field="cardInfo-notes"]')
+        .containsText('Meeting Notes');
 
       await renderCard(loader, instance, 'edit');
-      assert.dom('[data-test-field="title"] input').hasValue(title);
-      assert.dom('[data-test-field="description"] input').hasValue(description);
-      assert.dom('[data-test-field="thumbnailURL"] input').hasValue('');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue(title);
+      assert
+        .dom('[data-test-field="cardInfo-summary"] input')
+        .hasValue(description);
+      assert.dom('[data-test-thumbnail-icon]').exists();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
+        .hasValue('');
+      await click('[data-test-close-thumbnail-editor]');
+      assert.dom('[data-test-field="cardInfo-thumbnailURL"]').doesNotExist();
       assert.dom('[data-test-links-to-editor="theme"]').exists();
-      assert.dom('[data-test-field="notes"] textarea').exists();
+      assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
     });
 
     test('render card-def instance with own fields', async function (assert) {
@@ -1823,31 +1833,49 @@ module('Integration | card-basics', function (hooks) {
         }),
       });
       await renderCard(loader, mang, 'isolated');
-      assert.dom('[data-test-field="thumbnailURL"]').exists();
-      assert.dom('[data-test-field="title"]').hasText('Mango the Pup');
-      assert.dom('[data-test-field="description"]').hasText('Mango as a puppy');
+      assert.dom('[data-test-field="cardThumbnailURL"]').exists();
+      assert.dom('[data-test-thumbnail-icon]').doesNotExist();
+      assert.dom('[data-test-field="cardTitle"]').hasText('Mango the Pup');
+      assert.dom('[data-test-field="title"]').hasText('Title Mango the Pup');
+      assert
+        .dom('[data-test-field="cardDescription"]')
+        .hasText('Mango as a puppy');
       assert.dom('[data-test-field="name"]').hasText('Name Mango');
       assert
         .dom('[data-test-field="picture"] [data-test-contain-cover-img]')
         .exists();
-      assert.dom('[data-test-field="notes"]').exists();
+      assert.dom('[data-test-field="cardInfo-notes"]').exists();
 
       await renderCard(loader, mang, 'edit');
+      // cardInfo fields
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue('');
+      assert
+        .dom('[data-test-field="cardInfo-summary"] input')
+        .hasValue('Mango as a puppy');
+      assert.dom('[data-test-add-new="theme"]').exists();
+      assert
+        .dom('[data-test-thumbnail-image] [data-test-thumbnail-icon]')
+        .exists();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
+        .hasValue('');
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert.dom('[data-test-field="cardInfo-thumbnailURL"]').doesNotExist();
+      // own fields
       assert.dom('[data-test-field="title"] input').hasValue('Mango the Pup');
       assert
-        .dom('[data-test-field="description"] input')
-        .hasValue('Mango as a puppy');
-      assert
-        .dom('[data-test-field="thumbnailURL"] input')
-        .hasValue(`data:image/png;base64,${mango}`);
-      assert.dom('[data-test-field="thumbnailURL"] input').isDisabled();
-      assert.dom('[data-test-boxel-input][disabled]').exists({ count: 1 });
-      assert.dom('[data-test-links-to-editor="theme"]').exists();
+        .dom('[data-test-contain-cover-img]')
+        .hasAttribute(
+          'style',
+          `background-image: url("data:image/png;base64,${mango}"); background-size: contain; height: 200px;`,
+        );
+
       assert.dom('[data-test-field="name"] input').hasValue('Mango');
       assert
         .dom('[data-test-field="picture"] [data-test-field="altText"] input')
         .hasValue('Picture of Mango');
-      assert.dom('[data-test-field="notes"] textarea').exists();
+      assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
     });
 
     test('render default isolated template', async function (assert) {
@@ -1877,7 +1905,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test="first-name"]').containsText('Arthur');
       assert.dom('[data-test-field="title"]').containsText('First Post');
       assert.dom('[data-test-thumbnail-icon]').exists();
-      assert.dom('[data-test-field="notes"]').hasText('Notes');
+      assert.dom('[data-test-field="cardInfo-notes"]').hasText('Notes');
     });
 
     test('render default atom view template', async function (assert) {
