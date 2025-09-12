@@ -792,28 +792,28 @@ export default class StoreService extends Service implements StoreInterface {
         | undefined;
       if (!doc) {
         let json: CardDocument | undefined;
-        // if ((globalThis as any).__boxelRenderContext) {
-        //   let result = await this.cardService.getSource(new URL(`${url}.json`));
-        //   if (result.status === 200) {
-        //     json = JSON.parse(result.content);
-        //   } else {
-        //     throw new Error(
-        //       `Received non-200 status fetching instance source ${url}.json: ${result.content}`,
-        //     );
-        //   }
-        // } else {
-        json = await this.cardService.fetchJSON(url);
-        // }
+        if ((globalThis as any).__boxelRenderContext) {
+          let result = await this.cardService.getSource(new URL(`${url}.json`));
+          if (result.status === 200) {
+            json = JSON.parse(result.content);
+          } else {
+            throw new Error(
+              `Received non-200 status fetching instance source ${url}.json: ${result.content}`,
+            );
+          }
+        } else {
+          json = await this.cardService.fetchJSON(url);
+        }
         if (!isSingleCardDocument(json)) {
           throw new Error(
             `bug: server returned a non card document for ${url}:
         ${JSON.stringify(json, null, 2)}`,
           );
         }
-        // if (!json.data.id) {
-        //   // card source format is not serialized with the ID, so we add that back in.
-        //   json.data.id = url;
-        // }
+        if (!json.data.id) {
+          // card source format is not serialized with the ID, so we add that back in.
+          json.data.id = url;
+        }
         doc = json;
       }
       let instance = await this.createFromSerialized(
