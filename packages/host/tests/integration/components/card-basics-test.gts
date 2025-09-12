@@ -1782,8 +1782,8 @@ module('Integration | card-basics', function (hooks) {
       });
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').exists();
-      assert.dom('[data-test-field="cardInfo-name"]').hasText(title);
-      assert.dom('[data-test-field="cardInfo-summary"]').hasText(description);
+      assert.dom('[data-test-field="cardTitle"]').hasText(title);
+      assert.dom('[data-test-field="cardDescription"]').hasText(description);
       assert
         .dom('[data-test-field="cardInfo-notes"]')
         .containsText('Meeting Notes');
@@ -1833,12 +1833,12 @@ module('Integration | card-basics', function (hooks) {
         }),
       });
       await renderCard(loader, mang, 'isolated');
-      assert.dom('[data-test-field="cardInfo-thumbnailURL"]').exists();
+      assert.dom('[data-test-field="cardThumbnailURL"]').exists();
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
-      assert.dom('[data-test-field="cardInfo-name"]').hasText('Mango the Pup');
+      assert.dom('[data-test-field="cardTitle"]').hasText('Mango the Pup');
       assert.dom('[data-test-field="title"]').hasText('Title Mango the Pup');
       assert
-        .dom('[data-test-field="cardInfo-summary"]')
+        .dom('[data-test-field="cardDescription"]')
         .hasText('Mango as a puppy');
       assert.dom('[data-test-field="name"]').hasText('Name Mango');
       assert
