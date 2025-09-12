@@ -2,7 +2,11 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import type { CardOrFieldTypeIcon } from '../card-api';
+import CardInfoNameIcon from '@cardstack/boxel-icons/folder-pen';
+import CardInfoSummaryIcon from '@cardstack/boxel-icons/notepad-text';
+import ThemeIcon from '@cardstack/boxel-icons/palette';
+
+import type { CardOrFieldTypeIcon, CardInfoField } from '../card-api';
 
 import setBackgroundImage from '../helpers/set-background-image';
 
@@ -56,27 +60,26 @@ class CardInfoImageContainer extends GlimmerComponent<{
   </template>
 }
 
-export default class CardInfo extends GlimmerComponent<{
+interface ViewSignature {
   Args: {
     title?: string;
     description?: string;
     thumbnailURL?: string;
     icon?: CardOrFieldTypeIcon;
   };
-}> {
+}
+
+class CardInfoView extends GlimmerComponent<ViewSignature> {
   <template>
     <CardInfoImageContainer
       class='image-container'
       @thumbnailURL={{@thumbnailURL}}
       @icon={{@icon}}
-      data-test-cardInfo-field='thumbnail-url'
+      data-test-field='cardThumbnailURL'
     />
     <div class='info'>
-      <h2
-        class='card-info-title'
-        data-test-cardInfo-field='name'
-      >{{@title}}</h2>
-      <p class='card-info-description' data-test-cardInfo-field='summary'>
+      <h2 class='card-info-title' data-test-field='cardTitle'>{{@title}}</h2>
+      <p class='card-info-description' data-test-field='cardDescription'>
         {{@description}}
       </p>
     </div>
@@ -107,20 +110,22 @@ export default class CardInfo extends GlimmerComponent<{
   </template>
 }
 
-export class CardInfoEditor extends GlimmerComponent<{
+interface EditSignature {
   Args: {
-    thumbnailURL?: string;
     icon?: CardOrFieldTypeIcon;
+    fields?: Record<string, new () => GlimmerComponent>;
+    model?: CardInfoField;
   };
-  Blocks: { default: []; thumbnailEditor: [] };
-}> {
+}
+
+class CardInfoEditor extends GlimmerComponent<EditSignature> {
   <template>
     <FieldContainer class='cardInfo-editor'>
       <:label>
         <div class='cardInfo-thumbnail-container'>
           <CardInfoImageContainer
             class='cardInfo-thumbnail-preview'
-            @thumbnailURL={{@thumbnailURL}}
+            @thumbnailURL={{@model.thumbnailURL}}
             @icon={{@icon}}
             data-test-thumbnail-image
           />
@@ -145,14 +150,55 @@ export class CardInfoEditor extends GlimmerComponent<{
                   aria-label='Close thumbnail url input'
                   data-test-close-thumbnail-editor
                 />
-                {{yield to='thumbnailEditor'}}
+                <FieldContainer
+                  @label='Thumbnail URL'
+                  @tag='label'
+                  @vertical={{true}}
+                  @labelFontSize='small'
+                  data-test-field='cardInfo-thumbnailURL'
+                >
+                  <@fields.thumbnailURL />
+                </FieldContainer>
               </div>
             </div>
           {{/if}}
         </div>
       </:label>
       <:default>
-        {{yield}}
+        <div class='card-info-edit-fields'>
+          <FieldContainer
+            class='card-info-field'
+            @label='Name'
+            @tag='label'
+            @labelFontSize='default'
+            @icon={{CardInfoNameIcon}}
+            @vertical={{true}}
+            data-test-field='cardInfo-name'
+          >
+            <@fields.title />
+          </FieldContainer>
+          <FieldContainer
+            class='card-info-field'
+            @label='Summary'
+            @tag='label'
+            @labelFontSize='default'
+            @icon={{CardInfoSummaryIcon}}
+            @vertical={{true}}
+            data-test-field='cardInfo-summary'
+          >
+            <@fields.description />
+          </FieldContainer>
+          <FieldContainer
+            class='card-info-field'
+            @label='Theme'
+            @tag='label'
+            @labelFontSize='default'
+            @icon={{ThemeIcon}}
+            data-test-field='cardInfo-theme'
+          >
+            <@fields.theme />
+          </FieldContainer>
+        </div>
       </:default>
     </FieldContainer>
     <style scoped>
@@ -199,6 +245,9 @@ export class CardInfoEditor extends GlimmerComponent<{
           top: 0;
           right: 0;
         }
+        .card-info-field + .card-info-field {
+          margin-top: var(--boxel-sp-lg);
+        }
       }
     </style>
   </template>
@@ -212,3 +261,10 @@ export class CardInfoEditor extends GlimmerComponent<{
     this.isThumbnailEditorVisible = false;
   };
 }
+
+const CardInfoTemplates = {
+  view: CardInfoView,
+  edit: CardInfoEditor,
+};
+
+export default CardInfoTemplates;

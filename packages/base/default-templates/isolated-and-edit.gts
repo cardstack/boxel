@@ -5,17 +5,14 @@ import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
 import { getFieldIcon, getField } from '@cardstack/runtime-common';
-import CardInfo, { CardInfoEditor } from './card-info';
+import CardInfoTemplates from './card-info';
 
-type Fields = Record<
-  string,
-  new () => GlimmerComponent<{ Args: { format?: Format } }>
->;
+type Fields = Record<string, new () => GlimmerComponent>;
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
-    fields: Fields;
+    fields: Fields & { cardInfo: Fields };
     format: Format;
   };
 }> {
@@ -85,33 +82,18 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     <div class={{cn 'default-card-template' @format}}>
       <Header @hasBottomBorder={{true}} class='card-info-header'>
         {{#if (eq @format 'isolated')}}
-          <CardInfo
+          <CardInfoTemplates.view
             @title={{@model.title}}
             @description={{@model.description}}
             @thumbnailURL={{@model.thumbnailURL}}
             @icon={{@model.constructor.icon}}
           />
         {{else}}
-          <CardInfoEditor
-            @thumbnailURL={{@model.cardInfo.thumbnailURL}}
+          <CardInfoTemplates.edit
+            @fields={{@fields.cardInfo}}
+            @model={{@model.cardInfo}}
             @icon={{@model.constructor.icon}}
-          >
-            <:thumbnailEditor>
-              <FieldContainer
-                @label='Thumbnail URL'
-                @tag='label'
-                @vertical={{true}}
-                @labelFontSize='small'
-                data-test-cardInfo-field='thumbnail-url'
-              >
-                {{! @glint-ignore "thumbnailURL" does not exist }}
-                <@fields.cardInfo.thumbnailURL />
-              </FieldContainer>
-            </:thumbnailEditor>
-            <:default>
-              <@fields.cardInfo @format='edit' />
-            </:default>
-          </CardInfoEditor>
+          />
         {{/if}}
       </Header>
       {{#if this.hasOwnFields}}
@@ -147,9 +129,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         <FieldContainer
           @label='Notes'
           @icon={{getFieldIcon @model.cardInfo 'notes'}}
-          data-test-cardInfo-field='notes'
+          data-test-field='cardInfo-notes'
         >
-          {{! @glint-ignore "notes" does not exist }}
           <@fields.cardInfo.notes />
         </FieldContainer>
       </footer>

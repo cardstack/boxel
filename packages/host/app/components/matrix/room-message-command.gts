@@ -258,7 +258,8 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .command-result-card-header {
         --boxel-label-color: var(--boxel-450);
-        --boxel-label-font: 600 var(--boxel-font-xs);
+        --boxel-label-font-size: var(--boxel-font-size-xs);
+        --boxel-label-line-height: calc(15 / 11);
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
       }

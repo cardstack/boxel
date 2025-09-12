@@ -1110,7 +1110,7 @@ module('Integration | operator-mode', function (hooks) {
       await click(
         '[data-test-stack-card-index="1"] [data-test-more-options-button]',
       );
-      await fillIn(`[data-test-field="title"] input`, 'New Post');
+      await fillIn(`[data-test-field="cardInfo-name"] input`, 'New Post');
       await saved.promise;
       let packetId = [...savedCards].find((k) =>
         k.includes('PublishingPacket'),
@@ -2001,16 +2001,21 @@ module('Integration | operator-mode', function (hooks) {
       count: 0,
     });
     await click('[data-test-card-catalog-go-button]');
-
-    await waitFor(`[data-test-stack-card-index="1"] [data-test-field="title"]`);
+    await waitFor(
+      `[data-test-stack-card-index="1"] [data-test-field="cardInfo-name"]`,
+    );
     assert
-      .dom(`[data-test-stack-card-index="1"] [data-test-field="title"]`)
+      .dom(`[data-test-stack-card-index="1"] [data-test-field="cardInfo-name"]`)
       .exists();
     assert
-      .dom(`[data-test-stack-card-index="1"] [data-test-field="description"]`)
+      .dom(
+        `[data-test-stack-card-index="1"] [data-test-field="cardInfo-summary"]`,
+      )
       .exists();
     assert
-      .dom(`[data-test-stack-card-index="1"] [data-test-field="thumbnailURL"]`)
+      .dom(
+        `[data-test-stack-card-index="1"] [data-test-field="cardInfo-notes"]`,
+      )
       .exists();
   });
 

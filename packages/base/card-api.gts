@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -85,8 +85,6 @@ import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
-import CardInfoNameIcon from '@cardstack/boxel-icons/folder-pen';
-import CardInfoSummaryIcon from '@cardstack/boxel-icons/notepad-text';
 
 interface CardOrFieldTypeIconSignature {
   Element: Element;
@@ -2373,50 +2371,6 @@ export class MarkdownField extends StringField {
   };
 }
 
-class CardInfoEditTemplate extends Component<typeof CardInfoField> {
-  <template>
-    <div class='card-info-edit-fields'>
-      <FieldContainer
-        class='card-info-field'
-        @label='Name'
-        @tag='label'
-        @labelFontSize='default'
-        @icon={{CardInfoNameIcon}}
-        @vertical={{true}}
-        data-test-cardInfo-field='name'
-      >
-        <@fields.title />
-      </FieldContainer>
-      <FieldContainer
-        class='card-info-field'
-        @label='Summary'
-        @tag='label'
-        @labelFontSize='default'
-        @icon={{CardInfoSummaryIcon}}
-        @vertical={{true}}
-        data-test-cardInfo-field='summary'
-      >
-        <@fields.description />
-      </FieldContainer>
-      <FieldContainer
-        class='card-info-field'
-        @label='Theme'
-        @tag='label'
-        @labelFontSize='default'
-        @icon={{ThemeIcon}}
-        data-test-cardInfo-field='theme'
-      >
-        <@fields.theme />
-      </FieldContainer>
-    </div>
-    <style scoped>
-      .card-info-field + .card-info-field {
-        margin-top: var(--boxel-sp-lg);
-      }
-    </style>
-  </template>
-}
-
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
   @field title = contains(StringField);
@@ -2424,8 +2378,6 @@ export class CardInfoField extends FieldDef {
   @field thumbnailURL = contains(MaybeBase64Field);
   @field theme = linksTo(() => Theme);
   @field notes = contains(MarkdownField);
-
-  static edit = CardInfoEditTemplate;
 }
 
 export class CardDef extends BaseDef {
