@@ -8,6 +8,7 @@ import {
   removeRealmPermissions,
   type PublishedRealmTable,
   fetchRealmPermissions,
+  PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import { removeSync } from 'fs-extra';
 import { join } from 'path';
@@ -62,19 +63,6 @@ export default function handleUnpublishRealm({
       ? json.publishedRealmURL
       : `${json.publishedRealmURL}/`;
 
-    let { user: ownerUserId } = token;
-    let permissions = await fetchRealmPermissions(
-      dbAdapter,
-      new URL(publishedRealmURL),
-    );
-    if (!permissions[ownerUserId]?.includes('realm-owner')) {
-      await sendResponseForForbiddenRequest(
-        ctxt,
-        `${ownerUserId} does not have enough permission to unpublish this realm`,
-      );
-      return;
-    }
-
     try {
       let publishedRealmData = (await query(dbAdapter, [
         `SELECT * FROM published_realms WHERE published_realm_url =`,
@@ -98,6 +86,19 @@ export default function handleUnpublishRealm({
 
       let publishedRealmInfo = publishedRealmData[0];
 
+      let { user: ownerUserId } = token;
+      let permissions = await fetchRealmPermissions(
+        dbAdapter,
+        new URL(publishedRealmInfo.source_realm_url),
+      );
+      if (!permissions[ownerUserId]?.includes('realm-owner')) {
+        await sendResponseForForbiddenRequest(
+          ctxt,
+          `${ownerUserId} does not have enough permission to unpublish this realm`,
+        );
+        return;
+      }
+
       // Find the realm instance
       let existingPublishedRealm = realms.find(
         (r) => r.url === publishedRealmURL,
@@ -118,7 +119,7 @@ export default function handleUnpublishRealm({
       }
 
       // Remove published realm directory from file system
-      let publishedDir = join(realmsRootPath, 'published');
+      let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       let publishedRealmPath = join(publishedDir, publishedRealmInfo.id);
       try {
         removeSync(publishedRealmPath);
@@ -167,7 +168,10 @@ export default function handleUnpublishRealm({
               },
             }
           : {
-              realm: realms[0], // Use first available realm as fallback
+              realm:
+                realms.find(
+                  (r) => r.url === publishedRealmInfo.source_realm_url,
+                ) || realms[0],
               permissions: {
                 [ownerUserId]: ['read'],
               },
