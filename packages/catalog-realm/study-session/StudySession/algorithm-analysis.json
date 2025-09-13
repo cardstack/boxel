@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sessionTitle": "Algorithm Analysis Study Session",
+      "subject": "Computer Science",
+      "startTime": "2025-01-15T09:00:00.000Z",
+      "endTime": "2025-01-15T11:30:00.000Z",
+      "plannedDuration": 120,
+      "actualDuration": 150,
+      "sessionType": "study",
+      "focusScore": 8,
+      "notes": "Covered Big-O notation and analyzed several sorting algorithms. Need more practice with recursive analysis.",
+      "isCompleted": true,
+      "tags": "algorithms,big-o,sorting"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../study-session",
+        "name": "StudySession"
+      }
+    }
+  }
+}

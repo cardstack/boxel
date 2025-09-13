@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Chemistry Lab Preparation",
+      "description": "Preparation session for organic chemistry lab experiment on synthesis reactions. Review safety protocols and procedures.",
+      "startTime": "2025-09-03T10:00:00.000Z",
+      "endTime": "2025-09-03T12:00:00.000Z",
+      "location": "Chemistry Lab Building - Room 101",
+      "isAllDay": "false",
+      "eventType": "lab_prep",
+      "eventColor": "#10b981"
+    },
+    "relationships": {
+      "calendar": {
+        "links": {
+          "self": "../CalendarCard/2c3c78cd-fa4f-4988-b098-c8d099557fba"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../calendar",
+        "name": "CalendarEvent"
+      }
+    }
+  }
+}

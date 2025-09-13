@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StudyGoal",
+        "module": "../study-goal"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "subject": "Computer Science",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "priority": "high",
+      "progress": 65,
+      "createdAt": "2025-01-01T10:00:00.000Z",
+      "goalTitle": "Complete Data Structures Textbook",
+      "targetDate": "2025-09-26",
+      "completedAt": null,
+      "description": "Finish reading the entire textbook and complete all practice problems by end of month.",
+      "isCompleted": false,
+      "actualTimeSpent": null,
+      "studyTimeEstimate": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
