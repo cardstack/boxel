@@ -459,6 +459,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   _recordGameResult = task(async () => {
     const outcome = this.determineGameOutcome();
     const game = this.args.model;
+    const createdAt = new Date();
 
     const codeRef = {
       module: new URL('../blackjack/blackjack', import.meta.url).href,
@@ -470,6 +471,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       status: new GameStatusField({
         label: outcome,
       }),
+      createdAt,
       ref: codeRef,
     });
 
