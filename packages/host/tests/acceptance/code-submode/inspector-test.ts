@@ -780,9 +780,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert
-      .dom('[data-test-file-incompatibility-message]')
+      .dom('[data-test-schema-editor-file-incompatibility-message]')
       .hasText(
-        'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
+        `No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.`,
       );
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
   });
@@ -1444,11 +1444,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .includesText('Re-exported Base Definition');
     assert.dom('[data-test-card-module-definition]').includesText('Base');
     assert.true(monacoService.getLineCursorOn()?.includes('BDef'));
-    assert
-      .dom('[data-test-file-incompatibility-message]')
-      .hasText(
-        'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.',
-      );
+    assert.dom('[data-test-file-incompatibility-message]').doesNotExist();
 
     //clicking on re-export (which doesn't enter module scope)
     elementName = 'Person';
@@ -1464,11 +1460,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .includesText('Re-exported Card Definition');
     assert.dom('[data-test-card-module-definition]').includesText('Card');
     assert.true(monacoService.getLineCursorOn()?.includes('Human'));
-    assert
-      .dom('[data-test-file-incompatibility-message]')
-      .hasText(
-        'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.',
-      );
+    assert.dom('[data-test-file-incompatibility-message]').doesNotExist();
   });
 
   test('"in-this-file" panel displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
@@ -1622,7 +1614,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert
-      .dom('[data-test-file-incompatibility-message]')
+      .dom('[data-test-schema-editor-file-incompatibility-message]')
       .hasText(
         'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
       );
@@ -1659,7 +1651,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert
-      .dom('[data-test-file-incompatibility-message]')
+      .dom('[data-test-schema-editor-file-incompatibility-message]')
       .hasText(
         `No tools are available for the selected item: function "${renamedElementName}". Select a card or field definition in the inspector.`,
       );

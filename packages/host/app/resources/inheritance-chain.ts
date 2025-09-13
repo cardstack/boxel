@@ -14,7 +14,7 @@ import { BaseDef } from 'https://cardstack.com/base/card-api';
 interface Args {
   named: {
     url: string;
-    card: typeof BaseDef;
+    card?: typeof BaseDef;
     cardType?: Type;
   };
 }
@@ -30,7 +30,7 @@ export class InheritanceChainResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { cardType, card, url } = named;
-    if (cardType) {
+    if (cardType && card) {
       this.load.perform(url, card, cardType);
     }
   }
@@ -47,6 +47,9 @@ export class InheritanceChainResource extends Resource<Args> {
     async (url: string, card: typeof BaseDef, cardType?: Type) => {
       if (!cardType) {
         throw new Error('Card type not found');
+      }
+      if (!card) {
+        throw new Error('card not found');
       }
 
       let cardInheritanceChain = [
@@ -77,7 +80,7 @@ export class InheritanceChainResource extends Resource<Args> {
 export function inheritanceChain(
   parent: object,
   url: () => string,
-  card: () => typeof BaseDef,
+  card: () => typeof BaseDef | undefined,
   cardType: () => Type | undefined,
 ) {
   return InheritanceChainResource.from(parent, () => ({

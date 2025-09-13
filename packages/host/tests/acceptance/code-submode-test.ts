@@ -1251,9 +1251,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .hasText('isHourly function');
       assert
-        .dom('[data-test-file-incompatibility-message]')
+        .dom('[data-test-schema-editor-file-incompatibility-message]')
         .hasText(
-          'No tools are available for the selected item: function "isHourly". Select a card or field definition in the inspector.',
+          `No tools are available for the selected item: function "isHourly". Select a card or field definition in the inspector.`,
         );
 
       await click('[data-test-boxel-selector-item-text="Isolated"]');
@@ -1265,9 +1265,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .hasText('Isolated class');
       assert
-        .dom('[data-test-file-incompatibility-message]')
+        .dom('[data-test-schema-editor-file-incompatibility-message]')
         .hasText(
-          'No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.',
+          `No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.`,
         );
 
       await visitOperatorMode({
@@ -1276,7 +1276,9 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       await waitFor('[data-test-loading-indicator]', { count: 0 });
-      assert.dom('[data-test-file-incompatibility-message]').exists();
+      assert
+        .dom('[data-test-schema-editor-file-incompatibility-message]')
+        .exists();
     });
 
     test('displays clear message on schema-editor when file is completely unsupported', async function (assert) {
@@ -1289,7 +1291,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-file-incompatibility-message]')
         .hasText(
-          'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.',
+          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
         );
 
       await waitFor('[data-test-definition-file-extension]');
