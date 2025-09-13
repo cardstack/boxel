@@ -6,6 +6,9 @@ const XunitReporter = require('testem/lib/reporters/xunit_reporter');
 const fs = require('fs');
 
 const config = {
+  tap_log_processor: function (log) {
+    return 'hellotest' + JSON.stringify(log, null, 2);
+  },
   test_page: 'tests/index.html?hidepassed',
   disable_watching: true,
   launch_in_ci: ['Chrome'],
@@ -28,7 +31,7 @@ const config = {
   },
 };
 
-if (process.env.CI) {
+if (process.env.CIXX) {
   fs.mkdirSync('../../junit');
 
   const reporters = [
