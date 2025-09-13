@@ -23,6 +23,7 @@ import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open'; // ⁴ Icon import
 
 export class StudyResource extends CardDef {
@@ -157,7 +158,6 @@ export class StudyResource extends CardDef {
     }
     <template>
       <div class='study-resource-clean'>
-        <!-- Focus Flow header with status integration -->
         <header class='resource-header'>
           {{#if @model.subject}}
             <div class='subject-badge'>
@@ -180,10 +180,9 @@ export class StudyResource extends CardDef {
           </div>
         </header>
 
-        <!-- Main resource card -->
         <div class='resource-stage'>
           <div class='resource-card'>
-            <!-- Quick stats row -->
+
             <div class='quick-stats'>
               {{#if @model.estimatedTime}}
                 <div class='stat-item'>
@@ -237,7 +236,6 @@ export class StudyResource extends CardDef {
 
             </div>
 
-            <!-- Progress indicator if available -->
             {{#if @model.progressPercentage}}
               <div class='progress-section'>
                 <div class='progress-header'>
@@ -249,13 +247,17 @@ export class StudyResource extends CardDef {
                 <div class='progress-bar'>
                   <div
                     class='progress-fill'
-                    style={{concat 'width: ' @model.progressPercentage '%;'}}
+                    style={{htmlSafe
+                      concat
+                      'width: '
+                      @model.progressPercentage
+                      '%;'
+                    }}
                   ></div>
                 </div>
               </div>
             {{/if}}
 
-            <!-- Primary action button -->
             {{#if @model.url}}
               <div class='primary-action'>
                 <button class='access-button' {{on 'click' this.openResource}}>
@@ -280,7 +282,6 @@ export class StudyResource extends CardDef {
           </div>
         </div>
 
-        <!-- Optional expandable notes -->
         {{#if @model.notes}}
           <div class='notes-section'>
             <button class='notes-toggle' {{on 'click' this.toggleNotes}}>
@@ -310,7 +311,6 @@ export class StudyResource extends CardDef {
           </div>
         {{/if}}
 
-        <!-- Compact tags footer -->
         {{#if (gt @model.allTags.length 0)}}
           <div class='tags-footer'>
             {{#each @model.allTags as |tag|}}
@@ -321,7 +321,6 @@ export class StudyResource extends CardDef {
       </div>
 
       <style scoped>
-        /* Focus Flow theme - Clean study interface */
         .study-resource-clean {
           font-family:
             'Inter',
@@ -335,7 +334,6 @@ export class StudyResource extends CardDef {
           overflow-y: auto;
           background: #f8fafc;
 
-          /* Focus Flow design tokens */
           --primary: #1e3a8a;
           --secondary: #059669;
           --accent: #f59e0b;
@@ -346,7 +344,6 @@ export class StudyResource extends CardDef {
           --radius: 12px;
         }
 
-        /* Clean header */
         .resource-header {
           text-align: center;
           margin-bottom: 2.5rem;
@@ -657,7 +654,6 @@ export class StudyResource extends CardDef {
     // ¹⁰ Clean embedded format
     <template>
       <div class='study-resource-embedded'>
-        <!-- Clean header with status -->
         <div class='card-header'>
           {{#if @model.subject}}
             <div class='subject-badge'>{{@model.subject}}</div>
@@ -683,7 +679,6 @@ export class StudyResource extends CardDef {
           </div>
         </div>
 
-        <!-- Main content -->
         <div class='card-content'>
           <h4 class='card-title'>{{if
               @model.resourceTitle
@@ -723,20 +718,23 @@ export class StudyResource extends CardDef {
           {{/if}}
         </div>
 
-        <!-- Progress bar if available -->
         {{#if @model.progressPercentage}}
           <div class='card-progress'>
             <div class='progress-bar'>
               <div
                 class='progress-fill'
-                style={{concat 'width: ' @model.progressPercentage '%;'}}
+                style={{htmlSafe
+                  concat
+                  'width: '
+                  @model.progressPercentage
+                  '%;'
+                }}
               ></div>
             </div>
             <div class='progress-text'>{{@model.progressPercentage}}% complete</div>
           </div>
         {{/if}}
 
-        <!-- Compact tags -->
         {{#if (gt @model.allTags.length 0)}}
           <div class='card-tags'>
             {{#each @model.allTags as |tag index|}}
@@ -975,11 +973,10 @@ export class StudyResource extends CardDef {
     // ²³² Fitted format for grids and galleries
     <template>
       <div class='fitted-container'>
-        <!-- Badge format (≤150px width, ≤169px height) -->
         <div class='badge-format'>
           <div class='resource-badge'>
             <div class='badge-icon status-{{@model.completionStatus}}'>
-              {{{@model.statusIconSVG}}}
+              {{htmlSafe @model.statusIconSVG}}
             </div>
             <div class='badge-content'>
               <div class='badge-title'>{{if
@@ -996,7 +993,6 @@ export class StudyResource extends CardDef {
           </div>
         </div>
 
-        <!-- Strip format (>150px width, ≤169px height) -->
         <div class='strip-format'>
           <div class='resource-strip'>
             <div class='strip-left'>
@@ -1013,7 +1009,7 @@ export class StudyResource extends CardDef {
             </div>
             <div class='strip-right'>
               <div class='strip-status {{@model.completionStatus}}'>
-                {{{@model.statusIconSVG}}}
+                {{htmlSafe @model.statusIconSVG}}
               </div>
               {{#if @model.estimatedTime}}
                 <div class='strip-time'>{{@model.estimatedTime}}m</div>
@@ -1022,7 +1018,6 @@ export class StudyResource extends CardDef {
           </div>
         </div>
 
-        <!-- Tile format (≤399px width, ≥170px height) -->
         <div class='tile-format'>
           <div class='resource-tile'>
             <div class='tile-header'>
@@ -1032,7 +1027,7 @@ export class StudyResource extends CardDef {
                   'Resource'
                 }}</h4>
               <div class='tile-status {{@model.completionStatus}}'>
-                {{{@model.statusIconSVG}}}
+                {{htmlSafe @model.statusIconSVG}}
               </div>
             </div>
 
@@ -1052,7 +1047,8 @@ export class StudyResource extends CardDef {
                 <div class='progress-bar'>
                   <div
                     class='progress-fill'
-                    style={{concat
+                    style={{htmlSafe
+                      concat
                       'width: '
                       @model.progressPercentage
                       '%; background: '
@@ -1077,7 +1073,6 @@ export class StudyResource extends CardDef {
           </div>
         </div>
 
-        <!-- Card format (≥400px width, ≥170px height) -->
         <div class='card-format'>
           <div class='resource-card'>
             <div class='card-header'>
@@ -1097,7 +1092,7 @@ export class StudyResource extends CardDef {
                 </div>
               </div>
               <div class='card-status {{@model.completionStatus}}'>
-                {{{@model.statusIconSVG}}}
+                {{htmlSafe @model.statusIconSVG}}
               </div>
             </div>
 
@@ -1113,7 +1108,8 @@ export class StudyResource extends CardDef {
                   <div class='progress-bar'>
                     <div
                       class='progress-fill'
-                      style={{concat
+                      style={{htmlSafe
+                        concat
                         'width: '
                         @model.progressPercentage
                         '%; background: '

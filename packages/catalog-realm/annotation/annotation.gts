@@ -15,6 +15,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency'; // ¹³ Task management
+import { htmlSafe } from '@ember/template';
 import {
   formatDateTime,
   lt,
@@ -1778,7 +1779,6 @@ export class AnnotationCard extends CardDef {
 
         <div class='clean-toolbar'>
           <div class='toolbar-primary'>
-            <!-- Main annotation tools -->
             <div class='tool-cluster'>
               {{#each this.annotationTools as |tool|}}
                 <Button
@@ -1819,7 +1819,6 @@ export class AnnotationCard extends CardDef {
               {{/each}}
             </div>
 
-            <!-- Tool options (colors/thickness) -->
             {{#if (eq this.selectedTool 'highlight')}}
               <div class='tool-options'>
                 <div class='color-strip'>
@@ -1831,7 +1830,9 @@ export class AnnotationCard extends CardDef {
                           "selected"
                           ""
                         }}'
-                      style={{concat 'background-color: ' color.value}}
+                      style={{htmlSafe
+                        (concat 'background-color: ' color.value)
+                      }}
                       {{on 'click' (fn this.selectColor color.value)}}
                       title={{color.name}}
                     >
@@ -1864,10 +1865,16 @@ export class AnnotationCard extends CardDef {
                     >
                       <div
                         class='thickness-preview'
-                        style='width: {{multiply
-                          thickness
-                          2
-                        }}px; height: {{multiply thickness 2}}px;'
+                        style={{htmlSafe
+                          (concat
+                            'width:'
+                            (multiply thickness 2)
+                            'px;'
+                            'height:'
+                            (multiply thickness 2)
+                            'px'
+                          )
+                        }}
                       ></div>
                     </button>
                   {{/each}}
@@ -1876,7 +1883,6 @@ export class AnnotationCard extends CardDef {
             {{/if}}
           </div>
 
-          <!-- Selection zone when text is selected -->
           {{#if this.selectedText}}
             <div class='toolbar-selection'>
               <div class='selection-preview'>
@@ -2127,11 +2133,12 @@ export class AnnotationCard extends CardDef {
                         'false'
                       }}
                     >
+                      {{! template-lint-disable no-invalid-interactive }}
                       <div
                         class='pageLayer'
                         {{on 'mouseup' this.handleTextSelection}}
                       >
-                        <!-- ⁶² Separate drawing layer to prevent text selection interference -->
+                        {{! template-lint-disable no-pointer-down-event-binding }}
                         <div
                           class='drawing-layer'
                           {{on 'mousedown' this.startDrawing}}
@@ -2139,11 +2146,7 @@ export class AnnotationCard extends CardDef {
                           {{on 'mouseup' this.stopDrawing}}
                           {{on 'mouseleave' this.stopDrawing}}
                         >
-                          <canvas
-                            id='pdf-canvas'
-                            class='pdf-canvas'
-                            style='max-width: 100%; height: auto; border: 1px solid #e5e7eb;'
-                          ></canvas>
+                          <canvas id='pdf-canvas' class='pdf-canvas'></canvas>
                         </div>
                       </div>
                     </div>
@@ -2172,7 +2175,7 @@ export class AnnotationCard extends CardDef {
                     <input
                       type='file'
                       accept='.pdf,application/pdf'
-                      style='display: none'
+                      class='hidden-input'
                       {{on 'change' this.handleFileUpload}}
                     />
                   </label>
@@ -2198,9 +2201,8 @@ export class AnnotationCard extends CardDef {
                         {{#if annotation.color}}
                           <div
                             class='annotation-color'
-                            style={{concat
-                              'background-color: '
-                              annotation.color
+                            style={{htmlSafe
+                              (concat 'background-color: ' annotation.color)
                             }}
                           ></div>
                         {{/if}}
@@ -3256,6 +3258,9 @@ export class AnnotationCard extends CardDef {
           max-width: 100%;
           z-index: 1; /* Canvas shows glyphs, text layer invisible above */
           position: relative;
+          max-width: 100%;
+          height: auto;
+          border: 1px solid #e5e7eb;
         }
 
         .error-message {
@@ -3518,6 +3523,10 @@ export class AnnotationCard extends CardDef {
           border-radius: 8px;
           font-size: 0.875rem;
           cursor: pointer;
+        }
+
+        .hidden-input {
+          display: none;
         }
 
         .load-pdf {

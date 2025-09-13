@@ -54,7 +54,6 @@ export class FlashcardCard extends CardDef {
 
     <template>
       <div class='flashcard-clean'>
-        <!-- Minimal header with just subject -->
         {{#if @model.subject}}
           <div class='study-header'>
             <div class='subject-badge'>
@@ -67,7 +66,6 @@ export class FlashcardCard extends CardDef {
           </div>
         {{/if}}
 
-        <!-- Main card - center stage -->
         <div class='card-stage'>
           <div class='flashcard'>
             <div class='card-content'>
@@ -93,7 +91,6 @@ export class FlashcardCard extends CardDef {
             </div>
           </div>
 
-          <!-- Single action button -->
           <div class='flip-action'>
             <button class='flip-button' {{on 'click' this.toggleAnswer}}>
               {{if this.showAnswer 'Show Question' 'Show Answer'}}
@@ -263,7 +260,6 @@ export class FlashcardCard extends CardDef {
 
     <template>
       <div class='flashcard-embedded'>
-        <!-- Simple header -->
         <div class='card-header'>
           {{#if @model.subject}}
             <div class='subject-badge'>
@@ -272,7 +268,6 @@ export class FlashcardCard extends CardDef {
           {{/if}}
         </div>
 
-        <!-- Card content -->
         <div class='card-body'>
           <div class='content-area'>
             {{#if this.showAnswer}}
@@ -296,7 +291,6 @@ export class FlashcardCard extends CardDef {
             {{/if}}
           </div>
 
-          <!-- Simple action -->
           <div class='card-actions'>
             <button class='flip-button' {{on 'click' this.toggleAnswer}}>
               {{if this.showAnswer 'Question' 'Answer'}}
@@ -304,7 +298,6 @@ export class FlashcardCard extends CardDef {
           </div>
         </div>
 
-        <!-- No footer needed - just pure content -->
       </div>
 
       <style scoped>

@@ -178,7 +178,6 @@ export class StudySession extends CardDef {
     <template>
       <div class='session-view'>
         <div class='session-container'>
-          <!-- ¹³ Enhanced header with Study Hub styling -->
           <header class='session-header'>
             <div class='header-content'>
               <div class='title-section'>
@@ -237,12 +236,10 @@ export class StudySession extends CardDef {
             </div>
           </header>
 
-          <!-- ¹⁴ Enhanced session metrics with Study Hub design -->
           <section class='session-metrics'>
             <h2 class='metrics-title'>Session Overview</h2>
 
             <div class='metrics-grid'>
-              <!-- Duration Card -->
               <div class='metric-card duration-card'>
                 <div class='metric-header'>
                   <div class='metric-icon duration-icon'>
@@ -289,7 +286,6 @@ export class StudySession extends CardDef {
                 {{/if}}
               </div>
 
-              <!-- Effectiveness Card -->
               <div class='metric-card effectiveness-card'>
                 <div class='metric-header'>
                   <div class='metric-icon effectiveness-icon'>
@@ -318,7 +314,6 @@ export class StudySession extends CardDef {
                 </div>
               </div>
 
-              <!-- Timing Card -->
               <div class='metric-card timing-card'>
                 <div class='metric-header'>
                   <div class='metric-icon timing-icon'>
@@ -365,7 +360,6 @@ export class StudySession extends CardDef {
             </div>
           </section>
 
-          <!-- ¹⁵ Enhanced notes section with Study Hub design -->
           {{#if @model.notes}}
             <section class='notes-section'>
               <div class='notes-header'>
@@ -441,7 +435,6 @@ export class StudySession extends CardDef {
             </section>
           {{/if}}
 
-          <!-- ¹⁶ Session insights with Study Hub analytics style -->
           <section class='insights-section'>
             <h2 class='insights-title'>
               <svg

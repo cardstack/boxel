@@ -25,6 +25,7 @@ import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
 import BrainIcon from '@cardstack/boxel-icons/brain';
 
 class StudyHubIsolated extends Component<typeof StudyHub> {
@@ -55,22 +56,45 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
     return Date.now();
   }
 
-  // ²⁶ᵃ Dynamic weekly progress calculation
+  // ²⁶ᵃ Dynamic weekly progress calculation - Fixed to handle relationship data properly
   get dynamicWeeklyProgress() {
     try {
       const weeklyGoal = this.args?.model?.weeklyGoal || 600; // Default 10 hours
+
+      // studySessions is a linksToMany field, so it returns a collection of StudySession cards
       const sessions = this.args?.model?.studySessions;
 
-      if (!Array.isArray(sessions)) return 0;
+      if (!sessions) {
+        return 0;
+      }
+
+      // For linksToMany fields, we need to convert to array and filter valid sessions
+      const sessionArray = Array.isArray(sessions)
+        ? sessions
+        : Object.values(sessions || {});
+
+      if (sessionArray.length === 0) {
+        return 0;
+      }
 
       // Calculate time from sessions in the last 7 days
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const recentSessions = sessions.filter((session) => {
+      const recentSessions = sessionArray.filter((session) => {
         try {
+          // Session should be a StudySession card instance
+          if (!session || typeof session !== 'object') {
+            return false;
+          }
+
           const sessionDate = session?.startTime
             ? new Date(session.startTime)
             : null;
-          return sessionDate && sessionDate >= weekAgo;
+
+          if (!sessionDate || isNaN(sessionDate.getTime())) {
+            return false;
+          }
+
+          return sessionDate >= weekAgo;
         } catch (e) {
           return false;
         }
@@ -79,7 +103,9 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
       const weeklyTime = recentSessions.reduce((total, session) => {
         try {
           const duration = session?.duration || session?.actualDuration || 0;
-          return total + duration;
+          const numericDuration =
+            typeof duration === 'number' ? duration : parseInt(duration) || 0;
+          return total + numericDuration;
         } catch (e) {
           return total;
         }
@@ -451,7 +477,6 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
 
   <template>
     <div class='study-hub'>
-      <!-- ²⁷ Header with navigation -->
       <header class='hub-header'>
         <div class='header-content'>
           <h1 class='hub-title'>
@@ -489,7 +514,6 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
           </div>
         </div>
 
-        <!-- ²⁸ Navigation tabs -->
         <nav class='tab-navigation'>
           <button
             class='tab-button
@@ -601,11 +625,9 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
         </nav>
       </header>
 
-      <!-- ²⁹ Main content area -->
       <main class='hub-content'>
         {{#if (eq this.activeTab 'dashboard')}}
           <div class='dashboard-view'>
-            <!-- ³⁰ Quick metrics -->
             <section class='metrics-section'>
               <h2 class='section-title'>Today's Overview</h2>
               <div class='metrics-grid'>
@@ -631,7 +653,9 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
                   <div class='progress-bar'>
                     <div
                       class='progress-fill'
-                      style={{concat 'width: ' this.dynamicWeeklyProgress '%'}}
+                      style={{htmlSafe
+                        (concat 'width: ' this.dynamicWeeklyProgress '%')
+                      }}
                     ></div>
                   </div>
                   <div class='metric-subtitle'>
@@ -706,7 +730,6 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
               </div>
             </section>
 
-            <!-- ³¹ Recent activity -->
             <section class='recent-section'>
               <h2 class='section-title'>Recent Sessions</h2>
               {{#if (gt @model.studySessions.length 0)}}
@@ -828,7 +851,6 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
         {{#if (eq this.activeTab 'tools')}}
           <div class='tools-view'>
             <div class='tools-grid'>
-              <!-- Flashcards Section -->
               <section class='tool-section'>
                 <div class='section-header'>
                   <h3 class='section-title'>Flashcards</h3>
@@ -844,7 +866,6 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
                 {{/if}}
               </section>
 
-              <!-- Study Notes Section -->
               <section class='tool-section'>
                 <div class='section-header'>
                   <h3 class='section-title'>Study Notes</h3>
@@ -860,7 +881,6 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
                 {{/if}}
               </section>
 
-              <!-- Practice Quiz Section -->
               <section class='tool-section'>
                 <div class='section-header'>
                   <h3 class='section-title'>Practice Quizzes</h3>
@@ -895,7 +915,6 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
                 {{/if}}
               </section>
 
-              <!-- Focus Timer Section -->
               <section class='tool-section full-width'>
                 <div class='section-header'>
                   <h3 class='section-title'>Focus Timers</h3>
@@ -2428,6 +2447,7 @@ export class StudyHub extends CardDef {
 
   static fitted = class Fitted extends Component<typeof StudyHub> {
     // ³⁵ Fitted format
+
     <template>
       <div class='fitted-container'>
         <div class='badge-format'>
@@ -2474,16 +2494,6 @@ export class StudyHub extends CardDef {
                   'Study Hub'
                 }}</div>
             </div>
-            <div class='strip-stats'>
-              <span>{{if @model.currentStreak @model.currentStreak 0}}d</span>
-              <span>{{if
-                  (and @model.studyResources @model.studyResources.length)
-                  @model.studyResources.length
-                  0
-                }}
-                resources</span>
-              <span>{{this.dynamicWeeklyProgress}}% weekly</span>
-            </div>
           </div>
         </div>
 
@@ -2529,17 +2539,6 @@ export class StudyHub extends CardDef {
                   }}</span>
                 <span class='metric-label'>goals</span>
               </div>
-            </div>
-
-            <div class='tile-progress'>
-              <div class='progress-label'>Weekly Progress</div>
-              <div class='progress-bar'>
-                <div
-                  class='progress-fill'
-                  style={{concat 'width: ' this.dynamicWeeklyProgress '%'}}
-                ></div>
-              </div>
-              <div class='progress-text'>{{@model.weeklyProgress}}%</div>
             </div>
           </div>
         </div>
@@ -2590,21 +2589,6 @@ export class StudyHub extends CardDef {
                     }}</span>
                   <span class='metric-label'>goals</span>
                 </div>
-              </div>
-            </div>
-
-            <div class='card-progress'>
-              <div class='progress-header'>
-                <span class='progress-title'>Weekly Progress</span>
-                <span
-                  class='progress-percent'
-                >{{this.dynamicWeeklyProgress}}%</span>
-              </div>
-              <div class='progress-bar'>
-                <div
-                  class='progress-fill'
-                  style={{concat 'width: ' this.dynamicWeeklyProgress '%'}}
-                ></div>
               </div>
             </div>
 

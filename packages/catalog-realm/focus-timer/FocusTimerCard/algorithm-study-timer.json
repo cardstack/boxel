@@ -15,17 +15,17 @@
         "description": null,
         "thumbnailURL": null
       },
-      "isActive": false,
+      "isActive": true,
       "startTime": null,
       "completedAt": null,
       "sessionName": "Deep Algorithm Analysis Session",
-      "currentPhase": "ready",
+      "currentPhase": "focus",
       "breakDuration": 10,
       "focusDuration": 50,
-      "timeRemaining": 0,
+      "timeRemaining": 2943,
       "targetSessions": 4,
-      "totalFocusTime": 0,
-      "sessionsCompleted": 0
+      "totalFocusTime": 50,
+      "sessionsCompleted": 1
     },
     "relationships": {
       "cardInfo.theme": {

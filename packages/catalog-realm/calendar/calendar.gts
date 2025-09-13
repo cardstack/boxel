@@ -21,6 +21,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
+import { htmlSafe } from '@ember/template';
 import {
   eq,
   formatDateTime,
@@ -33,6 +34,7 @@ import {
 } from '@cardstack/boxel-ui/helpers';
 import { cached } from '@glimmer/tracking';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
+import LocationPinIcon from '@cardstack/boxel-icons/location-pin';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common';
 
@@ -172,7 +174,7 @@ export class CalendarEvent extends CardDef {
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <div class='fitted-container' style='width: 100%; height: 100%'>
+      <div class='fitted-container'>
         <div class='badge-format'>
           <div class='event-badge'>
             <div class='event-time'>{{if
@@ -484,19 +486,18 @@ export class CalendarCard extends CardDef {
 
   // ²³ Query for events that belong to this calendar
   get eventsQuery(): Query {
-    console.log('Calendar ID for query:', this.id);
     return {
       filter: {
         every: [
           {
             type: {
-              module: new URL('./calendar/calendar', import.meta.url).href,
+              module: new URL(import.meta.url).href,
               name: 'CalendarEvent',
             },
           },
           {
             on: {
-              module: new URL('./calendar/calendar', import.meta.url).href,
+              module: new URL(import.meta.url).href,
               name: 'CalendarEvent',
             },
             eq: { 'calendar.id': this.id },
@@ -507,7 +508,7 @@ export class CalendarCard extends CardDef {
         {
           by: 'startTime',
           on: {
-            module: new URL('./calendar/calendar', import.meta.url).href,
+            module: new URL(import.meta.url).href,
             name: 'CalendarEvent',
           },
           direction: 'asc',
@@ -846,7 +847,7 @@ export class CalendarCard extends CardDef {
 
     private _addEvent = restartableTask(async () => {
       const calendarEventSource = {
-        module: new URL('./calendar/calendar', import.meta.url).href,
+        module: new URL(import.meta.url).href,
         name: 'CalendarEvent',
       };
 
@@ -880,7 +881,7 @@ export class CalendarCard extends CardDef {
       };
 
       try {
-        await this.args.context?.actions?.createCard(
+        await this.args.createCard?.(
           calendarEventSource,
           new URL(calendarEventSource.module),
           {
@@ -900,8 +901,8 @@ export class CalendarCard extends CardDef {
     @action
     editEvent(event: any) {
       // Open event card for editing
-      if (event && this.args.context?.actions?.viewCard) {
-        this.args.context.actions.viewCard(event, 'edit');
+      if (event && this.args.viewCard) {
+        this.args.viewCard(event, 'edit');
       }
     }
 
@@ -1101,6 +1102,8 @@ export class CalendarCard extends CardDef {
                       {{if day.isCurrentMonth "current-month" "other-month"}}
                       {{if day.isToday "today" ""}}
                       {{if day.hasEvents "has-events" ""}}'
+                    role='button'
+                    tabindex='0'
                     {{on 'click' (fn this.selectDate day)}}
                     {{on 'mouseenter' (fn this.onDateHover day)}}
                     {{on 'mouseleave' this.onDateLeave}}
@@ -1110,9 +1113,11 @@ export class CalendarCard extends CardDef {
                       <div class='event-list'>
                         {{#each day.events as |event index|}}
                           {{#if (lt index 2)}}
+                            {{! template-lint-disable no-invalid-interactive}}
                             <div
                               class='event-mini'
-                              style={{concat
+                              style={{htmlSafe
+                                concat
                                 'background-color: '
                                 (if
                                   event.eventColor
@@ -1125,7 +1130,6 @@ export class CalendarCard extends CardDef {
                                 'click'
                                 (fn this.handleEventClick event)
                                 stopPropagation=true
-                                preventDefault=true
                               }}
                             >
                               <span class='event-text'>
@@ -1145,13 +1149,13 @@ export class CalendarCard extends CardDef {
                           {{/if}}
                         {{/each}}
                         {{#if (gt day.events.length 2)}}
+                          {{! template-lint-disable no-invalid-interactive}}
                           <div
                             class='event-more'
                             {{on
                               'click'
                               (fn this.handleMoreEventsClick day)
                               stopPropagation=true
-                              preventDefault=true
                             }}
                           >
                             +{{subtract day.events.length 2}}
@@ -1168,7 +1172,6 @@ export class CalendarCard extends CardDef {
 
           {{#if (eq this.viewMode 'week')}}
             <div class='week-view'>
-              <!-- Week navigation and header -->
               <div class='week-header'>
                 <div class='week-nav'>
                   <Button class='week-nav-btn' {{on 'click' this.previousWeek}}>
@@ -1195,7 +1198,6 @@ export class CalendarCard extends CardDef {
                 </div>
               </div>
 
-              <!-- Days header with all 7 days -->
               <div class='week-days-header'>
                 <div class='time-column-header'>Time</div>
                 {{#each this.currentWeekDays as |day|}}
@@ -1210,7 +1212,6 @@ export class CalendarCard extends CardDef {
                 {{/each}}
               </div>
 
-              <!-- Time grid with events -->
               <div class='week-time-grid'>
                 {{#each this.timeSlots as |slot|}}
                   <div class='time-row'>
@@ -1228,12 +1229,14 @@ export class CalendarCard extends CardDef {
                           {{#if (this.eventStartsAtHour event slot.hour)}}
                             <div
                               class='week-event-block'
-                              style={{concat
+                              style={{htmlSafe
+                                concat
                                 'background-color: '
                                 (if event.eventColor event.eventColor '#3b82f6')
                                 '; border-left: 3px solid '
                                 (if event.eventColor event.eventColor '#2563eb')
                               }}
+                              role='button'
                               {{on 'click' (fn this.editEvent event)}}
                             >
                               <div class='event-time'>
@@ -1265,7 +1268,6 @@ export class CalendarCard extends CardDef {
 
           {{#if (eq this.viewMode 'day')}}
             <div class='day-view'>
-              <!-- Day navigation header -->
               <div class='day-header'>
                 <div class='day-nav'>
                   <Button class='day-nav-btn' {{on 'click' this.previousDay}}>
@@ -1311,7 +1313,6 @@ export class CalendarCard extends CardDef {
                 </Button>
               </div>
 
-              <!-- Time-based schedule view -->
               <div class='day-schedule'>
                 <div class='day-time-grid'>
                   {{#each this.timeSlots as |slot|}}
@@ -1325,16 +1326,21 @@ export class CalendarCard extends CardDef {
                           {{#if (this.eventStartsAtHour event slot.hour)}}
                             <div
                               class='day-event-block'
-                              style={{concat
-                                'background-color: '
-                                (if
-                                  event.eventColor
-                                  event.eventColor
-                                  'rgba(59, 130, 246, 0.1)'
+                              style={{htmlSafe
+                                (concat
+                                  'background-color: '
+                                  (if
+                                    event.eventColor
+                                    event.eventColor
+                                    'rgba(59, 130, 246, 0.1)'
+                                  )
+                                  '; border-left: 3px solid '
+                                  (if
+                                    event.eventColor event.eventColor '#3b82f6'
+                                  )
                                 )
-                                '; border-left: 3px solid '
-                                (if event.eventColor event.eventColor '#3b82f6')
                               }}
+                              role='button'
                               {{on 'click' (fn this.editEvent event)}}
                             >
                               <div class='event-time'>
@@ -1417,6 +1423,7 @@ export class CalendarCard extends CardDef {
           <div class='more-events-modal'>
             <div
               class='modal-backdrop'
+              role='button'
               {{on 'click' this.closeMoreEvents}}
             ></div>
             <div class='modal-content'>
@@ -1444,6 +1451,7 @@ export class CalendarCard extends CardDef {
                 {{#each this.showMoreEventsFor.events as |event|}}
                   <div
                     class='modal-event'
+                    role='button'
                     {{on 'click' (fn this.editEvent event)}}
                   >
                     <div class='modal-event-header'>
@@ -1472,17 +1480,10 @@ export class CalendarCard extends CardDef {
                     <div class='modal-event-details'>
                       {{#if event.location}}
                         <div class='modal-event-location'>
-                          <svg
-                            viewBox='0 0 24 24'
-                            fill='none'
-                            stroke='currentColor'
-                            stroke-width='2'
-                          >
-                            <path
-                              d='M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z'
-                            ></path>
-                            <circle cx='12' cy='10' r='3'></circle>
-                          </svg>
+                          <span
+                            class='location-icon'
+                            aria-hidden='true'
+                          >📍</span>
                           {{event.location}}
                         </div>
                       {{/if}}

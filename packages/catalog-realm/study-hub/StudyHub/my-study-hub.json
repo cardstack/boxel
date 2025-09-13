@@ -108,11 +108,6 @@
           "self": "../../practice-quiz/PracticeQuizCard/data-structures-quiz"
         }
       },
-      "practiceQuizzes.1": {
-        "links": {
-          "self": "../../practice-quiz/PracticeQuizCard/linear-algebra-fundamentals"
-        }
-      },
       "achievements": {
         "links": {
           "self": null

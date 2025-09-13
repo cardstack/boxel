@@ -26,6 +26,7 @@ import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
 import TargetIcon from '@cardstack/boxel-icons/target'; // ⁴ Icon import
 
 export class StudyGoal extends CardDef {
@@ -212,7 +213,6 @@ export class StudyGoal extends CardDef {
     <template>
       <div class='study-goal-view'>
         <div class='goal-container'>
-          <!-- ⁽¹⁰⁾ Study Hub Goal Header -->
           <header class='goal-header'>
             <div class='header-content'>
               <div class='goal-info'>
@@ -332,7 +332,6 @@ export class StudyGoal extends CardDef {
             </div>
           </header>
 
-          <!-- ⁽¹¹⁾ Progress Section -->
           <section class='progress-section'>
             <div class='section-header'>
               <h2 class='section-title'>Progress Tracking</h2>
@@ -379,15 +378,17 @@ export class StudyGoal extends CardDef {
                       stroke='url(#progressGradient)'
                       stroke-width='8'
                       stroke-linecap='round'
-                      style={{concat
-                        'stroke-dasharray: '
-                        (multiply 2 3.14159 52)
-                        '; stroke-dashoffset: '
-                        (multiply
+                      style={{htmlSafe
+                        (concat
+                          'stroke-dasharray: '
                           (multiply 2 3.14159 52)
-                          (divide (subtract 100 this.progressPercentage) 100)
+                          '; stroke-dashoffset: '
+                          (multiply
+                            (multiply 2 3.14159 52)
+                            (divide (subtract 100 this.progressPercentage) 100)
+                          )
+                          ';'
                         )
-                        ';'
                       }}
                     />
                     <defs>
@@ -398,8 +399,14 @@ export class StudyGoal extends CardDef {
                         x2='100%'
                         y2='100%'
                       >
-                        <stop offset='0%' style='stop-color:#1e3a8a' />
-                        <stop offset='100%' style='stop-color:#059669' />
+                        <stop
+                          offset='0%'
+                          style={{htmlSafe 'stop-color:#1e3a8a'}}
+                        />
+                        <stop
+                          offset='100%'
+                          style={{htmlSafe 'stop-color:#059669'}}
+                        />
                       </linearGradient>
                     </defs>
                   </svg>
@@ -413,7 +420,6 @@ export class StudyGoal extends CardDef {
 
                 <div class='progress-details'>
                   {{#if this.showProgressEdit}}
-                    <!-- ⁽⁵⁵⁾ Inline Progress Editor with Smooth Transitions -->
                     <div class='progress-editor-inline'>
                       <div class='editor-header'>
                         <h3 class='editor-title'>Update Progress</h3>
@@ -434,7 +440,6 @@ export class StudyGoal extends CardDef {
                         </Button>
                       </div>
 
-                      <!-- Quick Milestones -->
                       <div class='milestone-section'>
                         <label class='milestone-label'>Quick Updates</label>
                         <div class='milestone-buttons'>
@@ -497,11 +502,14 @@ export class StudyGoal extends CardDef {
                         </div>
                       </div>
 
-                      <!-- Fine-tune Slider -->
                       <div class='slider-section'>
-                        <label class='slider-label'>Fine-tune Progress</label>
+                        <label
+                          class='slider-label'
+                          for='progress-slider'
+                        >Fine-tune Progress</label>
                         <div class='custom-slider'>
                           <input
+                            id='progress-slider'
                             type='range'
                             min='0'
                             max='100'
@@ -513,10 +521,8 @@ export class StudyGoal extends CardDef {
                           <div class='slider-track'>
                             <div
                               class='slider-fill'
-                              style={{concat
-                                'width: '
-                                this.progressPercentage
-                                '%'
+                              style={{htmlSafe
+                                (concat 'width: ' this.progressPercentage '%')
                               }}
                             ></div>
                           </div>
@@ -530,7 +536,6 @@ export class StudyGoal extends CardDef {
                         </div>
                       </div>
 
-                      <!-- Live Progress Display -->
                       <div class='current-progress'>
                         <div class='progress-display-large'>
                           <span
@@ -556,7 +561,6 @@ export class StudyGoal extends CardDef {
                       </div>
                     </div>
                   {{else}}
-                    <!-- ⁽⁵⁶⁾ Progress Overview - Clean Display Mode -->
                     <div class='progress-overview'>
                       <div class='overview-stats'>
                         {{#if @model.studyTimeEstimate}}
@@ -632,7 +636,6 @@ export class StudyGoal extends CardDef {
                         {{/if}}
                       </div>
 
-                      <!-- Status Insight -->
                       <div class='status-insight {{@model.status}}'>
                         {{#if (eq @model.status 'completed')}}
                           🎉 Excellent! You've successfully completed this goal.
@@ -1852,7 +1855,6 @@ export class StudyGoal extends CardDef {
           <div class='goal-description'>{{@model.description}}</div>
         {{/if}}
 
-        <!-- ⁽²⁴⁾ Progress Display -->
         <div class='progress-display'>
           <div class='progress-info'>
             <span class='progress-label'>Progress</span>
@@ -1863,12 +1865,11 @@ export class StudyGoal extends CardDef {
           <div class='progress-bar'>
             <div
               class='progress-fill {{this.statusColor}}'
-              style={{concat 'width: ' this.progressPercentage '%'}}
+              style={{htmlSafe (concat 'width: ' this.progressPercentage '%')}}
             ></div>
           </div>
         </div>
 
-        <!-- ⁽²⁵⁾ Goal Metadata -->
         <div class='goal-metadata'>
           {{#if @model.targetDate}}
             <div class='meta-item {{@model.status}}'>

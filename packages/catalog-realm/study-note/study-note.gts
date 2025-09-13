@@ -71,7 +71,6 @@ export class StudyNoteCard extends CardDef {
 
     <template>
       <div class='study-note-clean'>
-        <!-- Focus Flow header -->
         <header class='note-header'>
           {{#if @model.subject}}
             <div class='subject-badge'>
@@ -125,7 +124,6 @@ export class StudyNoteCard extends CardDef {
           </div>
         </header>
 
-        <!-- Note content - reading focused -->
         <main class='note-content'>
           {{#if @model.content}}
             <div class='content-area'>
@@ -155,7 +153,6 @@ export class StudyNoteCard extends CardDef {
           {{/if}}
         </main>
 
-        <!-- Compact tags footer -->
         {{#if (gt @model.allTags.length 0)}}
           <footer class='note-footer'>
             <div class='tags-section'>
@@ -182,7 +179,6 @@ export class StudyNoteCard extends CardDef {
       </div>
 
       <style scoped>
-        /* Focus Flow theme - Clean note interface */
         .study-note-clean {
           font-family:
             'Inter',
@@ -196,7 +192,6 @@ export class StudyNoteCard extends CardDef {
           overflow-y: auto;
           background: #f8fafc;
 
-          /* Focus Flow design tokens */
           --primary: #1e3a8a;
           --secondary: #059669;
           --accent: #f59e0b;
@@ -380,7 +375,6 @@ export class StudyNoteCard extends CardDef {
     // ¹¹ Clean embedded format
     <template>
       <div class='study-note-embedded'>
-        <!-- Clean header -->
         <div class='note-header'>
           {{#if @model.subject}}
             <div class='subject-badge'>{{@model.subject}}</div>
@@ -405,7 +399,6 @@ export class StudyNoteCard extends CardDef {
           </div>
         </div>
 
-        <!-- Main content -->
         <div class='note-content'>
           <h4 class='note-title'>{{if
               @model.noteTitle
@@ -424,7 +417,6 @@ export class StudyNoteCard extends CardDef {
           </div>
         </div>
 
-        <!-- Footer with metadata -->
         <div class='note-footer'>
           {{#if @model.lastModified}}
             <div class='last-modified'>

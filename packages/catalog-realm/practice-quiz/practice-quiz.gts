@@ -20,6 +20,7 @@ import {
   subtract,
 } from '@cardstack/boxel-ui/helpers'; // ⁽³⁾ Formatters
 import { concat, get, fn, array } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -304,9 +305,8 @@ export class PracticeQuizCard extends CardDef {
       <div class='quiz-view'>
         <div class='quiz-container'>
           {{#unless this.isQuizActive}}
-            <!-- Study Hub Quiz Overview -->
             <div class='quiz-overview'>
-              <header class='quiz-header'>
+              <div class='quiz-header'>
                 <div class='header-content'>
                   <div class='quiz-info'>
                     <h1 class='quiz-title'>{{if
@@ -342,9 +342,11 @@ export class PracticeQuizCard extends CardDef {
                           stroke='currentColor'
                           stroke-width='2'
                         >
-                          <circle cx='12' cy='12' r='3' />
-                          <path d='M12 1v6m0 6v6m11-7h-6m-6 0H1' />
+                          <circle cx='12' cy='12' r='10' />
+                          <circle cx='12' cy='12' r='6' />
+                          <circle cx='12' cy='12' r='2' />
                         </svg>
+                        Topic:
                         {{@model.studyTopic}}
                       </div>
                     {{/if}}
@@ -372,9 +374,23 @@ export class PracticeQuizCard extends CardDef {
                     {{/if}}
                   </div>
                 </div>
-              </header>
+              </div>
 
               <div class='quiz-stats'>
+                {{#if @model.isCompleted}}
+                  <div class='stat-card score-card {{this.scoreColor}}'>
+                    <div class='grade-display'>
+                      <div class='grade-letter'>{{@model.gradeLevel}}</div>
+                    </div>
+                    <div class='stat-content'>
+                      <div
+                        class='stat-value'
+                      >{{@model.correctAnswers}}/{{@model.totalQuestions}}</div>
+                      <div class='stat-label'>Correct Answers</div>
+                    </div>
+                  </div>
+                {{/if}}
+
                 <div class='stat-card'>
                   <div class='stat-icon'>
                     <svg
@@ -383,20 +399,13 @@ export class PracticeQuizCard extends CardDef {
                       stroke='currentColor'
                       stroke-width='2'
                     >
-                      <path
-                        d='M9 11H7a2 2 0 1 1 0-4h2m0 4v4a2 2 0 1 1-4 0v-2'
-                      />
-                      <path
-                        d='M15 11h2a2 2 0 1 1 0 4h-2m0-4v-4a2 2 0 1 1 4 0v2'
-                      />
+                      <path d='M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4' />
+                      <path d='M11 9h4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-4' />
+                      <line x1='7' y1='9' x2='7' y2='13' />
                     </svg>
                   </div>
                   <div class='stat-content'>
-                    <div class='stat-value'>{{if
-                        @model.quizQuestions
-                        @model.quizQuestions.length
-                        @model.totalQuestions
-                      }}</div>
+                    <div class='stat-value'>{{@model.totalQuestions}}</div>
                     <div class='stat-label'>Questions</div>
                   </div>
                 </div>
@@ -415,23 +424,40 @@ export class PracticeQuizCard extends CardDef {
                       </svg>
                     </div>
                     <div class='stat-content'>
-                      <div class='stat-value'>{{@model.timeLimit}}</div>
-                      <div class='stat-label'>Minutes</div>
+                      <div class='stat-value'>{{@model.timeLimit}} min</div>
+                      <div class='stat-label'>Time Limit</div>
                     </div>
                   </div>
                 {{/if}}
 
-                {{#if @model.isCompleted}}
-                  <div class='stat-card score-card {{this.scoreColor}}'>
-                    <div class='grade-display'>
-                      <div class='grade-letter'>{{@model.gradeLevel}}</div>
-                      <div class='grade-percent'>{{@model.percentage}}%</div>
+                {{#if @model.completedAt}}
+                  <div class='stat-card'>
+                    <div class='stat-icon'>
+                      <svg
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='2'
+                      >
+                        <rect
+                          x='3'
+                          y='4'
+                          width='18'
+                          height='18'
+                          rx='2'
+                          ry='2'
+                        />
+                        <line x1='16' y1='2' x2='16' y2='6' />
+                        <line x1='8' y1='2' x2='8' y2='6' />
+                        <line x1='3' y1='10' x2='21' y2='10' />
+                      </svg>
                     </div>
                     <div class='stat-content'>
-                      <div
-                        class='stat-value'
-                      >{{@model.correctAnswers}}/{{@model.totalQuestions}}</div>
-                      <div class='stat-label'>Correct</div>
+                      <div class='stat-value'>{{formatDateTime
+                          @model.completedAt
+                          size='short'
+                        }}</div>
+                      <div class='stat-label'>Completed</div>
                     </div>
                   </div>
                 {{/if}}
@@ -441,108 +467,59 @@ export class PracticeQuizCard extends CardDef {
                 <div class='quiz-results {{this.scoreColor}}'>
                   <div class='results-content'>
                     <div class='grade-summary'>
-                      <div class='final-grade'>{{@model.gradeLevel}}</div>
                       <div class='grade-details'>
-                        <div class='percentage-score'>{{@model.percentage}}%
-                          Score</div>
+                        <div
+                          class='percentage-score'
+                        >{{@model.gradeLevel}}</div>
                         <div class='questions-summary'>{{@model.correctAnswers}}
-                          of
+                          out of
                           {{@model.totalQuestions}}
-                          correct</div>
-                        {{#if @model.completedAt}}
-                          <div class='completion-time'>Completed
-                            {{formatDateTime
-                              @model.completedAt
-                              size='medium'
-                              relative=true
-                            }}</div>
-                        {{/if}}
+                          questions correct</div>
+                        <div class='completion-time'>Completed
+                          {{formatDateTime
+                            @model.completedAt
+                            size='medium'
+                            relative=true
+                          }}</div>
                       </div>
                     </div>
 
                     <div class='performance-insight'>
-                      {{#if (gt @model.percentage 84)}}
+                      {{#if (eq this.scoreColor 'excellent')}}
                         <div class='insight excellent'>
-                          <svg
-                            class='insight-icon'
-                            viewBox='0 0 24 24'
-                            fill='none'
-                            stroke='currentColor'
-                            stroke-width='2'
-                          >
-                            <path
-                              d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'
-                            />
-                          </svg>
                           Excellent work! You've mastered this topic.
                         </div>
-                      {{else if (gt @model.percentage 74)}}
+                      {{else if (eq this.scoreColor 'good')}}
                         <div class='insight good'>
-                          <svg
-                            class='insight-icon'
-                            viewBox='0 0 24 24'
-                            fill='none'
-                            stroke='currentColor'
-                            stroke-width='2'
-                          >
-                            <path d='M14 9l-5 5L4 9' />
-                          </svg>
-                          Great job! You're on the right track.
+                          Great job! You're demonstrating solid understanding.
                         </div>
-                      {{else if (gt @model.percentage 64)}}
+                      {{else if (eq this.scoreColor 'satisfactory')}}
                         <div class='insight satisfactory'>
-                          <svg
-                            class='insight-icon'
-                            viewBox='0 0 24 24'
-                            fill='none'
-                            stroke='currentColor'
-                            stroke-width='2'
-                          >
-                            <path d='M8 12h8M12 8v8' />
-                          </svg>
-                          Good effort! Review the material and try again.
+                          Good progress! Review the material and try again.
                         </div>
                       {{else}}
                         <div class='insight needs-work'>
-                          <svg
-                            class='insight-icon'
-                            viewBox='0 0 24 24'
-                            fill='none'
-                            stroke='currentColor'
-                            stroke-width='2'
-                          >
-                            <path
-                              d='M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
-                            />
-                          </svg>
-                          Keep studying! Consider reviewing the fundamentals.
+                          Keep studying! Review the material and practice more.
                         </div>
                       {{/if}}
                     </div>
                   </div>
 
                   <div class='result-actions'>
-                    <Button
-                      class='action-btn secondary'
+                    <button class='action-btn secondary'>
+                      Review Answers
+                    </button>
+                    <button
+                      class='action-btn primary'
                       {{on 'click' this.restartQuiz}}
                     >
-                      <svg
-                        class='btn-icon'
-                        viewBox='0 0 24 24'
-                        fill='none'
-                        stroke='currentColor'
-                        stroke-width='2'
-                      >
-                        <polyline points='23,4 23,10 17,10' />
-                        <path d='M20.49 15a9 9 0 11-2.12-9.36L23 10' />
-                      </svg>
                       Retake Quiz
-                    </Button>
+                    </button>
                   </div>
                 </div>
               {{else}}
                 <div class='quiz-start'>
-                  <Button class='start-btn' {{on 'click' this.startQuiz}}>
+                  <button class='start-btn' {{on 'click' this.startQuiz}}>
                     <svg
                       class='btn-icon'
                       viewBox='0 0 24 24'
@@ -552,23 +529,46 @@ export class PracticeQuizCard extends CardDef {
                     >
                       <polygon points='5,3 19,12 5,21' />
                     </svg>
-                    Begin Assessment
-                  </Button>
+                    Start Quiz
+                  </button>
+
                   <div class='start-help'>
                     {{#if @model.timeLimit}}
-                      <span class='time-info'>⏱️
+                      <div class='time-info'>
+                        <svg
+                          viewBox='0 0 24 24'
+                          fill='none'
+                          stroke='currentColor'
+                          stroke-width='2'
+                        >
+                          <circle cx='12' cy='12' r='10' />
+                          <polyline points='12,6 12,12 16,14' />
+                        </svg>
                         {{@model.timeLimit}}
-                        minute time limit</span>
+                        minute time limit
+                      </div>
                     {{/if}}
-                    <span class='question-info'>📝
+                    <div class='question-info'>
+                      <svg
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='2'
+                      >
+                        <path d='M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4' />
+                        <path d='M11 9h4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-4' />
+                        <line x1='7' y1='9' x2='7' y2='13' />
+                      </svg>
                       {{@model.totalQuestions}}
-                      questions</span>
+                      questions total
+                    </div>
                   </div>
                 </div>
               {{/if}}
             </div>
-          {{else}}
-            <!-- Active Quiz Interface -->
+          {{/unless}}
+
+          {{#if this.isQuizActive}}
             <div class='quiz-active'>
               <div class='quiz-progress'>
                 <div class='progress-info'>
@@ -583,7 +583,12 @@ export class PracticeQuizCard extends CardDef {
                 <div class='progress-bar'>
                   <div
                     class='progress-fill'
-                    style={{concat 'width: ' this.progressPercentage '%'}}
+                    style={{htmlSafe
+                      concat
+                      'width: '
+                      this.progressPercentage
+                      '%'
+                    }}
                   ></div>
                 </div>
               </div>
@@ -593,7 +598,6 @@ export class PracticeQuizCard extends CardDef {
                   {{this.currentQuestionText}}
                 </div>
 
-                <!-- ⁽³³⁾ Dynamic answer choices -->
                 <div class='answer-choices'>
                   {{#if (gt this.currentAnswerChoices.length 0)}}
                     {{#each this.currentAnswerChoices as |choice index|}}
@@ -620,7 +624,6 @@ export class PracticeQuizCard extends CardDef {
                       </button>
                     {{/each}}
                   {{else}}
-                    <!-- ⁽³⁴⁾ Fallback if no answer choices provided -->
                     <div class='no-choices'>
                       <p>Answer choices not configured for this question.</p>
                       <Button
@@ -664,7 +667,7 @@ export class PracticeQuizCard extends CardDef {
                 {{/if}}
               </div>
             </div>
-          {{/unless}}
+          {{/if}}
         </div>
       </div>
 
@@ -1019,14 +1022,6 @@ export class PracticeQuizCard extends CardDef {
           align-items: center;
           gap: 1.5rem;
           margin-bottom: 1.5rem;
-        }
-
-        .final-grade {
-          font-size: 4rem;
-          font-weight: 800;
-          color: #1a1a2e;
-          line-height: 1;
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .grade-details {
@@ -1452,10 +1447,6 @@ export class PracticeQuizCard extends CardDef {
           .quiz-results {
             padding: 1.5rem;
             margin-bottom: 1rem;
-          }
-
-          .final-grade {
-            font-size: 3rem;
           }
         }
       </style>

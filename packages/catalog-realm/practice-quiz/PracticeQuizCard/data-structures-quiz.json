@@ -19,12 +19,17 @@
       "timeLimit": 10,
       "difficulty": "Intermediate",
       "studyTopic": "Data Structures Fundamentals",
-      "completedAt": "2025-09-11T07:09:57.623Z",
+      "completedAt": "2025-09-12T13:28:37.116Z",
       "isCompleted": true,
       "quizQuestions": [
         {
           "question": "What is the time complexity of binary search?",
-          "choices": ["O(log n)", "O(n)", "O(n log n)", "O(n²)"],
+          "choices": [
+            "O(log n)",
+            "O(n)",
+            "O(n log n)",
+            "O(n²)"
+          ],
           "correctAnswer": "A"
         },
         {
@@ -49,16 +54,26 @@
         },
         {
           "question": "What is the best case time complexity for quicksort?",
-          "choices": ["O(n log n)", "O(n²)", "O(log n)", "O(n)"],
+          "choices": [
+            "O(n log n)",
+            "O(n²)",
+            "O(log n)",
+            "O(n)"
+          ],
           "correctAnswer": "A"
         },
         {
           "question": "Which data structure uses LIFO principle?",
-          "choices": ["Stack", "Queue", "Array", "Tree"],
+          "choices": [
+            "Stack",
+            "Queue",
+            "Array",
+            "Tree"
+          ],
           "correctAnswer": "A"
         }
       ],
-      "correctAnswers": 4,
+      "correctAnswers": 1,
       "totalQuestions": 5
     },
     "relationships": {

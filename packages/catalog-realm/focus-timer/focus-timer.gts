@@ -22,6 +22,7 @@ import {
   and,
   not,
 } from '@cardstack/boxel-ui/helpers'; // ³ Enhanced formatters
+import { htmlSafe } from '@ember/template';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -494,7 +495,6 @@ export class FocusTimerCard extends CardDef {
     <template>
       <div class='timer-view'>
         <div class='timer-container'>
-          <!-- ³⁵ Enhanced header with Study Hub styling -->
           <header class='timer-header'>
             <div class='header-content'>
               <div class='title-section'>
@@ -539,13 +539,11 @@ export class FocusTimerCard extends CardDef {
             </div>
           </header>
 
-          <!-- ³⁶ Enhanced timer display with Study Hub aesthetics -->
           <div class='timer-display'>
             <div
               class='timer-circle'
-              style={{concat '--phase-color: ' this.phaseColor}}
+              style={{htmlSafe (concat '--phase-color: ' this.phaseColor)}}
             >
-              <!-- Enhanced progress ring with gradient -->
               <svg class='progress-ring' viewBox='0 0 200 200'>
                 <defs>
                   <linearGradient
@@ -557,18 +555,16 @@ export class FocusTimerCard extends CardDef {
                   >
                     <stop
                       offset='0%'
-                      style={{concat
-                        'stop-color:'
-                        this.phaseColor
-                        ';stop-opacity:1'
+                      style={{htmlSafe
+                        (concat 'stop-color:' this.phaseColor ';stop-opacity:1')
                       }}
                     />
                     <stop
                       offset='100%'
-                      style={{concat
-                        'stop-color:'
-                        this.phaseColor
-                        ';stop-opacity:0.6'
+                      style={{htmlSafe
+                        (concat
+                          'stop-color:' this.phaseColor ';stop-opacity:0.6'
+                        )
                       }}
                     />
                   </linearGradient>
@@ -628,7 +624,6 @@ export class FocusTimerCard extends CardDef {
                 {{/if}}
               </div>
 
-              <!-- Floating metrics around the circle -->
               <div class='metric-float metric-sessions'>
                 <span
                   class='metric-number'
@@ -644,7 +639,6 @@ export class FocusTimerCard extends CardDef {
             </div>
           </div>
 
-          <!-- ³⁷ Enhanced control panel with Study Hub button styling -->
           <div class='timer-controls'>
             <div class='primary-controls'>
               {{#if this.canStart}}
@@ -773,7 +767,6 @@ export class FocusTimerCard extends CardDef {
             </div>
           </div>
 
-          <!-- ³⁸ Enhanced progress section with Study Hub design language -->
           <div class='session-progress'>
             <div class='progress-header'>
               <div class='header-left'>
@@ -795,14 +788,14 @@ export class FocusTimerCard extends CardDef {
             <div class='progress-bar'>
               <div
                 class='progress-fill'
-                style={{concat 'width: ' @model.completionPercentage '%'}}
+                style={{htmlSafe
+                  (concat 'width: ' @model.completionPercentage '%')
+                }}
               ></div>
               <div
                 class='progress-marker'
-                style={{concat
-                  'left: calc('
-                  @model.completionPercentage
-                  '% - 6px)'
+                style={{htmlSafe
+                  (concat 'left: calc(' @model.completionPercentage '% - 6px)')
                 }}
               ></div>
             </div>
@@ -1140,11 +1133,6 @@ export class FocusTimerCard extends CardDef {
           align-items: center;
           justify-content: center;
           background: var(--surface-elevated);
-          box-shadow:
-            0 20px 40px rgba(0, 0, 0, 0.1),
-            0 8px 16px rgba(0, 0, 0, 0.05),
-            inset 0 2px 4px rgba(255, 255, 255, 0.8);
-          border: 6px solid rgba(248, 250, 252, 0.9);
         }
 
         .progress-ring {
@@ -2096,7 +2084,6 @@ export class FocusTimerCard extends CardDef {
   static fitted = class Fitted extends Component<typeof FocusTimerCard> {
     <template>
       <div class='fitted-container'>
-        <!-- Badge Format -->
         <div class='badge-format'>
           <div class='timer-badge'>
             <svg
@@ -2122,7 +2109,6 @@ export class FocusTimerCard extends CardDef {
           </div>
         </div>
 
-        <!-- Strip Format -->
         <div class='strip-format'>
           <div class='timer-strip'>
             <div class='strip-left'>
@@ -2162,7 +2148,6 @@ export class FocusTimerCard extends CardDef {
           </div>
         </div>
 
-        <!-- Tile Format -->
         <div class='tile-format'>
           <div class='timer-tile'>
             <div class='tile-header'>
@@ -2249,7 +2234,6 @@ export class FocusTimerCard extends CardDef {
           </div>
         </div>
 
-        <!-- Card Format -->
         <div class='card-format'>
           <div class='timer-card'>
             <div class='card-header'>
