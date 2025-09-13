@@ -4,6 +4,8 @@
   "description": "Type declarations for use within this monorepo",
   "devDependencies": {
     "content-tag": "catalog:",
-    "ember-source": "catalog:"
+    "ember-source": "catalog:",
+    "@glint/template": "^1.3.0",
+    "ember-provide-consume-context": "^0.7.0"
   }
 }
