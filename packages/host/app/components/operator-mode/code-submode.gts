@@ -307,10 +307,6 @@ export default class CodeSubmode extends Component<Signature> {
       declarations: this.codeSemanticsService.getDeclarations(file, isModule),
       moduleError: this.codeSemanticsService.getModuleError(file, isModule),
       isLoading: this.codeSemanticsService.getIsLoading(file, isModule),
-      isLoadingNewModule: this.codeSemanticsService.getIsLoadingNewModule(
-        file,
-        isModule,
-      ),
     };
   }
 

@@ -52,7 +52,6 @@ export default class CodeSemanticsService extends Service {
         declarations: [],
         moduleError: undefined,
         isLoading: false,
-        isLoadingNewModule: false,
       };
     }
 
@@ -89,12 +88,6 @@ export default class CodeSemanticsService extends Service {
     if (!isModule) return false;
     let resource = this.getResourceForFile(file);
     return resource.isLoading;
-  }
-
-  getIsLoadingNewModule(file: Ready | undefined, isModule: boolean): boolean {
-    if (!isModule) return false;
-    let resource = this.getResourceForFile(file);
-    return resource.isLoadingNewModule;
   }
 
   getSelectedDeclaration(

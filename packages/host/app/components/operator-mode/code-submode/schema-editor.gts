@@ -121,10 +121,7 @@ export default class SchemaEditor extends Component<Signature> {
   }
 
   get isLoading() {
-    return (
-      this.args.moduleAnalysis.isLoadingNewModule ||
-      this.cardInheritanceChain.isLoading
-    );
+    return this.cardInheritanceChain.isLoading;
   }
 
   <template>
