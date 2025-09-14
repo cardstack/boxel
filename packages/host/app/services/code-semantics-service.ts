@@ -143,8 +143,7 @@ export default class CodeSemanticsService extends Service {
   get isModule() {
     return (
       this.isReady &&
-      hasExecutableExtension(this.readyFile.url) &&
-      !this.isIncompatibleFile
+      hasExecutableExtension(this.readyFile.url)
     );
   }
 
@@ -153,7 +152,7 @@ export default class CodeSemanticsService extends Service {
   }
 
   get isIncompatibleFile() {
-    return this.readyFile.isBinary || this.isNonCardJson;
+    return this.readyFile.isBinary || (!this.isModule && this.isNonCardJson);
   }
 
   private get isNonCardJson() {
