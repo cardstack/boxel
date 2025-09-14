@@ -157,9 +157,9 @@ export default class CodeSemanticsService extends Service {
   }
 
   private get isNonCardJson() {
-    return (
+    return !(
       this.readyFile.name.endsWith('.json') &&
-      !isCardDocumentString(this.readyFile.content)
+      isCardDocumentString(this.readyFile.content)
     );
   }
 
