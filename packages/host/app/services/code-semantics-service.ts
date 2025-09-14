@@ -141,10 +141,7 @@ export default class CodeSemanticsService extends Service {
   }
 
   get isModule() {
-    return (
-      this.isReady &&
-      hasExecutableExtension(this.readyFile.url)
-    );
+    return this.isReady && hasExecutableExtension(this.readyFile.url);
   }
 
   get isReady() {
