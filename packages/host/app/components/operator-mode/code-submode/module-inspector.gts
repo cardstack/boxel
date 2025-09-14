@@ -438,21 +438,19 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         @syntaxErrors={{@moduleAnalysis.moduleError.message}}
       />
     {{else if @card}}
-      {{#if @cardError}}
-        <section class='module-inspector-content error'>
-          <CardError
-            @error={{@cardError}}
-            @fileToFixWithAi={{this.sourceFileForCard}}
-          />
-        </section>
-      {{else}}
-        <CardRendererPanel
-          @card={{@card}}
-          @format={{@previewFormat}}
-          @setFormat={{@setPreviewFormat}}
-          data-test-card-resource-loaded
+      <CardRendererPanel
+        @card={{@card}}
+        @format={{@previewFormat}}
+        @setFormat={{@setPreviewFormat}}
+        data-test-card-resource-loaded
+      />
+    {{else if @cardError}}
+      <section class='module-inspector-content error'>
+        <CardError
+          @error={{@cardError}}
+          @fileToFixWithAi={{this.sourceFileForCard}}
         />
-      {{/if}}
+      </section>
     {{/if}}
 
     <style scoped>
