@@ -437,13 +437,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       <SyntaxErrorDisplay
         @syntaxErrors={{@moduleAnalysis.moduleError.message}}
       />
-    {{else if @card}}
-      <CardRendererPanel
-        @card={{@card}}
-        @format={{@previewFormat}}
-        @setFormat={{@setPreviewFormat}}
-        data-test-card-resource-loaded
-      />
     {{else if @cardError}}
       <section class='module-inspector-content error'>
         <CardError
@@ -451,6 +444,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @fileToFixWithAi={{this.sourceFileForCard}}
         />
       </section>
+    {{else if @card}}
+      <CardRendererPanel
+        @card={{@card}}
+        @format={{@previewFormat}}
+        @setFormat={{@setPreviewFormat}}
+        data-test-card-resource-loaded
+      />
     {{/if}}
 
     <style scoped>
