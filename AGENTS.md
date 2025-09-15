@@ -60,6 +60,8 @@
     `cd ../realm-server && MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests`
   - Run tests:
     `pnpm test`
+- Focusing on single test or module:
+  Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
 
 ### packages/realm-server
 
