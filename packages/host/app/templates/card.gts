@@ -240,14 +240,5 @@ function eventHasInvalidOrigin(event: MessageEvent) {
     return false;
   }
 
-  if (!config.validPublishedRealmDomains) {
-    // If no valid domains are configured, reject all messages
-    return true;
-  }
-
-  let validDomainRoots = config.validPublishedRealmDomains.split(',');
-
-  return validDomainRoots.some((domainRoot) => {
-    return new URL(event.origin).hostname.endsWith(domainRoot.trim());
-  });
+  return new URL(event.origin).href === config.realmServerURL;
 }
