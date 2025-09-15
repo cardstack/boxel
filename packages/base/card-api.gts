@@ -56,7 +56,6 @@ import {
   type LooseCardResource,
   type LooseSingleCardDocument,
   type CardDocument,
-  type CardResource,
   type CardResourceMeta,
   type ResolvedCodeRef,
   type getCard,
@@ -85,6 +84,20 @@ import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
+import {
+  callSerializeHook,
+  cardClassFromResource,
+  deserialize,
+  makeMetaForField,
+  makeRelativeURL,
+  serialize,
+  resourceFrom,
+  type DeserializeOpts,
+  type JSONAPIResource,
+  type JSONAPISingleResourceDocument,
+  type SerializeOpts,
+  getCardMeta,
+} from './card-serialization';
 
 interface CardOrFieldTypeIconSignature {
   Element: Element;
@@ -93,16 +106,22 @@ interface CardOrFieldTypeIconSignature {
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export {
-  meta,
-  localId,
-  realmURL,
-  primitive,
-  relativeTo,
+  deserialize,
+  getCardMeta,
   isField,
+  localId,
+  meta,
+  primitive,
+  realmURL,
+  relativeTo,
+  serialize,
   type BoxComponent,
+  type DeserializeOpts,
+  type JSONAPISingleResourceDocument,
+  type ResourceID,
+  type SerializeOpts,
 };
-export const serialize = Symbol.for('cardstack-serialize');
-export const deserialize = Symbol.for('cardstack-deserialize');
+
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const fieldType = Symbol.for('cardstack-field-type');
@@ -331,25 +350,6 @@ export interface CardStore {
   loaded(): Promise<void>;
 }
 
-type JSONAPIResource =
-  | {
-      attributes: Record<string, any>;
-      relationships?: Record<string, Relationship>;
-      meta?: Record<string, any>;
-    }
-  | {
-      attributes?: Record<string, any>;
-      relationships: Record<string, Relationship>;
-      meta?: Record<string, any>;
-    };
-
-export interface JSONAPISingleResourceDocument {
-  data: Partial<JSONAPIResource> & { type: string } & { id?: string } & {
-    lid?: string;
-  };
-  included?: (Partial<JSONAPIResource> & ResourceID)[];
-}
-
 export interface Field<
   CardT extends BaseDefConstructor = BaseDefConstructor,
   SearchT = any,
@@ -396,26 +396,6 @@ export interface Field<
   >;
 }
 
-function callSerializeHook(
-  card: typeof BaseDef,
-  value: any,
-  doc: JSONAPISingleResourceDocument,
-  visited: Set<string> = new Set(),
-  opts?: SerializeOpts,
-) {
-  if (value != null) {
-    if (primitive in card && fieldSerializer in card) {
-      assertIsSerializerName(card[fieldSerializer]);
-      let serializer = getSerializer(card[fieldSerializer]);
-      return serializer.serialize(value, doc, visited, opts);
-    } else {
-      return card[serialize](value, doc, visited, opts);
-    }
-  } else {
-    return null;
-  }
-}
-
 function cardTypeFor(
   field: Field<typeof BaseDef>,
   boxedElement?: Box<BaseDef>,
@@ -441,31 +421,6 @@ function cardTypeFor(
   }
   return Reflect.getPrototypeOf(boxedElement.value)!
     .constructor as typeof BaseDef;
-}
-
-function resourceFrom(
-  doc: CardDocument | undefined,
-  resourceId: string | undefined,
-): LooseCardResource | undefined {
-  if (doc == null) {
-    return;
-  }
-  let data: CardResource[];
-  if (isSingleCardDocument(doc)) {
-    if (resourceId === undefined) {
-      return undefined;
-    }
-    if (resourceId === null) {
-      return doc.data;
-    }
-    data = [doc.data];
-  } else {
-    data = doc.data;
-  }
-  let res = [...data, ...(doc.included ?? [])].find(
-    (resource) => resource.id === resourceId,
-  );
-  return res;
 }
 
 function getter<CardT extends BaseDefConstructor>(
@@ -2998,15 +2953,6 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   return result;
 }
 
-export interface SerializeOpts {
-  includeComputeds?: boolean;
-  includeUnrenderedFields?: boolean;
-  useAbsoluteURL?: boolean;
-  omitFields?: [typeof BaseDef];
-  maybeRelativeURL?: (possibleURL: string) => string;
-  overrides?: Map<string, typeof BaseDef>;
-}
-
 function serializeCardResource(
   model: CardDef,
   doc: JSONAPISingleResourceDocument,
@@ -3087,10 +3033,6 @@ export function serializeCard(
     );
   }
   return doc;
-}
-
-export interface DeserializeOpts {
-  ignoreBrokenLinks?: true;
 }
 
 // TODO Currently our deserialization process performs 2 tasks that probably
@@ -3395,53 +3337,6 @@ export async function searchDoc<CardT extends BaseDefConstructor>(
     string,
     any
   >;
-}
-
-function makeMetaForField(
-  meta: Partial<Meta> | undefined,
-  fieldName: string,
-  fallback: typeof BaseDef,
-): Meta {
-  let adoptsFrom = meta?.adoptsFrom ?? identifyCard(fallback);
-  if (!adoptsFrom) {
-    throw new Error(`bug: cannot determine identity for field '${fieldName}'`);
-  }
-  let fields: NonNullable<LooseCardResource['meta']['fields']> = {
-    ...(meta?.fields ?? {}),
-  };
-  return {
-    adoptsFrom,
-    ...(Object.keys(fields).length > 0 ? { fields } : {}),
-  };
-}
-
-async function cardClassFromResource<CardT extends BaseDefConstructor>(
-  resource: LooseCardResource | undefined,
-  fallback: CardT,
-  relativeTo: URL | undefined,
-): Promise<CardT> {
-  let cardIdentity = identifyCard(fallback);
-  if (!cardIdentity) {
-    throw new Error(
-      `bug: could not determine identity for card '${fallback.name}'`,
-    );
-  }
-  if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let card: typeof BaseDef | undefined = await loadCardDef(
-      resource.meta.adoptsFrom,
-      {
-        loader: myLoader(),
-        relativeTo: resource.id ? new URL(resource.id) : relativeTo,
-      },
-    );
-    if (!card) {
-      throw new Error(
-        `could not find card: '${humanReadable(resource.meta.adoptsFrom)}'`,
-      );
-    }
-    return card as CardT;
-  }
-  return fallback;
 }
 
 function makeDescriptor<
@@ -3862,12 +3757,6 @@ export class Box<T> {
 
 type ElementType<T> = T extends (infer V)[] ? V : never;
 
-function makeRelativeURL(maybeURL: string, opts?: SerializeOpts): string {
-  return opts?.maybeRelativeURL && !opts?.useAbsoluteURL
-    ? opts.maybeRelativeURL(maybeURL)
-    : maybeURL;
-}
-
 declare module 'ember-provide-consume-context/context-registry' {
   export default interface ContextRegistry {
     [CardContextName]: CardContext;
@@ -3887,13 +3776,6 @@ function myLoader(): Loader {
   // this file is always loaded through our loader and always has access to import.meta.
   // @ts-ignore
   return (import.meta as any).loader;
-}
-
-export function getCardMeta<K extends keyof CardResourceMeta>(
-  card: CardDef,
-  metaKey: K,
-): CardResourceMeta[K] | undefined {
-  return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
 }
 
 class FallbackCardStore implements CardStore {
