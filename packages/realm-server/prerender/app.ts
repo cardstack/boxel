@@ -16,10 +16,6 @@ let log = logger('prerender-server');
 export function buildPrerenderApp(
   secretSeed: string,
 ): Koa<Koa.DefaultState, Koa.Context> {
-  if (!secretSeed) {
-    throw new Error(`REALM_SECRET_SEED is required to start prerender server`);
-  }
-
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
 

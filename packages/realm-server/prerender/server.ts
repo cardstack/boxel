@@ -1,5 +1,5 @@
 import '../instrument';
-import '../setup-logger'; // This should be first
+import '../setup-logger';
 import { logger } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import { Server } from 'http';
