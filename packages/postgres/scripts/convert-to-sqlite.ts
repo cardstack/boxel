@@ -118,7 +118,15 @@ function createColumns(
           ) {
             column.push('DEFAULT', String(constraint.expr.expr.text));
             break;
+          } else if (
+            constraint.expr.type === 'func_call' &&
+            constraint.expr.name.type === 'identifier' &&
+            constraint.expr.name.name === 'gen_random_uuid'
+          ) {
+            column.push('DEFAULT', '(hex(randomblob(16)))');
+            break;
           } else {
+            debugger;
             throw new Error(
               `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
             );
