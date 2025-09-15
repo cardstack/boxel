@@ -351,7 +351,11 @@ module(basename(__filename), function () {
 
       assert.strictEqual(unpublishResponse.status, 200, 'HTTP 200 status');
       assert.strictEqual(unpublishResponse.body.data.type, 'unpublished_realm');
-      assert.ok(unpublishResponse.body.data.id, 'unpublished realm has an ID');
+      assert.strictEqual(
+        unpublishResponse.body.data.id,
+        publishResponse.body.data.id,
+        'unpublished realm ID is the same as the published realm ID',
+      );
       assert.strictEqual(
         unpublishResponse.body.data.attributes.sourceRealmURL,
         testRealm.url,
