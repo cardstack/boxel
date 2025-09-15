@@ -1,9 +1,11 @@
 import {
   type PrerenderMeta,
+  type DBAdapter,
   type CardErrorJSONAPI,
+  fetchUserPermissions,
 } from '@cardstack/runtime-common';
 import puppeteer, { type Page } from 'puppeteer';
-import { createJWT } from '../jwt';
+import { createJWT } from './jwt';
 
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
 
@@ -19,31 +21,29 @@ export interface RenderResponse extends PrerenderMeta {
   iconHTML: string | null;
   error?: CardErrorJSONAPI;
 }
-export type PermissionsMap = {
-  [realm: string]: ('read' | 'write' | 'realm-owner')[];
-};
 
 export async function prerenderCard({
   url,
   userId,
   secretSeed,
-  permissions,
+  dbAdapter,
 }: {
   url: string;
   userId: string;
   secretSeed: string;
-  permissions: PermissionsMap;
-}): Promise<{
-  response: RenderResponse;
-  timings: { launchMs: number; renderMs: number };
-}> {
+  dbAdapter: DBAdapter;
+}): Promise<RenderResponse> {
+  let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, userId);
+  if (!permissionsForAllRealms) {
+    throw new Error(`Cannot determine permissions for user ${userId}`);
+  }
   let sessions: { [realm: string]: string } = {};
-  for (let [realm, realmPermissions] of Object.entries(permissions ?? {})) {
+  for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
     sessions[realm] = createJWT(
       {
         user: userId,
         realm: realm,
-        permissions: realmPermissions,
+        permissions,
         sessionRoom: '',
       },
       '1d',
@@ -51,16 +51,12 @@ export async function prerenderCard({
     );
   }
   let auth = JSON.stringify(sessions);
-
-  let t0 = Date.now();
   const browser = await puppeteer.launch({
     headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
     args: process.env.CI ? ['--no-sandbox'] : [],
   });
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
-  let launchMs = Date.now() - t0;
-  let renderStart = Date.now();
   try {
     let error: CardErrorJSONAPI | undefined;
     page.evaluateOnNewDocument((auth) => {
@@ -126,7 +122,7 @@ export async function prerenderCard({
       ];
     }
 
-    let response: RenderResponse = {
+    return {
       ...meta,
       ...(error ? { error } : {}),
       iconHTML,
@@ -134,10 +130,6 @@ export async function prerenderCard({
       atomHTML,
       embeddedHTML,
       fittedHTML,
-    };
-    return {
-      response,
-      timings: { launchMs, renderMs: Date.now() - renderStart },
     };
   } finally {
     await context.close();
@@ -238,5 +230,3 @@ async function captureResult(
 function isRenderError(value: any): value is RenderError {
   return typeof value === 'object' && 'error' in value;
 }
-
-export type { PrerenderMeta };
