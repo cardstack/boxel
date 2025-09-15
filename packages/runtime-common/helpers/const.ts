@@ -19,4 +19,5 @@ export const testRealmInfo: RealmInfo = {
   visibility: 'public',
   realmUserId: testRealmURLToUsername(testRealmURL),
   publishable: null,
+  lastPublishedAt: null,
 };

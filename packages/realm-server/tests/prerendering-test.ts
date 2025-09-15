@@ -149,7 +149,7 @@ module(basename(__filename), function () {
       test('embedded HTML', function (assert) {
         assert.ok(
           /Maple\s+says\s+Meow/.test(
-            result.embeddedHTML[`${realmURL2}cat/Cat`],
+            result.embeddedHTML![`${realmURL2}cat/Cat`],
           ),
           `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
         );
@@ -158,7 +158,7 @@ module(basename(__filename), function () {
       test('parent embedded HTML', function (assert) {
         assert.ok(
           /data-test-card-thumbnail-placeholder/.test(
-            result.embeddedHTML['https://cardstack.com/base/card-api/CardDef'],
+            result.embeddedHTML!['https://cardstack.com/base/card-api/CardDef'],
           ),
           `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
         );
@@ -166,20 +166,27 @@ module(basename(__filename), function () {
 
       test('isolated HTML', function (assert) {
         assert.ok(
-          /data-test-field="description"/.test(result.isolatedHTML),
+          /data-test-field="description"/.test(result.isolatedHTML!),
           `failed to match isolated html:${result.isolatedHTML}`,
+        );
+      });
+
+      test('atom HTML', function (assert) {
+        assert.ok(
+          /Untitled Cat/.test(result.atomHTML!),
+          `failed to match atom html:${result.atomHTML}`,
         );
       });
 
       test('icon HTML', function (assert) {
         assert.ok(
-          result.iconHTML.startsWith('<svg'),
+          result.iconHTML?.startsWith('<svg'),
           `iconHTML: ${result.iconHTML}`,
         );
       });
 
       test('serialized', function (assert) {
-        assert.strictEqual(result.serialized.data.attributes?.name, 'Maple');
+        assert.strictEqual(result.serialized?.data.attributes?.name, 'Maple');
       });
 
       test('displayName', function (assert) {
@@ -194,10 +201,10 @@ module(basename(__filename), function () {
       });
 
       test('searchDoc', function (assert) {
-        assert.strictEqual(result.searchDoc.name, 'Maple');
-        assert.strictEqual(result.searchDoc._cardType, 'Cat');
+        assert.strictEqual(result.searchDoc?.name, 'Maple');
+        assert.strictEqual(result.searchDoc?._cardType, 'Cat');
         assert.deepEqual(
-          result.searchDoc.owner,
+          result.searchDoc?.owner,
           {
             id: `${realmURL1}1`,
             name: 'Hassan',
@@ -212,17 +219,33 @@ module(basename(__filename), function () {
     module('errors', function () {
       test('error during render', async function (assert) {
         const testCardURL = `${realmURL2}2`;
-        assert.rejects(
-          (async () => {
-            await prerenderCard({
-              url: testCardURL,
-              userId: testUserId,
-              secretSeed: realmSecretSeed,
-              dbAdapter,
-            });
-          })(),
-          /todo: error doc/,
-        );
+        let result = await prerenderCard({
+          url: testCardURL,
+          userId: testUserId,
+          secretSeed: realmSecretSeed,
+          dbAdapter,
+        });
+        let { error, ...restOfResult } = result;
+
+        assert.strictEqual(error?.id, testCardURL);
+        assert.strictEqual(error?.message, 'intentional failure during render');
+        assert.strictEqual(error?.status, 500);
+        assert.ok(error?.meta.stack, 'stack trace exists in error');
+
+        // TODO Perhaps if we add error handlers for the /render/html subroute
+        // these all wont be empty, as this is triggering in the /render route
+        // error handler and hence stomping over all the subroutes.
+        assert.deepEqual(restOfResult, {
+          displayName: null,
+          searchDoc: null,
+          serialized: null,
+          types: null,
+          atomHTML: null,
+          embeddedHTML: null,
+          fittedHTML: null,
+          iconHTML: null,
+          isolatedHTML: null,
+        });
       });
     });
   });

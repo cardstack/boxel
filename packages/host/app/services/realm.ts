@@ -419,6 +419,7 @@ export default class RealmService extends Service {
         publishable: null,
         isIndexing: false,
         isPublic: false,
+        lastPublishedAt: null,
       };
     }
 
@@ -433,6 +434,7 @@ export default class RealmService extends Service {
         publishable: null,
         isIndexing: false,
         isPublic: false,
+        lastPublishedAt: null,
       };
     } else {
       return resource.info;
