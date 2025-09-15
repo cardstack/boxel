@@ -106,7 +106,9 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     }
   }
 
-  class LocalCategoryCard extends Category {}
+  class LocalCategoryCard extends Category {
+    static displayName = 'Local Category'
+  }
 
   export class RandomClass {}
 
@@ -370,21 +372,25 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-module-inspector-view="schema"]');
       await selectDeclaration('LocalCategoryCard');
-      assert.dom('[data-test-incompatible-nonexports]').doesNotExist();
       await togglePlaygroundPanel();
       assert
         .dom('[data-test-playground-panel]')
         .doesNotExist(
-          'playground preview is not available for LocalCategory (local card def)',
+          'playground panel exists for Category (exported card def)',
         );
-      assert.dom('[data-test-incompatible-nonexports]').exists();
+      assert.dom('[data-test-playground-incompatible-message]').exists();
+      assert
+        .dom('[data-test-playground-incompatible-message] span')
+        .containsText('Playground is not currently supported for this type.');
 
       await selectDeclaration('RandomClass');
       assert
         .dom('[data-test-module-inspector-view="preview"]')
-        .doesNotExist(
-          'does not exist for RandomClass (not a card or field def)',
-        );
+        .exists('inspector exists for RandomClass (not a card or field def)');
+      assert.dom('[data-test-playground-incompatible-message]').exists();
+      assert
+        .dom('[data-test-playground-incompatible-message] span')
+        .containsText('Playground is not currently supported for this type.');
 
       await selectDeclaration('BlogPost');
       assert
