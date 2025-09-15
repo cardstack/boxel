@@ -3,22 +3,17 @@ import {
   SupportedMimeType,
   systemInitiatedPriority,
 } from '@cardstack/runtime-common';
-import {
-  sendResponseForUnauthorizedRequest,
-  setContextResponse,
-} from '../middleware';
+import { setContextResponse } from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
 import {
   compareCurrentBoxelUIChecksum,
   writeCurrentBoxelUIChecksum,
 } from '../lib/boxel-ui-change-checker';
-import { reindex } from './handle-reindex';
 
 export default function handlePostDeployment({
   assetsURL,
   realms,
   queue,
-  dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (
@@ -34,14 +29,16 @@ export default function handlePostDeployment({
       boxelUiChangeCheckerResult.currentChecksum !==
       boxelUiChangeCheckerResult.previousChecksum
     ) {
-      for (let realm of realms) {
-        await reindex({
-          realm,
-          queue,
-          dbAdapter,
-          priority: systemInitiatedPriority,
-        });
-      }
+      await queue.publish<void>({
+        jobType: `full-reindex`,
+        concurrencyGroup: `full-reindex`,
+        timeout: 6 * 60,
+        priority: systemInitiatedPriority,
+        args: {
+          realmUrls: realms.map((r) => r.url),
+        },
+      });
+
       writeCurrentBoxelUIChecksum(boxelUiChangeCheckerResult.currentChecksum);
     }
 

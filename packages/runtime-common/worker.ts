@@ -22,17 +22,13 @@ import {
   type RealmInfo,
   type LintArgs,
   systemInitiatedPriority,
-  Realm,
   QueuePublisher,
   DBAdapter,
+  fetchAllRealmsWithOwners,
 } from '.';
 import { MatrixClient } from './matrix-client';
 import { lintFix } from './lint';
-import { enqueueReindexRealmJob } from 'jobs/reindex-realm';
-import {
-  compareCurrentBoxelUIChecksum,
-  writeCurrentBoxelUIChecksum,
-} from 'helpers/boxel-ui-change-checker';
+import { enqueueReindexRealmJob } from './jobs/reindex-realm';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -68,11 +64,8 @@ export interface StatusArgs {
   deps?: string[];
 }
 
-export interface PostRealmServerDeploymentArgs {
-  assetsURL: URL;
-  realms: Realm[];
-  queue: QueuePublisher;
-  dbAdapter: DBAdapter;
+export interface FullReindexArgs {
+  realmUrls: string[];
 }
 
 export type RunnerRegistration = (
@@ -165,6 +158,8 @@ export class Worker {
   runnerOptsMgr: RunnerOptionsManager;
   #indexWriter: IndexWriter;
   #queue: QueueRunner;
+  #dbAdapter: DBAdapter;
+  #queuePublisher: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
   #matrixClientCache: Map<string, MatrixClient> = new Map();
@@ -187,6 +182,8 @@ export class Worker {
   constructor({
     indexWriter,
     queue,
+    dbAdapter,
+    queuePublisher,
     indexRunner,
     runnerOptsManager,
     virtualNetwork,
@@ -197,6 +194,8 @@ export class Worker {
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
+    dbAdapter: DBAdapter;
+    queuePublisher: QueuePublisher;
     indexRunner: IndexRunner;
     runnerOptsManager: RunnerOptionsManager;
     virtualNetwork: VirtualNetwork;
@@ -214,6 +213,8 @@ export class Worker {
     this.#runner = indexRunner;
     this.#reportStatus = reportStatus;
     this.#realmServerMatrixUsername = realmServerMatrixUsername;
+    this.#dbAdapter = dbAdapter;
+    this.#queuePublisher = queuePublisher;
   }
 
   async run() {
@@ -222,10 +223,7 @@ export class Worker {
       this.#queue.register(`incremental-index`, this.incremental),
       this.#queue.register(`copy-index`, this.copy),
       this.#queue.register(`lint-source`, this.lintSource),
-      this.#queue.register(
-        `post-realm-server-deployment`,
-        this.postRealmServerDeployment,
-      ),
+      this.#queue.register(`full-reindex`, this.fullReindex),
     ]);
     await this.#queue.start();
   }
@@ -361,31 +359,42 @@ export class Worker {
     return result;
   };
 
-  private postRealmServerDeployment = async (
-    args: PostRealmServerDeploymentArgs & { jobInfo?: JobInfo },
+  private fullReindex = async (
+    args: FullReindexArgs & { jobInfo?: JobInfo },
   ) => {
     this.#log.debug(
-      `${jobIdentity(args.jobInfo)} starting post-realm-server-deployment for job: ${JSON.stringify(args)}`,
+      `${jobIdentity(args.jobInfo)} starting reindex-all for job: ${JSON.stringify(args)}`,
     );
     this.reportStatus(args.jobInfo, 'start');
-    let { assetsURL, realms, queue, dbAdapter } = args;
-    let boxelUiChangeCheckerResult =
-      await compareCurrentBoxelUIChecksum(assetsURL);
+    let { realmUrls } = args;
 
-    if (
-      boxelUiChangeCheckerResult.currentChecksum !==
-      boxelUiChangeCheckerResult.previousChecksum
-    ) {
-      for (let realm of realms) {
-        await enqueueReindexRealmJob(
-          realm,
-          queue,
-          dbAdapter,
-          systemInitiatedPriority,
-        );
-      }
-      writeCurrentBoxelUIChecksum(boxelUiChangeCheckerResult.currentChecksum);
+    const realmOwners = await fetchAllRealmsWithOwners(this.#dbAdapter);
+
+    const ownerMap = new Map(
+      realmOwners.map((r) => [r.realm_url, r.owner_username]),
+    );
+
+    // Only include realms with a non-bot owner
+    const realmsWithUsernames = realmUrls
+      .map((realmUrl) => {
+        const username = ownerMap.get(realmUrl)!;
+        return {
+          url: realmUrl,
+          username,
+        };
+      })
+      .filter((realm) => !realm.username.startsWith('@realm/'));
+
+    for (let realm of realmsWithUsernames) {
+      await enqueueReindexRealmJob(
+        realm.url,
+        realm.username,
+        this.#queuePublisher,
+        this.#dbAdapter,
+        systemInitiatedPriority,
+      );
     }
+
     this.reportStatus(args.jobInfo, 'finish');
   };
 

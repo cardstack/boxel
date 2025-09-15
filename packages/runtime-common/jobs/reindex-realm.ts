@@ -3,29 +3,28 @@ import {
   FromScratchArgs,
   FromScratchResult,
   QueuePublisher,
-  Realm,
   param,
   query,
-} from 'index';
+} from '../';
 
 export async function enqueueReindexRealmJob(
-  realm: Realm,
+  realmUrl: string,
+  realmUsername: string,
   queue: QueuePublisher,
   dbAdapter: DBAdapter,
   priority: number,
 ) {
-  let realmUsername = await realm.getRealmOwnerUsername();
   let args: FromScratchArgs = {
-    realmURL: realm.url,
+    realmURL: realmUrl,
     realmUsername,
   };
   await query(dbAdapter, [
     `UPDATE boxel_index SET last_modified = NULL WHERE realm_url =`,
-    param(realm.url),
+    param(realmUrl),
   ]);
   let job = await queue.publish<FromScratchResult>({
     jobType: `from-scratch-index`,
-    concurrencyGroup: `indexing:${realm.url}`,
+    concurrencyGroup: `indexing:${realmUrl}`,
     // allow this to run longer than normal as we are forcing all files to be
     // revisited regardless of mtime
     timeout: 6 * 60,

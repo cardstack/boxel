@@ -76,5 +76,11 @@ export async function reindex({
   dbAdapter: DBAdapter;
   priority?: number;
 }) {
-  return await enqueueReindexRealmJob(realm, queue, dbAdapter, priority);
+  return await enqueueReindexRealmJob(
+    realm.url,
+    await realm.getRealmOwnerUsername(),
+    queue,
+    dbAdapter,
+    priority,
+  );
 }
