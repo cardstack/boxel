@@ -69,6 +69,18 @@ test.describe('Host mode', () => {
     ).toBeVisible();
   });
 
+  test('visiting connect route with known origin includes a matching frame-ancestors CSP', async ({
+    page,
+  }) => {
+    let response = await page.goto(
+      'http://localhost:4205/connect/http%3A%2F%2Fpublished.localhost%3A4205%2F',
+    );
+
+    expect(response?.headers()['content-security-policy']).toBe(
+      'frame-ancestors http://published.localhost:4205/',
+    );
+  });
+
   test('visiting connect route with origin not in published_realms returns 404', async ({
     page,
   }) => {

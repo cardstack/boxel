@@ -254,6 +254,11 @@ export class RealmServer {
 
             return;
           }
+
+          ctxt.set(
+            'Content-Security-Policy',
+            `frame-ancestors ${originParameter}`,
+          );
         } catch (error) {
           ctxt.status = 400;
           ctxt.body = 'Bad Request';
