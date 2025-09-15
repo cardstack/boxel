@@ -15,11 +15,11 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(basename(__filename), function () {
+module.only(basename(__filename), function () {
   module('prerender', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
-    const testUserId = '@user1:localhost';
+    let testUserId = '@user1:localhost';
     let permissions: PermissionsMap = {};
 
     hooks.before(() => {
@@ -30,105 +30,106 @@ module(basename(__filename), function () {
 
     setupPermissionedRealms(hooks, {
       mode: 'before',
-      realm1: {
-        realmURL: realmURL1,
-        permissions: {
-          [testUserId]: ['read', 'write', 'realm-owner'],
-        },
-        fileSystem: {
-          'person.gts': `
-            import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-            import { Component } from 'https://cardstack.com/base/card-api';
-            export class Person extends CardDef {
-              static displayName = "Person";
-              @field name = contains(StringField);
-              static fitted = <template><@fields.name/></template>
-            }
-          `,
-          '1.json': {
-            data: {
-              attributes: {
-                name: 'Hassan',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person',
-                  name: 'Person',
-                },
-              },
-            },
+      realms: [
+        {
+          realmURL: realmURL1,
+          permissions: {
+            [testUserId]: ['read', 'write', 'realm-owner'],
           },
-        },
-      },
-      realm2: {
-        realmURL: realmURL2,
-        permissions: {
-          [testUserId]: ['read', 'write', 'realm-owner'],
-        },
-        fileSystem: {
-          'cat.gts': `
-            import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
-            import { Component } from 'https://cardstack.com/base/card-api';
-            import { Person } from '${realmURL1}person';
-            export class Cat extends CardDef {
-              @field name = contains(StringField);
-              @field owner = linksTo(Person);
-              static displayName = "Cat";
-              static embedded = <template>{{@fields.name}} says Meow</template>
-            }
-          `,
-          '1.json': {
-            data: {
-              attributes: {
-                name: 'Maple',
-              },
-              relationships: {
-                owner: {
-                  links: { self: `${realmURL1}1` },
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './cat',
-                  name: 'Cat',
-                },
-              },
-            },
-          },
-          'intentional-error.gts': `
-            import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-            import { Component } from 'https://cardstack.com/base/card-api';
-            export class IntentionalError extends CardDef {
-              @field name = contains(StringField);
-              static displayName = "Intentional Error";
-              static isolated = class extends Component {
-                get message() {
-                  if (this.args.model.name === 'Intentional Error') {
-                    throw new Error('intentional failure during render')
-                  }
-                  return this.args.model.name;
-                }
-                <template>{{this.message}}</template>
+          fileSystem: {
+            'person.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { Component } from 'https://cardstack.com/base/card-api';
+              export class Person extends CardDef {
+                static displayName = "Person";
+                @field name = contains(StringField);
+                static fitted = <template><@fields.name/></template>
               }
-            }
-          `,
-          '2.json': {
-            data: {
-              attributes: {
-                name: 'Intentional Error',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './intentional-error',
-                  name: 'IntentionalError',
+            `,
+            '1.json': {
+              data: {
+                attributes: {
+                  name: 'Hassan',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
                 },
               },
             },
           },
         },
-      },
+        {
+          realmURL: realmURL2,
+          permissions: {
+            [testUserId]: ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'cat.gts': `
+              import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
+              import { Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+              export class Cat extends CardDef {
+                @field name = contains(StringField);
+                @field owner = linksTo(Person);
+                static displayName = "Cat";
+                static embedded = <template>{{@fields.name}} says Meow</template>
+              }
+            `,
+            '1.json': {
+              data: {
+                attributes: {
+                  name: 'Maple',
+                },
+                relationships: {
+                  owner: {
+                    links: { self: `${realmURL1}1` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './cat',
+                    name: 'Cat',
+                  },
+                },
+              },
+            },
+            'intentional-error.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { Component } from 'https://cardstack.com/base/card-api';
+              export class IntentionalError extends CardDef {
+                @field name = contains(StringField);
+                static displayName = "Intentional Error";
+                static isolated = class extends Component {
+                  get message() {
+                    if (this.args.model.name === 'Intentional Error') {
+                      throw new Error('intentional failure during render')
+                    }
+                    return this.args.model.name;
+                  }
+                  <template>{{this.message}}</template>
+                }
+              }
+            `,
+            '2.json': {
+              data: {
+                attributes: {
+                  name: 'Intentional Error',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './intentional-error',
+                    name: 'IntentionalError',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
       onRealmSetup: () => {
-        // in this test harness, both realms grant read/write/realm-owner to testUserId
         permissions = {
           [realmURL1]: ['read', 'write', 'realm-owner'],
           [realmURL2]: ['read', 'write', 'realm-owner'],
@@ -241,6 +242,23 @@ module(basename(__filename), function () {
           iconHTML: null,
           isolatedHTML: null,
         });
+      });
+
+      test('render timeout', async function (assert) {
+        const testCardURL = `${realmURL2}1`;
+        let result = await prerenderCard({
+          url: testCardURL,
+          userId: testUserId,
+          secretSeed: realmSecretSeed,
+          permissions,
+          opts: { timeoutMs: 4000, simulateTimeoutMs: 5000 },
+        });
+        let {
+          response: { error },
+        } = result;
+        assert.strictEqual(error?.id, testCardURL);
+        assert.strictEqual(error?.message, 'Render timed-out after 4000 ms');
+        assert.strictEqual(error?.status, 504);
       });
     });
   });

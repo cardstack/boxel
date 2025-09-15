@@ -13,7 +13,7 @@ import {
 } from './helpers';
 import { createPrerenderHttpServer } from '../prerender/app';
 
-module.only(basename(__filename), function () {
+module(basename(__filename), function () {
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
     let prerenderServer: Server;

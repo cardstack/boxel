@@ -77,15 +77,6 @@ export function buildPrerenderApp(
         permissions,
       });
       let totalMs = Date.now() - start;
-
-      if (response.error) {
-        ctxt.status = 500;
-        ctxt.body = {
-          errors: [response.error],
-        };
-        return;
-      }
-
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {
