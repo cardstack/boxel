@@ -15,7 +15,7 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module.only(basename(__filename), function () {
+module(basename(__filename), function () {
   module('prerender', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
