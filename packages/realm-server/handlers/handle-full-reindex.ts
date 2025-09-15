@@ -5,22 +5,21 @@ import {
 } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
-import { reindex } from './handle-reindex';
 
 export default function handleFullReindex({
   queue,
-  dbAdapter,
   realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    for (let realm of realms) {
-      await reindex({
-        realm,
-        queue,
-        dbAdapter,
-        priority: systemInitiatedPriority,
-      });
-    }
+    await queue.publish<void>({
+      jobType: `full-reindex`,
+      concurrencyGroup: `full-reindex`,
+      timeout: 6 * 60,
+      priority: systemInitiatedPriority,
+      args: {
+        realmUrls: realms.map((r) => r.url),
+      },
+    });
     await setContextResponse(
       ctxt,
       new Response(
