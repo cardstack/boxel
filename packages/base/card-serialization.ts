@@ -7,13 +7,14 @@ import type {
   CardDocument,
   CardResource,
   CardResourceMeta,
+  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { ResourceID } from '@cardstack/runtime-common';
 
 // --- Runtime Imports ---
 
-import { isEqual } from 'lodash';
+import { isEqual, merge } from 'lodash';
 import {
   assertIsSerializerName,
   fieldSerializer,
@@ -22,9 +23,14 @@ import {
   identifyCard,
   isSingleCardDocument,
   loadCardDef,
+  localId,
+  maybeRelativeURL,
+  maybeURL,
   meta,
   primitive,
+  relativeTo,
 } from '@cardstack/runtime-common';
+import { getFieldOverrides, getFields, serializedGet } from './field-support';
 
 // --- Type Exports ---
 
@@ -184,4 +190,86 @@ export function resourceFrom(
     (resource) => resource.id === resourceId,
   );
   return res;
+}
+
+export function serializeCard(
+  model: CardDef,
+  opts?: SerializeOpts,
+): LooseSingleCardDocument {
+  let doc = {
+    data: {
+      type: 'card',
+      ...(model.id != null ? { id: model.id } : { lid: model[localId] }),
+    },
+  };
+  let modelRelativeTo = model[relativeTo];
+  let data = serializeCardResource(model, doc, {
+    ...opts,
+    ...{
+      maybeRelativeURL(possibleURL: string) {
+        let url = maybeURL(possibleURL, modelRelativeTo);
+        if (!url) {
+          throw new Error(
+            `could not determine url from '${maybeRelativeURL}' relative to ${modelRelativeTo}`,
+          );
+        }
+        if (!modelRelativeTo) {
+          return url.href;
+        }
+        const realmURLString = getCardMeta(model, 'realmURL');
+        const realmURL = realmURLString ? new URL(realmURLString) : undefined;
+        return maybeRelativeURL(url, modelRelativeTo, realmURL);
+      },
+    },
+  });
+  merge(doc, { data });
+  if (!isSingleCardDocument(doc)) {
+    throw new Error(
+      `Expected serialized card to be a SingleCardDocument, but is was: ${JSON.stringify(
+        doc,
+        null,
+        2,
+      )}`,
+    );
+  }
+  return doc;
+}
+
+export function serializeCardResource(
+  model: CardDef,
+  doc: JSONAPISingleResourceDocument,
+  opts?: SerializeOpts,
+  visited: Set<string> = new Set(),
+): LooseCardResource {
+  let adoptsFrom = identifyCard(
+    model.constructor,
+    opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+  );
+  if (!adoptsFrom) {
+    throw new Error(`bug: could not identify card: ${model.constructor.name}`);
+  }
+  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
+  let { id: removedIdField, ...fields } = getFields(model, {
+    ...fieldOpts,
+    usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
+  });
+  let overrides = getFieldOverrides(model);
+  opts = { ...(opts ?? {}), overrides };
+  let fieldResources = Object.entries(fields)
+    .filter(([_fieldName, field]) =>
+      opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
+    )
+    .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
+  let realmURL = getCardMeta(model, 'realmURL');
+  return merge(
+    {
+      attributes: {},
+    },
+    ...fieldResources,
+    {
+      type: 'card',
+      meta: { adoptsFrom, ...(realmURL ? { realmURL } : {}) },
+    },
+    model.id ? { id: model.id } : { lid: model[localId] },
+  );
 }
