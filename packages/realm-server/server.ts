@@ -6,6 +6,7 @@ import {
   logger,
   SupportedMimeType,
   insertPermissions,
+  param,
   query,
   Deferred,
   type VirtualNetwork,
@@ -229,6 +230,40 @@ export class RealmServer {
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
     if (ctxt.header.accept?.includes('text/html')) {
+      // If this is a /connect iframe request, is the origin a valid published realm?
+
+      let connectMatch = ctxt.request.path.match(/\/connect\/(.+)$/);
+
+      if (connectMatch) {
+        try {
+          let originParameter = new URL(decodeURIComponent(connectMatch[1]))
+            .href;
+
+          let publishedRealms = await query(this.dbAdapter, [
+            `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
+            param(`${originParameter}%`),
+          ]);
+
+          if (publishedRealms.length === 0) {
+            ctxt.status = 404;
+            ctxt.body = `Not Found: No published realm found for origin ${originParameter}`;
+
+            this.log.debug(
+              `Ignoring /connect request for origin ${originParameter}: no matching published realm`,
+            );
+
+            return;
+          }
+        } catch (error) {
+          ctxt.status = 400;
+          ctxt.body = 'Bad Request';
+
+          this.log.info(`Error processing /connect request: ${error}`);
+
+          return;
+        }
+      }
+
       ctxt.type = 'html';
       ctxt.body = await this.retrieveIndexHTML();
       return;
