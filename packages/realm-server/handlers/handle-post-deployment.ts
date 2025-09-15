@@ -3,7 +3,10 @@ import {
   SupportedMimeType,
   systemInitiatedPriority,
 } from '@cardstack/runtime-common';
-import { setContextResponse } from '../middleware';
+import {
+  sendResponseForUnauthorizedRequest,
+  setContextResponse,
+} from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
 import {
   compareCurrentBoxelUIChecksum,
