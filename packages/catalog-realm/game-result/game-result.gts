@@ -8,6 +8,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import StringField from 'https://cardstack.com/base/string';
+import DatetimeField from 'https://cardstack.com/base/datetime';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { RadioInput, FieldContainer } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
@@ -60,6 +61,60 @@ export class GameStatusField extends FieldDef {
   static edit = GameStatusEdit;
 }
 
+// Shared status color utility function
+function getStatusColors(status?: string) {
+  const statusLower = status?.toLowerCase();
+  switch (statusLower) {
+    case 'win':
+      return {
+        bg: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #60a5fa 100%)',
+        accent: '#10b981',
+        border: '#10b981',
+        glow: 'rgba(16, 185, 129, 0.3)',
+        stars: '#fbbf24',
+      };
+    case 'lose':
+      return {
+        bg: 'linear-gradient(135deg, #7f1d1d 0%, #dc2626 50%, #ef4444 100%)',
+        accent: '#ef4444',
+        border: '#dc2626',
+        glow: 'rgba(220, 38, 38, 0.3)',
+        stars: '#f59e0b',
+      };
+    case 'draw':
+      return {
+        bg: 'linear-gradient(135deg, #92400e 0%, #d97706 50%, #f59e0b 100%)',
+        accent: '#f59e0b',
+        border: '#ea580c',
+        glow: 'rgba(234, 88, 12, 0.3)',
+        stars: '#3b82f6',
+      };
+    default:
+      return {
+        bg: 'linear-gradient(135deg, #374151 0%, #6b7280 50%, #9ca3af 100%)',
+        accent: '#6b7280',
+        border: '#6b7280',
+        glow: 'rgba(107, 114, 128, 0.3)',
+        stars: '#64748b',
+      };
+  }
+}
+
+// Shared status icon utility function
+function getStatusIcon(status?: string) {
+  const statusLower = status?.toLowerCase();
+  switch (statusLower) {
+    case 'win':
+      return '🏆';
+    case 'lose':
+      return '💀';
+    case 'draw':
+      return '🤝';
+    default:
+      return '❓';
+  }
+}
+
 export class GameResult extends CardDef {
   static displayName = 'Game Result';
   static icon = GamepadIcon;
@@ -67,6 +122,7 @@ export class GameResult extends CardDef {
   @field game = linksTo(() => CardDef);
   @field status = contains(GameStatusField);
   @field ref = contains(AbsoluteCodeRefField);
+  @field createdAt = contains(DatetimeField);
   @field title = contains(StringField, {
     computeVia: function (this: GameResult) {
       return this.game.title ?? 'Untitled Game Result';
@@ -75,646 +131,518 @@ export class GameResult extends CardDef {
 
   static isolated = class Isolated extends Component<typeof GameResult> {
     get statusColors() {
-      const status = this.args.model.status?.label?.toLowerCase();
-      switch (status) {
-        case 'win':
-          return {
-            bg: 'linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 50%, #34d399 100%)',
-            border: '#10b981',
-            glow: 'rgba(16, 185, 129, 0.3)',
-            stars: '#fbbf24',
-          };
-        case 'lose':
-          return {
-            bg: 'linear-gradient(135deg, #fecaca 0%, #f87171 50%, #ef4444 100%)',
-            border: '#dc2626',
-            glow: 'rgba(220, 38, 38, 0.3)',
-            stars: '#f59e0b',
-          };
-        case 'draw':
-          return {
-            bg: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 50%, #fb923c 100%)',
-            border: '#ea580c',
-            glow: 'rgba(234, 88, 12, 0.3)',
-            stars: '#3b82f6',
-          };
-        default:
-          return {
-            bg: 'linear-gradient(135deg, #e5e7eb 0%, #d1d5db 50%, #9ca3af 100%)',
-            border: '#6b7280',
-            glow: 'rgba(107, 114, 128, 0.3)',
-            stars: '#64748b',
-          };
-      }
+      return getStatusColors(this.args.model.status?.label);
     }
 
-    get statusIcon() {
-      const status = this.args.model.status?.label?.toLowerCase();
-      switch (status) {
-        case 'win':
-          return '🏆';
-        case 'lose':
-          return '💀';
-        case 'draw':
-          return '🤝';
-        default:
-          return '❓';
-      }
-    }
-
-    get statusTitle() {
-      const status = this.args.model.status?.label?.toLowerCase();
-      switch (status) {
-        case 'win':
-          return 'YOU WIN!';
-        case 'lose':
-          return 'GAME OVER';
-        case 'draw':
-          return 'TIE GAME';
-        default:
-          return 'RESULT';
-      }
-    }
-
-    get gamePanelStyle() {
+    get cardStyle() {
+      const colors = this.statusColors;
       return htmlSafe(
-        `background: ${this.statusColors.bg}; border-color: ${this.statusColors.border}; box-shadow: 0 8px 32px ${this.statusColors.glow};`,
+        `background: ${colors.bg}; border-color: ${colors.border};`,
       );
     }
 
-    get statusIconStyle() {
-      return htmlSafe(`color: ${this.statusColors.stars}`);
-    }
-
     <template>
-      <div class='game-result-panel'>
-        {{! Decorative Stars }}
-        <div class='stars-decoration'>
-          ⭐ ⭐ ⭐ ⭐ ⭐
-        </div>
-
-        {{! Main Game Panel }}
-        <div class='game-panel' style={{this.gamePanelStyle}}>
-
-          {{! Status Header with Status Badge }}
-          <div class='status-header'>
-            <div
-              class='status-icon'
-              style={{this.statusIconStyle}}
-            >{{this.statusIcon}}</div>
-            <div class='status-badge' data-test-status>
-              <span class='status-text'>{{@model.status.label}}</span>
-            </div>
-            <div class='decorative-line'></div>
+      <div class='game-result-isolated'>
+        <div class='card-container' style={{this.cardStyle}}>
+          {{! Status Badge }}
+          <div class='status-badge'>
+            <span class='status-icon'>{{getStatusIcon
+                @model.status.label
+              }}</span>
+            <span class='status-text'>{{@model.status.label}}</span>
           </div>
 
-          {{! Game Info Section }}
-          <div class='game-info-section'>
-            <div class='game-badge'>
+          {{! Game Title Section }}
+          <div class='game-section'>
+            <div class='game-header'>
               <GamepadIcon class='game-icon' />
-              <div class='game-details'>
-                <span class='game-label'>GAME</span>
-                <div class='game-name' data-test-game>
-                  <@fields.game />
-                </div>
-              </div>
+              <h1 class='game-title'>{{@model.game.title}}</h1>
             </div>
           </div>
 
-          {{! Code Reference Panel }}
-          <div class='code-panel'>
-            <div class='panel-header'>
-              <GitBranch class='code-icon' />
-              <span class='panel-title'>CODE REFERENCE</span>
+          {{! Details Section }}
+          <div class='details-section'>
+            <div class='detail-group'>
+              <span class='detail-label'>Game ID</span>
+              <div class='detail-value monospace'>{{@model.game.id}}</div>
             </div>
-            <div class='code-info'>
-              <div class='code-item'>
-                <span class='code-label'>MODULE:</span>
-                <div
-                  class='code-value'
-                  data-test-module-href
-                >{{@model.ref.module}}</div>
-              </div>
-              <div class='code-item'>
-                <span class='code-label'>NAME:</span>
-                <div
-                  class='code-value'
-                  data-test-exported-name
-                >{{@model.ref.name}}</div>
+
+            <div class='detail-group'>
+              <span class='detail-label'>Created</span>
+              <div class='detail-value'>
+                <@fields.createdAt />
               </div>
             </div>
           </div>
-        </div>
-
-        {{! Bottom Stars }}
-        <div class='stars-decoration bottom'>
-          ⭐ ⭐ ⭐ ⭐ ⭐
         </div>
       </div>
 
       <style scoped>
-        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One:wght@400&family=Nunito:wght@400;600;700;800&display=swap');
-
-        .game-result-panel {
-          min-height: 100vh;
-          background: #2c3e50;
-          padding: 2rem;
+        .game-result-isolated {
+          width: 100%;
+          height: 100%;
           display: flex;
-          flex-direction: column;
           align-items: center;
           justify-content: center;
-          font-family: 'Nunito', sans-serif;
-          position: relative;
-          overflow: hidden;
+          padding: 2rem;
+          box-sizing: border-box;
+          background: linear-gradient(
+            135deg,
+            var(--bg-start, #f8fafc) 0%,
+            var(--bg-end, #e2e8f0) 100%
+          );
+          container-type: inline-size;
         }
 
-        .game-result-panel::before {
+        .card-container {
+          width: 100%;
+          max-width: 600px;
+          height: auto;
+          border-radius: 1.5rem;
+          padding: 3rem 2.5rem;
+          color: white;
+          border: 2px solid;
+          font-family:
+            'Inter',
+            -apple-system,
+            sans-serif;
+          box-shadow:
+            0 20px 60px rgba(0, 0, 0, 0.15),
+            0 8px 25px rgba(0, 0, 0, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          gap: 2.5rem;
+          align-items: center;
+          text-align: center;
+          backdrop-filter: blur(20px);
+        }
+
+        /* Subtle glass effect */
+        .card-container::before {
           content: '';
           position: absolute;
           top: 0;
           left: 0;
           right: 0;
           bottom: 0;
-          background-image:
-            /* Racing track lines - matching character-creator */
-            linear-gradient(
-              90deg,
-              transparent 48%,
-              rgba(255, 255, 255, 0.1) 49%,
-              rgba(255, 255, 255, 0.1) 51%,
-              transparent 52%
-            ),
-            linear-gradient(
-              0deg,
-              transparent 48%,
-              rgba(255, 255, 255, 0.08) 49%,
-              rgba(255, 255, 255, 0.08) 51%,
-              transparent 52%
-            );
-          background-size:
-            60px 60px,
-            60px 60px;
+          background: rgba(255, 255, 255, 0.05);
+          backdrop-filter: blur(2px);
           pointer-events: none;
-          z-index: 0;
-          animation: trackMove 8s linear infinite;
         }
 
-        @keyframes trackMove {
-          0% {
-            transform: translateX(0) translateY(0);
-          }
-          100% {
-            transform: translateX(60px) translateY(60px);
-          }
-        }
-
-        .stars-decoration {
-          font-size: 2.5rem;
-          animation: coinFloat 3s ease-in-out infinite;
-          text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
-        }
-
-        .stars-decoration::before {
-          content: '🪙 ';
-        }
-
-        .stars-decoration::after {
-          content: ' 🪙';
-        }
-
-        .stars-decoration.bottom {
-          animation-delay: 1.5s;
-        }
-
-        .stars-decoration.bottom::before {
-          content: '💰 ';
-        }
-
-        .stars-decoration.bottom::after {
-          content: ' 💰';
-        }
-
-        @keyframes coinFloat {
-          0%,
-          100% {
-            transform: translateY(0px) rotate(0deg);
-          }
-          50% {
-            transform: translateY(-10px) rotate(5deg);
-          }
-        }
-
-        .game-panel {
-          background: linear-gradient(
-            145deg,
-            #f4f1e8 0%,
-            #e8dcc6 30%,
-            #d4c5a9 60%,
-            #c2a878 100%
-          );
-          border: 8px solid #e6b800;
-          border-radius: 32px;
-          padding: 3rem 2.5rem;
-          max-width: 520px;
-          width: 100%;
+        .status-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.75rem;
+          background: rgba(255, 255, 255, 0.2);
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          border-radius: 3rem;
+          padding: 1rem 2rem;
+          backdrop-filter: blur(15px);
           box-shadow:
-            0 12px 40px rgba(0, 0, 0, 0.25),
-            0 0 0 6px rgba(194, 168, 120, 0.6),
-            0 0 0 12px #e6b800,
-            inset 0 8px 16px rgba(230, 184, 0, 0.2),
-            inset 0 -8px 16px rgba(0, 0, 0, 0.1);
-          position: relative;
-          text-align: center;
-        }
-
-        /* Ornate corner decorations */
-        .game-panel::before {
-          content: '';
-          position: absolute;
-          top: -12px;
-          left: -12px;
-          right: -12px;
-          bottom: -12px;
-          background:
-            radial-gradient(circle at 20px 20px, #ffd700 0%, transparent 50%),
-            radial-gradient(
-              circle at calc(100% - 20px) 20px,
-              #ffd700 0%,
-              transparent 50%
-            ),
-            radial-gradient(
-              circle at 20px calc(100% - 20px),
-              #ffd700 0%,
-              transparent 50%
-            ),
-            radial-gradient(
-              circle at calc(100% - 20px) calc(100% - 20px),
-              #ffd700 0%,
-              transparent 50%
-            );
-          border-radius: 44px;
-          z-index: -1;
-          animation: ornateGlow 4s ease-in-out infinite;
-        }
-
-        /* Decorative gems in corners */
-        .game-panel::after {
-          content: '💎 💎 💎 💎';
-          position: absolute;
-          top: -8px;
-          left: 50%;
-          transform: translateX(-50%);
-          font-size: 1.5rem;
-          color: #00ced1;
-          text-shadow: 0 0 20px rgba(0, 206, 209, 0.8);
-          animation: gemSparkle 3s ease-in-out infinite;
-        }
-
-        @keyframes ornateGlow {
-          0%,
-          100% {
-            opacity: 0.7;
-            transform: scale(1);
-          }
-          50% {
-            opacity: 1;
-            transform: scale(1.02);
-          }
-        }
-
-        @keyframes gemSparkle {
-          0%,
-          100% {
-            transform: translateX(-50%) scale(1);
-          }
-          50% {
-            transform: translateX(-50%) scale(1.1);
-          }
-        }
-
-        .status-header {
-          margin-bottom: 2rem;
+            0 4px 20px rgba(0, 0, 0, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+          z-index: 2;
         }
 
         .status-icon {
-          font-size: 4rem;
-          margin-bottom: 1rem;
-          animation: bounce 1s ease-in-out infinite;
-          filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+          font-size: 1.75rem;
+          filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
         }
 
-        @keyframes bounce {
-          0%,
-          100% {
-            transform: translateY(0);
+        .status-text {
+          font-size: 1.125rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .game-section {
+          z-index: 2;
+        }
+
+        .game-header {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 1.5rem;
+        }
+
+        .game-icon {
+          width: 4rem;
+          height: 4rem;
+          opacity: 0.95;
+          filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+        }
+
+        .game-title {
+          font-size: clamp(2rem, 4vw, 3.5rem);
+          font-weight: 800;
+          margin: 0;
+          text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+          line-height: 1.1;
+          letter-spacing: -0.02em;
+        }
+
+        .details-section {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+          width: 100%;
+          max-width: 400px;
+          z-index: 2;
+        }
+
+        .detail-group {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 1.25rem;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 1rem;
+          backdrop-filter: blur(10px);
+        }
+
+        .detail-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          opacity: 0.85;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .detail-value {
+          font-size: 1rem;
+          font-weight: 500;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+          word-break: break-all;
+          text-align: center;
+          line-height: 1.4;
+        }
+
+        .detail-value.monospace {
+          font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+          font-size: 0.875rem;
+          background: rgba(255, 255, 255, 0.1);
+          padding: 0.5rem 1rem;
+          border-radius: 0.5rem;
+          border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        /* Container Query Responsive Design */
+        @container (max-width: 768px) {
+          .game-result-isolated {
+            padding: 1.5rem;
           }
-          50% {
-            transform: translateY(-10px);
+
+          .card-container {
+            padding: 2rem 1.5rem;
+            gap: 2rem;
           }
+
+          .game-icon {
+            width: 3rem;
+            height: 3rem;
+          }
+
+          .status-badge {
+            padding: 0.75rem 1.5rem;
+          }
+
+          .status-icon {
+            font-size: 1.5rem;
+          }
+
+          .status-text {
+            font-size: 1rem;
+          }
+        }
+
+        @container (max-width: 480px) {
+          .game-result-isolated {
+            padding: 1rem;
+          }
+
+          .card-container {
+            padding: 1.5rem 1rem;
+            gap: 1.5rem;
+          }
+
+          .game-header {
+            gap: 1rem;
+          }
+
+          .game-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+          }
+
+          .details-section {
+            gap: 1rem;
+          }
+
+          .detail-group {
+            padding: 1rem;
+          }
+        }
+
+        /* Compact layout for small containers */
+        @container (max-width: 600px) {
+          .card-container {
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            text-align: left;
+            gap: 2rem;
+            padding: 1.5rem 2rem;
+          }
+
+          .game-section .game-header {
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .details-section {
+            flex-direction: row;
+            max-width: none;
+            gap: 1rem;
+          }
+
+          .detail-group {
+            flex: 1;
+            min-width: 0;
+          }
+        }
+      </style>
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof GameResult> {
+    get tileStyle() {
+      const colors = getStatusColors(this.args.model.status?.label);
+      return htmlSafe(`background: ${colors.bg};`);
+    }
+
+    <template>
+      <div class='game-tile' style={{this.tileStyle}}>
+        {{! Left Section - Status }}
+        <div class='status-section'>
+          <div class='status-badge'>
+            <span class='status-icon'>{{getStatusIcon
+                @model.status.label
+              }}</span>
+            <span class='status-text'>{{@model.status.label}}</span>
+          </div>
+        </div>
+
+        {{! Center Section - Game Info }}
+        <div class='game-section'>
+          <div class='game-header'>
+            <GamepadIcon class='game-icon' />
+            <div class='game-title'>{{@model.game.title}}</div>
+          </div>
+          <div class='game-meta'>
+            <span class='game-id-label'>Game ID:</span>
+            <span class='game-id'>{{@model.game.id}}</span>
+          </div>
+          <div class='created-at-meta'>
+            <span class='created-at-label'>Created:</span>
+            <@fields.createdAt />
+          </div>
+        </div>
+
+        {{! Right Section - Accent Line }}
+        <div class='accent-line'></div>
+      </div>
+
+      <style scoped>
+        .game-tile {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          padding: 1rem 1.5rem;
+          color: white;
+          font-family:
+            'Inter',
+            -apple-system,
+            sans-serif;
+          position: relative;
+          overflow: hidden;
+          container-type: inline-size;
+        }
+
+        .game-tile::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.1);
+          backdrop-filter: blur(1px);
+          pointer-events: none;
+        }
+
+        .status-section {
+          display: flex;
+          align-items: center;
+          gap: 0.875rem;
+          flex-shrink: 0;
+          z-index: 1;
         }
 
         .status-badge {
           display: flex;
           align-items: center;
-          justify-content: center;
-          gap: 1rem;
+          gap: 0.5rem;
+          background: rgba(255, 255, 255, 0.15);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 2rem;
           padding: 0.5rem 1rem;
-          background: linear-gradient(
-            145deg,
-            #fff8dc 0%,
-            #fffacd 50%,
-            #f0e68c 100%
-          );
-          border: 6px solid #ffd700;
-          border-radius: 25px;
-          color: #8b4513;
-          font-weight: 800;
-          font-size: 2.2rem;
-          font-family: 'Fredoka One', cursive;
-          text-transform: uppercase;
-          letter-spacing: 3px;
-          position: relative;
-          overflow: hidden;
-          box-shadow:
-            0 8px 24px rgba(0, 0, 0, 0.3),
-            0 0 0 4px #8b4513,
-            0 0 0 8px #ffd700,
-            inset 0 6px 12px rgba(255, 255, 255, 0.6),
-            inset 0 -6px 12px rgba(139, 69, 19, 0.2);
-          text-shadow:
-            2px 2px 0px #ffd700,
-            4px 4px 0px #daa520,
-            6px 6px 8px rgba(0, 0, 0, 0.3);
-          animation: statusPulse 2s ease-in-out infinite;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
-        @keyframes statusPulse {
-          0%,
-          100% {
-            transform: scale(1);
-            box-shadow:
-              0 0 30px rgba(255, 255, 255, 0.8),
-              0 0 60px rgba(255, 255, 255, 0.6),
-              0 0 90px rgba(255, 255, 255, 0.4),
-              inset 0 4px 8px rgba(255, 255, 255, 0.8),
-              inset 0 -4px 8px rgba(0, 0, 0, 0.1);
-          }
-          50% {
-            transform: scale(1.05);
-            box-shadow:
-              0 0 40px rgba(255, 255, 255, 1),
-              0 0 80px rgba(255, 255, 255, 0.8),
-              0 0 120px rgba(255, 255, 255, 0.6),
-              inset 0 6px 12px rgba(255, 255, 255, 1),
-              inset 0 -6px 12px rgba(0, 0, 0, 0.2);
-          }
-        }
-
-        .status-badge::before {
-          content: '';
-          position: absolute;
-          top: -50%;
-          left: -50%;
-          width: 200%;
-          height: 200%;
-          background: linear-gradient(
-            45deg,
-            transparent 30%,
-            rgba(255, 255, 255, 0.8) 50%,
-            transparent 70%
-          );
-          transform: rotate(45deg);
-          animation: sweepLight 3s ease-in-out infinite;
-        }
-
-        @keyframes sweepLight {
-          0% {
-            transform: translateX(-100%) translateY(-100%) rotate(45deg);
-          }
-          50% {
-            transform: translateX(0%) translateY(0%) rotate(45deg);
-          }
-          100% {
-            transform: translateX(100%) translateY(100%) rotate(45deg);
-          }
-        }
-
-        .status-badge::after {
-          content: '✨ ⭐ ✨';
-          position: absolute;
-          top: -20px;
-          left: 50%;
-          transform: translateX(-50%);
-          font-size: 1.2rem;
-          color: #fbbf24;
-          animation: floatingSparkles 2s ease-in-out infinite;
-          text-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
-        }
-
-        @keyframes floatingSparkles {
-          0%,
-          100% {
-            transform: translateX(-50%) translateY(0) rotate(0deg);
-          }
-          50% {
-            transform: translateX(-50%) translateY(-5px) rotate(10deg);
-          }
-        }
-
-        .decorative-line {
-          height: 4px;
-          background: linear-gradient(90deg, transparent, white, transparent);
-          border-radius: 2px;
-          margin: 0 auto;
-          width: 60%;
-        }
-
-        .game-info-section {
-          margin-bottom: 2rem;
-        }
-
-        .game-badge {
-          background: linear-gradient(
-            145deg,
-            #fefcf3 0%,
-            #fef7e0 50%,
-            #fed7aa 100%
-          );
-          border-radius: 20px;
-          padding: 2rem;
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
-          box-shadow:
-            0 6px 20px rgba(0, 0, 0, 0.2),
-            0 0 0 4px #d97706,
-            0 0 0 8px #e6b800,
-            inset 0 4px 8px rgba(255, 255, 255, 0.5);
-          border: 4px solid #e6b800;
-          position: relative;
-        }
-
-        .game-badge::before {
-          content: '⚔️';
-          position: absolute;
-          top: -10px;
-          right: -10px;
-          font-size: 2rem;
-          background: linear-gradient(45deg, #ffd700, #ffa500);
-          border-radius: 50%;
-          width: 50px;
-          height: 50px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-          animation: weaponSpin 3s ease-in-out infinite;
-        }
-
-        @keyframes weaponSpin {
-          0%,
-          100% {
-            transform: rotate(0deg) scale(1);
-          }
-          50% {
-            transform: rotate(10deg) scale(1.1);
-          }
-        }
-
-        .game-icon {
-          width: 2.5rem;
-          height: 2.5rem;
-          color: #4f46e5;
-        }
-
-        .game-details {
-          flex: 1;
-          text-align: left;
-        }
-
-        .game-label {
-          font-size: 0.875rem;
-          font-weight: 700;
-          color: #6b7280;
-          letter-spacing: 1px;
-        }
-
-        .game-name {
+        .status-icon {
           font-size: 1.25rem;
-          font-weight: 800;
-          color: #1f2937;
-          margin-top: 0.25rem;
+          filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
         }
 
-        .code-panel {
-          background: linear-gradient(
-            145deg,
-            #fefcf3 0%,
-            #fef7e0 50%,
-            #fed7aa 100%
-          );
-          border-radius: 20px;
-          padding: 2rem;
-          margin-bottom: 2rem;
-          border: 4px solid #e6b800;
-          text-align: left;
-          box-shadow:
-            0 6px 20px rgba(0, 0, 0, 0.2),
-            0 0 0 4px #d97706,
-            inset 0 4px 8px rgba(255, 255, 255, 0.4),
-            inset 0 -4px 8px rgba(217, 119, 6, 0.15);
-          position: relative;
+        .status-text {
+          font-size: 0.875rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
-        .code-panel::before {
-          content: '📜';
-          position: absolute;
-          top: -12px;
-          left: 50%;
-          transform: translateX(-50%);
-          font-size: 2rem;
-          background: linear-gradient(45deg, #ffd700, #ffa500);
-          border-radius: 50%;
-          width: 48px;
-          height: 48px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        .game-section {
+          flex: 1;
+          margin-left: 1.5rem;
+          min-width: 0;
+          z-index: 1;
         }
 
-        .panel-header {
+        .game-header {
           display: flex;
           align-items: center;
           gap: 0.75rem;
-          margin-bottom: 1rem;
-          padding-bottom: 0.75rem;
-          border-bottom: 2px solid #e5e7eb;
+          margin-bottom: 0.5rem;
         }
 
-        .code-icon {
-          width: 1.25rem;
-          height: 1.25rem;
-          color: #4f46e5;
+        .game-icon {
+          width: 1.5rem;
+          height: 1.5rem;
+          opacity: 0.9;
+          filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
         }
 
-        .panel-title {
-          font-size: 0.875rem;
-          font-weight: 700;
-          color: #1f2937;
-          letter-spacing: 1px;
+        .game-title {
+          font-size: 1.125rem;
+          font-weight: 600;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
-        .code-item {
-          margin-bottom: 1rem;
+        .game-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          opacity: 0.9;
         }
 
-        .code-item:last-child {
-          margin-bottom: 0;
-        }
-
-        .code-label {
+        .game-id-label {
           font-size: 0.75rem;
-          font-weight: 700;
-          color: #6b7280;
-          letter-spacing: 1px;
-          display: block;
-          margin-bottom: 0.25rem;
+          font-weight: 500;
+          opacity: 0.8;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
-        .code-value {
-          font-family: 'SF Mono', 'Monaco', monospace;
-          font-size: 0.875rem;
-          color: #1f2937;
-          background: #f3f4f6;
-          padding: 0.5rem;
-          border-radius: 6px;
-          word-break: break-all;
-          border: 1px solid #d1d5db;
+        .game-id {
+          font-size: 0.8rem;
+          font-weight: 400;
+          font-family: 'SF Mono', Monaco, monospace;
+          background: rgba(255, 255, 255, 0.1);
+          padding: 0.25rem 0.5rem;
+          border-radius: 4px;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
-        /* Responsive design */
-        @media (max-width: 640px) {
-          .game-result-panel {
-            padding: 1rem;
+        .created-at-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-top: 0.5rem;
+          opacity: 0.9;
+        }
+
+        .created-at-meta .created-at-label {
+          font-size: 0.75rem;
+          font-weight: 500;
+          opacity: 0.8;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        .accent-line {
+          width: 4px;
+          height: 80%;
+          background: var(--accent-color, rgba(255, 255, 255, 0.6));
+          border-radius: 2px;
+          flex-shrink: 0;
+          box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+          z-index: 1;
+          margin-left: 0.5rem;
+        }
+
+        /* Dynamic accent color based on status */
+        .game-tile .accent-line {
+          background: rgba(255, 255, 255, 0.8);
+          box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+        }
+
+        /* Container Query Responsive */
+        @container (max-width: 420px) {
+          .game-section {
+            margin-right: 0.5rem;
           }
 
-          .game-panel {
-            padding: 1.5rem;
+          .game-tile {
+            padding: 0.75rem 1rem;
           }
 
-          .status-title {
-            font-size: 2rem;
+          .status-badge {
+            padding: 0.5rem 0.75rem;
           }
 
-          .action-buttons {
-            flex-direction: column;
+          .status-icon {
+            font-size: 1.25rem;
           }
 
-          .stats-section {
-            flex-direction: column;
-            gap: 1rem;
-            text-align: center;
+          .game-title {
+            font-size: 1rem;
+          }
+
+          .game-id {
+            max-width: 6rem;
           }
         }
       </style>
@@ -741,6 +669,16 @@ export class GameResult extends CardDef {
           </header>
           <div data-test-status>
             <@fields.status />
+          </div>
+        </section>
+
+        <section class='created-at section'>
+          <header class='row-header' aria-labelledby='created-at'>
+            <GamepadIcon width='20' height='20' role='presentation' />
+            <h2 id='created-at'>Created At</h2>
+          </header>
+          <div data-test-created-at>
+            <@fields.createdAt />
           </div>
         </section>
 
