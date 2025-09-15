@@ -1,6 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { prerenderCard, type RenderResponse } from '../prerender';
+import {
+  prerenderCard,
+  type RenderResponse,
+  type PermissionsMap,
+} from '../prerender/index';
 import { execSync } from 'child_process';
 
 import {
@@ -10,14 +14,13 @@ import {
   realmSecretSeed,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { DBAdapter } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
   module('prerender', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
-    let dbAdapter: DBAdapter;
     const testUserId = '@user1:localhost';
+    let permissions: PermissionsMap = {};
 
     hooks.before(() => {
       execSync('pnpm puppeteer browsers install chrome');
@@ -124,8 +127,12 @@ module(basename(__filename), function () {
           },
         },
       },
-      onRealmSetup: ({ dbAdapter: _dbAdapter }) => {
-        dbAdapter = _dbAdapter;
+      onRealmSetup: () => {
+        // in this test harness, both realms grant read/write/realm-owner to testUserId
+        permissions = {
+          [realmURL1]: ['read', 'write', 'realm-owner'],
+          [realmURL2]: ['read', 'write', 'realm-owner'],
+        };
       },
     });
 
@@ -134,12 +141,13 @@ module(basename(__filename), function () {
 
       hooks.before(async () => {
         const testCardURL = `${realmURL2}1`;
-        result = await prerenderCard({
+        let { response } = await prerenderCard({
           url: testCardURL,
           userId: testUserId,
           secretSeed: realmSecretSeed,
-          dbAdapter,
+          permissions,
         });
+        result = response;
       });
 
       test('embedded HTML', function (assert) {
@@ -206,13 +214,13 @@ module(basename(__filename), function () {
     module('errors', function () {
       test('error during render', async function (assert) {
         const testCardURL = `${realmURL2}2`;
-        let result = await prerenderCard({
+        let { response } = await prerenderCard({
           url: testCardURL,
           userId: testUserId,
           secretSeed: realmSecretSeed,
-          dbAdapter,
+          permissions,
         });
-        let { error, ...restOfResult } = result;
+        let { error, ...restOfResult } = response;
 
         assert.strictEqual(error?.id, testCardURL);
         assert.strictEqual(error?.message, 'intentional failure during render');
