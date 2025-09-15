@@ -282,22 +282,6 @@ export class Batch {
     ]);
   }
 
-  async removeRealm(): Promise<void> {
-    await this.ready;
-
-    // Delete all index entries for this realm from working table
-    await this.#query([
-      `DELETE FROM boxel_index_working WHERE realm_url =`,
-      param(this.realmURL.href),
-    ] as Expression);
-
-    // Delete realm version tracking
-    await this.#query([
-      `DELETE FROM realm_versions WHERE realm_url =`,
-      param(this.realmURL.href),
-    ] as Expression);
-  }
-
   async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
     if (!new RealmPaths(this.realmURL).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can

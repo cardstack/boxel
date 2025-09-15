@@ -14,8 +14,6 @@ import {
   type IncrementalResult,
   type CopyArgs,
   type CopyResult,
-  type RemoveRealmArgs,
-  type RemoveRealmResult,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -165,36 +163,6 @@ export class RealmIndexUpdater {
       };
       let job = await this.#queue.publish<CopyResult>({
         jobType: 'copy-index',
-        concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: 4 * 60,
-        priority: userInitiatedPriority,
-        args,
-      });
-      let { invalidations } = await job.done;
-      if (onInvalidation) {
-        onInvalidation(
-          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
-        );
-      }
-    } catch (e: any) {
-      this.#indexingDeferred.reject(e);
-      throw e;
-    } finally {
-      this.#indexingDeferred.fulfill();
-    }
-  }
-
-  async removeRealm(
-    onInvalidation?: (invalidatedURLs: URL[]) => void,
-  ): Promise<void> {
-    this.#indexingDeferred = new Deferred<void>();
-    try {
-      let args: RemoveRealmArgs = {
-        realmURL: this.#realm.url,
-        realmUsername: await this.#realm.getRealmOwnerUsername(),
-      };
-      let job = await this.#queue.publish<RemoveRealmResult>({
-        jobType: 'remove-realm-index',
         concurrencyGroup: `indexing:${this.#realm.url}`,
         timeout: 4 * 60,
         priority: userInitiatedPriority,

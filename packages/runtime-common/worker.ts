@@ -111,13 +111,6 @@ export interface CopyResult {
   invalidations: string[];
 }
 
-export interface RemoveRealmArgs extends WorkerArgs {}
-
-export interface RemoveRealmResult {
-  invalidations: string[];
-  totalRemovedEntries: number;
-}
-
 export type IndexRunner = (optsId: number) => Promise<void>;
 
 // This class is used to support concurrent index runs against the same fastboot
@@ -212,7 +205,6 @@ export class Worker {
       this.#queue.register(`from-scratch-index`, this.fromScratch),
       this.#queue.register(`incremental-index`, this.incremental),
       this.#queue.register(`copy-index`, this.copy),
-      this.#queue.register(`remove-realm-index`, this.removeRealm),
       this.#queue.register(`lint-source`, this.lintSource),
     ]);
     await this.#queue.start();
@@ -377,34 +369,6 @@ export class Worker {
     return {
       invalidations,
       totalNonErrorIndexEntries,
-    };
-  };
-
-  private removeRealm = async (
-    args: RemoveRealmArgs & { jobInfo?: JobInfo },
-  ) => {
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} starting remove realm indexing for job: ${JSON.stringify(args)}`,
-    );
-    this.reportStatus(args.jobInfo, 'start');
-
-    let batch = await this.#indexWriter.createBatch(new URL(args.realmURL));
-    await batch.removeRealm();
-    let result = await batch.done();
-    let invalidations = batch.invalidations;
-
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} completed remove realm indexing for realm ${args.realmURL}:\n${JSON.stringify(
-        result,
-        null,
-        2,
-      )}`,
-    );
-    let { totalIndexEntries: totalRemovedEntries } = result;
-    this.reportStatus(args.jobInfo, 'finish');
-    return {
-      invalidations,
-      totalRemovedEntries,
     };
   };
 

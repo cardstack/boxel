@@ -10,8 +10,9 @@ import {
   fetchRealmPermissions,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
-import { removeSync } from 'fs-extra';
+import { readdirSync, removeSync } from 'fs-extra';
 import { join } from 'path';
+import * as Sentry from '@sentry/node';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -24,6 +25,35 @@ import { type CreateRoutesArgs } from '../routes';
 import { RealmServerTokenClaim } from '../utils/jwt';
 
 const log = logger('handle-unpublish');
+
+function collectAllFilePaths(realmPath: string): string[] {
+  let allPaths: string[] = [];
+
+  function traverseDirectory(currentPath: string, basePath: string) {
+    try {
+      let entries = readdirSync(currentPath, { withFileTypes: true });
+
+      for (let entry of entries) {
+        let fullPath = join(currentPath, entry.name);
+
+        if (entry.isDirectory()) {
+          traverseDirectory(fullPath, basePath);
+        } else {
+          // Calculate relative path from the original realm root
+          let relativePath = fullPath.replace(basePath, '').replace(/^\//, '');
+          if (relativePath) {
+            allPaths.push(relativePath);
+          }
+        }
+      }
+    } catch (e) {
+      log.warn(`Failed to traverse realm directory ${currentPath}: ${e}`);
+    }
+  }
+
+  traverseDirectory(realmPath, realmPath);
+  return allPaths;
+}
 
 export default function handleUnpublishRealm({
   dbAdapter,
@@ -99,43 +129,39 @@ export default function handleUnpublishRealm({
         return;
       }
 
-      // Find the realm instance
       let existingPublishedRealm = realms.find(
         (r) => r.url === publishedRealmURL,
       );
-
-      if (existingPublishedRealm) {
-        // Unmount the realm from virtual network
-        virtualNetwork.unmount(existingPublishedRealm.handle);
-
-        // Remove from realms array
-        let index = realms.findIndex((r) => r.url === publishedRealmURL);
-        if (index !== -1) {
-          realms.splice(index, 1);
-        }
-
-        // Remove index entries using the new removeRealm method
-        await existingPublishedRealm.realmIndexUpdater.removeRealm();
-      }
-
-      // Remove published realm directory from file system
-      let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-      let publishedRealmPath = join(publishedDir, publishedRealmInfo.id);
-      try {
-        removeSync(publishedRealmPath);
-      } catch (e) {
-        log.warn(
-          `Failed to remove published realm directory ${publishedRealmPath}: ${e}`,
+      if (!existingPublishedRealm) {
+        throw new Error(
+          `No realm instance found for published realm ${publishedRealmURL}`,
         );
       }
 
-      // Remove from published_realms table
+      let publishedRealmPath = join(
+        realmsRootPath,
+        PUBLISHED_DIRECTORY_NAME,
+        publishedRealmInfo.id,
+      );
+      let allFilePaths = collectAllFilePaths(publishedRealmPath);
+
+      if (allFilePaths.length > 0) {
+        await existingPublishedRealm.deleteAll(allFilePaths);
+      }
+      removeSync(publishedRealmPath);
+
+      virtualNetwork.unmount(existingPublishedRealm.handle);
+
+      let index = realms.findIndex((r) => r.url === publishedRealmURL);
+      if (index !== -1) {
+        realms.splice(index, 1);
+      }
+
       await query(dbAdapter, [
         `DELETE FROM published_realms WHERE published_realm_url =`,
         param(publishedRealmURL),
       ]);
 
-      // Remove all permissions for the published realm
       await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
 
       let response = createResponse({
@@ -180,7 +206,8 @@ export default function handleUnpublishRealm({
       await setContextResponse(ctxt, response);
       return;
     } catch (error: any) {
-      log.error('Error unpublishing realm:', error);
+      log.error(`Error unpublishing realm ${publishedRealmURL}:`, error);
+      Sentry.captureException(error);
       await sendResponseForSystemError(ctxt, error.message);
     }
   };
