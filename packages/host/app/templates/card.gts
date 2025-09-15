@@ -75,7 +75,9 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   get connectUrl() {
-    return `${config.realmServerURL}connect`;
+    return `${config.realmServerURL}connect/${encodeURIComponent(
+      window.location.origin,
+    )}`;
   }
 
   get isError() {
