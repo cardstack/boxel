@@ -13,7 +13,7 @@ export default function handleFullReindex({
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     await queue.publish<void>({
       jobType: `full-reindex`,
-      concurrencyGroup: `full-reindex`,
+      concurrencyGroup: `full-reindex-group`,
       timeout: 6 * 60,
       priority: systemInitiatedPriority,
       args: {

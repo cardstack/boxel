@@ -17,12 +17,12 @@ export default function handlePostDeployment({
   assetsURL,
   realms,
   queue,
+  realmServerSecretSeed,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    if (
-      ctxt.request.headers.authorization !== process.env.REALM_SERVER_SECRET
-    ) {
+    if (ctxt.request.headers.authorization !== realmServerSecretSeed) {
       sendResponseForUnauthorizedRequest(ctxt, 'Unauthorized');
+      return;
     }
 
     let boxelUiChangeCheckerResult =
@@ -34,7 +34,7 @@ export default function handlePostDeployment({
     ) {
       await queue.publish<void>({
         jobType: `full-reindex`,
-        concurrencyGroup: `full-reindex`,
+        concurrencyGroup: `full-reindex-group`,
         timeout: 6 * 60,
         priority: systemInitiatedPriority,
         args: {
