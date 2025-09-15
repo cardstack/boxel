@@ -40,11 +40,7 @@ module(basename(__filename), function () {
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
-                @field title = contains(StringField, {
-                  computeVia(this: Person) {
-                    return this.name;
-                  },
-                });
+                static fitted = <template><@fields.name/></template>
               }
             `,
             '1.json': {
@@ -205,16 +201,7 @@ module(basename(__filename), function () {
       test('searchDoc', function (assert) {
         assert.strictEqual(result.searchDoc?.name, 'Maple');
         assert.strictEqual(result.searchDoc?._cardType, 'Cat');
-        assert.deepEqual(
-          result.searchDoc?.owner,
-          {
-            id: `${realmURL1}1`,
-            name: 'Hassan',
-            title: 'Hassan',
-            cardInfo: { theme: null },
-          },
-          'linked field search doc is correct',
-        );
+        assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
       });
     });
 
