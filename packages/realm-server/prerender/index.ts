@@ -34,7 +34,6 @@ export async function prerenderCard({
   userId,
   secretSeed,
   permissions,
-  dbAdapter,
   opts,
 }: {
   url: string;
