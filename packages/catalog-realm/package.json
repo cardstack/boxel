@@ -6,6 +6,7 @@
   "devDependencies": {
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@types/lodash": "catalog:",
     "@types/uuid": "catalog:",

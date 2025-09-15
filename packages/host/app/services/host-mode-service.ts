@@ -43,14 +43,12 @@ export default class HostModeService extends Service {
   }
 
   get simulatingHostMode() {
-    return new URLSearchParams(window.location.search).has('host-mode-origin');
+    return new URLSearchParams(window.location.search).has('hostModeOrigin');
   }
 
   get hostModeOrigin() {
     if (this.simulatingHostMode) {
-      return new URLSearchParams(window.location.search).get(
-        'host-mode-origin',
-      );
+      return new URLSearchParams(window.location.search).get('hostModeOrigin');
     }
 
     return window.location.origin;
