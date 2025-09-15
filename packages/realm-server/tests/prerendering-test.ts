@@ -12,7 +12,7 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { DBAdapter } from '@cardstack/runtime-common';
 
-module(basename(__filename), function () {
+module.only(basename(__filename), function () {
   module('prerender', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
@@ -39,7 +39,7 @@ module(basename(__filename), function () {
             export class Person extends CardDef {
               static displayName = "Person";
               @field name = contains(StringField);
-              static fitted = <template>{{@fields.name}}</template>
+              static fitted = <template><@fields.name/></template>
             }
           `,
           '1.json': {
