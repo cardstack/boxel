@@ -1534,7 +1534,7 @@ module(basename(__filename), function () {
           );
           assert.strictEqual(
             jobs[0].concurrency_group,
-            `full-reindex`,
+            `full-reindex-group`,
             'concurrency group is correct',
           );
         });
