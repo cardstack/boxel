@@ -22,7 +22,6 @@ import {
   type getCards,
   type getCard,
   type Query,
-  isCardDocumentString,
   isFieldDef,
   internalKeyFor,
   CodeRef,
@@ -125,31 +124,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private get declarations() {
-    return this.args.moduleAnalysis?.declarations;
-  }
-
-  get showSpecPreview() {
-    return Boolean(this.args.selectedCardOrField?.exportName);
-  }
-
-  private get hasCardDefOrFieldDef() {
-    return this.declarations.some(isCardOrFieldDeclaration);
-  }
-
-  private get isCardPreviewError() {
-    return this.args.isCard && this.args.cardError;
-  }
-
   private get isEmptyFile() {
     return this.args.readyFile?.content.match(/^\s*$/);
-  }
-
-  private get isSelectedItemIncompatibleWithSchemaEditor() {
-    if (!this.args.selectedDeclaration) {
-      return undefined;
-    }
-    return !isCardOrFieldDeclaration(this.args.selectedDeclaration);
   }
 
   private get sourceFileForCard(): FileDef | undefined {
@@ -177,49 +153,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get fileIncompatibilityMessage() {
-    if (this.args.isCard) {
-      if (this.args.cardError) {
-        return `Card preview failed. Make sure both the card instance data and card definition files have no errors and that their data schema matches. `;
-      }
-    }
-
-    if (this.args.moduleAnalysis.moduleError) {
-      return null; // Handled in code-submode schema editor
-    }
-
     if (this.args.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
-
-    // If the module is incompatible
-    if (this.args.isModule) {
-      //this will prevent displaying message during a page refresh
-      if (this.args.moduleAnalysis.isLoading) {
-        return null;
-      }
-      if (!this.hasCardDefOrFieldDef) {
-        return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
-      } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
-        return `No tools are available for the selected item: ${this.args.selectedDeclaration?.type} "${this.args.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
-      }
-    }
-    // If module inspector doesn't handle any case but we can't capture the error
-    if (!this.args.card && !this.args.selectedCardOrField) {
-      // this will prevent displaying message during a page refresh
-      if (isCardDocumentString(this.args.readyFile.content)) {
-        return null;
-      }
-      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
-    if (
-      !this.args.isModule &&
-      !this.args.readyFile?.name.endsWith('.json') &&
-      !this.args.card //for case of creating new card instance
-    ) {
-      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
     return null;
   }
 
@@ -401,28 +337,21 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
+  get displayInspector() {
+    return this.args.selectedDeclaration;
+  }
+
   <template>
-    {{#if this.isCardPreviewError}}
-      {{! this is here to make TS happy, this is always true }}
-      {{#if @cardError}}
-        <section class='module-inspector-content error'>
-          <CardError
-            @error={{@cardError}}
-            @fileToFixWithAi={{this.sourceFileForCard}}
-          />
-        </section>
-      {{/if}}
-    {{else if this.isEmptyFile}}
+    {{#if this.isEmptyFile}}
       <SyntaxErrorDisplay @syntaxErrors='File is empty' />
     {{else if this.fileIncompatibilityMessage}}
-
       <div
         class='file-incompatible-message'
         data-test-file-incompatibility-message
       >
         {{this.fileIncompatibilityMessage}}
       </div>
-    {{else if @selectedCardOrField.cardOrField}}
+    {{else if this.displayInspector}}
       {{consumeContext this.makeCardResource}}
       {{consumeContext this.findSpecsForSelectedDefinition}}
 
@@ -431,11 +360,11 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         @moduleAnalysis={{@moduleAnalysis}}
         @card={{@selectedCardOrField.cardOrField}}
         @cardType={{@selectedCardOrField.cardType}}
+        @selectedDeclaration={{@selectedDeclaration}}
         @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
         @isReadOnly={{@isReadOnly}}
         as |SchemaEditorBadge SchemaEditorPanel|
       >
-
         <header
           class='module-inspector-header'
           {{SpecUpdatedModifier
@@ -463,7 +392,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                     @numberOfInstances={{this.specsForSelectedDefinition.length}}
                   />
                 {{else if (eq moduleInspectorView 'schema')}}
-                  <SchemaEditorBadge />
+                  {{#if @selectedCardOrField}}
+                    <SchemaEditorBadge />
+                  {{/if}}
                 {{/if}}
               </:annotation>
             </ToggleButton>
@@ -496,17 +427,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               @showCreateSpec={{this.showCreateSpec}}
               as |SpecPreviewContent|
             >
-              {{#if this.showSpecPreview}}
-                <SpecPreviewContent class='non-preview-panel-content' />
-              {{else}}
-                <p
-                  class='file-incompatible-message'
-                  data-test-incompatible-spec-nonexports
-                >
-                  <span>Boxel Spec is not supported for card or field
-                    definitions that are not exported.</span>
-                </p>
-              {{/if}}
+              <SpecPreviewContent class='non-preview-panel-content' />
             </SpecPreview>
           {{/if}}
         </section>
@@ -515,6 +436,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       <SyntaxErrorDisplay
         @syntaxErrors={{@moduleAnalysis.moduleError.message}}
       />
+    {{else if @cardError}}
+      <section class='module-inspector-content error'>
+        <CardError
+          @error={{@cardError}}
+          @fileToFixWithAi={{this.sourceFileForCard}}
+        />
+      </section>
     {{else if @card}}
       <CardRendererPanel
         @card={{@card}}
