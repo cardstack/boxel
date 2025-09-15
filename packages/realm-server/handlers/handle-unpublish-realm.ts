@@ -16,9 +16,9 @@ import * as Sentry from '@sentry/node';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
+  sendResponseForUnprocessableEntity,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
-  sendResponseForNotFound,
   setContextResponse,
 } from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
@@ -107,7 +107,7 @@ export default function handleUnpublishRealm({
       >[];
 
       if (!publishedRealmData.length) {
-        await sendResponseForNotFound(
+        await sendResponseForUnprocessableEntity(
           ctxt,
           `Published realm ${publishedRealmURL} not found`,
         );

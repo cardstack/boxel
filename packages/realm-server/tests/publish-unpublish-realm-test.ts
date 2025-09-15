@@ -62,7 +62,7 @@ module(basename(__filename), function () {
         await runTestRealmServer({
           virtualNetwork,
           testRealmDir,
-          realmsRootPath: join(dir.name, 'realm_server_2'),
+          realmsRootPath: join(dir.name, 'realm_server_3'),
           realmURL: new URL(testRealm2URL),
           dbAdapter,
           publisher,
@@ -82,7 +82,7 @@ module(basename(__filename), function () {
         dbAdapter = _dbAdapter;
         publisher = _publisher;
         runner = _runner;
-        testRealmDir = join(dir.name, 'realm_server_2', 'test');
+        testRealmDir = join(dir.name, 'realm_server_3', 'test');
         ensureDirSync(testRealmDir);
         copySync(join(__dirname, 'cards'), testRealmDir);
         await startRealmServer(dbAdapter, publisher, runner);
@@ -130,7 +130,7 @@ module(basename(__filename), function () {
 
       // Verify that the correct directory within _published was created
       let publishedRealmId = response.body.data.id;
-      let publishedDir = join(dir.name, 'realm_server_2', '_published');
+      let publishedDir = join(dir.name, 'realm_server_3', '_published');
       let publishedRealmPath = join(publishedDir, publishedRealmId);
 
       assert.ok(existsSync(publishedDir), '_published directory exists');
@@ -373,7 +373,7 @@ module(basename(__filename), function () {
 
       // Verify that the published realm directory was removed
       let publishedRealmId = unpublishResponse.body.data.id;
-      let publishedDir = join(dir.name, 'realm_server_2', '_published');
+      let publishedDir = join(dir.name, 'realm_server_3', '_published');
       let publishedRealmPath = join(publishedDir, publishedRealmId);
 
       assert.notOk(
@@ -456,7 +456,7 @@ module(basename(__filename), function () {
           }),
         );
 
-      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      assert.strictEqual(response.status, 422, 'HTTP 422 status');
       assert.strictEqual(
         response.text,
         '{"errors":["Published realm http://testuser.localhost/non-existent-realm/ not found"]}',
