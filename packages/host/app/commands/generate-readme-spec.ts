@@ -27,7 +27,7 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
   ) {
     return `Generate README documentation for a spec of type ${specType} that has code ref of (name:${ref.name}, module:${ref.module}). Show how to import and use it in inside a consuming card.`;
   }
-  private static SYSTEM_PROMPT = `YOU ARE creating practical usage documentation for specs. 
+  private static SYSTEM_PROMPT = `YOU ARE a bot responsible to Github README documentation for specs/code. 
 
 Reference the Spec Documentation inside boxel-development skill for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with these 4 sections:
 
