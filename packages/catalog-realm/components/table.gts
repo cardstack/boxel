@@ -6,21 +6,24 @@ import {
   type CardContext,
   getFields,
   type CardDef,
-  Box,
+  type CreateCardFn,
 } from 'https://cardstack.com/base/card-api';
-import { isPrimitive } from '@cardstack/runtime-common';
-import { LoadingIndicator, Pill } from '@cardstack/boxel-ui/components';
+import { type CodeRef } from '@cardstack/runtime-common';
+import { LoadingIndicator, Pill, Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { on } from '@ember/modifier';
 
 import { Paginator } from './paginator';
+import { SingleFieldRenderer } from './field-renderer';
 
-import { type Query } from '@cardstack/runtime-common';
+import { type Query, isPrimitive } from '@cardstack/runtime-common';
 
 interface TableRowSignature {
   Args: {
     instance: CardDef;
     fieldColumns: string[];
     context?: CardContext;
+    showComputedFields?: boolean;
   };
   Element: HTMLTableRowElement;
 }
@@ -31,100 +34,67 @@ interface TableSignature {
     realm?: string; //we try to use a single realm, otherwise pagination is tricky
     context?: CardContext;
     showComputedFields?: boolean;
+    showPrimitivesOnly?: boolean;
+    createCard?: CreateCardFn;
+    cardTypeRef?: CodeRef;
   };
   Element: HTMLElement;
 }
 
 class TableRow extends GlimmerComponent<TableRowSignature> {
-  get fieldInfo() {
-    const fields = getFields(this.args.instance.constructor, {
-      includeComputeds: false,
-      usedLinksToFieldsOnly: false,
-    });
-    console.log('=== fieldInfo ===');
-
-    // Create a Box for the instance
-    const rootBox = Box.create(this.args.instance);
-
-    return this.args.fieldColumns.map((fieldName) => {
-      const field = fields[fieldName];
-      const value = (this.args.instance as any)[fieldName];
-      const isPrimitiveField = field ? isPrimitive(field.card) : false;
-
-      // Create a Box for this specific field and get its component
-      let boxComponent = null;
-      if (field) {
-        boxComponent = field.component(rootBox);
-      }
-
-      console.log(`Field ${fieldName}:`, {
-        value,
-        fieldType: field?.fieldType,
-        field: field,
-        hasComponent: !!field?.component,
-        component: field?.component,
-        isPrimitive: isPrimitiveField,
-        boxComponent,
-      });
-
-      return {
-        fieldName,
-        value,
-        fieldType: field?.fieldType,
-        field,
-        isPrimitive: isPrimitiveField,
-        component: field?.component,
-        boxComponent,
-      };
-    });
-  }
-
   <template>
     <tr class='table-row'>
-      {{#each this.fieldInfo as |fieldInfo|}}
+      {{#each this.args.fieldColumns as |fieldName|}}
         <td class='field-cell'>
-          {{#if (eq fieldInfo.fieldType 'contains')}}
-            {{#if fieldInfo.boxComponent}}
-              <fieldInfo.boxComponent @format='edit' />
+          <SingleFieldRenderer
+            @instance={{this.args.instance}}
+            @fieldName={{fieldName}}
+            @showComputedFields={{this.args.showComputedFields}}
+            as |fieldInfo|
+          >
+            {{#if (eq fieldInfo.fieldType 'contains')}}
+              {{#if fieldInfo.component}}
+                <fieldInfo.component @format='edit' />
+              {{else}}
+                {{fieldInfo.value}}
+              {{/if}}
+            {{else if (eq fieldInfo.fieldType 'linksTo')}}
+              {{#if fieldInfo.value}}
+                <Pill
+                  {{@context.cardComponentModifier
+                    cardId=fieldInfo.value.id
+                    format='data'
+                    fieldType='linksTo'
+                    fieldName=fieldInfo.name
+                  }}
+                >
+                  {{#if fieldInfo.value.title}}
+                    {{fieldInfo.value.title}}
+                  {{else}}
+                    [linked card]
+                  {{/if}}
+                </Pill>
+              {{/if}}
+            {{else if (eq fieldInfo.fieldType 'containsMany')}}
+              [{{fieldInfo.value.length}}
+              items]
+            {{else if (eq fieldInfo.fieldType 'linksToMany')}}
+              {{#each fieldInfo.value as |linkedCard|}}
+                <Pill
+                  {{@context.cardComponentModifier
+                    cardId=linkedCard.id
+                    format='data'
+                    fieldType='linksToMany'
+                    fieldName=fieldInfo.name
+                  }}
+                >
+                  {{linkedCard.title}}
+                </Pill>
+              {{/each}}
             {{else}}
               {{fieldInfo.value}}
             {{/if}}
-          {{else if (eq fieldInfo.fieldType 'linksTo')}}
-            {{#if fieldInfo.value}}
-              <Pill
-                {{this.args.context.cardComponentModifier
-                  cardId=fieldInfo.value.id
-                  format='data'
-                  fieldType='linksTo'
-                  fieldName=fieldInfo.fieldName
-                }}
-              >
-                {{#if fieldInfo.value.title}}
-                  {{fieldInfo.value.title}}
-                {{else}}
-                  [linked card]
-                {{/if}}
-              </Pill>
-            {{/if}}
-          {{else if (eq fieldInfo.fieldType 'containsMany')}}
-            [{{fieldInfo.value.length}}
-            items]
-          {{else if (eq fieldInfo.fieldType 'linksToMany')}}
-            {{#each fieldInfo.value as |linkedCard|}}
-              <Pill
-                {{this.args.context.cardComponentModifier
-                  cardId=linkedCard.id
-                  format='data'
-                  fieldType='linksToMany'
-                  fieldName=fieldInfo.fieldName
-                }}
-              >
-                {{linkedCard.title}}
-              </Pill>
-            {{/each}}
-          {{else}}
-            {{fieldInfo.value}}
-          {{/if}}
+          </SingleFieldRenderer>
         </td>
       {{/each}}
     </tr>
@@ -195,11 +165,13 @@ export class Table extends GlimmerComponent<TableSignature> {
     this,
     () => this.paginatedQuery,
     () => this.realms,
+    { isLive: true }, //for new cards to appear
   );
 
   get fieldColumns() {
+    // Only compute field columns after data has loaded and instances are available
     if (this.cardsData?.instances?.length) {
-      const firstInstance = this.cardsData.instances[0];
+      const firstInstance = this.cardsData?.instances[0];
       const instanceFields = getFields(firstInstance.constructor, {
         includeComputeds: this.args.showComputedFields ?? false,
         usedLinksToFieldsOnly: false,
@@ -207,9 +179,17 @@ export class Table extends GlimmerComponent<TableSignature> {
 
       console.log('instanceField', instanceFields);
       const excludedFields = ['id', 'cardInfo'];
-      const filteredFields = Object.keys(instanceFields).filter(
-        (key) => !excludedFields.includes(key),
-      );
+      const filteredFields = Object.keys(instanceFields).filter((key) => {
+        if (excludedFields.includes(key)) {
+          return false;
+        }
+        // Only include primitive fields if showPrimitivesOnly is true
+        if (this.args.showPrimitivesOnly) {
+          const fieldDef = instanceFields[key];
+          return isPrimitive(fieldDef.card);
+        }
+        return true;
+      });
 
       // Prioritize 'name' or 'title' fields by putting them first
       const priorityFields = ['name', 'title'];
@@ -236,6 +216,20 @@ export class Table extends GlimmerComponent<TableSignature> {
 
   get size() {
     return this.paginatedQuery?.page?.size;
+  }
+
+  @action
+  createNewCard() {
+    if (!this.args.createCard) {
+      throw new Error('No createCard crud function');
+    }
+    if (!this.args.cardTypeRef) {
+      throw new Error('No cardTypeRef');
+    }
+    const realmURL = this.args.realm ? new URL(this.args.realm) : undefined;
+    this.args.createCard(this.args.cardTypeRef, realmURL, {
+      realmURL,
+    });
   }
 
   <template>
@@ -272,6 +266,7 @@ export class Table extends GlimmerComponent<TableSignature> {
                     @instance={{instance}}
                     @fieldColumns={{this.fieldColumns}}
                     @context={{@context}}
+                    @showComputedFields={{@showComputedFields}}
                   />
                 {{/each}}
               {{else}}
@@ -283,6 +278,14 @@ export class Table extends GlimmerComponent<TableSignature> {
               {{/if}}
             </tbody>
           </table>
+        </div>
+      {{/if}}
+
+      {{#if @cardTypeRef}}
+        <div class='table-actions'>
+          <Button @kind='primary' {{on 'click' this.createNewCard}}>
+            Create New Card
+          </Button>
         </div>
       {{/if}}
     </div>
@@ -342,6 +345,14 @@ export class Table extends GlimmerComponent<TableSignature> {
         text-align: center;
         color: var(--boxel-500);
         font: var(--boxel-font-sm);
+      }
+
+      .table-actions {
+        padding: var(--boxel-sp);
+        background: var(--boxel-100);
+        border-top: 1px solid var(--boxel-300);
+        display: flex;
+        justify-content: flex-end;
       }
     </style>
   </template>

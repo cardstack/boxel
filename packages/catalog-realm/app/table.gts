@@ -2,14 +2,16 @@ import {
   Component,
   field,
   contains,
+  type CreateCardFn,
 } from 'https://cardstack.com/base/card-api';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { AbsoluteCodeRefField } from 'https://cardstack.com/base/code-ref';
-import { realmURL } from '@cardstack/runtime-common';
+import { realmURL, type CodeRef } from '@cardstack/runtime-common';
 
 import { Table } from '../components/table';
 import { AppCard } from './app';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { CardCrudFunctionsConsumer } from 'https://cardstack.com/base/field-component';
 
 import type { Query } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
@@ -69,6 +71,21 @@ class IsolatedTemplate extends Component<typeof TableApp> {
       : undefined;
   }
 
+  createCard = (cardCrudFunctions: { createCard: CreateCardFn }) => {
+    return cardCrudFunctions.createCard;
+  };
+
+  get cardTypeRef(): CodeRef | undefined {
+    const typeRef = this.args.model.codeRef;
+    if (typeRef?.module && typeRef?.name) {
+      return {
+        module: typeRef.module,
+        name: typeRef.name,
+      };
+    }
+    return undefined;
+  }
+
   <template>
     {{#if this.queryBuilder.isError}}
       <div class='error-message'>{{this.queryBuilder.error.message}}</div>
@@ -77,12 +94,17 @@ class IsolatedTemplate extends Component<typeof TableApp> {
         <LoadingIndicator />
       </div>
     {{else if this.queryBuilder.value}}
-      <Table
-        @query={{this.queryBuilder.value}}
-        @realm={{this.realm}}
-        @context={{@context}}
-        @showComputedFields={{@model.showComputedFields}}
-      />
+      <CardCrudFunctionsConsumer as |cardCrudFunctions|>
+        <Table
+          @query={{this.queryBuilder.value}}
+          @realm={{this.realm}}
+          @context={{@context}}
+          @showComputedFields={{@model.showComputedFields}}
+          @showPrimitivesOnly={{@model.showPrimitivesOnly}}
+          @createCard={{this.createCard cardCrudFunctions}}
+          @cardTypeRef={{this.cardTypeRef}}
+        />
+      </CardCrudFunctionsConsumer>
     {{else}}
       <div>No query configured</div>
     {{/if}}
@@ -109,6 +131,7 @@ class IsolatedTemplate extends Component<typeof TableApp> {
 export class TableApp extends AppCard {
   static displayName = 'Table App';
   @field showComputedFields = contains(BooleanField);
+  @field showPrimitivesOnly = contains(BooleanField);
   @field codeRef = contains(AbsoluteCodeRefField);
 
   static isolated = IsolatedTemplate;
