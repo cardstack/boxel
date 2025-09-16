@@ -234,17 +234,6 @@ export class Table extends GlimmerComponent<TableSignature> {
 
   <template>
     <div class='table-container'>
-      {{#if this.total}}
-        {{#if this.size}}
-          <Paginator
-            @currentPage={{this.currentPage}}
-            @total={{this.total}}
-            @size={{this.size}}
-            @onPageSelect={{this.goToPage}}
-          />
-        {{/if}}
-      {{/if}}
-
       {{#if this.cardsData.isLoading}}
         <div class='loading-indicator'>
           <LoadingIndicator />
@@ -281,13 +270,28 @@ export class Table extends GlimmerComponent<TableSignature> {
         </div>
       {{/if}}
 
-      {{#if @cardTypeRef}}
-        <div class='table-actions'>
-          <Button @kind='primary' {{on 'click' this.createNewCard}}>
-            Create New Card
-          </Button>
+      <div class='table-footer'>
+        <div class='footer-left'></div>
+        <div class='footer-center'>
+          {{#if this.total}}
+            {{#if this.size}}
+              <Paginator
+                @currentPage={{this.currentPage}}
+                @total={{this.total}}
+                @size={{this.size}}
+                @onPageSelect={{this.goToPage}}
+              />
+            {{/if}}
+          {{/if}}
         </div>
-      {{/if}}
+        <div class='footer-right'>
+          {{#if @cardTypeRef}}
+            <Button @kind='primary' {{on 'click' this.createNewCard}}>
+              Create
+            </Button>
+          {{/if}}
+        </div>
+      </div>
     </div>
     <style scoped>
       .table-container {
@@ -347,10 +351,25 @@ export class Table extends GlimmerComponent<TableSignature> {
         font: var(--boxel-font-sm);
       }
 
-      .table-actions {
+      .table-footer {
         padding: var(--boxel-sp);
         background: var(--boxel-100);
-        border-top: 1px solid var(--boxel-300);
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
+
+      .footer-left {
+        /* Empty spacer for left side */
+      }
+
+      .footer-center {
+        display: flex;
+        justify-content: center;
+      }
+
+      .footer-right {
         display: flex;
         justify-content: flex-end;
       }
