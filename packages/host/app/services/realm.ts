@@ -70,6 +70,9 @@ class RealmResource {
   private auth: AuthStatus = { type: 'anonymous' };
   private subscription: { unsubscribe: () => void } | undefined;
   private realmServerSubscription: { unsubscribe: () => void } | undefined;
+  private realmServerUnpublishSubscription:
+    | { unsubscribe: () => void }
+    | undefined;
 
   // Hassan: in general i'm questioning the usefulness of using Tasks in this
   // class. We seem to be following the pattern of await-ing all the tasks on
@@ -89,6 +92,9 @@ class RealmResource {
       }
       if (this.realmServerSubscription) {
         this.realmServerSubscription.unsubscribe();
+      }
+      if (this.realmServerUnpublishSubscription) {
+        this.realmServerUnpublishSubscription.unsubscribe();
       }
     });
   }
@@ -200,18 +206,45 @@ class RealmResource {
         'publish-realm-notification',
         async (data: any) => {
           let sourceRealmURL = data.sourceRealmURL;
+          if (sourceRealmURL === this.realmURL && this.info) {
+            console.log('publish-realm-notification', data);
+            this.info = {
+              ...this.info,
+              lastPublishedAt: {
+                ...(this.info.lastPublishedAt ? this.info.lastPublishedAt : {}),
+                [data.publishedRealmURL]: data.lastPublishedAt,
+              },
+            };
+          }
+        },
+      ),
+    };
+
+    this.realmServerUnpublishSubscription = {
+      unsubscribe: this.realmServer.subscribeEvent(
+        'unpublish-realm-notification',
+        async (data: any) => {
+          let sourceRealmURL = data.sourceRealmURL;
           if (
             sourceRealmURL === this.realmURL &&
             this.info &&
             typeof this.info.lastPublishedAt === 'object' &&
             this.info.lastPublishedAt?.[data.publishedRealmURL]
           ) {
+            // Set the specific published realm to null
+            let updatedLastPublishedAt = {
+              ...this.info.lastPublishedAt,
+              [data.publishedRealmURL]: null,
+            };
+
+            // If all published realms are null, set the entire lastPublishedAt to null
+            let hasAnyPublished = Object.values(updatedLastPublishedAt).some(
+              (value) => value !== null,
+            );
+
             this.info = {
               ...this.info,
-              lastPublishedAt: {
-                ...this.info.lastPublishedAt,
-                [data.publishedRealmURL]: data.lastPublishedAt,
-              },
+              lastPublishedAt: hasAnyPublished ? updatedLastPublishedAt : null,
             };
           }
         },

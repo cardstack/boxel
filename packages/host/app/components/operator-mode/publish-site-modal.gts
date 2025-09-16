@@ -36,9 +36,14 @@ export default class PublishSiteModal extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   @tracked selectedDomains: string[] = [];
+  @tracked isUnpublishing = false;
 
   get isRealmPublished() {
     return !!this.lastPublishedTime;
+  }
+
+  get isPublishDisabled() {
+    return !this.hasSelectedDomains || this.isUnpublishing;
   }
 
   get lastPublishedTime() {
@@ -165,6 +170,19 @@ export default class PublishSiteModal extends Component<Signature> {
   }
 
   @action
+  async handleUnpublish() {
+    try {
+      this.isUnpublishing = true;
+      await this.realm.realmServer.unpublishRealm(this.generatedUrl);
+      // The UI will be updated via the unpublish-realm-notification event
+    } catch (error) {
+      console.error('Error unpublishing realm:', error);
+    } finally {
+      this.isUnpublishing = false;
+    }
+  }
+
+  @action
   handleOpenSite() {
     window.open(this.generatedUrl, '_blank');
   }
@@ -200,6 +218,7 @@ export default class PublishSiteModal extends Component<Signature> {
                 {{on 'change' this.toggleDefaultDomain}}
                 class='domain-checkbox'
                 data-test-default-domain-checkbox
+                disabled={{this.isUnpublishing}}
               />
               <span class='domain-name'>Your Boxel Space</span>
             </label>
@@ -225,6 +244,7 @@ export default class PublishSiteModal extends Component<Signature> {
                       @kind='text-only'
                       @size='extra-small'
                       class='unpublish-button'
+                      {{on 'click' this.handleUnpublish}}
                     >
                       <UndoArrow
                         width='11'
@@ -273,7 +293,7 @@ export default class PublishSiteModal extends Component<Signature> {
               @kind='primary'
               @size='tall'
               {{on 'click' this.handlePublish}}
-              @disabled={{not this.hasSelectedDomains}}
+              @disabled={{this.isPublishDisabled}}
               class='publish-button'
               data-test-publish-button
             >

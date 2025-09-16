@@ -60,6 +60,7 @@ export default function handleUnpublishRealm({
   virtualNetwork,
   realms,
   realmsRootPath,
+  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -202,6 +203,11 @@ export default function handleUnpublishRealm({
                 [ownerUserId]: ['read'],
               },
             },
+      });
+      sendEvent(ownerUserId, 'unpublish-realm-notification', {
+        sourceRealmURL: publishedRealmInfo.source_realm_url,
+        publishedRealmURL: publishedRealmInfo.published_realm_url,
+        lastPublishedAt: null,
       });
       await setContextResponse(ctxt, response);
       return;
