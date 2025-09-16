@@ -242,5 +242,5 @@ function eventHasInvalidOrigin(event: MessageEvent) {
     return false;
   }
 
-  return new URL(config.realmServerURL).href.startsWith(event.origin);
+  return !new URL(config.realmServerURL).href.startsWith(event.origin);
 }
