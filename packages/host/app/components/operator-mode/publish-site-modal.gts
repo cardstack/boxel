@@ -1,29 +1,32 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import Component from '@glimmer/component';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import ExternalLink from '@cardstack/boxel-icons/external-link';
+
+import { formatDistanceToNow } from 'date-fns';
 
 import { BoxelButton, RealmIcon } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { UndoArrow } from '@cardstack/boxel-ui/icons';
-import ExternalLink from '@cardstack/boxel-icons/external-link';
-import { formatDistanceToNow, parseISO } from 'date-fns';
 
 import config from '@cardstack/host/config/environment';
 
 import ModalContainer from '../modal-container';
 import WithLoadedRealm from '../with-loaded-realm';
 
-import type RealmService from '../../services/realm';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type MatrixService from '../../services/matrix-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RealmService from '../../services/realm';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     isOpen: boolean;
     onClose: () => void;
+    onPublish: (selectedDomains: string[]) => void;
   };
 }
 
@@ -35,47 +38,44 @@ export default class PublishSiteModal extends Component<Signature> {
   @tracked selectedDomains: string[] = [];
 
   get isRealmPublished() {
+    return !!this.lastPublishedTime;
+  }
+
+  get lastPublishedTime() {
     const realmInfo = this.operatorModeStateService.currentRealmInfo;
     if (
       !realmInfo?.lastPublishedAt ||
       typeof realmInfo.lastPublishedAt !== 'object'
     ) {
-      return false;
-    }
-
-    const publishedUrl = this.generatedUrl;
-    return realmInfo.lastPublishedAt[publishedUrl];
-  }
-
-  get lastPublishedTime() {
-    const realmInfo = this.operatorModeStateService.currentRealmInfo;
-    if (!this.isRealmPublished || !realmInfo?.lastPublishedAt) {
       return null;
     }
 
     const publishedUrl = this.generatedUrl;
-    const publishedAtString = realmInfo.lastPublishedAt[publishedUrl];
+    const publishedAtValue = realmInfo.lastPublishedAt[publishedUrl];
 
-    if (!publishedAtString) {
+    if (!publishedAtValue) {
       return null;
     }
 
     try {
-      // Use parseISO for better ISO 8601 string parsing
-      const publishedAt = parseISO(publishedAtString);
+      let publishedAt = new Date(publishedAtValue);
       return formatDistanceToNow(publishedAt, { addSuffix: true });
     } catch (error) {
-      console.warn('Failed to parse published date:', publishedAtString, error);
+      console.warn('Failed to parse published date:', publishedAtValue, error);
       return null;
     }
   }
 
   get isDefaultDomainSelected() {
-    return this.selectedDomains.includes('default-domain');
+    return this.selectedDomains.includes(this.generatedUrl);
+  }
+
+  get hasSelectedDomains() {
+    return this.selectedDomains.length > 0;
   }
 
   get currentRealmUrl() {
-    return this.operatorModeStateService.currentRealmInfo?.url || '';
+    return this.operatorModeStateService.realmURL;
   }
 
   get generatedUrl() {
@@ -125,8 +125,9 @@ export default class PublishSiteModal extends Component<Signature> {
     }
 
     try {
-      const url = new URL(realmUrl);
-      const pathSegments = url.pathname.split('/').filter((segment) => segment);
+      const pathSegments = realmUrl.pathname
+        .split('/')
+        .filter((segment) => segment);
       const lastSegment = pathSegments[pathSegments.length - 1];
 
       if (!lastSegment) {
@@ -144,19 +145,23 @@ export default class PublishSiteModal extends Component<Signature> {
 
   @action
   toggleDefaultDomain() {
+    const defaultUrl = this.generatedUrl;
     if (this.isDefaultDomainSelected) {
       this.selectedDomains = this.selectedDomains.filter(
-        (domain) => domain !== 'default-domain',
+        (url) => url !== defaultUrl,
       );
     } else {
-      this.selectedDomains = [...this.selectedDomains, 'default-domain'];
+      this.selectedDomains = [...this.selectedDomains, defaultUrl];
     }
   }
 
   @action
   handlePublish() {
-    // TODO: Implement actual publish functionality
-    console.log('Publishing to selected domains:', this.selectedDomains);
+    if (this.selectedDomains.length === 0) {
+      return;
+    }
+
+    this.args.onPublish(this.selectedDomains);
   }
 
   @action
@@ -188,7 +193,7 @@ export default class PublishSiteModal extends Component<Signature> {
 
         <div class='domain-options'>
           <div class='domain-option'>
-            <div class='domain-header'>
+            <label class='domain-header'>
               <input
                 type='checkbox'
                 checked={{this.isDefaultDomainSelected}}
@@ -197,10 +202,13 @@ export default class PublishSiteModal extends Component<Signature> {
                 data-test-default-domain-checkbox
               />
               <span class='domain-name'>Your Boxel Space</span>
-            </div>
+            </label>
 
             <div class='domain-details'>
-              <WithLoadedRealm @realmURL={{this.currentRealmUrl}} as |realm|>
+              <WithLoadedRealm
+                @realmURL={{this.currentRealmUrl.href}}
+                as |realm|
+              >
                 <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
               </WithLoadedRealm>
               <div class='domain-url-container'>
@@ -265,7 +273,7 @@ export default class PublishSiteModal extends Component<Signature> {
               @kind='primary'
               @size='tall'
               {{on 'click' this.handlePublish}}
-              @disabled={{not this.isDefaultDomainSelected}}
+              @disabled={{not this.hasSelectedDomains}}
               class='publish-button'
               data-test-publish-button
             >

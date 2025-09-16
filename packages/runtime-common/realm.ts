@@ -120,7 +120,7 @@ export type RealmInfo = {
   visibility: RealmVisibility;
   realmUserId?: string;
   publishable: boolean | null;
-  lastPublishedAt: string | Record<string, string> | null;
+  lastPublishedAt: number | Record<string, number> | null;
 };
 
 export interface FileRef {
@@ -2570,13 +2570,13 @@ export class Realm {
   }
 
   private async getLastPublishedAt(): Promise<
-    string | Record<string, string> | null
+    number | Record<string, number> | null
   > {
     try {
       // First check if this realm is a published realm
       let publishedRealmData = await this.queryPublishedRealm();
       if (publishedRealmData) {
-        return publishedRealmData.last_published_at;
+        return Number(publishedRealmData.last_published_at);
       }
 
       // If not published, check if this is a source realm with published versions
@@ -2585,7 +2585,7 @@ export class Realm {
         return Object.fromEntries(
           publishedVersions.map((p) => [
             p.published_realm_url,
-            p.last_published_at,
+            Number(p.last_published_at),
           ]),
         );
       }
@@ -2598,13 +2598,13 @@ export class Realm {
   }
 
   private async queryPublishedRealm(): Promise<{
-    last_published_at: string;
+    last_published_at: number;
   } | null> {
     try {
       let results = (await query(this.#dbAdapter, [
         `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
         param(this.url),
-      ])) as { last_published_at: string }[];
+      ])) as { last_published_at: number }[];
 
       return results.length > 0 ? results[0] : null;
     } catch (error) {
@@ -2614,13 +2614,13 @@ export class Realm {
   }
 
   private async querySourceRealmPublications(): Promise<
-    { published_realm_url: string; last_published_at: string }[]
+    { published_realm_url: string; last_published_at: number }[]
   > {
     try {
       let results = (await query(this.#dbAdapter, [
         `SELECT published_realm_url, last_published_at FROM published_realms WHERE source_realm_url =`,
         param(this.url),
-      ])) as { published_realm_url: string; last_published_at: string }[];
+      ])) as { published_realm_url: string; last_published_at: number }[];
 
       return results;
     } catch (error) {

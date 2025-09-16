@@ -1624,13 +1624,13 @@ module(basename(__filename), function () {
             'published realm has lastPublishedAt field',
           );
 
-          // For published realm, lastPublishedAt should be a string
+          // For published realm, lastPublishedAt should be a number (bigint)
           let publishedLastPublishedAt =
             publishedRealmInfoResponse.body.data.attributes.lastPublishedAt;
           assert.strictEqual(
             typeof publishedLastPublishedAt,
-            'string',
-            'published realm lastPublishedAt is a string',
+            'number',
+            'published realm lastPublishedAt is a number',
           );
 
           // Verify the timestamp matches what was returned from the publish response

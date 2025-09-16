@@ -39,6 +39,7 @@ export default function handlePublishRealm({
   getMatrixRegistrationSecret,
   createAndMountRealm,
   validPublishedRealmDomains,
+  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -143,7 +144,7 @@ export default function handlePublishRealm({
         publishedRealmData = results[0];
         realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
 
-        let lastPublishedAt = new Date().toISOString();
+        let lastPublishedAt = Date.now();
         await query(dbAdapter, [
           `UPDATE published_realms SET last_published_at =`,
           param(lastPublishedAt),
@@ -159,7 +160,7 @@ export default function handlePublishRealm({
           owner_username: realmUsername,
           source_realm_url: sourceRealmURL,
           published_realm_url: publishedRealmURL,
-          last_published_at: new Date(),
+          last_published_at: Date.now(),
         });
 
         let results = (await query(
@@ -245,6 +246,11 @@ export default function handlePublishRealm({
             [ownerUserId]: ['read'],
           },
         },
+      });
+      sendEvent(ownerUserId, 'publish-realm-notification', {
+        sourceRealmURL: publishedRealmData.source_realm_url,
+        publishedRealmURL: publishedRealmData.published_realm_url,
+        lastPublishedAt: publishedRealmData.last_published_at,
       });
       await setContextResponse(ctxt, response);
       return;

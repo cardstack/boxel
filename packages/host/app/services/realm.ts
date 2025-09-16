@@ -61,6 +61,7 @@ class RealmResource {
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
   @service declare private messageService: MessageService;
+  @service declare private realmServer: RealmServerService;
 
   @tracked info: EnhancedRealmInfo | undefined;
   @tracked private realmPermissions: RealmPermissions | null | undefined;
@@ -68,6 +69,7 @@ class RealmResource {
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
   private subscription: { unsubscribe: () => void } | undefined;
+  private realmServerSubscription: { unsubscribe: () => void } | undefined;
 
   // Hassan: in general i'm questioning the usefulness of using Tasks in this
   // class. We seem to be following the pattern of await-ing all the tasks on
@@ -84,6 +86,9 @@ class RealmResource {
     registerDestructor(this, () => {
       if (this.subscription) {
         this.subscription.unsubscribe();
+      }
+      if (this.realmServerSubscription) {
+        this.realmServerSubscription.unsubscribe();
       }
     });
   }
@@ -185,6 +190,29 @@ class RealmResource {
               break;
             default:
               throw assertNever(data);
+          }
+        },
+      ),
+    };
+
+    this.realmServerSubscription = {
+      unsubscribe: this.realmServer.subscribeEvent(
+        'publish-realm-notification',
+        async (data: any) => {
+          let sourceRealmURL = data.sourceRealmURL;
+          if (
+            sourceRealmURL === this.realmURL &&
+            this.info &&
+            typeof this.info.lastPublishedAt === 'object' &&
+            this.info.lastPublishedAt?.[data.publishedRealmURL]
+          ) {
+            this.info = {
+              ...this.info,
+              lastPublishedAt: {
+                ...this.info.lastPublishedAt,
+                [data.publishedRealmURL]: data.lastPublishedAt,
+              },
+            };
           }
         },
       ),

@@ -1,10 +1,12 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
+
+import Refresh from '@cardstack/boxel-icons/refresh';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
@@ -12,16 +14,19 @@ import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import PublishingRealm from '@cardstack/host/components/operator-mode/publishing-realm';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import SubmodeLayout from './submode-layout';
 import PublishSiteModal from './publish-site-modal';
+import SubmodeLayout from './submode-layout';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;
@@ -31,8 +36,11 @@ interface HostSubmodeSignature {
 export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
+  @service private declare realmServer: RealmServerService;
+  @service private declare realm: RealmService;
 
   @tracked isPublishSiteModalOpen = false;
+  @tracked isPublishingDropdownOpen = false;
 
   get currentCardId() {
     return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
@@ -93,6 +101,36 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     this.isPublishSiteModalOpen = false;
   }
 
+  @action
+  showPublishingStatus() {
+    this.isPublishingDropdownOpen = !this.isPublishingDropdownOpen;
+  }
+
+  @action
+  closePublishingDropdown() {
+    this.isPublishingDropdownOpen = false;
+  }
+
+  @action
+  handlePublish(selectedDomains: string[]) {
+    if (selectedDomains.length === 0) {
+      return;
+    }
+
+    try {
+      this.realmServer.publishRealmToDomains(
+        this.operatorModeStateService.realmURL.href,
+        selectedDomains,
+        () => {
+          this.closePublishingDropdown();
+        },
+      );
+      this.closePublishSiteModal();
+    } catch (error) {
+      console.error('Error publishing to domains:', error);
+    }
+  }
+
   <template>
     <SubmodeLayout
       class='host-submode-layout'
@@ -101,16 +139,32 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     >
       <div class='host-submode' style={{this.backgroundImageStyle}}>
         <div class='host-mode-top-bar'>
-          <BoxelButton
-            @kind='primary'
-            @size='tall'
-            class='publish-site-button'
-            {{on 'click' this.openPublishSiteModal}}
-            data-test-publish-site-button
-          >
-            <PublishSiteIcon width='22' height='22' class='publish-icon' />
-            Publish Site
-          </BoxelButton>
+          <div class='publish-button-container'>
+            {{#if this.realmServer.isPublishingRealm}}
+              <BoxelButton
+                @kind='primary'
+                @size='tall'
+                class='publish-site-button publishing'
+                {{on 'click' this.showPublishingStatus}}
+                data-test-publish-site-button
+              >
+                <Refresh width='22' height='22' class='publish-icon' />
+                Publishing...
+              </BoxelButton>
+            {{else}}
+              <BoxelButton
+                @kind='primary'
+                @size='tall'
+                class='publish-site-button'
+                {{on 'click' this.openPublishSiteModal}}
+                data-test-publish-site-button
+              >
+                <PublishSiteIcon width='22' height='22' class='publish-icon' />
+                Publish Site
+              </BoxelButton>
+            {{/if}}
+            <PublishingRealm @isOpen={{this.isPublishingDropdownOpen}} />
+          </div>
         </div>
         <div class={{this.hostModeContentClass}}>
           <CardContainer @displayBoundaries={{true}} class='container'>
@@ -150,6 +204,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     <PublishSiteModal
       @isOpen={{this.isPublishSiteModalOpen}}
       @onClose={{this.closePublishSiteModal}}
+      @onPublish={{this.handlePublish}}
     />
 
     <style scoped>
@@ -157,6 +212,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         --submode-bar-item-border-radius: var(--boxel-border-radius);
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
         --submode-bar-item-outline: var(--boxel-border-flexible);
+        --operator-mode-left-column: calc(
+          21.5rem - var(--submode-new-file-button-width)
+        );
       }
 
       .host-submode-layout :deep(.submode-switcher),
@@ -183,10 +241,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         display: flex;
         align-items: center;
         justify-content: flex-start;
-        padding-left: calc(
-          var(--operator-mode-left-column) -
-            var(--submode-new-file-button-width)
-        );
+        padding-left: var(--operator-mode-left-column);
+      }
+
+      .publish-button-container {
+        position: relative;
       }
 
       .host-mode-top-bar-content {
@@ -211,6 +270,22 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       .publish-icon {
         flex-shrink: 0;
+      }
+
+      .publish-site-button.publishing {
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+        100% {
+          opacity: 1;
+        }
       }
 
       .host-mode-title {
