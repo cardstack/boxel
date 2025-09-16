@@ -45,7 +45,6 @@ export interface ModuleAnalysis {
   declarations: ModuleDeclaration[];
   moduleError: { type: 'runtime' | 'compile'; message: string } | undefined;
   isLoading: boolean;
-  isLoadingNewModule: boolean;
 }
 
 export class ModuleContentsResource
@@ -64,17 +63,6 @@ export class ModuleContentsResource
 
   get isLoading() {
     return this.load.isRunning;
-  }
-
-  // this resource is aware of loading new modules (ie it stores previous urls)
-  // it has to know this to distinguish the act of editing of a file and switching between definitions
-  // when editing a file we don't want to introduce loading state, whereas when switching between definitions we do
-  get isLoadingNewModule() {
-    if (!this.executableFile) {
-      return false;
-    }
-
-    return this.executableFile.url !== this.state?.url;
   }
 
   get declarations() {
