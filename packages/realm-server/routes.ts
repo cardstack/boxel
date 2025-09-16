@@ -12,6 +12,7 @@ import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-rea
 import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
 import handlePublishRealm from './handlers/handle-publish-realm';
+import handleUnpublishRealm from './handlers/handle-unpublish-realm';
 import {
   healthCheck,
   jwtMiddleware,
@@ -27,6 +28,7 @@ import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
+import handlePostDeployment from './handlers/handle-post-deployment';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -67,6 +69,7 @@ export type CreateRoutesArgs = {
     data?: Record<string, any>,
   ) => Promise<void>;
   validPublishedRealmDomains?: string[];
+  assetsURL: URL;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -110,6 +113,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handlePublishRealm(args),
   );
+  router.post(
+    '/_unpublish-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleUnpublishRealm(args),
+  );
 
   // it's awkward that these are GET's but we are working around grafana's limitations
   router.get(
@@ -132,6 +140,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     grafanaAuthorization(args.grafanaSecret),
     handleFullReindex(args),
   );
+  router.post('/_post-deployment', handlePostDeployment(args));
 
   return router.routes();
 }

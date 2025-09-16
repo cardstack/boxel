@@ -881,6 +881,36 @@ export class Realm {
     });
   }
 
+  async deleteAll(paths: LocalPath[]): Promise<void> {
+    let urls: URL[] = [];
+    let trackPromises: Promise<void>[] = [];
+    let removePromises: Promise<void>[] = [];
+
+    for (let path of paths) {
+      let url = this.paths.fileURL(path);
+      urls.push(url);
+      this.sendIndexInitiationEvent(url.href);
+      trackPromises.push(this.trackOwnWrite(path, { isDelete: true }));
+      removePromises.push(this.#adapter.remove(path));
+    }
+
+    await Promise.all(trackPromises);
+    await Promise.all(removePromises);
+    await this.#realmIndexUpdater.update(urls, {
+      delete: true,
+      onInvalidation: (invalidatedURLs: URL[]) => {
+        if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+          this.#definitionsCache.invalidate();
+        }
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: invalidatedURLs.map((u) => u.href),
+        });
+      },
+    });
+  }
+
   get realmIndexUpdater() {
     return this.#realmIndexUpdater;
   }

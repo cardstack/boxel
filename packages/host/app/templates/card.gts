@@ -1,5 +1,8 @@
+import { getOwner } from '@ember/owner';
+import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
@@ -24,13 +27,17 @@ import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
+
 import config from '@cardstack/host/config/environment';
+
+import type IndexController from '@cardstack/host/controllers/index';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -43,6 +50,8 @@ export interface HostModeComponentSignature {
 
 export class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare commandService: CommandService;
+  @service private declare matrixService: MatrixService;
+  @service private declare router: RouterService;
   @service private declare store: StoreService;
 
   @provide(GetCardContextName)
@@ -108,11 +117,46 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   addMessageListener = modifier((element: HTMLElement) => {
-    let messageHandler = (event: MessageEvent) => {
-      // TODO if this becomes anything more significant than just showing
-      // the button, the origin should be verified.
+    let messageHandler = async (event: MessageEvent) => {
+      if (eventHasInvalidOrigin(event)) {
+        console.debug(
+          'ignoring message from invalid origin',
+          event.data,
+          event.origin,
+        );
+
+        return;
+      } else {
+        console.debug(
+          'received message, origin validated',
+          event.data,
+          event.origin,
+        );
+      }
+
       if (event.data === 'ready') {
         element.classList.remove('not-loaded');
+      } else if (event.data === 'login') {
+        let indexController = getOwner(this)!.lookup(
+          'controller:index',
+        ) as IndexController;
+
+        let transitionQueryParameters = new URLSearchParams({
+          authRedirect: window.location.href,
+        });
+
+        if (indexController.hostModeOrigin) {
+          transitionQueryParameters.set(
+            'hostModeOrigin',
+            indexController.hostModeOrigin,
+          );
+        }
+
+        await this.matrixService.ready;
+
+        let loginUrl = new URL(config.realmServerURL);
+        loginUrl.search = transitionQueryParameters.toString();
+        window.location.href = loginUrl.toString();
       }
     };
 
@@ -189,3 +233,12 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 }
 
 export default RouteTemplate(HostModeComponent);
+
+function eventHasInvalidOrigin(event: MessageEvent) {
+  if (isDevelopingApp()) {
+    // During development, allow messages from any origin
+    return false;
+  }
+
+  return new URL(event.origin).href === config.realmServerURL;
+}
