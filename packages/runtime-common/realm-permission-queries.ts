@@ -1,6 +1,7 @@
 import { DBAdapter } from './db';
 import { RealmAction, type RealmPermissions } from './realm';
 import { query, asExpressions, param, upsert } from './expression';
+import { getMatrixUsername } from './matrix-client';
 
 async function insertPermission(
   dbAdapter: DBAdapter,
@@ -153,6 +154,52 @@ export async function fetchPublicRealms(dbAdapter: DBAdapter) {
   ])) as {
     realm_url: string;
   }[];
+
+  return results;
+}
+
+export async function fetchAllRealmsWithOwners(
+  dbAdapter: DBAdapter,
+): Promise<{ realm_url: string; owner_username: string }[]> {
+  // Get all realms with their owners
+  const allOwners = (await query(dbAdapter, [
+    `SELECT
+      realm_url,
+      username,
+      realm_owner
+    FROM realm_user_permissions
+    WHERE realm_owner = true`,
+  ])) as { realm_url: string; username: string; realm_owner: boolean }[];
+
+  // Group by realm to handle multiple owners case
+  const realmOwners = new Map<string, string[]>();
+  for (const row of allOwners) {
+    if (!realmOwners.has(row.realm_url)) {
+      realmOwners.set(row.realm_url, []);
+    }
+    realmOwners.get(row.realm_url)!.push(row.username);
+  }
+
+  // Process each realm to get the final owner
+  const results: { realm_url: string; owner_username: string }[] = [];
+  for (const [realmUrl, owners] of realmOwners) {
+    let finalOwner = owners[0];
+
+    // If multiple owners, prefer non-bot owner
+    if (owners.length > 1) {
+      const nonBotOwner = owners.find((owner) => !owner.startsWith('@realm/'));
+      if (nonBotOwner) {
+        finalOwner = nonBotOwner;
+      }
+    }
+
+    const ownerUsername = getMatrixUsername(finalOwner);
+
+    results.push({
+      realm_url: realmUrl,
+      owner_username: ownerUsername,
+    });
+  }
 
   return results;
 }

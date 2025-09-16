@@ -159,4 +159,32 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-realm-server-${{ inputs.environment }}"
       image: ${{ needs.build-realm-server.outputs.image }}
-      wait-for-service-stability: false
+      wait-for-service-stability: true
+
+  post-deploy-realm-server:
+    name: After realm server stable deployment
+    needs: [deploy-realm-server]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call post-deployment endpoint on realm server
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            URL="https://app.boxel.ai/_post-deployment?authHeader=${{ secrets.PRODUCTION_REALM_SERVER_SECRET }}"
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            URL="https://realms-staging.stack.cards/_post-deployment?authHeader=${{ secrets.STAGING_REALM_SERVER_SECRET }}"
+          else
+            echo "Unknown environment: ${{ inputs.environment }}"
+            exit 1
+          fi
+
+          response=$(curl -s -w "\n%{http_code}" -X POST "$URL")
+          response_body=$(echo "$response" | head -n -1)
+          response_code=$(echo "$response" | tail -n 1)
+
+          echo "Response body: $response_body"
+
+          if [ "$response_code" != "200" ]; then
+            echo "Post-deployment endpoint returned $response_code, expected 200"
+            echo "Response body: $response_body"
+            exit 1
+          fi

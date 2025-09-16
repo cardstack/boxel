@@ -55,6 +55,7 @@ import {
 import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
+import * as boxelUIChangeChecker from '../lib/boxel-ui-change-checker';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   MatrixEvent,
@@ -1321,6 +1322,157 @@ module(basename(__filename), function () {
           );
         });
 
+        test('can reindex all realms via post-deployment endpoint called from CI pipeline', async function (assert: Assert) {
+          let compareCurrentBoxelUIChecksumStub: sinon.SinonStub;
+          let writeCurrentBoxelUIChecksumStub: sinon.SinonStub;
+
+          // Test case 1: Missing authorization header - should be unauthorized
+          {
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json');
+
+            assert.strictEqual(
+              response.status,
+              401,
+              'HTTP 401 status for missing auth header',
+            );
+          }
+
+          // Test case 2: Wrong authorization header - should be unauthorized
+          {
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', 'wrong-secret');
+
+            assert.strictEqual(
+              response.status,
+              401,
+              'HTTP 401 status for wrong auth header',
+            );
+          }
+
+          // Test case 3: Checksums are different - should trigger reindex
+          {
+            compareCurrentBoxelUIChecksumStub = sinon
+              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+              .resolves({
+                previousChecksum: 'old-checksum-123',
+                currentChecksum: 'new-checksum-456',
+              });
+            writeCurrentBoxelUIChecksumStub = sinon.stub(
+              boxelUIChangeChecker,
+              'writeCurrentBoxelUIChecksum',
+            );
+
+            let initialJobs = await dbAdapter.execute('select * from jobs');
+            let initialJobCount = initialJobs.length;
+
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', "mum's the word");
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            assert.deepEqual(
+              response.body,
+              {
+                previousChecksum: 'old-checksum-123',
+                currentChecksum: 'new-checksum-456',
+              },
+              'response body contains checksum comparison result',
+            );
+
+            // Verify that a full-reindex job was published
+            let finalJobs = await dbAdapter.execute('select * from jobs');
+            assert.strictEqual(
+              finalJobs.length,
+              initialJobCount + 1,
+              'a new full-reindex job was created when checksums differ',
+            );
+
+            let reindexJob = finalJobs.find(
+              (job) => job.job_type === 'full-reindex',
+            );
+            assert.ok(reindexJob, 'full-reindex job exists');
+            if (reindexJob) {
+              assert.strictEqual(
+                reindexJob.concurrency_group,
+                'full-reindex-group',
+                'job has correct concurrency group',
+              );
+              assert.strictEqual(
+                reindexJob.timeout,
+                360,
+                'job has correct timeout (6 minutes)',
+              );
+            }
+
+            // Verify that writeCurrentBoxelUIChecksum was called
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.calledOnce,
+              'writeCurrentBoxelUIChecksum was called',
+            );
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.calledWith('new-checksum-456'),
+              'writeCurrentBoxelUIChecksum called with new checksum',
+            );
+
+            compareCurrentBoxelUIChecksumStub.restore();
+            writeCurrentBoxelUIChecksumStub.restore();
+          }
+
+          // Test case 4: Checksums are the same - should not trigger reindex
+          {
+            compareCurrentBoxelUIChecksumStub = sinon
+              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+              .resolves({
+                previousChecksum: 'same-checksum-789',
+                currentChecksum: 'same-checksum-789',
+              });
+            writeCurrentBoxelUIChecksumStub = sinon.stub(
+              boxelUIChangeChecker,
+              'writeCurrentBoxelUIChecksum',
+            );
+
+            let initialJobs = await dbAdapter.execute('select * from jobs');
+            let initialJobCount = initialJobs.length;
+
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', "mum's the word");
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            assert.deepEqual(
+              response.body,
+              {
+                previousChecksum: 'same-checksum-789',
+                currentChecksum: 'same-checksum-789',
+              },
+              'response body contains checksum comparison result',
+            );
+
+            // Verify that no new job was published
+            let finalJobs = await dbAdapter.execute('select * from jobs');
+            assert.strictEqual(
+              finalJobs.length,
+              initialJobCount,
+              'no new job was created when checksums are the same',
+            );
+
+            // Verify that writeCurrentBoxelUIChecksum was not called
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.notCalled,
+              'writeCurrentBoxelUIChecksum was not called when checksums are same',
+            );
+
+            compareCurrentBoxelUIChecksumStub.restore();
+            writeCurrentBoxelUIChecksumStub.restore();
+          }
+        });
+
         test('can reindex all realms via grafana endpoint', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
@@ -1371,28 +1523,18 @@ module(basename(__filename), function () {
           let finalJobs = await dbAdapter.execute('select * from jobs');
           assert.strictEqual(
             finalJobs.length,
-            4,
-            'realm index jobs were created',
+            3,
+            'realm full reindex job was created',
           );
           let jobs = finalJobs.slice(2);
           assert.strictEqual(
             jobs[0].job_type,
-            'from-scratch-index',
+            'full-reindex',
             'job type is correct',
           );
           assert.strictEqual(
             jobs[0].concurrency_group,
-            `indexing:${testRealm2URL.href}`,
-            'concurrency group is correct',
-          );
-          assert.strictEqual(
-            jobs[1].job_type,
-            'from-scratch-index',
-            'job type is correct',
-          );
-          assert.strictEqual(
-            jobs[1].concurrency_group,
-            `indexing:${realmURL}`,
+            `full-reindex-group`,
             'concurrency group is correct',
           );
         });
