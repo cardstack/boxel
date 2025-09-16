@@ -12,6 +12,7 @@ import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-rea
 import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
 import handlePublishRealm from './handlers/handle-publish-realm';
+import handleUnpublishRealm from './handlers/handle-unpublish-realm';
 import {
   healthCheck,
   jwtMiddleware,
@@ -107,6 +108,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed),
     handlePublishRealm(args),
+  );
+  router.post(
+    '/_unpublish-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleUnpublishRealm(args),
   );
 
   // it's awkward that these are GET's but we are working around grafana's limitations
