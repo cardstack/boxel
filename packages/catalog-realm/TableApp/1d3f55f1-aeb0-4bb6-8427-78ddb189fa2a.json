@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "codeRef": {
-        "name": "Listing",
-        "module": "../catalog-app/listing/listing"
+        "name": "EventTicketCard",
+        "module": "../event-ticket/event-ticket"
       },
       "cardInfo": {
         "notes": "",
@@ -18,7 +18,8 @@
         "description": null,
         "thumbnailURL": null
       },
-      "showComputedFields": false
+      "showComputedFields": true,
+      "showPrimitivesOnly": true
     },
     "relationships": {
       "cardInfo.theme": {
