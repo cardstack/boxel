@@ -180,6 +180,7 @@ export class RealmServer {
           sendEvent: this.sendEvent,
           queue: this.queue,
           realms: this.realms,
+          assetsURL: this.assetsURL,
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           createAndMountRealm: this.createAndMountRealm,

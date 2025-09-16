@@ -418,7 +418,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
-              @isLoadingNewModule={{@moduleAnalysis.isLoadingNewModule}}
               @setActiveModuleInspectorPanel={{this.setActivePanel}}
               @isPanelOpen={{eq this.activePanel 'spec'}}
               @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
