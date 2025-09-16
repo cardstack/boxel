@@ -2143,7 +2143,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('displays highlights filter with special layout and community cards', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
-        aiAssistantOpen: false,
         selectAllCardsFilter: false,
       });
 
