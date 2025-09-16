@@ -97,9 +97,6 @@ function createColumns(
         case 'INTEGER':
           column.push('INTEGER');
           break;
-        case 'UUID':
-          column.push('INTEGER');
-          break;
       }
     }
     for (let constraint of item.constraints) {
@@ -123,11 +120,10 @@ function createColumns(
             break;
           } else if (
             constraint.expr.type === 'func_call' &&
-            'name' in constraint.expr &&
             constraint.expr.name.type === 'identifier' &&
             constraint.expr.name.name === 'gen_random_uuid'
           ) {
-            // Skip default value for UUID columns - using AUTOINCREMENT instead
+            column.push('DEFAULT', '(hex(randomblob(16)))');
             break;
           } else {
             throw new Error(
@@ -138,21 +134,6 @@ function createColumns(
           throw new Error(
             `Don't know how to serialize constraint ${constraint.type} for column '${item.name.name}'`,
           );
-      }
-    }
-
-    // Check if this is a UUID column that will become a primary key via table-level constraint
-    if (item.dataType?.type === 'named_data_type') {
-      let dataTypeName = Array.isArray(item.dataType.nameKw)
-        ? item.dataType.nameKw[0]
-        : item.dataType.nameKw;
-      if (
-        dataTypeName.name === 'UUID' &&
-        isUuidPrimaryKey(cst, tableName, item.name.name)
-      ) {
-        // For UUID primary keys, use INTEGER PRIMARY KEY AUTOINCREMENT
-        // Keep the indentation and column name, replace the rest
-        column.push('PRIMARY', 'KEY', 'AUTOINCREMENT');
       }
     }
 
@@ -202,20 +183,12 @@ function makePrimaryKeyConstraint(
                 );
               }
               if (columns.length > 0) {
-                // Skip table-level primary key constraint if it's a single UUID column
-                // (handled at column level with INTEGER PRIMARY KEY AUTOINCREMENT)
-                let isSingleUuidPrimaryKey =
-                  columns.length === 1 &&
-                  isUuidPrimaryKey(cst, tableName, columns[0]);
-
-                if (!isSingleUuidPrimaryKey) {
-                  pkConstraint.push(
-                    INDENT,
-                    'PRIMARY KEY (',
-                    columns.join(', '),
-                    ')',
-                  );
-                }
+                pkConstraint.push(
+                  INDENT,
+                  'PRIMARY KEY (',
+                  columns.join(', '),
+                  ')',
+                );
               }
             }
             break;
@@ -232,94 +205,6 @@ function makePrimaryKeyConstraint(
     return undefined;
   }
   return pkConstraint.join(' ');
-}
-
-function isUuidPrimaryKey(
-  cst: Program,
-  tableName: string,
-  columnName: string,
-): boolean {
-  let isUuid = false;
-  let isPrimaryKey = false;
-
-  // First check column-level constraints
-  for (let statement of cst.statements) {
-    if (statement.type === 'create_table_stmt') {
-      let statementTableName = '';
-      if (
-        statement.name.type === 'member_expr' &&
-        statement.name.property.type === 'identifier'
-      ) {
-        statementTableName = statement.name.property.name;
-      }
-
-      if (statementTableName === tableName && statement.columns) {
-        for (let item of statement.columns.expr.items) {
-          if (
-            item.type === 'column_definition' &&
-            item.name.name === columnName
-          ) {
-            // Check if it's a UUID type
-            if (item.dataType?.type === 'named_data_type') {
-              let dataTypeName = Array.isArray(item.dataType.nameKw)
-                ? item.dataType.nameKw[0]
-                : item.dataType.nameKw;
-              if (dataTypeName.name === 'UUID') {
-                isUuid = true;
-              }
-            }
-
-            // Check for column-level primary key constraint
-            for (let constraint of item.constraints) {
-              if (constraint.type === 'constraint_primary_key') {
-                isPrimaryKey = true;
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Then check table-level primary key constraints
-  if (!isPrimaryKey) {
-    for (let statement of cst.statements) {
-      if (statement.type === 'alter_table_stmt') {
-        let alterTableName = '';
-        if (
-          statement.table.type === 'table_without_inheritance' &&
-          statement.table.table.type === 'member_expr' &&
-          statement.table.table.property.type === 'identifier'
-        ) {
-          alterTableName = statement.table.table.property.name;
-        }
-
-        if (alterTableName === tableName) {
-          for (let item of statement.actions.items) {
-            if (item.type === 'alter_action_add_constraint') {
-              if (item.constraint.type === 'constraint_primary_key') {
-                if (item.constraint.columns?.type === 'paren_expr') {
-                  for (let column of item.constraint.columns.expr.items) {
-                    if (
-                      column.type === 'index_specification' &&
-                      column.expr.type === 'identifier' &&
-                      column.expr.name === columnName
-                    ) {
-                      isPrimaryKey = true;
-                      break;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return isUuid && isPrimaryKey;
 }
 
 // This strips out all the things that our SQL AST chokes on (it's still in an
