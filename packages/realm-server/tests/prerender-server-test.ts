@@ -2,7 +2,6 @@ import { module, test } from 'qunit';
 import supertest, { SuperTest, Test } from 'supertest';
 import { basename } from 'path';
 import { Server } from 'http';
-import { execSync } from 'child_process';
 
 import {
   setupBaseRealmServer,
@@ -18,11 +17,6 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
     let prerenderServer: Server;
     const testUserId = '@jade:localhost';
-
-    hooks.before(() => {
-      // Ensure chrome is available for puppeteer in CI
-      execSync('pnpm puppeteer browsers install chrome');
-    });
 
     setupBaseRealmServer(hooks, matrixURL);
 
