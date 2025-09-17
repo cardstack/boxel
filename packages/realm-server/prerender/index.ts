@@ -115,7 +115,7 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    // Serialize per realm using a tail-promise chain with Deferred
+    // chain requests for the same realm together so they happen in serial
     let prev = this.#pendingByRealm.get(realm) ?? Promise.resolve();
     let deferred = new Deferred<void>();
     this.#pendingByRealm.set(
@@ -127,15 +127,14 @@ export class Prerenderer {
       await prev.catch(() => {}); // ensure chain continues even after errors
       const { page, reused, launchMs } = await this.#getPage(realm);
 
-      // Create sessions JWT auth map per permissions
       let sessions: { [realm: string]: string } = {};
-      for (let [realmKey, realmPermissions] of Object.entries(
+      for (let [realmURL, realmPermissions] of Object.entries(
         permissions ?? {},
       )) {
-        sessions[realmKey] = createJWT(
+        sessions[realmURL] = createJWT(
           {
             user: userId,
-            realm: realmKey,
+            realm: realmURL,
             permissions: realmPermissions,
             sessionRoom: '',
           },
@@ -165,14 +164,7 @@ export class Prerenderer {
         page,
         async () => {
           if (reused) {
-            await page.evaluate((id: string) => {
-              (globalThis as any).boxelTransitionTo(
-                'render.html',
-                id,
-                'isolated',
-                '0',
-              );
-            }, url);
+            await transitionTo(page, 'render.html', url, 'isolated', '0');
           } else {
             await page.goto(
               `${boxelHostURL}/render/${encodeURIComponent(url)}/html/isolated/0`,
@@ -182,15 +174,12 @@ export class Prerenderer {
         },
         opts?.timeoutMs,
       );
-      if ((result as RenderCapture).status === 'error') {
-        error = JSON.parse((result as RenderCapture).value) as CardErrorJSONAPI;
+      if (result.status === 'error') {
+        error = JSON.parse(result.value) as CardErrorJSONAPI;
       } else if (isRenderError(result)) {
         error = result;
       }
-      const isolatedHTML =
-        (result as RenderCapture).status === 'ready'
-          ? (result as RenderCapture).value
-          : null;
+      const isolatedHTML = result.status === 'ready' ? result.value : null;
 
       // TODO consider breaking out rendering search doc into its own route so
       // that we ran fully understand all the linked fields that are used in all
@@ -280,7 +269,9 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot start browser');
     }
-    if (this.#browser) return this.#browser;
+    if (this.#browser) {
+      return this.#browser;
+    }
     this.#browser = await puppeteer.launch({
       headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
       args: process.env.CI ? ['--no-sandbox'] : [],
