@@ -100,7 +100,7 @@ class TableRow extends GlimmerComponent<TableRowSignature> {
         </td>
       {{/each}}
     </tr>
-    <style>
+    <style scoped>
       .table-row {
         border-bottom: 1px solid var(--boxel-300);
         height: 60px;
@@ -212,7 +212,6 @@ export class Table extends GlimmerComponent<TableSignature> {
 
     return [...priorityFieldsFound, ...otherFields];
   }
-
 
   goToPage = (page: number) => {
     this.currentPage = page;
