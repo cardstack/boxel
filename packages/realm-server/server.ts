@@ -273,15 +273,16 @@ export class RealmServer {
         try {
           console.log('xyz href? ' + ctxt.request.href);
           let requestUrlString = ctxt.request.href;
-          let requestOrigin = new URL(requestUrlString).origin;
+          let requestHostname = new URL(requestUrlString).hostname;
 
+          // FIXME ctxt.request.href has http:// instead of https://!
           let publishedRealms = await query(this.dbAdapter, [
             `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
-            param(`${requestOrigin}%`),
+            param(`%//${requestHostname}%`),
           ]);
 
           this.log.info(
-            `Found published realms for origin ${requestOrigin}: ${JSON.stringify(publishedRealms, null, 2)}`,
+            `Found published realms for origin ${requestHostname}: ${JSON.stringify(publishedRealms, null, 2)}`,
           );
 
           if (publishedRealms.length > 0) {
