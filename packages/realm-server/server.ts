@@ -230,6 +230,7 @@ export class RealmServer {
   }
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
+    console.log('index request: ', ctxt.request.originalUrl);
     if (ctxt.header.accept?.includes('text/html')) {
       // If this is a /connect iframe request, is the origin a valid published realm?
 
