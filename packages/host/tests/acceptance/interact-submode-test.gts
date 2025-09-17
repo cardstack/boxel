@@ -2204,6 +2204,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-community-link]').exists({ count: 4 }); // Discord, Twitter, YouTube, Reddit
 
       // Take a snapshot of the highlights layout
+      await click('[data-test-close-ai-assistant]');
       await percySnapshot(assert);
 
       // Verify the community cards have the correct content

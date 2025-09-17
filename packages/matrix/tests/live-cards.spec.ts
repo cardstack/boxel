@@ -241,7 +241,9 @@ test.describe('Live Cards', () => {
     await new Promise((r) => setTimeout(r, 5000));
     let content = await getMonacoContent(page);
 
-    await page.locator('[data-test-field="title"] input').fill('Replacement');
+    await page
+      .locator('[data-test-field="cardInfo-name"] input')
+      .fill('Replacement');
 
     await waitUntil(async () => (await getMonacoContent(page)) !== content);
 

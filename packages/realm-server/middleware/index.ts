@@ -179,6 +179,13 @@ export async function sendResponseForBadRequest(
   await sendResponseForError(ctxt, 400, 'Bad Request', message);
 }
 
+export async function sendResponseForUnprocessableEntity(
+  ctxt: Koa.Context,
+  message: string,
+) {
+  await sendResponseForError(ctxt, 422, 'Unprocessable Entity', message);
+}
+
 export async function sendResponseForNotFound(
   ctxt: Koa.Context,
   message: string,

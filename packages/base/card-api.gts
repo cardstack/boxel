@@ -1,7 +1,6 @@
 import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
-import { flatMap, merge, isEqual } from 'lodash';
-import { TrackedWeakMap } from 'tracked-built-ins';
+import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -18,9 +17,7 @@ import {
   Deferred,
   isCardResource,
   Loader,
-  isSingleCardDocument,
   isRelationship,
-  isNotLoadedError,
   CardError,
   CardContextName,
   NotLoaded,
@@ -33,8 +30,6 @@ import {
   isBaseInstance,
   loadCardDef,
   humanReadable,
-  maybeURL,
-  maybeRelativeURL,
   CodeRef,
   CommandContext,
   uuidv4,
@@ -56,7 +51,6 @@ import {
   type LooseCardResource,
   type LooseSingleCardDocument,
   type CardDocument,
-  type CardResource,
   type CardResourceMeta,
   type ResolvedCodeRef,
   type getCard,
@@ -85,6 +79,40 @@ import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
+import {
+  callSerializeHook,
+  cardClassFromResource,
+  deserialize,
+  makeMetaForField,
+  makeRelativeURL,
+  serialize,
+  serializeCard,
+  serializeCardResource,
+  resourceFrom,
+  type DeserializeOpts,
+  type JSONAPIResource,
+  type JSONAPISingleResourceDocument,
+  type SerializeOpts,
+  getCardMeta,
+} from './card-serialization';
+import {
+  entangleWithCardTracking,
+  getDataBucket,
+  getFieldDescription,
+  getFieldOverrides,
+  getFields,
+  getIfReady,
+  getter,
+  isArrayOfCardOrField,
+  isCard,
+  isCardOrField,
+  isNotLoadedValue,
+  notifyCardTracking,
+  peekAtField,
+  relationshipMeta,
+  setFieldDescription,
+  type NotLoadedValue,
+} from './field-support';
 
 interface CardOrFieldTypeIconSignature {
   Element: Element;
@@ -93,16 +121,28 @@ interface CardOrFieldTypeIconSignature {
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export {
-  meta,
-  localId,
-  realmURL,
-  primitive,
-  relativeTo,
+  deserialize,
+  getCardMeta,
+  getFieldDescription,
+  getFields,
+  getIfReady,
+  isCard,
   isField,
+  localId,
+  meta,
+  primitive,
+  realmURL,
+  relativeTo,
+  relationshipMeta,
+  serialize,
+  serializeCard,
   type BoxComponent,
+  type DeserializeOpts,
+  type JSONAPISingleResourceDocument,
+  type ResourceID,
+  type SerializeOpts,
 };
-export const serialize = Symbol.for('cardstack-serialize');
-export const deserialize = Symbol.for('cardstack-deserialize');
+
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const fieldType = Symbol.for('cardstack-field-type');
@@ -157,11 +197,6 @@ interface Options {
   isUsed?: true;
 }
 
-interface NotLoadedValue {
-  type: 'not-loaded';
-  reference: string;
-}
-
 export interface CardContext<T extends CardDef = CardDef> {
   commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
@@ -191,33 +226,11 @@ export interface FieldConstructor<T> {
   isPolymorphic?: true;
 }
 
-function isNotLoadedValue(val: any): val is NotLoadedValue {
-  if (!val || typeof val !== 'object') {
-    return false;
-  }
-  if (!('type' in val) || !('reference' in val)) {
-    return false;
-  }
-  let { type, reference } = val;
-  if (typeof type !== 'string' || typeof reference !== 'string') {
-    return false;
-  }
-  return type === 'not-loaded';
-}
-
 type CardChangeSubscriber = (
   instance: BaseDef,
   fieldName: string,
   fieldValue: any,
 ) => void;
-const deserializedData = initSharedState(
-  'deserializedData',
-  () => new WeakMap<BaseDef, Map<string, any>>(),
-);
-const fieldOverrides = initSharedState(
-  'fieldOverrides',
-  () => new WeakMap<BaseDef, Map<string, any>>(),
-);
 const loadLinksPromises = initSharedState(
   'loadLinksPromises',
   () => new WeakMap<BaseDef, Promise<any>>(),
@@ -234,32 +247,10 @@ const subscriberConsumer = initSharedState(
   'subscriberConsumer',
   () => new WeakMap<BaseDef, { fieldOrCard: BaseDef; fieldName: string }>(),
 );
-const fieldDescriptions = initSharedState(
-  'fieldDescriptions',
-  () => new WeakMap<typeof BaseDef, Map<string, string>>(),
-);
 const inflightLinkLoads = initSharedState(
   'inflightLinkLoads',
   () => new WeakMap<CardDef, Map<string, Promise<unknown>>>(),
 );
-
-// our place for notifying Glimmer when a card is ready to re-render
-const cardTracking = initSharedState(
-  'cardTracking',
-  () => new TrackedWeakMap<object, any>(),
-);
-
-export function getFieldDescription(
-  cardOrFieldKlass: typeof BaseDef,
-  fieldName: string,
-): string | undefined {
-  let descriptionsMap = fieldDescriptions.get(cardOrFieldKlass);
-  if (!descriptionsMap) {
-    descriptionsMap = new Map();
-    fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
-  }
-  return descriptionsMap.get(fieldName);
-}
 
 export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
   let instanceClazz: typeof BaseDef | null = instance.constructor;
@@ -273,19 +264,6 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
     instanceClazz = instanceClazz ? getAncestor(instanceClazz) ?? null : null;
   } while (codeRefInstance && !isEqual(codeRefInstance, baseRef));
   return false;
-}
-
-function setFieldDescription(
-  cardOrFieldKlass: typeof BaseDef,
-  fieldName: string,
-  description: string,
-) {
-  let descriptionsMap = fieldDescriptions.get(cardOrFieldKlass);
-  if (!descriptionsMap) {
-    descriptionsMap = new Map();
-    fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
-  }
-  descriptionsMap.set(fieldName, description);
 }
 
 class Logger {
@@ -329,25 +307,6 @@ export interface CardStore {
   loadDocument(url: string): Promise<SingleCardDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
-}
-
-type JSONAPIResource =
-  | {
-      attributes: Record<string, any>;
-      relationships?: Record<string, Relationship>;
-      meta?: Record<string, any>;
-    }
-  | {
-      attributes?: Record<string, any>;
-      relationships: Record<string, Relationship>;
-      meta?: Record<string, any>;
-    };
-
-export interface JSONAPISingleResourceDocument {
-  data: Partial<JSONAPIResource> & { type: string } & { id?: string } & {
-    lid?: string;
-  };
-  included?: (Partial<JSONAPIResource> & ResourceID)[];
 }
 
 export interface Field<
@@ -396,26 +355,6 @@ export interface Field<
   >;
 }
 
-function callSerializeHook(
-  card: typeof BaseDef,
-  value: any,
-  doc: JSONAPISingleResourceDocument,
-  visited: Set<string> = new Set(),
-  opts?: SerializeOpts,
-) {
-  if (value != null) {
-    if (primitive in card && fieldSerializer in card) {
-      assertIsSerializerName(card[fieldSerializer]);
-      let serializer = getSerializer(card[fieldSerializer]);
-      return serializer.serialize(value, doc, visited, opts);
-    } else {
-      return card[serialize](value, doc, visited, opts);
-    }
-  } else {
-    return null;
-  }
-}
-
 function cardTypeFor(
   field: Field<typeof BaseDef>,
   boxedElement?: Box<BaseDef>,
@@ -441,63 +380,6 @@ function cardTypeFor(
   }
   return Reflect.getPrototypeOf(boxedElement.value)!
     .constructor as typeof BaseDef;
-}
-
-function resourceFrom(
-  doc: CardDocument | undefined,
-  resourceId: string | undefined,
-): LooseCardResource | undefined {
-  if (doc == null) {
-    return;
-  }
-  let data: CardResource[];
-  if (isSingleCardDocument(doc)) {
-    if (resourceId === undefined) {
-      return undefined;
-    }
-    if (resourceId === null) {
-      return doc.data;
-    }
-    data = [doc.data];
-  } else {
-    data = doc.data;
-  }
-  let res = [...data, ...(doc.included ?? [])].find(
-    (resource) => resource.id === resourceId,
-  );
-  return res;
-}
-
-function getter<CardT extends BaseDefConstructor>(
-  instance: BaseDef,
-  field: Field<CardT>,
-): BaseInstanceType<CardT> {
-  let deserialized = getDataBucket(instance);
-  // this establishes that our field should rerender when cardTracking for this card changes
-  cardTracking.get(instance);
-
-  if (field.computeVia) {
-    try {
-      let value = field.computeVia.bind(instance)();
-      if (value === undefined) {
-        value = field.emptyValue(instance);
-      }
-      return value as BaseInstanceType<CardT>;
-    } catch (e) {
-      if (isNotLoadedError(e)) {
-        // Re-throw NotLoaded errors with the computed field's name instead of the dependency field's name
-        throw new NotLoaded(instance, e.reference, field.name);
-      }
-      throw e;
-    }
-  } else {
-    if (deserialized.has(field.name)) {
-      return deserialized.get(field.name);
-    }
-    let value = field.emptyValue(instance);
-    deserialized.set(field.name, value);
-    return value;
-  }
 }
 
 class ContainsMany<FieldT extends FieldDefConstructor>
@@ -532,7 +414,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
 
   getter(instance: BaseDef): BaseInstanceType<FieldT> {
     let deserialized = getDataBucket(instance);
-    cardTracking.get(instance);
+    entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
@@ -696,7 +578,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             arrayValue,
           );
           notifySubscribers(instance, field.name, arrayValue);
-          cardTracking.set(instance, true);
+          notifyCardTracking(instance);
         }),
       await Promise.all(
         value.map(async (entry, index) => {
@@ -754,7 +636,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      cardTracking.set(instance, true);
+      notifyCardTracking(instance);
     });
   }
 
@@ -788,7 +670,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      cardTracking.set(instance, true);
+      notifyCardTracking(instance);
     }, values);
   }
 
@@ -842,7 +724,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   getter(instance: BaseDef): BaseInstanceType<CardT> {
     let deserialized = getDataBucket(instance);
-    cardTracking.get(instance);
+    entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
@@ -1041,7 +923,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   getter(instance: CardDef): BaseInstanceType<CardT> {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
-    cardTracking.get(instance);
+    entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
@@ -1401,7 +1283,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
-    cardTracking.get(instance);
+    entangleWithCardTracking(instance);
 
     if (this.computeVia) {
       // For computed LinksToMany fields, use the main getter function
@@ -1690,7 +1572,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
             value as BaseDef[],
           );
           notifySubscribers(instance, this.name, value);
-          cardTracking.set(instance, true);
+          notifyCardTracking(instance);
         }),
       await Promise.all(resources),
     );
@@ -1705,7 +1587,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      cardTracking.set(instance, true);
+      notifyCardTracking(instance);
     });
   }
 
@@ -1746,7 +1628,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      cardTracking.set(instance, true);
+      notifyCardTracking(instance);
     }, values);
   }
 
@@ -2141,37 +2023,6 @@ export class BaseDef {
     }
   }
 }
-
-export function isArrayOfCardOrField(
-  cardsOrFields: any,
-): cardsOrFields is CardDef[] | FieldDef[] {
-  return (
-    Array.isArray(cardsOrFields) &&
-    (cardsOrFields.length === 0 ||
-      cardsOrFields.every((item) => isCardOrField(item)))
-  );
-}
-
-export function isCardOrField(card: any): card is CardDef | FieldDef {
-  return card && typeof card === 'object' && isBaseInstance in card;
-}
-
-export function isCard(card: any): card is CardDef {
-  return isCardOrField(card) && !('isFieldDef' in card.constructor);
-}
-
-export function isFieldDef(field: any): field is FieldDef {
-  return isCardOrField(field) && 'isFieldDef' in field.constructor;
-}
-
-export function isCompoundField(card: any) {
-  return (
-    isCardOrField(card) &&
-    'isFieldDef' in card.constructor &&
-    !(primitive in card)
-  );
-}
-
 export class Component<
   CardT extends BaseDefConstructor,
 > extends GlimmerComponent<SignatureFor<CardT>> {}
@@ -2389,7 +2240,7 @@ export class CardDef extends BaseDef {
     return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
   }
   get [fields](): Record<string, typeof BaseDef> | undefined {
-    cardTracking.get(this);
+    entangleWithCardTracking(this);
     return this[fieldsUntracked];
   }
   set [fields](overrides: Record<string, typeof BaseDef>) {
@@ -2398,7 +2249,7 @@ export class CardDef extends BaseDef {
       existingOverrides.set(fieldName, clazz);
     }
     // notify glimmer to rerender this card
-    cardTracking.set(this, true);
+    notifyCardTracking(this);
   }
   @field id = contains(ReadOnlyField);
   @field cardInfo = contains(CardInfoField);
@@ -2650,28 +2501,6 @@ function applySubscribersToInstanceValue(
   );
 }
 
-function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
-  let deserialized = deserializedData.get(instance);
-  if (!deserialized) {
-    deserialized = new Map();
-    deserializedData.set(instance, deserialized);
-  }
-  return deserialized;
-}
-
-function getFieldOverrides<T extends BaseDef>(instance: T): Map<string, any> {
-  let overrides = fieldOverrides.get(instance);
-  if (!overrides) {
-    overrides = new Map();
-    fieldOverrides.set(instance, overrides);
-  }
-  return overrides;
-}
-
-function getUsedFields(instance: BaseDef): string[] {
-  return [...getDataBucket(instance)?.keys()];
-}
-
 function lazilyLoadLink(
   instance: CardDef,
   field: Field,
@@ -2854,109 +2683,6 @@ export function formatQueryValue(
   );
 }
 
-function peekAtField(instance: BaseDef, fieldName: string): any {
-  let field = getField(instance, fieldName);
-  if (!field) {
-    throw new Error(
-      `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
-    );
-  }
-  try {
-    return getter(instance, field);
-  } catch (e) {
-    // we peek specifically so that we can see the raw values
-    // without worrying about encountering NotLoaded errors
-    if (isNotLoadedError(e)) {
-      // For linksToMany fields (both computed and non-computed), we want to return
-      // the actual array data (which may contain NotLoadedValue entries) rather than a single NotLoadedValue
-      if (field.fieldType === 'linksToMany') {
-        let deserialized = getDataBucket(instance);
-        let rawValue = deserialized.get(field.name);
-        if (rawValue) {
-          return rawValue;
-        }
-        // For computed linksToMany fields that can't be computed, return a special marker
-        // to indicate that the field should be skipped during serialization
-        if (field.computeVia) {
-          return { type: 'skip-serialization' };
-        }
-        // For non-computed fields, fall back to returning empty array for relationshipMeta to handle
-        return [];
-      }
-      return { type: 'not-loaded', reference: e.reference } as NotLoadedValue;
-    }
-    throw e;
-  }
-}
-
-type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
-interface NotLoadedRelationship {
-  type: 'not-loaded';
-  reference: string;
-  // TODO add a loader (which may turn this into a class)
-  // load(): Promise<CardInstanceType<CardT>>;
-}
-interface LoadedRelationship {
-  type: 'loaded';
-  card: CardDef | null;
-}
-
-export function relationshipMeta(
-  instance: CardDef,
-  fieldName: string,
-): RelationshipMeta | RelationshipMeta[] | undefined {
-  let field = getField(instance, fieldName);
-  if (!field) {
-    throw new Error(
-      `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
-    );
-  }
-  if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
-    return undefined;
-  }
-  let related = peekAtField(instance, field.name) as CardDef;
-  if (field.fieldType === 'linksToMany') {
-    // this is the scenario where the linksToMany is a computed that consumes a link that is not loaded
-    if (isNotLoadedValue(related)) {
-      return { type: 'not-loaded', reference: related.reference };
-    }
-    if (!Array.isArray(related)) {
-      throw new Error(
-        `expected ${fieldName} to be an array but was ${typeof related}`,
-      );
-    }
-    return related.map((rel) => {
-      if (isNotLoadedValue(rel)) {
-        return { type: 'not-loaded', reference: rel.reference };
-      } else {
-        return { type: 'loaded', card: rel ?? null };
-      }
-    });
-  }
-
-  if (isNotLoadedValue(related)) {
-    return { type: 'not-loaded', reference: related.reference };
-  } else {
-    return { type: 'loaded', card: related ?? null };
-  }
-}
-
-function serializedGet<CardT extends BaseDefConstructor>(
-  model: InstanceType<CardT>,
-  fieldName: string,
-  doc: JSONAPISingleResourceDocument,
-  visited: Set<string>,
-  opts?: SerializeOpts,
-): JSONAPIResource {
-  let field = getField(model, fieldName);
-  if (!field) {
-    throw new Error(
-      `tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`,
-    );
-  }
-  return field.serialize(peekAtField(model, fieldName), doc, visited, opts);
-}
-
 async function getDeserializedValue<CardT extends BaseDefConstructor>({
   card,
   loadedValue,
@@ -2996,101 +2722,6 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
     opts,
   );
   return result;
-}
-
-export interface SerializeOpts {
-  includeComputeds?: boolean;
-  includeUnrenderedFields?: boolean;
-  useAbsoluteURL?: boolean;
-  omitFields?: [typeof BaseDef];
-  maybeRelativeURL?: (possibleURL: string) => string;
-  overrides?: Map<string, typeof BaseDef>;
-}
-
-function serializeCardResource(
-  model: CardDef,
-  doc: JSONAPISingleResourceDocument,
-  opts?: SerializeOpts,
-  visited: Set<string> = new Set(),
-): LooseCardResource {
-  let adoptsFrom = identifyCard(
-    model.constructor,
-    opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
-  );
-  if (!adoptsFrom) {
-    throw new Error(`bug: could not identify card: ${model.constructor.name}`);
-  }
-  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
-  let { id: removedIdField, ...fields } = getFields(model, {
-    ...fieldOpts,
-    usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
-  });
-  let overrides = getFieldOverrides(model);
-  opts = { ...(opts ?? {}), overrides };
-  let fieldResources = Object.entries(fields)
-    .filter(([_fieldName, field]) =>
-      opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
-    )
-    .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
-  let realmURL = getCardMeta(model, 'realmURL');
-  return merge(
-    {
-      attributes: {},
-    },
-    ...fieldResources,
-    {
-      type: 'card',
-      meta: { adoptsFrom, ...(realmURL ? { realmURL } : {}) },
-    },
-    model.id ? { id: model.id } : { lid: model[localId] },
-  );
-}
-
-export function serializeCard(
-  model: CardDef,
-  opts?: SerializeOpts,
-): LooseSingleCardDocument {
-  let doc = {
-    data: {
-      type: 'card',
-      ...(model.id != null ? { id: model.id } : { lid: model[localId] }),
-    },
-  };
-  let modelRelativeTo = model[relativeTo];
-  let data = serializeCardResource(model, doc, {
-    ...opts,
-    ...{
-      maybeRelativeURL(possibleURL: string) {
-        let url = maybeURL(possibleURL, modelRelativeTo);
-        if (!url) {
-          throw new Error(
-            `could not determine url from '${maybeRelativeURL}' relative to ${modelRelativeTo}`,
-          );
-        }
-        if (!modelRelativeTo) {
-          return url.href;
-        }
-        const realmURLString = getCardMeta(model, 'realmURL');
-        const realmURL = realmURLString ? new URL(realmURLString) : undefined;
-        return maybeRelativeURL(url, modelRelativeTo, realmURL);
-      },
-    },
-  });
-  merge(doc, { data });
-  if (!isSingleCardDocument(doc)) {
-    throw new Error(
-      `Expected serialized card to be a SingleCardDocument, but is was: ${JSON.stringify(
-        doc,
-        null,
-        2,
-      )}`,
-    );
-  }
-  return doc;
-}
-
-export interface DeserializeOpts {
-  ignoreBrokenLinks?: true;
 }
 
 // TODO Currently our deserialization process performs 2 tasks that probably
@@ -3362,7 +2993,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
     }
-    cardTracking.set(instance, true);
+    notifyCardTracking(instance);
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
       // fields, such that subsequent assignment of the id field when the model is
@@ -3395,53 +3026,6 @@ export async function searchDoc<CardT extends BaseDefConstructor>(
     string,
     any
   >;
-}
-
-function makeMetaForField(
-  meta: Partial<Meta> | undefined,
-  fieldName: string,
-  fallback: typeof BaseDef,
-): Meta {
-  let adoptsFrom = meta?.adoptsFrom ?? identifyCard(fallback);
-  if (!adoptsFrom) {
-    throw new Error(`bug: cannot determine identity for field '${fieldName}'`);
-  }
-  let fields: NonNullable<LooseCardResource['meta']['fields']> = {
-    ...(meta?.fields ?? {}),
-  };
-  return {
-    adoptsFrom,
-    ...(Object.keys(fields).length > 0 ? { fields } : {}),
-  };
-}
-
-async function cardClassFromResource<CardT extends BaseDefConstructor>(
-  resource: LooseCardResource | undefined,
-  fallback: CardT,
-  relativeTo: URL | undefined,
-): Promise<CardT> {
-  let cardIdentity = identifyCard(fallback);
-  if (!cardIdentity) {
-    throw new Error(
-      `bug: could not determine identity for card '${fallback.name}'`,
-    );
-  }
-  if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let card: typeof BaseDef | undefined = await loadCardDef(
-      resource.meta.adoptsFrom,
-      {
-        loader: myLoader(),
-        relativeTo: resource.id ? new URL(resource.id) : relativeTo,
-      },
-    );
-    if (!card) {
-      throw new Error(
-        `could not find card: '${humanReadable(resource.meta.adoptsFrom)}'`,
-      );
-    }
-    return card as CardT;
-  }
-  return fallback;
 }
 
 function makeDescriptor<
@@ -3489,7 +3073,7 @@ function setField(instance: BaseDef, field: Field, value: any) {
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
   notifySubscribers(instance, field.name, value);
-  cardTracking.set(instance, true);
+  notifyCardTracking(instance);
 }
 
 function notifySubscribers(
@@ -3617,118 +3201,8 @@ export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
   }
 
   // notify glimmer to rerender this card
-  cardTracking.set(card, true);
+  notifyCardTracking(card);
   done!();
-}
-
-export async function getIfReady<T extends BaseDef, K extends keyof T>(
-  instance: T,
-  fieldName: K,
-): Promise<T[K] | T[K][] | undefined> {
-  let result: T[K] | T[K][] | undefined;
-  let deserialized = getDataBucket(instance);
-  let field = getField(instance, fieldName as string, { untracked: true });
-  if (!field) {
-    throw new Error(
-      `the field '${fieldName as string} does not exist in card ${
-        instance.constructor.name
-      }'`,
-    );
-  }
-  if (field.computeVia) {
-    // Computed fields should never be passed to this function
-    return undefined;
-  }
-  try {
-    result = instance[fieldName];
-  } catch (e: any) {
-    if (isNotLoadedError(e)) {
-      let field: Field = getField(instance, fieldName as string)!;
-      let result: T[K] | T[K][] | undefined;
-      result = (await field.handleNotLoadedError(instance, e)) as
-        | T[K]
-        | T[K][]
-        | undefined;
-      if (result === undefined) {
-        // For linksToMany fields, preserve the existing array structure instead of
-        // overwriting with a single NotLoadedValue
-        if (field.fieldType === 'linksToMany') {
-          // The field should already have the correct array structure from deserialization
-          // Don't overwrite it with a single NotLoadedValue
-          return undefined;
-        }
-        deserialized.set(
-          fieldName as string,
-          { type: 'not-loaded', reference: e.reference } as NotLoadedValue,
-        );
-      }
-      return result;
-    } else {
-      throw e;
-    }
-  }
-  return result;
-}
-
-export function getFields(
-  card: typeof BaseDef,
-  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
-): { [fieldName: string]: Field<BaseDefConstructor> };
-export function getFields<T extends BaseDef>(
-  card: T,
-  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
-): { [P in keyof T]?: Field<BaseDefConstructor> };
-export function getFields(
-  cardInstanceOrClass: BaseDef | typeof BaseDef,
-  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
-): { [fieldName: string]: Field<BaseDefConstructor> } {
-  let obj: object | null;
-  let usedFields: string[] = [];
-  if (isCardOrField(cardInstanceOrClass)) {
-    // this is a card instance
-    obj = Reflect.getPrototypeOf(cardInstanceOrClass);
-    usedFields = getUsedFields(cardInstanceOrClass);
-  } else {
-    // this is a card class
-    obj = (cardInstanceOrClass as typeof BaseDef).prototype;
-  }
-  let fields: { [fieldName: string]: Field<BaseDefConstructor> } = {};
-  while (obj?.constructor.name && obj.constructor.name !== 'Object') {
-    let descs = Object.getOwnPropertyDescriptors(obj);
-    let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
-      if (maybeFieldName === 'constructor') {
-        return [];
-      }
-      let maybeField = getField(cardInstanceOrClass, maybeFieldName, {
-        untracked: true,
-      });
-      if (!maybeField) {
-        return [];
-      }
-
-      if (
-        !(primitive in maybeField.card) ||
-        maybeField.computeVia ||
-        !['contains', 'containsMany'].includes(maybeField.fieldType)
-      ) {
-        if (
-          opts?.usedLinksToFieldsOnly &&
-          !usedFields.includes(maybeFieldName) &&
-          !maybeField.isUsed &&
-          !['contains', 'containsMany'].includes(maybeField.fieldType)
-        ) {
-          return [];
-        }
-        if (maybeField.computeVia && !opts?.includeComputeds) {
-          return [];
-        }
-      }
-      return [[maybeFieldName, maybeField]];
-    });
-    fields = { ...fields, ...Object.fromEntries(currentFields) };
-    obj = Reflect.getPrototypeOf(obj);
-  }
-  return fields;
 }
 
 export class Box<T> {
@@ -3862,12 +3336,6 @@ export class Box<T> {
 
 type ElementType<T> = T extends (infer V)[] ? V : never;
 
-function makeRelativeURL(maybeURL: string, opts?: SerializeOpts): string {
-  return opts?.maybeRelativeURL && !opts?.useAbsoluteURL
-    ? opts.maybeRelativeURL(maybeURL)
-    : maybeURL;
-}
-
 declare module 'ember-provide-consume-context/context-registry' {
   export default interface ContextRegistry {
     [CardContextName]: CardContext;
@@ -3887,13 +3355,6 @@ function myLoader(): Loader {
   // this file is always loaded through our loader and always has access to import.meta.
   // @ts-ignore
   return (import.meta as any).loader;
-}
-
-export function getCardMeta<K extends keyof CardResourceMeta>(
-  card: CardDef,
-  metaKey: K,
-): CardResourceMeta[K] | undefined {
-  return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
 }
 
 class FallbackCardStore implements CardStore {

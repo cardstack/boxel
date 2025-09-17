@@ -1765,7 +1765,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       await click('[data-test-edit-button]');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"] input')
+        .dom(
+          '[data-test-playground-panel] [data-test-field="cardInfo-name"] input',
+        )
         .hasValue('Delilah');
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert.dom('[data-test-format-chooser]').exists();
@@ -1796,7 +1798,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
 
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"] input')
+        .dom(
+          '[data-test-playground-panel] [data-test-field="cardInfo-name"] input',
+        )
         .hasValue('Delilah');
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert.dom('[data-test-format-chooser]').exists();
@@ -1844,7 +1848,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Card Error: Link Not Found');
       assert.dom('[data-test-card-error]').exists();
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
@@ -1873,7 +1877,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
         .containsText('Lila');
       assert
         .dom('[data-test-error-container]')

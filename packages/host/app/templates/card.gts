@@ -75,7 +75,9 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   get connectUrl() {
-    return `${config.realmServerURL}connect`;
+    return `${config.realmServerURL}connect/${encodeURIComponent(
+      window.location.origin,
+    )}`;
   }
 
   get isError() {
@@ -118,7 +120,13 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 
   addMessageListener = modifier((element: HTMLElement) => {
     let messageHandler = async (event: MessageEvent) => {
-      if (eventHasInvalidOrigin(event)) {
+      if (eventHasValidOrigin(event)) {
+        console.debug(
+          'received message, origin validated',
+          event.data,
+          event.origin,
+        );
+      } else {
         console.debug(
           'ignoring message from invalid origin',
           event.data,
@@ -126,12 +134,6 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         );
 
         return;
-      } else {
-        console.debug(
-          'received message, origin validated',
-          event.data,
-          event.origin,
-        );
       }
 
       if (event.data === 'ready') {
@@ -234,11 +236,11 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 
 export default RouteTemplate(HostModeComponent);
 
-function eventHasInvalidOrigin(event: MessageEvent) {
+function eventHasValidOrigin(event: MessageEvent) {
   if (isDevelopingApp()) {
     // During development, allow messages from any origin
-    return false;
+    return true;
   }
 
-  return new URL(event.origin).href === config.realmServerURL;
+  return new URL(config.realmServerURL).href.startsWith(event.origin);
 }

@@ -274,6 +274,8 @@ export async function createRealm({
     worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
       queue: runner,
+      dbAdapter,
+      queuePublisher: publisher,
       runnerOptsManager: manager,
       indexRunner,
       virtualNetwork,
@@ -340,6 +342,8 @@ export async function runBaseRealmServer(
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
+    dbAdapter,
+    queuePublisher: publisher,
     runnerOptsManager: manager,
     indexRunner,
     virtualNetwork,
@@ -415,6 +419,8 @@ export async function runTestRealmServer({
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
+    dbAdapter,
+    queuePublisher: publisher,
     runnerOptsManager: manager,
     indexRunner,
     virtualNetwork,
