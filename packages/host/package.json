@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "ember build",
-    "build:production": "NODE_OPTIONS='--max-old-space-size=8192' ember build --environment=production",
+    "build:production": "NODE_OPTIONS='--max-old-space-size=14000' ember build --environment=production",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:css:fix": "concurrently \"pnpm:lint:css -- --fix\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
