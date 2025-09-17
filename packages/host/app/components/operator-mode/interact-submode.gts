@@ -740,7 +740,7 @@ export default class InteractSubmode extends Component {
                 @viewCard={{fn this.viewCard stackIndex}}
                 @saveCard={{this.saveCard}}
                 @editCard={{fn this.editCard stackIndex}}
-                @requestDeleteCard={{this.requestDeleteCard}}
+                @deleteCard={{this.requestDeleteCard}}
                 @commandContext={{this.commandService.commandContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}

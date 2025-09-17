@@ -13,7 +13,6 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import Captions from '@cardstack/boxel-icons/captions';
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { restartableTask, timeout, dropTask } from 'ember-concurrency';
@@ -31,7 +30,7 @@ import {
 import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
-import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
+import { IconTrash } from '@cardstack/boxel-ui/icons';
 
 import {
   type Permissions,
@@ -47,20 +46,18 @@ import {
   cardTypeIcon,
   CommandContext,
   realmURL,
-  identifyCard,
   CardContextName,
   CardCrudFunctionsContextName,
+  getCardMenuItems,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
-
-import type {
-  CardContext,
-  CardCrudFunctions,
-  CardDef,
+import {
+  type CardContext,
+  type CardCrudFunctions,
+  type CardDef,
 } from 'https://cardstack.com/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
@@ -445,8 +442,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       new MenuItem('Delete Card', 'action', {
         action: () =>
           this.cardIdentifier &&
-          this.args.requestDeleteCard &&
-          this.args.requestDeleteCard(this.cardIdentifier),
+          this.cardCrudFunctions.deleteCard?.(this.cardIdentifier),
         icon: IconTrash,
         dangerous: true,
       }),
@@ -458,46 +454,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
 
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy Card URL', 'action', {
-        action: () =>
-          this.card ? copyCardURLToClipboard(this.card) : undefined,
-        icon: IconLink,
-        disabled: !this.url,
-      }),
-    ];
-    if (
-      !this.isIndexCard && // workspace index card cannot be deleted
-      this.url &&
-      this.realm.canWrite(this.url)
-    ) {
-      menuItems.push(
-        new MenuItem('New Card of This Type', 'action', {
-          action: () => {
-            if (!this.card) {
-              return;
-            }
-            let ref = identifyCard(this.card.constructor);
-            if (!ref) {
-              return;
-            }
-            this.cardCrudFunctions.createCard(ref, undefined, {
-              realmURL: this.operatorModeStateService.getWritableRealmURL(),
-            });
-          },
-          icon: this.card ? (cardTypeIcon(this.card) as any) : Captions,
-          disabled: !this.card,
-        }),
-        new MenuItem('Delete', 'action', {
-          action: () =>
-            this.card ? this.args.requestDeleteCard!(this.card) : undefined,
-          icon: IconTrash,
-          dangerous: true,
-          disabled: !this.url,
-        }),
-      );
-    }
-    return menuItems;
+    return (
+      this.card?.[getCardMenuItems]?.({
+        canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
+        cardCrudFunctions: this.cardCrudFunctions,
+      }) ?? []
+    );
   }
 
   @cached
