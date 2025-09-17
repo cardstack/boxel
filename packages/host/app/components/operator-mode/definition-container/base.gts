@@ -124,6 +124,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
                   class='realm-name'
                   data-test-definition-realm-name
                   @ellipsize={{true}}
+                  @size='small'
                 >in
                   {{realmInfo.name}}</Label>
               </div>
@@ -152,7 +153,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
         --boxel-realm-icon-size: var(--code-mode-realm-icon-size);
       }
       .realm-name {
-        --boxel-label-font: var(--boxel-font-xs);
+        --boxel-label-font-weight: 400;
       }
       .definition-info {
         display: flex;

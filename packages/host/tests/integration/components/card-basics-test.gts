@@ -12,6 +12,7 @@ import {
 
 import { tracked } from '@glimmer/tracking';
 
+import Plane from '@cardstack/boxel-icons/plane';
 import percySnapshot from '@percy/ember';
 import { getService } from '@universal-ember/test-support';
 import format from 'date-fns/format';
@@ -21,16 +22,18 @@ import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
+import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
+
 import {
   baseRealm,
   primitive,
   localId,
   PermissionsContextName,
   fields,
+  cardTypeDisplayName,
+  Loader,
+  type CodeRef,
 } from '@cardstack/runtime-common';
-
-import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
 
 import type {
   BaseDef,
@@ -1782,72 +1785,274 @@ module('Integration | card-basics', function (hooks) {
       });
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').exists();
-      assert.dom('[data-test-field="title"]').hasText(title);
-      assert.dom('[data-test-field="description"]').hasText(description);
-      assert.dom('[data-test-field="notes"]').containsText('Meeting Notes');
+      assert.dom('[data-test-field="cardTitle"]').hasText(title);
+      assert.dom('[data-test-field="cardDescription"]').hasText(description);
+      assert
+        .dom('[data-test-field="cardInfo-notes"]')
+        .containsText('Meeting Notes');
 
       await renderCard(loader, instance, 'edit');
-      assert.dom('[data-test-field="title"] input').hasValue(title);
-      assert.dom('[data-test-field="description"] input').hasValue(description);
-      assert.dom('[data-test-field="thumbnailURL"] input').hasValue('');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue(title);
+      assert
+        .dom('[data-test-field="cardInfo-summary"] input')
+        .hasValue(description);
+      assert.dom('[data-test-thumbnail-icon]').exists();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
+        .hasValue('');
       assert.dom('[data-test-links-to-editor="theme"]').exists();
-      assert.dom('[data-test-field="notes"] textarea').exists();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert.dom('[data-test-field="cardInfo-thumbnailURL"]').doesNotExist();
+      assert.dom('[data-test-links-to-editor="theme"]').doesNotExist();
+
+      assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
     });
 
-    test('render card-def instance with own fields', async function (assert) {
-      class Puppy extends CardDef {
-        static displayName = 'Puppy';
-        @field name = contains(StringField); // own field
-        @field picture = contains(Base64ImageField); // own field
-        @field title = contains(StringField); // overrides cardDef's title field
-        @field thumbnailURL = contains(MaybeBase64Field, {
-          // overrides cardDef's thumbnailURL field via computed
-          computeVia: function (this: Puppy) {
-            return this.picture.base64;
+    test('render card-def instance with cardInfo overrides', async function (assert) {
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        @field profilePic = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return [this.firstName, this.lastName].filter(Boolean).join(' ');
+          },
+        });
+        @field thumbnailURL = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.profilePic;
+          },
+        });
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+
+      let instance = new Person({
+        cardInfo: new CardInfoField({
+          title: 'Johnny',
+          description: 'Volleyball player',
+          thumbnailURL: 'http://pic/of/volleyball',
+        }),
+        firstName: 'John',
+        lastName: 'Doe',
+        profilePic: 'http://john/pic.jpg',
+      });
+      await renderCard(loader, instance, 'isolated');
+      assert.dom('[data-test-thumbnail-icon]').doesNotExist();
+      assert
+        .dom('[data-test-field="cardThumbnailURL"]')
+        .hasAttribute('style', `background-image: url(http://john/pic.jpg);`);
+      assert.dom('[data-test-field="cardTitle"]').hasText('John Doe');
+      assert
+        .dom('[data-test-field="cardDescription"]')
+        .hasText('Volleyball player');
+
+      await renderCard(loader, instance, 'edit');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue('Johnny');
+      assert
+        .dom('[data-test-field="cardInfo-summary"] input')
+        .hasValue('Volleyball player');
+      assert.dom('[data-test-thumbnail-icon]').doesNotExist();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
+        .hasValue('http://pic/of/volleyball');
+      assert.dom('[data-test-links-to-editor="theme"]').exists();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
+      assert.dom('[data-test-field="firstName"] input').hasValue('John');
+      assert
+        .dom('[data-test-field="profilePic"] input')
+        .hasValue('http://john/pic.jpg');
+    });
+
+    test('render card-def instance with cardInfo overrides variation', async function (assert) {
+      class Book extends CardDef {
+        static displayName = 'Person';
+        @field bookTitle = contains(StringField);
+        @field blurb = contains(StringField);
+        @field bookCoverImage = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Book) {
+            return this.bookTitle ?? this.cardInfo.title ?? 'Untitled Book';
+          },
+        });
+        @field description = contains(StringField, {
+          computeVia: function (this: Book) {
+            return this.blurb ?? this.cardInfo.description;
+          },
+        });
+        @field thumbnailURL = contains(StringField, {
+          computeVia: function (this: Book) {
+            return this.bookCoverImage;
+          },
+        });
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Book });
+
+      let instance = new Book({
+        cardInfo: new CardInfoField({
+          description: 'The latest novel from John Doe',
+        }),
+        bookTitle: 'Insomniac',
+        blurb: 'This book will keep you up at night',
+        bookCoverImage: 'http://book/pic.jpg',
+      });
+      await renderCard(loader, instance, 'isolated');
+      assert.dom('[data-test-thumbnail-icon]').doesNotExist();
+      assert
+        .dom('[data-test-field="cardThumbnailURL"]')
+        .hasAttribute('style', `background-image: url(http://book/pic.jpg);`);
+      assert.dom('[data-test-field="cardTitle"]').hasText('Insomniac');
+      assert
+        .dom('[data-test-field="cardDescription"]')
+        .hasText('This book will keep you up at night');
+
+      await renderCard(loader, instance, 'edit');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasNoValue();
+      assert
+        .dom('[data-test-field="cardInfo-summary"] input')
+        .hasValue('The latest novel from John Doe');
+      assert.dom('[data-test-thumbnail-icon]').exists();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
+        .hasNoValue();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="bookCoverImage"] input')
+        .hasValue('http://book/pic.jpg');
+    });
+
+    test('render card-def instance with cardInfo overrides (not computed)', async function (assert) {
+      class Book extends CardDef {
+        static displayName = 'Person';
+        @field title = contains(StringField);
+        @field description = contains(StringField);
+        @field thumbnailURL = contains(StringField);
+      }
+
+      let insomniac = new Book({
+        title: 'Insomniac',
+        description: 'This book will keep you up at night',
+        thumbnailURL: 'http://book/pic.jpg',
+        cardInfo: new CardInfoField({
+          description: 'The latest novel from John Doe',
+        }),
+      });
+      await renderCard(loader, insomniac, 'isolated');
+      assert.dom('[data-test-field="cardTitle"]').hasText('Insomniac');
+      assert
+        .dom('[data-test-field="cardDescription"]')
+        .hasText('This book will keep you up at night');
+      assert
+        .dom('[data-test-field="cardThumbnailURL"]')
+        .hasAttribute('style', 'background-image: url(http://book/pic.jpg);');
+
+      assert.dom('[data-test-field="title"]').hasText('Title Insomniac');
+      assert
+        .dom('[data-test-field="description"]')
+        .hasText('Description This book will keep you up at night');
+      assert
+        .dom('[data-test-field="thumbnailURL"]')
+        .hasText('Thumbnail URL http://book/pic.jpg');
+
+      await renderCard(loader, insomniac, 'edit');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasNoValue();
+      assert
+        .dom('[data-test-field="cardInfo-summary"] input')
+        .hasValue('The latest novel from John Doe');
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
+        .hasNoValue();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert.dom('[data-test-field="title"] input').hasValue('Insomniac');
+      assert
+        .dom('[data-test-field="description"] input')
+        .hasValue('This book will keep you up at night');
+      assert
+        .dom('[data-test-field="thumbnailURL"] input')
+        .hasValue('http://book/pic.jpg');
+    });
+
+    test('render card-def instance with cardInfo overrides (complex)', async function (assert) {
+      class FlightBooking extends CardDef {
+        static displayName = 'Flight Booking';
+        static icon = Plane;
+        @field origin = contains(StringField);
+        @field destination = contains(StringField);
+        @field date = contains(DatetimeField);
+        @field flightNumber = contains(StringField);
+
+        @field title = contains(StringField, {
+          computeVia: function (this: FlightBooking) {
+            let route;
+            let date;
+            let flightNo;
+            if (this.origin && this.destination) {
+              route = `${this.origin} to ${this.destination}`;
+            }
+            if (this.date) {
+              date = `(${dayjsFormat(this.date, 'MM/DD/YY')})`;
+            }
+            if (this.flightNumber) {
+              flightNo = `Flt. ${this.flightNumber}`;
+            }
+            return [route, date, flightNo].filter(Boolean).join(' ');
+          },
+        });
+
+        @field description = contains(StringField, {
+          computeVia: function (this: FlightBooking) {
+            return [this.cardInfo.title, this.cardInfo.description]
+              .filter(Boolean)
+              .join(' - ');
           },
         });
       }
 
-      let mang = new Puppy({
-        name: 'Mango',
-        title: 'Mango the Pup',
+      let instance = new FlightBooking({
+        date: new Date('2025-12-25T21:06:00.000Z'),
+        origin: 'JFK',
         cardInfo: new CardInfoField({
-          description: 'Mango as a puppy',
+          notes: null,
+          title: 'Smith Wedding Flight',
+          description: 'John, Jane + kids to LA for holiday wedding',
+          thumbnailURL: null,
         }),
-        picture: new Base64ImageField({
-          altText: 'Picture of Mango',
-          size: 'contain',
-          width: null,
-          height: 200,
-          base64: `data:image/png;base64,${mango}`,
-        }),
+        destination: 'LAX',
+        flightNumber: '101',
       });
-      await renderCard(loader, mang, 'isolated');
-      assert.dom('[data-test-field="thumbnailURL"]').exists();
-      assert.dom('[data-test-field="title"]').hasText('Mango the Pup');
-      assert.dom('[data-test-field="description"]').hasText('Mango as a puppy');
-      assert.dom('[data-test-field="name"]').hasText('Name Mango');
+      await renderCard(loader, instance, 'isolated');
       assert
-        .dom('[data-test-field="picture"] [data-test-contain-cover-img]')
-        .exists();
-      assert.dom('[data-test-field="notes"]').exists();
+        .dom('[data-test-field="cardTitle"]')
+        .hasText('JFK to LAX (12/25/25) Flt. 101');
+      assert
+        .dom('[data-test-field="cardDescription"]')
+        .hasText(
+          'Smith Wedding Flight - John, Jane + kids to LA for holiday wedding',
+        );
+      assert.dom('[data-test-thumbnail-icon]').hasClass('lucide-plane');
+      assert
+        .dom('[data-test-field="flightNumber"]')
+        .hasText('Flight Number 101');
 
-      await renderCard(loader, mang, 'edit');
-      assert.dom('[data-test-field="title"] input').hasValue('Mango the Pup');
+      await renderCard(loader, instance, 'edit');
       assert
-        .dom('[data-test-field="description"] input')
-        .hasValue('Mango as a puppy');
+        .dom('[data-test-field="cardInfo-name"] input')
+        .hasValue('Smith Wedding Flight');
       assert
-        .dom('[data-test-field="thumbnailURL"] input')
-        .hasValue(`data:image/png;base64,${mango}`);
-      assert.dom('[data-test-field="thumbnailURL"] input').isDisabled();
-      assert.dom('[data-test-boxel-input][disabled]').exists({ count: 1 });
-      assert.dom('[data-test-links-to-editor="theme"]').exists();
-      assert.dom('[data-test-field="name"] input').hasValue('Mango');
+        .dom('[data-test-field="cardInfo-summary"] input')
+        .hasValue('John, Jane + kids to LA for holiday wedding');
+      assert.dom('[data-test-thumbnail-icon]').hasClass('lucide-plane');
+      await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-field="picture"] [data-test-field="altText"] input')
-        .hasValue('Picture of Mango');
-      assert.dom('[data-test-field="notes"] textarea').exists();
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
+        .hasNoValue();
+      await click('[data-test-toggle-thumbnail-editor]');
+      assert.dom('[data-test-field="destination"] input').hasValue('LAX');
     });
 
     test('render default isolated template', async function (assert) {
@@ -1877,7 +2082,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test="first-name"]').containsText('Arthur');
       assert.dom('[data-test-field="title"]').containsText('First Post');
       assert.dom('[data-test-thumbnail-icon]').exists();
-      assert.dom('[data-test-field="notes"]').hasText('Notes');
+      assert.dom('[data-test-field="cardInfo-notes"]').hasText('Notes');
     });
 
     test('render default atom view template', async function (assert) {
