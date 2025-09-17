@@ -182,7 +182,7 @@ export class Prerenderer {
       const isolatedHTML = result.status === 'ready' ? result.value : null;
 
       // TODO consider breaking out rendering search doc into its own route so
-      // that we ran fully understand all the linked fields that are used in all
+      // that we can fully understand all the linked fields that are used in all
       // the html formats and generate a search doc that is well populated. Right
       // now we only consider linked fields used in the isolated template.
       let metaMaybeError = await withTimeout(
