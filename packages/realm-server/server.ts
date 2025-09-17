@@ -270,22 +270,24 @@ export class RealmServer {
         }
       } else {
         // Is this a host mode domain?
-        let requestOrigin = new URL(ctxt.request.url).origin;
+        try {
+          let requestOrigin = new URL(ctxt.request.url).origin;
 
-        let publishedRealms = await query(this.dbAdapter, [
-          `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
-          param(`${requestOrigin}%`),
-        ]);
+          let publishedRealms = await query(this.dbAdapter, [
+            `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
+            param(`${requestOrigin}%`),
+          ]);
 
-        if (publishedRealms.length > 0) {
-          let realmServerUrlWithoutTrailingSlash = this.serverURL.href.replace(
-            /\/$/,
-            '',
-          );
-          ctxt.set(
-            'Permissions-Policy',
-            `storage-access=(self "${realmServerUrlWithoutTrailingSlash}")`,
-          );
+          if (publishedRealms.length > 0) {
+            let realmServerUrlWithoutTrailingSlash =
+              this.serverURL.href.replace(/\/$/, '');
+            ctxt.set(
+              'Permissions-Policy',
+              `storage-access=(self "${realmServerUrlWithoutTrailingSlash}")`,
+            );
+          }
+        } catch (error) {
+          this.log.info(`Error processing host mode request: ${error}`);
         }
       }
 
