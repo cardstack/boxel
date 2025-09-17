@@ -279,6 +279,10 @@ export class RealmServer {
             param(`${requestOrigin}%`),
           ]);
 
+          this.log.info(
+            `Found published realms for origin ${requestOrigin}: ${JSON.stringify(publishedRealms, null, 2)}`,
+          );
+
           if (publishedRealms.length > 0) {
             let realmServerUrlWithoutTrailingSlash =
               this.serverURL.href.replace(/\/$/, '');
