@@ -27,6 +27,8 @@ module.exports = function (defaults) {
         [require.resolve('decorator-transforms')],
         require.resolve('ember-concurrency/async-arrow-task-transform'),
       ],
+      // FIXME will this make everything huge? warnings about “deoptimised the styling”
+      generatorOpts: { compact: false },
     },
   });
   return compatBuild(app, Webpack, {
