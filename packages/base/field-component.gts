@@ -10,12 +10,11 @@ import {
   type BaseDefConstructor,
   type Theme,
   CardContext,
-  isCard,
-  isCompoundField,
   formats,
   FieldFormats,
   CardCrudFunctions,
 } from './card-api';
+import { isCard, isCompoundField } from './field-support';
 import {
   CardContextName,
   DefaultFormatsContextName,
