@@ -2,9 +2,11 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
+import { sanitizeHtml } from '../../helpers/sanitize-html.ts';
 
 interface Signature {
   Args: {
+    cssImports?: string[];
     displayBoundaries?: boolean;
     tag?: keyof HTMLElementTagNameMap;
   };
@@ -25,6 +27,15 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       ...attributes
     >
       {{yield}}
+      {{#if @cssImports.length}}
+        {{! template-lint-disable require-scoped-style  }}
+        <style>
+          {{#each @cssImports as |url|}}
+            @import url('{{sanitizeHtml url}}');
+          {{/each}}
+        </style>
+        {{! template-lint-enable require-scoped-style  }}
+      {{/if}}
     </Tag>
   {{/let}}
 
