@@ -196,7 +196,11 @@ class Isolated extends Component<typeof Spec> {
           <h2 id='module'>Module</h2>
         </header>
         <div class='code-ref-container'>
-          <FieldContainer @label='URL' @vertical={{true}}>
+          <FieldContainer
+            @label='URL'
+            @vertical={{true}}
+            @labelFontSize='small'
+          >
             <div class='code-ref-row'>
               <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
               <span class='code-ref-value' data-test-module-href>
@@ -204,7 +208,11 @@ class Isolated extends Component<typeof Spec> {
               </span>
             </div>
           </FieldContainer>
-          <FieldContainer @label='Module Name' @vertical={{true}}>
+          <FieldContainer
+            @label='Module Name'
+            @vertical={{true}}
+            @labelFontSize='small'
+          >
             <div class='code-ref-row'>
               <ExportArrow class='exported-arrow' width='10' height='10' />
               <div class='code-ref-value' data-test-exported-name>
@@ -769,7 +777,11 @@ class Edit extends Component<typeof Spec> {
           </div>
         </header>
         <div class='code-ref-container'>
-          <FieldContainer @label='URL' @vertical={{true}}>
+          <FieldContainer
+            @label='URL'
+            @vertical={{true}}
+            @labelFontSize='small'
+          >
             <div class='code-ref-row'>
               <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
               <span class='code-ref-value' data-test-module-href>
@@ -777,7 +789,11 @@ class Edit extends Component<typeof Spec> {
               </span>
             </div>
           </FieldContainer>
-          <FieldContainer @label='Module Name' @vertical={{true}}>
+          <FieldContainer
+            @label='Module Name'
+            @vertical={{true}}
+            @labelFontSize='small'
+          >
             <div class='code-ref-row'>
               <ExportArrow class='exported-arrow' width='10' height='10' />
               <div class='code-ref-value' data-test-exported-name>
