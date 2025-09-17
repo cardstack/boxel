@@ -230,7 +230,6 @@ export class RealmServer {
   }
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
-    console.log('helloxyz index request: ', ctxt.request.originalUrl);
     if (ctxt.header.accept?.includes('text/html')) {
       // If this is a /connect iframe request, is the origin a valid published realm?
 
@@ -272,7 +271,8 @@ export class RealmServer {
       } else {
         // Is this a host mode domain?
         try {
-          let requestUrlString = ctxt.request.originalUrl;
+          console.log('xyz href? ' + ctxt.request.href);
+          let requestUrlString = ctxt.request.href;
           let requestOrigin = new URL(requestUrlString).origin;
 
           let publishedRealms = await query(this.dbAdapter, [
@@ -294,7 +294,7 @@ export class RealmServer {
           }
         } catch (error) {
           this.log.info(
-            `Error processing host mode request: ${error} (request: ${ctxt.request.originalUrl})`,
+            `Error processing host mode request: ${error} (request: ${ctxt.request.href})`,
           );
         }
       }
