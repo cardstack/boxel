@@ -13,7 +13,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 
 import { Paginator } from './paginator';
-import { SingleFieldRenderer } from './field-renderer';
+import { FieldRenderer } from './field-renderer';
 import { cardDefLoader } from '../resources/card-def-loader';
 
 import { type Query, isPrimitive } from '@cardstack/runtime-common';
@@ -46,55 +46,57 @@ class TableRow extends GlimmerComponent<TableRowSignature> {
     <tr class='table-row'>
       {{#each @fieldColumns as |fieldName|}}
         <td class='field-cell'>
-          <SingleFieldRenderer
+          <FieldRenderer
             @instance={{@instance}}
             @fieldName={{fieldName}}
             @showComputedFields={{@showComputedFields}}
-            as |fieldInfo|
+            as |field|
           >
-            {{#if (eq fieldInfo.fieldType 'contains')}}
-              {{#if fieldInfo.component}}
-                <fieldInfo.component @format='edit' />
+            {{#if field}}
+              {{#if (eq field.fieldType 'contains')}}
+                {{#if field.component}}
+                  <field.component @format='edit' />
+                {{else}}
+                  {{field.value}}
+                {{/if}}
+              {{else if (eq field.fieldType 'linksTo')}}
+                {{#if field.value}}
+                  <Pill
+                    {{@context.cardComponentModifier
+                      cardId=field.value.id
+                      format='data'
+                      fieldType='linksTo'
+                      fieldName=field.name
+                    }}
+                  >
+                    {{#if field.value.title}}
+                      {{field.value.title}}
+                    {{else}}
+                      [linked card]
+                    {{/if}}
+                  </Pill>
+                {{/if}}
+              {{else if (eq field.fieldType 'containsMany')}}
+                [{{field.value.length}}
+                items]
+              {{else if (eq field.fieldType 'linksToMany')}}
+                {{#each field.value as |linkedCard|}}
+                  <Pill
+                    {{@context.cardComponentModifier
+                      cardId=linkedCard.id
+                      format='data'
+                      fieldType='linksToMany'
+                      fieldName=field.name
+                    }}
+                  >
+                    {{linkedCard.title}}
+                  </Pill>
+                {{/each}}
               {{else}}
-                {{fieldInfo.value}}
+                {{field.value}}
               {{/if}}
-            {{else if (eq fieldInfo.fieldType 'linksTo')}}
-              {{#if fieldInfo.value}}
-                <Pill
-                  {{@context.cardComponentModifier
-                    cardId=fieldInfo.value.id
-                    format='data'
-                    fieldType='linksTo'
-                    fieldName=fieldInfo.name
-                  }}
-                >
-                  {{#if fieldInfo.value.title}}
-                    {{fieldInfo.value.title}}
-                  {{else}}
-                    [linked card]
-                  {{/if}}
-                </Pill>
-              {{/if}}
-            {{else if (eq fieldInfo.fieldType 'containsMany')}}
-              [{{fieldInfo.value.length}}
-              items]
-            {{else if (eq fieldInfo.fieldType 'linksToMany')}}
-              {{#each fieldInfo.value as |linkedCard|}}
-                <Pill
-                  {{@context.cardComponentModifier
-                    cardId=linkedCard.id
-                    format='data'
-                    fieldType='linksToMany'
-                    fieldName=fieldInfo.name
-                  }}
-                >
-                  {{linkedCard.title}}
-                </Pill>
-              {{/each}}
-            {{else}}
-              {{fieldInfo.value}}
             {{/if}}
-          </SingleFieldRenderer>
+          </FieldRenderer>
         </td>
       {{/each}}
     </tr>
@@ -186,7 +188,6 @@ export class Table extends GlimmerComponent<TableSignature> {
       usedLinksToFieldsOnly: false,
     });
 
-    console.log('instanceField', instanceFields);
     const excludedFields = ['id', 'cardInfo'];
     const filteredFields = Object.keys(instanceFields).filter((key) => {
       if (excludedFields.includes(key)) {
@@ -211,6 +212,7 @@ export class Table extends GlimmerComponent<TableSignature> {
 
     return [...priorityFieldsFound, ...otherFields];
   }
+
 
   goToPage = (page: number) => {
     this.currentPage = page;
