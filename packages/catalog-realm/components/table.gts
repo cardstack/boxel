@@ -44,12 +44,12 @@ interface TableSignature {
 class TableRow extends GlimmerComponent<TableRowSignature> {
   <template>
     <tr class='table-row'>
-      {{#each this.args.fieldColumns as |fieldName|}}
+      {{#each @fieldColumns as |fieldName|}}
         <td class='field-cell'>
           <SingleFieldRenderer
-            @instance={{this.args.instance}}
+            @instance={{@instance}}
             @fieldName={{fieldName}}
-            @showComputedFields={{this.args.showComputedFields}}
+            @showComputedFields={{@showComputedFields}}
             as |fieldInfo|
           >
             {{#if (eq fieldInfo.fieldType 'contains')}}
