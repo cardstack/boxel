@@ -55,6 +55,15 @@
    PRIMARY KEY ( url, realm_url ) 
 );
 
+ CREATE TABLE IF NOT EXISTS published_realms (
+   id DEFAULT (hex(randomblob(16))) NOT NULL,
+   owner_username TEXT NOT NULL,
+   source_realm_url TEXT NOT NULL,
+   published_realm_url TEXT NOT NULL,
+   last_published_at,
+   PRIMARY KEY ( id ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_meta (
    realm_url TEXT NOT NULL,
    realm_version INTEGER NOT NULL,
