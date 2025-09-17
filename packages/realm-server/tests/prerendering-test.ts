@@ -1,11 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
-  prerenderCard,
+  Prerenderer,
   type RenderResponse,
   type PermissionsMap,
 } from '../prerender/index';
-import { execSync } from 'child_process';
 
 import {
   setupBaseRealmServer,
@@ -19,11 +18,26 @@ module(basename(__filename), function () {
   module('prerender', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
+    let realmURL3 = 'http://127.0.0.1:4449/';
     let testUserId = '@user1:localhost';
     let permissions: PermissionsMap = {};
+    let prerenderer: Prerenderer;
+    const disposeAllRealms = async () => {
+      await Promise.all([
+        prerenderer.disposeRealm(realmURL1),
+        prerenderer.disposeRealm(realmURL2),
+        prerenderer.disposeRealm(realmURL3),
+      ]);
+    };
 
-    hooks.before(() => {
-      execSync('pnpm puppeteer browsers install chrome');
+    hooks.before(async () => {
+      prerenderer = new Prerenderer({
+        secretSeed: realmSecretSeed,
+        maxPages: 2,
+      });
+    });
+    hooks.after(async () => {
+      await prerenderer.stop();
     });
 
     setupBaseRealmServer(hooks, matrixURL);
@@ -128,24 +142,56 @@ module(basename(__filename), function () {
             },
           },
         },
+        {
+          realmURL: realmURL3,
+          permissions: {
+            [testUserId]: ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'dog.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { Component } from 'https://cardstack.com/base/card-api';
+              export class Dog extends CardDef {
+                @field name = contains(StringField);
+                static displayName = "Dog";
+                static embedded = <template>{{@fields.name}} wags tail</template>
+              }
+            `,
+            '1.json': {
+              data: {
+                attributes: {
+                  name: 'Taro',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog',
+                    name: 'Dog',
+                  },
+                },
+              },
+            },
+          },
+        },
       ],
       onRealmSetup: () => {
         permissions = {
           [realmURL1]: ['read', 'write', 'realm-owner'],
           [realmURL2]: ['read', 'write', 'realm-owner'],
+          [realmURL3]: ['read', 'write', 'realm-owner'],
         };
       },
     });
 
     module('basics', function (hooks) {
+      hooks.beforeEach(disposeAllRealms);
       let result: RenderResponse;
 
       hooks.before(async () => {
         const testCardURL = `${realmURL2}1`;
-        let { response } = await prerenderCard({
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
-          secretSeed: realmSecretSeed,
           permissions,
         });
         result = response;
@@ -216,13 +262,14 @@ module(basename(__filename), function () {
       });
     });
 
-    module('errors', function () {
+    module('errors', function (hooks) {
+      hooks.beforeEach(disposeAllRealms);
       test('error during render', async function (assert) {
         const testCardURL = `${realmURL2}2`;
-        let { response } = await prerenderCard({
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
-          secretSeed: realmSecretSeed,
           permissions,
         });
         let { error, ...restOfResult } = response;
@@ -250,10 +297,10 @@ module(basename(__filename), function () {
 
       test('render timeout', async function (assert) {
         const testCardURL = `${realmURL2}1`;
-        let result = await prerenderCard({
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
-          secretSeed: realmSecretSeed,
           permissions,
           opts: { timeoutMs: 4000, simulateTimeoutMs: 5000 },
         });
@@ -263,6 +310,119 @@ module(basename(__filename), function () {
         assert.strictEqual(error?.id, testCardURL);
         assert.strictEqual(error?.message, 'Render timed-out after 4000 ms');
         assert.strictEqual(error?.status, 504);
+      });
+    });
+
+    module('realm pooling', function (hooks) {
+      hooks.beforeEach(disposeAllRealms);
+      test('reuses the same page within a realm', async function (assert) {
+        const testCardURL = `${realmURL2}1`;
+        let first = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        let second = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.strictEqual(first.pool.realm, realmURL2, 'first realm matches');
+        assert.strictEqual(
+          second.pool.realm,
+          realmURL2,
+          'second realm matches',
+        );
+        assert.strictEqual(
+          first.pool.pageId,
+          second.pool.pageId,
+          'pageId reused',
+        );
+        assert.strictEqual(first.pool.reused, false, 'first call not reused');
+        assert.strictEqual(second.pool.reused, true, 'second call reused');
+      });
+
+      test('does not reuse across different realms', async function (assert) {
+        const testCardURL1 = `${realmURL1}1`;
+        const testCardURL2 = `${realmURL2}1`;
+        let r1 = await prerenderer.prerenderCard({
+          realm: realmURL1,
+          url: testCardURL1,
+          userId: testUserId,
+          permissions,
+        });
+        let r2 = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL2,
+          userId: testUserId,
+          permissions,
+        });
+        assert.notStrictEqual(
+          r1.pool.pageId,
+          r2.pool.pageId,
+          'distinct pages per realm',
+        );
+        assert.strictEqual(
+          r1.pool.reused,
+          false,
+          'first realm first call not reused',
+        );
+        assert.strictEqual(
+          r2.pool.reused,
+          false,
+          'second realm first call not reused',
+        );
+      });
+
+      test('evicts LRU when capacity reached', async function (assert) {
+        const cardA = `${realmURL1}1`;
+        const cardB = `${realmURL2}1`;
+        const cardC = `${realmURL3}1`;
+
+        let firstA = await prerenderer.prerenderCard({
+          realm: realmURL1,
+          url: cardA,
+          userId: testUserId,
+          permissions,
+        });
+        assert.strictEqual(firstA.pool.reused, false, 'first A not reused');
+
+        let firstB = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: cardB,
+          userId: testUserId,
+          permissions,
+        });
+        assert.strictEqual(firstB.pool.reused, false, 'first B not reused');
+
+        // Now adding C should evict the LRU (A), since maxPages=2
+        let firstC = await prerenderer.prerenderCard({
+          realm: realmURL3,
+          url: cardC,
+          userId: testUserId,
+          permissions,
+        });
+        assert.strictEqual(firstC.pool.reused, false, 'first C not reused');
+
+        // Returning to A should not reuse because it was evicted
+        let secondA = await prerenderer.prerenderCard({
+          realm: realmURL1,
+          url: cardA,
+          userId: testUserId,
+          permissions,
+        });
+        assert.strictEqual(
+          secondA.pool.reused,
+          false,
+          'A was evicted, so not reused',
+        );
+        assert.notStrictEqual(
+          firstA.pool.pageId,
+          secondA.pool.pageId,
+          'A got a new page after eviction',
+        );
       });
     });
   });
