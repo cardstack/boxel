@@ -22,6 +22,9 @@ module.exports = function (defaults) {
       enableTypeScriptTransform: true,
       disableDecoratorTransforms: true,
     },
+    'ember-cli-terser': {
+      enabled: false,
+    },
     babel: {
       plugins: [
         [require.resolve('decorator-transforms')],
