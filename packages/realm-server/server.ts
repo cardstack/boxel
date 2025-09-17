@@ -268,6 +268,25 @@ export class RealmServer {
 
           return;
         }
+      } else {
+        // Is this a host mode domain?
+        let requestOrigin = new URL(ctxt.request.url).origin;
+
+        let publishedRealms = await query(this.dbAdapter, [
+          `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
+          param(`${requestOrigin}%`),
+        ]);
+
+        if (publishedRealms.length > 0) {
+          let realmServerUrlWithoutTrailingSlash = this.serverURL.href.replace(
+            /\/$/,
+            '',
+          );
+          ctxt.set(
+            'Permissions-Policy',
+            `storage-access=(self "${realmServerUrlWithoutTrailingSlash}")`,
+          );
+        }
       }
 
       ctxt.type = 'html';

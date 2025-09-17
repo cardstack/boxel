@@ -80,6 +80,10 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     )}`;
   }
 
+  get realmServerUrlWithoutTrailingSlash() {
+    return config.realmServerURL.replace(/\/$/, '');
+  }
+
   get isError() {
     return isCardErrorJSONAPI(this.args.model);
   }
@@ -178,6 +182,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
       </div>
     {{else}}
       <iframe
+        allow="storage-access 'self' {{this.realmServerUrlWithoutTrailingSlash}}"
         class='connect not-loaded'
         title='connect'
         src={{this.connectUrl}}
