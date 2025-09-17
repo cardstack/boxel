@@ -1,6 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 
 import {
   type CardContext,
@@ -15,6 +14,7 @@ import { on } from '@ember/modifier';
 
 import { Paginator } from './paginator';
 import { SingleFieldRenderer } from './field-renderer';
+import { cardDefLoader } from '../resources/card-def-loader';
 
 import { type Query, isPrimitive } from '@cardstack/runtime-common';
 
@@ -168,47 +168,53 @@ export class Table extends GlimmerComponent<TableSignature> {
     { isLive: true }, //for new cards to appear
   );
 
+  cardDefLoader = cardDefLoader(
+    this,
+    () => this.args.cardTypeRef,
+    () => this.args.realm,
+  );
+
   get fieldColumns() {
-    // Only compute field columns after data has loaded and instances are available
-    if (this.cardsData?.instances?.length) {
-      const firstInstance = this.cardsData?.instances[0];
-      const instanceFields = getFields(firstInstance.constructor, {
-        includeComputeds: this.args.showComputedFields ?? false,
-        usedLinksToFieldsOnly: false,
-      });
-
-      console.log('instanceField', instanceFields);
-      const excludedFields = ['id', 'cardInfo'];
-      const filteredFields = Object.keys(instanceFields).filter((key) => {
-        if (excludedFields.includes(key)) {
-          return false;
-        }
-        // Only include primitive fields if showPrimitivesOnly is true
-        if (this.args.showPrimitivesOnly) {
-          const fieldDef = instanceFields[key];
-          return isPrimitive(fieldDef.card);
-        }
-        return true;
-      });
-
-      // Prioritize 'name' or 'title' fields by putting them first
-      const priorityFields = ['name', 'title'];
-      const priorityFieldsFound = filteredFields.filter((field) =>
-        priorityFields.includes(field),
-      );
-      const otherFields = filteredFields
-        .filter((field) => !priorityFields.includes(field))
-        .sort();
-
-      return [...priorityFieldsFound, ...otherFields];
+    // Use the loaded CardDef from cardDefLoader instead of first instance
+    const cardDef = this.cardDefLoader.value;
+    if (!cardDef) {
+      return [];
     }
-    return [];
+
+    const instanceFields = getFields(cardDef, {
+      includeComputeds: this.args.showComputedFields ?? false,
+      usedLinksToFieldsOnly: false,
+    });
+
+    console.log('instanceField', instanceFields);
+    const excludedFields = ['id', 'cardInfo'];
+    const filteredFields = Object.keys(instanceFields).filter((key) => {
+      if (excludedFields.includes(key)) {
+        return false;
+      }
+      // Only include primitive fields if showPrimitivesOnly is true
+      if (this.args.showPrimitivesOnly) {
+        const fieldDef = instanceFields[key];
+        return fieldDef ? isPrimitive(fieldDef.card) : false;
+      }
+      return true;
+    });
+
+    // Prioritize 'name' or 'title' fields by putting them first
+    const priorityFields = ['name', 'title'];
+    const priorityFieldsFound = filteredFields.filter((field) =>
+      priorityFields.includes(field),
+    );
+    const otherFields = filteredFields
+      .filter((field) => !priorityFields.includes(field))
+      .sort();
+
+    return [...priorityFieldsFound, ...otherFields];
   }
 
-  @action
-  goToPage(page: number) {
+  goToPage = (page: number) => {
     this.currentPage = page;
-  }
+  };
 
   get total() {
     return this.cardsData?.meta.page.total;
@@ -218,8 +224,7 @@ export class Table extends GlimmerComponent<TableSignature> {
     return this.paginatedQuery?.page?.size;
   }
 
-  @action
-  createNewCard() {
+  createNewCard = () => {
     if (!this.args.createCard) {
       throw new Error('No createCard crud function');
     }
@@ -230,11 +235,15 @@ export class Table extends GlimmerComponent<TableSignature> {
     this.args.createCard(this.args.cardTypeRef, realmURL, {
       realmURL,
     });
+  };
+
+  get isLoading() {
+    return this.cardsData?.isLoading || this.cardDefLoader?.isLoading;
   }
 
   <template>
     <div class='table-container'>
-      {{#if this.cardsData.isLoading}}
+      {{#if this.isLoading}}
         <div class='loading-indicator'>
           <LoadingIndicator />
         </div>
