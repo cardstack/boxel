@@ -340,8 +340,8 @@ module(basename(__filename), function () {
           second.pool.pageId,
           'pageId reused',
         );
-        assert.strictEqual(first.pool.reused, false, 'first call not reused');
-        assert.strictEqual(second.pool.reused, true, 'second call reused');
+        assert.false(first.pool.reused, 'first call not reused');
+        assert.true(second.pool.reused, 'second call reused');
       });
 
       test('does not reuse across different realms', async function (assert) {
@@ -364,16 +364,8 @@ module(basename(__filename), function () {
           r2.pool.pageId,
           'distinct pages per realm',
         );
-        assert.strictEqual(
-          r1.pool.reused,
-          false,
-          'first realm first call not reused',
-        );
-        assert.strictEqual(
-          r2.pool.reused,
-          false,
-          'second realm first call not reused',
-        );
+        assert.false(r1.pool.reused, 'first realm first call not reused');
+        assert.false(r2.pool.reused, 'second realm first call not reused');
       });
 
       test('evicts LRU when capacity reached', async function (assert) {
@@ -387,7 +379,7 @@ module(basename(__filename), function () {
           userId: testUserId,
           permissions,
         });
-        assert.strictEqual(firstA.pool.reused, false, 'first A not reused');
+        assert.false(firstA.pool.reused, 'first A not reused');
 
         let firstB = await prerenderer.prerenderCard({
           realm: realmURL2,
@@ -395,7 +387,7 @@ module(basename(__filename), function () {
           userId: testUserId,
           permissions,
         });
-        assert.strictEqual(firstB.pool.reused, false, 'first B not reused');
+        assert.false(firstB.pool.reused, 'first B not reused');
 
         // Now adding C should evict the LRU (A), since maxPages=2
         let firstC = await prerenderer.prerenderCard({
@@ -404,7 +396,7 @@ module(basename(__filename), function () {
           userId: testUserId,
           permissions,
         });
-        assert.strictEqual(firstC.pool.reused, false, 'first C not reused');
+        assert.false(firstC.pool.reused, 'first C not reused');
 
         // Returning to A should not reuse because it was evicted
         let secondA = await prerenderer.prerenderCard({
@@ -413,11 +405,7 @@ module(basename(__filename), function () {
           userId: testUserId,
           permissions,
         });
-        assert.strictEqual(
-          secondA.pool.reused,
-          false,
-          'A was evicted, so not reused',
-        );
+        assert.false(secondA.pool.reused, 'A was evicted, so not reused');
         assert.notStrictEqual(
           firstA.pool.pageId,
           secondA.pool.pageId,

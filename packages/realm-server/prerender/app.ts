@@ -147,7 +147,10 @@ export function createPrerenderHttpServer(options?: {
   server.on('close', async () => {
     try {
       await prerenderer.stop();
-    } catch {}
+    } catch (e: any) {
+      // Best-effort shutdown; log and continue
+      log.warn('Error stopping prerenderer on server close:', e?.message ?? e);
+    }
   });
   return server;
 }
