@@ -271,7 +271,8 @@ export class RealmServer {
       } else {
         // Is this a host mode domain?
         try {
-          let requestOrigin = new URL(ctxt.request.url).origin;
+          let requestUrlString = ctxt.request.originalUrl;
+          let requestOrigin = new URL(requestUrlString).origin;
 
           let publishedRealms = await query(this.dbAdapter, [
             `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
@@ -287,7 +288,9 @@ export class RealmServer {
             );
           }
         } catch (error) {
-          this.log.info(`Error processing host mode request: ${error}`);
+          this.log.info(
+            `Error processing host mode request: ${error} (request: ${ctxt.request.originalUrl})`,
+          );
         }
       }
 
