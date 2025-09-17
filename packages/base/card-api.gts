@@ -3,7 +3,11 @@ import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import {
+  copyCardURLToClipboard,
+  MenuItem,
+  not,
+} from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -63,7 +67,11 @@ import {
   SingleCardDocument,
   loadDocument,
   LocalPath,
+  Command,
+  getCardMenuItems,
+  cardTypeIcon,
 } from '@cardstack/runtime-common';
+
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -74,12 +82,15 @@ import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
+import LinkIcon from '@cardstack/boxel-icons/link';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+import Trash2Icon from '@cardstack/boxel-icons/trash-2';
+
 import {
   callSerializeHook,
   cardClassFromResource,
@@ -116,7 +127,7 @@ import {
 } from './field-support';
 
 interface CardOrFieldTypeIconSignature {
-  Element: Element;
+  Element: SVGElement;
 }
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
@@ -226,6 +237,8 @@ export interface FieldConstructor<T> {
   isUsed?: true;
   isPolymorphic?: true;
 }
+
+export type CardMenuItem = typeof Command | MenuItem | '--';
 
 type CardChangeSubscriber = (
   instance: BaseDef,
@@ -2054,11 +2067,14 @@ export type EditCardFn = (card: CardDef) => void;
 
 export type SaveCardFn = (id: string) => void;
 
+export type DeleteCardFn = (cardOrId: CardDef | URL | string) => Promise<void>;
+
 export interface CardCrudFunctions {
   createCard: CreateCardFn;
   saveCard: SaveCardFn;
   editCard: EditCardFn;
   viewCard: ViewCardFn;
+  deleteCard: DeleteCardFn;
 }
 
 export type BaseDefComponent = ComponentLike<{
@@ -2333,6 +2349,54 @@ export class CardDef extends BaseDef {
   get [realmURL]() {
     let realmURLString = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
+  }
+
+  [getCardMenuItems]({
+    canEdit,
+    cardCrudFunctions,
+  }: {
+    canEdit: boolean;
+    cardCrudFunctions: CardCrudFunctions;
+  }): CardMenuItem[] {
+    let cardId = this.id as unknown as string;
+    let menuItems: MenuItem[] = [
+      new MenuItem('Copy Card URL', 'action', {
+        action: () => copyCardURLToClipboard(cardId),
+        icon: LinkIcon,
+        disabled: !cardId,
+      }),
+    ];
+    if (
+      !isIndexCard(this) && // workspace index card cannot be deleted
+      cardId &&
+      canEdit
+    ) {
+      menuItems.push(
+        new MenuItem('New Card of This Type', 'action', {
+          action: () => {
+            if (!this) {
+              return;
+            }
+            let ref = identifyCard(this.constructor);
+            if (!ref) {
+              return;
+            }
+            cardCrudFunctions.createCard(ref, undefined, {
+              realmURL: this[realmURL],
+            });
+          },
+          icon: cardTypeIcon(this as BaseDef),
+          disabled: !this,
+        }),
+        new MenuItem('Delete', 'action', {
+          action: () => cardCrudFunctions.deleteCard(this),
+          icon: Trash2Icon,
+          dangerous: true,
+          disabled: !this.id,
+        }),
+      );
+    }
+    return menuItems;
   }
 }
 
@@ -3389,4 +3453,12 @@ class FallbackCardStore implements CardStore {
   async loadDocument(url: string) {
     return await loadDocument(fetch, url);
   }
+}
+
+function isIndexCard(card: CardDef): boolean {
+  let cardRealmURL = card[realmURL];
+  if (!cardRealmURL) {
+    return false;
+  }
+  return (card.id as unknown as string) === `${cardRealmURL.href}index`;
 }
