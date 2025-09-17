@@ -42,7 +42,7 @@ export class QueryState {
   }
 }
 
-class IsolatedTemplate extends Component<typeof TableApp> {
+class IsolatedTemplate extends Component<typeof DataExplorer> {
   queryBuilder = resource(this, () => {
     const state = new QueryState();
 
@@ -128,8 +128,8 @@ class IsolatedTemplate extends Component<typeof TableApp> {
   </template>
 }
 
-export class TableApp extends AppCard {
-  static displayName = 'Table App';
+export class DataExplorer extends AppCard {
+  static displayName = 'Data Explorer';
   @field showComputedFields = contains(BooleanField);
   @field showPrimitivesOnly = contains(BooleanField);
   @field codeRef = contains(AbsoluteCodeRefField);

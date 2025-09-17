@@ -2,15 +2,15 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "TableApp",
-        "module": "../app/table"
+        "name": "DataExplorer",
+        "module": "../app/data-explorer"
       }
     },
     "type": "card",
     "attributes": {
       "codeRef": {
-        "name": "EventTicketCard",
-        "module": "../event-ticket/event-ticket"
+        "name": "Listing",
+        "module": "../catalog-app/listing/listing"
       },
       "cardInfo": {
         "notes": "",
@@ -19,7 +19,7 @@
         "thumbnailURL": null
       },
       "showComputedFields": true,
-      "showPrimitivesOnly": true
+      "showPrimitivesOnly": false
     },
     "relationships": {
       "cardInfo.theme": {
