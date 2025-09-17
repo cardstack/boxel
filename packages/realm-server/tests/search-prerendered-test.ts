@@ -505,6 +505,60 @@ module(basename(__filename), function () {
             'http://127.0.0.1:4444/aaron.json',
           );
         });
+
+        test('can paginate prerendered instances', async function (assert) {
+          // First page with size 2
+          let query: Query & { prerenderedHtmlFormat: string } = {
+            page: {
+              number: 0,
+              size: 2,
+            },
+            sort: [
+              {
+                by: 'firstName',
+                on: { module: `${testRealmHref}person`, name: 'Person' },
+                direction: 'asc',
+              },
+            ],
+            prerenderedHtmlFormat: 'embedded',
+          };
+
+          let response = await request
+            .get(`/_search-prerendered?${stringify(query)}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          let json = response.body;
+
+          assert.strictEqual(json.data.length, 2, 'first page has 2 results');
+          assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
+          assert.strictEqual(
+            json.data[0].id,
+            'http://127.0.0.1:4444/aaron.json',
+          );
+          assert.strictEqual(
+            json.data[1].id,
+            'http://127.0.0.1:4444/craig.json',
+          );
+
+          // Second page
+          query.page = { number: 1, size: 2 };
+          response = await request
+            .get(`/_search-prerendered?${stringify(query)}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          json = response.body;
+
+          assert.strictEqual(json.data.length, 2, 'second page has 2 results');
+          assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
+          assert.strictEqual(
+            json.data[0].id,
+            'http://127.0.0.1:4444/jane.json',
+          );
+          assert.strictEqual(
+            json.data[1].id,
+            'http://127.0.0.1:4444/jimmy.json',
+          );
+        });
       });
     });
 

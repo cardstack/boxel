@@ -15,7 +15,9 @@ import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface ConnectComponentSignature {
-  Args: {};
+  Args: {
+    model: string;
+  };
 }
 
 let sendReadyMessage = modifier((_element: HTMLElement) => {
@@ -32,6 +34,10 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
     this.storeAccessPermissions();
   }
 
+  get parentIframeOrigin() {
+    return this.args.model;
+  }
+
   @action
   async storeAccessPermissions() {
     this.storageAccess = await window.document.hasStorageAccess();
@@ -42,7 +48,11 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
     let handle = await this.matrixService.requestStorageAccess();
 
     if (handle) {
-      window.localStorage.setItem('auth', handle.localStorage['auth']);
+      if (handle?.localStorage?.getItem('auth')) {
+        window.localStorage.setItem('auth', handle.localStorage['auth']);
+      } else {
+        window.top?.postMessage('login', this.parentIframeOrigin);
+      }
     }
 
     await this.matrixService.start();

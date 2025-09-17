@@ -172,6 +172,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
+      class='blog-app'
     >
       <:sidebar>
         <TitleGroup
@@ -186,7 +187,6 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           <BoxelButton
             class='sidebar-create-button'
             @kind='primary'
-            @size='large'
             @disabled={{this.activeFilter.isCreateNewDisabled}}
             @loading={{this.createCard.isRunning}}
             {{on 'click' this.createNew}}

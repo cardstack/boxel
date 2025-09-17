@@ -6,9 +6,11 @@
       "shortName": "Movies",
       "slug": "movies",
       "pillColor": "#fff500",
-      "description": null,
-      "title": "Movie Review",
-      "thumbnailURL": null
+      "cardInfo": {
+        "description": null,
+        "title": "Movie Review",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "blog": {

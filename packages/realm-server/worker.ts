@@ -11,7 +11,11 @@ import {
 import yargs from 'yargs';
 import { makeFastBootIndexRunner } from './fastboot';
 import * as Sentry from '@sentry/node';
-import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  PgQueueRunner,
+} from '@cardstack/postgres';
 
 let log = logger('worker');
 
@@ -128,6 +132,8 @@ let autoMigrate = migrateDB || undefined;
     indexRunner: getRunner,
     reportStatus,
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
+    dbAdapter,
+    queuePublisher: new PgQueuePublisher(dbAdapter),
   });
 
   await worker.run();

@@ -836,9 +836,3 @@ function extractTokenErrorMessage(error: Error) {
 
   return false;
 }
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface RegisterUser {
-    'Matrix::RegisterUser': typeof RegisterUser;
-  }
-}

@@ -432,6 +432,8 @@ async function setupTestRealm({
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
+    dbAdapter,
+    queuePublisher: queue,
     runnerOptsManager: runnerOptsMgr,
     indexRunner,
     virtualNetwork,

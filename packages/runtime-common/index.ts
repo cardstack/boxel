@@ -25,10 +25,10 @@ export type PatchData = {
 // Shared type produced by the host app when visiting the render.meta route and
 // consumed by the server.
 export interface PrerenderMeta {
-  serialized: LooseSingleCardDocument;
-  searchDoc: Record<string, any>;
-  displayName: string;
-  types: string[];
+  serialized: LooseSingleCardDocument | null;
+  searchDoc: Record<string, any> | null;
+  displayName: string | null;
+  types: string[] | null;
 }
 
 export { Deferred } from './deferred';
@@ -193,7 +193,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmInfo } from './realm';
-import { PrerenderedCard } from './index-query-engine';
+import { PrerenderedCard, QueryResultsMeta } from './index-query-engine';
 
 export interface MatrixCardError {
   id?: string;
@@ -321,6 +321,7 @@ export type getCards<T extends CardDef = CardDef> = (
   instances: T[];
   instancesByRealm: { realm: string; cards: T[] }[];
   isLoading: boolean;
+  meta: QueryResultsMeta;
 };
 
 export interface CreateOptions {
@@ -404,13 +405,6 @@ export function subscribeToRealm(
 export interface SearchQuery {
   instances: CardDef[];
   isLoading: boolean;
-}
-
-export interface Actions {
-  changeSubmode: (
-    url: URL,
-    submode: 'code' | 'interact',
-  ) => Promise<void> | void;
 }
 
 export interface CopyCardsWithCodeRef {

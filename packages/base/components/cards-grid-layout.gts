@@ -238,6 +238,8 @@ export default class CardsGridLayout extends Component<Signature> {
         height: 100%;
         max-height: 100vh;
         overflow: hidden;
+        background-color: var(--background, var(--boxel-light));
+        color: var(--foreground, var(--boxel-dark));
       }
       .scroll-container {
         overflow: hidden;
@@ -247,11 +249,19 @@ export default class CardsGridLayout extends Component<Signature> {
         overflow-y: auto;
       }
       .sidebar {
+        --accent: var(--sidebar-accent);
+        --accent-foreground: var(--sidebar-accent-foreground);
+        --primary: var(--sidebar-primary);
+        --primary-foreground: var(--sidebar-primary-foreground);
+        --border: var(--sidebar-border);
+        --ring: var(--sidebar-ring);
         position: relative;
         max-width: 100%;
         width: var(--sidebar-max-width);
         min-width: var(--sidebar-min-width);
         padding: var(--boxel-cards-grid-layout-sidebar-padding, var(--padding));
+        background-color: var(--sidebar);
+        color: var(--sidebar-foreground);
       }
       .content {
         position: relative;
@@ -266,7 +276,7 @@ export default class CardsGridLayout extends Component<Signature> {
         display: flex;
         align-items: center;
         flex-wrap: wrap;
-        column-gap: var(--boxel-sp-lg);
+        column-gap: var(--boxel-sp);
         row-gap: var(--boxel-sp-xs);
         padding: var(--padding) 0;
         margin: 0 var(--padding);
@@ -297,8 +307,9 @@ export default class CardsGridLayout extends Component<Signature> {
       .content-title {
         flex-grow: 1;
         margin-block: 0;
-        margin-left: calc(-1 * var(--boxel-sp-sm));
-        font: 600 var(--boxel-font-lg);
+        font-size: var(--typescale-h1, var(--boxel-font-size-lg));
+        font-weight: 600;
+        line-height: calc(30 / 22);
         letter-spacing: var(--boxel-lsp-xxs);
       }
 

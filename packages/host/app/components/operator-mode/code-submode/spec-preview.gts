@@ -56,7 +56,6 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     activeSpec: Spec | undefined;
-    isLoadingNewModule: boolean;
     isPanelOpen: boolean;
     selectedDeclaration?: ModuleDeclaration;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
@@ -348,7 +347,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   get isLoading() {
-    return this.args.isLoadingNewModule;
+    return false;
   }
 
   private viewSpecInPlayground = (spec: CardDefOrId) => {

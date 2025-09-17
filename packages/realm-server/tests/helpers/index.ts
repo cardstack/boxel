@@ -34,12 +34,13 @@ import {
   Subscription,
   Plan,
   RealmAdapter,
+  PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import { PUBLISHED_DIRECTORY_NAME, RealmServer } from '../../server';
+import { RealmServer } from '../../server';
 
 import {
   PgAdapter,
@@ -106,6 +107,7 @@ export const testRealmInfo = {
   visibility: 'public',
   realmUserId: testMatrix.username,
   publishable: null,
+  lastPublishedAt: null,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
@@ -272,6 +274,8 @@ export async function createRealm({
     worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
       queue: runner,
+      dbAdapter,
+      queuePublisher: publisher,
       runnerOptsManager: manager,
       indexRunner,
       virtualNetwork,
@@ -338,6 +342,8 @@ export async function runBaseRealmServer(
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
+    dbAdapter,
+    queuePublisher: publisher,
     runnerOptsManager: manager,
     indexRunner,
     virtualNetwork,
@@ -393,6 +399,7 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
+  validPublishedRealmDomains = ['localhost'],
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -406,11 +413,14 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
+  validPublishedRealmDomains?: string[];
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
+    dbAdapter,
+    queuePublisher: publisher,
     runnerOptsManager: manager,
     indexRunner,
     virtualNetwork,
@@ -455,6 +465,7 @@ export async function runTestRealmServer({
     grafanaSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    validPublishedRealmDomains,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();
@@ -813,6 +824,91 @@ export function setupPermissionedRealm(
     testRealmServer.testRealm.unsubscribe();
     await closeServer(testRealmServer.testRealmHttpServer);
     resetCatalogRealms();
+  });
+}
+
+export function setupPermissionedRealms(
+  hooks: NestedHooks,
+  {
+    mode = 'beforeEach',
+    realms: realmsArg,
+    onRealmSetup,
+  }: {
+    mode?: 'beforeEach' | 'before';
+    realms: {
+      realmURL: string;
+      permissions: RealmPermissions;
+      fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    }[];
+    onRealmSetup?: (args: {
+      dbAdapter: PgAdapter;
+      realms: {
+        realm: Realm;
+        realmPath: string;
+        realmHttpServer: Server;
+        realmAdapter: RealmAdapter;
+      }[];
+    }) => void;
+  },
+) {
+  // We want 2 different realm users to test authorization between them - these
+  // names are selected because they are already available in the test
+  // environment (via register-realm-users.ts)
+  let matrixUsers = ['test_realm', 'node-test_realm'];
+  let realms: {
+    realm: Realm;
+    realmPath: string;
+    realmHttpServer: Server;
+    realmAdapter: RealmAdapter;
+  }[] = [];
+  let _dbAdapter: PgAdapter;
+  setupDB(hooks, {
+    [mode]: async (
+      dbAdapter: PgAdapter,
+      publisher: QueuePublisher,
+      runner: QueueRunner,
+    ) => {
+      _dbAdapter = dbAdapter;
+      for (let [i, realmArg] of realmsArg.entries()) {
+        let {
+          testRealmDir: realmPath,
+          testRealm: realm,
+          testRealmHttpServer: realmHttpServer,
+          testRealmAdapter: realmAdapter,
+        } = await runTestRealmServer({
+          virtualNetwork: await createVirtualNetwork(),
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
+          realmURL: new URL(realmArg.realmURL),
+          fileSystem: realmArg.fileSystem,
+          permissions: realmArg.permissions,
+          matrixURL,
+          matrixConfig: {
+            url: matrixURL,
+            username: matrixUsers[i] ?? matrixUsers[0],
+          },
+          dbAdapter,
+          publisher,
+          runner,
+        });
+        realms.push({
+          realm,
+          realmPath,
+          realmHttpServer,
+          realmAdapter,
+        });
+      }
+      onRealmSetup?.({
+        dbAdapter: _dbAdapter!,
+        realms,
+      });
+    },
+  });
+
+  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
+    for (let realm of realms) {
+      await closeServer(realm.realmHttpServer);
+    }
   });
 }
 

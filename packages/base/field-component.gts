@@ -10,12 +10,11 @@ import {
   type BaseDefConstructor,
   type Theme,
   CardContext,
-  isCard,
-  isCompoundField,
   formats,
   FieldFormats,
   CardCrudFunctions,
 } from './card-api';
+import { isCard, isCompoundField } from './field-support';
 import {
   CardContextName,
   DefaultFormatsContextName,
@@ -386,8 +385,9 @@ export function getBoxComponent(
         background-color: var(--muted, var(--boxel-100));
       }
 
-      .field-component-card.fitted-format {
-        /*
+      @layer baseComponent {
+        .field-component-card.fitted-format {
+          /*
         The cards themselves need to be in charge of the styles within the card boundary
         in order for the container queries to make sense--otherwise we need to do style
         math to figure out what the actual breakpoints are. please resist the urge to add
@@ -397,13 +397,14 @@ export function getBoxComponent(
         works if we use up all the space horizontally and vertically that is available
         to the card since some of our queries are height queries
       */
-        width: 100%;
-        height: 100%;
-        min-height: 40px;
-        max-height: 600px;
-        container-name: fitted-card;
-        container-type: size;
-        overflow: hidden;
+          width: 100%;
+          height: 100%;
+          min-height: 40px;
+          max-height: 600px;
+          container-name: fitted-card;
+          container-type: size;
+          overflow: hidden;
+        }
       }
 
       .field-component-card.embedded-format {

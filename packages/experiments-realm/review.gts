@@ -203,6 +203,7 @@ export class Review extends BlogPost {
           position: absolute;
           top: 0;
           min-height: var(--banner-height);
+          height: var(--banner-height);
           background-color: rgba(0 0 0 / 70%);
           color: var(--boxel-light);
           border-radius: 0;

@@ -6,12 +6,14 @@ import {
   logger,
   SupportedMimeType,
   insertPermissions,
+  param,
   query,
   Deferred,
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
-  type RealmPermissions,
+  DEFAULT_PERMISSIONS,
+  PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -44,14 +46,6 @@ import {
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
-const DEFAULT_PERMISSIONS = Object.freeze([
-  'read',
-  'write',
-  'realm-owner',
-]) as RealmPermissions['user'];
-
-export const PUBLISHED_DIRECTORY_NAME = '_published';
-
 export class RealmServer {
   private log = logger('realm-server');
   private realms: Realm[];
@@ -73,6 +67,7 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
+  private validPublishedRealmDomains: string[] | undefined;
 
   constructor({
     serverURL,
@@ -90,6 +85,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
+    validPublishedRealmDomains,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -106,6 +102,7 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
+    validPublishedRealmDomains?: string[];
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -130,6 +127,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
+    this.validPublishedRealmDomains = validPublishedRealmDomains;
     this.realms = [...realms];
   }
 
@@ -182,6 +180,11 @@ export class RealmServer {
           sendEvent: this.sendEvent,
           queue: this.queue,
           realms: this.realms,
+          assetsURL: this.assetsURL,
+          realmsRootPath: this.realmsRootPath,
+          getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
+          createAndMountRealm: this.createAndMountRealm,
+          validPublishedRealmDomains: this.validPublishedRealmDomains,
         }),
       )
       .use(this.serveIndex)
@@ -228,6 +231,45 @@ export class RealmServer {
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
     if (ctxt.header.accept?.includes('text/html')) {
+      // If this is a /connect iframe request, is the origin a valid published realm?
+
+      let connectMatch = ctxt.request.path.match(/\/connect\/(.+)$/);
+
+      if (connectMatch) {
+        try {
+          let originParameter = new URL(decodeURIComponent(connectMatch[1]))
+            .href;
+
+          let publishedRealms = await query(this.dbAdapter, [
+            `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
+            param(`${originParameter}%`),
+          ]);
+
+          if (publishedRealms.length === 0) {
+            ctxt.status = 404;
+            ctxt.body = `Not Found: No published realm found for origin ${originParameter}`;
+
+            this.log.debug(
+              `Ignoring /connect request for origin ${originParameter}: no matching published realm`,
+            );
+
+            return;
+          }
+
+          ctxt.set(
+            'Content-Security-Policy',
+            `frame-ancestors ${originParameter}`,
+          );
+        } catch (error) {
+          ctxt.status = 400;
+          ctxt.body = 'Bad Request';
+
+          this.log.info(`Error processing /connect request: ${error}`);
+
+          return;
+        }
+      }
+
       ctxt.type = 'html';
       ctxt.body = await this.retrieveIndexHTML();
       return;
@@ -301,14 +343,19 @@ export class RealmServer {
     backgroundURL?: string;
     iconURL?: string;
   }): Promise<Realm> => {
-    if (
-      this.realms.find(
-        (r) => new URL(r.url).href.replace(/\/$/, '') === new URL(r.url).origin,
-      )
-    ) {
+    let realmAtServerRoot = this.realms.find((r) => {
+      let realmUrl = new URL(r.url);
+
+      return (
+        realmUrl.href.replace(/\/$/, '') === realmUrl.origin &&
+        realmUrl.hostname === this.serverURL.hostname
+      );
+    });
+
+    if (realmAtServerRoot) {
       throw errorWithStatus(
         400,
-        `Cannot create a realm: a realm is already mounted at the origin of this server`,
+        `Cannot create a realm: a realm is already mounted at the origin of this server: ${realmAtServerRoot.url}`,
       );
     }
     if (!endpoint.match(/^[a-z0-9-]+$/)) {
@@ -337,10 +384,6 @@ export class RealmServer {
 
     let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
-    let adapter = new NodeAdapter(
-      resolve(String(realmPath)),
-      this.enableFileWatcher,
-    );
 
     let username = `realm/${ownerUsername}_${endpoint}`;
     let { userId } = await registerUser({
@@ -374,19 +417,32 @@ export class RealmServer {
       },
     });
 
-    let realm = new Realm({
-      url,
-      adapter,
-      secretSeed: this.realmSecretSeed,
-      virtualNetwork: this.virtualNetwork,
-      dbAdapter: this.dbAdapter,
-      queue: this.queue,
-      matrix: {
-        url: this.matrixClient.matrixURL,
-        username,
+    return this.createAndMountRealm(realmPath, url, username);
+  };
+
+  private createAndMountRealm = (
+    path: string,
+    url: string,
+    username: string,
+    copiedFromRealm?: URL,
+  ) => {
+    let adapter = new NodeAdapter(resolve(path), this.enableFileWatcher);
+    let realm = new Realm(
+      {
+        url,
+        adapter,
+        secretSeed: this.realmSecretSeed,
+        virtualNetwork: this.virtualNetwork,
+        dbAdapter: this.dbAdapter,
+        queue: this.queue,
+        matrix: {
+          url: new URL(this.matrixClient.matrixURL),
+          username,
+        },
+        realmServerMatrixClient: this.matrixClient,
       },
-      realmServerMatrixClient: this.matrixClient,
-    });
+      copiedFromRealm ? { copiedFromRealm } : undefined,
+    );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
     return realm;
@@ -624,7 +680,7 @@ export class RealmServer {
   // client tests leverage a synapse instance that changes multiple times per
   // realm lifespan, and each new synapse instance has a unique registration
   // secret
-  private async getMatrixRegistrationSecret() {
+  private getMatrixRegistrationSecret = async () => {
     if (this.getRegistrationSecret) {
       let secret = await this.getRegistrationSecret();
       if (!secret) {
@@ -640,7 +696,7 @@ export class RealmServer {
     }
 
     throw new Error(`Can not determine the matrix registration secret`);
-  }
+  };
 }
 
 function detectRealmCollision(realms: Realm[]): void {

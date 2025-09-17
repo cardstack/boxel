@@ -289,6 +289,9 @@ export function getContainsManyComponent({
       'isFieldDef' in model.value.constructor &&
       model.value.constructor.isFieldDef
     ) {
+      console.warn(
+        'We intentionally DO NOT render a contains-many editor when the plural field is nested inside another field. The decision of what to display is complex and should be user-defined',
+      );
       return false;
     }
     if (isComputed) {

@@ -388,6 +388,7 @@ module('Integration | realm', function (hooks) {
               showAsCatalog: null,
               visibility: 'public',
               publishable: null,
+              lastPublishedAt: null,
             },
             realmURL: 'http://localhost:4202/test/',
           },
@@ -3151,6 +3152,7 @@ module('Integration | realm', function (hooks) {
               showAsCatalog: null,
               visibility: 'public',
               publishable: null,
+              lastPublishedAt: null,
             },
             realmURL: testModuleRealm,
           },
@@ -3159,6 +3161,11 @@ module('Integration | realm', function (hooks) {
           },
         },
       ],
+      meta: {
+        page: {
+          total: 3,
+        },
+      },
     });
   });
 
@@ -3328,6 +3335,7 @@ posts/ignore-me.gts
             showAsCatalog: null,
             visibility: 'public',
             publishable: null,
+            lastPublishedAt: null,
           },
         },
       },

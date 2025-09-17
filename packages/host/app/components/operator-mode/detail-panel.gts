@@ -154,10 +154,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get isLoading() {
-    return (
-      this.args.moduleAnalysis.isLoadingNewModule ||
-      this.cardInstanceType?.isLoading
-    );
+    return this.cardInstanceType?.isLoading;
   }
 
   private get definitionActions() {

@@ -7,11 +7,13 @@ import { copySync, existsSync, ensureDirSync, readJSONSync } from 'fs-extra';
 import {
   Deferred,
   Realm,
-  fetchUserPermissions,
+  fetchRealmPermissions,
   baseCardRef,
   type SingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
+  DEFAULT_PERMISSIONS,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
@@ -53,6 +55,7 @@ import {
 import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
+import * as boxelUIChangeChecker from '../lib/boxel-ui-change-checker';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   MatrixEvent,
@@ -92,13 +95,13 @@ module(basename(__filename), function () {
       module('various other realm tests', function (hooks) {
         let testRealmHttpServer2: Server;
         let testRealmServer2: RealmServer;
-        let testRealm2: Realm;
         let dbAdapter: PgAdapter;
         let publisher: QueuePublisher;
         let runner: QueueRunner;
         let request2: SuperTest<Test>;
         let testRealmDir: string;
-        let virtualNetwork = createVirtualNetwork();
+        let virtualNetwork: VirtualNetwork;
+        let ownerUserId = '@mango:localhost';
 
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -112,11 +115,8 @@ module(basename(__filename), function () {
           publisher: QueuePublisher,
           runner: QueueRunner,
         ) {
-          if (testRealm2) {
-            virtualNetwork.unmount(testRealm2.handle);
-          }
+          virtualNetwork = createVirtualNetwork();
           ({
-            testRealm: testRealm2,
             testRealmServer: testRealmServer2,
             testRealmHttpServer: testRealmHttpServer2,
           } = await runTestRealmServer({
@@ -128,6 +128,10 @@ module(basename(__filename), function () {
             publisher,
             runner,
             matrixURL,
+            permissions: {
+              '*': ['read', 'write'],
+              [ownerUserId]: DEFAULT_PERMISSIONS,
+            },
           }));
           request2 = supertest(testRealmHttpServer2);
         }
@@ -212,7 +216,7 @@ module(basename(__filename), function () {
             existsSync(join(realmPath, 'index.json')),
             'seed file index.json exists',
           );
-          let permissions = await fetchUserPermissions(
+          let permissions = await fetchRealmPermissions(
             dbAdapter,
             new URL(json.data.id),
           );
@@ -1316,6 +1320,157 @@ module(basename(__filename), function () {
           );
         });
 
+        test('can reindex all realms via post-deployment endpoint called from CI pipeline', async function (assert: Assert) {
+          let compareCurrentBoxelUIChecksumStub: sinon.SinonStub;
+          let writeCurrentBoxelUIChecksumStub: sinon.SinonStub;
+
+          // Test case 1: Missing authorization header - should be unauthorized
+          {
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json');
+
+            assert.strictEqual(
+              response.status,
+              401,
+              'HTTP 401 status for missing auth header',
+            );
+          }
+
+          // Test case 2: Wrong authorization header - should be unauthorized
+          {
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', 'wrong-secret');
+
+            assert.strictEqual(
+              response.status,
+              401,
+              'HTTP 401 status for wrong auth header',
+            );
+          }
+
+          // Test case 3: Checksums are different - should trigger reindex
+          {
+            compareCurrentBoxelUIChecksumStub = sinon
+              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+              .resolves({
+                previousChecksum: 'old-checksum-123',
+                currentChecksum: 'new-checksum-456',
+              });
+            writeCurrentBoxelUIChecksumStub = sinon.stub(
+              boxelUIChangeChecker,
+              'writeCurrentBoxelUIChecksum',
+            );
+
+            let initialJobs = await dbAdapter.execute('select * from jobs');
+            let initialJobCount = initialJobs.length;
+
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', "mum's the word");
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            assert.deepEqual(
+              response.body,
+              {
+                previousChecksum: 'old-checksum-123',
+                currentChecksum: 'new-checksum-456',
+              },
+              'response body contains checksum comparison result',
+            );
+
+            // Verify that a full-reindex job was published
+            let finalJobs = await dbAdapter.execute('select * from jobs');
+            assert.strictEqual(
+              finalJobs.length,
+              initialJobCount + 1,
+              'a new full-reindex job was created when checksums differ',
+            );
+
+            let reindexJob = finalJobs.find(
+              (job) => job.job_type === 'full-reindex',
+            );
+            assert.ok(reindexJob, 'full-reindex job exists');
+            if (reindexJob) {
+              assert.strictEqual(
+                reindexJob.concurrency_group,
+                'full-reindex-group',
+                'job has correct concurrency group',
+              );
+              assert.strictEqual(
+                reindexJob.timeout,
+                360,
+                'job has correct timeout (6 minutes)',
+              );
+            }
+
+            // Verify that writeCurrentBoxelUIChecksum was called
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.calledOnce,
+              'writeCurrentBoxelUIChecksum was called',
+            );
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.calledWith('new-checksum-456'),
+              'writeCurrentBoxelUIChecksum called with new checksum',
+            );
+
+            compareCurrentBoxelUIChecksumStub.restore();
+            writeCurrentBoxelUIChecksumStub.restore();
+          }
+
+          // Test case 4: Checksums are the same - should not trigger reindex
+          {
+            compareCurrentBoxelUIChecksumStub = sinon
+              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+              .resolves({
+                previousChecksum: 'same-checksum-789',
+                currentChecksum: 'same-checksum-789',
+              });
+            writeCurrentBoxelUIChecksumStub = sinon.stub(
+              boxelUIChangeChecker,
+              'writeCurrentBoxelUIChecksum',
+            );
+
+            let initialJobs = await dbAdapter.execute('select * from jobs');
+            let initialJobCount = initialJobs.length;
+
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', "mum's the word");
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            assert.deepEqual(
+              response.body,
+              {
+                previousChecksum: 'same-checksum-789',
+                currentChecksum: 'same-checksum-789',
+              },
+              'response body contains checksum comparison result',
+            );
+
+            // Verify that no new job was published
+            let finalJobs = await dbAdapter.execute('select * from jobs');
+            assert.strictEqual(
+              finalJobs.length,
+              initialJobCount,
+              'no new job was created when checksums are the same',
+            );
+
+            // Verify that writeCurrentBoxelUIChecksum was not called
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.notCalled,
+              'writeCurrentBoxelUIChecksum was not called when checksums are same',
+            );
+
+            compareCurrentBoxelUIChecksumStub.restore();
+            writeCurrentBoxelUIChecksumStub.restore();
+          }
+        });
+
         test('can reindex all realms via grafana endpoint', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
@@ -1366,28 +1521,18 @@ module(basename(__filename), function () {
           let finalJobs = await dbAdapter.execute('select * from jobs');
           assert.strictEqual(
             finalJobs.length,
-            4,
-            'realm index jobs were created',
+            3,
+            'realm full reindex job was created',
           );
           let jobs = finalJobs.slice(2);
           assert.strictEqual(
             jobs[0].job_type,
-            'from-scratch-index',
+            'full-reindex',
             'job type is correct',
           );
           assert.strictEqual(
             jobs[0].concurrency_group,
-            `indexing:${testRealm2URL.href}`,
-            'concurrency group is correct',
-          );
-          assert.strictEqual(
-            jobs[1].job_type,
-            'from-scratch-index',
-            'job type is correct',
-          );
-          assert.strictEqual(
-            jobs[1].concurrency_group,
-            `indexing:${realmURL}`,
+            `full-reindex-group`,
             'concurrency group is correct',
           );
         });
@@ -1480,18 +1625,16 @@ module(basename(__filename), function () {
         });
 
         test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {
-          virtualNetwork.mount(
-            async (req: Request) => {
-              if (req.url.includes('_info')) {
-                return new Response('Failed to fetch realm info', {
-                  status: 500,
-                  statusText: 'Internal Server Error',
-                });
-              }
-              return null;
-            },
-            { prepend: true },
-          );
+          let failedRealmInfoMock = async (req: Request) => {
+            if (req.url.includes('_info')) {
+              return new Response('Failed to fetch realm info', {
+                status: 500,
+                statusText: 'Internal Server Error',
+              });
+            }
+            return null;
+          };
+          virtualNetwork.mount(failedRealmInfoMock, { prepend: true });
           let response = await request2
             .get('/_catalog-realms')
             .set('Accept', 'application/json');

@@ -439,4 +439,94 @@ module(`Integration | search resource`, function (hooks) {
       `Mang Mang`,
     );
   });
+
+  test(`can paginate search results and returns correct meta.page.total`, async function (assert) {
+    // First page with size 2
+    let query: Query = {
+      filter: {
+        type: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+      },
+      page: {
+        number: 0,
+        size: 2,
+      },
+      sort: [
+        {
+          by: 'author.firstName',
+          on: { module: `${testRealmURL}book`, name: 'Book' },
+          direction: 'asc',
+        },
+      ],
+    };
+
+    let search = getSearchResourceForTest(loaderService, () => ({
+      named: {
+        query,
+        realms: [testRealmURL],
+        isLive: false,
+        isAutoSaved: false,
+        storeService,
+      },
+    }));
+
+    await search.loaded;
+
+    // First page should have 2 results
+    assert.strictEqual(search.instances.length, 2);
+    // Total should be 4 (all books: card-2, books/1, books/2, books/3)
+    assert.strictEqual(
+      search.meta.page?.total,
+      4,
+      'meta.page.total shows total count across all pages',
+    );
+
+    // Test second page
+    query.page = { number: 1, size: 2 };
+    search = getSearchResourceForTest(loaderService, () => ({
+      named: {
+        query,
+        realms: [testRealmURL],
+        isLive: false,
+        isAutoSaved: false,
+        storeService,
+      },
+    }));
+
+    await search.loaded;
+
+    // Second page should have 2 results (the remaining books)
+    assert.strictEqual(search.instances.length, 2);
+    // Total should still be 4
+    assert.strictEqual(
+      search.meta.page?.total,
+      4,
+      'meta.page.total consistent across pages',
+    );
+
+    // Test empty page
+    query.page = { number: 2, size: 2 };
+    search = getSearchResourceForTest(loaderService, () => ({
+      named: {
+        query,
+        realms: [testRealmURL],
+        isLive: false,
+        isAutoSaved: false,
+        storeService,
+      },
+    }));
+
+    await search.loaded;
+
+    // Third page should have no results
+    assert.strictEqual(search.instances.length, 0);
+    // Total should still be 4
+    assert.strictEqual(
+      search.meta.page?.total,
+      4,
+      'meta.page.total remains correct on empty page',
+    );
+  });
 });

@@ -275,13 +275,17 @@ export default class StoreService extends Service implements StoreInterface {
 
     if (opts?.doNotWaitForPersist) {
       // intentionally not awaiting
-      this.persistAndUpdate(instance, { realm: opts?.realm });
+      this.persistAndUpdate(instance, {
+        realm: opts?.realm,
+        localDir: opts?.localDir,
+      });
     } else if (!opts?.doNotPersist) {
       if (instance.id) {
         this.save(instance.id);
       } else {
         return (await this.persistAndUpdate(instance, {
           realm: opts?.realm,
+          localDir: opts?.localDir,
         })) as T | CardErrorJSONAPI;
       }
     }
@@ -787,12 +791,28 @@ export default class StoreService extends Service implements StoreInterface {
         | SingleCardDocument
         | undefined;
       if (!doc) {
-        let json = await this.cardService.fetchJSON(url);
+        let json: CardDocument | undefined;
+        if ((globalThis as any).__boxelRenderContext) {
+          let result = await this.cardService.getSource(new URL(`${url}.json`));
+          if (result.status === 200) {
+            json = JSON.parse(result.content);
+          } else {
+            throw new Error(
+              `Received non-200 status fetching instance source ${url}.json: ${result.content}`,
+            );
+          }
+        } else {
+          json = await this.cardService.fetchJSON(url);
+        }
         if (!isSingleCardDocument(json)) {
           throw new Error(
             `bug: server returned a non card document for ${url}:
         ${JSON.stringify(json, null, 2)}`,
           );
+        }
+        if (!json.data.id) {
+          // card source format is not serialized with the ID, so we add that back in.
+          json.data.id = url;
         }
         doc = json;
       }
@@ -826,17 +846,19 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  // this function is used to determine if the instance will be auto-saved or not
-  // this is a temporary function that is likely to go away with the creation of completion emphemeral state solution of the store/realm
-  // the only use-case for this function is determining if a preview instance in catalog realm (which is a read-only),
-  // st a card can be mutable without persisting to the server
+  // this function is used to determine if the instance will be auto-saved or
+  // note this is a temporary function that is likely to go away with the
+  // creation of completion ephemeral state solution of the store/realm the
+  // only use-case for this function is determining if a preview instance in
+  // catalog realm (which is a read-only), st a card can be mutable without
+  // persisting to the server
   private useEphemeralState(instance: CardDef | undefined): boolean {
     if (!instance) {
       return false;
     }
     let realmURL = instance[realmURLSymbol];
     if (!realmURL) {
-      // if a proper cannot derived, I just revert to the default behaviour of auto-save
+      // if a proper cannot derived, I just revert to the default behavior of auto-save
       return false;
     }
     let permissionToWrite = this.realm.permissions(realmURL.href).canWrite;

@@ -7,10 +7,12 @@ import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
 import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
-import * as CopyCardCommandModule from './copy-card';
+import * as CopyCardToRealmModule from './copy-card';
+import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
+import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
@@ -20,10 +22,12 @@ import * as ListingCreateCommandModule from './listing-create';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
+import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
+import * as PatchFieldsCommandModule from './patch-fields';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
@@ -62,7 +66,11 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/copy-card',
-    CopyCardCommandModule,
+    CopyCardToRealmModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-card-to-stack',
+    CopyCardToStackCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/copy-source',
@@ -111,6 +119,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-code',
     PatchCodeCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/patch-fields',
+    PatchFieldsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/preview-format',
@@ -197,6 +209,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     UseAiAssistantCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/generate-readme-spec',
+    GenerateReadmeSpecCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-card',
     GetCardCommandModule,
   );
@@ -208,6 +224,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/search-google-images',
     SearchGoogleImagesCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/one-shot-llm-request',
+    OneShotLlmRequestCommandModule,
+  );
 }
 
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
@@ -215,9 +235,13 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AddSkillsToRoomCommandModule.default,
   AskAiCommandModule.default,
   ApplySearchReplaceBlockCommandModule.default,
+  CopyCardToStackCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
   CreateSpecCommandModule.default,
   GetCardCommandModule.default,
+  OpenAiAssistantRoomCommandModule.default,
+  OpenWorkspaceCommandModule.default,
+  PatchFieldsCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
   SaveCardCommandModule.default,
@@ -237,4 +261,5 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   WriteTextFileCommandModule.default,
   SearchGoogleImagesCommandModule.default,
   SummarizeSessionCommandModule.default,
+  OneShotLlmRequestCommandModule.default,
 ];

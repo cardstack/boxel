@@ -29,7 +29,8 @@
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
       "*": ["types/*"]
-    }
+    },
+    "types": ["@cardstack/local-types"]
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]

@@ -8,6 +8,8 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   formattedError,
+  isCardErrorJSONAPI,
+  isCardError,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -31,17 +33,31 @@ export default class RenderRoute extends Route<Model> {
   @service declare private network: NetworkService;
 
   errorHandler = (event: Event) => {
+    let [_a, _b, encodedId] = (this.router.currentURL ?? '').split('/');
+    let id = encodedId ? decodeURIComponent(encodedId) : undefined;
     let reason =
       'reason' in event
         ? (event as any).reason
         : (event as CustomEvent).detail?.reason;
     let element: HTMLElement = document.querySelector('[data-prerender]')!;
     element.innerHTML = `
-      ${reason ? JSON.stringify(reason) : '{"message": "indexing failed"}'}
+      ${
+        reason
+          ? JSON.stringify(
+              isCardErrorJSONAPI(reason)
+                ? reason
+                : isCardError(reason)
+                  ? reason
+                  : formattedError(id, reason).errors[0],
+            )
+          : '{"message": "indexing failed"}'
+      }
     `;
     element.dataset.prerenderStatus = 'error';
 
     event.preventDefault?.();
+    (globalThis as any)._lazilyLoadLinks = undefined;
+    (globalThis as any)._boxelRenderContext = undefined;
   };
 
   activate() {
@@ -52,6 +68,7 @@ export default class RenderRoute extends Route<Model> {
 
   deactivate() {
     (globalThis as any)._lazilyLoadLinks = undefined;
+    (globalThis as any)._boxelRenderContext = undefined;
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
     window.removeEventListener('boxel-render-error', this.errorHandler);
@@ -61,6 +78,7 @@ export default class RenderRoute extends Route<Model> {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__lazilyLoadLinks = true;
+    (globalThis as any).__boxelRenderContext = true;
   }
 
   async model({ id }: { id: string }) {

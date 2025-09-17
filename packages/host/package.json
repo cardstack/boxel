@@ -40,6 +40,7 @@
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/eslint-plugin-boxel": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
     "@cardstack/requirejs-monaco-ember-polyfill": "catalog:",
     "@cardstack/runtime-common": "workspace:*",
     "@ember/optional-features": "^2.0.0",
