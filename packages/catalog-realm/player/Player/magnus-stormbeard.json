@@ -2,8 +2,8 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "PlayerCard",
-        "module": "../player-card"
+        "name": "Player",
+        "module": "../player"
       }
     },
     "type": "card",

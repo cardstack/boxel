@@ -2,8 +2,8 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "PlayerCard",
-        "module": "../player-card"
+        "name": "Player",
+        "module": "../player"
       }
     },
     "type": "card",
@@ -11,21 +11,9 @@
       "type": "bot",
       "cardInfo": {
         "notes": null,
-        "title": "Chess Bot",
-        "description": "Strategic AI opponent for chess matches",
+        "title": "Solitaire Bot",
+        "description": "Helpful AI assistant for solitaire games",
         "thumbnailURL": "https://avataaars.io/?topType=ShortHairDreads02&accessoriesType=Blank&hairColor=BrownDark&facialHairType=Blank&clotheType=BlazerSweater&eyeType=Surprised&eyebrowType=FlatNatural&mouthType=Twinkle&skinColor=Light"
-      }
-    },
-    "relationships": {
-      "player": {
-        "links": {
-          "self": "../../avatar-creator/AvatarCreator/chess-bot"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
       }
     }
   }

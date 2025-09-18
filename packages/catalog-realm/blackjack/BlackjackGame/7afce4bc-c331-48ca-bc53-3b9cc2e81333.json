@@ -25,12 +25,12 @@
     "relationships": {
       "players.0": {
         "links": {
-          "self": "../../player-card/PlayerCard/blackjack-bot"
+          "self": "../../player/Player/blackjack-bot"
         }
       },
       "players.1": {
         "links": {
-          "self": "../../PlayerCard/c45ce9d7-95b3-4324-800a-01bd3d20e703"
+          "self": "../../Player/c45ce9d7-95b3-4324-800a-01bd3d20e703"
         }
       },
       "cardInfo.theme": {

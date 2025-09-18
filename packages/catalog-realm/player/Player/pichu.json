@@ -2,8 +2,8 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "PlayerCard",
-        "module": "../player-card"
+        "name": "Player",
+        "module": "../player"
       }
     },
     "type": "card",
@@ -14,18 +14,6 @@
         "title": "Pichu",
         "description": null,
         "thumbnailURL": "https://avataaars.io/?topType=LongHairShavedSides&accessoriesType=Blank&hairColor=Auburn&facialHairType=Blank&clotheType=Hoodie&eyeType=Hearts&eyebrowType=UpDownNatural&mouthType=Smile&skinColor=Tanned"
-      }
-    },
-    "relationships": {
-      "player": {
-        "links": {
-          "self": "../../avatar-creator/AvatarCreator/pichu"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
       }
     }
   }

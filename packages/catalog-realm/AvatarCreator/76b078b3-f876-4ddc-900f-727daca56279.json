@@ -1,0 +1,43 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AvatarCreator",
+        "module": "../avatar-creator/avatar-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "avatar": {
+        "eyeType": "Default",
+        "topType": "ShortHairShortCurly",
+        "hairColor": "BrownDark",
+        "mouthType": "Smile",
+        "skinColor": "Light",
+        "clotheType": "Hoodie",
+        "eyebrowType": "Default",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "suggestionSkill": {
+        "links": {
+          "self": "../Skill/avatar-suggestion"
+        }
+      }
+    }
+  }
+}

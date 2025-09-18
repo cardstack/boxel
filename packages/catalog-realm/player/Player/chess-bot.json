@@ -1,0 +1,19 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Player",
+        "module": "../player"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Chess Bot",
+        "description": "Strategic AI opponent for chess matches",
+        "thumbnailURL": "https://avataaars.io/?topType=ShortHairDreads02&accessoriesType=Blank&hairColor=BrownDark&facialHairType=Blank&clotheType=BlazerSweater&eyeType=Surprised&eyebrowType=FlatNatural&mouthType=Twinkle&skinColor=Light"
+      }
+    }
+  }
+}

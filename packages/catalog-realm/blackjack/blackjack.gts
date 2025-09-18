@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import RecordGameResultCommand from '../commands/record-game-result';
 import { GameResult, GameStatusField } from '../game-result/game-result';
-import { PlayerCard } from '../player-card/player-card';
+import { Player } from '../player/player';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
@@ -1058,8 +1058,8 @@ export class BlackjackGame extends CardDef {
 
   @field casinoName = contains(StringField);
 
-  @field player = linksTo(() => PlayerCard);
-  @field dealer = linksTo(() => PlayerCard);
+  @field player = linksTo(() => Player);
+  @field dealer = linksTo(() => Player);
 
   @field gameState = contains(StringField);
   @field gameMessage = contains(StringField);

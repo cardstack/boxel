@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "avatar": {
+        "topType": null,
+        "accessoriesType": null,
+        "hairColor": null,
+        "facialHairType": null,
+        "clotheType": null,
+        "eyeType": null,
+        "eyebrowType": null,
+        "mouthType": null,
+        "skinColor": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../avatar-creator/avatar-creator",
+        "name": "AvatarCreator"
+      }
+    }
+  }
+}

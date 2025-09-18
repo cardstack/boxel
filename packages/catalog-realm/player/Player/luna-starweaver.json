@@ -2,30 +2,17 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "PlayerCard",
-        "module": "../player-card"
+        "name": "Player",
+        "module": "../player"
       }
     },
     "type": "card",
     "attributes": {
-      "type": "human",
       "cardInfo": {
         "notes": null,
         "title": "Luna Starweaver",
         "description": null,
         "thumbnailURL": "https://avataaars.io/?topType=LongHairMiaWallace&accessoriesType=Blank&hairColor=Black&facialHairType=Blank&clotheType=Hoodie&eyeType=Wink&eyebrowType=DefaultNatural&mouthType=Twinkle&skinColor=Brown"
-      }
-    },
-    "relationships": {
-      "player": {
-        "links": {
-          "self": "../../avatar-creator/AvatarCreator/luna-starweaver"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
       }
     }
   }

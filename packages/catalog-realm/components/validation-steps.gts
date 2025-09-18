@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import type { PlayerCard } from '../player-card/player-card';
+import type { Player } from '../player/player';
 
 export interface ValidationStep {
   id: string;
@@ -137,7 +137,7 @@ export default class ValidationSteps extends Component<ValidationStepsSignature>
 
 // Game Validation State
 export interface GameValidationState {
-  players: PlayerCard[];
+  players: Player[];
 }
 
 export function generateSetupValidationSteps(
@@ -149,10 +149,10 @@ export function generateSetupValidationSteps(
   const hasPlayers = () => gameState.players.length > 0;
 
   const hasHumanPlayer = () =>
-    gameState.players.some((p: PlayerCard) => p.type === 'human');
+    gameState.players.some((p: Player) => p.type === 'human');
 
   const getBotDealerCount = () =>
-    gameState.players.filter((p: PlayerCard) => p.type === 'bot').length;
+    gameState.players.filter((p: Player) => p.type === 'bot').length;
 
   const hasExactlyOneBotDealer = () => getBotDealerCount() === 1;
 
@@ -254,10 +254,10 @@ export function generateSetupValidationSteps(
 
 export function canGameStart(gameState: GameValidationState): boolean {
   const hasHumanPlayer = () =>
-    gameState.players.some((p: PlayerCard) => p.type === 'human');
+    gameState.players.some((p: Player) => p.type === 'human');
 
   const getBotDealerCount = () =>
-    gameState.players.filter((p: PlayerCard) => p.type === 'bot').length;
+    gameState.players.filter((p: Player) => p.type === 'bot').length;
 
   const hasExactlyOneBotDealer = () => getBotDealerCount() === 1;
 
