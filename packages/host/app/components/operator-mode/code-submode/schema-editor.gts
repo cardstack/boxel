@@ -177,7 +177,7 @@ export default class SchemaEditor extends Component<Signature> {
   }
 
   get isLoading() {
-    return true; // Temporarily set to true to show loading state
+    return this.cardInheritanceChain.isLoading;
   }
 
   get shouldRender() {
