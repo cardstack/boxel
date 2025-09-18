@@ -291,10 +291,8 @@ module('Integration | card-prerender', function (hooks) {
       ['test card: person jimmy', 'Fancy Person'],
     ].forEach(([title, type], index) => {
       assert.strictEqual(
-        cleanWhiteSpace(
-          stripScopedCSSAttributes(
-            unwrap(results.prerenderedCards[index].html!),
-          ),
+        stripScopedCSSAttributes(
+          unwrap(cleanWhiteSpace(results.prerenderedCards[index].html!)),
         ),
         cleanWhiteSpace(`
           <div class="fitted-template">

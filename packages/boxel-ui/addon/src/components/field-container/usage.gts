@@ -12,6 +12,7 @@ import { ALL_ICON_COMPONENTS } from '../../icons.gts';
 import Profile from '../../icons/profile.gts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelInput from '../input/index.gts';
+import type { BoxelLabelFontSize } from '../label/index.gts';
 import BoxelFieldContainer from './index.gts';
 
 export default class FieldUsage extends Component {
@@ -21,6 +22,7 @@ export default class FieldUsage extends Component {
   @tracked vertical = false;
   @tracked centeredDisplay = false;
   @tracked horizontalLabelSize = 'default';
+  @tracked labelFontSize?: BoxelLabelFontSize;
   @tracked icon = Profile;
   @tracked tag?: keyof HTMLElementTagNameMap;
 
@@ -41,6 +43,7 @@ export default class FieldUsage extends Component {
           @fieldId={{this.id}}
           @vertical={{this.vertical}}
           @horizontalLabelSize={{this.horizontalLabelSize}}
+          @labelFontSize={{this.labelFontSize}}
           @centeredDisplay={{this.centeredDisplay}}
           @icon={{this.icon}}
           style={{cssVars
@@ -93,6 +96,13 @@ export default class FieldUsage extends Component {
           @defaultValue='minmax(4rem, 25%)'
           @onInput={{fn (mut this.horizontalLabelSize)}}
           @value={{this.horizontalLabelSize}}
+        />
+        <Args.Object
+          @name='labelFontSize'
+          @description='label font-size'
+          @options={{array 'small' 'default'}}
+          @onInput={{fn (mut this.labelFontSize)}}
+          @value={{this.labelFontSize}}
         />
         <Args.Bool
           @name='centeredDisplay'
