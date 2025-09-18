@@ -8,10 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Doom64",
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Doom64",
         "description": null,
         "thumbnailURL": null
       },

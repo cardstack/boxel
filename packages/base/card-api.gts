@@ -2344,7 +2344,6 @@ export class CssImportField extends StringField {
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
-  @field title = contains(StringField);
   @field cssVariables = contains(CSSField);
   @field cssImports = containsMany(CssImportField);
 }

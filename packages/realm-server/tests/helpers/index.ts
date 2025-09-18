@@ -1037,7 +1037,7 @@ export const cardDefinition: Definition['fields'] = {
   },
   'cardInfo.theme.title': {
     type: 'contains',
-    isComputed: false,
+    isComputed: true,
     fieldOrCard: {
       name: 'StringField',
       module: 'https://cardstack.com/base/card-api',
@@ -1145,7 +1145,7 @@ export const cardDefinition: Definition['fields'] = {
   },
   'cardInfo.theme.cardInfo.theme.title': {
     type: 'contains',
-    isComputed: false,
+    isComputed: true,
     fieldOrCard: {
       name: 'StringField',
       module: 'https://cardstack.com/base/card-api',
@@ -1253,7 +1253,7 @@ export const cardDefinition: Definition['fields'] = {
   },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
     type: 'contains',
-    isComputed: false,
+    isComputed: true,
     fieldOrCard: {
       name: 'StringField',
       module: 'https://cardstack.com/base/card-api',
@@ -1361,7 +1361,7 @@ export const cardDefinition: Definition['fields'] = {
   },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
     type: 'contains',
-    isComputed: false,
+    isComputed: true,
     fieldOrCard: {
       name: 'StringField',
       module: 'https://cardstack.com/base/card-api',
