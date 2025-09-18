@@ -82,10 +82,12 @@ import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
-import LinkIcon from '@cardstack/boxel-icons/link';
-import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
+import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
+import Eye from '@cardstack/boxel-icons/eye';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
+import LinkIcon from '@cardstack/boxel-icons/link';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
+import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
@@ -125,6 +127,9 @@ import {
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
+import CopyCardCommand from '@cardstack/boxel-host/commands/copy-card';
+import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
+import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 
 interface CardOrFieldTypeIconSignature {
   Element: SVGElement;
@@ -2354,45 +2359,89 @@ export class CardDef extends BaseDef {
   [getCardMenuItems]({
     canEdit,
     cardCrudFunctions,
+    menuContext,
+    commandContext,
   }: {
     canEdit: boolean;
-    cardCrudFunctions: CardCrudFunctions;
+    cardCrudFunctions: Partial<CardCrudFunctions>;
+    menuContext: 'interact' | 'ai-assistant' | 'code-mode-preview';
+    commandContext: CommandContext;
   }): CardMenuItem[] {
     let cardId = this.id as unknown as string;
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy Card URL', 'action', {
-        action: () => copyCardURLToClipboard(cardId),
-        icon: LinkIcon,
-        disabled: !cardId,
-      }),
-    ];
+    let menuItems: MenuItem[] = [];
     if (
-      !isIndexCard(this) && // workspace index card cannot be deleted
-      cardId &&
-      canEdit
+      ['interact', 'code-mode-preview', 'code-mode-playground'].includes(
+        menuContext,
+      )
     ) {
       menuItems.push(
-        new MenuItem('New Card of This Type', 'action', {
-          action: () => {
-            if (!this) {
-              return;
-            }
-            let ref = identifyCard(this.constructor);
-            if (!ref) {
-              return;
-            }
-            cardCrudFunctions.createCard(ref, undefined, {
-              realmURL: this[realmURL],
+        new MenuItem('Copy Card URL', 'action', {
+          action: () => copyCardURLToClipboard(cardId),
+          icon: LinkIcon,
+          disabled: !cardId,
+        }),
+      );
+    }
+    if (menuContext === 'interact') {
+      if (
+        !isIndexCard(this) && // workspace index card cannot be deleted
+        cardId &&
+        canEdit
+      ) {
+        menuItems.push(
+          new MenuItem('New Card of This Type', 'action', {
+            action: () => {
+              if (!this) {
+                return;
+              }
+              let ref = identifyCard(this.constructor);
+              if (!ref) {
+                return;
+              }
+              cardCrudFunctions.createCard?.(ref, undefined, {
+                realmURL: this[realmURL],
+              });
+            },
+            icon: cardTypeIcon(this as BaseDef),
+            disabled: !this,
+          }),
+          new MenuItem('Delete', 'action', {
+            action: () => cardCrudFunctions.deleteCard?.(this),
+            icon: Trash2Icon,
+            dangerous: true,
+            disabled: !this.id,
+          }),
+        );
+      }
+    } else if (menuContext === 'ai-assistant') {
+      menuItems.push(
+        new MenuItem('Copy to Workspace', 'action', {
+          action: async () => {
+            const { newCardId } = await new CopyCardCommand(
+              commandContext,
+            ).execute({
+              sourceCard: this,
+            });
+
+            let showCardCommand = new ShowCardCommand(commandContext);
+            await showCardCommand.execute({
+              cardId: newCardId,
             });
           },
-          icon: cardTypeIcon(this as BaseDef),
-          disabled: !this,
+          icon: ArrowLeft,
         }),
-        new MenuItem('Delete', 'action', {
-          action: () => cardCrudFunctions.deleteCard(this),
-          icon: Trash2Icon,
-          dangerous: true,
-          disabled: !this.id,
+      );
+    } else if (
+      ['code-mode-preview', 'code-mode-playground'].includes(menuContext)
+    ) {
+      menuItems.push(
+        new MenuItem('Open in Interact Mode', 'action', {
+          action: () => {
+            new OpenInInteractModeCommand(commandContext).execute({
+              cardId,
+            });
+          },
+          icon: Eye,
         }),
       );
     }
