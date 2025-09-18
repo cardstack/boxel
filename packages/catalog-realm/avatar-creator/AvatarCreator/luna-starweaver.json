@@ -2,8 +2,8 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "CharacterCreator",
-        "module": "../character-creator"
+        "name": "AvatarCreator",
+        "module": "../avatar-creator"
       }
     },
     "type": "card",
@@ -31,7 +31,7 @@
       },
       "suggestionSkill": {
         "links": {
-          "self": "../../Skill/character-suggestion"
+          "self": "../../Skill/avatar-suggestion"
         }
       }
     }

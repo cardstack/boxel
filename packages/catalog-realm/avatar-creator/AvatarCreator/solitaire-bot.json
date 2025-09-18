@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "eyes": "Surprised",
+      "hair": "ShortHairDreads02",
+      "lips": "Twinkle",
+      "name": "Solitaire Bot",
+      "clothes": "BlazerSweater",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "eyebrows": "FlatNatural",
+      "skinTone": "SilverGray",
+      "hairColor": null
+    },
+    "relationships": {
+      "suggestionSkill": {
+        "links": {
+          "self": "../../Skill/avatar-suggestion"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../avatar-creator",
+        "name": "AvatarCreator"
+      }
+    }
+  }
+}

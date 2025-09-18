@@ -4,20 +4,28 @@ import {
   field,
   contains,
   containsMany,
+  linksTo,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import RecordGameResultCommand from '../commands/record-game-result';
 import { GameResult, GameStatusField } from '../game-result/game-result';
+import { PlayerCard } from '../player-card/player-card';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
 import type Owner from '@ember/owner';
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
+import ValidationSteps, {
+  type ValidationStep,
+  generateSetupValidationSteps,
+  canGameStart,
+} from '../components/validation-steps';
+
 import { realmURL } from '@cardstack/runtime-common';
 
 class PlayingCardField extends FieldDef {
@@ -27,32 +35,31 @@ class PlayingCardField extends FieldDef {
   @field faceUp = contains(BooleanField);
 }
 
-class StatsField extends FieldDef {
-  static displayName = 'Hand Statistics';
-
-  @field wins = contains(NumberField);
-  @field losses = contains(NumberField);
-  @field earnings = contains(NumberField);
-}
-
 class IsolatedTemplate extends Component<typeof BlackjackGame> {
   // Game state
   @tracked gameState = this.args.model.gameState;
   @tracked gameMessage = this.args.model.gameMessage;
 
-  // Player data
-  @tracked playerChips = this.args.model.playerChips || 5000;
-  @tracked currentBet = this.args.model.currentBet || 100;
-  @tracked statistics = this.args.model.statistics || {
-    wins: 0,
-    losses: 0,
-    earnings: 0,
-  };
+  // Player data - removed chips, betting, and statistics
 
   // Card deck and hands
   @tracked deck: PlayingCardField[] = [];
   @tracked playerHand: PlayingCardField[] = [];
   @tracked dealerHand: PlayingCardField[] = [];
+
+  // Check if game can start using shared validation logic
+  get gameCanStart() {
+    return canGameStart({
+      players: this.args.model.players || [],
+    });
+  }
+
+  // Generate validation steps for setup instructions using shared function
+  get validationSteps(): ValidationStep[] {
+    return generateSetupValidationSteps({
+      players: this.args.model.players || [],
+    });
+  }
 
   // Card and suit arrays for generating the deck
   suits = ['hearts', 'diamonds', 'clubs', 'spades'];
@@ -94,14 +101,14 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
 
       // Match game state based on the state we were in
       if (this.gameState === 'betting') {
-        this.gameMessage = 'Place your bet and deal';
+        this.gameMessage = 'Click Deal to start a new game';
       } else if (this.gameState === 'playerTurn') {
         this.gameMessage = 'Your turn. Hit or Stand?';
       } else if (this.gameState === 'dealerTurn') {
         this.gameMessage = "Dealer's turn.";
         // If we're in dealer turn but haven't flipped the card yet
         if (this.dealerHand.length > 0 && !this.dealerHand[1].faceUp) {
-          setTimeout(() => this.dealerPlay(), 1000);
+          setTimeout(() => this.playDealerTurn(), 1000);
         }
       } else if (this.gameState === 'gameOver') {
         // Game already over, no action needed
@@ -116,7 +123,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   initializeGame() {
     // Set initial state
     this.gameState = 'betting';
-    this.gameMessage = 'Place your bet and deal';
+    this.gameMessage = 'Click Deal to start a new game';
     this.playerHand = [];
     this.dealerHand = [];
   }
@@ -186,21 +193,12 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     return score;
   }
 
-  // Update the scores for player and dealer
-  updateScores() {
-    // We're not setting tracked properties anymore, just using the getters when needed
-  }
-
   // Check for blackjack
   checkForBlackjack() {
     const playerHasBlackjack =
       this.calculatedPlayerScore === 21 && this.playerHand.length === 2;
     const dealerHasBlackjack =
       this.calculatedDealerScore === 21 && this.dealerHand.length === 2;
-
-    if (!this.currentBet) {
-      throw new Error('Current bet is undefined');
-    }
 
     if (playerHasBlackjack && dealerHasBlackjack) {
       // Tie - both have blackjack
@@ -212,13 +210,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       this.recordGameResult();
       return true;
     } else if (playerHasBlackjack) {
-      // Player wins with blackjack (pays 3:2)
+      // Player wins with blackjack
       this.gameState = 'gameOver';
-      this.gameMessage = 'Blackjack! You win 1.5x your bet!';
-
-      this.playerChips += this.currentBet * 1.5;
-      this.statistics.wins += 1;
-      this.statistics.earnings += this.currentBet * 1.5;
+      this.gameMessage = 'Blackjack! You win!';
       this.saveGameState();
 
       // Record the game result
@@ -228,9 +222,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       // Dealer wins with blackjack
       this.gameState = 'gameOver';
       this.gameMessage = 'Dealer has Blackjack! You lose.';
-      this.playerChips -= this.currentBet;
-      this.statistics.losses += 1;
-      this.statistics.earnings -= this.currentBet;
       this.saveGameState();
 
       // Record the game result
@@ -246,9 +237,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     if (this.calculatedPlayerScore > 21) {
       this.gameState = 'gameOver';
       this.gameMessage = 'Bust! You lose.';
-      this.playerChips -= this.currentBet;
-      this.statistics.losses += 1;
-      this.statistics.earnings -= this.currentBet;
       this.saveGameState();
 
       // Record the game result
@@ -259,7 +247,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   }
 
   // Dealer's turn
-  dealerPlay() {
+  playDealerTurn() {
     // Reveal dealer's hole card
     const newDealerHand = [...this.dealerHand];
     newDealerHand.forEach((card) => (card.faceUp = true));
@@ -280,21 +268,12 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     if (dealerScore > 21) {
       // Dealer busts
       this.gameMessage = 'Dealer busts! You win!';
-      this.playerChips += this.currentBet;
-      this.statistics.wins += 1;
-      this.statistics.earnings += this.currentBet;
     } else if (dealerScore > playerScore) {
       // Dealer wins
       this.gameMessage = 'Dealer wins!';
-      this.playerChips -= this.currentBet;
-      this.statistics.losses += 1;
-      this.statistics.earnings -= this.currentBet;
     } else if (dealerScore < playerScore) {
       // Player wins
       this.gameMessage = 'You win!';
-      this.playerChips += this.currentBet;
-      this.statistics.wins += 1;
-      this.statistics.earnings += this.currentBet;
     } else {
       // Push (tie)
       this.gameMessage = "Push! It's a tie.";
@@ -308,21 +287,8 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   }
 
   // Action handlers
-  @action placeBet(amount: number) {
-    if (this.gameState !== 'betting') return;
-    if (amount > this.playerChips) return;
-    this.currentBet = amount;
-    this.gameMessage = `Bet placed: ${amount} chips. Deal to start the game.`;
-  }
-
   @action deal() {
-    if (this.gameState !== 'betting') return;
-
-    // Check if player has enough chips
-    if (this.playerChips < this.currentBet) {
-      this.gameMessage = 'Not enough chips to place bet!';
-      return;
-    }
+    if (!this.gameCanStart || this.gameState !== 'betting') return;
 
     // Reset hands
     this.playerHand = [];
@@ -372,6 +338,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     }
 
     this.gameMessage = `You drew a ${newCard.value}. Hit or Stand?`;
+    this.saveGameState();
   }
 
   @action stand() {
@@ -381,15 +348,12 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     this.gameMessage = "Dealer's turn.";
 
     // Dealer plays after a brief delay
-    setTimeout(() => this.dealerPlay(), 1000);
+    setTimeout(() => this.playDealerTurn(), 1000);
   }
 
   @action doubleDown() {
     if (this.gameState !== 'playerTurn' || this.playerHand.length !== 2) return;
-    if (this.playerChips < this.currentBet) return;
 
-    // Double the bet
-    this.currentBet *= 2;
     this.gameMessage = 'Double Down! Drawing one card then standing.';
 
     // Draw one card then stand with a new array reference
@@ -416,7 +380,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     }
 
     this.gameState = 'betting';
-    this.gameMessage = 'Place your bet and deal';
+    this.gameMessage = 'Click Deal to start a new game';
 
     // Clear the hands to ensure proper reactivity for the next game
     this.playerHand = [];
@@ -489,15 +453,10 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   // Save game state back to model for persistence
   saveGameState() {
     // Update the model's properties with our current state
-    this.args.model.playerChips = this.playerChips;
-    this.args.model.currentBet = this.currentBet;
     this.args.model.gameState = this.gameState;
     this.args.model.gameMessage = this.gameMessage;
-    if (this.args.model.statistics) {
-      this.args.model.statistics.wins = this.statistics.wins;
-      this.args.model.statistics.losses = this.statistics.losses;
-      this.args.model.statistics.earnings = this.statistics.earnings;
-    }
+    this.args.model.playerScore = this.calculatedPlayerScore;
+    this.args.model.dealerScore = this.calculatedDealerScore;
 
     // Clear and update the hands in the model
     this.args.model.playerHand = [];
@@ -533,7 +492,152 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   }
 
   <template>
+    <div class='blackjack-table'>
+      {{#unless this.gameCanStart}}
+        <div class='validation-steps-overlay'>
+          <ValidationSteps
+            @steps={{this.validationSteps}}
+            @title='Setup Required'
+            @description='You must link at least one dealer and one player card to continue.'
+            @editModeNote='Switch to edit mode to configure players'
+            class='validation-steps'
+          />
+        </div>
+      {{/unless}}
+      <div class='table-content'>
+        <div class='table-header'>
+          <div class='game-title'>{{@model.title}}</div>
+        </div>
+
+        <div class='game-area'>
+          <div class='dealer-area'>
+            <div class='area-label'>
+              <span>Dealer</span>
+              <span>Score: {{this.calculatedDealerScore}}</span>
+            </div>
+            <div class='card-area'>
+              {{#each this.dealerHand as |card|}}
+                <div class='card {{if (not card.faceUp) "hidden"}}'>
+                  {{#if card.faceUp}}
+                    <div class='card-top'>
+                      <div class='card-value'>{{card.value}}</div>
+                      <div class='suit {{card.suit}}'>
+                        {{#if (eq card.suit 'hearts')}}♥{{/if}}
+                        {{#if (eq card.suit 'diamonds')}}♦{{/if}}
+                        {{#if (eq card.suit 'clubs')}}♣{{/if}}
+                        {{#if (eq card.suit 'spades')}}♠{{/if}}
+                      </div>
+                    </div>
+                    <div class='card-bottom'>
+                      <div class='card-value'>{{card.value}}</div>
+                      <div class='suit {{card.suit}}'>
+                        {{#if (eq card.suit 'hearts')}}♥{{/if}}
+                        {{#if (eq card.suit 'diamonds')}}♦{{/if}}
+                        {{#if (eq card.suit 'clubs')}}♣{{/if}}
+                        {{#if (eq card.suit 'spades')}}♠{{/if}}
+                      </div>
+                    </div>
+                  {{/if}}
+                </div>
+              {{/each}}
+            </div>
+          </div>
+
+          <div class='player-area'>
+            <div class='area-label'>
+              <span>Players</span>
+              <span>Score: {{this.calculatedPlayerScore}}</span>
+            </div>
+            <div class='card-area'>
+              {{#each this.playerHand as |card|}}
+                <div class='card'>
+                  <div class='card-top'>
+                    <div class='card-value'>{{card.value}}</div>
+                    <div class='suit {{card.suit}}'>
+                      {{#if (eq card.suit 'hearts')}}♥{{/if}}
+                      {{#if (eq card.suit 'diamonds')}}♦{{/if}}
+                      {{#if (eq card.suit 'clubs')}}♣{{/if}}
+                      {{#if (eq card.suit 'spades')}}♠{{/if}}
+                    </div>
+                  </div>
+                  <div class='card-bottom'>
+                    <div class='card-value'>{{card.value}}</div>
+                    <div class='suit {{card.suit}}'>
+                      {{#if (eq card.suit 'hearts')}}♥{{/if}}
+                      {{#if (eq card.suit 'diamonds')}}♦{{/if}}
+                      {{#if (eq card.suit 'clubs')}}♣{{/if}}
+                      {{#if (eq card.suit 'spades')}}♠{{/if}}
+                    </div>
+                  </div>
+                </div>
+              {{/each}}
+            </div>
+          </div>
+        </div>
+
+        <div class='game-bottom-area'>
+          <div class='status-bar'>
+            {{this.gameMessage}}
+          </div>
+
+          <div class='controls-container'>
+            {{#if (eq this.gameState 'betting')}}
+              <div class='controls'>
+                <button
+                  class='button primary'
+                  disabled={{not this.gameCanStart}}
+                  {{on 'click' this.deal}}
+                >Deal</button>
+              </div>
+            {{else}}
+              <div class='controls'>
+                <button
+                  class='button primary'
+                  {{on 'click' this.hit}}
+                  disabled={{not (eq this.gameState 'playerTurn')}}
+                >Hit</button>
+                <button
+                  class='button secondary'
+                  {{on 'click' this.stand}}
+                  disabled={{not (eq this.gameState 'playerTurn')}}
+                >Stand</button>
+                <button
+                  class='button danger'
+                  {{on 'click' this.doubleDown}}
+                  disabled={{not (eq this.gameState 'playerTurn')}}
+                >Double Down</button>
+                <button
+                  class='button success'
+                  {{on 'click' this.newGame}}
+                  disabled={{not (eq this.gameState 'gameOver')}}
+                >New Game</button>
+              </div>
+            {{/if}}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <style scoped>
+      .validation-steps-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .validation-steps {
+        --validation-content-bg: rgba(27, 94, 32, 0.95);
+      }
       .blackjack-table {
         background-color: #1b5e20;
         background-image: radial-gradient(
@@ -945,147 +1049,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
         }
       }
     </style>
-
-    <div class='blackjack-table'>
-      <div class='table-content'>
-        <div class='table-header'>
-          <div class='game-title'>{{@model.casinoName}}
-            Blackjack</div>
-          <div class='statistics'>
-            <div class='stat'>Wins: {{this.statistics.wins}}</div>
-            <div class='stat'>Losses: {{this.statistics.losses}}</div>
-            <div class='stat'>Earnings: {{this.statistics.earnings}}</div>
-          </div>
-        </div>
-
-        <div class='game-area'>
-          <div class='dealer-area'>
-            <div class='area-label'>
-              <span>Dealer</span>
-              <span>Score: {{this.calculatedDealerScore}}</span>
-            </div>
-            <div class='card-area'>
-              {{#each this.dealerHand as |card|}}
-                <div class='card {{if (not card.faceUp) "hidden"}}'>
-                  {{#if card.faceUp}}
-                    <div class='card-top'>
-                      <div class='card-value'>{{card.value}}</div>
-                      <div class='suit {{card.suit}}'>
-                        {{#if (eq card.suit 'hearts')}}♥{{/if}}
-                        {{#if (eq card.suit 'diamonds')}}♦{{/if}}
-                        {{#if (eq card.suit 'clubs')}}♣{{/if}}
-                        {{#if (eq card.suit 'spades')}}♠{{/if}}
-                      </div>
-                    </div>
-                    <div class='card-bottom'>
-                      <div class='card-value'>{{card.value}}</div>
-                      <div class='suit {{card.suit}}'>
-                        {{#if (eq card.suit 'hearts')}}♥{{/if}}
-                        {{#if (eq card.suit 'diamonds')}}♦{{/if}}
-                        {{#if (eq card.suit 'clubs')}}♣{{/if}}
-                        {{#if (eq card.suit 'spades')}}♠{{/if}}
-                      </div>
-                    </div>
-                  {{/if}}
-                </div>
-              {{/each}}
-            </div>
-          </div>
-
-          <div class='player-area'>
-            <div class='area-label'>
-              <span>Player ({{@model.playerName}})</span>
-              <span>Score: {{this.calculatedPlayerScore}}</span>
-            </div>
-            <div class='card-area'>
-              {{#each this.playerHand as |card|}}
-                <div class='card'>
-                  <div class='card-top'>
-                    <div class='card-value'>{{card.value}}</div>
-                    <div class='suit {{card.suit}}'>
-                      {{#if (eq card.suit 'hearts')}}♥{{/if}}
-                      {{#if (eq card.suit 'diamonds')}}♦{{/if}}
-                      {{#if (eq card.suit 'clubs')}}♣{{/if}}
-                      {{#if (eq card.suit 'spades')}}♠{{/if}}
-                    </div>
-                  </div>
-                  <div class='card-bottom'>
-                    <div class='card-value'>{{card.value}}</div>
-                    <div class='suit {{card.suit}}'>
-                      {{#if (eq card.suit 'hearts')}}♥{{/if}}
-                      {{#if (eq card.suit 'diamonds')}}♦{{/if}}
-                      {{#if (eq card.suit 'clubs')}}♣{{/if}}
-                      {{#if (eq card.suit 'spades')}}♠{{/if}}
-                    </div>
-                  </div>
-                </div>
-              {{/each}}
-            </div>
-          </div>
-        </div>
-
-        <div class='game-bottom-area'>
-          <div class='status-bar'>
-            {{this.gameMessage}}
-          </div>
-
-          <div class='area-label'>
-            <span class='chips-display'>Chips: {{this.playerChips}}</span>
-            <span class='bet-amount'>Current Bet: {{this.currentBet}}</span>
-          </div>
-
-          <div class='controls-container'>
-            {{#if (eq this.gameState 'betting')}}
-              <div class='betting-controls'>
-                <button
-                  class='chip red'
-                  {{on 'click' (fn this.placeBet 5)}}
-                >5</button>
-                <button
-                  class='chip blue'
-                  {{on 'click' (fn this.placeBet 20)}}
-                >20</button>
-                <button
-                  class='chip green'
-                  {{on 'click' (fn this.placeBet 50)}}
-                >50</button>
-                <button
-                  class='chip black'
-                  {{on 'click' (fn this.placeBet 100)}}
-                >100</button>
-                <button
-                  class='button primary'
-                  {{on 'click' this.deal}}
-                >Deal</button>
-              </div>
-            {{else}}
-              <div class='controls'>
-                <button
-                  class='button primary'
-                  {{on 'click' this.hit}}
-                  disabled={{not (eq this.gameState 'playerTurn')}}
-                >Hit</button>
-                <button
-                  class='button secondary'
-                  {{on 'click' this.stand}}
-                  disabled={{not (eq this.gameState 'playerTurn')}}
-                >Stand</button>
-                <button
-                  class='button danger'
-                  {{on 'click' this.doubleDown}}
-                  disabled={{not (eq this.gameState 'playerTurn')}}
-                >Double Down</button>
-                <button
-                  class='button success'
-                  {{on 'click' this.newGame}}
-                  disabled={{not (eq this.gameState 'gameOver')}}
-                >New Game</button>
-              </div>
-            {{/if}}
-          </div>
-        </div>
-      </div>
-    </div>
   </template>
 }
 
@@ -1093,21 +1056,25 @@ export class BlackjackGame extends CardDef {
   static displayName = 'Blackjack Game';
   static prefersWideFormat = true;
 
-  @field playerName = contains(StringField);
-  @field playerChips = contains(NumberField);
-  @field currentBet = contains(NumberField);
+  @field casinoName = contains(StringField);
+
+  @field player = linksTo(() => PlayerCard);
+  @field dealer = linksTo(() => PlayerCard);
+
   @field gameState = contains(StringField);
   @field gameMessage = contains(StringField);
-  @field statistics = contains(StatsField);
   @field playerScore = contains(NumberField);
   @field dealerScore = contains(NumberField);
   @field dealerHand = containsMany(PlayingCardField);
   @field playerHand = containsMany(PlayingCardField);
-  @field casinoName = contains(StringField);
 
   @field title = contains(StringField, {
     computeVia: function (this: BlackjackGame) {
-      return 'Blackjack';
+      if (this.casinoName) {
+        return `Blackjack - ${this.casinoName}`;
+      } else {
+        return 'Blackjack';
+      }
     },
   });
 
@@ -1116,82 +1083,105 @@ export class BlackjackGame extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div class='edit-container'>
-        <h3>Casino Information</h3>
-        <div class='field-row'>
-          <label>Casino Name:</label>
-          <@fields.casinoName />
+        <div class='content-box'>
+          <h3>Casino Information</h3>
+          <FieldContainer @label='Casino Name' @vertical={{true}}>
+            <@fields.casinoName />
+          </FieldContainer>
         </div>
 
-        <h3>Player Information</h3>
-        <div class='field-row'>
-          <label>Player Name:</label>
-          <@fields.playerName />
-        </div>
-        <div class='field-row'>
-          <label>Starting Chips:</label>
-          <@fields.playerChips />
-        </div>
-        <div class='field-row'>
-          <label>Initial Bet:</label>
-          <@fields.currentBet />
+        <hr />
+
+        <div class='content-box'>
+          <h3>Player Setup</h3>
+
+          <FieldContainer @label='Players' @vertical={{true}}>
+            <@fields.players />
+          </FieldContainer>
+
+          <ValidationSteps
+            @steps={{this.validationSteps}}
+            class='validation-steps'
+          />
         </div>
 
-        <h3>Game Statistics</h3>
-        <div class='field-row'>
-          <label>Wins:</label>
-          <@fields.statistics.wins />
-        </div>
-        <div class='field-row'>
-          <label>Losses:</label>
-          <@fields.statistics.losses />
-        </div>
-        <div class='field-row'>
-          <label>Earnings:</label>
-          <@fields.statistics.earnings />
-        </div>
+        <hr />
 
-        <h3>Game State</h3>
-        <div class='field-row'>
-          <label>Game State:</label>
-          <@fields.gameState />
+        <div class='content-box'>
+          <h3>Game State</h3>
+          <FieldContainer @label='Game State' @vertical={{true}}>
+            <@fields.gameState />
+          </FieldContainer>
+          <FieldContainer @label='Game Message' @vertical={{true}}>
+            <@fields.gameMessage />
+          </FieldContainer>
+          <FieldContainer @label='Player Score' @vertical={{true}}>
+            <@fields.playerScore />
+          </FieldContainer>
+          <FieldContainer @label='Dealer Score' @vertical={{true}}>
+            <@fields.dealerScore />
+          </FieldContainer>
         </div>
-        <div class='field-row'>
-          <label>Game Message:</label>
-          <@fields.gameMessage />
-        </div>
-        <div class='field-row'>
-          <label>Player Score:</label>
-          <@fields.playerScore />
-        </div>
-        <div class='field-row'>
-          <label>Dealer Score:</label>
-          <@fields.dealerScore />
-        </div>
-
       </div>
+
       <style scoped>
+        .validation-steps {
+          /* Customize ValidationSteps using CSS variables */
+          --validation-content-bg: transparent;
+          --validation-content-border: none;
+          --validation-content-padding: 0;
+          --validation-content-box-shadow: none;
+          --validation-content-max-width: 100%;
+        }
         .edit-container {
           font-family: sans-serif;
           max-width: 600px;
           margin: 0 auto;
           padding: 20px;
         }
-        .field-row {
+        .edit-container > * + * {
+          margin-top: 0.5rem;
+        }
+        .content-box {
+          background-color: rgba(27, 94, 32, 0.95);
+          border: 3px solid #f9a825;
+          border-radius: 20px;
+          padding: 20px;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+          color: white;
+        }
+        .content-box > * + * {
+          margin-top: 0.5rem;
+        }
+        .content-box h3 {
+          font-size: 24px;
+          margin-top: 0;
           margin-bottom: 15px;
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
+          color: #f9a825;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+          border: none;
+          padding: 0;
         }
-        h3 {
-          margin-top: 20px;
-          margin-bottom: 10px;
-          border-bottom: 1px solid #eee;
-          padding-bottom: 5px;
+        .help-text {
+          font-size: 16px;
+          color: #e8f5e8;
+          font-style: italic;
+          margin-bottom: 15px;
+          line-height: 1.4;
         }
-        label {
-          font-weight: bold;
+        hr {
+          border: none;
+          border-top: 1px solid #eee;
+          margin: 20px 0;
         }
       </style>
     </template>
+
+    // Generate validation steps for setup instructions using shared function
+    get validationSteps(): ValidationStep[] {
+      return generateSetupValidationSteps({
+        players: this.args.model.players || [],
+      });
+    }
   };
 }

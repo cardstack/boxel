@@ -2,15 +2,15 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Magnus Stormbeard",
-      "hair": "ShortHairDreads01",
-      "hairColor": "SilverGray",
-      "lips": "Serious",
-      "skinTone": "Pale",
-      "eyes": "Squint",
-      "eyebrows": "Angry",
-      "clothes": "Overall",
-      "title": "Magnus Stormbeard",
+      "name": "Zara Nightshade",
+      "hair": "LongHairCurly",
+      "hairColor": "Blue",
+      "lips": "Smile",
+      "skinTone": "Brown",
+      "eyes": "Hearts",
+      "eyebrows": "RaisedExcited",
+      "clothes": "BlazerSweater",
+      "title": "Zara Nightshade",
       "cardInfo": {
         "title": null,
         "description": null,
@@ -23,7 +23,7 @@
     "relationships": {
       "suggestionSkill": {
         "links": {
-          "self": "http://localhost:4201/catalog/Skill/character-suggestion"
+          "self": "http://localhost:4201/catalog/Skill/avatar-suggestion"
         }
       },
       "cardInfo.theme": {
@@ -34,8 +34,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4201/catalog/character-creator/character-creator",
-        "name": "CharacterCreator"
+        "module": "http://localhost:4201/catalog/avatar-creator/avatar-creator",
+        "name": "AvatarCreator"
       }
     }
   }

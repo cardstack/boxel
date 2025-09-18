@@ -2,26 +2,26 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "CharacterCreator",
-        "module": "../character-creator"
+        "name": "AvatarCreator",
+        "module": "../avatar-creator"
       }
     },
     "type": "card",
     "attributes": {
-      "eyes": "Hearts",
-      "hair": "LongHairShavedSides",
-      "lips": "Smile",
-      "name": "Pichu",
-      "clothes": "Hoodie",
+      "eyes": "Surprised",
+      "hair": "ShortHairDreads02",
+      "lips": "Twinkle",
+      "name": "Blackjack Bot",
+      "clothes": "BlazerSweater",
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
         "thumbnailURL": null
       },
-      "eyebrows": "UpDownNatural",
-      "skinTone": "Tanned",
-      "hairColor": "Auburn"
+      "eyebrows": "FlatNatural",
+      "skinTone": "SilverGray",
+      "hairColor": null
     },
     "relationships": {
       "cardInfo.theme": {
@@ -31,7 +31,7 @@
       },
       "suggestionSkill": {
         "links": {
-          "self": "../../Skill/character-suggestion"
+          "self": "../../Skill/avatar-suggestion"
         }
       }
     }

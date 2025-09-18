@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PlayerCard",
+        "module": "../player-card"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "type": "human",
+      "cardInfo": {
+        "notes": null,
+        "title": "Magnus Stormbeard",
+        "description": null,
+        "thumbnailURL": "https://avataaars.io/?topType=ShortHairDreads01&accessoriesType=Blank&hairColor=SilverGray&facialHairType=Blank&clotheType=Overall&eyeType=Squint&eyebrowType=Angry&mouthType=Serious&skinColor=Pale"
+      }
+    },
+    "relationships": {
+      "player": {
+        "links": {
+          "self": "../../avatar-creator/AvatarCreator/magnus-stormbeard"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -18,7 +18,7 @@ import { Skill } from 'https://cardstack.com/base/skill';
 
 import UserIcon from '@cardstack/boxel-icons/user';
 
-class IsolatedTemplate extends Component<typeof CharacterCreator> {
+class IsolatedTemplate extends Component<typeof AvatarCreator> {
   @tracked selectedCategory = 'hair';
   @tracked errorMessage = '';
   @tracked copySuccess = false;
@@ -180,7 +180,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
   }
 
   @action
-  generateRandomCharacter() {
+  generateRandomAvatar() {
     // Play click sound
     this.playClickSound();
 
@@ -414,15 +414,13 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
     if (!this.roomId) {
       let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
       let result = await useAiAssistantCommand.execute({
-        roomName: `Character Suggestion: ${
-          this.args.model.name || 'New Character'
-        }`,
+        roomName: `Avatar Suggestion: ${this.args.model.name || 'New Avatar'}`,
         openRoom: true,
         skillCards: [this.args.model.suggestionSkill],
         attachedCards: [this.args.model as CardDef],
         prompt:
           this.suggestionPrompt ||
-          'Please suggest character features for this avatar.',
+          'Please suggest avatar features for this avatar.',
       });
 
       this.roomId = result.roomId;
@@ -437,7 +435,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
     return this.roomId;
   };
 
-  suggestCharacter = async () => {
+  suggestAvatar = async () => {
     if (this.isSuggesting) return;
 
     this.isSuggesting = true;
@@ -458,28 +456,26 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         throw new Error('Room setup failed');
       }
     } catch (error) {
-      console.error('Error getting character suggestions:', error);
-      alert(
-        'There was an error getting character suggestions. Please try again.',
-      );
+      console.error('Error getting avatar suggestions:', error);
+      alert('There was an error getting avatar suggestions. Please try again.');
     } finally {
       this.isSuggesting = false;
     }
   };
 
   <template>
-    <div class='character-creator'>
-      <div class='character-display'>
-        <div class='character-preview'>
+    <div class='avatar-creator'>
+      <div class='avatar-display'>
+        <div class='avatar-preview'>
           <img
             src={{this.avataaarsUrl}}
-            alt='Character Avatar'
+            alt='Avatar Avatar'
             class='avatar-image'
           />
         </div>
 
-        <div class='character-info'>
-          <h2>{{if @model.name @model.name 'Unnamed Character'}}</h2>
+        <div class='avatar-info'>
+          <h2>{{if @model.name @model.name 'Unnamed Avatar'}}</h2>
 
           <div class='url-copy-section'>
             <div class='url-display-row'>
@@ -527,7 +523,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
             {{/if}}
           </div>
 
-          <div class='character-details'>
+          <div class='avatar-details'>
             {{#if @model.hair}}
               <div class='detail-item'>
                 <strong>Hair:</strong>
@@ -576,21 +572,21 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
 
       <div class='customization-panel'>
         <div class='panel-header'>
-          <h3>Customize Your Character</h3>
+          <h3>Customize Your Avatar</h3>
           <div class='header-buttons'>
             <button
               class='random-btn'
-              {{on 'click' this.generateRandomCharacter}}
-              title='Generate Random Character'
+              {{on 'click' this.generateRandomAvatar}}
+              title='Generate Random Avatar'
             >
               🎲 Random
             </button>
             {{#if @model.suggestionSkill}}
               <button
                 class='ai-suggestion-btn'
-                {{on 'click' this.suggestCharacter}}
+                {{on 'click' this.suggestAvatar}}
                 disabled={{this.isSuggesting}}
-                title='Get AI Character Suggestions'
+                title='Get AI Avatar Suggestions'
               >
                 {{#if this.isSuggesting}}
                   🤖 Suggesting...
@@ -699,7 +695,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
     <style scoped>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Fredoka+One:wght@400&family=Press+Start+2P:wght@400&display=swap');
 
-      .character-creator {
+      .avatar-creator {
         display: grid;
         grid-template-columns: 420px 1fr;
         gap: 2rem;
@@ -711,7 +707,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         overflow: hidden;
       }
 
-      .character-creator::before {
+      .avatar-creator::before {
         content: '';
         position: absolute;
         top: 0;
@@ -751,7 +747,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         }
       }
 
-      .character-display {
+      .avatar-display {
         background: rgba(52, 73, 94, 0.8);
         border: 4px solid #ffffff;
         border-radius: 2px;
@@ -781,7 +777,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         }
       }
 
-      .character-preview {
+      .avatar-preview {
         width: 280px;
         height: 280px;
         border: 6px solid #ffffff;
@@ -806,7 +802,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         transition: all 0.3s ease;
       }
 
-      .character-preview:hover {
+      .avatar-preview:hover {
         transform: scale(1.05);
         box-shadow: 0 0 60px rgba(52, 152, 219, 0.6);
       }
@@ -831,7 +827,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         filter: brightness(1.1) contrast(1.05) saturate(1.1);
       }
 
-      .character-info h2 {
+      .avatar-info h2 {
         margin: 0 0 1.5rem 0;
         color: #ffffff;
         font-size: 2rem;
@@ -971,7 +967,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         }
       }
 
-      .character-details {
+      .avatar-details {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0.75rem;
@@ -1590,20 +1586,20 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
 
       /* Responsive Design */
       @media (max-width: 1200px) {
-        .character-creator {
+        .avatar-creator {
           grid-template-columns: 400px 1fr;
           gap: 1.5rem;
           padding: 1.5rem;
         }
 
-        .character-preview {
+        .avatar-preview {
           width: 260px;
           height: 260px;
         }
       }
 
       @media (max-width: 720px) {
-        .character-creator {
+        .avatar-creator {
           padding: 0.75rem;
           gap: 0.75rem;
           grid-template-columns: 1fr;
@@ -1632,13 +1628,13 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
   </template>
 }
 
-export class CharacterCreator extends CardDef {
-  static displayName = 'Character Creator';
+export class AvatarCreator extends CardDef {
+  static displayName = 'Avatar Creator';
   static icon = UserIcon;
   static prefersWideFormat = true;
 
   @field name = contains(StringField, {
-    description: 'Name of the character',
+    description: 'Name of the avatar',
   });
 
   @field hair = contains(StringField, {
@@ -1672,8 +1668,26 @@ export class CharacterCreator extends CardDef {
   @field suggestionSkill = linksTo(() => Skill);
 
   @field title = contains(StringField, {
-    computeVia: function (this: CharacterCreator) {
-      return this.name ?? 'Untitled Character';
+    computeVia: function (this: AvatarCreator) {
+      return this.name ?? 'Untitled Avatar';
+    },
+  });
+
+  @field thumbnailURL = contains(StringField, {
+    computeVia: function (this: AvatarCreator) {
+      const params = [
+        `topType=${encodeURIComponent(this.hair || 'ShortHairShortFlat')}`,
+        `accessoriesType=Blank`,
+        `hairColor=${encodeURIComponent(this.hairColor || 'BrownDark')}`,
+        `facialHairType=Blank`,
+        `clotheType=${encodeURIComponent(this.clothes || 'BlazerShirt')}`,
+        `eyeType=${encodeURIComponent(this.eyes || 'Default')}`,
+        `eyebrowType=${encodeURIComponent(this.eyebrows || 'Default')}`,
+        `mouthType=${encodeURIComponent(this.lips || 'Default')}`,
+        `skinColor=${encodeURIComponent(this.skinTone || 'Light')}`,
+      ];
+
+      return `https://avataaars.io/?${params.join('&')}`;
     },
   });
 

@@ -14,55 +14,25 @@
         "description": null,
         "thumbnailURL": null
       },
-      "gameState": "gameOver",
+      "gameState": "betting",
       "casinoName": "Casino de Monte-Carlo",
-      "currentBet": 100,
-      "dealerHand": [
-        {
-          "suit": "spades",
-          "value": "A",
-          "faceUp": true
-        },
-        {
-          "suit": "diamonds",
-          "value": "2",
-          "faceUp": true
-        },
-        {
-          "suit": "clubs",
-          "value": "J",
-          "faceUp": true
-        },
-        {
-          "suit": "clubs",
-          "value": "10",
-          "faceUp": true
-        }
-      ],
-      "playerHand": [
-        {
-          "suit": "spades",
-          "value": "K",
-          "faceUp": true
-        },
-        {
-          "suit": "diamonds",
-          "value": "7",
-          "faceUp": true
-        }
-      ],
-      "playerName": "Jack Black",
-      "statistics": {
-        "wins": 3,
-        "losses": 5,
-        "earnings": -110
-      },
-      "dealerScore": null,
-      "gameMessage": "Dealer busts! You win!",
-      "playerChips": 4890,
-      "playerScore": null
+      "dealerHand": [],
+      "playerHand": [],
+      "dealerScore": 0,
+      "gameMessage": "Click Deal to start a new game",
+      "playerScore": 0
     },
     "relationships": {
+      "players.0": {
+        "links": {
+          "self": "../../player-card/PlayerCard/blackjack-bot"
+        }
+      },
+      "players.1": {
+        "links": {
+          "self": "../../PlayerCard/c45ce9d7-95b3-4324-800a-01bd3d20e703"
+        }
+      },
       "cardInfo.theme": {
         "links": {
           "self": null
