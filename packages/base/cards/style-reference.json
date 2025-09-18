@@ -6,7 +6,7 @@
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/style-reference",
-        "name": "default"
+        "name": "StyleReference"
       }
     },
     "meta": {

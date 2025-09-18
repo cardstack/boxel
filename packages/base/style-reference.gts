@@ -129,7 +129,7 @@ class Isolated extends Component<typeof StyleReference> {
   </template>
 }
 
-export default class StyleReference extends Theme {
+export class StyleReference extends Theme {
   static displayName = 'Style Reference';
 
   @field styleName = contains(StringField);
