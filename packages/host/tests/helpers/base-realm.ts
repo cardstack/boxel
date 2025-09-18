@@ -16,6 +16,7 @@ import type * as NumberFieldModule from 'https://cardstack.com/base/number';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
+import type * as LLMEnvironmentModule from 'https://cardstack.com/base/llm-environment';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -55,6 +56,12 @@ let CardsGrid: CardsGrid;
 
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
+
+type LLMEnvironment = (typeof LLMEnvironmentModule)['LLMEnvironment'];
+let LLMEnvironment: LLMEnvironment;
+
+type ModelConfiguration = (typeof LLMEnvironmentModule)['ModelConfiguration'];
+let ModelConfiguration: ModelConfiguration;
 
 let field: (typeof CardAPIModule)['field'];
 let CardDef: (typeof CardAPIModule)['CardDef'];
@@ -140,6 +147,13 @@ async function initialize() {
   Skill = (await loader.import<typeof SkillModule>(`${baseRealm.url}skill`))
     .Skill;
 
+  let llmEnvironmentModule = await loader.import<typeof LLMEnvironmentModule>(
+    `${baseRealm.url}llm-environment`,
+  );
+
+  LLMEnvironment = llmEnvironmentModule.LLMEnvironment;
+  ModelConfiguration = llmEnvironmentModule.ModelConfiguration;
+
   let cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,
   );
@@ -216,4 +230,6 @@ export {
   Skill,
   instanceOf,
   CardInfoField,
+  LLMEnvironment,
+  ModelConfiguration,
 };

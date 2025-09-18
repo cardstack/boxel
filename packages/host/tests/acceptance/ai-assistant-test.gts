@@ -57,6 +57,8 @@ import {
   field,
   setupBaseRealm,
   StringField,
+  LLMEnvironment,
+  ModelConfiguration,
 } from '../helpers/base-realm';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -259,6 +261,33 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let mangoPet = new Pet({ name: 'Mango' });
 
+    // Create model configurations for testing
+    let model1 = new ModelConfiguration({
+      title: 'GPT-4 Turbo',
+      modelId: 'openai/gpt-4-turbo',
+      temperature: 0.7,
+      toolsSupported: true,
+    });
+
+    let model2 = new ModelConfiguration({
+      title: 'Claude 3.5 Haiku',
+      modelId: 'anthropic/claude-3.5-haiku',
+      temperature: 0.5,
+      toolsSupported: true,
+    });
+
+    let model3 = new ModelConfiguration({
+      title: 'Claude 3.7 Sonnet',
+      modelId: 'anthropic/claude-3.7-sonnet',
+      temperature: 0.8,
+      toolsSupported: true,
+    });
+
+    // Create LLM environment with model configurations
+    let llmEnvironment = new LLMEnvironment({
+      modelConfigurations: [model1, model2, model3],
+    });
+
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
@@ -357,6 +386,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             },
           },
         },
+        'ModelConfiguration/gpt-4-turbo.json': model1,
+        'ModelConfiguration/claude-3.5-haiku.json': model2,
+        'ModelConfiguration/claude-3.7-sonnet.json': model3,
+        'LLMEnvironment/default.json': llmEnvironment,
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
@@ -527,24 +560,28 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(DEFAULT_LLM_ID_TO_NAME[DEFAULT_LLM]);
+
+    // Default model should be the first one in the LLM environment (gpt-4-turbo)
+    let defaultModelId = 'openai/gpt-4-turbo';
+    let defaultModelName = 'GPT-4 Turbo'; // Expected display name from model configuration title
+
+    assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
 
+    // Should have 3 models from our LLM environment
     assert.dom('[data-test-llm-select-item]').exists({
-      count: DEFAULT_LLM_LIST.length,
+      count: 3,
     });
 
     let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
-    let llmName = DEFAULT_LLM_ID_TO_NAME[llmIdToChangeTo];
+    let llmNameToChangeTo = 'Claude 3.7 Sonnet'; // Expected display name
 
     assert
       .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
-      .hasText(llmName);
+      .hasText(llmNameToChangeTo);
     await click(`[data-test-llm-select-item="${llmIdToChangeTo}"] button`);
     await click('[data-test-pill-menu-button]');
-    assert.dom('[data-test-llm-select-selected]').hasText(llmName);
+    assert.dom('[data-test-llm-select-selected]').hasText(llmNameToChangeTo);
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, llmIdToChangeTo);
