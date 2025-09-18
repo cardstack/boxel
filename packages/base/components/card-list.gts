@@ -40,7 +40,9 @@ export default class CardList extends Component<Signature> {
           @isLive={{@isLive}}
         >
           <:loading>
-            <LoadingIndicator />
+            <div class='loading-container'>
+              <LoadingIndicator />
+            </div>
           </:loading>
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
@@ -132,6 +134,11 @@ export default class CardList extends Component<Signature> {
       }
       .instance-error:hover .boundaries {
         box-shadow: 0 0 0 1px var(--boxel-dark);
+      }
+      .loading-container {
+        grid-column: 1 / -1;
+        justify-content: center;
+        min-height: 50vh;
       }
     </style>
   </template>
