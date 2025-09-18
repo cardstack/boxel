@@ -345,7 +345,7 @@ class RealmResource {
 
     let refreshMs = 0;
 
-    if (!this.claims.sessionRoom) {
+    if (/*!this.claims.sessionRoom*/ false) {
       // Force JWT renewal to ensure presence of sessionRoom property
       console.log(`JWT for realm ${this.url} has no session room, renewing`);
     } else {
@@ -631,12 +631,20 @@ export default class RealmService extends Service {
     return resource;
   }
 
-  private getOrCreateRealmResource(realmURL: string): RealmResource {
+  getOrCreateRealmResource(
+    realmURL: string,
+    token: string | undefined,
+  ): RealmResource {
     // this should be the only place we do the untracked read. It needs to be
     // untracked so our `this.realms.set` below will not be an assertion.
     let resource = this.knownRealm(realmURL, false);
+
+    if (resource && resource?.token !== token) {
+      resource.token = token; // this will trigger recalculation errors
+    }
+
     if (!resource) {
-      resource = this.createRealmResource(realmURL, undefined);
+      resource = this.createRealmResource(realmURL, token);
       this.realms.set(realmURL, resource);
       // only after the set has happened can we safely do the tracked read to
       // establish our depenency.
@@ -680,6 +688,7 @@ export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
+  // debugger;
   return JSON.parse(atob(payload)) as JWTPayload;
 }
 

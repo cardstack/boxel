@@ -182,6 +182,20 @@ export default class RealmServerService extends Service {
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
+  async fetchTokensForAllUserRealms() {
+    await this.login();
+    let response = await this.network.fetch(`${this.url.href}_realm-auth`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    return response.json();
+  }
+
   @cached
   get availableRealmURLs() {
     return this.availableRealms.map((r) => r.url);
