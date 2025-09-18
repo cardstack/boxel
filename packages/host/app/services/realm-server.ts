@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 
 import { cached } from '@glimmer/tracking';
 
-import { restartableTask, rawTimeout, task, timeout } from 'ember-concurrency';
+import { restartableTask, rawTimeout, task } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
@@ -429,7 +429,6 @@ export default class RealmServerService extends Service {
 
   async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
     await this.login();
-    await timeout(5000);
 
     const response = await this.network.fetch(
       `${this.url.href}_publish-realm`,
@@ -459,7 +458,6 @@ export default class RealmServerService extends Service {
 
   async unpublishRealm(publishedRealmURL: string) {
     await this.login();
-    await timeout(5000);
 
     const response = await this.network.fetch(
       `${this.url.href}_unpublish-realm`,

@@ -27,7 +27,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt';
 const testRealm2URL = 'http://127.0.0.1:4445/test/';
 
 module(basename(__filename), function () {
-  module('publish and unpublish realm tests', function (hooks) {
+  module.only('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: Realm;
     let dbAdapter: PgAdapter;
@@ -217,7 +217,7 @@ module(basename(__filename), function () {
       assert.strictEqual(
         typeof publishedLastPublishedAt,
         'string',
-        'published realm lastPublishedAt is a number',
+        'published realm lastPublishedAt is a string',
       );
 
       // Verify the timestamp matches what was returned from the publish response

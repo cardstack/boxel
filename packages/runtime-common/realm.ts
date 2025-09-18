@@ -120,7 +120,7 @@ export type RealmInfo = {
   visibility: RealmVisibility;
   realmUserId?: string;
   publishable: boolean | null;
-  lastPublishedAt: number | Record<string, number> | null;
+  lastPublishedAt: string | Record<string, string> | null;
 };
 
 export interface FileRef {
@@ -2600,13 +2600,13 @@ export class Realm {
   }
 
   private async getLastPublishedAt(): Promise<
-    number | Record<string, number> | null
+    string | Record<string, string> | null
   > {
     try {
       // First check if this realm is a published realm
       let publishedRealmData = await this.queryPublishedRealm();
       if (publishedRealmData) {
-        return Number(publishedRealmData.last_published_at);
+        return publishedRealmData.last_published_at;
       }
 
       // If not published, check if this is a source realm with published versions
@@ -2615,7 +2615,7 @@ export class Realm {
         return Object.fromEntries(
           publishedVersions.map((p) => [
             p.published_realm_url,
-            Number(p.last_published_at),
+            p.last_published_at,
           ]),
         );
       }
@@ -2628,13 +2628,13 @@ export class Realm {
   }
 
   private async queryPublishedRealm(): Promise<{
-    last_published_at: number;
+    last_published_at: string;
   } | null> {
     try {
       let results = (await query(this.#dbAdapter, [
         `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
         param(this.url),
-      ])) as { last_published_at: number }[];
+      ])) as { last_published_at: string }[];
 
       return results.length > 0 ? results[0] : null;
     } catch (error) {
@@ -2644,13 +2644,13 @@ export class Realm {
   }
 
   private async querySourceRealmPublications(): Promise<
-    { published_realm_url: string; last_published_at: number }[]
+    { published_realm_url: string; last_published_at: string }[]
   > {
     try {
       let results = (await query(this.#dbAdapter, [
         `SELECT published_realm_url, last_published_at FROM published_realms WHERE source_realm_url =`,
         param(this.url),
-      ])) as { published_realm_url: string; last_published_at: number }[];
+      ])) as { published_realm_url: string; last_published_at: string }[];
 
       return results;
     } catch (error) {
@@ -2830,8 +2830,6 @@ export class Realm {
 
   private async startFileWatcher() {
     await this.#adapter.subscribe((data) => {
-      console.log('subscribe');
-      console.log(data);
       let tracked = this.getTrackedWrite(data);
       if (!tracked || tracked.isTracked) {
         return;
