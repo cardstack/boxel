@@ -16,32 +16,30 @@ import {
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
+import {
+  PromptParts,
+  isRecognisedDebugCommand,
+  getPromptParts,
+  isInDebugMode,
+  isCommandResultStatusApplied,
+  getRoomEvents,
+  sendPromptAsDebugMessage,
+  constructHistory,
+} from '@cardstack/runtime-common/ai';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
 } from '@cardstack/runtime-common/matrix-constants';
-import {
-  type PromptParts,
-  isCommandResultStatusApplied,
-  getPromptParts,
-  isInDebugMode,
-} from './helpers';
 
-import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
-import { constructHistory } from './lib/history';
+import { handleDebugCommands } from './lib/debug';
 import { Responder } from './lib/responder';
 import {
   shouldSetRoomTitle,
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import {
-  getRoomEvents,
-  type MatrixClient,
-  sendPromptAsDebugMessage,
-} from './lib/matrix/util';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -54,6 +52,7 @@ import { acquireLock, releaseLock } from './lib/queries';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
+import { type MatrixClient } from 'matrix-js-sdk';
 
 // Silence FetchHttpApi Matrix SDK logs
 matrixLogger.setLevel('warn');
@@ -312,7 +311,21 @@ Common issues are:
         );
 
         let promptParts: PromptParts;
-        let eventList = await getRoomEvents(room.roomId, client, event.getId());
+        let eventList: DiscreteMatrixEvent[];
+        try {
+          eventList = await getRoomEvents(room.roomId, client, event.getId());
+        } catch (e) {
+          log.error(e);
+          Sentry.captureException(e, {
+            extra: {
+              roomId: room.roomId,
+              eventId: eventId,
+              eventBody: eventBody,
+              senderMatrixUserId: senderMatrixUserId,
+            },
+          });
+          return;
+        }
 
         // Return early here if it's a debug event
         if (isRecognisedDebugCommand(eventBody)) {
@@ -347,6 +360,14 @@ Common issues are:
           await responder.ensureThinkingMessageSent();
         } catch (e) {
           log.error(e);
+          Sentry.captureException(e, {
+            extra: {
+              roomId: room.roomId,
+              eventId: eventId,
+              eventBody: eventBody,
+              senderMatrixUserId: senderMatrixUserId,
+            },
+          });
           await responder.onError(
             new Error(
               'There was an error processing chat history. Please open another session.',
@@ -451,7 +472,13 @@ Common issues are:
         return;
       } catch (e) {
         log.error(e);
-        Sentry.captureException(e);
+        Sentry.captureException(e, {
+          extra: {
+            roomId: room?.roomId,
+            eventId: event.getId(),
+            eventType: event.getType(),
+          },
+        });
         return;
       }
     },
@@ -488,7 +515,13 @@ Common issues are:
       return await assistant.setTitle(room.roomId, history, event);
     } catch (e) {
       log.error(e);
-      Sentry.captureException(e);
+      Sentry.captureException(e, {
+        extra: {
+          roomId: room?.roomId,
+          eventId: event.getId(),
+          eventType: event.getType(),
+        },
+      });
       return;
     }
   });
@@ -515,6 +548,10 @@ Common issues are:
   log.info('client started');
 })().catch((e) => {
   log.error(e);
-  Sentry.captureException(e);
+  Sentry.captureException(e, {
+    extra: {
+      aiBotInstanceId: aiBotInstanceId,
+    },
+  });
   process.exit(1);
 });

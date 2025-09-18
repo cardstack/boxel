@@ -146,14 +146,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         border: 1px solid var(--border, var(--boxel-form-control-border-color));
         grid-column: -1 / 1;
       }
-      .card-info-header :deep(.add-button--full-width:hover),
-      .card-info-header :deep(.add-button--full-width:active) {
-        border-color: transparent;
-        transition:
-          border-color var(--boxel-transition),
-          background-color var(--boxel-transition),
-          box-shadow var(--boxel-transition);
-      }
       .own-display-fields {
         display: grid;
         gap: var(--boxel-sp-lg);

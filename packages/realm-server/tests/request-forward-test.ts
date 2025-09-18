@@ -56,14 +56,12 @@ module(basename(__filename), function () {
           url: 'https://openrouter.ai/api/v1/chat/completions',
           apiKey: 'openrouter-api-key',
           creditStrategy: 'openrouter',
-          whitelisted: true,
           supportsStreaming: true,
         },
         {
           url: 'https://api.example.com',
           apiKey: 'example-api-key',
           creditStrategy: 'no-credit',
-          whitelisted: true,
           supportsStreaming: false,
         },
       ]);

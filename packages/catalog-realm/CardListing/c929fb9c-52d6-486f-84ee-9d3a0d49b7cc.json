@@ -49,12 +49,12 @@
       },
       "examples.0": {
         "links": {
-          "self": "../catalog-app/birthday-card/BirthdayCard/61360985-5f9f-4c8b-856d-9f1ab5217fce"
+          "self": "../birthday-card/BirthdayCard/61360985-5f9f-4c8b-856d-9f1ab5217fce"
         }
       },
       "examples.1": {
         "links": {
-          "self": "../catalog-app/birthday-card/BirthdayCard/b3ad6040-4f72-4284-9634-965c1ce567d4"
+          "self": "../birthday-card/BirthdayCard/b3ad6040-4f72-4284-9634-965c1ce567d4"
         }
       }
     },

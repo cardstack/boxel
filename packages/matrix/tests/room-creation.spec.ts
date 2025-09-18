@@ -1,16 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
 import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import {
   login,
   logout,
   assertRooms,
@@ -18,7 +8,6 @@ import {
   openRoom,
   openRenameMenu,
   reloadAndOpenAiAssistant,
-  registerRealmUsers,
   clearLocalStorage,
   sendMessage,
   getRoomId,
@@ -30,34 +19,34 @@ import {
   setupUserSubscribed,
   setSkillsRedirect,
   waitUntil,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
 
 test.describe('Room creation', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
 
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
-    synapse = await synapseStart();
+    testEnv = await startUniqueTestEnvironment();
     await setSkillsRedirect(page);
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-    await registerUser(synapse, 'user2', 'pass');
-    await registerUser(synapse, 'xuser', 'pass');
-    await clearLocalStorage(page, appURL);
-    await setupUserSubscribed('@user1:localhost', realmServer);
-    await setupUserSubscribed('@user2:localhost', realmServer);
-    await setupUserSubscribed('@xuser:localhost', realmServer);
+
+    await registerUser(testEnv.synapse!, 'user1', 'pass');
+    await registerUser(testEnv.synapse!, 'user2', 'pass');
+    await registerUser(testEnv.synapse!, 'xuser', 'pass');
+    await clearLocalStorage(page, testEnv.config.testHost);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
+    await setupUserSubscribed('@user2:localhost', testEnv.realmServer!);
+    await setupUserSubscribed('@xuser:localhost', testEnv.realmServer!);
   });
-  test.afterEach(async ({ page }) => {
-    await clearLocalStorage(page, appURL);
-    await synapseStop(synapse.synapseId);
-    await realmServer.stop();
+
+  test.afterEach(async () => {
+    await stopTestEnvironment(testEnv);
   });
 
   test('it can create a room', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
 
     let room1 = await getRoomId(page); // Automatically created room
     await assertRooms(page, [room1]);
@@ -69,7 +58,7 @@ test.describe('Room creation', () => {
     // Assert that the room selection persists for each tab separately after reload
     const context = page.context();
     const page2 = await context.newPage();
-    await page2.goto(appURL);
+    await page2.goto(testEnv.config.testHost);
     await openRoom(page, room1);
     await openRoom(page2, room2);
     await page.reload();
@@ -80,12 +69,12 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room1, room2]);
 
     await logout(page);
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     await assertRooms(page, [room1, room2]);
 
     // user2 should not be able to see user1's room
     await logout(page);
-    await login(page, 'user2', 'pass', { url: appURL });
+    await login(page, 'user2', 'pass', { url: testEnv.config.testHost });
 
     let room1New = await getRoomId(page); // Automatically created room
     await assertRooms(page, [room1New]);
@@ -96,7 +85,7 @@ test.describe('Room creation', () => {
   test.skip('it does not create a new room when another new room is available', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
 
     let room = await getRoomId(page); // Automatically created room
     await expect(page.locator(`[data-test-create-room-btn]`)).toBeDisabled();
@@ -118,12 +107,12 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room, newRoom]);
 
     await logout(page);
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     await assertRooms(page, [room, newRoom]);
 
     // user2 should not be able to see user1's room
     await logout(page);
-    await login(page, 'user2', 'pass', { url: appURL });
+    await login(page, 'user2', 'pass', { url: testEnv.config.testHost });
     let user2Room = await getRoomId(page);
     await assertRooms(page, [user2Room]);
     expect(user2Room).not.toEqual(room);
@@ -133,7 +122,7 @@ test.describe('Room creation', () => {
   // skipping flaky test:
   // https://linear.app/cardstack/issue/CS-7637/flaky-test-room-creationspects1217-%E2%80%BA-room-creation-%E2%80%BA-it-can-rename-a
   test.skip('it can rename a room', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
 
     let room1 = await getRoomId(page);
     await assertRooms(page, [room1]);
@@ -181,12 +170,12 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room1, room2, room3]);
 
     await logout(page);
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     await assertRooms(page, [room1, room2, room3]);
   });
 
   test('it can cancel renaming a room', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
 
     let room1 = await getRoomId(page);
     await assertRooms(page, [room1]);
@@ -224,7 +213,7 @@ test.describe('Room creation', () => {
   test('room names do not persist across different user sessions', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
 
     let room = await getRoomId(page);
     await sendMessage(page, room, 'Hello');
@@ -246,7 +235,7 @@ test.describe('Room creation', () => {
 
     await logout(page);
     await login(page, 'xuser', 'pass', {
-      url: appURL,
+      url: testEnv.config.testHost,
     });
 
     await expect(page.locator(`[data-test-close-ai-assistant]`)).toHaveCount(1);
@@ -256,9 +245,13 @@ test.describe('Room creation', () => {
   });
 
   test('it can delete a room', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     await page.locator(`[data-test-room-settled]`).waitFor();
-    let roomsBeforeDeletion = await getRoomsFromSync(synapse, 'user1', 'pass');
+    let roomsBeforeDeletion = await getRoomsFromSync(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+    );
 
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
@@ -299,7 +292,11 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     // For asserting the result of the forget matrix API
-    let roomsAfterDeletion = await getRoomsFromSync(synapse, 'user1', 'pass');
+    let roomsAfterDeletion = await getRoomsFromSync(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+    );
     let roomsAfterDeletionKeys = Object.keys(roomsAfterDeletion.join);
     let roomsBeforeDeletionKeys = Object.keys(roomsBeforeDeletion.join);
     expect(roomsAfterDeletionKeys.length).toEqual(
@@ -311,7 +308,7 @@ test.describe('Room creation', () => {
   });
 
   test('it can cancel deleting a room', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     let room = await getRoomId(page);
     await assertRooms(page, [room]);
 
@@ -340,7 +337,7 @@ test.describe('Room creation', () => {
   test('it opens latest room available (or creates new) when current room is deleted', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
     let room2 = await createRoomWithMessage(page, 'Room 2');
@@ -372,7 +369,7 @@ test.describe('Room creation', () => {
   test.skip('it orders past-sessions list items based on last activity in reverse chronological order', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
     let room2 = await createRoomWithMessage(page, 'Room 2');

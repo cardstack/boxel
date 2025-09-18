@@ -2878,6 +2878,12 @@ importers:
       marked:
         specifier: 'catalog:'
         version: 12.0.1
+      matrix-js-sdk:
+        specifier: 'catalog:'
+        version: 31.0.0(patch_hash=e48a62d3beba2bd8e529374a29cd1b08fa45c4e8b1d6bbe0ec26d0abc3b42dca)
+      openai:
+        specifier: 'catalog:'
+        version: 5.12.2(patch_hash=6833f1bcf56cde16edb25881777c31d2745994c6ea992d1e2051d1248d213449)(ws@8.18.2)(zod@3.24.4)
       pluralize:
         specifier: 'catalog:'
         version: 8.0.0

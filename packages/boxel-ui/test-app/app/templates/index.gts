@@ -98,6 +98,9 @@ class IndexComponent extends Component {
         --radius: var(--boxel-border-radius);
         --border-color: var(--boxel-border-color);
       }
+      .FreestyleUsageCssVar-name {
+        width: 40%;
+      }
     </style>
   </template>
 

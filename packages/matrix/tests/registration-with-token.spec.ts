@@ -1,17 +1,5 @@
 import { expect, test } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  getAccountData,
-  loginUser,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
+import { getAccountData, loginUser } from '../docker/synapse';
 import {
   clearLocalStorage,
   validateEmail,
@@ -20,10 +8,12 @@ import {
   assertLoggedOut,
   logout,
   login,
-  registerRealmUsers,
   enterWorkspace,
   showAllCards,
   setupUser,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
@@ -31,37 +21,38 @@ import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
 const REGISTRATION_TOKEN = 'abc123';
 
 test.describe('User Registration w/ Token - isolated realm server', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
 
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(60_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    await smtpStart();
-    realmServer = await startRealmServer();
+    testEnv = await startUniqueTestEnvironment({ withSmtp: true });
   });
 
   test.afterEach(async () => {
-    await realmServer.stop();
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
+    await stopTestEnvironment(testEnv);
   });
 
   test('it can register a user with a registration token', async ({ page }) => {
-    let serverIndexUrl = new URL(appURL).origin;
+    let serverIndexUrl = new URL(testEnv.config.testHost).origin;
     test.setTimeout(120_000);
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerUser(synapse, 'user2', 'pass');
+    let admin = await registerUser(
+      testEnv.synapse!,
+      'admin',
+      'adminpass',
+      true,
+    );
+    await registerUser(testEnv.synapse!, 'user2', 'pass');
     await createRegistrationToken(
-      synapse,
+      testEnv.synapse!,
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
     await clearLocalStorage(page, serverIndexUrl);
     await gotoRegistration(page, serverIndexUrl);
+
+    await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 
     await expect(
       page.locator('[data-test-token-field]'),
@@ -92,7 +83,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await validateEmail(page, 'user1@example.com', {
+    await validateEmail(testEnv, page, 'user1@example.com', {
       onEmailPage: async (page) => {
         await expect(page).toHaveScreenshot('verification-email.png', {
           mask: [page.locator('.messagelist')],
@@ -154,7 +145,19 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     ).toHaveCount(1);
 
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
+
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+
     await enterWorkspace(page, "Test User's Workspace");
+
+    await expect(
+      page.locator(
+        `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+      ),
+    ).toContainText("Test User's Workspace");
 
     // assert workspace chooser toggle states
     await expect(
@@ -172,7 +175,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await logout(page);
     await assertLoggedOut(page);
 
-    await setupUser('@user2:localhost', realmServer);
+    await setupUser('@user2:localhost', testEnv.realmServer!);
 
     // assert workspaces state don't leak into other sessions
     await login(page, 'user2', 'pass', {
@@ -242,9 +245,9 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
-    let auth = await loginUser(synapse, `user1`, 'mypassword1!');
+    let auth = await loginUser(testEnv.synapse!, `user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(
-      synapse,
+      testEnv.synapse!,
       auth.userId,
       auth.accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,
@@ -255,14 +258,19 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   });
 
   test(`it can resend email validation message`, async ({ page }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await clearLocalStorage(page, appURL);
+    let admin = await registerUser(
+      testEnv.synapse!,
+      'admin',
+      'adminpass',
+      true,
+    );
+    await clearLocalStorage(page, testEnv.config.testHost);
     await createRegistrationToken(
-      synapse,
+      testEnv.synapse!,
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
-    await gotoRegistration(page, appURL);
+    await gotoRegistration(page, testEnv.config.testHost);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page.locator('[data-test-name-field]').fill('user1');
@@ -280,19 +288,26 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
+    await validateEmail(testEnv, page, 'user1@example.com', {
+      sendAttempts: 2,
+    });
   });
 
   test('it shows an error when the username is already taken', async ({
     page,
   }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    let admin = await registerUser(
+      testEnv.synapse!,
+      'admin',
+      'adminpass',
+      true,
+    );
     await createRegistrationToken(
-      synapse,
+      testEnv.synapse!,
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
-    await registerUser(synapse, 'user1', 'pass');
+    await registerUser(testEnv.synapse!, 'user1', 'pass');
     await clearLocalStorage(page);
 
     await gotoRegistration(page);
@@ -332,9 +347,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   test('it shows an error when the username start with an underscore', async ({
     page,
   }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    let admin = await registerUser(
+      testEnv.synapse!,
+      'admin',
+      'adminpass',
+      true,
+    );
     await createRegistrationToken(
-      synapse,
+      testEnv.synapse!,
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
@@ -377,9 +397,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   test('it shows an error when the username start with "realm/"', async ({
     page,
   }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    let admin = await registerUser(
+      testEnv.synapse!,
+      'admin',
+      'adminpass',
+      true,
+    );
     await createRegistrationToken(
-      synapse,
+      testEnv.synapse!,
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
@@ -422,9 +447,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   test(`it show an error when a invalid registration token is used`, async ({
     page,
   }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    let admin = await registerUser(
+      testEnv.synapse!,
+      'admin',
+      'adminpass',
+      true,
+    );
     await createRegistrationToken(
-      synapse,
+      testEnv.synapse!,
       admin.accessToken,
       REGISTRATION_TOKEN,
     );

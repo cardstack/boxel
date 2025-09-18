@@ -16,6 +16,7 @@ interface Signature {
     onCreateNewSession: (opts?: {
       addSameSkills: boolean;
       shouldCopyFileHistory: boolean;
+      shouldSummarizeSession: boolean;
     }) => void;
   };
 }
@@ -56,6 +57,9 @@ export default class NewSessionButton extends Component<Signature> {
     this.args.onCreateNewSession({
       addSameSkills: this.selectedOptions.has('Add Same Skills'),
       shouldCopyFileHistory: this.selectedOptions.has('Copy File History'),
+      shouldSummarizeSession: this.selectedOptions.has(
+        'Summarize Current Session',
+      ),
     });
     this.closeMenu();
   }

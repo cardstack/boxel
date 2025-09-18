@@ -19,9 +19,18 @@ export const DEVELOPMENT_SYNAPSE_PORT = 8008;
 export const TEST_SYNAPSE_IP_ADDRESS = '172.20.0.6';
 export const TEST_SYNAPSE_PORT = 8009;
 
-const registrationSecretFile = path.resolve(
-  path.join(__dirname, '..', '..', 'registration_secret.txt'),
-);
+// FIXME these are being left behind
+export function getRegistrationSecretFilename(uniquePort?: number) {
+  return uniquePort
+    ? `registration_secret_${uniquePort}.txt`
+    : 'registration_secret.txt';
+}
+
+function getRegistrationSecretFile(uniquePort?: number) {
+  let baseFileName = getRegistrationSecretFilename(uniquePort);
+
+  return path.resolve(path.join(__dirname, '..', '..', baseFileName));
+}
 
 interface SynapseConfig {
   configDir: string;
@@ -47,6 +56,7 @@ export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
   isTestInstance?: boolean,
+  uniquePort?: number,
 ): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
 
@@ -68,12 +78,21 @@ export async function cfgDirFromTemplate(
   const macaroonSecret = randB64Bytes(16);
   const formSecret = randB64Bytes(16);
 
-  // Use different IP and port for test instances to avoid conflicts
-  const host = isTestInstance
-    ? TEST_SYNAPSE_IP_ADDRESS
-    : DEVELOPMENT_SYNAPSE_IP_ADDRESS;
-  const port = isTestInstance ? TEST_SYNAPSE_PORT : DEVELOPMENT_SYNAPSE_PORT;
-  const baseUrl = `http://${host}:${port}`;
+  let host: string;
+  let port: number;
+
+  if (uniquePort) {
+    const uniqueIpSuffix = 100 + (uniquePort % 155);
+    host = `172.20.0.${uniqueIpSuffix}`;
+    port = uniquePort;
+  } else {
+    host = isTestInstance
+      ? TEST_SYNAPSE_IP_ADDRESS
+      : DEVELOPMENT_SYNAPSE_IP_ADDRESS;
+    port = isTestInstance ? TEST_SYNAPSE_PORT : DEVELOPMENT_SYNAPSE_PORT;
+  }
+
+  let baseUrl = `http://localhost:${port}`;
 
   // now copy homeserver.yaml, applying substitutions
   console.log(`Gen ${path.join(templateDir, 'homeserver.yaml')}`);
@@ -116,6 +135,7 @@ interface StartOptions {
   containerName?: string;
   suppressRegistrationSecretFile?: true;
   isTestInstance?: boolean;
+  uniquePort?: number;
 }
 export async function synapseStart(
   opts?: StartOptions,
@@ -124,9 +144,15 @@ export async function synapseStart(
   let templateName = opts?.template ?? 'test';
   let isTestInstance = opts?.isTestInstance ?? templateName.startsWith('test');
 
-  let containerName =
-    opts?.containerName ||
-    (isTestInstance ? 'boxel-synapse-test' : 'boxel-synapse');
+  let containerName;
+
+  if (opts?.containerName) {
+    containerName = opts.containerName;
+  } else if (opts?.uniquePort) {
+    containerName = `boxel-synapse-test-${opts.uniquePort}`;
+  } else {
+    containerName = isTestInstance ? 'boxel-synapse-test' : 'boxel-synapse';
+  }
 
   if (stopExisting) {
     // Stop the existing container if it's running
@@ -143,6 +169,7 @@ export async function synapseStart(
     templateName,
     opts?.dataDir,
     isTestInstance,
+    opts?.uniquePort,
   );
 
   console.log(
@@ -191,6 +218,8 @@ export async function synapseStart(
 
   const synapse: SynapseInstance = { synapseId, ...synCfg };
   synapses.set(synapseId, synapse);
+
+  let registrationSecretFile = getRegistrationSecretFile(opts?.uniquePort);
 
   function cleanupRegistrationSecret() {
     fse.removeSync(registrationSecretFile);
@@ -241,6 +270,7 @@ export async function registerUser(
   password: string,
   admin = false,
   displayName?: string,
+  customAppURL?: string,
 ): Promise<Credentials> {
   const url = `http://localhost:${synapse.port}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
@@ -270,13 +300,14 @@ export async function registerUser(
   // Set the test realm in the user's account data
   // so it appears in the list of available realms
   if (username.startsWith('user')) {
+    let realmURL = customAppURL || appURL;
     await updateAccountData(
       synapse,
       response.user_id,
       response.access_token,
       APP_BOXEL_REALMS_EVENT_TYPE,
       JSON.stringify({
-        realms: [`${appURL}/`],
+        realms: [`${realmURL}/`],
       }),
     );
   }

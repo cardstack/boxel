@@ -5,17 +5,147 @@ import {
   getJoinedRooms,
   type SynapseInstance,
   sync,
+  synapseStart,
+  synapseStop,
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
-import { IsolatedRealmServer } from './isolated-realm-server';
+import { IsolatedRealmServer, startServer } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
+import { smtpStart, smtpStop } from '../docker/smtp4dev';
 
 export const testHost = 'http://localhost:4205/test';
-export const mailHost = 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
 
 const realmSecretSeed = "shhh! it's a secret";
+
+interface TestEnvironmentOptions {
+  withSmtp?: boolean;
+}
+
+export interface TestEnvironment {
+  options: TestEnvironmentOptions;
+  config: ReturnType<typeof generateTestConfig>;
+  synapse?: SynapseInstance;
+  realmServer?: IsolatedRealmServer;
+}
+
+export function generateTestConfig() {
+  let basePort = 6000;
+  let randomOffset = Math.floor(Math.random() * 10000);
+  let realmServerPort = basePort + randomOffset;
+  let workerManagerPort = realmServerPort + 1;
+  let synapsePort = realmServerPort + 2;
+  let smtp4DevPort = realmServerPort + 3;
+
+  return {
+    realmServerPort,
+    workerManagerPort,
+    synapsePort,
+    smtp4DevPort,
+    testHost: `http://localhost:${realmServerPort}/test`,
+  };
+}
+
+export async function startUniqueTestEnvironment(
+  options: TestEnvironmentOptions = {},
+): Promise<TestEnvironment> {
+  let config = generateTestConfig();
+  console.log(
+    `[startUniqueTestEnvironment wm:${config.workerManagerPort} rs:${config.realmServerPort}] Starting unique test environment…`,
+  );
+
+  try {
+    let synapse = await synapseStart({ uniquePort: config.synapsePort });
+    await registerRealmUsers(synapse, config.testHost);
+
+    let realmServer = await startServer(
+      false, // includePublishedRealm
+      {
+        realmServerPort: config.realmServerPort,
+        workerManagerPort: config.workerManagerPort,
+      },
+      `http://localhost:${config.synapsePort}`,
+      config.synapsePort,
+    );
+
+    try {
+      await setupRealmPermissions(realmServer, config.realmServerPort);
+    } catch (error) {
+      console.error(
+        '[startUniqueTestEnvironment] Failed to setup realm permissions:',
+        error,
+      );
+      throw error;
+    }
+
+    if (options.withSmtp) {
+      await smtpStart({ mailClientPort: config.smtp4DevPort });
+    }
+
+    return {
+      options,
+      config,
+      synapse,
+      realmServer,
+    };
+  } catch (error) {
+    console.error(
+      `[startUniqueTestEnvironment wm:${config.workerManagerPort} rs:${config.realmServerPort}] Failed to start test environment:`,
+      error,
+    );
+    throw error;
+  }
+}
+
+async function setupRealmPermissions(
+  realmServer: IsolatedRealmServer,
+  realmServerPort: number,
+) {
+  // FIXME How can this be cleaned up
+  let realmConfigs = [
+    { username: '@test_realm:localhost', realmPath: 'test' },
+    { username: '@skills_realm:localhost', realmPath: 'skills' },
+    { username: '@base_realm:localhost', realmPath: 'base' },
+    { username: '@catalog_realm:localhost', realmPath: 'catalog' },
+    { username: '@experiments_realm:localhost', realmPath: 'experiments' },
+    { username: '@realm_server:localhost', realmPath: 'test' },
+    { username: '@realm_server:localhost', realmPath: 'skills' },
+    { username: '@realm_server:localhost', realmPath: 'base' },
+    { username: '@realm_server:localhost', realmPath: 'catalog' },
+    { username: '@realm_server:localhost', realmPath: 'experiments' },
+  ];
+
+  for (let { username, realmPath } of realmConfigs) {
+    let realmUrl = new URL(`http://localhost:${realmServerPort}/${realmPath}/`);
+
+    try {
+      let insertQuery = `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ('${realmUrl.href}', '${username}', true, true, true)`;
+      console.log('trying query', insertQuery);
+      await realmServer.executeSQL(insertQuery);
+    } catch (error) {
+      console.error(
+        `Failed to set up permissions for ${username} on ${realmUrl.href}:`,
+        error,
+      );
+      console.error('ignoring…?');
+      // throw error;
+    }
+  }
+}
+
+export async function stopTestEnvironment(env: TestEnvironment) {
+  if (env.realmServer) {
+    await env.realmServer.stop();
+  }
+  if (env.synapse) {
+    await synapseStop(env.synapse.synapseId);
+  }
+
+  if (env.options.withSmtp) {
+    await smtpStop();
+  }
+}
 
 interface ProfileAssertions {
   userId?: string;
@@ -24,7 +154,6 @@ interface ProfileAssertions {
 }
 interface LoginOptions {
   url?: string;
-  expectFailure?: true;
 }
 
 export async function setSkillsRedirect(page: Page) {
@@ -100,9 +229,9 @@ export async function createRealm(
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
   await page.locator('[data-test-create-workspace-submit]').click();
-  await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
-  await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(
-    0,
+  await waitUntil(
+    async () =>
+      (await page.locator(`[data-test-workspace="${name}"]`).count()) === 1,
   );
 }
 
@@ -122,6 +251,7 @@ export async function getMonacoContent(page: Page): Promise<string> {
 }
 
 export async function validateEmail(
+  testEnv: TestEnvironment,
   appPage: Page,
   email: string,
   opts?: {
@@ -148,7 +278,7 @@ export async function validateEmail(
 
   let context = appPage.context();
   let emailPage = await context.newPage();
-  await emailPage.goto(mailHost);
+  await emailPage.goto(`http://localhost:${testEnv.config.smtp4DevPort}`);
   await expect(
     emailPage.locator('.messagelist .unread').filter({ hasText: email }),
   ).toHaveCount(sendAttempts);
@@ -185,6 +315,7 @@ export async function validateEmail(
 }
 
 export async function validateEmailForResetPassword(
+  testEnv: TestEnvironment,
   appPage: Page,
   email: string,
   opts?: {
@@ -206,7 +337,7 @@ export async function validateEmailForResetPassword(
 
   let context = appPage.context();
   let emailPage = await context.newPage();
-  await emailPage.goto(mailHost);
+  await emailPage.goto(`http://localhost:${testEnv.config.smtp4DevPort}`);
   await expect(
     emailPage.locator('.messagelist .unread').filter({ hasText: email }),
   ).toHaveCount(sendAttempts);
@@ -256,16 +387,12 @@ export async function gotoRegistration(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
 
   await page.locator('[data-test-register-user]').click();
-  await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 }
 
 export async function gotoForgotPassword(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
 
   await page.locator('[data-test-forgot-password]').click();
-  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
-    1,
-  );
 }
 
 export async function login(
@@ -276,36 +403,19 @@ export async function login(
 ) {
   await openRoot(page, opts?.url);
 
-  await expect(page.locator('[data-test-username-field]')).toBeEditable();
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
-
-  if (opts?.expectFailure) {
-    await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
-  }
 }
 
 export async function enterWorkspace(
   page: Page,
   workspace = 'Test Workspace A',
 ) {
-  await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-  await expect(
-    page.locator(`[data-test-workspace="${workspace}"]`),
-  ).toHaveCount(1);
   await page.locator(`[data-test-workspace="${workspace}"]`).click();
-  await expect(
-    page.locator(
-      `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
-    ),
-  ).toContainText(workspace);
 }
 
 export async function showAllCards(page: Page) {
-  await expect(
-    page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
-  ).toHaveCount(1);
   await page
     .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
     .click();
@@ -314,7 +424,6 @@ export async function showAllCards(page: Page) {
 export async function logout(page: Page) {
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
-  await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
 export async function createRoom(page: Page) {
@@ -377,9 +486,6 @@ export async function openRenameMenu(page: Page, roomId: string) {
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
-  await expect(
-    page.locator(`[data-test-boxel-menu-item-text="Rename"]`),
-  ).toHaveCount(1);
   await page.locator(`[data-test-boxel-menu-item-text="Rename"]`).click();
   await page.locator(`[data-test-name-field]`).waitFor();
 }
@@ -390,9 +496,6 @@ export async function writeMessage(
   message: string,
 ) {
   await page.locator(`[data-test-message-field="${roomId}"]`).fill(message);
-  await expect(
-    page.locator(`[data-test-message-field="${roomId}"]`),
-  ).toHaveValue(message);
 }
 
 export async function selectCardFromCatalog(

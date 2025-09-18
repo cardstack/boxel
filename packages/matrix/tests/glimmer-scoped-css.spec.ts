@@ -1,31 +1,22 @@
 import { test, expect } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-  appURL,
-} from '../helpers/isolated-realm-server';
+import { registerUser } from '../docker/synapse';
 import {
   clearLocalStorage,
   createRealm,
   login,
-  registerRealmUsers,
   setupUserSubscribed,
   postCardSource,
   postNewCard,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
 
 test.describe('glimmer-scoped-css', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-  const serverIndexUrl = new URL(appURL).origin;
+  let testEnv: TestEnvironment;
+  let serverIndexUrl: string;
   const realmName = 'realm1';
-  const realmURL = new URL(`user1/${realmName}/`, serverIndexUrl).href;
+  let realmURL: string;
 
   let newCardURL: string;
 
@@ -33,16 +24,22 @@ test.describe('glimmer-scoped-css', () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    testEnv = await startUniqueTestEnvironment();
+    serverIndexUrl = new URL(testEnv.config.testHost).origin;
+    realmURL = new URL(`user1/${realmName}/`, serverIndexUrl).href;
+    await registerUser(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+      false,
+      undefined,
+      testEnv.config.testHost,
+    );
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
   });
 
   test.afterEach(async () => {
-    await realmServer?.stop();
-    await synapseStop(synapse.synapseId);
+    await stopTestEnvironment(testEnv);
   });
 
   test(':global is ignored and does not affect styles', async ({ page }) => {

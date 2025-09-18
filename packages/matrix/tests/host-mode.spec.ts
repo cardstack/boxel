@@ -1,33 +1,31 @@
 import { test, expect } from '@playwright/test';
+import { registerUser } from '../docker/synapse';
 import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import { registerRealmUsers } from '../helpers';
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
+} from '../helpers';
 
 test.describe('Host mode', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
 
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer(true);
-    await registerUser(synapse, 'user1', 'pass');
+    testEnv = await startUniqueTestEnvironment();
+    await registerUser(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+      false,
+      undefined,
+      testEnv.config.testHost,
+    );
   });
 
   test.afterEach(async () => {
-    await realmServer?.stop();
-    await synapseStop(synapse.synapseId);
+    await stopTestEnvironment(testEnv);
   });
 
   test('card in a published realm renders in host mode', async ({ page }) => {

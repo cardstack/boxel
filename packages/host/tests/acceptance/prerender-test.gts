@@ -158,6 +158,10 @@ module('Acceptance | prerender', function (hooks) {
     });
   });
 
+  hooks.afterEach(function () {
+    delete (globalThis as any).__lazilyLoadLinks;
+  });
+
   test('can prerender instance with contains field', async function (assert) {
     let url = `${testRealmURL}Pet/vangogh.json`;
     await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);

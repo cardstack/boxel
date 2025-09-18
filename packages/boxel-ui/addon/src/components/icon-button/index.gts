@@ -1,16 +1,17 @@
-import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import cn from '../../helpers/cn.ts';
 import type { Icon } from '../../icons/types.ts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 
 export interface Signature {
   Args: {
     class?: string;
     height?: string;
     icon?: Icon;
+    loading?: boolean;
     variant?: string;
     width?: string;
   };
@@ -33,12 +34,17 @@ class IconButton extends Component<Signature> {
 
   <template>
     <button
-      class={{cn (if @variant (concat @variant)) @class}}
+      class={{cn (if @variant @variant) @class loading=@loading}}
       {{on 'mouseenter' this.onMouseEnterButton}}
       {{on 'mouseleave' this.onMouseLeaveButton}}
       ...attributes
     >
-      {{#if @icon}}
+      {{#if @loading}}
+        <LoadingIndicator
+          width={{if @width @width '16px'}}
+          height={{if @height @height '16px'}}
+        />
+      {{else if @icon}}
         <@icon
           width={{if @width @width '16px'}}
           height={{if @height @height '16px'}}
@@ -61,14 +67,17 @@ class IconButton extends Component<Signature> {
         color: var(--boxel-icon-button-color, currentColor);
         z-index: 0;
         overflow: hidden;
+        transition: var(
+          --boxel-icon-button-transition,
+          var(--boxel-transition-properties)
+        );
       }
-
-      button:hover {
+      .loading,
+      :disabled {
+        pointer-events: none;
+      }
+      button:not(:disabled):hover {
         cursor: pointer;
-      }
-
-      button:disabled {
-        cursor: default;
       }
 
       .primary {

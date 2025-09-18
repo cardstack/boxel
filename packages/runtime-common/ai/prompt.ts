@@ -1,31 +1,31 @@
+import { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import {
-  LooseCardResource,
-  type LooseSingleCardDocument,
-  type CardResource,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-  REPLACE_MARKER,
-  humanReadable,
-} from '@cardstack/runtime-common';
-import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
+  ChatCompletionMessageToolCall,
+  OpenAIPromptMessage,
+  PromptParts,
+} from './types';
+import { constructHistory } from './history';
+import {
+  downloadFile,
+  extractCodePatchBlocks,
+  isCommandOrCodePatchResult,
+} from './matrix-utils';
+import { isRecognisedDebugCommand } from './debug';
 import type {
   ActiveLLMEvent,
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
   CommandResultEvent,
-  EncodedCommandRequest,
   MatrixEvent as DiscreteMatrixEvent,
+  EncodedCommandRequest,
   MatrixEventWithBoxelContext,
   SkillsConfigEvent,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
-import { MatrixEvent } from 'matrix-js-sdk';
-import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
-import * as Sentry from '@sentry/node';
-import { logger } from '@cardstack/runtime-common';
+import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 import {
-  APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -34,127 +34,24 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
-} from '@cardstack/runtime-common/matrix-constants';
-
+} from '../matrix-constants';
 import {
-  downloadFile,
-  MatrixClient,
-  isCommandOrCodePatchResult,
-  extractCodePatchBlocks,
-} from './lib/matrix/util';
-import { constructHistory } from './lib/history';
-import { isRecognisedDebugCommand } from './lib/debug';
-import { APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+  CardResource,
+  LooseCardResource,
+  LooseSingleCardDocument,
+} from '../index';
+import { ToolChoice } from '../helpers/ai';
+import { logger } from '../log';
 
-let log = logger('ai-bot');
+import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants';
+import { humanReadable } from '../code-ref';
+import { SEARCH_MARKER, REPLACE_MARKER, SEPARATOR_MARKER } from '../constants';
 
-const SYSTEM_MESSAGE = `# Boxel System Prompt
-
-This document defines your operational parameters as the Boxel AI assistant—an intelligent code generation and real-time runtime environment helper. You are designed to support end users as they create, edit, and customize "Cards" (JSON data models) within Boxel. Your goal is to assist non-technical and technical users alike with content creation, data entry, code modifications, design/layout recommendations, and research of reusable software/data.
-
----
-
-## I. Overview
-
-- **Purpose:**
-  Provide actionable support for navigating the Boxel environment, performing real-time code and data edits, and generating a customized visual and interactive experience. All changes (initiated by user interactions or function calls) are applied immediately to the runtime system.
-
-- **Primary Capabilities:**
-  - Teach users how to use Boxel features.
-  - Aid in efficient data entry by creating and structuring Cards.
-  - Assist with code generation and modification, ensuring consistency and adherence to best practices.
-  - Support UI/UX design via layout suggestions, sample content, and aesthetic guidance.
-  - Help locate pre-existing solutions or software that users may reuse.
-
----
-
-## II. Role and Responsibilities
-
-- **Your Role:**
-  You operate as an in-application assistant within Boxel. Users interact with you to create, modify, and navigate Cards and layouts. You work in real time, modifying system state without delay. Answer in the language the user employs and ask clarifying questions when input is ambiguous or overly generic.
-
-- **End User Focus:**
-  Whether users need guidance on editing card contents or require help writing/modifying code, you provide concise explanations, suggestions, and step-by-step support. You also leverage your extensive world knowledge to answer questions about card content beyond direct editing tasks.
-
-- **Function Call Flexibility:**
-  You may initiate multiple function calls as needed. Each call is user-gated, which means you wait for confirmation before proceeding to the next step.
-
----
-
-## III. Interacting With Users
-
-- **Session Initialization:**
-  At session start, the system attaches the Card the user is currently viewing along with contextual information (e.g., the active screen and visible panels). Use this context to tailor your responses.
-
-- **Formatting Guidelines:**
-  - **JSON:** Enclose in backticks for clear markdown presentation.
-  - **Code:** Indent using two spaces per tab stop and wrap within triple backticks, specifying the language (e.g., \`\`\`javascript).
-
-- **Clarification Protocol:**
-  If user inputs are unclear or incomplete, ask specific follow-up questions. However, if sufficient context is available via attached cards or environment details, proceed with your response and tool selection.
-
----
-
-## IV. Skill Cards
-
-- **Skill Cards:**
-  Boxel supports a skill card system to extend your abilities:
-  - **Environment Skills:** Assist with navigating, creating, editing, and searching Cards.
-  - **Development Skills:** Aid in modifying Boxel code for template layouts, schema changes, and custom UI adjustments.
-  - **User Skills:** You may have additional skills by end users.
-
----
-
-## V. Limitations and Ethics
-
-- **Ethical and Legal Compliance:**
-  Do not perform operations that violate ethical guidelines or legal requirements.
-
-- **Image Limitations:**
-  You cannot create or upload images. Instead, use publicly accessible image URLs if needed.
-
-- **Command Restrictions:**
-  Do not change directories outside of the current working directory. Always provide explicit paths in your tool calls.
-
-- **Communication Style:**
-  Responses must be clear, direct, and technical without superfluous pleasantries. Do not initiate further conversation after presenting a final result.
-`;
-
-export const SKILL_INSTRUCTIONS_MESSAGE =
-  '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n\n';
-
-type CommandMessage = {
-  type: 'command';
-  content: any;
-};
-
-type TextMessage = {
-  type: 'text';
-  content: string;
-  complete: boolean;
-};
-
-export type PromptParts =
-  | {
-      shouldRespond: true;
-      tools: Tool[];
-      messages: OpenAIPromptMessage[];
-      model: string;
-      history: DiscreteMatrixEvent[];
-      toolChoice: ToolChoice;
-    }
-  | {
-      shouldRespond: false;
-      tools: undefined;
-      messages: undefined;
-      model: undefined;
-      history: undefined;
-      toolChoice: undefined;
-    };
-
-export type Message = CommandMessage | TextMessage;
+function getLog() {
+  return logger('ai-bot:prompt');
+}
 
 export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
@@ -172,7 +69,7 @@ export async function getPromptParts(
       tools: undefined,
       messages: undefined,
       model: undefined,
-      history: undefined,
+      history: [],
       toolChoice: undefined,
     };
   }
@@ -201,7 +98,8 @@ export async function getPromptParts(
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   // If the aibot is awaiting command or code patch results, it should not respond yet.
-  let lastEventExcludingResults = history.findLast(
+  let lastEventExcludingResults = findLast(
+    history,
     (event) => !isCommandOrCodePatchResult(event),
   );
 
@@ -258,7 +156,8 @@ async function getEnabledSkills(
   eventlist: DiscreteMatrixEvent[],
   client: MatrixClient,
 ): Promise<LooseCardResource[]> {
-  let skillsConfigEvent = eventlist.findLast(
+  let skillsConfigEvent = findLast(
+    eventlist,
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
   if (!skillsConfigEvent) {
@@ -280,7 +179,8 @@ async function getEnabledSkills(
 export async function getDisabledSkillIds(
   eventList: DiscreteMatrixEvent[],
 ): Promise<string[]> {
-  let skillsConfigEvent = eventList.findLast(
+  let skillsConfigEvent = findLast(
+    eventList,
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
   if (!skillsConfigEvent) {
@@ -289,21 +189,6 @@ export async function getDisabledSkillIds(
   return skillsConfigEvent.content.disabledSkillCards.map(
     (serializedFile) => serializedFile.sourceUrl,
   );
-}
-
-export interface OpenAIPromptMessage {
-  /**
-   * The contents of the message. `content` is required for all messages, and may be
-   * null for assistant messages with function calls.
-   */
-  content: string | null;
-  /**
-   * The role of the messages author. One of `system`, `user`, `assistant`, or
-   * `function`.
-   */
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  tool_calls?: ChatCompletionMessageToolCall[];
-  tool_call_id?: string;
 }
 
 function setRelevantCards(
@@ -345,13 +230,16 @@ export function getRelevantCards(
 
     if (event.sender !== aiBotUserId) {
       let { content } = event;
-      let attachedCards = (content as CardMessageContent).data?.attachedCards
-        ?.map((attachedCard: SerializedFileDef) =>
-          attachedCard.content
-            ? (JSON.parse(attachedCard.content) as LooseSingleCardDocument)
-            : undefined,
-        )
-        .filter((card) => card !== undefined);
+      let attachedCards: LooseSingleCardDocument[] =
+        (content as CardMessageContent).data?.attachedCards
+          ?.map((attachedCard: SerializedFileDef) =>
+            attachedCard.content
+              ? (JSON.parse(attachedCard.content) as LooseSingleCardDocument)
+              : undefined,
+          )
+          .filter(
+            (card): card is LooseSingleCardDocument => card !== undefined,
+          ) || [];
       if (content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE && attachedCards) {
         setRelevantCards(attachedCardMap, attachedCards);
         mostRecentlyAttachedCard = getMostRecentlyAttachedCard(attachedCards);
@@ -429,13 +317,7 @@ export async function getAttachedCards(
           try {
             result.content = await downloadFile(client, attachedCard);
           } catch (error) {
-            log.error(`Failed to fetch file ${attachedCard.url}:`, error);
-            Sentry.captureException(error, {
-              extra: {
-                fileUrl: attachedCard.url,
-                fileName: attachedCard.name,
-              },
-            });
+            getLog().error(`Failed to fetch file ${attachedCard.url}:`, error);
             result.error = `Error loading attached card: ${(error as Error).message}`;
             result.content = undefined;
           }
@@ -482,10 +364,7 @@ export async function getAttachedFiles(
         try {
           result.content = await downloadFile(client, attachedFile);
         } catch (error) {
-          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
-          Sentry.captureException(error, {
-            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
-          });
+          getLog().error(`Failed to fetch file ${attachedFile.url}:`, error);
           result.error = `Error loading attached file: ${(error as Error).message}`;
           result.content = undefined;
         }
@@ -500,7 +379,8 @@ export async function loadCurrentlySerializedFileDefs(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): Promise<SerializedFileDef[]> {
-  let lastMessageEventByUser = history.findLast(
+  let lastMessageEventByUser = findLast(
+    history,
     (event) =>
       event.sender !== aiBotUserId &&
       ((event.type === 'm.room.message' &&
@@ -542,10 +422,7 @@ export async function loadCurrentlySerializedFileDefs(
           content,
         };
       } catch (error) {
-        log.error(`Failed to fetch file ${attachedFile.url}:`, error);
-        Sentry.captureException(error, {
-          extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
-        });
+        getLog().error(`Failed to fetch file ${attachedFile.url}:`, error);
         return {
           sourceUrl: attachedFile.sourceUrl ?? '',
           url: attachedFile.url,
@@ -609,7 +486,8 @@ export async function getTools(
     }
   }
 
-  let skillsConfigEvent = eventList.findLast(
+  let skillsConfigEvent = findLast(
+    eventList,
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
 
@@ -648,7 +526,7 @@ export function getLastUserMessage(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): DiscreteMatrixEvent | undefined {
-  return history.findLast((event) => event.sender !== aiBotUserId);
+  return findLast(history, (event) => event.sender !== aiBotUserId);
 }
 
 export function getToolChoice(
@@ -927,7 +805,7 @@ export async function buildPromptForModel(
     messages.push(contextMessage);
   } else {
     // Find the last user message and insert context before it
-    let lastUserIndex = messages.findLastIndex((msg) => msg.role === 'user');
+    let lastUserIndex = findLastIndex(messages, (msg) => msg.role === 'user');
     if (lastUserIndex !== -1) {
       messages.splice(lastUserIndex, 0, contextMessage);
     }
@@ -968,7 +846,7 @@ export const buildContextMessage = async (
     aiBotUserId,
   );
 
-  let lastEventWithContext = history.findLast((ev) => {
+  let lastEventWithContext = findLast(history, (ev) => {
     if (ev.sender === aiBotUserId) {
       return false;
     }
@@ -1143,7 +1021,8 @@ export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
 };
 
 function getModel(eventlist: DiscreteMatrixEvent[]): string {
-  let activeLLMEvent = eventlist.findLast(
+  let activeLLMEvent = findLast(
+    eventlist,
     (event) => event.type === APP_BOXEL_ACTIVE_LLM,
   ) as ActiveLLMEvent;
   if (!activeLLMEvent) {
@@ -1253,4 +1132,24 @@ export function isInDebugMode(
     return false;
   }
   return (lastUserMessage.content as any).data?.context?.debug ?? false;
+}
+
+function findLast<T>(
+  arr: T[],
+  predicate: (value: T, index: number) => boolean,
+): T | undefined {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i], i)) return arr[i];
+  }
+  return undefined;
+}
+
+function findLastIndex<T>(
+  arr: T[],
+  predicate: (value: T, index: number) => boolean,
+): number {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i], i)) return i;
+  }
+  return -1;
 }

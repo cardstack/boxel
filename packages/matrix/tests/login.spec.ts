@@ -1,47 +1,47 @@
 import { expect, test } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
 import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import {
   clearLocalStorage,
   assertLoggedIn,
   assertLoggedOut,
   login,
   logout,
   openRoot,
-  registerRealmUsers,
   setupUserSubscribed,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 
 const REALM_SECRET_SEED = "shhh! it's a secret";
 
 test.describe('Login', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
+  let appURL: string;
 
   test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 120s to the overall test timeout
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
+    testEnv = await startUniqueTestEnvironment();
+
+    appURL = testEnv.config.testHost;
+
+    await registerUser(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+      false,
+      undefined,
+      appURL,
+    );
+
     await clearLocalStorage(page, appURL);
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
   });
   test.afterEach(async () => {
-    await realmServer.stop();
-    await synapseStop(synapse.synapseId);
+    await stopTestEnvironment(testEnv);
   });
 
   test('it can login on the realm server home page and see the workspace chooser', async ({
@@ -61,6 +61,7 @@ test.describe('Login', () => {
     ).toHaveCount(1);
 
     await logout(page);
+    await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
     await assertLoggedOut(page);
     await page.reload();
     await assertLoggedOut(page);
@@ -310,7 +311,7 @@ test.describe('Login', () => {
   });
 
   test('it can logout at payment setup flow', async ({ page }) => {
-    await registerUser(synapse, 'user2', 'pass');
+    await registerUser(testEnv.synapse!, 'user2', 'pass');
     await login(page, 'user2', 'pass', {
       url: appURL,
     });
