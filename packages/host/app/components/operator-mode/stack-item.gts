@@ -458,6 +458,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.card?.[getCardMenuItems]?.({
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
+        menuContext: 'interact',
+        commandContext: this.args.commandContext,
       }) ?? []
     );
   }

@@ -173,13 +173,18 @@ export default class PlaygroundPanel extends Component<Signature> {
     return Boolean(this.cardError);
   }
 
+  // TODO: delegate to CardDef?
   private get contextMenuItems() {
     let cardId = this.card?.id;
+    if (!cardId) {
+      return [];
+    }
     let menuItems: MenuItem[] = [
-      new MenuItem('Copy Card URL', 'action', {
-        action: () => this.copyToClipboard.perform(cardId),
-        icon: IconLink,
-        disabled: !cardId,
+      ...this.card[getCardMenuItems]?.({
+        canEdit: this.realm.canWrite(cardId),
+        cardCrudFunctions: {},
+        menuContext: 'code-mode-playground',
+        commandContext: this.commandService.commandContext,
       }),
       new MenuItem('Open in Code Mode', 'action', {
         action: async () =>
@@ -187,11 +192,6 @@ export default class PlaygroundPanel extends Component<Signature> {
             cardId ? new URL(cardId) : null,
           ),
         icon: IconCode,
-        disabled: !cardId,
-      }),
-      new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode(cardId),
-        icon: Eye,
         disabled: !cardId,
       }),
       new MenuItem('Fill in sample data with AI', 'action', {
