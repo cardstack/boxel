@@ -4,32 +4,34 @@ import Component from '@glimmer/component';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmServerService from '@cardstack/host/services/realm-server';
+import RealmService from '@cardstack/host/services/realm';
 
 interface PublishingRealmArgs {
   isOpen: boolean;
 }
 
-export default class PublishingRealm extends Component<PublishingRealmArgs> {
-  @service declare realmServer: RealmServerService;
+export default class PublishingRealmPopover extends Component<PublishingRealmArgs> {
+  @service declare realm: RealmService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  get publishingDomainEntries() {
-    return Array.from(this.realmServer.publishingDomains.entries()).map(
-      ([url, _]) => url,
-    );
+  get publishingRealms() {
+    return this.realm.publishingRealms(this.realmURL);
+  }
+
+  get realmURL() {
+    return this.operatorModeStateService.realmURL.href;
   }
 
   <template>
     {{#if @isOpen}}
-      <div class='publishing-realm-dropdown'>
+      <div class='publishing-realm-popover'>
         <div class='publishing-realm-header'>
           Publishing to:
         </div>
         <div class='publishing-realm-content'>
-          {{#if this.publishingDomainEntries.length}}
+          {{#if this.publishingRealms.length}}
             <div class='publishing-domains-list'>
-              {{#each this.publishingDomainEntries as |url|}}
+              {{#each this.publishingRealms as |url|}}
                 <div class='publishing-domain-item'>
                   <div class='domain-icon'>
                     {{#if this.operatorModeStateService.currentRealmInfo}}
@@ -57,7 +59,7 @@ export default class PublishingRealm extends Component<PublishingRealmArgs> {
     {{/if}}
 
     <style scoped>
-      .publishing-realm-dropdown {
+      .publishing-realm-popover {
         position: absolute;
         top: 100%;
         left: 0;
@@ -83,7 +85,7 @@ export default class PublishingRealm extends Component<PublishingRealmArgs> {
         padding: 0.5rem 0;
       }
 
-      .publishing-domains-list {
+      .publishing-realms-list {
         max-height: 200px;
       }
 

@@ -2830,6 +2830,8 @@ export class Realm {
 
   private async startFileWatcher() {
     await this.#adapter.subscribe((data) => {
+      console.log('subscribe');
+      console.log(data);
       let tracked = this.getTrackedWrite(data);
       if (!tracked || tracked.isTracked) {
         return;

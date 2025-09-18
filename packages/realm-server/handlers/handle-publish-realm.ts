@@ -39,7 +39,6 @@ export default function handlePublishRealm({
   getMatrixRegistrationSecret,
   createAndMountRealm,
   validPublishedRealmDomains,
-  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -215,6 +214,7 @@ export default function handlePublishRealm({
         publishedRealmURL,
         realmUsername,
         new URL(sourceRealmURL),
+        false,
       );
       await realm.start();
 
@@ -246,11 +246,6 @@ export default function handlePublishRealm({
             [ownerUserId]: ['read'],
           },
         },
-      });
-      sendEvent(ownerUserId, 'publish-realm-notification', {
-        sourceRealmURL: publishedRealmData.source_realm_url,
-        publishedRealmURL: publishedRealmData.published_realm_url,
-        lastPublishedAt: publishedRealmData.last_published_at,
       });
       await setContextResponse(ctxt, response);
       return;

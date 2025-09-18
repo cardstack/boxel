@@ -385,8 +385,12 @@ export class RealmServer {
     url: string,
     username: string,
     copiedFromRealm?: URL,
+    enableFileWatcher?: boolean,
   ) => {
-    let adapter = new NodeAdapter(resolve(path), this.enableFileWatcher);
+    let adapter = new NodeAdapter(
+      resolve(path),
+      enableFileWatcher ?? this.enableFileWatcher,
+    );
     let realm = new Realm(
       {
         url,

@@ -8,19 +8,22 @@ import { tracked } from '@glimmer/tracking';
 
 import Refresh from '@cardstack/boxel-icons/refresh';
 
+import { restartableTask } from 'ember-concurrency';
+
+import perform from 'ember-concurrency/helpers/perform';
+
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import PublishingRealm from '@cardstack/host/components/operator-mode/publishing-realm';
+import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
-import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -36,11 +39,10 @@ interface HostSubmodeSignature {
 export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
-  @service private declare realmServer: RealmServerService;
   @service private declare realm: RealmService;
 
   @tracked isPublishSiteModalOpen = false;
-  @tracked isPublishingDropdownOpen = false;
+  @tracked isPublishingRealmPopoverOpen = false;
 
   get currentCardId() {
     return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
@@ -102,34 +104,27 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   @action
-  showPublishingStatus() {
-    this.isPublishingDropdownOpen = !this.isPublishingDropdownOpen;
+  togglePublishingRealmPopover() {
+    this.isPublishingRealmPopoverOpen = !this.isPublishingRealmPopoverOpen;
   }
 
-  @action
-  closePublishingDropdown() {
-    this.isPublishingDropdownOpen = false;
+  get realmURL() {
+    return this.operatorModeStateService.realmURL.href;
   }
 
-  @action
-  handlePublish(selectedDomains: string[]) {
-    if (selectedDomains.length === 0) {
-      return;
-    }
-
-    try {
-      this.realmServer.publishRealmToDomains(
-        this.operatorModeStateService.realmURL.href,
-        selectedDomains,
-        () => {
-          this.closePublishingDropdown();
-        },
-      );
-      this.closePublishSiteModal();
-    } catch (error) {
-      console.error('Error publishing to domains:', error);
-    }
+  get isPublishing() {
+    return this.realm.isPublishing(this.realmURL);
   }
+
+  handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
+    this.closePublishSiteModal();
+    await this.realm.publishToURLs(this.realmURL, publishedRealmURLs);
+    this.isPublishingRealmPopoverOpen = false;
+  });
+
+  handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
+    await this.realm.unpublishFromURL(this.realmURL, publishedRealmURL);
+  });
 
   <template>
     <SubmodeLayout
@@ -140,12 +135,12 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       <div class='host-submode' style={{this.backgroundImageStyle}}>
         <div class='host-mode-top-bar'>
           <div class='publish-button-container'>
-            {{#if this.realmServer.isPublishingRealm}}
+            {{#if this.isPublishing}}
               <BoxelButton
                 @kind='primary'
                 @size='tall'
                 class='publish-site-button publishing'
-                {{on 'click' this.showPublishingStatus}}
+                {{on 'click' this.togglePublishingRealmPopover}}
                 data-test-publish-site-button
               >
                 <Refresh width='22' height='22' class='publish-icon' />
@@ -163,7 +158,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
                 Publish Site
               </BoxelButton>
             {{/if}}
-            <PublishingRealm @isOpen={{this.isPublishingDropdownOpen}} />
+            <PublishingRealmPopover
+              @isOpen={{this.isPublishingRealmPopoverOpen}}
+            />
           </div>
         </div>
         <div class={{this.hostModeContentClass}}>
@@ -204,7 +201,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     <PublishSiteModal
       @isOpen={{this.isPublishSiteModalOpen}}
       @onClose={{this.closePublishSiteModal}}
-      @onPublish={{this.handlePublish}}
+      @handlePublish={{perform this.handlePublish}}
+      @handleUnpublish={{perform this.handleUnpublish}}
     />
 
     <style scoped>

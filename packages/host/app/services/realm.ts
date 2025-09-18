@@ -16,7 +16,7 @@ import { cached } from '@glimmer/tracking';
 import { dropTask, task, restartableTask, rawTimeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
-import { TrackedSet, TrackedObject } from 'tracked-built-ins';
+import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import {
   Permissions,
@@ -69,10 +69,10 @@ class RealmResource {
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
   private subscription: { unsubscribe: () => void } | undefined;
-  private realmServerSubscription: { unsubscribe: () => void } | undefined;
-  private realmServerUnpublishSubscription:
-    | { unsubscribe: () => void }
-    | undefined;
+
+  @tracked private _isPublishing = false;
+  private _publishingRealms = new TrackedArray<string>();
+  private _unPublishingRealms = new TrackedArray<string>();
 
   // Hassan: in general i'm questioning the usefulness of using Tasks in this
   // class. We seem to be following the pattern of await-ing all the tasks on
@@ -89,12 +89,6 @@ class RealmResource {
     registerDestructor(this, () => {
       if (this.subscription) {
         this.subscription.unsubscribe();
-      }
-      if (this.realmServerSubscription) {
-        this.realmServerSubscription.unsubscribe();
-      }
-      if (this.realmServerUnpublishSubscription) {
-        this.realmServerUnpublishSubscription.unsubscribe();
       }
     });
   }
@@ -196,56 +190,6 @@ class RealmResource {
               break;
             default:
               throw assertNever(data);
-          }
-        },
-      ),
-    };
-
-    this.realmServerSubscription = {
-      unsubscribe: this.realmServer.subscribeEvent(
-        'publish-realm-notification',
-        async (data: any) => {
-          let sourceRealmURL = data.sourceRealmURL;
-          if (sourceRealmURL === this.realmURL && this.info) {
-            console.log('publish-realm-notification', data);
-            this.info = {
-              ...this.info,
-              lastPublishedAt: {
-                ...(this.info.lastPublishedAt ? this.info.lastPublishedAt : {}),
-                [data.publishedRealmURL]: data.lastPublishedAt,
-              },
-            };
-          }
-        },
-      ),
-    };
-
-    this.realmServerUnpublishSubscription = {
-      unsubscribe: this.realmServer.subscribeEvent(
-        'unpublish-realm-notification',
-        async (data: any) => {
-          let sourceRealmURL = data.sourceRealmURL;
-          if (
-            sourceRealmURL === this.realmURL &&
-            this.info &&
-            typeof this.info.lastPublishedAt === 'object' &&
-            this.info.lastPublishedAt?.[data.publishedRealmURL]
-          ) {
-            // Set the specific published realm to null
-            let updatedLastPublishedAt = {
-              ...this.info.lastPublishedAt,
-              [data.publishedRealmURL]: null,
-            };
-
-            // If all published realms are null, set the entire lastPublishedAt to null
-            let hasAnyPublished = Object.values(updatedLastPublishedAt).some(
-              (value) => value !== null,
-            );
-
-            this.info = {
-              ...this.info,
-              lastPublishedAt: hasAnyPublished ? updatedLastPublishedAt : null,
-            };
           }
         },
       ),
@@ -426,6 +370,126 @@ class RealmResource {
       await this.loggingIn;
     }
   });
+
+  async publish(publishedRealmURLs: string[]) {
+    if (this._isPublishing) {
+      return;
+    }
+
+    try {
+      this._isPublishing = true;
+      const publishPromises = publishedRealmURLs.map(
+        async (publishedRealmURL) => {
+          if (this._publishingRealms.includes(publishedRealmURL)) {
+            return;
+          }
+          // Set publishing state
+          this._publishingRealms.push(publishedRealmURL);
+
+          try {
+            const result = await this.realmServer.publishRealm(
+              this.url,
+              publishedRealmURL,
+            );
+
+            return result;
+          } catch (error) {
+            console.error(
+              `Error publishing to URL ${publishedRealmURL}:`,
+              error,
+            );
+            return;
+          } finally {
+            this._publishingRealms.splice(
+              this._publishingRealms.indexOf(publishedRealmURL),
+              1,
+            );
+          }
+        },
+      );
+
+      const results = await Promise.allSettled(publishPromises);
+      if (this.info) {
+        let lastPublishedAt = results.reduce(
+          (acc, result) => {
+            if (result.status === 'fulfilled' && result.value) {
+              acc[result.value.data.attributes.publishedRealmURL] = Number(
+                result.value.data.attributes.lastPublishedAt,
+              );
+            }
+            return acc;
+          },
+          {} as Record<string, any>,
+        );
+        this.info = {
+          ...this.info,
+          lastPublishedAt: {
+            ...(this.info.lastPublishedAt &&
+            typeof this.info.lastPublishedAt === 'object'
+              ? this.info.lastPublishedAt
+              : {}),
+            ...lastPublishedAt,
+          },
+        };
+      }
+
+      return results;
+    } catch (error) {
+      console.error(`Error publishing to URLs ${publishedRealmURLs}:`, error);
+      return;
+    } finally {
+      this._isPublishing = false;
+    }
+  }
+
+  get isPublishing() {
+    return this._isPublishing;
+  }
+
+  get isAnyRealmPublishing(): boolean {
+    return this._publishingRealms.length > 0;
+  }
+
+  get publishingRealms(): string[] {
+    return this._publishingRealms;
+  }
+
+  async unpublish(publishedRealmURL: string) {
+    if (this._unPublishingRealms.includes(publishedRealmURL)) {
+      return;
+    }
+
+    try {
+      this._unPublishingRealms.push(publishedRealmURL);
+      await this.realmServer.unpublishRealm(publishedRealmURL);
+      if (
+        this.info &&
+        this.info.lastPublishedAt &&
+        typeof this.info.lastPublishedAt === 'object'
+      ) {
+        delete this.info.lastPublishedAt[publishedRealmURL];
+        this.info = {
+          ...this.info,
+        };
+      }
+    } catch (error) {
+      console.error(`Error unpublishing from URL ${publishedRealmURL}:`, error);
+      return;
+    } finally {
+      this._unPublishingRealms.splice(
+        this._unPublishingRealms.indexOf(publishedRealmURL),
+        1,
+      );
+    }
+  }
+
+  isUnpublishingAnyRealms = (): boolean => {
+    return this._unPublishingRealms.length > 0;
+  };
+
+  isUnpublishingRealm = (publishedRealmURL: string): boolean => {
+    return this._unPublishingRealms.includes(publishedRealmURL);
+  };
 }
 
 export default class RealmService extends Service {
@@ -646,6 +710,39 @@ export default class RealmService extends Service {
       realm.logout();
     }
   }
+
+  async publishToURLs(realmURL: string, publishedRealmURLs: string[]) {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return await resource.publish(publishedRealmURLs);
+  }
+
+  async unpublishFromURL(realmURL: string, publishedRealmURL: string) {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return await resource.unpublish(publishedRealmURL);
+  }
+
+  isUnpublishingAnyRealms = (realmURL: string): boolean => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.isUnpublishingAnyRealms();
+  };
+
+  isUnpublishingRealm = (
+    realmURL: string,
+    publishedRealmURL: string,
+  ): boolean => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.isUnpublishingRealm(publishedRealmURL);
+  };
+
+  isPublishing = (realmURL: string): boolean => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.isPublishing;
+  };
+
+  publishingRealms = (realmURL: string): string[] => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.publishingRealms;
+  };
 
   // By default, this does a tracked read from currentKnownRealms so that your
   // answer can be invalidated if a new realm is discovered. Internally, we also

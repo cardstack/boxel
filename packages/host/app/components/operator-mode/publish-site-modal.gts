@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -8,8 +9,11 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 
 import { formatDistanceToNow } from 'date-fns';
 
-import { BoxelButton, RealmIcon } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import {
+  BoxelButton,
+  RealmIcon,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { UndoArrow } from '@cardstack/boxel-ui/icons';
 
 import config from '@cardstack/host/config/environment';
@@ -26,7 +30,8 @@ interface Signature {
   Args: {
     isOpen: boolean;
     onClose: () => void;
-    onPublish: (selectedDomains: string[]) => void;
+    handlePublish: (publishedRealmURLs: string[]) => void;
+    handleUnpublish: (publishedRealmURL: string) => void;
   };
 }
 
@@ -36,14 +41,13 @@ export default class PublishSiteModal extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   @tracked selectedDomains: string[] = [];
-  @tracked isUnpublishing = false;
 
   get isRealmPublished() {
     return !!this.lastPublishedTime;
   }
 
   get isPublishDisabled() {
-    return !this.hasSelectedDomains || this.isUnpublishing;
+    return !this.hasSelectedDomains || this.isUnpublishingAnyRealms;
   }
 
   get lastPublishedTime() {
@@ -161,28 +165,6 @@ export default class PublishSiteModal extends Component<Signature> {
   }
 
   @action
-  handlePublish() {
-    if (this.selectedDomains.length === 0) {
-      return;
-    }
-
-    this.args.onPublish(this.selectedDomains);
-  }
-
-  @action
-  async handleUnpublish() {
-    try {
-      this.isUnpublishing = true;
-      await this.realm.realmServer.unpublishRealm(this.generatedUrl);
-      // The UI will be updated via the unpublish-realm-notification event
-    } catch (error) {
-      console.error('Error unpublishing realm:', error);
-    } finally {
-      this.isUnpublishing = false;
-    }
-  }
-
-  @action
   handleOpenSite() {
     window.open(this.generatedUrl, '_blank');
   }
@@ -190,6 +172,17 @@ export default class PublishSiteModal extends Component<Signature> {
   @action
   handleCancel() {
     this.args.onClose();
+  }
+
+  isUnpublishingRealm = (publishedRealmURL: string) => {
+    return this.realm.isUnpublishingRealm(
+      this.currentRealmUrl.href,
+      publishedRealmURL,
+    );
+  };
+
+  get isUnpublishingAnyRealms() {
+    return this.realm.isUnpublishingAnyRealms(this.currentRealmUrl.href);
   }
 
   <template>
@@ -218,7 +211,7 @@ export default class PublishSiteModal extends Component<Signature> {
                 {{on 'change' this.toggleDefaultDomain}}
                 class='domain-checkbox'
                 data-test-default-domain-checkbox
-                disabled={{this.isUnpublishing}}
+                disabled={{this.isUnpublishingAnyRealms}}
               />
               <span class='domain-name'>Your Boxel Space</span>
             </label>
@@ -243,15 +236,22 @@ export default class PublishSiteModal extends Component<Signature> {
                     <BoxelButton
                       @kind='text-only'
                       @size='extra-small'
+                      @disabled={{this.isUnpublishingRealm this.generatedUrl}}
                       class='unpublish-button'
-                      {{on 'click' this.handleUnpublish}}
+                      {{on 'click' (fn @handleUnpublish this.generatedUrl)}}
                     >
-                      <UndoArrow
-                        width='11'
-                        height='11'
-                        class='unpublish-icon'
-                      />
-                      Unpublish
+                      {{#if (this.isUnpublishingRealm this.generatedUrl)}}
+                        <LoadingIndicator />
+                        Unpublishing...
+                      {{else}}
+                        <UndoArrow
+                          width='11'
+                          height='11'
+                          class='unpublish-icon'
+                        />
+                        Unpublish
+                      {{/if}}
+
                     </BoxelButton>
                   </div>
                 {{/if}}
@@ -260,6 +260,7 @@ export default class PublishSiteModal extends Component<Signature> {
                 <BoxelButton
                   @kind='secondary-light'
                   @size='small'
+                  @disabled={{this.isUnpublishingAnyRealms}}
                   {{on 'click' this.handleOpenSite}}
                   class='open-site-button'
                   data-test-open-site-button
@@ -283,6 +284,7 @@ export default class PublishSiteModal extends Component<Signature> {
             <BoxelButton
               @kind='secondary-light'
               @size='tall'
+              @disabled={{this.isUnpublishingAnyRealms}}
               {{on 'click' this.handleCancel}}
               class='cancel-button'
               data-test-cancel-button
@@ -292,7 +294,7 @@ export default class PublishSiteModal extends Component<Signature> {
             <BoxelButton
               @kind='primary'
               @size='tall'
-              {{on 'click' this.handlePublish}}
+              {{on 'click' (fn @handlePublish this.selectedDomains)}}
               @disabled={{this.isPublishDisabled}}
               class='publish-button'
               data-test-publish-button
@@ -419,16 +421,16 @@ export default class PublishSiteModal extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
+        background-color: transparent;
+        border: none;
       }
 
       .unpublish-icon {
         flex-shrink: 0;
       }
 
-      .unpublish-button:hover {
+      .unpublish-button:not(:disabled):hover {
         color: var(--boxel-dark);
-        background-color: transparent;
-        border-color: transparent;
       }
 
       .open-site-button {

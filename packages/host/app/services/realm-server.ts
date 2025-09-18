@@ -4,14 +4,12 @@ import { service } from '@ember/service';
 
 import { cached } from '@glimmer/tracking';
 
-import { tracked } from '@glimmer/tracking';
-
 import { restartableTask, rawTimeout, task, timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
 import { type IEvent } from 'matrix-js-sdk';
-import { TrackedArray, TrackedMap } from 'tracked-built-ins';
+import { TrackedArray } from 'tracked-built-ins';
 
 import {
   baseRealm,
@@ -21,11 +19,6 @@ import {
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
-
-interface PublishingState {
-  status: 'publishing';
-  startTime: number;
-}
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -72,8 +65,6 @@ export default class RealmServerService extends Service {
   private _ready = new Deferred<void>();
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
     new Map();
-
-  @tracked publishingDomains = new TrackedMap<string, PublishingState>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -283,12 +274,6 @@ export default class RealmServerService extends Service {
     }
 
     this.eventSubscribers.get(eventType)!.push(subscriber);
-
-    return () => {
-      this.eventSubscribers
-        .get(eventType)!
-        .splice(this.eventSubscribers.get(eventType)!.indexOf(subscriber), 1);
-    };
   }
 
   get url() {
@@ -442,10 +427,7 @@ export default class RealmServerService extends Service {
     return response;
   }
 
-  async publishRealmToDomain(
-    sourceRealmURL: string,
-    publishedRealmURL: string,
-  ) {
+  async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
     await this.login();
     await timeout(5000);
 
@@ -502,82 +484,6 @@ export default class RealmServerService extends Service {
     }
 
     return response.json();
-  }
-
-  publishRealmToDomains(
-    sourceRealmURL: string,
-    publishedRealmURLs: string[],
-    onComplete?: () => void,
-  ) {
-    if (this.isPublishingRealm) {
-      return;
-    }
-
-    this.publishRealmToDomainsTask.perform(
-      sourceRealmURL,
-      publishedRealmURLs,
-      onComplete,
-    );
-  }
-
-  get isPublishingRealm() {
-    return this.publishRealmToDomainsTask.isRunning;
-  }
-
-  private publishRealmToDomainsTask = task(
-    async (
-      sourceRealmURL: string,
-      publishedRealmURLs: string[],
-      onComplete?: () => void,
-    ) => {
-      const publishPromises = publishedRealmURLs.map(
-        async (publishedRealmURL) => {
-          // Set publishing state
-          this.publishingDomains.set(publishedRealmURL, {
-            status: 'publishing',
-            startTime: Date.now(),
-          });
-
-          try {
-            const result = await this.publishRealmToDomain(
-              sourceRealmURL,
-              publishedRealmURL,
-            );
-
-            return { publishedRealmURL, success: true, result };
-          } catch (error) {
-            return { publishedRealmURL, success: false, error };
-          } finally {
-            // Remove from publishing map when done
-            this.publishingDomains.delete(publishedRealmURL);
-          }
-        },
-      );
-
-      try {
-        const results = await Promise.allSettled(publishPromises);
-        return results;
-      } finally {
-        // Clear any remaining publishing states
-        this.publishingDomains.clear();
-        // Call the completion callback if provided
-        if (onComplete) {
-          onComplete();
-        }
-      }
-    },
-  );
-
-  get isAnyDomainPublishing(): boolean {
-    return this.publishingDomains.size > 0;
-  }
-
-  get publishingDomainsList(): string[] {
-    return Array.from(this.publishingDomains.keys());
-  }
-
-  get publishingStates(): PublishingState[] {
-    return Array.from(this.publishingDomains.values());
   }
 
   private async getToken() {
