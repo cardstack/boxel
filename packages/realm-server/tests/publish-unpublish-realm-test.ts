@@ -27,7 +27,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt';
 const testRealm2URL = 'http://127.0.0.1:4445/test/';
 
 module(basename(__filename), function () {
-  module.only('publish and unpublish realm tests', function (hooks) {
+  module('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: Realm;
     let dbAdapter: PgAdapter;
