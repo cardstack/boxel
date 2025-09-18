@@ -8,10 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Bubblegum",
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Bubblegum",
         "description": null,
         "thumbnailURL": null
       },

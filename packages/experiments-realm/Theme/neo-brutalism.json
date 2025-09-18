@@ -8,10 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Neo-brutalism",
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Neo-brutalism",
         "description": null,
         "thumbnailURL": null
       },
