@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 import supertest, { SuperTest, Test } from 'supertest';
 import { basename } from 'path';
-import { Server } from 'http';
 
 import {
   setupBaseRealmServer,
@@ -10,12 +9,13 @@ import {
   realmSecretSeed,
   testRealmHref,
 } from './helpers';
-import { createPrerenderHttpServer } from '../prerender/app';
+import { buildPrerenderApp } from '../prerender/app';
+import { Prerenderer } from '../prerender';
 
 module(basename(__filename), function () {
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
-    let prerenderServer: Server;
+    let prerenderer: Prerenderer;
     const testUserId = '@jade:localhost';
 
     setupBaseRealmServer(hooks, matrixURL);
@@ -45,16 +45,13 @@ module(basename(__filename), function () {
     });
 
     hooks.before(function () {
-      prerenderServer = createPrerenderHttpServer({
-        secretSeed: realmSecretSeed,
-      });
-      request = supertest(prerenderServer);
+      let built = buildPrerenderApp(realmSecretSeed);
+      prerenderer = built.prerenderer;
+      request = supertest(built.app.callback());
     });
 
     hooks.after(async function () {
-      await new Promise<void>((resolve) =>
-        prerenderServer.close(() => resolve()),
-      );
+      await prerenderer.stop();
     });
 
     test('liveness', async function (assert) {
@@ -83,6 +80,7 @@ module(basename(__filename), function () {
               url,
               userId: testUserId,
               permissions,
+              realm: testRealmHref,
             },
           },
         });
@@ -110,6 +108,12 @@ module(basename(__filename), function () {
         'isolatedHTML contains the instance title',
       );
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
+      assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
+      assert.strictEqual(
+        res.body.meta?.pool?.realm,
+        testRealmHref,
+        'pool realm ok',
+      );
     });
   });
 });
