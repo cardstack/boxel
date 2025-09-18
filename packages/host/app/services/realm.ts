@@ -71,8 +71,8 @@ class RealmResource {
   private subscription: { unsubscribe: () => void } | undefined;
 
   @tracked private _isPublishing = false;
-  private _publishingRealms = new TrackedArray<string>();
-  private _unPublishingRealms = new TrackedArray<string>();
+  private _publishingSites = new TrackedArray<string>();
+  private _unPublishingSites = new TrackedArray<string>();
 
   // Hassan: in general i'm questioning the usefulness of using Tasks in this
   // class. We seem to be following the pattern of await-ing all the tasks on
@@ -371,42 +371,31 @@ class RealmResource {
     }
   });
 
-  async publish(publishedRealmURLs: string[]) {
+  async publishToSites(urls: string[]) {
     if (this._isPublishing) {
       return;
     }
 
     try {
       this._isPublishing = true;
-      const publishPromises = publishedRealmURLs.map(
-        async (publishedRealmURL) => {
-          if (this._publishingRealms.includes(publishedRealmURL)) {
-            return;
-          }
-          // Set publishing state
-          this._publishingRealms.push(publishedRealmURL);
+      const publishPromises = urls.map(async (url) => {
+        if (this._publishingSites.includes(url)) {
+          return;
+        }
+        // Set publishing state
+        this._publishingSites.push(url);
 
-          try {
-            const result = await this.realmServer.publishRealm(
-              this.url,
-              publishedRealmURL,
-            );
+        try {
+          const result = await this.realmServer.publishRealm(this.url, url);
 
-            return result;
-          } catch (error) {
-            console.error(
-              `Error publishing to URL ${publishedRealmURL}:`,
-              error,
-            );
-            return;
-          } finally {
-            this._publishingRealms.splice(
-              this._publishingRealms.indexOf(publishedRealmURL),
-              1,
-            );
-          }
-        },
-      );
+          return result;
+        } catch (error) {
+          console.error(`Error publishing to URL ${url}:`, error);
+          return;
+        } finally {
+          this._publishingSites.splice(this._publishingSites.indexOf(url), 1);
+        }
+      });
 
       const results = await Promise.allSettled(publishPromises);
       if (this.info) {
@@ -435,7 +424,7 @@ class RealmResource {
 
       return results;
     } catch (error) {
-      console.error(`Error publishing to URLs ${publishedRealmURLs}:`, error);
+      console.error(`Error publishing to URLs ${urls}:`, error);
       return;
     } finally {
       this._isPublishing = false;
@@ -446,49 +435,46 @@ class RealmResource {
     return this._isPublishing;
   }
 
-  get isAnyRealmPublishing(): boolean {
-    return this._publishingRealms.length > 0;
+  get isPublishingToAnySites(): boolean {
+    return this._publishingSites.length > 0;
   }
 
   get publishingRealms(): string[] {
-    return this._publishingRealms;
+    return this._publishingSites;
   }
 
-  async unpublish(publishedRealmURL: string) {
-    if (this._unPublishingRealms.includes(publishedRealmURL)) {
+  async unpublishFromSite(url: string) {
+    if (this._unPublishingSites.includes(url)) {
       return;
     }
 
     try {
-      this._unPublishingRealms.push(publishedRealmURL);
-      await this.realmServer.unpublishRealm(publishedRealmURL);
+      this._unPublishingSites.push(url);
+      await this.realmServer.unpublishRealm(url);
       if (
         this.info &&
         this.info.lastPublishedAt &&
         typeof this.info.lastPublishedAt === 'object'
       ) {
-        delete this.info.lastPublishedAt[publishedRealmURL];
+        delete this.info.lastPublishedAt[url];
         this.info = {
           ...this.info,
         };
       }
     } catch (error) {
-      console.error(`Error unpublishing from URL ${publishedRealmURL}:`, error);
+      console.error(`Error unpublishing from URL ${url}:`, error);
       return;
     } finally {
-      this._unPublishingRealms.splice(
-        this._unPublishingRealms.indexOf(publishedRealmURL),
-        1,
-      );
+      this._unPublishingSites.splice(this._unPublishingSites.indexOf(url), 1);
     }
   }
 
-  isUnpublishingAnyRealms = (): boolean => {
-    return this._unPublishingRealms.length > 0;
+  isUnpublishingFromAnySites = (): boolean => {
+    return this._unPublishingSites.length > 0;
   };
 
-  isUnpublishingRealm = (publishedRealmURL: string): boolean => {
-    return this._unPublishingRealms.includes(publishedRealmURL);
+  isUnpublishingFromSite = (publishedRealmURL: string): boolean => {
+    return this._unPublishingSites.includes(publishedRealmURL);
   };
 }
 
@@ -711,27 +697,27 @@ export default class RealmService extends Service {
     }
   }
 
-  async publishToURLs(realmURL: string, publishedRealmURLs: string[]) {
+  async publishToSites(realmURL: string, publishedRealmURLs: string[]) {
     let resource = this.getOrCreateRealmResource(realmURL);
-    return await resource.publish(publishedRealmURLs);
+    return await resource.publishToSites(publishedRealmURLs);
   }
 
-  async unpublishFromURL(realmURL: string, publishedRealmURL: string) {
+  async unpublishFromSite(realmURL: string, publishedRealmURL: string) {
     let resource = this.getOrCreateRealmResource(realmURL);
-    return await resource.unpublish(publishedRealmURL);
+    return await resource.unpublishFromSite(publishedRealmURL);
   }
 
-  isUnpublishingAnyRealms = (realmURL: string): boolean => {
+  isUnpublishingFromAnySites = (realmURL: string): boolean => {
     let resource = this.getOrCreateRealmResource(realmURL);
-    return resource.isUnpublishingAnyRealms();
+    return resource.isUnpublishingFromAnySites();
   };
 
-  isUnpublishingRealm = (
+  isUnpublishingFromSite = (
     realmURL: string,
     publishedRealmURL: string,
   ): boolean => {
     let resource = this.getOrCreateRealmResource(realmURL);
-    return resource.isUnpublishingRealm(publishedRealmURL);
+    return resource.isUnpublishingFromSite(publishedRealmURL);
   };
 
   isPublishing = (realmURL: string): boolean => {

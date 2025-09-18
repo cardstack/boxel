@@ -47,7 +47,7 @@ export default class PublishSiteModal extends Component<Signature> {
   }
 
   get isPublishDisabled() {
-    return !this.hasSelectedDomains || this.isUnpublishingAnyRealms;
+    return !this.hasSelectedDomains || this.isUnpublishingAnySites;
   }
 
   get lastPublishedTime() {
@@ -174,15 +174,15 @@ export default class PublishSiteModal extends Component<Signature> {
     this.args.onClose();
   }
 
-  isUnpublishingRealm = (publishedRealmURL: string) => {
-    return this.realm.isUnpublishingRealm(
+  isUnpublishingFromSite = (publishedRealmURL: string) => {
+    return this.realm.isUnpublishingFromSite(
       this.currentRealmUrl.href,
       publishedRealmURL,
     );
   };
 
-  get isUnpublishingAnyRealms() {
-    return this.realm.isUnpublishingAnyRealms(this.currentRealmUrl.href);
+  get isUnpublishingAnySites() {
+    return this.realm.isUnpublishingFromAnySites(this.currentRealmUrl.href);
   }
 
   <template>
@@ -211,7 +211,7 @@ export default class PublishSiteModal extends Component<Signature> {
                 {{on 'change' this.toggleDefaultDomain}}
                 class='domain-checkbox'
                 data-test-default-domain-checkbox
-                disabled={{this.isUnpublishingAnyRealms}}
+                disabled={{this.isUnpublishingAnySites}}
               />
               <span class='domain-name'>Your Boxel Space</span>
             </label>
@@ -236,11 +236,13 @@ export default class PublishSiteModal extends Component<Signature> {
                     <BoxelButton
                       @kind='text-only'
                       @size='extra-small'
-                      @disabled={{this.isUnpublishingRealm this.generatedUrl}}
+                      @disabled={{this.isUnpublishingFromSite
+                        this.generatedUrl
+                      }}
                       class='unpublish-button'
                       {{on 'click' (fn @handleUnpublish this.generatedUrl)}}
                     >
-                      {{#if (this.isUnpublishingRealm this.generatedUrl)}}
+                      {{#if (this.isUnpublishingFromSite this.generatedUrl)}}
                         <LoadingIndicator />
                         Unpublishing...
                       {{else}}
@@ -260,7 +262,7 @@ export default class PublishSiteModal extends Component<Signature> {
                 <BoxelButton
                   @kind='secondary-light'
                   @size='small'
-                  @disabled={{this.isUnpublishingAnyRealms}}
+                  @disabled={{this.isUnpublishingAnySites}}
                   {{on 'click' this.handleOpenSite}}
                   class='open-site-button'
                   data-test-open-site-button
@@ -284,7 +286,7 @@ export default class PublishSiteModal extends Component<Signature> {
             <BoxelButton
               @kind='secondary-light'
               @size='tall'
-              @disabled={{this.isUnpublishingAnyRealms}}
+              @disabled={{this.isUnpublishingAnySites}}
               {{on 'click' this.handleCancel}}
               class='cancel-button'
               data-test-cancel-button

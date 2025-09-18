@@ -217,7 +217,7 @@ module(basename(__filename), function () {
       assert.strictEqual(
         typeof publishedLastPublishedAt,
         'string',
-        'published realm lastPublishedAt is a string',
+        'published realm lastPublishedAt is a number',
       );
 
       // Verify the timestamp matches what was returned from the publish response
