@@ -404,6 +404,7 @@ export class RealmServer {
       name,
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
+      publishable: true,
     });
     writeJSONSync(join(realmPath, 'index.json'), {
       data: {
