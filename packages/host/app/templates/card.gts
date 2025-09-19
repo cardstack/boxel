@@ -105,6 +105,19 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     return false;
   }
 
+  get hostModeContainerClass() {
+    if (this.isError) {
+      return 'host-mode-container';
+    }
+
+    // Check if the card prefers wide format
+    if ((this.card.constructor as typeof CardDef).prefersWideFormat) {
+      return 'host-mode-container is-wide';
+    }
+
+    return 'host-mode-container';
+  }
+
   @provide(CardContextName)
   // @ts-expect-error 'context' is declared but not used
   private get context(): CardContext {
@@ -184,7 +197,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         {{this.addMessageListener}}
       />
       <section
-        class='host-mode-container'
+        class={{this.hostModeContainerClass}}
         style={{this.backgroundImageStyle}}
         data-test-host-mode-container
       >
@@ -210,8 +223,24 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         padding: var(--boxel-sp);
       }
 
+      .host-mode-container.is-wide {
+        padding: 0;
+      }
+
       .card {
         width: 50rem;
+      }
+
+      .host-mode-content.is-wide .container {
+        width: 100%;
+        max-width: 100%;
+        padding: 0;
+        border-radius: 0;
+      }
+
+      .host-mode-container.is-wide .card {
+        width: 100%;
+        max-width: 100%;
       }
 
       .connect {
