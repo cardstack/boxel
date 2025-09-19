@@ -231,7 +231,10 @@ export default class PublishSiteModal extends Component<Signature> {
                 </span>
                 {{#if this.isRealmPublished}}
                   <div class='domain-info'>
-                    <span class='last-published-at'>Published
+                    <span
+                      class='last-published-at'
+                      data-test-last-published-at
+                    >Published
                       {{this.lastPublishedTime}}</span>
                     <BoxelButton
                       @kind='text-only'
@@ -241,6 +244,7 @@ export default class PublishSiteModal extends Component<Signature> {
                       }}
                       class='unpublish-button'
                       {{on 'click' (fn @handleUnpublish this.generatedUrl)}}
+                      data-test-unpublish-button
                     >
                       {{#if (this.isUnpublishingFromSite this.generatedUrl)}}
                         <LoadingIndicator />
