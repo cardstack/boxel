@@ -1,30 +1,37 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AvatarCreator",
+        "module": "../avatar-creator/avatar-creator"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": null,
       "avatar": {
-        "topType": null,
-        "accessoriesType": null,
-        "hairColor": null,
-        "facialHairType": null,
-        "clotheType": null,
-        "eyeType": null,
-        "eyebrowType": null,
-        "mouthType": null,
-        "skinColor": null
+        "eyeType": "Happy",
+        "topType": "ShortHairShortCurly",
+        "hairColor": "Auburn",
+        "mouthType": "Smile",
+        "skinColor": "Tanned",
+        "clotheType": "Hoodie",
+        "eyebrowType": "RaisedExcited",
+        "facialHairType": "BeardMedium",
+        "accessoriesType": "Sunglasses"
       },
       "cardInfo": {
+        "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null,
-        "notes": null
+        "thumbnailURL": null
       }
     },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../avatar-creator/avatar-creator",
-        "name": "AvatarCreator"
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

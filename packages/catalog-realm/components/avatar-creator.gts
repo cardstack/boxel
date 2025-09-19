@@ -25,6 +25,7 @@ interface AvatarCreatorArgs {
   model: AvataaarsModel;
   name?: string;
   context?: any;
+  onUpdate?: (model: AvataaarsModel) => void;
 }
 
 export default class AvatarCreator extends Component<AvatarCreatorArgs> {
@@ -234,6 +235,9 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
       ['mouthType', randomMouth.value],
       ['skinColor', randomSkinTone.value],
     ]);
+    
+    // Notify parent component of the change
+    this.args.onUpdate?.(Object.fromEntries(this.currentModel.entries()) as AvataaarsModel);
   };
 
   selectAvataaarsOption = (option: { value: string; label: string }) => {
@@ -261,6 +265,9 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
         this.currentModel.set('clotheType', option.value);
         break;
     }
+    
+    // Notify parent component of the change
+    this.args.onUpdate?.(Object.fromEntries(this.currentModel.entries()) as AvataaarsModel);
   };
 
   copyAvataaarsUrl = () => {

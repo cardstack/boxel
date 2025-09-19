@@ -11,6 +11,7 @@ import { Skill } from 'https://cardstack.com/base/skill';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Avatar from '../fields/avatar';
 import AvatarCreatorComponent from '../components/avatar-creator';
+import { AvataaarsModel } from '../components/avatar-creator';
 
 class IsolatedTemplate extends Component<typeof AvatarCreator> {
   // Convert avatar field to the format expected by the component
@@ -28,11 +29,16 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
     };
   }
 
+  updateAvatar = (model: AvataaarsModel) => {
+    this.args.model.avatar = new Avatar(model);
+  };
+
   <template>
     <AvatarCreatorComponent
       @model={{this.avatarModel}}
       @name={{@model.name}}
       @context={{@context}}
+      @onUpdate={{this.updateAvatar}}
     />
   </template>
 }
