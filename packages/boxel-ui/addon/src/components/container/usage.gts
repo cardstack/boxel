@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
+import { type BoxelSpacing } from '../../helpers.ts';
 import BoxelContainer, { type BoxelContainerDisplayOption } from './index.gts';
 
 interface Signature {
@@ -19,6 +20,7 @@ export default class BoxelContainerUsage extends Component<Signature> {
   ];
   @tracked private tag?: keyof HTMLElementTagNameMap;
   @tracked private display?: BoxelContainerDisplayOption;
+  @tracked private padding?: string | BoxelSpacing;
 
   <template>
     <FreestyleUsage @name='BoxelContainer'>
@@ -30,6 +32,7 @@ export default class BoxelContainerUsage extends Component<Signature> {
         <BoxelContainer
           @display={{this.display}}
           @tag={{if this.tag this.tag 'div'}}
+          @padding={{this.padding}}
         >
           <h3>h3</h3>
           <p>Hello</p>
@@ -52,6 +55,14 @@ export default class BoxelContainerUsage extends Component<Signature> {
           @options={{this.displayOptions}}
           @onInput={{fn (mut this.display)}}
           @value='default'
+        />
+        <Args.String
+          @name='padding'
+          @description='Container padding. Accepts string or BoxelSpacing values.'
+          @defaultValue='var(--boxel-sp)'
+          @value={{this.padding}}
+          @optional={{true}}
+          @onInput={{fn (mut this.padding)}}
         />
       </:api>
     </FreestyleUsage>

@@ -35,7 +35,6 @@ export default function calcBoxelSpacing(value?: string | BoxelSpacing) {
   if (!value) {
     return;
   }
-
   value = value.toLowerCase().trim();
 
   if (value === 'default' || value === 'm') {

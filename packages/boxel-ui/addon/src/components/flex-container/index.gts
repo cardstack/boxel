@@ -11,55 +11,41 @@ import BoxelContainer, {
 
 interface Signature extends BoxelContainerSignature {
   Args: {
+    alignContent?: string;
+    alignItems?: string;
+    alignSelf?: string;
     columnGap?: string | BoxelSpacing;
-    columnMaxWidth?: string;
-    columnMinWidth?: string;
-    columns?: string | number;
+    flexDirection?: string;
+    flexWrap?: string;
     gap?: string | BoxelSpacing;
+    justifyContent?: string;
+    justifyItems?: string;
+    justifySelf?: string;
     maxWidth?: string;
     padding?: string | BoxelSpacing;
     paddingBlock?: string | BoxelSpacing;
     paddingInline?: string | BoxelSpacing;
     rowGap?: string | BoxelSpacing;
-    rowMaxHeight?: string;
-    rowMinHeight?: string;
-    rows?: string | number;
     tag?: keyof HTMLElementTagNameMap;
   };
 }
 
-export default class GridContainer extends Component<Signature> {
+export default class FlexContainer extends Component<Signature> {
   <template>
     <BoxelContainer
+      class='boxel-flex-container'
       @tag={{@tag}}
-      @display='grid'
-      style={{this.gridStyles}}
+      @display='flex'
+      style={{this.flexStyles}}
       ...attributes
     >
       {{yield}}
     </BoxelContainer>
   </template>
 
-  private get gridStyles() {
+  private get flexStyles() {
     let layout = '';
-    let cols = formatValue(this.args.columns);
-    let rows = formatValue(this.args.rows);
     let maxWidth = formatValue(this.args.maxWidth);
-
-    if (cols) {
-      let colMin = formatValue(this.args.columnMinWidth);
-      let colMax = formatValue(this.args.columnMaxWidth);
-      layout += `grid-template-columns: repeat(${cols}, minmax(${
-        colMin ?? 0
-      }, ${colMax ?? '1fr'}));`;
-    }
-    if (rows) {
-      let rowMin = formatValue(this.args.rowMinHeight);
-      let rowMax = formatValue(this.args.rowMaxHeight);
-      layout += `grid-template-rows: repeat(${rows}, minmax(${rowMin ?? 0}, ${
-        rowMax ?? '1fr'
-      }));`;
-    }
 
     if (maxWidth) {
       layout += `max-width: ${maxWidth};`;
@@ -83,6 +69,33 @@ export default class GridContainer extends Component<Signature> {
     }
     if (this.args.padding) {
       layout += `padding: ${calcBoxelSpacing(this.args.padding)};`;
+    }
+
+    if (this.args.flexDirection) {
+      layout += `flex-direction: ${formatValue(this.args.flexDirection)};`;
+    }
+    if (this.args.flexWrap) {
+      layout += `flex-wrap: ${formatValue(this.args.flexWrap)};`;
+    }
+
+    if (this.args.alignContent) {
+      layout += `align-content: ${formatValue(this.args.alignContent)};`;
+    }
+    if (this.args.alignItems) {
+      layout += `align-items: ${formatValue(this.args.alignItems)};`;
+    }
+    if (this.args.alignSelf) {
+      layout += `align-self: ${formatValue(this.args.alignSelf)};`;
+    }
+
+    if (this.args.justifyContent) {
+      layout += `justify-content: ${formatValue(this.args.justifyContent)};`;
+    }
+    if (this.args.justifyItems) {
+      layout += `justify-items: ${formatValue(this.args.justifyItems)};`;
+    }
+    if (this.args.justifySelf) {
+      layout += `justify-self: ${formatValue(this.args.justifySelf)};`;
     }
 
     return sanitizeHtmlSafe(layout);
