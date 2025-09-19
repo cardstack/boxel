@@ -261,8 +261,8 @@ module('Acceptance | host submode', function (hooks) {
           trail: [`${testRealmURL}Person/1.json`],
         });
 
-        await click('[data-test-publish-site-button]');
-        assert.dom('[data-test-publish-site-modal]').exists();
+        await click('[data-test-publish-realm-button]');
+        assert.dom('[data-test-publish-realm-modal]').exists();
 
         assert.dom('[data-test-last-published-at]').doesNotExist();
         assert.dom('[data-test-unpublish-button]').doesNotExist();
@@ -275,13 +275,14 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-publish-button]').isNotDisabled();
 
         await click('[data-test-publish-button]');
-        assert.dom('[data-test-publish-site-modal]').doesNotExist();
+        assert.dom('[data-test-publish-button]').hasText('Publishing...');
+        assert.dom('[data-test-publish-button]').hasAttribute('disabled');
 
-        await waitFor('[data-test-publish-site-button].publishing');
-        assert.dom('[data-test-publish-site-button]').hasText('Publishing...');
-        assert.dom('[data-test-publish-site-button]').hasClass('publishing');
+        await waitFor('[data-test-publish-realm-button].publishing');
+        assert.dom('[data-test-publish-realm-button]').hasText('Publishing...');
+        assert.dom('[data-test-publish-realm-button]').hasClass('publishing');
 
-        await click('[data-test-publish-site-button]');
+        await click('[data-test-publish-realm-button]');
         await waitFor('.publishing-realm-popover');
         assert.dom('.publishing-realm-popover').exists();
         assert
@@ -294,16 +295,17 @@ module('Acceptance | host submode', function (hooks) {
 
         await waitUntil(() => {
           return !document.querySelector(
-            '[data-test-publish-site-button].publishing',
+            '[data-test-publish-realm-button].publishing',
           );
         });
 
-        assert.dom('[data-test-publish-site-button]').hasText('Publish Site');
+        assert.dom('[data-test-publish-realm-button]').hasText('Publish...');
         assert
-          .dom('[data-test-publish-site-button]')
+          .dom('[data-test-publish-realm-button]')
           .doesNotHaveClass('publishing');
+        assert.dom('.publishing-realm-popover').doesNotExist();
 
-        await click('[data-test-publish-site-button]');
+        await click('[data-test-publish-realm-button]');
 
         assert.dom('[data-test-last-published-at]').exists();
         assert.dom('[data-test-last-published-at]').containsText('Published');
@@ -348,7 +350,7 @@ module('Acceptance | host submode', function (hooks) {
           trail: [`${testRealmURL}Person/1.json`],
         });
 
-        await click('[data-test-publish-site-button]');
+        await click('[data-test-publish-realm-button]');
         assert.dom('[data-test-last-published-at]').containsText('3 days ago');
         assert.dom('[data-test-unpublish-button]').exists();
         assert.dom('[data-test-open-site-button]').exists();
@@ -362,6 +364,7 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-last-published-at]').doesNotExist();
         assert.dom('[data-test-unpublish-button]').doesNotExist();
         assert.dom('[data-test-open-site-button]').doesNotExist();
+        getService('network').resetState();
       });
     });
   });

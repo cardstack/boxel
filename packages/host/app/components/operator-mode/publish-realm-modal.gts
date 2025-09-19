@@ -35,19 +35,23 @@ interface Signature {
   };
 }
 
-export default class PublishSiteModal extends Component<Signature> {
+export default class PublishRealmModal extends Component<Signature> {
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
 
-  @tracked selectedDomains: string[] = [];
+  @tracked selectedPublishedRealmURLs: string[] = [];
 
   get isRealmPublished() {
     return !!this.lastPublishedTime;
   }
 
   get isPublishDisabled() {
-    return !this.hasSelectedDomains || this.isUnpublishingAnySites;
+    return (
+      !this.hasSelectedPublishedRealmURLs ||
+      this.isUnpublishingAnyRealms ||
+      this.isPublishing
+    );
   }
 
   get lastPublishedTime() {
@@ -75,16 +79,16 @@ export default class PublishSiteModal extends Component<Signature> {
     }
   }
 
-  get isDefaultDomainSelected() {
-    return this.selectedDomains.includes(this.generatedUrl);
+  get isDefaultPublishedRealmURLSelected() {
+    return this.selectedPublishedRealmURLs.includes(this.generatedUrl);
   }
 
-  get hasSelectedDomains() {
-    return this.selectedDomains.length > 0;
+  get hasSelectedPublishedRealmURLs() {
+    return this.selectedPublishedRealmURLs.length > 0;
   }
 
-  get currentRealmUrl() {
-    return this.operatorModeStateService.realmURL;
+  get currentRealmURL() {
+    return this.operatorModeStateService.realmURL.href;
   }
 
   get generatedUrl() {
@@ -128,13 +132,13 @@ export default class PublishSiteModal extends Component<Signature> {
   }
 
   private getRealmName(): string {
-    const realmUrl = this.currentRealmUrl;
+    const realmUrl = this.currentRealmURL;
     if (!realmUrl) {
       throw new Error('Current realm URL is not available');
     }
 
     try {
-      const pathSegments = realmUrl.pathname
+      const pathSegments = new URL(realmUrl).pathname
         .split('/')
         .filter((segment) => segment);
       const lastSegment = pathSegments[pathSegments.length - 1];
@@ -155,12 +159,11 @@ export default class PublishSiteModal extends Component<Signature> {
   @action
   toggleDefaultDomain() {
     const defaultUrl = this.generatedUrl;
-    if (this.isDefaultDomainSelected) {
-      this.selectedDomains = this.selectedDomains.filter(
-        (url) => url !== defaultUrl,
-      );
-    } else {
-      this.selectedDomains = [...this.selectedDomains, defaultUrl];
+    if (!this.isDefaultPublishedRealmURLSelected) {
+      this.selectedPublishedRealmURLs = [
+        ...this.selectedPublishedRealmURLs,
+        defaultUrl,
+      ];
     }
   }
 
@@ -174,26 +177,30 @@ export default class PublishSiteModal extends Component<Signature> {
     this.args.onClose();
   }
 
-  isUnpublishingFromSite = (publishedRealmURL: string) => {
-    return this.realm.isUnpublishingFromSite(
-      this.currentRealmUrl.href,
+  isUnpublishingRealm = (publishedRealmURL: string) => {
+    return this.realm.isUnpublishingRealm(
+      this.currentRealmURL,
       publishedRealmURL,
     );
   };
 
-  get isUnpublishingAnySites() {
-    return this.realm.isUnpublishingFromAnySites(this.currentRealmUrl.href);
+  get isUnpublishingAnyRealms() {
+    return this.realm.isUnpublishingAnyRealms(this.currentRealmURL);
+  }
+
+  get isPublishing() {
+    return this.realm.isPublishing(this.currentRealmURL);
   }
 
   <template>
     <ModalContainer
-      class='publish-site-modal'
-      @cardContainerClass='publish-site'
+      class='publish-realm-modal'
+      @cardContainerClass='publish-realm'
       @title='Where to?'
       @size='medium'
       @isOpen={{@isOpen}}
       @onClose={{this.handleCancel}}
-      data-test-publish-site-modal
+      data-test-publish-realm-modal
     >
       <:header>
         <div class='modal-subtitle'>
@@ -207,20 +214,17 @@ export default class PublishSiteModal extends Component<Signature> {
             <label class='domain-header'>
               <input
                 type='checkbox'
-                checked={{this.isDefaultDomainSelected}}
+                checked={{this.isDefaultPublishedRealmURLSelected}}
                 {{on 'change' this.toggleDefaultDomain}}
                 class='domain-checkbox'
                 data-test-default-domain-checkbox
-                disabled={{this.isUnpublishingAnySites}}
+                disabled={{this.isUnpublishingAnyRealms}}
               />
               <span class='domain-name'>Your Boxel Space</span>
             </label>
 
             <div class='domain-details'>
-              <WithLoadedRealm
-                @realmURL={{this.currentRealmUrl.href}}
-                as |realm|
-              >
+              <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
                 <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
               </WithLoadedRealm>
               <div class='domain-url-container'>
@@ -239,14 +243,12 @@ export default class PublishSiteModal extends Component<Signature> {
                     <BoxelButton
                       @kind='text-only'
                       @size='extra-small'
-                      @disabled={{this.isUnpublishingFromSite
-                        this.generatedUrl
-                      }}
+                      @disabled={{this.isUnpublishingRealm this.generatedUrl}}
                       class='unpublish-button'
                       {{on 'click' (fn @handleUnpublish this.generatedUrl)}}
                       data-test-unpublish-button
                     >
-                      {{#if (this.isUnpublishingFromSite this.generatedUrl)}}
+                      {{#if (this.isUnpublishingRealm this.generatedUrl)}}
                         <LoadingIndicator />
                         Unpublishing...
                       {{else}}
@@ -266,7 +268,7 @@ export default class PublishSiteModal extends Component<Signature> {
                 <BoxelButton
                   @kind='secondary-light'
                   @size='small'
-                  @disabled={{this.isUnpublishingAnySites}}
+                  @disabled={{this.isUnpublishingAnyRealms}}
                   {{on 'click' this.handleOpenSite}}
                   class='open-site-button'
                   data-test-open-site-button
@@ -288,24 +290,19 @@ export default class PublishSiteModal extends Component<Signature> {
         {{#if @isOpen}}
           <div class='footer-buttons'>
             <BoxelButton
-              @kind='secondary-light'
-              @size='tall'
-              @disabled={{this.isUnpublishingAnySites}}
-              {{on 'click' this.handleCancel}}
-              class='cancel-button'
-              data-test-cancel-button
-            >
-              Cancel
-            </BoxelButton>
-            <BoxelButton
               @kind='primary'
               @size='tall'
-              {{on 'click' (fn @handlePublish this.selectedDomains)}}
+              {{on 'click' (fn @handlePublish this.selectedPublishedRealmURLs)}}
               @disabled={{this.isPublishDisabled}}
               class='publish-button'
               data-test-publish-button
             >
-              Publish to selected domains
+              {{#if this.isPublishing}}
+                <LoadingIndicator />
+                Publishing...
+              {{else}}
+                Publish to selected domains
+              {{/if}}
             </BoxelButton>
           </div>
         {{/if}}
@@ -313,21 +310,21 @@ export default class PublishSiteModal extends Component<Signature> {
     </ModalContainer>
 
     <style scoped>
-      .publish-site-modal {
+      .publish-realm-modal {
         --horizontal-gap: var(--boxel-sp-xs);
         --stack-card-footer-height: auto;
       }
 
-      .publish-site-modal > :deep(.boxel-modal__inner) {
+      .publish-realm-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
 
-      .publish-site-modal :deep(.dialog-box__content) {
+      .publish-realm-modal :deep(.dialog-box__content) {
         display: flex;
         flex-direction: column;
       }
 
-      :deep(.publish-site) {
+      :deep(.publish-realm) {
         height: 32rem;
       }
 
@@ -437,6 +434,12 @@ export default class PublishSiteModal extends Component<Signature> {
 
       .unpublish-button:not(:disabled):hover {
         color: var(--boxel-dark);
+      }
+
+      .publish-button {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
       }
 
       .open-site-button {

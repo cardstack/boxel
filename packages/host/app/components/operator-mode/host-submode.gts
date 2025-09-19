@@ -18,7 +18,7 @@ import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import PublishingSitesPopover from '@cardstack/host/components/operator-mode/publishing-sites-popover';
+import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -28,7 +28,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import PublishSiteModal from './publish-site-modal';
+import PublishRealmModal from './publish-realm-modal';
 import SubmodeLayout from './submode-layout';
 
 interface HostSubmodeSignature {
@@ -41,8 +41,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare store: StoreService;
   @service private declare realm: RealmService;
 
-  @tracked isPublishSiteModalOpen = false;
-  @tracked isPublishingSitesPopoverOpen = false;
+  @tracked isPublishRealmModalOpen = false;
+  @tracked isPublishingRealmPopoverOpen = false;
 
   get currentCardId() {
     return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
@@ -94,18 +94,18 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   @action
-  openPublishSiteModal() {
-    this.isPublishSiteModalOpen = true;
+  openPublishRealmModal() {
+    this.isPublishRealmModalOpen = true;
   }
 
   @action
-  closePublishSiteModal() {
-    this.isPublishSiteModalOpen = false;
+  closePublishRealmModal() {
+    this.isPublishRealmModalOpen = false;
   }
 
   @action
-  togglePublishingSitesPopover() {
-    this.isPublishingSitesPopoverOpen = !this.isPublishingSitesPopoverOpen;
+  togglePublishingRealmPopover() {
+    this.isPublishingRealmPopoverOpen = !this.isPublishingRealmPopoverOpen;
   }
 
   get realmURL() {
@@ -117,13 +117,12 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
-    this.closePublishSiteModal();
-    await this.realm.publishToSites(this.realmURL, publishedRealmURLs);
-    this.isPublishingSitesPopoverOpen = false;
+    await this.realm.publish(this.realmURL, publishedRealmURLs);
+    this.isPublishingRealmPopoverOpen = false;
   });
 
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
-    await this.realm.unpublishFromSite(this.realmURL, publishedRealmURL);
+    await this.realm.unpublish(this.realmURL, publishedRealmURL);
   });
 
   <template>
@@ -139,9 +138,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               <BoxelButton
                 @kind='primary'
                 @size='tall'
-                class='publish-site-button publishing'
-                {{on 'click' this.togglePublishingSitesPopover}}
-                data-test-publish-site-button
+                class='publish-realm-button publishing'
+                {{on 'click' this.togglePublishingRealmPopover}}
+                data-test-publish-realm-button
               >
                 <Refresh width='22' height='22' class='publish-icon' />
                 Publishing...
@@ -150,16 +149,16 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               <BoxelButton
                 @kind='primary'
                 @size='tall'
-                class='publish-site-button'
-                {{on 'click' this.openPublishSiteModal}}
-                data-test-publish-site-button
+                class='publish-realm-button'
+                {{on 'click' this.openPublishRealmModal}}
+                data-test-publish-realm-button
               >
                 <PublishSiteIcon width='22' height='22' class='publish-icon' />
-                Publish Site
+                Publish...
               </BoxelButton>
             {{/if}}
-            <PublishingSitesPopover
-              @isOpen={{this.isPublishingSitesPopoverOpen}}
+            <PublishingRealmPopover
+              @isOpen={{this.isPublishingRealmPopoverOpen}}
             />
           </div>
         </div>
@@ -198,9 +197,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       </div>
     </SubmodeLayout>
 
-    <PublishSiteModal
-      @isOpen={{this.isPublishSiteModalOpen}}
-      @onClose={{this.closePublishSiteModal}}
+    <PublishRealmModal
+      @isOpen={{this.isPublishRealmModalOpen}}
+      @onClose={{this.closePublishRealmModal}}
       @handlePublish={{perform this.handlePublish}}
       @handleUnpublish={{perform this.handleUnpublish}}
     />
@@ -256,7 +255,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         );
       }
 
-      .publish-site-button {
+      .publish-realm-button {
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
@@ -270,7 +269,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         flex-shrink: 0;
       }
 
-      .publish-site-button.publishing {
+      .publish-realm-button.publishing {
         animation: pulse 2s infinite;
       }
 

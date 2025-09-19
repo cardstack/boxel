@@ -71,8 +71,8 @@ class RealmResource {
   private subscription: { unsubscribe: () => void } | undefined;
 
   @tracked private _isPublishing = false;
-  private _publishingSites = new TrackedArray<string>();
-  private _unPublishingSites = new TrackedArray<string>();
+  private _publishingRealms = new TrackedArray<string>();
+  private _unPublishingRealms = new TrackedArray<string>();
 
   // Hassan: in general i'm questioning the usefulness of using Tasks in this
   // class. We seem to be following the pattern of await-ing all the tasks on
@@ -371,7 +371,7 @@ class RealmResource {
     }
   });
 
-  async publishToSites(urls: string[]) {
+  async publish(urls: string[]) {
     if (this._isPublishing) {
       return;
     }
@@ -379,11 +379,11 @@ class RealmResource {
     try {
       this._isPublishing = true;
       const publishPromises = urls.map(async (url) => {
-        if (this._publishingSites.includes(url)) {
+        if (this._publishingRealms.includes(url)) {
           return;
         }
         // Set publishing state
-        this._publishingSites.push(url);
+        this._publishingRealms.push(url);
 
         try {
           const result = await this.realmServer.publishRealm(this.url, url);
@@ -393,7 +393,7 @@ class RealmResource {
           console.error(`Error publishing to URL ${url}:`, error);
           return;
         } finally {
-          this._publishingSites.splice(this._publishingSites.indexOf(url), 1);
+          this._publishingRealms.splice(this._publishingRealms.indexOf(url), 1);
         }
       });
 
@@ -435,21 +435,21 @@ class RealmResource {
     return this._isPublishing;
   }
 
-  get isPublishingToAnySites(): boolean {
-    return this._publishingSites.length > 0;
+  get isPublishingToAnyRealms(): boolean {
+    return this._publishingRealms.length > 0;
   }
 
   get publishingRealms(): string[] {
-    return this._publishingSites;
+    return this._publishingRealms;
   }
 
-  async unpublishFromSite(url: string) {
-    if (this._unPublishingSites.includes(url)) {
+  async unpublish(url: string) {
+    if (this._unPublishingRealms.includes(url)) {
       return;
     }
 
     try {
-      this._unPublishingSites.push(url);
+      this._unPublishingRealms.push(url);
       await this.realmServer.unpublishRealm(url);
       if (
         this.info &&
@@ -465,16 +465,16 @@ class RealmResource {
       console.error(`Error unpublishing from URL ${url}:`, error);
       return;
     } finally {
-      this._unPublishingSites.splice(this._unPublishingSites.indexOf(url), 1);
+      this._unPublishingRealms.splice(this._unPublishingRealms.indexOf(url), 1);
     }
   }
 
-  isUnpublishingFromAnySites = (): boolean => {
-    return this._unPublishingSites.length > 0;
+  isUnpublishingAnyRealms = (): boolean => {
+    return this._unPublishingRealms.length > 0;
   };
 
-  isUnpublishingFromSite = (publishedRealmURL: string): boolean => {
-    return this._unPublishingSites.includes(publishedRealmURL);
+  isUnpublishingRealm = (publishedRealmURL: string): boolean => {
+    return this._unPublishingRealms.includes(publishedRealmURL);
   };
 }
 
@@ -697,27 +697,27 @@ export default class RealmService extends Service {
     }
   }
 
-  async publishToSites(realmURL: string, publishedRealmURLs: string[]) {
+  async publish(realmURL: string, publishedRealmURLs: string[]) {
     let resource = this.getOrCreateRealmResource(realmURL);
-    return await resource.publishToSites(publishedRealmURLs);
+    return await resource.publish(publishedRealmURLs);
   }
 
-  async unpublishFromSite(realmURL: string, publishedRealmURL: string) {
+  async unpublish(realmURL: string, publishedRealmURL: string) {
     let resource = this.getOrCreateRealmResource(realmURL);
-    return await resource.unpublishFromSite(publishedRealmURL);
+    return await resource.unpublish(publishedRealmURL);
   }
 
-  isUnpublishingFromAnySites = (realmURL: string): boolean => {
+  isUnpublishingAnyRealms = (realmURL: string): boolean => {
     let resource = this.getOrCreateRealmResource(realmURL);
-    return resource.isUnpublishingFromAnySites();
+    return resource.isUnpublishingAnyRealms();
   };
 
-  isUnpublishingFromSite = (
+  isUnpublishingRealm = (
     realmURL: string,
     publishedRealmURL: string,
   ): boolean => {
     let resource = this.getOrCreateRealmResource(realmURL);
-    return resource.isUnpublishingFromSite(publishedRealmURL);
+    return resource.isUnpublishingRealm(publishedRealmURL);
   };
 
   isPublishing = (realmURL: string): boolean => {

@@ -30,10 +30,10 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
         </div>
         <div class='publishing-realm-content'>
           {{#if this.publishingRealms.length}}
-            <div class='publishing-domains-list'>
+            <div class='realm-urls'>
               {{#each this.publishingRealms as |url|}}
-                <div class='publishing-domain-item'>
-                  <div class='domain-icon'>
+                <div class='realm-item'>
+                  <div class='realm-icon-container'>
                     {{#if this.operatorModeStateService.currentRealmInfo}}
                       <img
                         src={{this.operatorModeStateService.currentRealmInfo.iconURL}}
@@ -44,7 +44,7 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
                       <div class='default-realm-icon'></div>
                     {{/if}}
                   </div>
-                  <div class='domain-url'>{{url}}</div>
+                  <div class='realm-url'>{{url}}</div>
                   <div class='status-icon'>
                     <LoadingIndicator class='loading-icon' />
                   </div>
@@ -89,17 +89,17 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
         max-height: 200px;
       }
 
-      .publishing-domain-item {
+      .realm-item {
         display: flex;
         align-items: center;
         border-bottom: 1px solid var(--boxel-light-200);
       }
 
-      .publishing-domain-item:last-child {
+      .realm-item:last-child {
         border-bottom: none;
       }
 
-      .domain-icon {
+      .realm-icon-container {
         width: 20px;
         height: 20px;
         margin-right: 0.75rem;
@@ -120,7 +120,7 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
         border-radius: 3px;
       }
 
-      .domain-url {
+      .realm-url {
         flex: 1;
         font: 500 var(--boxel-font-sm);
         color: var(--boxel-dark);
