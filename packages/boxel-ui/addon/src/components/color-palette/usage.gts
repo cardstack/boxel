@@ -3,13 +3,18 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import ColorPalette from './index.gts';
+import ColorPalette, { DEFAULT_PALETTE_COLORS } from './index.gts';
 
 export default class ColorPaletteUsage extends Component {
   @tracked color: string | null = null;
+  @tracked colors?: string[];
 
   private handleColorChange = (newColor: string | null) => {
-    this.color = newColor;
+    if (this.color === newColor) {
+      this.color = null;
+    } else {
+      this.color = newColor;
+    }
   };
 
   <template>
@@ -21,6 +26,7 @@ export default class ColorPaletteUsage extends Component {
         <ColorPalette
           @color={{this.color}}
           @onChange={{this.handleColorChange}}
+          @colors={{this.colors}}
         />
       </:example>
 
@@ -38,7 +44,18 @@ export default class ColorPaletteUsage extends Component {
           @value={{this.handleColorChange}}
           @onInput={{fn (mut this.handleColorChange)}}
         />
+        <Args.Object
+          @name='colors'
+          @description='An array of colors (optional)'
+          @value={{this.colors}}
+          @defaultValue={{DEFAULT_PALETTE_COLORS}}
+        />
       </:api>
     </FreestyleUsage>
+    <style scoped>
+      :deep(.FreestyleUsageArgument-default.u-codePill) {
+        word-break: break-word;
+      }
+    </style>
   </template>
 }

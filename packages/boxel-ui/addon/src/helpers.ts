@@ -1,3 +1,7 @@
+import calcBoxelSpacing, {
+  type BoxelSpacing,
+  BOXEL_SPACING_VARS,
+} from './helpers/calc-spacing.ts';
 import cn from './helpers/cn.ts';
 import compact from './helpers/compact.ts';
 import { getContrastColor } from './helpers/contrast-color.ts';
@@ -41,9 +45,12 @@ import {
 } from './helpers/truth-helpers.ts';
 
 export {
+  type BoxelSpacing,
   add,
   and,
   bool,
+  BOXEL_SPACING_VARS,
+  calcBoxelSpacing,
   cn,
   compact,
   cssVar,

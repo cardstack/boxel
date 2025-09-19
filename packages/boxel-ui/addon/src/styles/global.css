@@ -93,10 +93,14 @@
     letter-spacing: inherit;
   }
 
-  input:disabled,
+  input:not([type='color']):disabled,
   select:disabled,
   textarea:disabled {
     opacity: 0.5;
+    pointer-events: none;
+  }
+
+  input[type='color']:disabled {
     pointer-events: none;
   }
 
