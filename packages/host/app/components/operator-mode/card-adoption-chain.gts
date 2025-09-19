@@ -38,8 +38,7 @@ export default class CardAdoptionChain extends Component<Signature> {
     <div ...attributes>
       {{#if @isLoading}}
         <div class='loading'>
-          <LoadingIndicator class='loading-icon' />
-          Loading...
+          <LoadingIndicator />
         </div>
       {{else}}
         {{#each @cardInheritanceChain as |data index|}}
@@ -64,12 +63,9 @@ export default class CardAdoptionChain extends Component<Signature> {
     </div>
     <style scoped>
       .loading {
-        display: inline-flex;
-      }
-      .loading-icon {
-        display: inline-block;
-        margin-right: var(--boxel-sp-xxxs);
-        vertical-align: middle;
+        display: flex;
+        justify-content: center;
+        margin: 30vh auto;
       }
     </style>
   </template>

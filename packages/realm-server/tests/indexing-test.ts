@@ -796,7 +796,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -904,7 +904,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -1012,7 +1012,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -1129,7 +1129,7 @@ module(basename(__filename), function () {
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title':
               {
                 type: 'contains',
-                isComputed: false,
+                isComputed: true,
                 fieldOrCard: {
                   name: 'StringField',
                   module: 'https://cardstack.com/base/card-api',

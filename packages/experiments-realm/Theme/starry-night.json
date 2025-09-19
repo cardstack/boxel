@@ -8,10 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Starry Night",
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Starry Night",
         "description": null,
         "thumbnailURL": null
       },
