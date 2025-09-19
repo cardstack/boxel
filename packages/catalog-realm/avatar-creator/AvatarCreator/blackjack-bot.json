@@ -8,17 +8,29 @@
     },
     "type": "card",
     "attributes": {
-
+      "name": null,
+      "avatar": {
+        "eyeType": "Surprised",
+        "topType": "ShortHairShortWaved",
+        "hairColor": "PastelPink",
+        "mouthType": "Eating",
+        "skinColor": "DarkBrown",
+        "clotheType": "Overall",
+        "eyebrowType": "FlatNatural",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
           "self": null
-        }
-      },
-      "suggestionSkill": {
-        "links": {
-          "self": "../../Skill/avatar-suggestion"
         }
       }
     }

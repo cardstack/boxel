@@ -3,19 +3,19 @@
     "meta": {
       "adoptsFrom": {
         "name": "Player",
-        "module": "../player/player"
+        "module": "../player"
       }
     },
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Default",
-        "topType": "NoHair",
-        "hairColor": "BrownDark",
-        "mouthType": "Default",
+        "eyeType": "Hearts",
+        "topType": "ShortHairShortWaved",
+        "hairColor": "Brown",
+        "mouthType": "Twinkle",
         "skinColor": "Light",
-        "clotheType": "BlazerShirt",
-        "eyebrowType": "Default",
+        "clotheType": "GraphicShirt",
+        "eyebrowType": "SadConcernedNatural",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },

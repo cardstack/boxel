@@ -6,8 +6,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import UserIcon from '@cardstack/boxel-icons/user';
-import { getAvataarsUrl, AvataaarsModel } from '../components/avatar-creator';
-import AvatarCreatorComponent from '../components/avatar-creator';
+import { getAvataarsUrl, AvataaarsModel } from '../external/avataar-utils';
+import AvatarComponent from './components/avatar';
 
 export default class Avatar extends FieldDef {
   static displayName = 'Avatar';
@@ -94,9 +94,8 @@ export default class Avatar extends FieldDef {
     };
 
     <template>
-      <AvatarCreatorComponent
+      <AvatarComponent
         @model={{this.avatarModel}}
-        @name='Avatar'
         @context={{@context}}
         @onUpdate={{this.updateAvatar}}
       />

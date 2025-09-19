@@ -1,41 +1,36 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AvatarCreator",
+        "module": "../avatar-creator"
+      }
+    },
     "type": "card",
     "attributes": {
-      "name": "Zara Nightshade",
-      "hair": "LongHairCurly",
-      "hairColor": "Blue",
-      "lips": "Smile",
-      "skinTone": "Brown",
-      "eyes": "Hearts",
-      "eyebrows": "RaisedExcited",
-      "clothes": "BlazerSweater",
-      "title": "Zara Nightshade",
+      "avatar": {
+        "eyeType": "Happy",
+        "topType": "Turban",
+        "hairColor": "Auburn",
+        "mouthType": "Smile",
+        "skinColor": "Pale",
+        "clotheType": "Overall",
+        "eyebrowType": "RaisedExcited",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
       "cardInfo": {
+        "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null,
-        "notes": null
-      },
-      "description": null,
-      "thumbnailURL": null
+        "thumbnailURL": null
+      }
     },
     "relationships": {
-      "suggestionSkill": {
-        "links": {
-          "self": "http://localhost:4201/catalog/Skill/avatar-suggestion"
-        }
-      },
       "cardInfo.theme": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "http://localhost:4201/catalog/avatar-creator/avatar-creator",
-        "name": "AvatarCreator"
       }
     }
   }

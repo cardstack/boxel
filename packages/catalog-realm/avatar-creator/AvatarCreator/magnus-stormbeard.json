@@ -1,41 +1,37 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AvatarCreator",
+        "module": "../avatar-creator"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Magnus Stormbeard",
-      "hair": "ShortHairDreads01",
-      "hairColor": "SilverGray",
-      "lips": "Serious",
-      "skinTone": "Pale",
-      "eyes": "Squint",
-      "eyebrows": "Angry",
-      "clothes": "Overall",
-      "title": "Magnus Stormbeard",
+      "avatar": {
+        "eyeType": "Default",
+        "topType": "LongHairBob",
+        "hairColor": "SilverGray",
+        "mouthType": "Eating",
+        "skinColor": "Yellow",
+        "clotheType": "ShirtCrewNeck",
+        "eyebrowType": "SadConcerned",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
       "cardInfo": {
+        "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null,
-        "notes": null
-      },
-      "description": null,
-      "thumbnailURL": null
+        "thumbnailURL": null
+      }
     },
     "relationships": {
-      "suggestionSkill": {
-        "links": {
-          "self": "http://localhost:4201/catalog/Skill/avatar-suggestion"
-        }
-      },
       "cardInfo.theme": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "http://localhost:4201/catalog/avatar-creator/avatar-creator",
-        "name": "AvatarCreator"
       }
     }
   }

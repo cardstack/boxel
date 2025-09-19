@@ -8,30 +8,29 @@
     },
     "type": "card",
     "attributes": {
-      "eyes": "Surprised",
-      "hair": "ShortHairDreads02",
-      "lips": "Twinkle",
       "name": "Chess Bot",
-      "clothes": "BlazerSweater",
+      "avatar": {
+        "eyeType": "Hearts",
+        "topType": "ShortHairShaggyMullet",
+        "hairColor": "Red",
+        "mouthType": "Grimace",
+        "skinColor": "Tanned",
+        "clotheType": "BlazerSweater",
+        "eyebrowType": "FlatNatural",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
         "thumbnailURL": null
-      },
-      "eyebrows": "FlatNatural",
-      "skinTone": "SilverGray",
-      "hairColor": null
+      }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
           "self": null
-        }
-      },
-      "suggestionSkill": {
-        "links": {
-          "self": "../../Skill/avatar-suggestion"
         }
       }
     }

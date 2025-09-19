@@ -3,18 +3,18 @@
     "meta": {
       "adoptsFrom": {
         "name": "Player",
-        "module": "../player/player"
+        "module": "../player"
       }
     },
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Default",
-        "topType": "NoHair",
+        "eyeType": "Close",
+        "topType": "ShortHairShortFlat",
         "hairColor": "BrownDark",
-        "mouthType": "Default",
+        "mouthType": "Smile",
         "skinColor": "Light",
-        "clotheType": "BlazerShirt",
+        "clotheType": "ShirtScoopNeck",
         "eyebrowType": "Default",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
@@ -29,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/experiments/default/playful-illustration"
         }
       }
     }

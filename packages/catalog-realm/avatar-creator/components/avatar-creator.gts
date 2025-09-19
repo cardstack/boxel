@@ -6,171 +6,63 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { task } from 'ember-concurrency';
 
-import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
-import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
+import {
+  AvataaarsModel,
+  DEFAULT_AVATAR_VALUES,
+  getAvataarsUrl,
+  generateRandomAvatarModel,
+  getCategoryOptions,
+  getOptionPreviewUrl,
+  getCurrentSelectionForCategory,
+  updateAvatarModelForCategory,
+  playClickSound,
+} from '../../external/avataar-utils';
 
-export interface AvataaarsModel {
-  topType?: string;
-  accessoriesType?: string;
-  hairColor?: string;
-  facialHairType?: string;
-  clotheType?: string;
-  eyeType?: string;
-  eyebrowType?: string;
-  mouthType?: string;
-  skinColor?: string;
-}
+import { SuggestAvatar } from '../../commands/suggest-avatar';
 
 interface AvatarCreatorArgs {
   model: AvataaarsModel;
-  name?: string;
   context?: any;
   onUpdate?: (model: AvataaarsModel) => void;
 }
 
-export default class AvatarCreator extends Component<AvatarCreatorArgs> {
+export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs> {
   @tracked selectedCategory = 'hair';
   @tracked copySuccess = false;
-  roomId: string | null = null;
 
   // Internal mutable avatar state using TrackedMap
   @tracked currentModel = new TrackedMap([
-    ['topType', this.args.model?.topType || 'ShortHairShortFlat'],
-    ['accessoriesType', this.args.model?.accessoriesType || 'Blank'],
-    ['hairColor', this.args.model?.hairColor || 'BrownDark'],
-    ['facialHairType', this.args.model?.facialHairType || 'Blank'],
-    ['clotheType', this.args.model?.clotheType || 'BlazerShirt'],
-    ['eyeType', this.args.model?.eyeType || 'Default'],
-    ['eyebrowType', this.args.model?.eyebrowType || 'Default'],
-    ['mouthType', this.args.model?.mouthType || 'Default'],
-    ['skinColor', this.args.model?.skinColor || 'Light'],
+    ['topType', this.args.model?.topType || DEFAULT_AVATAR_VALUES.topType],
+    [
+      'accessoriesType',
+      this.args.model?.accessoriesType || DEFAULT_AVATAR_VALUES.accessoriesType,
+    ],
+    [
+      'hairColor',
+      this.args.model?.hairColor || DEFAULT_AVATAR_VALUES.hairColor,
+    ],
+    [
+      'facialHairType',
+      this.args.model?.facialHairType || DEFAULT_AVATAR_VALUES.facialHairType,
+    ],
+    [
+      'clotheType',
+      this.args.model?.clotheType || DEFAULT_AVATAR_VALUES.clotheType,
+    ],
+    ['eyeType', this.args.model?.eyeType || DEFAULT_AVATAR_VALUES.eyeType],
+    [
+      'eyebrowType',
+      this.args.model?.eyebrowType || DEFAULT_AVATAR_VALUES.eyebrowType,
+    ],
+    [
+      'mouthType',
+      this.args.model?.mouthType || DEFAULT_AVATAR_VALUES.mouthType,
+    ],
+    [
+      'skinColor',
+      this.args.model?.skinColor || DEFAULT_AVATAR_VALUES.skinColor,
+    ],
   ]);
-
-  // Avataaars configuration options with comprehensive styling
-  avataaarsOptions = {
-    topType: [
-      { value: 'NoHair', label: 'Bald' },
-      { value: 'Eyepatch', label: 'Eyepatch' },
-      { value: 'Hat', label: 'Hat' },
-      { value: 'Hijab', label: 'Hijab' },
-      { value: 'Turban', label: 'Turban' },
-      { value: 'WinterHat1', label: 'Winter Hat 1' },
-      { value: 'WinterHat2', label: 'Winter Hat 2' },
-      { value: 'WinterHat3', label: 'Winter Hat 3' },
-      { value: 'WinterHat4', label: 'Winter Hat 4' },
-      { value: 'LongHairBigHair', label: 'Big Hair' },
-      { value: 'LongHairBob', label: 'Bob Cut' },
-      { value: 'LongHairBun', label: 'Hair Bun' },
-      { value: 'LongHairCurly', label: 'Curly Hair' },
-      { value: 'LongHairCurvy', label: 'Curvy Hair' },
-      { value: 'LongHairDreads', label: 'Dreadlocks' },
-      { value: 'LongHairFro', label: 'Afro' },
-      { value: 'LongHairFroBand', label: 'Afro with Band' },
-      { value: 'LongHairNotTooLong', label: 'Medium Hair' },
-      { value: 'LongHairShavedSides', label: 'Shaved Sides' },
-      { value: 'LongHairMiaWallace', label: 'Mia Wallace' },
-      { value: 'LongHairStraight', label: 'Straight Hair' },
-      { value: 'LongHairStraight2', label: 'Straight Hair 2' },
-      { value: 'LongHairStraightStrand', label: 'Hair Strand' },
-      { value: 'ShortHairDreads01', label: 'Short Dreads 1' },
-      { value: 'ShortHairDreads02', label: 'Short Dreads 2' },
-      { value: 'ShortHairFrizzle', label: 'Frizzled Hair' },
-      { value: 'ShortHairShaggyMullet', label: 'Shaggy Mullet' },
-      { value: 'ShortHairShortCurly', label: 'Short Curly' },
-      { value: 'ShortHairShortFlat', label: 'Short Flat' },
-      { value: 'ShortHairShortRound', label: 'Short Round' },
-      { value: 'ShortHairShortWaved', label: 'Short Waved' },
-      { value: 'ShortHairSides', label: 'Hair Sides' },
-      { value: 'ShortHairTheCaesar', label: 'Caesar Cut' },
-      { value: 'ShortHairTheCaesarSidePart', label: 'Caesar Side Part' },
-    ],
-    hairColor: [
-      { value: 'Auburn', label: 'Auburn' },
-      { value: 'Black', label: 'Black' },
-      { value: 'Blonde', label: 'Blonde' },
-      { value: 'BlondeGolden', label: 'Golden Blonde' },
-      { value: 'Brown', label: 'Brown' },
-      { value: 'BrownDark', label: 'Dark Brown' },
-      { value: 'PastelPink', label: 'Pastel Pink' },
-      { value: 'Blue', label: 'Blue' },
-      { value: 'Platinum', label: 'Platinum' },
-      { value: 'Red', label: 'Red' },
-      { value: 'SilverGray', label: 'Silver Gray' },
-    ],
-    eyeType: [
-      { value: 'Close', label: 'Closed' },
-      { value: 'Cry', label: 'Crying' },
-      { value: 'Default', label: 'Default' },
-      { value: 'Dizzy', label: 'Dizzy' },
-      { value: 'EyeRoll', label: 'Eye Roll' },
-      { value: 'Happy', label: 'Happy' },
-      { value: 'Hearts', label: 'Hearts' },
-      { value: 'Side', label: 'Side Glance' },
-      { value: 'Squint', label: 'Squint' },
-      { value: 'Surprised', label: 'Surprised' },
-      { value: 'Wink', label: 'Wink' },
-      { value: 'WinkWacky', label: 'Wacky Wink' },
-    ],
-    eyebrowType: [
-      { value: 'Angry', label: 'Angry' },
-      { value: 'AngryNatural', label: 'Angry Natural' },
-      { value: 'Default', label: 'Default' },
-      { value: 'DefaultNatural', label: 'Default Natural' },
-      { value: 'FlatNatural', label: 'Flat Natural' },
-      { value: 'RaisedExcited', label: 'Raised Excited' },
-      { value: 'RaisedExcitedNatural', label: 'Raised Excited Natural' },
-      { value: 'SadConcerned', label: 'Sad Concerned' },
-      { value: 'SadConcernedNatural', label: 'Sad Concerned Natural' },
-      { value: 'UnibrowNatural', label: 'Unibrow Natural' },
-      { value: 'UpDown', label: 'Up Down' },
-      { value: 'UpDownNatural', label: 'Up Down Natural' },
-    ],
-    mouthType: [
-      { value: 'Concerned', label: 'Concerned' },
-      { value: 'Default', label: 'Default' },
-      { value: 'Disbelief', label: 'Disbelief' },
-      { value: 'Eating', label: 'Eating' },
-      { value: 'Grimace', label: 'Grimace' },
-      { value: 'Sad', label: 'Sad' },
-      { value: 'ScreamOpen', label: 'Scream Open' },
-      { value: 'Serious', label: 'Serious' },
-      { value: 'Smile', label: 'Smile' },
-      { value: 'Tongue', label: 'Tongue Out' },
-      { value: 'Twinkle', label: 'Twinkle' },
-      { value: 'Vomit', label: 'Vomit' },
-    ],
-    skinColor: [
-      { value: 'Tanned', label: 'Tanned' },
-      { value: 'Yellow', label: 'Yellow' },
-      { value: 'Pale', label: 'Pale' },
-      { value: 'Light', label: 'Light' },
-      { value: 'Brown', label: 'Brown' },
-      { value: 'DarkBrown', label: 'Dark Brown' },
-      { value: 'Black', label: 'Black' },
-    ],
-    clotheType: [
-      { value: 'BlazerShirt', label: 'Blazer & Shirt' },
-      { value: 'BlazerSweater', label: 'Blazer & Sweater' },
-      { value: 'CollarSweater', label: 'Collar Sweater' },
-      { value: 'GraphicShirt', label: 'Graphic Shirt' },
-      { value: 'Hoodie', label: 'Hoodie' },
-      { value: 'Overall', label: 'Overall' },
-      { value: 'ShirtCrewNeck', label: 'Crew Neck Shirt' },
-      { value: 'ShirtScoopNeck', label: 'Scoop Neck Shirt' },
-      { value: 'ShirtVNeck', label: 'V-Neck Shirt' },
-    ],
-  };
-
-  // <ui label> = <avataarsUrl param>
-  categoryMap: Record<string, keyof typeof this.avataaarsOptions> = {
-    hair: 'topType',
-    eyes: 'eyeType',
-    eyebrows: 'eyebrowType',
-    mouth: 'mouthType',
-    skinTone: 'skinColor',
-    clothes: 'clotheType',
-    hairColor: 'hairColor',
-  };
 
   // Get Avataaars URL for the image
   get avataaarsUrl() {
@@ -180,8 +72,7 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
   }
 
   get currentCategoryOptions() {
-    const paramName = this.categoryMap[this.selectedCategory];
-    return this.avataaarsOptions[paramName] || [];
+    return getCategoryOptions(this.selectedCategory);
   }
 
   selectCategory = (category: string) => {
@@ -190,93 +81,42 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
 
   generateRandomAvatar = () => {
     // Play click sound
-    this.playClickSound();
+    playClickSound();
 
-    // Get random options from each category
-    const randomHair =
-      this.avataaarsOptions.topType[
-        Math.floor(Math.random() * this.avataaarsOptions.topType.length)
-      ];
-    const randomHairColor =
-      this.avataaarsOptions.hairColor[
-        Math.floor(Math.random() * this.avataaarsOptions.hairColor.length)
-      ];
-    const randomEyes =
-      this.avataaarsOptions.eyeType[
-        Math.floor(Math.random() * this.avataaarsOptions.eyeType.length)
-      ];
-    const randomEyebrows =
-      this.avataaarsOptions.eyebrowType[
-        Math.floor(Math.random() * this.avataaarsOptions.eyebrowType.length)
-      ];
-    const randomMouth =
-      this.avataaarsOptions.mouthType[
-        Math.floor(Math.random() * this.avataaarsOptions.mouthType.length)
-      ];
-    const randomSkinTone =
-      this.avataaarsOptions.skinColor[
-        Math.floor(Math.random() * this.avataaarsOptions.skinColor.length)
-      ];
-    const randomClothes =
-      this.avataaarsOptions.clotheType[
-        Math.floor(Math.random() * this.avataaarsOptions.clotheType.length)
-      ];
+    // Generate random avatar using the utility function
+    const randomAvatar = generateRandomAvatarModel();
 
     // Apply random selections to internal state - reassign entire TrackedMap
-    this.currentModel = new TrackedMap([
-      ['topType', randomHair.value],
-      ['accessoriesType', 'Blank'],
-      ['hairColor', randomHairColor.value],
-      ['facialHairType', 'Blank'],
-      ['clotheType', randomClothes.value],
-      ['eyeType', randomEyes.value],
-      ['eyebrowType', randomEyebrows.value],
-      ['mouthType', randomMouth.value],
-      ['skinColor', randomSkinTone.value],
-    ]);
+    this.currentModel = new TrackedMap(Object.entries(randomAvatar));
 
     // Notify parent component of the change
-    this.args.onUpdate?.(
-      Object.fromEntries(this.currentModel.entries()) as AvataaarsModel,
-    );
+    this.args.onUpdate?.(randomAvatar);
   };
 
   selectAvataaarsOption = (option: { value: string; label: string }) => {
-    // Update internal avatar state
-    switch (this.selectedCategory) {
-      case 'hair':
-        this.currentModel.set('topType', option.value);
-        break;
-      case 'hairColor':
-        this.currentModel.set('hairColor', option.value);
-        break;
-      case 'eyes':
-        this.currentModel.set('eyeType', option.value);
-        break;
-      case 'eyebrows':
-        this.currentModel.set('eyebrowType', option.value);
-        break;
-      case 'mouth':
-        this.currentModel.set('mouthType', option.value);
-        break;
-      case 'skinTone':
-        this.currentModel.set('skinColor', option.value);
-        break;
-      case 'clothes':
-        this.currentModel.set('clotheType', option.value);
-        break;
-    }
+    // Get current model as object
+    const currentModelObj = Object.fromEntries(
+      this.currentModel.entries(),
+    ) as AvataaarsModel;
+
+    // Update using the utility function
+    const updatedModel = updateAvatarModelForCategory(
+      currentModelObj,
+      this.selectedCategory,
+      option.value,
+    );
+
+    // Update internal state
+    this.currentModel = new TrackedMap(Object.entries(updatedModel));
 
     // Notify parent component of the change
-    this.args.onUpdate?.(
-      Object.fromEntries(this.currentModel.entries()) as AvataaarsModel,
-    );
+    this.args.onUpdate?.(updatedModel);
   };
 
   copyAvataaarsUrl = () => {
     try {
       // Play click sound
-      this.playClickSound();
+      playClickSound();
       navigator.clipboard.writeText(this.avataaarsUrl);
       this.copySuccess = true;
       // Reset success state after 2 seconds
@@ -289,77 +129,16 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
     }
   };
 
-  // Create a click sound using Web Audio API
-  playClickSound() {
-    try {
-      const audioContext = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
-
-      // Create oscillator for the click sound
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
-      // Connect nodes
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      // Configure the sound - a short, crisp click
-      oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // High frequency for crisp sound
-      oscillator.frequency.exponentialRampToValueAtTime(
-        400,
-        audioContext.currentTime + 0.1,
-      );
-
-      // Set volume envelope for a quick click
-      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(
-        0.3,
-        audioContext.currentTime + 0.01,
-      ); // Quick attack
-      gainNode.gain.exponentialRampToValueAtTime(
-        0.01,
-        audioContext.currentTime + 0.1,
-      ); // Quick decay
-
-      // Play the sound
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.1);
-    } catch (error) {
-      console.log('Audio not supported or failed:', error);
-      // Silently fail if audio is not supported
-    }
-  }
-
   // Generate preview URL for each option
   getOptionPreviewUrl = (option: { value: string; label: string }) => {
-    // Create a temporary model with the option applied for preview
-    const previewModel = Object.fromEntries(this.currentModel.entries());
-
-    switch (this.selectedCategory) {
-      case 'hair':
-        previewModel.topType = option.value;
-        break;
-      case 'hairColor':
-        previewModel.hairColor = option.value;
-        break;
-      case 'eyes':
-        previewModel.eyeType = option.value;
-        break;
-      case 'eyebrows':
-        previewModel.eyebrowType = option.value;
-        break;
-      case 'mouth':
-        previewModel.mouthType = option.value;
-        break;
-      case 'skinTone':
-        previewModel.skinColor = option.value;
-        break;
-      case 'clothes':
-        previewModel.clotheType = option.value;
-        break;
-    }
-
-    return getAvataarsUrl(previewModel as AvataaarsModel);
+    const currentModelObj = Object.fromEntries(
+      this.currentModel.entries(),
+    ) as AvataaarsModel;
+    return getOptionPreviewUrl(
+      currentModelObj,
+      this.selectedCategory,
+      option.value,
+    );
   };
 
   // Getters for template use - these properly track TrackedMap changes
@@ -393,24 +172,13 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
 
   get currentSelection() {
     try {
-      switch (this.selectedCategory) {
-        case 'hair':
-          return this.topType;
-        case 'hairColor':
-          return this.hairColor;
-        case 'eyes':
-          return this.eyeType;
-        case 'eyebrows':
-          return this.eyebrowType;
-        case 'mouth':
-          return this.mouthType;
-        case 'skinTone':
-          return this.skinColor;
-        case 'clothes':
-          return this.clotheType;
-        default:
-          return null;
-      }
+      const currentModelObj = Object.fromEntries(
+        this.currentModel.entries(),
+      ) as AvataaarsModel;
+      return getCurrentSelectionForCategory(
+        currentModelObj,
+        this.selectedCategory,
+      );
     } catch (error) {
       console.warn('Error getting current selection:', error);
       return null;
@@ -425,26 +193,11 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
           'Command context does not exist. Please switch to Interact Mode',
         );
       }
-      if (!this.roomId) {
-        let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
-        let result = await useAiAssistantCommand.execute({
-          roomName: `Avatar Suggestions: ${this.args.name || 'Unnamed Avatar'}`,
-          openRoom: true,
-          prompt:
-            'Please edit the following card with an avatar based upon params of https://getavataaars.com/. The params supported are: topType, accessoriesType, hairColor, facialHairType, clotheType, eyeType, eyebrowType, mouthType and skinColor.',
-        });
 
-        this.roomId = result.roomId;
-
-        let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
-        await setActiveLLMCommand.execute({
-          roomId: this.roomId,
-          mode: 'act',
-        });
-      }
-      if (!this.roomId) {
-        throw new Error('Room setup failed');
-      }
+      let suggestCommand = new SuggestAvatar(commandContext);
+      await suggestCommand.execute({
+        name: 'Avatar',
+      });
     } catch (error) {
       console.error('Error suggesting avatar:', error);
       alert('There was an error getting avatar suggestions. Please try again.');
@@ -471,8 +224,6 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
         </div>
 
         <div class='avatar-info'>
-          <h2>{{if @name @name 'Unnamed Avatar'}}</h2>
-
           <div class='url-copy-section'>
             <div class='url-display-row'>
               <label for='avatar-url-input' class='sr-only'>Avatar URL</label>
@@ -819,28 +570,6 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
         object-fit: cover;
         border-radius: 18px;
         filter: brightness(1.1) contrast(1.05) saturate(1.1);
-      }
-
-      .avatar-info h2 {
-        margin: 0 0 1.5rem 0;
-        color: #ffffff;
-        font-size: 2rem;
-        font-weight: 700;
-        text-align: center;
-        letter-spacing: -0.025em;
-        font-family: 'Press Start 2P', cursive;
-        text-shadow:
-          3px 3px 0px #ff6b6b,
-          6px 6px 0px #4ecdc4;
-        background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #feca57);
-        background-size: 300% 300%;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        animation: textShimmer 3s ease-in-out infinite;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        hyphens: auto;
       }
 
       /* URL Copy Section Styles */
@@ -1606,29 +1335,3 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
     </style>
   </template>
 }
-
-export const getAvataarsUrl = (model: AvataaarsModel) => {
-  let {
-    topType,
-    accessoriesType,
-    hairColor,
-    facialHairType,
-    clotheType,
-    eyeType,
-    eyebrowType,
-    mouthType,
-    skinColor,
-  } = model;
-  const params = [
-    `topType=${encodeURIComponent(topType || 'ShortHairShortFlat')}`,
-    `accessoriesType=${encodeURIComponent(accessoriesType || 'Blank')}`,
-    `hairColor=${encodeURIComponent(hairColor || 'BrownDark')}`,
-    `facialHairType=${encodeURIComponent(facialHairType || 'Blank')}`,
-    `clotheType=${encodeURIComponent(clotheType || 'BlazerShirt')}`,
-    `eyeType=${encodeURIComponent(eyeType || 'Default')}`,
-    `eyebrowType=${encodeURIComponent(eyebrowType || 'Default')}`,
-    `mouthType=${encodeURIComponent(mouthType || 'Default')}`,
-    `skinColor=${encodeURIComponent(skinColor || 'Light')}`,
-  ];
-  return `https://avataaars.io/?${params.join('&')}`;
-};

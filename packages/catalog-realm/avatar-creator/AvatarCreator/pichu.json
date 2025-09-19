@@ -8,30 +8,29 @@
     },
     "type": "card",
     "attributes": {
-      "eyes": "Hearts",
-      "hair": "LongHairShavedSides",
-      "lips": "Smile",
       "name": "Pichu",
-      "clothes": "Hoodie",
+      "avatar": {
+        "eyeType": "Wink",
+        "topType": "LongHairBun",
+        "hairColor": "PastelPink",
+        "mouthType": "Smile",
+        "skinColor": "Light",
+        "clotheType": "ShirtVNeck",
+        "eyebrowType": "UnibrowNatural",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
         "thumbnailURL": null
-      },
-      "eyebrows": "UpDownNatural",
-      "skinTone": "Tanned",
-      "hairColor": "Auburn"
+      }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
           "self": null
-        }
-      },
-      "suggestionSkill": {
-        "links": {
-          "self": "../../Skill/avatar-suggestion"
         }
       }
     }

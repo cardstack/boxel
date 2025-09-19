@@ -8,30 +8,29 @@
     },
     "type": "card",
     "attributes": {
-      "eyes": "Wink",
-      "hair": "LongHairMiaWallace",
-      "lips": "Twinkle",
       "name": "Luna Starweaver",
-      "clothes": "Hoodie",
+      "avatar": {
+        "eyeType": "EyeRoll",
+        "topType": "LongHairMiaWallace",
+        "hairColor": "Blonde",
+        "mouthType": "Vomit",
+        "skinColor": "Pale",
+        "clotheType": "ShirtVNeck",
+        "eyebrowType": "UpDown",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
         "thumbnailURL": null
-      },
-      "eyebrows": "DefaultNatural",
-      "skinTone": "Brown",
-      "hairColor": "Black"
+      }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
           "self": null
-        }
-      },
-      "suggestionSkill": {
-        "links": {
-          "self": "../../Skill/avatar-suggestion"
         }
       }
     }
