@@ -195,6 +195,7 @@ module(basename(__filename), function () {
                   endpoint,
                   backgroundURL: 'http://example.com/background.jpg',
                   iconURL: 'http://example.com/icon.jpg',
+                  publishable: true,
                 },
               },
             },
@@ -209,6 +210,7 @@ module(basename(__filename), function () {
               name: 'Test Realm',
               backgroundURL: 'http://example.com/background.jpg',
               iconURL: 'http://example.com/icon.jpg',
+              publishable: true,
             },
             '.realm.json is correct',
           );
