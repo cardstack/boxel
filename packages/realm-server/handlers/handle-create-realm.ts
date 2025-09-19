@@ -12,6 +12,7 @@ import {
   logger,
   Realm,
   SupportedMimeType,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import { CreateRoutesArgs } from '../routes';
@@ -67,13 +68,16 @@ export default function handleCreateRealmRequest({
     }
 
     let realm: Realm | undefined;
+    let info: Partial<RealmInfo> | undefined;
     let start = Date.now();
     let indexStart: number | undefined;
     try {
-      realm = await createRealm({
+      let result = await createRealm({
         ownerUserId,
         ...json.data.attributes,
       });
+      realm = result.realm;
+      info = result.info;
       log.debug(`created new realm ${realm.url} in ${Date.now() - start} ms`);
       log.debug(`indexing new realm ${realm.url}`);
       indexStart = Date.now();
@@ -114,7 +118,7 @@ export default function handleCreateRealmRequest({
           data: {
             type: 'realm',
             id: realm.url,
-            attributes: { ...json.data.attributes },
+            attributes: { ...json.data.attributes, ...info },
           },
         },
         null,
