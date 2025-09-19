@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Player",
+        "module": "../player/player"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "avatar": {
+        "eyeType": "Default",
+        "topType": "NoHair",
+        "hairColor": "BrownDark",
+        "mouthType": "Default",
+        "skinColor": "Light",
+        "clotheType": "BlazerShirt",
+        "eyebrowType": "Default",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

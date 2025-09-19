@@ -1,7 +1,13 @@
-import { FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
+import {
+  FieldDef,
+  field,
+  contains,
+  Component,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import UserIcon from '@cardstack/boxel-icons/user';
-import { getAvataarsUrl } from '../components/avatar-creator';
+import { getAvataarsUrl, AvataaarsModel } from '../components/avatar-creator';
+import AvatarCreatorComponent from '../components/avatar-creator';
 
 export default class Avatar extends FieldDef {
   static displayName = 'Avatar';
@@ -58,4 +64,42 @@ export default class Avatar extends FieldDef {
       });
     },
   });
+
+  static edit = class EditTemplate extends Component<typeof Avatar> {
+    // Convert avatar field to the format expected by the component
+    get avatarModel() {
+      return {
+        topType: this.args.model.topType,
+        accessoriesType: this.args.model.accessoriesType,
+        hairColor: this.args.model.hairColor,
+        facialHairType: this.args.model.facialHairType,
+        clotheType: this.args.model.clotheType,
+        eyeType: this.args.model.eyeType,
+        eyebrowType: this.args.model.eyebrowType,
+        mouthType: this.args.model.mouthType,
+        skinColor: this.args.model.skinColor,
+      };
+    }
+
+    updateAvatar = (model: AvataaarsModel) => {
+      this.args.model.topType = model.topType;
+      this.args.model.accessoriesType = model.accessoriesType;
+      this.args.model.hairColor = model.hairColor;
+      this.args.model.facialHairType = model.facialHairType;
+      this.args.model.clotheType = model.clotheType;
+      this.args.model.eyeType = model.eyeType;
+      this.args.model.eyebrowType = model.eyebrowType;
+      this.args.model.mouthType = model.mouthType;
+      this.args.model.skinColor = model.skinColor;
+    };
+
+    <template>
+      <AvatarCreatorComponent
+        @model={{this.avatarModel}}
+        @name='Avatar'
+        @context={{@context}}
+        @onUpdate={{this.updateAvatar}}
+      />
+    </template>
+  };
 }

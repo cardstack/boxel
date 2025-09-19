@@ -191,7 +191,6 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
   generateRandomAvatar = () => {
     // Play click sound
     this.playClickSound();
-    debugger;
 
     // Get random options from each category
     const randomHair =
@@ -235,9 +234,11 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
       ['mouthType', randomMouth.value],
       ['skinColor', randomSkinTone.value],
     ]);
-    
+
     // Notify parent component of the change
-    this.args.onUpdate?.(Object.fromEntries(this.currentModel.entries()) as AvataaarsModel);
+    this.args.onUpdate?.(
+      Object.fromEntries(this.currentModel.entries()) as AvataaarsModel,
+    );
   };
 
   selectAvataaarsOption = (option: { value: string; label: string }) => {
@@ -265,9 +266,11 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
         this.currentModel.set('clotheType', option.value);
         break;
     }
-    
+
     // Notify parent component of the change
-    this.args.onUpdate?.(Object.fromEntries(this.currentModel.entries()) as AvataaarsModel);
+    this.args.onUpdate?.(
+      Object.fromEntries(this.currentModel.entries()) as AvataaarsModel,
+    );
   };
 
   copyAvataaarsUrl = () => {
