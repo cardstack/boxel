@@ -59,6 +59,7 @@ import ImagePlaceholder from './icons/image-placeholder.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
+import PublishSiteIcon from './icons/publish-site-icon.gts';
 import Rows4 from './icons/rows-4.gts';
 import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
@@ -69,6 +70,7 @@ import SuccessBordered from './icons/success-bordered.gts';
 import ThreeDotsHorizontal from './icons/three-dots-horizontal.gts';
 import TriangleLeft from './icons/triangle-left.gts';
 import TriangleRight from './icons/triangle-right.gts';
+import UndoArrow from './icons/undo-arrow.gts';
 import Upload from './icons/upload.gts';
 import Warning from './icons/warning.gts';
 
@@ -129,6 +131,7 @@ export const ALL_ICON_COMPONENTS = [
   LoadingIndicator,
   Lock,
   Profile,
+  PublishSiteIcon,
   Rows4,
   Send,
   Sparkle,
@@ -139,6 +142,7 @@ export const ALL_ICON_COMPONENTS = [
   ThreeDotsHorizontal,
   TriangleLeft,
   TriangleRight,
+  UndoArrow,
   Upload,
   Warning,
 ];
@@ -200,6 +204,7 @@ export {
   LoadingIndicator,
   Lock,
   Profile,
+  PublishSiteIcon,
   Rows4,
   Send,
   Sparkle,
@@ -210,6 +215,7 @@ export {
   ThreeDotsHorizontal,
   TriangleLeft,
   TriangleRight,
+  UndoArrow,
   Upload,
   Warning,
 };

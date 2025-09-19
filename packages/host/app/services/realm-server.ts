@@ -427,6 +427,63 @@ export default class RealmServerService extends Service {
     return response;
   }
 
+  async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
+    await this.login();
+
+    const response = await this.network.fetch(
+      `${this.url.href}_publish-realm`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          sourceRealmURL,
+          publishedRealmURL,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Publish realm failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return response.json();
+  }
+
+  async unpublishRealm(publishedRealmURL: string) {
+    await this.login();
+
+    const response = await this.network.fetch(
+      `${this.url.href}_unpublish-realm`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          publishedRealmURL,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Unpublish realm failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return response.json();
+  }
+
   private async getToken() {
     if (!this.token) {
       await this.login();

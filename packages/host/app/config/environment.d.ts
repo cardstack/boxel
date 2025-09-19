@@ -35,4 +35,5 @@ declare const config: {
   featureFlags?: {
     SHOW_ASK_AI?: boolean;
   };
+  defaultPublishedRealmDomain: string;
 };

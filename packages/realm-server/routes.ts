@@ -47,6 +47,7 @@ export type CreateRoutesArgs = {
     url: string,
     username: string,
     copiedFromRealm?: URL,
+    enableFileWatcher?: boolean,
   ) => Realm;
   createRealm: ({
     ownerUserId,
@@ -63,7 +64,11 @@ export type CreateRoutesArgs = {
   }) => Promise<Realm>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
-  sendEvent: (user: string, eventType: string) => Promise<void>;
+  sendEvent: (
+    user: string,
+    eventType: string,
+    data?: Record<string, any>,
+  ) => Promise<void>;
   validPublishedRealmDomains?: string[];
   assetsURL: URL;
 };
