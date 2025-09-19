@@ -12,10 +12,7 @@ import {
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import {
-  type CardDef,
-  type CardStore,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, CardStore } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const ELIGIBLE_FOR_GC = true;

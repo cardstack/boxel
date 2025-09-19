@@ -31,11 +31,7 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type {
-  CardDef,
-  CardMenuItem,
-  Format,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import FormatChooser from '../code-submode/format-chooser';
 
@@ -94,7 +90,7 @@ export default class CardRendererPanel extends Component<Signature> {
     return this.realm.info(url);
   }
 
-  private get contextMenuItems(): CardMenuItem[] {
+  private get contextMenuItems() {
     if (!this.args.card) {
       return [];
     }

@@ -19,7 +19,7 @@ import { type Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
 
-import { type BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { loadModule } from '../resources/import';
 

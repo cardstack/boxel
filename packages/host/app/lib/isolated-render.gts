@@ -10,7 +10,7 @@ import { type ComponentLike } from '@glint/template';
 
 import { CardError } from '@cardstack/runtime-common/error';
 
-import { Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
 
 import type { SimpleElement } from '@simple-dom/interface';
 

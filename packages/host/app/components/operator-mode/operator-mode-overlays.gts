@@ -26,7 +26,7 @@ import {
 
 import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
 
-import { type Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
 
 import { removeFileExtension } from '../search-sheet/utils';
 

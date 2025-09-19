@@ -9,7 +9,7 @@ import { loadCardDef } from '@cardstack/runtime-common';
 import type { Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {

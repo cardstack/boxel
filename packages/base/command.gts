@@ -102,10 +102,15 @@ export class WriteTextFileInput extends CardDef {
 }
 
 export class CreateInstanceInput extends CardDef {
-  @field module = contains(CodeRefField);
+  @field codeRef = contains(CodeRefField);
   @field realm = contains(StringField);
 }
 
+export class CreateInstancesInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field realm = contains(StringField);
+  @field count = contains(NumberField);
+}
 export class UpdateCodePathWithSelectionInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field localName = contains(StringField);

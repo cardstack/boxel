@@ -43,10 +43,7 @@ import {
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
