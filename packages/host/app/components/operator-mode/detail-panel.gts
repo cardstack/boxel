@@ -537,6 +537,8 @@ export default class DetailPanel extends Component<Signature> {
       .loading {
         display: flex;
         justify-content: center;
+        align-items: center;
+        height: 100%;
       }
       .delete-module-button {
         --icon-stroke-width: 1.2px;

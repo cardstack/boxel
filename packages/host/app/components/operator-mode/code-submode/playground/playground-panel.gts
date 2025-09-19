@@ -881,7 +881,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     <section class='playground-panel' data-test-playground-panel>
       <div class='playground-panel-content' style={{this.setMaxWidth}}>
         {{#if this.isLoading}}
-          <LoadingIndicator @color='var(--boxel-light)' />
+          <div class='loading'>
+            <LoadingIndicator @color='var(--boxel-light)' />
+          </div>
         {{else}}
           {{#let (if @isFieldDef this.field this.card) as |card|}}
             {{#let
@@ -1029,6 +1031,11 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
       .card-error-detail :deep(.instance-chooser) {
         border-radius: var(--boxel-border-radius);
+      }
+      .loading {
+        display: flex;
+        justify-content: center;
+        margin: 30vh auto;
       }
     </style>
   </template>
