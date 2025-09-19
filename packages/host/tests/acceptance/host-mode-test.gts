@@ -175,6 +175,16 @@ module('Acceptance | host mode tests', function (hooks) {
     await percySnapshot(assert);
   });
 
+  test('visiting a full width card in host mode', async function (assert) {
+    await visit('/test');
+
+    assert.dom(`[data-test-card="${testHostModeRealmURL}index"]`).exists();
+    assert.strictEqual(getPageTitle(), 'Test Workspace B');
+    assert.dom('[data-test-host-mode-container]').hasClass('is-wide');
+
+    await percySnapshot(assert);
+  });
+
   test('visiting a non-existent card shows an error', async function (assert) {
     await visit('/test/Pet/non-existent.json');
 
