@@ -264,15 +264,13 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   }
 
   private get codePatchErrorMessage() {
-    if (this.args.codePatchStatus === 'failed') {
+    if (this.args.codePatchStatus === 'applied') {
+      return null;
+    } else if (this.args.codePatchStatus === 'failed') {
       return this.args.codePatchResult?.failureReason;
-    }
-
-    if (this.codeDiffResource?.errorMessage) {
+    } else if (this.codeDiffResource?.errorMessage) {
       return this.codeDiffResource.errorMessage;
     }
-
-    return null;
   }
 
   <template>
