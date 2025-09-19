@@ -218,6 +218,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           this,
           this.args.codeData.fileUrl,
           this.args.codeData.searchReplaceBlock,
+          this.args.codePatchStatus as CodePatchStatus,
         )
       : undefined;
     return this._codeDiffResource;
@@ -271,6 +272,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     } else if (this.codeDiffResource?.errorMessage) {
       return this.codeDiffResource.errorMessage;
     }
+    return null;
   }
 
   <template>
