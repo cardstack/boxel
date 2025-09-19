@@ -138,6 +138,37 @@ export function buildPrerenderApp(secretSeed: string): {
   return { app, prerenderer };
 }
 
+async function registerWithManager() {
+  try {
+    const managerURL =
+      process.env.PRERENDER_MANAGER_URL ?? 'http://localhost:4222';
+    const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+    const urlOverride = process.env.PRERENDER_SERVER_URL; // optional explicit URL
+    let body = {
+      data: {
+        type: 'prerender-server',
+        attributes: {
+          capacity,
+          ...(urlOverride ? { url: urlOverride } : {}),
+        },
+      },
+    };
+    await fetch(`${managerURL.replace(/\/$/, '')}/prerender-servers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+      },
+      body: JSON.stringify(body),
+    }).catch((e) => {
+      log.debug('Prerender manager registration request failed:', e);
+    });
+  } catch (e) {
+    // best-effort, but log for visibility
+    log.debug('Error while attempting to register with prerender manager:', e);
+  }
+}
+
 export function createPrerenderHttpServer(options?: {
   secretSeed?: string;
 }): Server {
@@ -150,6 +181,14 @@ export function createPrerenderHttpServer(options?: {
     } catch (e: any) {
       // Best-effort shutdown; log and continue
       log.warn('Error stopping prerenderer on server close:', e?.message ?? e);
+    }
+  });
+  // best-effort registration (async, non-blocking)
+  server.on('listening', () => {
+    try {
+      registerWithManager();
+    } catch (e) {
+      log.debug('Error scheduling registration with prerender manager:', e);
     }
   });
   return server;

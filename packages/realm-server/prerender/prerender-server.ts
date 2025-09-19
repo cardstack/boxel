@@ -3,7 +3,7 @@ import '../setup-logger';
 import { logger } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import { Server } from 'http';
-import { createPrerenderHttpServer } from './app';
+import { createPrerenderHttpServer } from './prerender-app';
 
 let log = logger('prerender-server');
 

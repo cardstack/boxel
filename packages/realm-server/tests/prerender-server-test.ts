@@ -9,7 +9,7 @@ import {
   realmSecretSeed,
   testRealmHref,
 } from './helpers';
-import { buildPrerenderApp } from '../prerender/app';
+import { buildPrerenderApp } from '../prerender/prerender-app';
 import { Prerenderer } from '../prerender';
 
 module(basename(__filename), function () {

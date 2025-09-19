@@ -182,6 +182,18 @@ export class Prerenderer {
     } catch (e) {
       log.warn(`Error closing context for realm ${realm}:`, e);
     }
+    try {
+      const managerURL =
+        process.env.PRERENDER_MANAGER_URL ?? 'http://localhost:4222';
+      await fetch(
+        `${managerURL.replace(/\/$/, '')}/prerender-servers/realms/${encodeURIComponent(realm)}`,
+        { method: 'DELETE' },
+      ).catch((e) => {
+        log.debug('Manager realm eviction notify failed:', e);
+      });
+    } catch (_e) {
+      // do best attempt
+    }
   }
 
   async prerenderCard({
@@ -213,7 +225,9 @@ export class Prerenderer {
     );
 
     try {
-      await prev.catch(() => {}); // ensure chain continues even after errors
+      await prev.catch((e) => {
+        log.debug('Previous prerender in chain failed (continuing):', e);
+      }); // ensure chain continues even after errors
       const { page, reused, launchMs } = await this.#getPage(realm);
 
       let sessions: { [realm: string]: string } = {};
