@@ -9,13 +9,13 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Close",
-        "topType": "ShortHairShortFlat",
-        "hairColor": "BrownDark",
+        "eyeType": "Happy",
+        "topType": "LongHairCurly",
+        "hairColor": "PastelPink",
         "mouthType": "Smile",
-        "skinColor": "Light",
-        "clotheType": "ShirtScoopNeck",
-        "eyebrowType": "Default",
+        "skinColor": "Tanned",
+        "clotheType": "GraphicShirt",
+        "eyebrowType": "RaisedExcited",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },
@@ -29,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/experiments/default/playful-illustration"
         }
       }
     }

@@ -5,7 +5,11 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { task } from 'ember-concurrency';
-import { FilterList, BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  FilterList,
+  BoxelButton,
+  BoxelInput,
+} from '@cardstack/boxel-ui/components';
 
 import {
   AvataaarsModel,
@@ -35,10 +39,22 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
   @tracked copySuccess = false;
   @tracked currentMode: 'presets' | 'customized' = 'presets';
 
+  // Store filter objects to maintain reference equality
+  private presetFilter = {
+    displayName: 'Presets',
+    mode: 'presets' as const,
+  };
+
+  private customizedFilter = {
+    displayName: 'Customized',
+    filters: [] as any[], // Will be populated in getter
+    isExpanded: false,
+  };
+
   constructor(owner: any, args: AvatarCreatorArgs) {
     super(owner, args);
     // Set initial active filter to Presets
-    this.activeFilter = this.avatarFilters[0] || null;
+    this.activeFilter = this.presetFilter;
   }
 
   // Generate categories from CATEGORY_MAP to keep things DRY
@@ -59,26 +75,32 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
     }));
   }
 
+  // Store category filter objects to maintain reference equality
+  private _categoryFilters = new Map<string, any>();
+
+  private getCategoryFilter(category: { key: string; label: string }) {
+    if (!this._categoryFilters.has(category.key)) {
+      this._categoryFilters.set(category.key, {
+        displayName: category.label,
+        categoryKey: category.key,
+        mode: 'customized' as const,
+      });
+    }
+    return this._categoryFilters.get(category.key);
+  }
+
   // Transform into FilterList format with Presets and Customized
   get avatarFilters() {
-    // Custom category filters
-    const categoryFilters = this.categories.map((category) => ({
-      displayName: category.label,
-      categoryKey: category.key,
-      mode: 'customized' as const,
-    }));
+    // Custom category filters with stable references
+    const categoryFilters = this.categories.map((category) =>
+      this.getCategoryFilter(category),
+    );
 
-    return [
-      {
-        displayName: 'Presets',
-        mode: 'presets' as const,
-      },
-      {
-        displayName: 'Customized',
-        filters: categoryFilters,
-        isExpanded: this.currentMode === 'customized',
-      },
-    ];
+    // Update the customized filter with current state
+    this.customizedFilter.filters = categoryFilters;
+    this.customizedFilter.isExpanded = this.currentMode === 'customized';
+
+    return [this.presetFilter, this.customizedFilter];
   }
 
   // Internal mutable avatar state using TrackedMap
@@ -139,13 +161,18 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
     // Handle presets selection
     if (filter.mode === 'presets') {
       this.currentMode = 'presets';
-      this.activeFilter = filter;
+      this.activeFilter = this.presetFilter;
     }
     // Handle customized category filter selection
     else if (filter.mode === 'customized' && filter.categoryKey) {
       this.currentMode = 'customized';
       this.selectedCategory = filter.categoryKey;
-      this.activeFilter = filter;
+      this.activeFilter = filter; // This should now be from our cached objects
+    }
+    // Handle customized parent selection (expand/collapse)
+    else if (filter.displayName === 'Customized') {
+      // Don't change activeFilter for the parent, just toggle expansion
+      this.currentMode = 'customized';
     }
   };
 
@@ -308,7 +335,6 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
 
   <template>
     <div class='avatar-compact'>
-      <!-- Top Section: Avatar Preview & URL Copy -->
       <div class='avatar-header'>
         <div class='avatar-preview'>
           <img src={{this.avataaarsUrl}} alt='Avatar' class='avatar-image' />
@@ -316,12 +342,12 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
 
         <div class='url-copy-section'>
           <div class='url-display-row'>
-            <input
-              type='text'
-              value={{this.avataaarsUrl}}
+            <BoxelInput
+              @value={{this.avataaarsUrl}}
+              @placeholder='Avatar URL'
+              @readonly={{true}}
               class='url-input'
-              readonly
-              placeholder='Avatar URL'
+              aria-label='Avatar URL'
             />
             <button
               class='copy-btn {{if this.copySuccess "copied"}}'
@@ -335,28 +361,20 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
               {{/if}}
             </button>
           </div>
-          {{#if this.copySuccess}}
-            <div class='copy-feedback'>Copied!</div>
-          {{/if}}
         </div>
       </div>
 
-      <!-- Main Content: Sidebar + Options -->
       <div class='avatar-content'>
-        <!-- Left Sidebar with FilterList -->
         <div class='sidebar'>
-          <!-- FilterList with Presets and Customized -->
-          <div class='filter-section'>
-            <FilterList
-              @filters={{this.avatarFilters}}
-              @activeFilter={{this.activeFilter}}
-              @onChanged={{this.onFilterChanged}}
-            />
-          </div>
 
-          <!-- AI Suggest Section -->
+          <FilterList
+            @filters={{this.avatarFilters}}
+            @activeFilter={{this.activeFilter}}
+            @onChanged={{this.onFilterChanged}}
+            class='filter-section'
+          />
+
           <div class='ai-section'>
-            <h3 class='ai-title'>AI Suggest</h3>
             <div class='ai-buttons'>
               <BoxelButton
                 @kind='primary'
@@ -383,10 +401,8 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
           </div>
         </div>
 
-        <!-- Right Content: Options Grid -->
         <div class='options-content'>
           {{#if (eq this.currentMode 'presets')}}
-            <!-- Preset Avatars Grid -->
             <div class='options-header'>
               <h3>Preset Avatars</h3>
             </div>
@@ -411,7 +427,6 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
               {{/each}}
             </div>
           {{else}}
-            <!-- Category Options -->
             <div class='options-header'>
               <h3>{{this.selectedCategory}} Options</h3>
             </div>
@@ -447,7 +462,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .avatar-compact {
         container-type: inline-size;
         background: var(--muted-foreground);
@@ -479,6 +494,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         width: 100%;
         height: 100%;
         object-fit: cover;
+        filter: drop-shadow(4px 1px 1px rgba(0, 0, 0, 0.2));
       }
 
       .url-copy-section {
@@ -501,8 +517,11 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       }
 
       .copy-btn {
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background: var(--muted-foreground);
+        width: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--secondary, var(--boxel-highlight));
         color: white;
         border: none;
         border-radius: var(--boxel-border-radius-xs);
@@ -511,18 +530,12 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       }
 
       .copy-btn:hover {
-        background: var(--muted-foreground-hover);
+        background: var(--secondary-hover, var(--boxel-highlight-hover));
         transform: translateY(-1px);
       }
 
       .copy-btn.copied {
-        background: var(--boxel-success);
-      }
-
-      .copy-feedback {
-        font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-success);
-        margin-top: var(--boxel-sp-xxxs);
+        background: var(--boxel-dark, var(--boxel-success));
       }
 
       .avatar-content {
@@ -541,6 +554,24 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       .filter-section {
         padding: var(--boxel-sp-xs);
         border-bottom: 1px solid var(--boxel-border-color);
+        --boxel-filter-expanded-background: transparent;
+        --boxel-filter-hover-background: var(--boxel-300);
+        --boxel-filter-selected-background: var(--muted-foreground);
+        --boxel-filter-selected-foreground: var(--background);
+      }
+
+      .filter-section :where(.filter-name),
+      .filter-section :where(svg) {
+        color: var(--muted);
+      }
+
+      .filter-section :deep(.filter-list-item) {
+        margin-bottom: var(--boxel-sp-4xs);
+      }
+
+      .filter-section :deep(.filter-list__button) {
+        font-size: var(--boxel-font-size-sm);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
 
       .ai-section {
@@ -616,23 +647,28 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       }
 
       .option-btn:hover {
-        border: 2px solid var(--muted-foreground);
+        border: 2px solid var(--boxel-200);
         background: var(--muted);
         transform: translateY(-1px);
         box-shadow: var(--boxel-box-shadow-sm);
       }
 
       .option-btn.selected {
-        border: 2px solid var(--muted-foreground);
-        background: var(--muted);
+        border: 2px solid var(--boxel-500);
+        background: var(--primary);
         box-shadow: var(--boxel-box-shadow);
       }
 
       /* Enhanced selection styling for preset avatars */
-      .option-btn.preset-avatar.selected {
-        border: 2px solid var(--muted-foreground);
-        background: var(--muted);
+      .option-btn.preset-avatar {
+        border: 2px solid var(--primary);
+        background: var(--primary);
         box-shadow: var(--boxel-box-shadow);
+      }
+
+      .option-btn.preset-avatar.selected {
+        border: 2px solid var(--boxel-500);
+        background: var(--muted);
         transform: translateY(-2px);
       }
 
@@ -683,7 +719,6 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
 
         .sidebar {
           width: 100%;
-          flex-direction: row;
           min-height: auto;
         }
 
