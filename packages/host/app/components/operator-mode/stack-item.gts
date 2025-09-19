@@ -54,10 +54,10 @@ import {
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import {
-  type CardContext,
-  type CardCrudFunctions,
-  type CardDef,
+import type {
+  CardContext,
+  CardCrudFunctions,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
@@ -445,6 +445,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           this.cardCrudFunctions.deleteCard?.(this.cardIdentifier),
         icon: IconTrash,
         dangerous: true,
+        disabled: !this.cardCrudFunctions.deleteCard,
       }),
     ];
   }

@@ -3,11 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import {
-  copyCardURLToClipboard,
-  MenuItem,
-  not,
-} from '@cardstack/boxel-ui/helpers';
+import { MenuItem, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -67,9 +63,7 @@ import {
   SingleCardDocument,
   loadDocument,
   LocalPath,
-  Command,
   getCardMenuItems,
-  cardTypeIcon,
 } from '@cardstack/runtime-common';
 
 import type { ComponentLike } from '@glint/template';
@@ -82,16 +76,12 @@ import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
-import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
-import Eye from '@cardstack/boxel-icons/eye';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
-import LinkIcon from '@cardstack/boxel-icons/link';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
-import Trash2Icon from '@cardstack/boxel-icons/trash-2';
 
 import {
   callSerializeHook,
@@ -127,9 +117,12 @@ import {
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
-import CopyCardCommand from '@cardstack/boxel-host/commands/copy-card';
-import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
-import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
+import {
+  type GetCardMenuItemParams,
+  getDefaultCardMenuItems,
+} from './card-menu-items';
+
+export const BULK_GENERATED_ITEM_COUNT = 3;
 
 interface CardOrFieldTypeIconSignature {
   Element: SVGElement;
@@ -242,8 +235,6 @@ export interface FieldConstructor<T> {
   isUsed?: true;
   isPolymorphic?: true;
 }
-
-export type CardMenuItem = typeof Command | MenuItem | '--';
 
 type CardChangeSubscriber = (
   instance: BaseDef,
@@ -2356,96 +2347,8 @@ export class CardDef extends BaseDef {
     return realmURLString ? new URL(realmURLString) : undefined;
   }
 
-  [getCardMenuItems]({
-    canEdit,
-    cardCrudFunctions,
-    menuContext,
-    commandContext,
-  }: {
-    canEdit: boolean;
-    cardCrudFunctions: Partial<CardCrudFunctions>;
-    menuContext: 'interact' | 'ai-assistant' | 'code-mode-preview';
-    commandContext: CommandContext;
-  }): CardMenuItem[] {
-    let cardId = this.id as unknown as string;
-    let menuItems: MenuItem[] = [];
-    if (
-      ['interact', 'code-mode-preview', 'code-mode-playground'].includes(
-        menuContext,
-      )
-    ) {
-      menuItems.push(
-        new MenuItem('Copy Card URL', 'action', {
-          action: () => copyCardURLToClipboard(cardId),
-          icon: LinkIcon,
-          disabled: !cardId,
-        }),
-      );
-    }
-    if (menuContext === 'interact') {
-      if (
-        !isIndexCard(this) && // workspace index card cannot be deleted
-        cardId &&
-        canEdit
-      ) {
-        menuItems.push(
-          new MenuItem('New Card of This Type', 'action', {
-            action: () => {
-              if (!this) {
-                return;
-              }
-              let ref = identifyCard(this.constructor);
-              if (!ref) {
-                return;
-              }
-              cardCrudFunctions.createCard?.(ref, undefined, {
-                realmURL: this[realmURL],
-              });
-            },
-            icon: cardTypeIcon(this as BaseDef),
-            disabled: !this,
-          }),
-          new MenuItem('Delete', 'action', {
-            action: () => cardCrudFunctions.deleteCard?.(this),
-            icon: Trash2Icon,
-            dangerous: true,
-            disabled: !this.id,
-          }),
-        );
-      }
-    } else if (menuContext === 'ai-assistant') {
-      menuItems.push(
-        new MenuItem('Copy to Workspace', 'action', {
-          action: async () => {
-            const { newCardId } = await new CopyCardCommand(
-              commandContext,
-            ).execute({
-              sourceCard: this,
-            });
-
-            let showCardCommand = new ShowCardCommand(commandContext);
-            await showCardCommand.execute({
-              cardId: newCardId,
-            });
-          },
-          icon: ArrowLeft,
-        }),
-      );
-    } else if (
-      ['code-mode-preview', 'code-mode-playground'].includes(menuContext)
-    ) {
-      menuItems.push(
-        new MenuItem('Open in Interact Mode', 'action', {
-          action: () => {
-            new OpenInInteractModeCommand(commandContext).execute({
-              cardId,
-            });
-          },
-          icon: Eye,
-        }),
-      );
-    }
-    return menuItems;
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItem[] {
+    return getDefaultCardMenuItems(this, params);
   }
 }
 
@@ -3502,12 +3405,4 @@ class FallbackCardStore implements CardStore {
   async loadDocument(url: string) {
     return await loadDocument(fetch, url);
   }
-}
-
-function isIndexCard(card: CardDef): boolean {
-  let cardRealmURL = card[realmURL];
-  if (!cardRealmURL) {
-    return false;
-  }
-  return (card.id as unknown as string) === `${cardRealmURL.href}index`;
 }

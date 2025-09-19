@@ -113,6 +113,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @stackItems={{@stackItems}}
             @commandContext={{@commandContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
+            @requestDeleteCard={{@deleteCard}}
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}
             @setupStackItem={{this.setupStackItem}}

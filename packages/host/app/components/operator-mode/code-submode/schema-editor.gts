@@ -24,7 +24,7 @@ import {
   isSelectedItemIncompatibleWithSchemaEditor,
 } from '@cardstack/host/utils/schema-editor';
 
-import { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import type { WithBoundArgs } from '@glint/template';
 
