@@ -1,446 +1,191 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
-import {
-  CardDef,
-  Component,
-  field,
-  contains,
-  linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import { action } from '@ember/object';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { TrackedMap } from 'tracked-built-ins';
+import { task } from 'ember-concurrency';
 
-import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
-import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
-import { Skill } from 'https://cardstack.com/base/skill';
+import {
+  AvataaarsModel,
+  DEFAULT_AVATAR_VALUES,
+  getAvataarsUrl,
+  generateRandomAvatarModel,
+  getCategoryOptions,
+  getOptionPreviewUrl,
+  getCurrentSelectionForCategory,
+  updateAvatarModelForCategory,
+  playClickSound,
+} from '../../external/avataar-utils';
 
-import UserIcon from '@cardstack/boxel-icons/user';
+import { SuggestAvatar } from '../../commands/suggest-avatar';
 
-class IsolatedTemplate extends Component<typeof CharacterCreator> {
+interface AvatarCreatorArgs {
+  model: AvataaarsModel;
+  context?: any;
+  onUpdate?: (model: AvataaarsModel) => void;
+}
+
+export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs> {
   @tracked selectedCategory = 'hair';
-  @tracked errorMessage = '';
   @tracked copySuccess = false;
-  @tracked isSuggesting = false;
-  @tracked suggestionPrompt = '';
-  roomId: string | null = null;
 
-  // Avataaars configuration options with comprehensive styling
-  avataaarsOptions = {
-    hair: [
-      { value: 'NoHair', label: 'Bald' },
-      { value: 'Eyepatch', label: 'Eyepatch' },
-      { value: 'Hat', label: 'Hat' },
-      { value: 'Hijab', label: 'Hijab' },
-      { value: 'Turban', label: 'Turban' },
-      { value: 'WinterHat1', label: 'Winter Hat 1' },
-      { value: 'WinterHat2', label: 'Winter Hat 2' },
-      { value: 'WinterHat3', label: 'Winter Hat 3' },
-      { value: 'WinterHat4', label: 'Winter Hat 4' },
-      { value: 'LongHairBigHair', label: 'Big Hair' },
-      { value: 'LongHairBob', label: 'Bob Cut' },
-      { value: 'LongHairBun', label: 'Hair Bun' },
-      { value: 'LongHairCurly', label: 'Curly Hair' },
-      { value: 'LongHairCurvy', label: 'Curvy Hair' },
-      { value: 'LongHairDreads', label: 'Dreadlocks' },
-      { value: 'LongHairFro', label: 'Afro' },
-      { value: 'LongHairFroBand', label: 'Afro with Band' },
-      { value: 'LongHairNotTooLong', label: 'Medium Hair' },
-      { value: 'LongHairShavedSides', label: 'Shaved Sides' },
-      { value: 'LongHairMiaWallace', label: 'Mia Wallace' },
-      { value: 'LongHairStraight', label: 'Straight Hair' },
-      { value: 'LongHairStraight2', label: 'Straight Hair 2' },
-      { value: 'LongHairStraightStrand', label: 'Hair Strand' },
-      { value: 'ShortHairDreads01', label: 'Short Dreads 1' },
-      { value: 'ShortHairDreads02', label: 'Short Dreads 2' },
-      { value: 'ShortHairFrizzle', label: 'Frizzled Hair' },
-      { value: 'ShortHairShaggyMullet', label: 'Shaggy Mullet' },
-      { value: 'ShortHairShortCurly', label: 'Short Curly' },
-      { value: 'ShortHairShortFlat', label: 'Short Flat' },
-      { value: 'ShortHairShortRound', label: 'Short Round' },
-      { value: 'ShortHairShortWaved', label: 'Short Waved' },
-      { value: 'ShortHairSides', label: 'Hair Sides' },
-      { value: 'ShortHairTheCaesar', label: 'Caesar Cut' },
-      { value: 'ShortHairTheCaesarSidePart', label: 'Caesar Side Part' },
+  // Internal mutable avatar state using TrackedMap
+  @tracked currentModel = new TrackedMap([
+    ['topType', this.args.model?.topType || DEFAULT_AVATAR_VALUES.topType],
+    [
+      'accessoriesType',
+      this.args.model?.accessoriesType || DEFAULT_AVATAR_VALUES.accessoriesType,
     ],
-    hairColor: [
-      { value: 'Auburn', label: 'Auburn' },
-      { value: 'Black', label: 'Black' },
-      { value: 'Blonde', label: 'Blonde' },
-      { value: 'BlondeGolden', label: 'Golden Blonde' },
-      { value: 'Brown', label: 'Brown' },
-      { value: 'BrownDark', label: 'Dark Brown' },
-      { value: 'PastelPink', label: 'Pastel Pink' },
-      { value: 'Blue', label: 'Blue' },
-      { value: 'Platinum', label: 'Platinum' },
-      { value: 'Red', label: 'Red' },
-      { value: 'SilverGray', label: 'Silver Gray' },
+    [
+      'hairColor',
+      this.args.model?.hairColor || DEFAULT_AVATAR_VALUES.hairColor,
     ],
-    eyes: [
-      { value: 'Close', label: 'Closed' },
-      { value: 'Cry', label: 'Crying' },
-      { value: 'Default', label: 'Default' },
-      { value: 'Dizzy', label: 'Dizzy' },
-      { value: 'EyeRoll', label: 'Eye Roll' },
-      { value: 'Happy', label: 'Happy' },
-      { value: 'Hearts', label: 'Hearts' },
-      { value: 'Side', label: 'Side Glance' },
-      { value: 'Squint', label: 'Squint' },
-      { value: 'Surprised', label: 'Surprised' },
-      { value: 'Wink', label: 'Wink' },
-      { value: 'WinkWacky', label: 'Wacky Wink' },
+    [
+      'facialHairType',
+      this.args.model?.facialHairType || DEFAULT_AVATAR_VALUES.facialHairType,
     ],
-    eyebrows: [
-      { value: 'Angry', label: 'Angry' },
-      { value: 'AngryNatural', label: 'Angry Natural' },
-      { value: 'Default', label: 'Default' },
-      { value: 'DefaultNatural', label: 'Default Natural' },
-      { value: 'FlatNatural', label: 'Flat Natural' },
-      { value: 'RaisedExcited', label: 'Raised Excited' },
-      { value: 'RaisedExcitedNatural', label: 'Raised Excited Natural' },
-      { value: 'SadConcerned', label: 'Sad Concerned' },
-      { value: 'SadConcernedNatural', label: 'Sad Concerned Natural' },
-      { value: 'UnibrowNatural', label: 'Unibrow Natural' },
-      { value: 'UpDown', label: 'Up Down' },
-      { value: 'UpDownNatural', label: 'Up Down Natural' },
+    [
+      'clotheType',
+      this.args.model?.clotheType || DEFAULT_AVATAR_VALUES.clotheType,
     ],
-    mouth: [
-      { value: 'Concerned', label: 'Concerned' },
-      { value: 'Default', label: 'Default' },
-      { value: 'Disbelief', label: 'Disbelief' },
-      { value: 'Eating', label: 'Eating' },
-      { value: 'Grimace', label: 'Grimace' },
-      { value: 'Sad', label: 'Sad' },
-      { value: 'ScreamOpen', label: 'Scream Open' },
-      { value: 'Serious', label: 'Serious' },
-      { value: 'Smile', label: 'Smile' },
-      { value: 'Tongue', label: 'Tongue Out' },
-      { value: 'Twinkle', label: 'Twinkle' },
-      { value: 'Vomit', label: 'Vomit' },
+    ['eyeType', this.args.model?.eyeType || DEFAULT_AVATAR_VALUES.eyeType],
+    [
+      'eyebrowType',
+      this.args.model?.eyebrowType || DEFAULT_AVATAR_VALUES.eyebrowType,
     ],
-    skinTone: [
-      { value: 'Tanned', label: 'Tanned' },
-      { value: 'Yellow', label: 'Yellow' },
-      { value: 'Pale', label: 'Pale' },
-      { value: 'Light', label: 'Light' },
-      { value: 'Brown', label: 'Brown' },
-      { value: 'DarkBrown', label: 'Dark Brown' },
-      { value: 'Black', label: 'Black' },
+    [
+      'mouthType',
+      this.args.model?.mouthType || DEFAULT_AVATAR_VALUES.mouthType,
     ],
-    clothes: [
-      { value: 'BlazerShirt', label: 'Blazer & Shirt' },
-      { value: 'BlazerSweater', label: 'Blazer & Sweater' },
-      { value: 'CollarSweater', label: 'Collar Sweater' },
-      { value: 'GraphicShirt', label: 'Graphic Shirt' },
-      { value: 'Hoodie', label: 'Hoodie' },
-      { value: 'Overall', label: 'Overall' },
-      { value: 'ShirtCrewNeck', label: 'Crew Neck Shirt' },
-      { value: 'ShirtScoopNeck', label: 'Scoop Neck Shirt' },
-      { value: 'ShirtVNeck', label: 'V-Neck Shirt' },
+    [
+      'skinColor',
+      this.args.model?.skinColor || DEFAULT_AVATAR_VALUES.skinColor,
     ],
-  };
+  ]);
 
   // Get Avataaars URL for the image
   get avataaarsUrl() {
-    const params = [
-      `topType=${encodeURIComponent(
-        this.args.model?.hair || 'ShortHairShortFlat',
-      )}`,
-      `accessoriesType=Blank`,
-      `hairColor=${encodeURIComponent(
-        this.args.model?.hairColor || 'BrownDark',
-      )}`,
-      `facialHairType=Blank`,
-      `clotheType=${encodeURIComponent(
-        this.args.model?.clothes || 'BlazerShirt',
-      )}`,
-      `eyeType=${encodeURIComponent(this.args.model?.eyes || 'Default')}`,
-      `eyebrowType=${encodeURIComponent(
-        this.args.model?.eyebrows || 'Default',
-      )}`,
-      `mouthType=${encodeURIComponent(this.args.model?.lips || 'Default')}`,
-      `skinColor=${encodeURIComponent(this.args.model?.skinTone || 'Light')}`,
-    ];
-
-    return `https://avataaars.io/?${params.join('&')}`;
+    // Convert TrackedMap to object for getAvataarsUrl function
+    const modelObj = Object.fromEntries(this.currentModel.entries());
+    return getAvataarsUrl(modelObj as AvataaarsModel);
   }
 
   get currentCategoryOptions() {
-    return (
-      this.avataaarsOptions[
-        this.selectedCategory as keyof typeof this.avataaarsOptions
-      ] || []
-    );
+    return getCategoryOptions(this.selectedCategory);
   }
 
-  @action
-  selectCategory(category: string) {
+  selectCategory = (category: string) => {
     this.selectedCategory = category;
-  }
+  };
 
-  @action
-  generateRandomCharacter() {
+  generateRandomAvatar = () => {
     // Play click sound
-    this.playClickSound();
+    playClickSound();
 
-    // Get random options from each category
-    const randomHair =
-      this.avataaarsOptions.hair[
-        Math.floor(Math.random() * this.avataaarsOptions.hair.length)
-      ];
-    const randomHairColor =
-      this.avataaarsOptions.hairColor[
-        Math.floor(Math.random() * this.avataaarsOptions.hairColor.length)
-      ];
-    const randomEyes =
-      this.avataaarsOptions.eyes[
-        Math.floor(Math.random() * this.avataaarsOptions.eyes.length)
-      ];
-    const randomEyebrows =
-      this.avataaarsOptions.eyebrows[
-        Math.floor(Math.random() * this.avataaarsOptions.eyebrows.length)
-      ];
-    const randomMouth =
-      this.avataaarsOptions.mouth[
-        Math.floor(Math.random() * this.avataaarsOptions.mouth.length)
-      ];
-    const randomSkinTone =
-      this.avataaarsOptions.skinTone[
-        Math.floor(Math.random() * this.avataaarsOptions.skinTone.length)
-      ];
-    const randomClothes =
-      this.avataaarsOptions.clothes[
-        Math.floor(Math.random() * this.avataaarsOptions.clothes.length)
-      ];
+    // Generate random avatar using the utility function
+    const randomAvatar = generateRandomAvatarModel();
 
-    // Apply random selections
-    this.args.model.hair = randomHair.value;
-    this.args.model.hairColor = randomHairColor.value;
-    this.args.model.eyes = randomEyes.value;
-    this.args.model.eyebrows = randomEyebrows.value;
-    this.args.model.lips = randomMouth.value;
-    this.args.model.skinTone = randomSkinTone.value;
-    this.args.model.clothes = randomClothes.value;
-  }
+    // Apply random selections to internal state - reassign entire TrackedMap
+    this.currentModel = new TrackedMap(Object.entries(randomAvatar));
 
-  @action
-  selectAvataaarsOption(option: { value: string; label: string }) {
-    // Simply store the Avataaars value directly in the StringField
-    switch (this.selectedCategory) {
-      case 'hair':
-        this.args.model.hair = option.value;
-        break;
-      case 'hairColor':
-        this.args.model.hairColor = option.value;
-        break;
-      case 'eyes':
-        this.args.model.eyes = option.value;
-        break;
-      case 'eyebrows':
-        this.args.model.eyebrows = option.value;
-        break;
-      case 'mouth':
-        this.args.model.lips = option.value;
-        break;
-      case 'skinTone':
-        this.args.model.skinTone = option.value;
-        break;
-      case 'clothes':
-        this.args.model.clothes = option.value;
-        break;
-    }
-  }
+    // Notify parent component of the change
+    this.args.onUpdate?.(randomAvatar);
+  };
 
-  @action
-  async copyAvataaarsUrl() {
+  selectAvataaarsOption = (option: { value: string; label: string }) => {
+    // Get current model as object
+    const currentModelObj = Object.fromEntries(
+      this.currentModel.entries(),
+    ) as AvataaarsModel;
+
+    // Update using the utility function
+    const updatedModel = updateAvatarModelForCategory(
+      currentModelObj,
+      this.selectedCategory,
+      option.value,
+    );
+
+    // Update internal state
+    this.currentModel = new TrackedMap(Object.entries(updatedModel));
+
+    // Notify parent component of the change
+    this.args.onUpdate?.(updatedModel);
+  };
+
+  copyAvataaarsUrl = () => {
     try {
       // Play click sound
-      this.playClickSound();
-      await navigator.clipboard.writeText(this.avataaarsUrl);
+      playClickSound();
+      navigator.clipboard.writeText(this.avataaarsUrl);
       this.copySuccess = true;
       // Reset success state after 2 seconds
+      //DO WE NEED THIS?
       setTimeout(() => {
         this.copySuccess = false;
       }, 2000);
     } catch (error) {
       console.error('Failed to copy URL:', error);
     }
-  }
-
-  // Create a click sound using Web Audio API
-  playClickSound() {
-    try {
-      const audioContext = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
-
-      // Create oscillator for the click sound
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
-      // Connect nodes
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      // Configure the sound - a short, crisp click
-      oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // High frequency for crisp sound
-      oscillator.frequency.exponentialRampToValueAtTime(
-        400,
-        audioContext.currentTime + 0.1,
-      );
-
-      // Set volume envelope for a quick click
-      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(
-        0.3,
-        audioContext.currentTime + 0.01,
-      ); // Quick attack
-      gainNode.gain.exponentialRampToValueAtTime(
-        0.01,
-        audioContext.currentTime + 0.1,
-      ); // Quick decay
-
-      // Play the sound
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.1);
-    } catch (error) {
-      console.log('Audio not supported or failed:', error);
-      // Silently fail if audio is not supported
-    }
-  }
-
-  // Get current avatar configuration
-  get currentAvatarConfig() {
-    return {
-      topType: this.args.model?.hair || 'ShortHairShortFlat',
-      accessoriesType: 'Blank',
-      hairColor: this.args.model?.hairColor || 'BrownDark',
-      facialHairType: 'Blank',
-      clotheType: this.args.model?.clothes || 'BlazerShirt',
-      eyeType: this.args.model?.eyes || 'Default',
-      eyebrowType: this.args.model?.eyebrows || 'Default',
-      mouthType: this.args.model?.lips || 'Default',
-      skinColor: this.args.model?.skinTone || 'Light',
-    };
-  }
+  };
 
   // Generate preview URL for each option
   getOptionPreviewUrl = (option: { value: string; label: string }) => {
-    const currentConfig = this.currentAvatarConfig;
-
-    // Create a config with this specific option selected
-    const previewConfig = { ...currentConfig };
-
-    switch (this.selectedCategory) {
-      case 'hair':
-        previewConfig.topType = option.value;
-        break;
-      case 'hairColor':
-        previewConfig.hairColor = option.value;
-        break;
-      case 'eyes':
-        previewConfig.eyeType = option.value;
-        break;
-      case 'eyebrows':
-        previewConfig.eyebrowType = option.value;
-        break;
-      case 'mouth':
-        previewConfig.mouthType = option.value;
-        break;
-      case 'skinTone':
-        previewConfig.skinColor = option.value;
-        break;
-      case 'clothes':
-        previewConfig.clotheType = option.value;
-        break;
-    }
-
-    // Generate avataaars.io URL for preview
-    const params = [
-      `topType=${encodeURIComponent(previewConfig.topType)}`,
-      `accessoriesType=${encodeURIComponent(previewConfig.accessoriesType)}`,
-      `hairColor=${encodeURIComponent(previewConfig.hairColor)}`,
-      `facialHairType=${encodeURIComponent(previewConfig.facialHairType)}`,
-      `clotheType=${encodeURIComponent(previewConfig.clotheType)}`,
-      `eyeType=${encodeURIComponent(previewConfig.eyeType)}`,
-      `eyebrowType=${encodeURIComponent(previewConfig.eyebrowType)}`,
-      `mouthType=${encodeURIComponent(previewConfig.mouthType)}`,
-      `skinColor=${encodeURIComponent(previewConfig.skinColor)}`,
-    ];
-
-    return `https://avataaars.io/?${params.join('&')}`;
+    const currentModelObj = Object.fromEntries(
+      this.currentModel.entries(),
+    ) as AvataaarsModel;
+    return getOptionPreviewUrl(
+      currentModelObj,
+      this.selectedCategory,
+      option.value,
+    );
   };
+
+  // Getters for template use - these properly track TrackedMap changes
+  get topType() {
+    return this.currentModel.get('topType');
+  }
+
+  get hairColor() {
+    return this.currentModel.get('hairColor');
+  }
+
+  get mouthType() {
+    return this.currentModel.get('mouthType');
+  }
+
+  get skinColor() {
+    return this.currentModel.get('skinColor');
+  }
+
+  get eyeType() {
+    return this.currentModel.get('eyeType');
+  }
+
+  get eyebrowType() {
+    return this.currentModel.get('eyebrowType');
+  }
+
+  get clotheType() {
+    return this.currentModel.get('clotheType');
+  }
 
   get currentSelection() {
     try {
-      switch (this.selectedCategory) {
-        case 'hair':
-          return this.args.model?.hair;
-        case 'hairColor':
-          return this.args.model?.hairColor;
-        case 'eyes':
-          return this.args.model?.eyes;
-        case 'eyebrows':
-          return this.args.model?.eyebrows;
-        case 'mouth':
-          return this.args.model?.lips;
-        case 'skinTone':
-          return this.args.model?.skinTone;
-        case 'clothes':
-          return this.args.model?.clothes;
-        default:
-          return null;
-      }
+      const currentModelObj = Object.fromEntries(
+        this.currentModel.entries(),
+      ) as AvataaarsModel;
+      return getCurrentSelectionForCategory(
+        currentModelObj,
+        this.selectedCategory,
+      );
     } catch (error) {
       console.warn('Error getting current selection:', error);
       return null;
     }
   }
 
-  isOptionSelected = (option: { value: string; label: string }) => {
-    return this.currentSelection === option.value;
-  };
-
-  setupRoom = async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('In wrong mode');
-    }
-
-    if (!this.args.model.suggestionSkill) {
-      throw new Error('No suggestion skill is linked');
-    }
-
-    if (!this.roomId) {
-      let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
-      let result = await useAiAssistantCommand.execute({
-        roomName: `Character Suggestion: ${
-          this.args.model.name || 'New Character'
-        }`,
-        openRoom: true,
-        skillCards: [this.args.model.suggestionSkill],
-        attachedCards: [this.args.model as CardDef],
-        prompt:
-          this.suggestionPrompt ||
-          'Please suggest character features for this avatar.',
-      });
-
-      this.roomId = result.roomId;
-
-      let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
-      await setActiveLLMCommand.execute({
-        roomId: this.roomId,
-        mode: 'act',
-      });
-    }
-
-    return this.roomId;
-  };
-
-  suggestCharacter = async () => {
-    if (this.isSuggesting) return;
-
-    this.isSuggesting = true;
+  _suggestAvatar = task(async () => {
     try {
       let commandContext = this.args.context?.commandContext;
       if (!commandContext) {
@@ -448,39 +193,37 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
           'Command context does not exist. Please switch to Interact Mode',
         );
       }
-      if (!this.args.model || !this.args.model.suggestionSkill) {
-        throw new Error(
-          'You need a suggestion skill to be linked to get AI suggestions',
-        );
-      }
-      await this.setupRoom();
-      if (!this.roomId) {
-        throw new Error('Room setup failed');
-      }
+
+      let suggestCommand = new SuggestAvatar(commandContext);
+      await suggestCommand.execute({
+        name: 'Avatar',
+      });
     } catch (error) {
-      console.error('Error getting character suggestions:', error);
-      alert(
-        'There was an error getting character suggestions. Please try again.',
-      );
-    } finally {
-      this.isSuggesting = false;
+      console.error('Error suggesting avatar:', error);
+      alert('There was an error getting avatar suggestions. Please try again.');
     }
+  });
+
+  suggestAvatar = () => {
+    this._suggestAvatar.perform();
+  };
+
+  isOptionSelected = (option: { value: string; label: string }) => {
+    return this.currentSelection === option.value;
   };
 
   <template>
-    <div class='character-creator'>
-      <div class='character-display'>
-        <div class='character-preview'>
+    <div class='avatar-creator'>
+      <div class='avatar-display'>
+        <div class='avatar-preview'>
           <img
             src={{this.avataaarsUrl}}
-            alt='Character Avatar'
+            alt='Avatar Avatar'
             class='avatar-image'
           />
         </div>
 
-        <div class='character-info'>
-          <h2>{{if @model.name @model.name 'Unnamed Character'}}</h2>
-
+        <div class='avatar-info'>
           <div class='url-copy-section'>
             <div class='url-display-row'>
               <label for='avatar-url-input' class='sr-only'>Avatar URL</label>
@@ -527,47 +270,47 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
             {{/if}}
           </div>
 
-          <div class='character-details'>
-            {{#if @model.hair}}
+          <div class='avatar-details'>
+            {{#if this.topType}}
               <div class='detail-item'>
                 <strong>Hair:</strong>
-                {{@model.hair}}
+                {{this.topType}}
               </div>
             {{/if}}
-            {{#if @model.hairColor}}
+            {{#if this.hairColor}}
               <div class='detail-item'>
                 <strong>Hair Color:</strong>
-                {{@model.hairColor}}
+                {{this.hairColor}}
               </div>
             {{/if}}
-            {{#if @model.lips}}
+            {{#if this.mouthType}}
               <div class='detail-item'>
                 <strong>Mouth:</strong>
-                {{@model.lips}}
+                {{this.mouthType}}
               </div>
             {{/if}}
-            {{#if @model.skinTone}}
+            {{#if this.skinColor}}
               <div class='detail-item'>
                 <strong>Skin:</strong>
-                {{@model.skinTone}}
+                {{this.skinColor}}
               </div>
             {{/if}}
-            {{#if @model.eyes}}
+            {{#if this.eyeType}}
               <div class='detail-item'>
                 <strong>Eyes:</strong>
-                {{@model.eyes}}
+                {{this.eyeType}}
               </div>
             {{/if}}
-            {{#if @model.eyebrows}}
+            {{#if this.eyebrowType}}
               <div class='detail-item'>
                 <strong>Eyebrows:</strong>
-                {{@model.eyebrows}}
+                {{this.eyebrowType}}
               </div>
             {{/if}}
-            {{#if @model.clothes}}
+            {{#if this.clotheType}}
               <div class='detail-item'>
                 <strong>Clothes:</strong>
-                {{@model.clothes}}
+                {{this.clotheType}}
               </div>
             {{/if}}
           </div>
@@ -576,29 +319,27 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
 
       <div class='customization-panel'>
         <div class='panel-header'>
-          <h3>Customize Your Character</h3>
+          <h3>Customize Your Avatar</h3>
           <div class='header-buttons'>
             <button
               class='random-btn'
-              {{on 'click' this.generateRandomCharacter}}
-              title='Generate Random Character'
+              {{on 'click' this.generateRandomAvatar}}
+              title='Generate Random Avatar'
             >
               🎲 Random
             </button>
-            {{#if @model.suggestionSkill}}
-              <button
-                class='ai-suggestion-btn'
-                {{on 'click' this.suggestCharacter}}
-                disabled={{this.isSuggesting}}
-                title='Get AI Character Suggestions'
-              >
-                {{#if this.isSuggesting}}
-                  🤖 Suggesting...
-                {{else}}
-                  🤖 AI Suggest
-                {{/if}}
-              </button>
-            {{/if}}
+            <button
+              class='ai-suggestion-btn'
+              {{on 'click' this.suggestAvatar}}
+              disabled={{this._suggestAvatar.isRunning}}
+              title='Get AI Avatar Suggestions'
+            >
+              {{#if this._suggestAvatar.isRunning}}
+                🤖 Suggesting...
+              {{else}}
+                🤖 AI Suggest
+              {{/if}}
+            </button>
           </div>
         </div>
 
@@ -699,7 +440,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
     <style scoped>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Fredoka+One:wght@400&family=Press+Start+2P:wght@400&display=swap');
 
-      .character-creator {
+      .avatar-creator {
         display: grid;
         grid-template-columns: 420px 1fr;
         gap: 2rem;
@@ -711,7 +452,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         overflow: hidden;
       }
 
-      .character-creator::before {
+      .avatar-creator::before {
         content: '';
         position: absolute;
         top: 0;
@@ -751,7 +492,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         }
       }
 
-      .character-display {
+      .avatar-display {
         background: rgba(52, 73, 94, 0.8);
         border: 4px solid #ffffff;
         border-radius: 2px;
@@ -781,7 +522,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         }
       }
 
-      .character-preview {
+      .avatar-preview {
         width: 280px;
         height: 280px;
         border: 6px solid #ffffff;
@@ -806,7 +547,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         transition: all 0.3s ease;
       }
 
-      .character-preview:hover {
+      .avatar-preview:hover {
         transform: scale(1.05);
         box-shadow: 0 0 60px rgba(52, 152, 219, 0.6);
       }
@@ -829,28 +570,6 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         object-fit: cover;
         border-radius: 18px;
         filter: brightness(1.1) contrast(1.05) saturate(1.1);
-      }
-
-      .character-info h2 {
-        margin: 0 0 1.5rem 0;
-        color: #ffffff;
-        font-size: 2rem;
-        font-weight: 700;
-        text-align: center;
-        letter-spacing: -0.025em;
-        font-family: 'Press Start 2P', cursive;
-        text-shadow:
-          3px 3px 0px #ff6b6b,
-          6px 6px 0px #4ecdc4;
-        background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #feca57);
-        background-size: 300% 300%;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        animation: textShimmer 3s ease-in-out infinite;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        hyphens: auto;
       }
 
       /* URL Copy Section Styles */
@@ -971,7 +690,7 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         }
       }
 
-      .character-details {
+      .avatar-details {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0.75rem;
@@ -995,6 +714,8 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         transition: all 0.2s ease;
         position: relative;
         overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       }
 
       .detail-item::before {
@@ -1033,23 +754,6 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
         white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      /* Add ellipsis to detail item values */
-      .detail-item {
-        font-size: 0.875rem;
-        color: #ffffff;
-        background: rgba(255, 255, 255, 0.1);
-        padding: 0.75rem;
-        border-radius: 2px;
-        border-left: 4px solid #ff6b6b;
-        font-weight: 600;
-        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
-        transition: all 0.2s ease;
-        position: relative;
-        overflow: hidden;
-        white-space: nowrap;
         text-overflow: ellipsis;
       }
 
@@ -1479,6 +1183,58 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
         transform: translateY(-2px) scale(1.05);
       }
 
+      .empty-styles {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 200px;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.875rem;
+        text-align: center;
+        font-style: italic;
+      }
+
+      /* Responsive Design */
+      @media (max-width: 1200px) {
+        .avatar-creator {
+          grid-template-columns: 400px 1fr;
+          gap: 1.5rem;
+          padding: 1.5rem;
+        }
+
+        .avatar-preview {
+          width: 260px;
+          height: 260px;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .avatar-creator {
+          padding: 0.75rem;
+          gap: 0.75rem;
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Scrollbar styling */
+      .customization-panel::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .customization-panel::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+      }
+
+      .customization-panel::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+      }
+
+      .customization-panel::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
       .ai-suggestion-btn {
         padding: 1rem 1.5rem;
         border: 3px solid #4ecdc4;
@@ -1576,106 +1332,6 @@ class IsolatedTemplate extends Component<typeof CharacterCreator> {
       .ai-suggestion-btn:active:not(:disabled) {
         transform: translateY(-2px) scale(1.05);
       }
-
-      .empty-styles {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 200px;
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 0.875rem;
-        text-align: center;
-        font-style: italic;
-      }
-
-      /* Responsive Design */
-      @media (max-width: 1200px) {
-        .character-creator {
-          grid-template-columns: 400px 1fr;
-          gap: 1.5rem;
-          padding: 1.5rem;
-        }
-
-        .character-preview {
-          width: 260px;
-          height: 260px;
-        }
-      }
-
-      @media (max-width: 720px) {
-        .character-creator {
-          padding: 0.75rem;
-          gap: 0.75rem;
-          grid-template-columns: 1fr;
-        }
-      }
-
-      /* Scrollbar styling */
-      .customization-panel::-webkit-scrollbar {
-        width: 8px;
-      }
-
-      .customization-panel::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 4px;
-      }
-
-      .customization-panel::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 4px;
-      }
-
-      .customization-panel::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.3);
-      }
     </style>
   </template>
-}
-
-export class CharacterCreator extends CardDef {
-  static displayName = 'Character Creator';
-  static icon = UserIcon;
-  static prefersWideFormat = true;
-
-  @field name = contains(StringField, {
-    description: 'Name of the character',
-  });
-
-  @field hair = contains(StringField, {
-    description: 'Selected hair style',
-  });
-
-  @field hairColor = contains(StringField, {
-    description: 'Selected hair color',
-  });
-
-  @field lips = contains(StringField, {
-    description: 'Selected lip style',
-  });
-
-  @field skinTone = contains(StringField, {
-    description: 'Selected skin tone',
-  });
-
-  @field eyes = contains(StringField, {
-    description: 'Selected eye style',
-  });
-
-  @field eyebrows = contains(StringField, {
-    description: 'Selected eyebrow style',
-  });
-
-  @field clothes = contains(StringField, {
-    description: 'Selected clothing style',
-  });
-
-  @field suggestionSkill = linksTo(() => Skill);
-
-  @field title = contains(StringField, {
-    computeVia: function (this: CharacterCreator) {
-      return this.name ?? 'Untitled Character';
-    },
-  });
-
-  static isolated = IsolatedTemplate;
 }

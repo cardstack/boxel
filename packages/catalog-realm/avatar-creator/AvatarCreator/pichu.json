@@ -1,0 +1,38 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AvatarCreator",
+        "module": "../avatar-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Pichu",
+      "avatar": {
+        "eyeType": "Wink",
+        "topType": "LongHairBun",
+        "hairColor": "PastelPink",
+        "mouthType": "Smile",
+        "skinColor": "Light",
+        "clotheType": "ShirtVNeck",
+        "eyebrowType": "UnibrowNatural",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

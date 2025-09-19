@@ -8,17 +8,17 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Character Creator",
+      "name": "Avatar Creator",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/character-creator-listing/screenshot_01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/character-creator-listing/screenshot_02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/avatar-creator-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/avatar-creator-listing/screenshot_02.png"
       ],
-      "summary": "Create customizable character avatars with various appearance options including hair styles, colors, facial features, and clothing.",
+      "summary": "Create customizable avatar- avatars with various appearance options including hair styles, colors, facial features, and clothing.",
       "cardInfo": {
-        "notes": "Includes AI-powered character suggestion feature for creative inspiration.",
-        "title": "Character Creator",
-        "description": "An interactive tool for designing and customizing character avatars. Choose from different hair styles, hair colors, facial expressions, skin tones, eyebrows, and clothing options to create unique characters. Perfect for games, storytelling, or creative projects.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/character-creator-listing/thumbnail.png"
+        "notes": "Includes AI-powered avatar- suggestion feature for creative inspiration.",
+        "title": "Avatar Creator",
+        "description": "An interactive tool for designing and customizing avatar- avatars. Choose from different hair styles, hair colors, facial expressions, skin tones, eyebrows, and clothing options to create unique avatars. Perfect for games, storytelling, or creative projects.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/avatar-creator-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -39,12 +39,12 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/character-creator"
+          "self": "../Spec/avatar-creator"
         }
       },
       "skills.0": {
         "links": {
-          "self": "../Skill/character-suggestion"
+          "self": "../Skill/avatar-suggestion"
         }
       },
       "publisher": {
@@ -54,22 +54,22 @@
       },
       "examples.0": {
         "links": {
-          "self": "../character-creator/CharacterCreator/pichu"
+          "self": "../avatar-creator/AvatarCreator/pichu"
         }
       },
       "examples.1": {
         "links": {
-          "self": "../character-creator/CharacterCreator/luna-starweaver"
+          "self": "../avatar-creator/AvatarCreator/luna-starweaver"
         }
       },
       "examples.2": {
         "links": {
-          "self": "../character-creator/CharacterCreator/magnus-stormbeard"
+          "self": "../avatar-creator/AvatarCreator/magnus-stormbeard"
         }
       },
       "examples.3": {
         "links": {
-          "self": "../character-creator/CharacterCreator/zara-nightshade"
+          "self": "../avatar-creator/AvatarCreator/zara-nightshade"
         }
       },
       "categories.0": {

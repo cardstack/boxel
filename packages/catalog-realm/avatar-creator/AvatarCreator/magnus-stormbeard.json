@@ -1,0 +1,38 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AvatarCreator",
+        "module": "../avatar-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Magnus Stormbeard",
+      "avatar": {
+        "eyeType": "Default",
+        "topType": "LongHairBob",
+        "hairColor": "SilverGray",
+        "mouthType": "Eating",
+        "skinColor": "Yellow",
+        "clotheType": "ShirtCrewNeck",
+        "eyebrowType": "SadConcerned",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
