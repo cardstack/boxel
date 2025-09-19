@@ -639,8 +639,8 @@ export default class RealmService extends Service {
     // untracked so our `this.realms.set` below will not be an assertion.
     let resource = this.knownRealm(realmURL, false);
 
-    if (resource && resource?.token !== token) {
-      resource.token = token; // this will trigger recalculation errors
+    if (resource && !resource?.token && token) {
+      resource.token = token;
     }
 
     if (!resource) {

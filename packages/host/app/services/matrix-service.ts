@@ -550,6 +550,15 @@ export default class MatrixService extends Service {
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
 
+        // TODO: Only do this if we don't have the tokens already (i.e. after clicking to "Sign in")
+        let tokens = (await this.realmServer.fetchTokensForAllUserRealms()) as {
+          [realmURL: string]: string;
+        };
+
+        for (let [realmURL, token] of Object.entries(tokens)) {
+          this.realm.getOrCreateRealmResource(realmURL, token);
+        }
+
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(
@@ -557,26 +566,8 @@ export default class MatrixService extends Service {
           ),
         ]);
 
-        // here, try to see which realms need login, and login to them
-        // maybe: realmResource = realms.getOrCreateRealmResource
-        // or, touch realm servoice so that it will restoreSessions
-        // restoreSessions will call sessions.set(realmURL, resource);
-        // then, check which realms need login, and login to them
-        //
-
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
-
-        let tokens = (await this.realmServer.fetchTokensForAllUserRealms()) as {
-          [realmURL: string]: string;
-        };
-
-        // debugger;
-        // await this.realmServer.login();
-
-        for (let [realmURL, token] of Object.entries(tokens)) {
-          this.realm.getOrCreateRealmResource(realmURL, token);
-        }
 
         this.postLoginCompleted = true;
       } catch (e) {
