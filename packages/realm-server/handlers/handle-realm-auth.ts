@@ -37,7 +37,7 @@ export default function handleRealmAuth({
     for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
       sessions[realm] = createJWT(
         {
-          user: user.id,
+          user: matrixUserId,
           realm: realm,
           permissions,
           sessionRoom: '',
