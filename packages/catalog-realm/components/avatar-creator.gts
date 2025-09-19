@@ -407,33 +407,6 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
     }
   }
 
-  setupRoom = async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('In wrong mode');
-    }
-
-    if (!this.roomId) {
-      let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
-      let result = await useAiAssistantCommand.execute({
-        roomName: `Avatar Suggestions: ${this.args.name || 'Unnamed Avatar'}`,
-        openRoom: true,
-        prompt:
-          'Please edit the following card with an avatar based upon params of https://getavataaars.com/. The params supported are: topType, accessoriesType, hairColor, facialHairType, clotheType, eyeType, eyebrowType, mouthType and skinColor.',
-      });
-
-      this.roomId = result.roomId;
-
-      let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
-      await setActiveLLMCommand.execute({
-        roomId: this.roomId,
-        mode: 'act',
-      });
-    }
-
-    return this.roomId;
-  };
-
   _suggestAvatar = task(async () => {
     try {
       let commandContext = this.args.context?.commandContext;
@@ -442,7 +415,23 @@ export default class AvatarCreator extends Component<AvatarCreatorArgs> {
           'Command context does not exist. Please switch to Interact Mode',
         );
       }
-      await this.setupRoom();
+      if (!this.roomId) {
+        let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
+        let result = await useAiAssistantCommand.execute({
+          roomName: `Avatar Suggestions: ${this.args.name || 'Unnamed Avatar'}`,
+          openRoom: true,
+          prompt:
+            'Please edit the following card with an avatar based upon params of https://getavataaars.com/. The params supported are: topType, accessoriesType, hairColor, facialHairType, clotheType, eyeType, eyebrowType, mouthType and skinColor.',
+        });
+
+        this.roomId = result.roomId;
+
+        let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
+        await setActiveLLMCommand.execute({
+          roomId: this.roomId,
+          mode: 'act',
+        });
+      }
       if (!this.roomId) {
         throw new Error('Room setup failed');
       }
