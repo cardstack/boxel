@@ -3,7 +3,6 @@ import { tracked } from '@glimmer/tracking';
 
 import {
   type CardContext,
-  getFields,
   type CardDef,
   type CreateCardFn,
 } from 'https://cardstack.com/base/card-api';
@@ -14,7 +13,7 @@ import { on } from '@ember/modifier';
 
 import { Paginator } from './paginator';
 import { FieldRenderer } from './field-renderer';
-import { cardDefLoader } from '../resources/card-def-loader';
+import { getFieldsResource } from '../resources/get-fields-resource';
 
 import { type Query, isPrimitive } from '@cardstack/runtime-common';
 
@@ -170,32 +169,31 @@ export class Table extends GlimmerComponent<TableSignature> {
     { isLive: true }, //for new cards to appear
   );
 
-  cardDefLoader = cardDefLoader(
+  getFieldsResource = getFieldsResource(
     this,
     () => this.args.cardTypeRef,
     () => this.args.realm,
+    () => ({
+      includeComputeds: this.args.showComputedFields ?? false,
+      usedLinksToFieldsOnly: false,
+    }),
   );
 
   get fieldColumns() {
-    // Use the loaded CardDef from cardDefLoader instead of first instance
-    const cardDef = this.cardDefLoader.value;
-    if (!cardDef) {
+    // Use precomputed fields from cardDefLoader
+    const fields = this.getFieldsResource.boxed?.fields;
+    if (!fields) {
       return [];
     }
 
-    const instanceFields = getFields(cardDef, {
-      includeComputeds: this.args.showComputedFields ?? false,
-      usedLinksToFieldsOnly: false,
-    });
-
     const excludedFields = ['id', 'cardInfo'];
-    const filteredFields = Object.keys(instanceFields).filter((key) => {
+    const filteredFields = Object.keys(fields).filter((key) => {
       if (excludedFields.includes(key)) {
         return false;
       }
       // Only include primitive fields if showPrimitivesOnly is true
       if (this.args.showPrimitivesOnly) {
-        const fieldDef = instanceFields[key];
+        const fieldDef = fields[key];
         return fieldDef ? isPrimitive(fieldDef.card) : false;
       }
       return true;
@@ -239,7 +237,7 @@ export class Table extends GlimmerComponent<TableSignature> {
   };
 
   get isLoading() {
-    return this.cardsData?.isLoading || this.cardDefLoader?.isLoading;
+    return this.cardsData?.isLoading || this.getFieldsResource?.isLoading;
   }
 
   <template>
