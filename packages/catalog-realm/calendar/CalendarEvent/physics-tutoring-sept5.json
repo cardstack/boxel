@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Physics Tutoring Session",
+      "description": "One-on-one tutoring for quantum mechanics and wave functions. Focus on problem-solving techniques and exam preparation.",
+      "startTime": "2025-09-05T15:00:00.000Z",
+      "endTime": "2025-09-05T16:30:00.000Z",
+      "location": "Tutoring Center - Room 205",
+      "isAllDay": "false",
+      "eventType": "tutoring",
+      "eventColor": "#f59e0b"
+    },
+    "relationships": {
+      "calendar": {
+        "links": {
+          "self": "../CalendarCard/2c3c78cd-fa4f-4988-b098-c8d099557fba"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../calendar",
+        "name": "CalendarEvent"
+      }
+    }
+  }
+}
