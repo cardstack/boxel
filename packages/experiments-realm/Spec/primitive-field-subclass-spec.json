@@ -1,0 +1,54 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      },
+      "fields": {
+        "containedExamples.0": {
+          "adoptsFrom": {
+            "module": "../pet-person",
+            "name": "Nickname"
+          }
+        },
+        "containedExamples.1": {
+          "adoptsFrom": {
+            "module": "../pet-person",
+            "name": "Nickname"
+          }
+        }
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Nickname",
+        "module": "../pet-person"
+      },
+      "title": "Nickname",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
+      "description": null,
+      "containedExamples": ["Pete", "Peet"]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
