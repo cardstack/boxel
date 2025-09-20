@@ -7,12 +7,15 @@ import { Resource } from 'ember-modify-based-class-resource';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 
+import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+
 import ApplySearchReplaceBlockCommand from '../commands/apply-search-replace-block';
 
 interface CodeDiffResourceArgs {
   named: {
     fileUrl?: string | null;
     searchReplaceBlock?: string | null;
+    codePatchStatus?: CodePatchStatus | null;
   };
 }
 
@@ -22,15 +25,17 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   @tracked modifiedCode: string | undefined | null;
   @tracked searchReplaceBlock: string | undefined | null;
   @tracked errorMessage: string | undefined | null;
+  codePatchStatus: CodePatchStatus | undefined | null;
 
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
-    let { fileUrl, searchReplaceBlock } = named;
+    let { fileUrl, searchReplaceBlock, codePatchStatus } = named;
     this.errorMessage = null;
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
+    this.codePatchStatus = codePatchStatus;
     if (!fileUrl) {
       this.errorMessage = 'Missing file URL in the code block';
       return;
@@ -49,7 +54,19 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   }
 
   private load = restartableTask(async () => {
-    let { fileUrl, searchReplaceBlock } = this;
+    let { fileUrl, searchReplaceBlock, codePatchStatus } = this;
+    if (codePatchStatus === 'applied') {
+      // We currently don't show the diff for applied code patches.
+      // Showing the diff for applied code patches won't work since in the
+      // current code below we try to apply the patch against the original code,
+      // but in this case the patch has already been applied.
+      // We could make it work if we replaced the this.cardService.getSource below
+      // with fetch of the matrix hosted attached file. But we deliberately
+      // decided not to do that, and show the "// existing code ... " "// new code ... "
+      // formatting instead. We decided to do that to avoid potential performance problems
+      // when loading big chats with many code patches.
+      return;
+    }
     if (!fileUrl || !searchReplaceBlock) {
       return;
     }
@@ -88,11 +105,13 @@ export function getCodeDiffResultResource(
   parent: object,
   fileUrl?: string | null,
   searchReplaceBlock?: string | null,
+  codePatchStatus?: CodePatchStatus | null,
 ) {
   return CodeDiffResource.from(parent, () => ({
     named: {
       fileUrl,
       searchReplaceBlock,
+      codePatchStatus,
     },
   }));
 }
