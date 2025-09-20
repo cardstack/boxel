@@ -18,6 +18,7 @@
         "description": null,
         "thumbnailURL": null
       },
+      "showClean": false,
       "showComputedFields": true,
       "showPrimitivesOnly": false
     },

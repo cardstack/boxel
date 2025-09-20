@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { type CodeRef } from '@cardstack/runtime-common';
 import { LoadingIndicator, Pill, Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 
 import { Paginator } from './paginator';
@@ -24,6 +24,7 @@ interface TableRowSignature {
     fieldColumns: string[];
     context?: CardContext;
     showComputedFields?: boolean;
+    showClean?: boolean;
     fields?: { [fieldName: string]: Field };
   };
   Element: HTMLTableRowElement;
@@ -31,13 +32,14 @@ interface TableRowSignature {
 
 interface TableSignature {
   Args: {
+    cardTypeRef?: CodeRef;
     query: Query;
     realm?: string; //we try to use a single realm, otherwise pagination is tricky
-    context?: CardContext;
     showComputedFields?: boolean;
     showPrimitivesOnly?: boolean;
+    showClean?: boolean;
+    context?: CardContext;
     createCard?: CreateCardFn;
-    cardTypeRef?: CodeRef;
   };
   Element: HTMLElement;
 }
@@ -55,47 +57,57 @@ class TableRow extends GlimmerComponent<TableRowSignature> {
             as |field|
           >
             {{#if field}}
-              {{#if (eq field.fieldType 'contains')}}
-                {{#if field.component}}
+              {{#if (not @showClean)}}
+                {{#if (eq field.fieldType 'linksTo')}}
+                  <field.component />
+                {{else if (eq field.fieldType 'linksToMany')}}
+                  <field.component @format='atom' />
+                {{else}}
                   <field.component @format='edit' />
+                {{/if}}
+              {{else}}
+                {{#if (eq field.fieldType 'contains')}}
+                  {{#if field.component}}
+                    <field.component @format='edit' />
+                  {{else}}
+                    {{field.value}}
+                  {{/if}}
+                {{else if (eq field.fieldType 'linksTo')}}
+                  {{#if field.value}}
+                    <Pill
+                      {{@context.cardComponentModifier
+                        cardId=field.value.id
+                        format='data'
+                        fieldType='linksTo'
+                        fieldName=field.name
+                      }}
+                    >
+                      {{#if field.value.title}}
+                        {{field.value.title}}
+                      {{else}}
+                        [linked card]
+                      {{/if}}
+                    </Pill>
+                  {{/if}}
+                {{else if (eq field.fieldType 'containsMany')}}
+                  [{{field.value.length}}
+                  items]
+                {{else if (eq field.fieldType 'linksToMany')}}
+                  {{#each field.value as |linkedCard|}}
+                    <Pill
+                      {{@context.cardComponentModifier
+                        cardId=linkedCard.id
+                        format='data'
+                        fieldType='linksToMany'
+                        fieldName=field.name
+                      }}
+                    >
+                      {{linkedCard.title}}
+                    </Pill>
+                  {{/each}}
                 {{else}}
                   {{field.value}}
                 {{/if}}
-              {{else if (eq field.fieldType 'linksTo')}}
-                {{#if field.value}}
-                  <Pill
-                    {{@context.cardComponentModifier
-                      cardId=field.value.id
-                      format='data'
-                      fieldType='linksTo'
-                      fieldName=field.name
-                    }}
-                  >
-                    {{#if field.value.title}}
-                      {{field.value.title}}
-                    {{else}}
-                      [linked card]
-                    {{/if}}
-                  </Pill>
-                {{/if}}
-              {{else if (eq field.fieldType 'containsMany')}}
-                [{{field.value.length}}
-                items]
-              {{else if (eq field.fieldType 'linksToMany')}}
-                {{#each field.value as |linkedCard|}}
-                  <Pill
-                    {{@context.cardComponentModifier
-                      cardId=linkedCard.id
-                      format='data'
-                      fieldType='linksToMany'
-                      fieldName=field.name
-                    }}
-                  >
-                    {{linkedCard.title}}
-                  </Pill>
-                {{/each}}
-              {{else}}
-                {{field.value}}
               {{/if}}
             {{/if}}
           </FieldRenderer>
@@ -271,6 +283,7 @@ export class Table extends GlimmerComponent<TableSignature> {
                     @fieldColumns={{this.fieldColumns}}
                     @context={{@context}}
                     @showComputedFields={{@showComputedFields}}
+                    @showClean={{@showClean}}
                     @fields={{this.typeFields}}
                   />
                 {{/each}}

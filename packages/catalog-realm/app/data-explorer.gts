@@ -98,11 +98,12 @@ class IsolatedTemplate extends Component<typeof DataExplorer> {
         <Table
           @query={{this.queryBuilder.value}}
           @realm={{this.realm}}
-          @context={{@context}}
+          @cardTypeRef={{this.cardTypeRef}}
+          @showClean={{@model.showClean}}
           @showComputedFields={{@model.showComputedFields}}
           @showPrimitivesOnly={{@model.showPrimitivesOnly}}
+          @context={{@context}}
           @createCard={{this.createCard cardCrudFunctions}}
-          @cardTypeRef={{this.cardTypeRef}}
         />
       </CardCrudFunctionsConsumer>
     {{else}}
@@ -132,6 +133,7 @@ export class DataExplorer extends AppCard {
   static displayName = 'Data Explorer';
   @field showComputedFields = contains(BooleanField);
   @field showPrimitivesOnly = contains(BooleanField);
+  @field showClean = contains(BooleanField);
   @field codeRef = contains(AbsoluteCodeRefField);
 
   static isolated = IsolatedTemplate;
