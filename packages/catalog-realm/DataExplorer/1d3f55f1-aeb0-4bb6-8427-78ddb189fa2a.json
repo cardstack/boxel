@@ -19,7 +19,7 @@
         "thumbnailURL": null
       },
       "showComputedFields": true,
-      "showPrimitivesOnly": true
+      "showPrimitivesOnly": false
     },
     "relationships": {
       "cardInfo.theme": {

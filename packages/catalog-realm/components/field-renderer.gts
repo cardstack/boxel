@@ -1,8 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
 import {
-  getFields,
   type CardDef,
   Box,
+  type Field,
 } from 'https://cardstack.com/base/card-api';
 import {
   getBoxComponent,
@@ -29,10 +29,11 @@ interface FieldRendererSignature {
     fieldName: string;
     showComputedFields?: boolean;
     usedLinksToFieldsOnly?: boolean;
+    fields?: { [fieldName: string]: Field };
   };
   Element: HTMLElement;
   Blocks: {
-    default: [field: FieldInfo];
+    default: [field: FieldInfo | undefined];
   };
 }
 
@@ -54,13 +55,10 @@ export class FieldRenderer extends GlimmerComponent<FieldRendererSignature> {
     return cached.fieldsProxy;
   }
 
-  get field(): FieldInfo {
-    const instanceFields = getFields(this.args.instance.constructor, {
-      includeComputeds: this.args.showComputedFields ?? false,
-      usedLinksToFieldsOnly: this.args.usedLinksToFieldsOnly ?? false,
-    });
-
-    const fieldInfo = instanceFields[this.args.fieldName];
+  get field(): FieldInfo | undefined {
+    const instanceFields = this.args.fields;
+    const fieldInfo = instanceFields?.[this.args.fieldName];
+    if (!fieldInfo) return undefined;
 
     const fieldValue = (this.args.instance as any)[this.args.fieldName];
     const fieldComponent = (this.fieldsProxy as any)[

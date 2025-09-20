@@ -5,6 +5,7 @@ import {
   type CardContext,
   type CardDef,
   type CreateCardFn,
+  type Field,
 } from 'https://cardstack.com/base/card-api';
 import { type CodeRef } from '@cardstack/runtime-common';
 import { LoadingIndicator, Pill, Button } from '@cardstack/boxel-ui/components';
@@ -23,6 +24,7 @@ interface TableRowSignature {
     fieldColumns: string[];
     context?: CardContext;
     showComputedFields?: boolean;
+    fields?: { [fieldName: string]: Field };
   };
   Element: HTMLTableRowElement;
 }
@@ -49,6 +51,7 @@ class TableRow extends GlimmerComponent<TableRowSignature> {
             @instance={{@instance}}
             @fieldName={{fieldName}}
             @showComputedFields={{@showComputedFields}}
+            @fields={{@fields}}
             as |field|
           >
             {{#if field}}
@@ -137,6 +140,10 @@ export class Table extends GlimmerComponent<TableSignature> {
   @tracked currentPage = 0;
   @tracked pageSize = 10;
 
+  get typeFields(): { [fieldName: string]: Field } | undefined {
+    return this.getFieldsResource.boxed?.fields;
+  }
+
   capitalizeFieldName(fieldName: string): string {
     return fieldName
       .split(/(?=[A-Z])|_/)
@@ -180,8 +187,8 @@ export class Table extends GlimmerComponent<TableSignature> {
   );
 
   get fieldColumns() {
-    // Use precomputed fields from cardDefLoader
-    const fields = this.getFieldsResource.boxed?.fields;
+    // Use precomputed fields from the fields resource
+    const fields = this.typeFields;
     if (!fields) {
       return [];
     }
@@ -264,6 +271,7 @@ export class Table extends GlimmerComponent<TableSignature> {
                     @fieldColumns={{this.fieldColumns}}
                     @context={{@context}}
                     @showComputedFields={{@showComputedFields}}
+                    @fields={{this.typeFields}}
                   />
                 {{/each}}
               {{else}}

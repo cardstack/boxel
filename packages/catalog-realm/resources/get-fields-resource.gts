@@ -7,7 +7,11 @@ import {
   isResolvedCodeRef,
   isBaseDef,
 } from '@cardstack/runtime-common';
-import { BaseDef, getFields } from 'https://cardstack.com/base/card-api';
+import {
+  BaseDef,
+  type Field,
+  getFields,
+} from 'https://cardstack.com/base/card-api';
 
 interface GetFieldsResourceArgs {
   named: {
@@ -28,8 +32,10 @@ class GetFieldsResource extends Resource<GetFieldsResourceArgs> {
   // (e.g., instanceof checks, getFields on classes, etc.).
   // By wrapping the ctor and its precomputed fields inside a plain object, we avoid passing the function
   // itself as a top-level value through templates, preventing auto-binding and keeping the constructor unbound.
-  @tracked boxed: { ctor: typeof BaseDef; fields: Record<string, any> } | null =
-    null;
+  @tracked boxed: {
+    ctor: typeof BaseDef;
+    fields: { [fieldName: string]: Field };
+  } | null = null;
   @tracked isLoading = false;
   @tracked error: Error | null = null;
 
