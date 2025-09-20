@@ -29,6 +29,7 @@ import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
+import handleRealmAuth from './handlers/handle-realm-auth';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -137,6 +138,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleFullReindex(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
+  router.post(
+    '/_realm-auth',
+    jwtMiddleware(args.realmSecretSeed),
+    handleRealmAuth(args),
+  );
 
   return router.routes();
 }

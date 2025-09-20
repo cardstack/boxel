@@ -298,7 +298,6 @@ export default class MatrixService extends Service {
             await this.realmServer.setAvailableRealmURLs(
               e.event.content.realms,
             );
-            await this.loginToRealms();
             await this.loadMoreAuthRooms(e.event.content.realms);
           }
         },
@@ -550,6 +549,16 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
+
+        // TODO: Only do this if we don't have the tokens already (i.e. after clicking to "Sign in")
+        let tokens = (await this.realmServer.fetchTokensForAllUserRealms()) as {
+          [realmURL: string]: string;
+        };
+
+        for (let [realmURL, token] of Object.entries(tokens)) {
+          this.realm.getOrCreateRealmResource(realmURL, token);
+        }
+
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(
@@ -628,28 +637,6 @@ export default class MatrixService extends Service {
     );
 
     return this.slidingSync;
-  }
-
-  async loginToRealms() {
-    // This is where we would actually load user-specific choices out of the
-    // user's profile based on this.client.getUserId();
-    let activeRealms = this.realmServer.availableRealmURLs;
-
-    await Promise.all(
-      activeRealms.map(async (realmURL: string) => {
-        try {
-          // Our authorization-middleware can login automatically after seeing a
-          // 401, but this preemptive login makes it possible to see
-          // canWrite===true on realms that are publicly readable.
-          await this.realm.login(realmURL);
-        } catch (err) {
-          console.warn(
-            `Unable to establish session with realm ${realmURL}`,
-            err,
-          );
-        }
-      }),
-    );
   }
 
   async createRealmSession(realmURL: URL) {
