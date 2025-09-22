@@ -14,18 +14,15 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
 import type Owner from '@ember/owner';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import ValidationSteps, {
   type ValidationStep,
-  generateSetupValidationSteps,
-  canGameStart,
 } from '../components/validation-steps';
-
 import { realmURL } from '@cardstack/runtime-common';
 
 class PlayingCardField extends FieldDef {
@@ -35,30 +32,91 @@ class PlayingCardField extends FieldDef {
   @field faceUp = contains(BooleanField);
 }
 
+class StatsField extends FieldDef {
+  static displayName = 'Hand Statistics';
+
+  @field wins = contains(NumberField);
+  @field losses = contains(NumberField);
+  @field earnings = contains(NumberField);
+}
+
 class IsolatedTemplate extends Component<typeof BlackjackGame> {
   // Game state
   @tracked gameState = this.args.model.gameState;
   @tracked gameMessage = this.args.model.gameMessage;
 
-  // Player data - removed chips, betting, and statistics
+  // Player data
+  @tracked playerChips = this.args.model.playerChips || 5000;
+  @tracked currentBet = this.args.model.currentBet || 100;
+  @tracked statistics = this.args.model.statistics || {
+    wins: 0,
+    losses: 0,
+    earnings: 0,
+  };
 
   // Card deck and hands
   @tracked deck: PlayingCardField[] = [];
   @tracked playerHand: PlayingCardField[] = [];
   @tracked dealerHand: PlayingCardField[] = [];
 
-  // Check if game can start using shared validation logic
+  // Check if game can start - requires player and dealer
   get gameCanStart() {
-    return canGameStart({
-      players: this.args.model.players || [],
-    });
+    const hasPlayer = !!this.args.model.player;
+    const hasDealer = !!this.args.model.dealer;
+    return hasPlayer && hasDealer;
   }
 
-  // Generate validation steps for setup instructions using shared function
+  // Generate validation steps for blackjack setup
   get validationSteps(): ValidationStep[] {
-    return generateSetupValidationSteps({
-      players: this.args.model.players || [],
-    });
+    const steps: ValidationStep[] = [];
+    const hasPlayer = !!this.args.model.player;
+    const hasDealer = !!this.args.model.dealer;
+
+    // Step 1: Add Player
+    if (!hasPlayer) {
+      steps.push({
+        id: 'player',
+        title: '1. Add Player:',
+        message: 'Link a player card to start playing',
+        status: 'incomplete',
+      });
+    } else {
+      steps.push({
+        id: 'player',
+        title: '✓ Player Added:',
+        message: 'Player card is linked',
+        status: 'complete',
+      });
+    }
+
+    // Step 2: Add Dealer
+    if (!hasDealer) {
+      steps.push({
+        id: 'dealer',
+        title: '2. Add Dealer:',
+        message: 'Link a dealer card to manage the game',
+        status: 'incomplete',
+      });
+    } else {
+      steps.push({
+        id: 'dealer',
+        title: '✓ Dealer Added:',
+        message: 'Dealer card is linked',
+        status: 'complete',
+      });
+    }
+
+    // Final step: Ready to play
+    if (hasPlayer && hasDealer) {
+      steps.push({
+        id: 'ready',
+        title: '✓ Ready to Play:',
+        message: 'All requirements met - game is ready!',
+        status: 'complete',
+      });
+    }
+
+    return steps;
   }
 
   // Card and suit arrays for generating the deck
@@ -101,14 +159,14 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
 
       // Match game state based on the state we were in
       if (this.gameState === 'betting') {
-        this.gameMessage = 'Click Deal to start a new game';
+        this.gameMessage = 'Place your bet and deal';
       } else if (this.gameState === 'playerTurn') {
         this.gameMessage = 'Your turn. Hit or Stand?';
       } else if (this.gameState === 'dealerTurn') {
         this.gameMessage = "Dealer's turn.";
         // If we're in dealer turn but haven't flipped the card yet
         if (this.dealerHand.length > 0 && !this.dealerHand[1].faceUp) {
-          setTimeout(() => this.playDealerTurn(), 1000);
+          setTimeout(() => this.dealerPlay(), 1000);
         }
       } else if (this.gameState === 'gameOver') {
         // Game already over, no action needed
@@ -123,7 +181,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   initializeGame() {
     // Set initial state
     this.gameState = 'betting';
-    this.gameMessage = 'Click Deal to start a new game';
+    this.gameMessage = 'Place your bet and deal';
     this.playerHand = [];
     this.dealerHand = [];
   }
@@ -200,6 +258,10 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     const dealerHasBlackjack =
       this.calculatedDealerScore === 21 && this.dealerHand.length === 2;
 
+    if (!this.currentBet) {
+      throw new Error('Current bet is undefined');
+    }
+
     if (playerHasBlackjack && dealerHasBlackjack) {
       // Tie - both have blackjack
       this.gameState = 'gameOver';
@@ -210,9 +272,13 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       this.recordGameResult();
       return true;
     } else if (playerHasBlackjack) {
-      // Player wins with blackjack
+      // Player wins with blackjack (pays 3:2)
       this.gameState = 'gameOver';
-      this.gameMessage = 'Blackjack! You win!';
+      this.gameMessage = 'Blackjack! You win 1.5x your bet!';
+
+      this.playerChips += this.currentBet * 1.5;
+      this.statistics.wins += 1;
+      this.statistics.earnings += this.currentBet * 1.5;
       this.saveGameState();
 
       // Record the game result
@@ -222,6 +288,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       // Dealer wins with blackjack
       this.gameState = 'gameOver';
       this.gameMessage = 'Dealer has Blackjack! You lose.';
+      this.playerChips -= this.currentBet;
+      this.statistics.losses += 1;
+      this.statistics.earnings -= this.currentBet;
       this.saveGameState();
 
       // Record the game result
@@ -237,6 +306,9 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     if (this.calculatedPlayerScore > 21) {
       this.gameState = 'gameOver';
       this.gameMessage = 'Bust! You lose.';
+      this.playerChips -= this.currentBet;
+      this.statistics.losses += 1;
+      this.statistics.earnings -= this.currentBet;
       this.saveGameState();
 
       // Record the game result
@@ -247,7 +319,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   }
 
   // Dealer's turn
-  playDealerTurn() {
+  dealerPlay() {
     // Reveal dealer's hole card
     const newDealerHand = [...this.dealerHand];
     newDealerHand.forEach((card) => (card.faceUp = true));
@@ -268,12 +340,21 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     if (dealerScore > 21) {
       // Dealer busts
       this.gameMessage = 'Dealer busts! You win!';
+      this.playerChips += this.currentBet;
+      this.statistics.wins += 1;
+      this.statistics.earnings += this.currentBet;
     } else if (dealerScore > playerScore) {
       // Dealer wins
       this.gameMessage = 'Dealer wins!';
+      this.playerChips -= this.currentBet;
+      this.statistics.losses += 1;
+      this.statistics.earnings -= this.currentBet;
     } else if (dealerScore < playerScore) {
       // Player wins
       this.gameMessage = 'You win!';
+      this.playerChips += this.currentBet;
+      this.statistics.wins += 1;
+      this.statistics.earnings += this.currentBet;
     } else {
       // Push (tie)
       this.gameMessage = "Push! It's a tie.";
@@ -287,8 +368,21 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   }
 
   // Action handlers
+  @action placeBet(amount: number) {
+    if (this.gameState !== 'betting') return;
+    if (amount > this.playerChips) return;
+    this.currentBet = amount;
+    this.gameMessage = `Bet placed: ${amount} chips. Deal to start the game.`;
+  }
+
   @action deal() {
     if (!this.gameCanStart || this.gameState !== 'betting') return;
+
+    // Check if player has enough chips
+    if (this.playerChips < this.currentBet) {
+      this.gameMessage = 'Not enough chips to place bet!';
+      return;
+    }
 
     // Reset hands
     this.playerHand = [];
@@ -338,7 +432,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     }
 
     this.gameMessage = `You drew a ${newCard.value}. Hit or Stand?`;
-    this.saveGameState();
   }
 
   @action stand() {
@@ -348,12 +441,15 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     this.gameMessage = "Dealer's turn.";
 
     // Dealer plays after a brief delay
-    setTimeout(() => this.playDealerTurn(), 1000);
+    setTimeout(() => this.dealerPlay(), 1000);
   }
 
   @action doubleDown() {
     if (this.gameState !== 'playerTurn' || this.playerHand.length !== 2) return;
+    if (this.playerChips < this.currentBet) return;
 
+    // Double the bet
+    this.currentBet *= 2;
     this.gameMessage = 'Double Down! Drawing one card then standing.';
 
     // Draw one card then stand with a new array reference
@@ -380,7 +476,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     }
 
     this.gameState = 'betting';
-    this.gameMessage = 'Click Deal to start a new game';
+    this.gameMessage = 'Place your bet and deal';
 
     // Clear the hands to ensure proper reactivity for the next game
     this.playerHand = [];
@@ -453,10 +549,15 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   // Save game state back to model for persistence
   saveGameState() {
     // Update the model's properties with our current state
+    this.args.model.playerChips = this.playerChips;
+    this.args.model.currentBet = this.currentBet;
     this.args.model.gameState = this.gameState;
     this.args.model.gameMessage = this.gameMessage;
-    this.args.model.playerScore = this.calculatedPlayerScore;
-    this.args.model.dealerScore = this.calculatedDealerScore;
+    if (this.args.model.statistics) {
+      this.args.model.statistics.wins = this.statistics.wins;
+      this.args.model.statistics.losses = this.statistics.losses;
+      this.args.model.statistics.earnings = this.statistics.earnings;
+    }
 
     // Clear and update the hands in the model
     this.args.model.playerHand = [];
@@ -506,13 +607,26 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       {{/unless}}
       <div class='table-content'>
         <div class='table-header'>
-          <div class='game-title'>{{@model.title}}</div>
+          <div class='game-title'>{{@model.casinoName}}
+            Blackjack</div>
+          <div class='statistics'>
+            <div class='stat'>Wins: {{this.statistics.wins}}</div>
+            <div class='stat'>Losses: {{this.statistics.losses}}</div>
+            <div class='stat'>Earnings: {{this.statistics.earnings}}</div>
+          </div>
         </div>
 
         <div class='game-area'>
           <div class='dealer-area'>
             <div class='area-label'>
-              <span>Dealer</span>
+              <div class='player-avatar-container'>
+                <img
+                  src={{@model.dealer.thumbnailURL}}
+                  alt={{@model.dealer.title}}
+                  class='player-avatar'
+                />
+                <div>Dealer: {{@model.dealer.title}}</div>
+              </div>
               <span>Score: {{this.calculatedDealerScore}}</span>
             </div>
             <div class='card-area'>
@@ -545,7 +659,14 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
 
           <div class='player-area'>
             <div class='area-label'>
-              <span>Players</span>
+              <div class='player-avatar-container'>
+                <img
+                  src={{@model.player.thumbnailURL}}
+                  alt={{@model.player.title}}
+                  class='player-avatar'
+                />
+                <div>Player: {{@model.player.title}}</div>
+              </div>
               <span>Score: {{this.calculatedPlayerScore}}</span>
             </div>
             <div class='card-area'>
@@ -580,9 +701,34 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
             {{this.gameMessage}}
           </div>
 
+          <div class='area-label'>
+            <span class='chips-display'>Chips: {{this.playerChips}}</span>
+            <span class='bet-amount'>Current Bet: {{this.currentBet}}</span>
+          </div>
+
           <div class='controls-container'>
             {{#if (eq this.gameState 'betting')}}
-              <div class='controls'>
+              <div class='betting-controls'>
+                <button
+                  class='chip red'
+                  disabled={{not this.gameCanStart}}
+                  {{on 'click' (fn this.placeBet 5)}}
+                >5</button>
+                <button
+                  class='chip blue'
+                  disabled={{not this.gameCanStart}}
+                  {{on 'click' (fn this.placeBet 20)}}
+                >20</button>
+                <button
+                  class='chip green'
+                  disabled={{not this.gameCanStart}}
+                  {{on 'click' (fn this.placeBet 50)}}
+                >50</button>
+                <button
+                  class='chip black'
+                  disabled={{not this.gameCanStart}}
+                  {{on 'click' (fn this.placeBet 100)}}
+                >100</button>
                 <button
                   class='button primary'
                   disabled={{not this.gameCanStart}}
@@ -636,7 +782,8 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
         align-items: center;
       }
       .validation-steps {
-        --validation-content-bg: rgba(27, 94, 32, 0.95);
+        --validation-content-background: #1b5e20;
+        --validation-content-foreground: #fffb12;
       }
       .blackjack-table {
         background-color: #1b5e20;
@@ -726,7 +873,22 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
         overflow-y: auto;
         min-height: 0;
       }
-
+      .player-avatar-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        gap: 10px;
+        background-color: rgba(0, 0, 0, 0.3);
+        padding: 5px;
+        border-radius: 5px;
+      }
+      .player-avatar {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        object-fit: cover;
+      }
       .dealer-area,
       .player-area {
         display: flex;
@@ -1061,8 +1223,11 @@ export class BlackjackGame extends CardDef {
   @field player = linksTo(() => Player);
   @field dealer = linksTo(() => Player);
 
+  @field playerChips = contains(NumberField);
+  @field currentBet = contains(NumberField);
   @field gameState = contains(StringField);
   @field gameMessage = contains(StringField);
+  @field statistics = contains(StatsField);
   @field playerScore = contains(NumberField);
   @field dealerScore = contains(NumberField);
   @field dealerHand = containsMany(PlayingCardField);
@@ -1070,118 +1235,9 @@ export class BlackjackGame extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: BlackjackGame) {
-      if (this.casinoName) {
-        return `Blackjack - ${this.casinoName}`;
-      } else {
-        return 'Blackjack';
-      }
+      return 'Blackjack';
     },
   });
 
   static isolated = IsolatedTemplate;
-
-  static edit = class Edit extends Component<typeof this> {
-    <template>
-      <div class='edit-container'>
-        <div class='content-box'>
-          <h3>Casino Information</h3>
-          <FieldContainer @label='Casino Name' @vertical={{true}}>
-            <@fields.casinoName />
-          </FieldContainer>
-        </div>
-
-        <hr />
-
-        <div class='content-box'>
-          <h3>Player Setup</h3>
-
-          <FieldContainer @label='Players' @vertical={{true}}>
-            <@fields.players />
-          </FieldContainer>
-
-          <ValidationSteps
-            @steps={{this.validationSteps}}
-            class='validation-steps'
-          />
-        </div>
-
-        <hr />
-
-        <div class='content-box'>
-          <h3>Game State</h3>
-          <FieldContainer @label='Game State' @vertical={{true}}>
-            <@fields.gameState />
-          </FieldContainer>
-          <FieldContainer @label='Game Message' @vertical={{true}}>
-            <@fields.gameMessage />
-          </FieldContainer>
-          <FieldContainer @label='Player Score' @vertical={{true}}>
-            <@fields.playerScore />
-          </FieldContainer>
-          <FieldContainer @label='Dealer Score' @vertical={{true}}>
-            <@fields.dealerScore />
-          </FieldContainer>
-        </div>
-      </div>
-
-      <style scoped>
-        .validation-steps {
-          /* Customize ValidationSteps using CSS variables */
-          --validation-content-bg: transparent;
-          --validation-content-border: none;
-          --validation-content-padding: 0;
-          --validation-content-box-shadow: none;
-          --validation-content-max-width: 100%;
-        }
-        .edit-container {
-          font-family: sans-serif;
-          max-width: 600px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-        .edit-container > * + * {
-          margin-top: 0.5rem;
-        }
-        .content-box {
-          background-color: rgba(27, 94, 32, 0.95);
-          border: 3px solid #f9a825;
-          border-radius: 20px;
-          padding: 20px;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
-          color: white;
-        }
-        .content-box > * + * {
-          margin-top: 0.5rem;
-        }
-        .content-box h3 {
-          font-size: 24px;
-          margin-top: 0;
-          margin-bottom: 15px;
-          color: #f9a825;
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
-          border: none;
-          padding: 0;
-        }
-        .help-text {
-          font-size: 16px;
-          color: #e8f5e8;
-          font-style: italic;
-          margin-bottom: 15px;
-          line-height: 1.4;
-        }
-        hr {
-          border: none;
-          border-top: 1px solid #eee;
-          margin: 20px 0;
-        }
-      </style>
-    </template>
-
-    // Generate validation steps for setup instructions using shared function
-    get validationSteps(): ValidationStep[] {
-      return generateSetupValidationSteps({
-        players: this.args.model.players || [],
-      });
-    }
-  };
 }

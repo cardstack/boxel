@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-import type { Player } from '../player/player';
 
 export interface ValidationStep {
   id: string;
@@ -40,226 +39,101 @@ export default class ValidationSteps extends Component<ValidationStepsSignature>
 
     <style scoped>
       .validation-content {
-        background-color: var(--validation-content-bg, rgba(0, 0, 0, 0.5));
-        border-radius: var(--validation-content-border-radius, 15px);
-        padding: var(--validation-content-padding, 30px);
+        background: var(--validation-content-background, var(--background));
+        color: var(--validation-content-foreground, var(--foreground));
+        border-radius: var(
+          --boxel-border-radius,
+          var(--validation-content-border-radius)
+        );
+        padding: var(--boxel-sp-xl, var(--validation-content-padding));
         max-width: var(--validation-content-max-width, 500px);
-        width: var(--validation-content-width, 100%);
-        box-shadow: var(
-          --validation-content-box-shadow,
-          0 10px 30px rgba(0, 0, 0, 0.5)
-        );
-        border: var(
-          --validation-content-border,
-          2px solid var(--boxel-highlight)
-        );
+        width: 100%;
+        box-shadow: var(--boxel-box-shadow-lg);
+        border: 3px solid var(--border, var(--boxel-border-color));
+        position: relative;
+        backdrop-filter: blur(15px);
+      }
+
+      .validation-content > * {
+        position: relative;
+        z-index: 1;
       }
 
       .validation-content h2 {
-        color: var(--validation-title-color, #f9a825);
-        margin: var(--validation-title-margin, 0 0 15px 0);
-        text-align: var(--validation-title-align, center);
-        font-size: var(--validation-title-size, 24px);
-        font-weight: var(--validation-title-weight, bold);
+        margin: 0 0 var(--boxel-sp) 0;
+        text-align: center;
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 600;
+        letter-spacing: -0.025em;
       }
 
       .validation-description {
-        color: var(--validation-desc-color, var(--boxel-light-500));
-        text-align: var(--validation-desc-align, center);
-        margin: var(--validation-desc-margin, 0 0 20px 0);
-        font-size: var(--validation-desc-size, 16px);
-        line-height: var(--validation-desc-line-height, 1.4);
+        text-align: center;
+        margin: 0 0 var(--boxel-sp-lg) 0;
+        font-size: var(--boxel-font-size);
+        line-height: 1.5;
       }
 
       .validation-steps {
         display: flex;
         flex-direction: column;
-        gap: var(--validation-steps-gap, 0.5rem);
+        gap: var(--boxel-sp-xs);
       }
 
       .validation-step {
-        background-color: var(--validation-step-bg, rgba(0, 0, 0, 0.3));
-        font-size: var(--validation-step-font-size, 16px);
-        line-height: var(--validation-step-line-height, 1.4);
-        padding: var(--validation-step-padding, 10px);
-        border: var(--validation-step-border, 1px solid #fff);
-        border-radius: var(--validation-step-border-radius, 5px);
-        border-left: var(--validation-step-border-left, 4px solid transparent);
-        box-shadow: var(
-          --validation-step-box-shadow,
-          0 4px 16px 0 rgba(0, 0, 0, 0.18),
-          0 1.5px 4px 0 rgba(249, 168, 37, 0.15)
-        );
+        background: var(--card);
+        color: var(--card-foreground);
+        font-size: var(--boxel-font-size);
+        line-height: 1.5;
+        padding: var(--boxel-sp);
+        border: 2px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius);
+        border-left: 4px solid var(--muted);
+        box-shadow: var(--boxel-box-shadow-sm);
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
       }
 
       .validation-step:last-child {
         margin-bottom: 0;
       }
 
-      .validation-step.incomplete {
-        background-color: var(
-          --validation-incomplete-bg,
-          rgba(138, 14, 5, 0.8)
-        );
-        border-left-color: var(--validation-incomplete-border, #f44336);
+      .validation-step:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--boxel-box-shadow);
       }
 
-      .validation-step.incomplete strong {
-        color: var(--validation-incomplete-text-color, #f44336);
+      .validation-step.incomplete {
+        background: rgba(220, 2, 2, 0.6); /* 50% transparent red */
+        color: #ffffff;
+        backdrop-filter: blur(4px);
       }
 
       .validation-step.complete {
-        background-color: var(--validation-complete-bg, rgba(76, 175, 80, 0.1));
-        border-left-color: var(--validation-complete-border, #4caf50);
-      }
-
-      .validation-step.complete strong {
-        color: var(--validation-complete-text-color, #4caf50);
+        background: rgba(55, 235, 119, 0.6); /* 50% transparent green */
+        color: #ffffff;
+        backdrop-filter: blur(4px);
       }
 
       .validation-step strong {
-        color: var(--validation-step-title-color, var(--boxel-highlight));
-        display: var(--validation-step-title-display, block);
-        margin: var(--validation-step-title-margin, 0 0 4px 0);
-        font-weight: var(--validation-step-title-weight, inherit);
+        display: block;
+        margin: 0 0 var(--boxel-sp-xs) 0;
+        font-weight: 600;
+        font-size: var(--boxel-font-size);
       }
 
       .edit-mode-note {
-        font-style: var(--validation-note-style, italic);
-        color: var(--validation-note-color, var(--boxel-light-500));
-        margin: var(--validation-note-margin, 20px 0 0 0);
-        font-size: var(--validation-note-size, 16px);
-        text-align: var(--validation-note-align, center);
+        font-style: italic;
+        margin: var(--boxel-sp-lg) 0 0 0;
+        font-size: var(--boxel-font-size-sm);
+        text-align: center;
+        background: var(--muted);
+        color: var(--card-foreground);
+        padding: var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius-xs);
+        border: 1px solid var(--border, var(--boxel-border-color));
       }
     </style>
   </template>
-}
-
-// Game Validation State
-export interface GameValidationState {
-  players: Player[];
-}
-
-export function generateSetupValidationSteps(
-  gameState: GameValidationState,
-): ValidationStep[] {
-  const steps: ValidationStep[] = [];
-
-  // Helper functions to check game state
-  const hasPlayers = () => gameState.players.length > 0;
-
-  const hasHumanPlayer = () =>
-    gameState.players.some((p: Player) => p.type === 'human');
-
-  const getBotDealerCount = () =>
-    gameState.players.filter((p: Player) => p.type === 'bot').length;
-
-  const hasExactlyOneBotDealer = () => getBotDealerCount() === 1;
-
-  const hasTooManyBotDealers = () => getBotDealerCount() > 1;
-
-  const gameCanStart = () => hasExactlyOneBotDealer() && hasHumanPlayer();
-
-  // Validation conditions
-  const needsPlayers = !hasPlayers();
-  const needsHumanPlayer = hasPlayers() && !hasHumanPlayer();
-  const needsBotDealer = hasPlayers() && getBotDealerCount() === 0;
-  const needsFewerBotDealers = hasPlayers() && hasTooManyBotDealers();
-
-  // Step 1: Add Players - always show
-  if (needsPlayers) {
-    steps.push({
-      id: 'players',
-      title: '1. Add Players:',
-      message: 'Link existing player cards or create new ones',
-      status: 'incomplete',
-    });
-
-    // When no players are linked, show all upcoming requirements
-    steps.push({
-      id: 'human-player-preview',
-      title: '2. Add Human Player:',
-      message: 'You need at least one human player to play',
-      status: 'incomplete',
-    });
-
-    steps.push({
-      id: 'bot-dealer-preview',
-      title: '3. Add Bot Dealer:',
-      message: 'You need exactly one bot player card to act as dealer',
-      status: 'incomplete',
-    });
-  } else {
-    steps.push({
-      id: 'players',
-      title: '✓ Players Added:',
-      message: 'Player cards are linked',
-      status: 'complete',
-    });
-
-    // Step 2: Add Human Player (show when we have players)
-    if (needsHumanPlayer) {
-      steps.push({
-        id: 'human-player',
-        title: '2. Add Human Player:',
-        message: 'You need at least one human player to play',
-        status: 'incomplete',
-      });
-    } else {
-      steps.push({
-        id: 'human-player',
-        title: '✓ Human Player:',
-        message: 'Human player is ready',
-        status: 'complete',
-      });
-    }
-
-    // Step 3: Add Bot Dealer (show when we have players)
-    if (needsBotDealer) {
-      steps.push({
-        id: 'bot-dealer',
-        title: '3. Add Bot Dealer:',
-        message: 'You need exactly one bot player card to act as dealer',
-        status: 'incomplete',
-      });
-    } else if (needsFewerBotDealers) {
-      steps.push({
-        id: 'bot-dealer',
-        title: '3. Too Many Bot Dealers:',
-        message: `You have ${getBotDealerCount()} bot dealers, but need exactly 1. Remove extra bot dealers.`,
-        status: 'incomplete',
-      });
-    } else {
-      steps.push({
-        id: 'bot-dealer',
-        title: '✓ Bot Dealer:',
-        message: 'Bot dealer is ready',
-        status: 'complete',
-      });
-    }
-  }
-
-  // Final step: Ready to play
-  if (gameCanStart()) {
-    steps.push({
-      id: 'ready',
-      title: '✓ Ready to Play:',
-      message: 'All requirements met - game is ready!',
-      status: 'complete',
-    });
-  }
-
-  return steps;
-}
-
-export function canGameStart(gameState: GameValidationState): boolean {
-  const hasHumanPlayer = () =>
-    gameState.players.some((p: Player) => p.type === 'human');
-
-  const getBotDealerCount = () =>
-    gameState.players.filter((p: Player) => p.type === 'bot').length;
-
-  const hasExactlyOneBotDealer = () => getBotDealerCount() === 1;
-
-  return hasExactlyOneBotDealer() && hasHumanPlayer();
 }
