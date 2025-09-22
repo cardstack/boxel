@@ -23,6 +23,7 @@ import ENV from '@cardstack/host/config/environment';
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
 import type ResetService from './reset';
+import RealmService from './realm';
 
 const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
 
@@ -57,6 +58,7 @@ type RealmServerEventSubscriber = (data: any) => Promise<void>;
 export default class RealmServerService extends Service {
   @service declare private network: NetworkService;
   @service declare private reset: ResetService;
+  @service declare private realm: RealmService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
@@ -182,7 +184,7 @@ export default class RealmServerService extends Service {
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
-  async fetchTokensForAllUserRealms() {
+  async fetchTokensForAccessibleRealms() {
     await this.login();
     let response = await this.network.fetch(`${this.url.href}_realm-auth`, {
       method: 'POST',
@@ -218,6 +220,16 @@ export default class RealmServerService extends Service {
   @cached
   get availableRealmIndexCardIds() {
     return this.availableRealmURLs.map((url) => `${url}index`);
+  }
+
+  async authenticateToAllAccessibleRealms() {
+    let tokens = (await this.fetchTokensForAccessibleRealms()) as {
+      [realmURL: string]: string;
+    };
+
+    for (let [realmURL, token] of Object.entries(tokens)) {
+      this.realm.getOrCreateRealmResource(realmURL, token);
+    }
   }
 
   async setAvailableRealmURLs(userRealmURLs: string[]) {

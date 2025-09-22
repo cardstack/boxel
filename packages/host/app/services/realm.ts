@@ -88,6 +88,10 @@ class RealmResource {
     });
   }
 
+  get isLoggedIn() {
+    return this.auth.type === 'logged-in';
+  }
+
   get url(): string {
     return this.realmURL;
   }
@@ -378,7 +382,7 @@ export default class RealmService extends Service {
   // treats that case as a read-then-write assertion failure. So instead we do
   // untracked reads from `realms` and pair them, at the right times, with
   // tracked reads from `currentKnownRealms` to establish dependencies.
-  private realms: Map<string, RealmResource> = this.restoreSessions();
+  realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
 
@@ -633,7 +637,7 @@ export default class RealmService extends Service {
 
   getOrCreateRealmResource(
     realmURL: string,
-    token: string | undefined,
+    token: string | undefined = undefined,
   ): RealmResource {
     // this should be the only place we do the untracked read. It needs to be
     // untracked so our `this.realms.set` below will not be an assertion.

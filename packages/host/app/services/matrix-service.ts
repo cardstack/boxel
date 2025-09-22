@@ -550,13 +550,14 @@ export default class MatrixService extends Service {
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
 
-        // TODO: Only do this if we don't have the tokens already (i.e. after clicking to "Sign in")
-        let tokens = (await this.realmServer.fetchTokensForAllUserRealms()) as {
-          [realmURL: string]: string;
-        };
+        let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
+          ([_url, realmResource]) => !realmResource.isLoggedIn,
+        );
 
-        for (let [realmURL, token] of Object.entries(tokens)) {
-          this.realm.getOrCreateRealmResource(realmURL, token);
+        if (noRealmsLoggedIn) {
+          // This means the user just clicked "Sign in". In this case
+          // we need to authenticate to all accessible realms–in one request, for performance reasons
+          await this.realmServer.authenticateToAllAccessibleRealms();
         }
 
         await Promise.all([
