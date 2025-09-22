@@ -1,70 +1,79 @@
-import { on } from '@ember/modifier';
-import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import cn from '../../helpers/cn.ts';
+import BoxelInput from '../input/index.gts';
+import Swatch from '../swatch/index.gts';
 
 interface Signature {
   Args: {
     color: string | null;
     disabled?: boolean;
     onChange: (color: string | null) => void;
-    showHexString?: boolean;
+    placeholder?: string;
   };
   Element: HTMLDivElement;
 }
 
-export default class ColorPicker extends Component<Signature> {
-  private handleColorChange = (event: Event) => {
-    let input = event.target as HTMLInputElement;
-    this.args.onChange(input.value);
-  };
-
-  <template>
-    <div class='color-picker' ...attributes>
-      <input
-        type='color'
-        value={{if @color @color '#ffffff'}}
-        class='input'
-        disabled={{@disabled}}
-        aria-label='Choose color'
-        {{on 'input' this.handleColorChange}}
+const ColorPicker: TemplateOnlyComponent<Signature> = <template>
+  <div class='color-picker' ...attributes>
+    <label class={{cn 'color-input-container' disabled=@disabled}}>
+      <span class='boxel-sr-only'>Color Picker</span>
+      <Swatch
+        class='color-preview'
+        @color={{@color}}
+        @hideLabel={{true}}
+        @style='round'
       />
-      {{#if @showHexString}}
-        <code class='hex-value'>{{@color}}</code>
-      {{/if}}
-    </div>
+      <BoxelInput
+        type='color'
+        @value={{@color}}
+        @onInput={{@onChange}}
+        @disabled={{@disabled}}
+      />
+    </label>
 
-    <style scoped>
+    <BoxelInput
+      class='color-text-input'
+      @value={{@color}}
+      @onInput={{@onChange}}
+      @disabled={{@disabled}}
+      @placeholder={{@placeholder}}
+    />
+  </div>
+
+  <style scoped>
+    @layer boxelComponentL2 {
       .color-picker {
-        --swatch-size: 1.4rem;
-        display: inline-flex;
+        --color-picker-width: 2.5rem;
+        --color-picker-height: 2.5rem;
+        position: relative;
+      }
+      .color-text-input {
+        padding-left: var(--color-picker-width);
+      }
+      .color-input-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
+        justify-content: center;
+        width: var(--color-picker-width);
+        height: var(--color-picker-height);
+        z-index: 1;
       }
-
-      .input {
-        width: var(--swatch-size);
-        height: var(--swatch-size);
-        padding: 0;
+      .color-input-container > :deep(.input-container) {
+        visibility: collapse;
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: block;
+      }
+      .color-input-container:not(.disabled):hover {
         cursor: pointer;
-        border: var(--boxel-border);
-        border-radius: 50%;
       }
+    }
+  </style>
+</template>;
 
-      .input:disabled {
-        pointer-events: none;
-      }
-
-      .input::-webkit-color-swatch-wrapper {
-        padding: 0;
-      }
-
-      .input::-webkit-color-swatch {
-        border: 1px solid transparent;
-        border-radius: 50%;
-      }
-
-      .hex-value {
-        text-transform: uppercase;
-      }
-    </style>
-  </template>
-}
+export default ColorPicker;

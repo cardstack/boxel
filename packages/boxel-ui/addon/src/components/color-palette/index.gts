@@ -1,22 +1,24 @@
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { concat, fn } from '@ember/helper';
+import IconTrash from '@cardstack/boxel-icons/trash-2';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
-import IconTrash from '../../icons/icon-trash.gts';
+import { cn, cssVar, eq } from '../../helpers.ts';
 import ColorPicker from '../color-picker/index.gts';
 import IconButton from '../icon-button/index.gts';
 
 interface Signature {
   Args: {
     color: string | null;
+    colors?: string[];
+    disabled?: boolean;
     onChange: (color: string | null) => void;
   };
-  Element: HTMLDivElement;
+  Element: HTMLElement;
 }
 
-const DEFAULT_PALETTE_COLORS = [
+export const DEFAULT_PALETTE_COLORS = [
   // Row 1
   '#000000',
   '#777777',
@@ -38,107 +40,73 @@ const DEFAULT_PALETTE_COLORS = [
 ];
 
 export default class ColorPalette extends Component<Signature> {
-  colors = DEFAULT_PALETTE_COLORS;
+  private get color() {
+    return this.args.color?.toUpperCase();
+  }
+  @tracked private colors = (this.args.colors ?? DEFAULT_PALETTE_COLORS).map(
+    (c) => c?.toUpperCase(),
+  );
 
   <template>
-    <div class='color-palette-container' ...attributes>
-      <div class='palette-group'>
+    <div class='color-palette-group' ...attributes>
+      {{#unless @disabled}}
         <div class='color-palette'>
           {{#each this.colors as |color|}}
-            <button
-              type='button'
-              class='swatch {{if (eq color @color) "selected"}}'
-              style={{htmlSafe (concat '--swatch-color: ' color)}}
+            <IconButton
+              class={{cn 'swatch-button' selected=(eq color this.color)}}
+              style={{cssVar swatch-color=color}}
               {{on 'click' (fn @onChange color)}}
               title={{color}}
             />
           {{/each}}
         </div>
-        {{#if @color}}
-          <div>
-            <code class='selected-color'>{{@color}}</code>
+        <div class='selected-color'>
+          {{#if this.color}}
+            <code>{{this.color}}</code>
             <IconButton
+              class='remove'
               @icon={{IconTrash}}
               @width='16px'
               @height='16px'
-              class='remove'
               {{on 'click' (fn @onChange null)}}
               aria-label='Unset color'
             />
-          </div>
-        {{/if}}
-      </div>
-
-      <label class='color-picker-container'>
-        <span class='custom-color-label'>Custom Color</span>
-        <ColorPicker @color={{@color}} @onChange={{@onChange}} />
-      </label>
+          {{/if}}
+        </div>
+      {{/unless}}
+      <ColorPicker
+        @color={{@color}}
+        @onChange={{@onChange}}
+        @placeholder='Custom Color'
+        @disabled={{@disabled}}
+      />
     </div>
 
     <style scoped>
-      .custom-color-label {
-        margin-left: var(--boxel-sp-sm);
-        color: var(--boxel-450);
-      }
-
-      .color-palette-container {
+      .color-palette-group {
         --boxel-icon-button-width: var(--boxel-icon-sm);
         --boxel-icon-button-height: var(--boxel-icon-sm);
-        display: flex;
+        display: inline-grid;
+        grid-template-columns: var(--boxel-palette-max-width, 18.75rem) auto;
+        align-items: center;
         gap: var(--boxel-sp);
-        align-items: flex-start;
-        flex-direction: column;
       }
-
-      .palette-group {
-        display: flex;
-        gap: var(--boxel-sp) var(--boxel-sp-lg);
-        align-items: center;
-        flex-wrap: wrap;
-      }
-
-      .selected-color {
-        text-transform: uppercase;
-      }
-
-      .color-picker-container {
-        --swatch-size: 1.8rem;
-        border: 1px solid var(--boxel-border-color);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-sm);
-        background: none;
-        display: flex;
-        align-items: center;
-        cursor: pointer;
-        flex-direction: row-reverse;
-        width: 18rem;
-        justify-content: flex-end;
-      }
-
-      .color-picker-container:hover {
-        background-color: var(--boxel-light-100);
-        color: var(--boxel-600);
-      }
-
       .color-palette {
         --swatch-size: 1.8rem;
         display: grid;
-        grid-template-columns: repeat(8, var(--swatch-size));
+        grid-template-columns: repeat(auto-fill, var(--swatch-size));
         gap: var(--boxel-sp-xs);
       }
-
-      .swatch {
+      .swatch-button {
         width: var(--swatch-size);
         height: var(--swatch-size);
         border: 2px solid transparent;
         border-radius: 50%;
         padding: 2px;
-        cursor: pointer;
         transition: transform 0.1s ease;
         background-color: transparent;
       }
-
-      .swatch::before {
+      .swatch-button::before {
         content: '';
         display: block;
         width: 100%;
@@ -146,41 +114,21 @@ export default class ColorPalette extends Component<Signature> {
         border-radius: 50%;
         background-color: var(--swatch-color);
       }
-
-      .swatch:hover:not(:disabled) {
+      .swatch-button:hover:not(:disabled) {
+        cursor: pointer;
         transform: scale(1.1);
       }
-
-      .swatch.selected {
-        background-color: white;
-        border-color: var(--boxel-800);
+      .swatch-button.selected {
+        background-color: var(--boxel-light);
+        border-color: var(--border, var(--boxel-800));
       }
-
-      .color-input {
-        width: 1.35rem;
-        height: 1.35rem;
-        padding: 0;
-        border: none;
-        cursor: pointer;
-        border-radius: 50%;
-      }
-
-      .color-input::-webkit-color-swatch-wrapper {
-        padding: 0;
-      }
-
-      .color-input::-webkit-color-swatch {
-        border: 1px solid transparent;
-        border-radius: 50%;
-      }
-
       .remove {
         vertical-align: text-bottom;
         margin-left: var(--boxel-sp-xxxs);
       }
       .remove:focus,
       .remove:hover {
-        --icon-color: var(--boxel-red);
+        color: var(--danger, var(--boxel-danger));
         outline: 0;
       }
     </style>
