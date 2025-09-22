@@ -9,15 +9,15 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Happy",
-        "topType": "LongHairBigHair",
+        "eyeType": "Default",
+        "topType": "LongHairShavedSides",
         "hairColor": "BrownDark",
         "mouthType": "Smile",
-        "skinColor": "Tanned",
-        "clotheType": "Hoodie",
+        "skinColor": "Pale",
+        "clotheType": "Overall",
         "eyebrowType": "Default",
-        "facialHairType": "BeardMedium",
-        "accessoriesType": "Prescription02"
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
       },
       "cardInfo": {
         "notes": null,

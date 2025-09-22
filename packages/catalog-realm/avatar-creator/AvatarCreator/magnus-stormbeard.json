@@ -9,13 +9,13 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Default",
-        "topType": "WinterHat2",
+        "eyeType": "Happy",
+        "topType": "WinterHat1",
         "hairColor": "Auburn",
-        "mouthType": "Eating",
-        "skinColor": "Yellow",
-        "clotheType": "ShirtCrewNeck",
-        "eyebrowType": "Default",
+        "mouthType": "Serious",
+        "skinColor": "Brown",
+        "clotheType": "Hoodie",
+        "eyebrowType": "RaisedExcitedNatural",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },

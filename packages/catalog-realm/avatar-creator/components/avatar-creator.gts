@@ -462,7 +462,8 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         gap: var(--boxel-sp-xl);
         padding: var(--boxel-sp-xl);
         min-height: 100vh;
-        background: var(--muted-foreground);
+        background: var(--background);
+        color: var(--foreground);
         position: relative;
         overflow: hidden;
         width: 100%;
@@ -603,10 +604,11 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       .url-input {
         flex: 1;
         padding: var(--boxel-sp-xs);
-        border: 2px solid var(--background, var(--boxel-500));
+        border: 2px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius-xs);
         font-size: var(--boxel-font-size-sm);
-        background: var(--boxel-light);
+        background: var(--muted);
+        color: var(--muted-foreground);
       }
 
       /* Override BoxelInput styles for URL input */
@@ -686,7 +688,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         grid-template-columns: 1fr 1fr;
         gap: 0.75rem;
         width: 100%;
-        background: var(--secondary, rgba(52, 73, 94, 0.2));
+        background: var(--accent, rgba(52, 73, 94, 0.2));
         padding: 1.25rem;
         border-radius: 2px;
         border: 2px solid var(--background, rgba(255, 255, 255, 0.2));
@@ -695,11 +697,11 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
 
       .detail-item {
         font-size: 0.875rem;
-        color: var(--background, var(--boxel-100));
-        background: var(--foreground, var(--boxel-400));
+        color: var(--card-foreground, var(--boxel-100));
+        background: var(--card, var(--boxel-400));
         padding: 0.75rem;
         border-radius: 2px;
-        border-left: 4px solid var(--primary, var(--boxel-highlight));
+        border-left: 4px solid var(--card-foreground, var(--boxel-highlight));
         font-weight: 600;
         transition: all 0.2s ease;
         position: relative;
@@ -718,7 +720,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .detail-item strong {
-        color: var(--primary, var(--boxel-highlight));
+        color: var(--card-foreground, var(--boxel-100));
         text-transform: uppercase;
         font-size: 0.75rem;
         letter-spacing: 0.5px;
@@ -731,7 +733,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .customization-panel {
-        background: var(--muted-foreground);
+        background: var(--accent, rgba(52, 73, 94, 0.2));
         border: 3px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xl);
@@ -760,7 +762,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
 
       .customization-panel h3 {
         margin: 0;
-        color: var(--background, var(--foreground));
+        color: var(--accent-foreground, var(--foreground));
         font-size: var(--boxel-font-size-lg);
         font-weight: 600;
         letter-spacing: -0.025em;
@@ -801,15 +803,16 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
 
       .styles-grid-container {
         min-height: 300px;
-        background: rgba(52, 73, 94, 0.2);
+        background: var(--background);
+        color: var(--foreground);
         padding: var(--boxel-sp-lg);
         border-radius: var(--boxel-border-radius);
-        border: 1px solid var(--boxel-border-color);
+        border: 1px solid var(--border, var(--boxel-border-color));
       }
 
       .styles-grid-container h4 {
         margin: 0 0 var(--boxel-sp-lg) 0;
-        color: var(--background, var(--muted));
+        color: var(--card-foreground);
         font-size: var(--boxel-font-size);
         font-weight: 600;
         text-transform: capitalize;
@@ -826,8 +829,8 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       .option-btn {
         aspect-ratio: 1;
         padding: var(--boxel-sp-xxs);
-        background: var(--foreground, var(--boxel-100));
-        border: 2px solid transparent;
+        background: var(--card, var(--boxel-100));
+        border: 2px solid var(--boxel-300);
         border-radius: var(--boxel-border-radius);
         cursor: pointer;
         transition: all 0.2s ease;
@@ -839,15 +842,15 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .option-btn:hover {
-        border: 2px solid var(--background, var(--boxel-500));
-        background: var(--muted);
+        border: 2px solid var(--accent-foreground, var(--boxel-500));
+        background: var(--accent);
         transform: translateY(-1px);
         box-shadow: var(--boxel-box-shadow-sm);
       }
 
       .option-btn.selected {
-        border: 2px solid var(--background, var(--boxel-500));
-        background: var(--muted);
+        border: 2px solid var(--accent-foreground, var(--boxel-500));
+        background: var(--accent);
         box-shadow: var(--boxel-box-shadow);
       }
 
@@ -908,6 +911,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       .avataaars-option .option-image {
         width: 52px;
         height: 52px;
+        border: none;
         border-radius: 50%;
         overflow: hidden;
         display: flex;
@@ -937,7 +941,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
 
       .option-label {
         font-size: var(--boxel-font-size-xs);
-        color: var(--muted);
+        color: var(--card-foreground);
         font-weight: 600;
         line-height: 1.3;
         max-width: 100%;
@@ -950,12 +954,12 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .option-btn:hover .option-label {
-        color: var(--muted-foreground);
+        color: var(--card-foreground);
         font-weight: 600;
       }
 
       .option-btn.selected .option-label {
-        color: var(--muted-foreground);
+        color: var(--accent-foreground);
         font-weight: 600;
       }
 

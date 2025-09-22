@@ -9,13 +9,13 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "EyeRoll",
-        "topType": "LongHairMiaWallace",
-        "hairColor": "Blonde",
-        "mouthType": "Vomit",
-        "skinColor": "Pale",
+        "eyeType": "Surprised",
+        "topType": "Hat",
+        "hairColor": "SilverGray",
+        "mouthType": "ScreamOpen",
+        "skinColor": "Brown",
         "clotheType": "ShirtVNeck",
-        "eyebrowType": "UpDown",
+        "eyebrowType": "FlatNatural",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },
@@ -29,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/experiments/default/playful-illustration"
+          "self": null
         }
       }
     }

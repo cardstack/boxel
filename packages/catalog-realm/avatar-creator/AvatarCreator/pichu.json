@@ -9,13 +9,13 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Wink",
-        "topType": "LongHairBun",
-        "hairColor": "PastelPink",
+        "eyeType": "Default",
+        "topType": "WinterHat2",
+        "hairColor": "BrownDark",
         "mouthType": "Smile",
         "skinColor": "Light",
-        "clotheType": "ShirtVNeck",
-        "eyebrowType": "UnibrowNatural",
+        "clotheType": "BlazerShirt",
+        "eyebrowType": "Default",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },

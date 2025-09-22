@@ -465,11 +465,54 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
     <style scoped>
       .avatar-compact {
         container-type: inline-size;
-        background: var(--muted-foreground);
-        border: 1px solid var(--boxel-border-color);
+        background: var(--background);
+        color: var(--foreground);
+        border: 3px solid var(--border, var(--boxel-border-color));
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
         min-height: 400px;
+        position: relative;
+        backdrop-filter: blur(15px);
+        box-shadow: var(--boxel-box-shadow-lg);
+      }
+
+      .avatar-compact::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image:
+          linear-gradient(
+            90deg,
+            transparent 48%,
+            rgba(255, 255, 255, 0.05) 49%,
+            rgba(255, 255, 255, 0.05) 51%,
+            transparent 52%
+          ),
+          linear-gradient(
+            0deg,
+            transparent 48%,
+            rgba(255, 255, 255, 0.03) 49%,
+            rgba(255, 255, 255, 0.03) 51%,
+            transparent 52%
+          );
+        background-size:
+          40px 40px,
+          40px 40px;
+        pointer-events: none;
+        z-index: 0;
+        animation: subtleMove 12s linear infinite;
+      }
+
+      @keyframes subtleMove {
+        0% {
+          transform: translateX(0) translateY(0);
+        }
+        100% {
+          transform: translateX(40px) translateY(40px);
+        }
       }
 
       .avatar-header {
@@ -477,8 +520,11 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         align-items: center;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp);
-        background: var(--primary);
-        border-bottom: 1px solid var(--boxel-border-color);
+        background: var(--card);
+        color: var(--card-foreground);
+        border-bottom: 2px solid var(--border, var(--boxel-border-color));
+        position: relative;
+        z-index: 1;
       }
 
       .avatar-preview {
@@ -486,15 +532,37 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         height: 80px;
         border-radius: 50%;
         overflow: hidden;
-        border: 2px solid var(--background, var(--boxel-500));
+        border: 3px solid var(--accent);
         flex-shrink: 0;
+        background: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        animation: avatarFloat 4s ease-in-out infinite;
+      }
+
+      @keyframes avatarFloat {
+        0%,
+        100% {
+          transform: translateY(0px) scale(1);
+        }
+        50% {
+          transform: translateY(-3px) scale(1.02);
+        }
+      }
+
+      .avatar-preview:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 30px var(--accent);
       }
 
       .avatar-image {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        filter: drop-shadow(4px 1px 1px rgba(0, 0, 0, 0.2));
+        filter: brightness(1.1) contrast(1.05) saturate(1.1);
+        border-radius: 50%;
       }
 
       .url-copy-section {
@@ -509,11 +577,26 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       .url-input {
         flex: 1;
         padding: var(--boxel-sp-xs);
-        border: 2px solid var(--background, var(--boxel-500));
+        border: 2px solid var(--border, var(--boxel-border-color));
         border-radius: var(--boxel-border-radius-xs);
-        font-family: var(--boxel-font-family-code);
         font-size: var(--boxel-font-size-sm);
-        background: var(--boxel-light);
+        background: var(--muted);
+        color: var(--muted-foreground);
+      }
+
+      /* Override BoxelInput styles for URL input */
+      .url-input :deep(input) {
+        background: var(--input);
+        border: 2px solid var(--border, var(--boxel-border-color));
+        color: var(--foreground);
+        font-size: var(--boxel-font-size-sm);
+        padding: var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
+      .url-input :deep(input:focus) {
+        border-color: var(--ring);
+        box-shadow: 0 0 0 2px var(--ring);
       }
 
       .copy-btn {
@@ -521,8 +604,8 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: var(--secondary, var(--boxel-highlight));
-        color: white;
+        background: var(--secondary);
+        color: var(--secondary-foreground);
         border: none;
         border-radius: var(--boxel-border-radius-xs);
         cursor: pointer;
@@ -530,39 +613,44 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       }
 
       .copy-btn:hover {
-        background: var(--secondary-hover, var(--boxel-highlight-hover));
+        background: var(--secondary);
+        opacity: 0.8;
         transform: translateY(-1px);
       }
 
       .copy-btn.copied {
-        background: var(--boxel-dark, var(--boxel-success));
+        background: var(--accent);
+        color: var(--accent-foreground);
       }
 
       .avatar-content {
         display: flex;
         min-height: 300px;
+        position: relative;
+        z-index: 1;
       }
 
       .sidebar {
         width: 200px;
-        background: var(--muted-foreground);
-        border-right: 1px solid var(--boxel-border-color);
+        border-right: 2px solid var(--border, var(--boxel-border-color));
         display: flex;
         flex-direction: column;
       }
 
       .filter-section {
         padding: var(--boxel-sp-xs);
-        border-bottom: 1px solid var(--boxel-border-color);
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
         --boxel-filter-expanded-background: transparent;
-        --boxel-filter-hover-background: var(--foreground);
-        --boxel-filter-selected-background: var(--foreground);
-        --boxel-filter-selected-foreground: var(--background);
+        --boxel-filter-hover-background: var(--accent);
+        --boxel-filter-selected-background: var(--accent);
+        --boxel-filter-selected-foreground: var(--accent-foreground);
+        --boxel-filter-selected-hover-background: var(--accent);
+        --boxel-filter-selected-hover-foreground: var(--accent-foreground);
       }
 
       .filter-section :where(.filter-name),
       .filter-section :where(svg) {
-        color: var(--muted);
+        color: var(--muted-foreground);
       }
 
       .filter-section :deep(.filter-list-item) {
@@ -572,6 +660,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       .filter-section :deep(.filter-list__button) {
         font-size: var(--boxel-font-size-sm);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius-xs);
       }
 
       .ai-section {
@@ -579,12 +668,13 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
+        background: var(--card);
       }
 
       .ai-title {
         font-size: var(--boxel-font-size-sm);
         font-weight: 600;
-        color: var(--boxel-dark);
+        color: var(--card-foreground);
         margin: 0 0 var(--boxel-sp-xs) 0;
       }
 
@@ -599,18 +689,23 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       .ai-section .random-btn {
         width: 100%;
         justify-content: center;
+        font-weight: 600;
       }
 
       .options-content {
         flex: 1;
         padding: var(--boxel-sp);
+        background: var(--background);
+        color: var(--foreground);
       }
 
       .options-header h3 {
         margin: 0 0 var(--boxel-sp) 0;
         font-size: var(--boxel-font-size-lg);
-        color: var(--muted);
+        color: var(--foreground);
+        font-weight: 600;
         text-transform: capitalize;
+        letter-spacing: -0.025em;
       }
 
       .options-grid {
@@ -627,8 +722,8 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       .option-btn {
         aspect-ratio: 1;
         padding: var(--boxel-sp-xxs);
-        background: var(--foreground, var(--boxel-100));
-        border: 2px solid transparent;
+        background: var(--card);
+        border: 2px solid var(--boxel-300);
         border-radius: var(--boxel-border-radius);
         cursor: pointer;
         transition: all 0.2s ease;
@@ -637,6 +732,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        position: relative;
       }
 
       .option-btn.preset-avatar {
@@ -644,37 +740,69 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         height: auto;
         min-height: 100px;
         padding: var(--boxel-sp-xs);
+        background: var(--card);
+        border: 2px solid var(--boxel-300);
       }
 
       .option-btn:hover {
-        border: 2px solid var(--background, var(--boxel-500));
+        border: 2px solid var(--boxel-400);
         background: var(--muted);
         transform: translateY(-1px);
         box-shadow: var(--boxel-box-shadow-sm);
       }
 
       .option-btn.selected {
-        border: 2px solid var(--background, var(--boxel-500));
-        background: var(--muted);
+        border: 2px solid var(--accent-foreground);
+        background: var(--accent);
         box-shadow: var(--boxel-box-shadow);
+        transform: translateY(-1px);
       }
 
-      /* Enhanced selection styling for preset avatars */
-      .option-btn.preset-avatar {
-        border: 2px solid transparent;
-        background: var(--foreground, var(--boxel-100));
-        box-shadow: var(--boxel-box-shadow);
+      .option-btn.selected::after {
+        content: '⭐';
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: linear-gradient(45deg, var(--primary), var(--secondary));
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        animation: starPulse 2s ease-in-out infinite;
+        box-shadow: 0 0 10px var(--primary);
+      }
+
+      @keyframes starPulse {
+        0%,
+        100% {
+          transform: scale(1) rotate(0deg);
+        }
+        50% {
+          transform: scale(1.1) rotate(180deg);
+        }
       }
 
       .option-btn.preset-avatar.selected {
-        border: 2px solid var(--background, var(--boxel-500));
-        background: var(--muted);
+        border: 2px solid var(--accent-foreground);
+        background: var(--accent);
         transform: translateY(-2px);
+        box-shadow: var(--boxel-box-shadow-md);
       }
 
       .option-btn.preset-avatar.selected .avatar-name {
-        color: var(--muted-foreground);
+        color: var(--accent-foreground);
         font-weight: 600;
+      }
+
+      .option-btn:hover .option-image {
+        transform: scale(1.05) rotateZ(2deg);
+      }
+
+      .option-btn.selected .option-image {
+        transform: scale(1.02);
       }
 
       .option-image {
@@ -682,7 +810,8 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         height: 100%;
         object-fit: cover;
         border-radius: var(--boxel-border-radius-xs);
-        filter: drop-shadow(4px 1px 1px rgba(0, 0, 0, 0.2));
+        filter: brightness(1.05) contrast(1.05) saturate(1.05);
+        transition: all 0.3s ease;
       }
 
       .preset-avatar .option-image {
@@ -690,6 +819,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         height: 60px;
         flex-shrink: 0;
         border-radius: 50%;
+        border: none;
       }
 
       .avatar-name {
@@ -697,8 +827,13 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         text-align: center;
-        color: var(--muted);
+        color: var(--card-foreground);
         line-height: 1.2;
+        transition: all 0.3s ease;
+      }
+
+      .option-btn:hover .avatar-name {
+        color: var(--accent-foreground);
       }
 
       .empty-state,
@@ -707,8 +842,9 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         align-items: center;
         justify-content: center;
         height: 200px;
-        color: var(--boxel-dark-500);
+        color: var(--muted-foreground);
         font-style: italic;
+        font-size: var(--boxel-font-size-sm);
       }
 
       /* Container Queries for Responsive Design */
@@ -724,13 +860,13 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
 
         .filter-section {
           flex: 1;
-          border-right: 1px solid var(--boxel-border-color);
+          border-right: 1px solid var(--border, var(--boxel-border-color));
           border-bottom: none;
         }
 
         .ai-section {
           min-width: 150px;
-          border-bottom: 1px solid var(--boxel-border-color);
+          border-bottom: 1px solid var(--border, var(--boxel-border-color));
         }
 
         .options-grid {
@@ -760,7 +896,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
 
         .filter-section {
           border-right: none;
-          border-bottom: 1px solid var(--boxel-border-color);
+          border-bottom: 1px solid var(--border, var(--boxel-border-color));
         }
 
         .ai-section {
