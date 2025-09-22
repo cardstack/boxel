@@ -44,7 +44,9 @@ export async function prerenderCard({
     simulateTimeoutMs?: number;
   };
 }): Promise<RenderResponse> {
-  let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, userId);
+  let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
+    userId,
+  });
   if (!permissionsForAllRealms) {
     throw new Error(`Cannot determine permissions for user ${userId}`);
   }

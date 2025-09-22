@@ -29,10 +29,10 @@ export default function handleRealmAuth({
       return;
     }
 
-    let permissionsForAllRealms = await fetchUserPermissions(
-      dbAdapter,
-      matrixUserId,
-    );
+    let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
+      userId: matrixUserId,
+      onlyOwnRealms: false,
+    });
     let sessions: { [realm: string]: string } = {};
     for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
       sessions[realm] = createJWT(
