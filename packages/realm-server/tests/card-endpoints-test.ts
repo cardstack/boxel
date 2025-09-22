@@ -458,10 +458,6 @@ module(basename(__filename), function () {
             response.get('x-created'),
             'created header should be set for new card',
           );
-          assert.ok(
-            response.get('x-created'),
-            'created header should be set for new card',
-          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
