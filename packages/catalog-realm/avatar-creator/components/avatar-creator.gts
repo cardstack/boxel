@@ -5,6 +5,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { task } from 'ember-concurrency';
+import { BoxelButton, BoxelInput } from '@cardstack/boxel-ui/components';
 
 import {
   AvataaarsModel,
@@ -226,14 +227,12 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         <div class='avatar-info'>
           <div class='url-copy-section'>
             <div class='url-display-row'>
-              <label for='avatar-url-input' class='sr-only'>Avatar URL</label>
-              <input
-                id='avatar-url-input'
-                type='text'
-                value={{this.avataaarsUrl}}
+              <BoxelInput
+                @value={{this.avataaarsUrl}}
+                @placeholder='Avatar URL'
+                @readonly={{true}}
                 class='url-input'
-                readonly
-                placeholder='Avatar URL will appear here'
+                aria-label='Avatar URL'
               />
               <button
                 class='copy-btn {{if this.copySuccess "copied"}}'
@@ -243,25 +242,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
                 {{#if this.copySuccess}}
                   ✓
                 {{else}}
-                  <svg
-                    class='copy-icon'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <rect
-                      x='9'
-                      y='9'
-                      width='13'
-                      height='13'
-                      rx='2'
-                      ry='2'
-                    ></rect>
-                    <path
-                      d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'
-                    ></path>
-                  </svg>
+                  📋
                 {{/if}}
               </button>
             </div>
@@ -321,85 +302,121 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         <div class='panel-header'>
           <h3>Customize Your Avatar</h3>
           <div class='header-buttons'>
-            <button
+            <BoxelButton
+              @kind='secondary'
+              @size='tall'
               class='random-btn'
               {{on 'click' this.generateRandomAvatar}}
-              title='Generate Random Avatar'
             >
               🎲 Random
-            </button>
-            <button
+            </BoxelButton>
+            <BoxelButton
+              @kind='primary'
+              @size='tall'
               class='ai-suggestion-btn'
+              @loading={{this._suggestAvatar.isRunning}}
               {{on 'click' this.suggestAvatar}}
-              disabled={{this._suggestAvatar.isRunning}}
-              title='Get AI Avatar Suggestions'
             >
               {{#if this._suggestAvatar.isRunning}}
                 🤖 Suggesting...
               {{else}}
-                🤖 AI Suggest
+                ✨ AI Suggest
               {{/if}}
-            </button>
+            </BoxelButton>
           </div>
         </div>
 
         <div class='category-nav'>
-          <button
+          <BoxelButton
+            @kind={{if (eq this.selectedCategory 'hair') 'primary' 'secondary'}}
+            @size='small'
             class='category-btn
               {{if (eq this.selectedCategory "hair") "active"}}'
             data-category='hair'
             {{on 'click' (fn this.selectCategory 'hair')}}
           >
             Hair Style
-          </button>
-          <button
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'hairColor')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
             class='category-btn
               {{if (eq this.selectedCategory "hairColor") "active"}}'
             data-category='hairColor'
             {{on 'click' (fn this.selectCategory 'hairColor')}}
           >
             Hair Color
-          </button>
-          <button
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if (eq this.selectedCategory 'eyes') 'primary' 'secondary'}}
+            @size='small'
             class='category-btn
               {{if (eq this.selectedCategory "eyes") "active"}}'
             data-category='eyes'
             {{on 'click' (fn this.selectCategory 'eyes')}}
           >
             Eyes
-          </button>
-          <button
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'eyebrows')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
             class='category-btn
               {{if (eq this.selectedCategory "eyebrows") "active"}}'
             data-category='eyebrows'
             {{on 'click' (fn this.selectCategory 'eyebrows')}}
           >
             Eyebrows
-          </button>
-          <button
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'mouth')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
             class='category-btn
               {{if (eq this.selectedCategory "mouth") "active"}}'
             data-category='mouth'
             {{on 'click' (fn this.selectCategory 'mouth')}}
           >
             Mouth
-          </button>
-          <button
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'skinTone')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
             class='category-btn
               {{if (eq this.selectedCategory "skinTone") "active"}}'
             data-category='skinTone'
             {{on 'click' (fn this.selectCategory 'skinTone')}}
           >
             Skin
-          </button>
-          <button
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'clothes')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
             class='category-btn
               {{if (eq this.selectedCategory "clothes") "active"}}'
             data-category='clothes'
             {{on 'click' (fn this.selectCategory 'clothes')}}
           >
             Clothes
-          </button>
+          </BoxelButton>
         </div>
 
         <div class='styles-grid-container'>
@@ -410,7 +427,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
               {{#each this.currentCategoryOptions as |option|}}
                 <button
                   type='button'
-                  class='style-option avataaars-option
+                  class='option-btn avataaars-option
                     {{if (this.isOptionSelected option) "selected"}}'
                   {{on 'click' (fn this.selectAvataaarsOption option)}}
                 >
@@ -438,18 +455,18 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
     </div>
 
     <style scoped>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Fredoka+One:wght@400&family=Press+Start+2P:wght@400&display=swap');
-
       .avatar-creator {
+        container-type: inline-size;
         display: grid;
         grid-template-columns: 420px 1fr;
-        gap: 2rem;
-        padding: 2rem;
+        gap: var(--boxel-sp-xl);
+        padding: var(--boxel-sp-xl);
         min-height: 100vh;
-        background: #2c3e50;
-        font-family: 'Inter', sans-serif;
+        background: var(--muted-foreground);
         position: relative;
         overflow: hidden;
+        width: 100%;
+        box-sizing: border-box;
       }
 
       .avatar-creator::before {
@@ -493,19 +510,16 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .avatar-display {
-        background: rgba(52, 73, 94, 0.8);
-        border: 4px solid #ffffff;
-        border-radius: 2px;
-        padding: 2rem;
+        background: transparent;
+        border: 4px solid var(--background);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-xl);
         backdrop-filter: blur(15px);
-        box-shadow:
-          0 0 30px rgba(255, 107, 107, 0.3),
-          0 20px 40px rgba(0, 0, 0, 0.3),
-          inset 0 2px 0 rgba(255, 255, 255, 0.3);
+        box-shadow: var(--boxel-box-shadow-lg);
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1.5rem;
+        gap: var(--boxel-sp-lg);
         position: relative;
         z-index: 1;
         animation: marioKartBounce 3s ease-in-out infinite;
@@ -525,7 +539,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       .avatar-preview {
         width: 280px;
         height: 280px;
-        border: 6px solid #ffffff;
+        border: 6px solid var(--background);
         border-radius: 50%;
         overflow: hidden;
         display: flex;
@@ -534,16 +548,13 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         position: relative;
         background: linear-gradient(
           135deg,
-          #3498db 0%,
-          #9b59b6 50%,
-          #e74c3c 100%
+          var(--boxel-500) 0%,
+          var(--boxel-600) 50%,
+          var(--boxel-700) 100%
         );
         background-size: 200% 200%;
         animation: marioKartRainbow 6s ease infinite;
-        box-shadow:
-          0 0 40px rgba(52, 152, 219, 0.4),
-          0 0 80px rgba(155, 89, 182, 0.3),
-          inset 0 6px 0 rgba(255, 255, 255, 0.4);
+        box-shadow: var(--boxel-box-shadow-xl);
         transition: all 0.3s ease;
       }
 
@@ -572,98 +583,78 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         filter: brightness(1.1) contrast(1.05) saturate(1.1);
       }
 
-      /* URL Copy Section Styles */
+      .avatar-info {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+
+      /* URL Copy Section Styles - Following avatar.gts pattern */
       .url-copy-section {
-        margin-bottom: 1.5rem;
-        padding: 1rem;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        backdrop-filter: blur(10px);
+        flex: 1;
       }
 
       .url-display-row {
         display: flex;
-        gap: 0.5rem;
-        align-items: center;
-        min-width: 0;
-      }
-
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
+        gap: var(--boxel-sp-xs);
       }
 
       .url-input {
         flex: 1;
-        padding: 0.75rem 1rem;
-        background: rgba(0, 0, 0, 0.3);
-        border: 2px solid rgba(255, 255, 255, 0.2);
-        border-radius: 6px;
-        color: #ffffff;
-        font-size: 0.875rem;
-        font-family: 'Space Mono', monospace;
-        outline: none;
-        transition: all 0.3s ease;
+        padding: var(--boxel-sp-xs);
+        border: 2px solid var(--background, var(--boxel-500));
+        border-radius: var(--boxel-border-radius-xs);
+        font-size: var(--boxel-font-size-sm);
+        background: var(--boxel-light);
       }
 
-      .url-input:focus {
-        border-color: #4ecdc4;
+      /* Override BoxelInput styles for URL input */
+      .url-input :deep(input) {
+        background: var(--boxel-light);
+        border: 2px solid var(--background, var(--boxel-500));
+        color: var(--foreground);
+        font-size: var(--boxel-font-size-sm);
+        padding: var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
+      .url-input :deep(input:focus) {
+        border-color: var(--background, var(--boxel-500));
         box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.2);
       }
 
       .copy-btn {
-        padding: 0.75rem;
-        background: linear-gradient(135deg, #4ecdc4 0%, #45b7d1 100%);
-        border: 2px solid #4ecdc4;
-        border-radius: 6px;
-        color: #ffffff;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        display: flex;
+        width: 40px;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 48px;
-        height: 48px;
-        font-size: 1rem;
-        font-weight: 700;
-        box-shadow: 0 4px 12px rgba(78, 205, 196, 0.3);
+        background: var(--secondary, var(--boxel-highlight));
+        color: white;
+        border: none;
+        border-radius: var(--boxel-border-radius-xs);
+        cursor: pointer;
+        transition: all 0.2s ease;
       }
 
       .copy-btn:hover {
-        transform: translateY(-2px) scale(1.05);
-        box-shadow: 0 6px 20px rgba(78, 205, 196, 0.4);
-        background: linear-gradient(135deg, #26a69a 0%, #42a5f5 100%);
+        background: var(--secondary-hover, var(--boxel-highlight-hover));
+        transform: translateY(-1px);
       }
 
       .copy-btn.copied {
-        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
-        border-color: #27ae60;
-        transform: scale(1.1);
-      }
-
-      .copy-icon {
-        width: 18px;
-        height: 18px;
+        background: var(--boxel-dark, var(--boxel-success));
       }
 
       .copy-feedback {
-        margin-top: 0.75rem;
-        padding: 0.5rem;
+        margin-top: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
         background: rgba(39, 174, 96, 0.2);
-        border: 1px solid rgba(39, 174, 96, 0.4);
-        border-radius: 4px;
-        color: #2ecc71;
-        font-size: 0.8125rem;
+        border: 1px solid var(--boxel-success);
+        border-radius: var(--boxel-border-radius-xs);
+        color: var(--boxel-success);
+        font-size: var(--boxel-font-size-sm);
         text-align: center;
-        font-weight: 600;
         animation: fadeInUp 0.3s ease;
       }
 
@@ -695,43 +686,26 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         grid-template-columns: 1fr 1fr;
         gap: 0.75rem;
         width: 100%;
-        background: rgba(52, 73, 94, 0.6);
+        background: var(--secondary, rgba(52, 73, 94, 0.2));
         padding: 1.25rem;
         border-radius: 2px;
-        border: 2px solid rgba(255, 255, 255, 0.2);
-        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        border: 2px solid var(--background, rgba(255, 255, 255, 0.2));
+        border-radius: var(--boxel-border-radius);
       }
 
       .detail-item {
         font-size: 0.875rem;
-        color: #ffffff;
-        background: rgba(255, 255, 255, 0.1);
+        color: var(--background, var(--boxel-100));
+        background: var(--foreground, var(--boxel-400));
         padding: 0.75rem;
         border-radius: 2px;
-        border-left: 4px solid #ff6b6b;
+        border-left: 4px solid var(--primary, var(--boxel-highlight));
         font-weight: 600;
-        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
         transition: all 0.2s ease;
         position: relative;
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
-      }
-
-      .detail-item::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(255, 255, 255, 0.2),
-          transparent
-        );
-        transition: left 0.5s ease;
       }
 
       .detail-item:hover::before {
@@ -744,28 +718,25 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .detail-item strong {
-        color: #ff6b6b;
+        color: var(--primary, var(--boxel-highlight));
         text-transform: uppercase;
         font-size: 0.75rem;
         letter-spacing: 0.5px;
-        font-weight: 700;
+        font-weight: 600;
         display: block;
         margin-bottom: 0.25rem;
-        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
       .customization-panel {
-        background: rgba(44, 62, 80, 0.9);
-        border: 3px solid rgba(255, 255, 255, 0.3);
-        border-radius: 2px;
-        padding: 2rem;
+        background: var(--muted-foreground);
+        border: 3px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-xl);
         backdrop-filter: blur(15px);
-        box-shadow:
-          0 20px 40px rgba(0, 0, 0, 0.2),
-          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        box-shadow: var(--boxel-box-shadow-lg);
         height: 100%;
         position: relative;
         z-index: 1;
@@ -775,22 +746,22 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 2rem;
-        padding-bottom: 1rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp-xl);
+        padding-bottom: var(--boxel-sp);
+        border-bottom: 1px solid var(--boxel-border-color);
       }
 
       .header-buttons {
         display: flex;
-        gap: 1rem;
+        gap: var(--boxel-sp);
         align-items: center;
       }
 
       .customization-panel h3 {
         margin: 0;
-        color: #ffffff;
-        font-size: 1.25rem;
+        color: var(--background, var(--foreground));
+        font-size: var(--boxel-font-size-lg);
         font-weight: 600;
         letter-spacing: -0.025em;
       }
@@ -798,147 +769,48 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       .category-nav {
         display: flex;
         justify-content: flex-start;
-        gap: 0.5rem;
-        margin-bottom: 2rem;
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp-xl);
         flex-wrap: wrap;
+        align-items: center;
+        overflow-x: auto;
       }
 
-      .category-btn {
-        padding: 0.75rem 1rem;
-        border: 3px solid transparent;
-        border-radius: 2px;
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.9);
-        cursor: pointer;
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        font-size: 0.875rem;
-        font-weight: 700;
-        font-family: 'Press Start 2P', cursive;
-        backdrop-filter: blur(15px);
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        position: relative;
-        overflow: hidden;
+      .category-nav .category-btn {
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        box-shadow:
-          0 4px 15px rgba(0, 0, 0, 0.2),
-          inset 0 2px 0 rgba(255, 255, 255, 0.2);
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        flex: 1;
+        min-width: 120px;
+        justify-content: center;
+        border-radius: var(--boxel-border-radius-xs);
+        white-space: nowrap;
+        flex-shrink: 0;
       }
 
-      /* Power-Up specific colors */
-      .category-btn[data-category='hair'] {
-        background: linear-gradient(
-          135deg,
-          #ff6b35 0%,
-          #f7931e 50%,
-          #ffd23f 100%
-        );
-        border-color: #ff6b35;
-        box-shadow:
-          0 0 20px rgba(255, 107, 53, 0.6),
-          0 4px 15px rgba(0, 0, 0, 0.3);
+      /* Override BoxelButton border radius for category buttons */
+      .category-nav .category-btn :deep(button) {
+        border-radius: var(--boxel-border-radius-xs);
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
       }
 
-      .category-btn[data-category='hairColor'] {
-        background: linear-gradient(
-          135deg,
-          #e74c3c 0%,
-          #8e44ad 50%,
-          #3498db 100%
-        );
-        border-color: #e74c3c;
-        box-shadow:
-          0 0 20px rgba(231, 76, 60, 0.6),
-          0 4px 15px rgba(0, 0, 0, 0.3);
-      }
-
-      .category-btn[data-category='eyes'] {
-        background: linear-gradient(
-          135deg,
-          #1abc9c 0%,
-          #16a085 50%,
-          #27ae60 100%
-        );
-        border-color: #1abc9c;
-        box-shadow:
-          0 0 20px rgba(26, 188, 156, 0.6),
-          0 4px 15px rgba(0, 0, 0, 0.3);
-      }
-
-      .category-btn[data-category='eyebrows'] {
-        background: linear-gradient(
-          135deg,
-          #f39c12 0%,
-          #e67e22 50%,
-          #d35400 100%
-        );
-        border-color: #f39c12;
-        box-shadow:
-          0 0 20px rgba(243, 156, 18, 0.6),
-          0 4px 15px rgba(0, 0, 0, 0.3);
-      }
-
-      .category-btn[data-category='mouth'] {
-        background: linear-gradient(
-          135deg,
-          #e91e63 0%,
-          #ad1457 50%,
-          #c2185b 100%
-        );
-        border-color: #e91e63;
-        box-shadow:
-          0 0 20px rgba(233, 30, 99, 0.6),
-          0 4px 15px rgba(0, 0, 0, 0.3);
-      }
-
-      .category-btn[data-category='skinTone'] {
-        background: linear-gradient(
-          135deg,
-          #ffab91 0%,
-          #ffcc02 50%,
-          #ff8a65 100%
-        );
-        border-color: #ffab91;
-        box-shadow:
-          0 0 20px rgba(255, 171, 145, 0.6),
-          0 4px 15px rgba(0, 0, 0, 0.3);
-      }
-
-      .category-btn[data-category='clothes'] {
-        background: linear-gradient(
-          135deg,
-          #9c27b0 0%,
-          #673ab7 50%,
-          #3f51b5 100%
-        );
-        border-color: #9c27b0;
-        box-shadow:
-          0 0 20px rgba(156, 39, 176, 0.6),
-          0 4px 15px rgba(0, 0, 0, 0.3);
-      }
-
-      .category-btn:hover {
-        transform: translateY(-2px) scale(1.01);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      }
-
-      .category-btn.active {
-        transform: translateY(-1px) scale(1.02);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-      }
+      /* Remove old category button specific styling since using BoxelButton */
 
       .styles-grid-container {
         min-height: 300px;
-        background: rgba(255, 255, 255, 0.02);
-        padding: 1.5rem;
-        border-radius: 2px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(52, 73, 94, 0.2);
+        padding: var(--boxel-sp-lg);
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--boxel-border-color);
       }
 
       .styles-grid-container h4 {
-        margin: 0 0 1.5rem 0;
-        color: #ffffff;
-        font-size: 1rem;
+        margin: 0 0 var(--boxel-sp-lg) 0;
+        color: var(--background, var(--muted));
+        font-size: var(--boxel-font-size);
         font-weight: 600;
         text-transform: capitalize;
         letter-spacing: -0.025em;
@@ -947,45 +819,39 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       .styles-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-        gap: 1rem;
+        gap: var(--boxel-sp);
         padding: 0;
       }
 
-      .style-option {
-        border: 3px solid transparent;
-        border-radius: 2px;
-        cursor: pointer;
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        overflow: hidden;
-        background: rgba(255, 255, 255, 0.1);
+      .option-btn {
         aspect-ratio: 1;
+        padding: var(--boxel-sp-xxs);
+        background: var(--foreground, var(--boxel-100));
+        border: 2px solid transparent;
+        border-radius: var(--boxel-border-radius);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        overflow: hidden;
         display: flex;
         flex-direction: column;
-        position: relative;
-        backdrop-filter: blur(15px);
-        box-shadow:
-          0 6px 20px rgba(0, 0, 0, 0.15),
-          inset 0 2px 0 rgba(255, 255, 255, 0.2);
-        padding: 0;
-        width: 100%;
-        height: 100%;
+        align-items: center;
+        justify-content: center;
       }
 
-      .style-option:hover {
-        border-color: #ffd700;
-        background: rgba(255, 215, 0, 0.2);
-        transform: translateY(-2px) scale(1.02);
-        box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+      .option-btn:hover {
+        border: 2px solid var(--background, var(--boxel-500));
+        background: var(--muted);
+        transform: translateY(-1px);
+        box-shadow: var(--boxel-box-shadow-sm);
       }
 
-      .style-option.selected {
-        border-color: #ffd700;
-        background: rgba(255, 215, 0, 0.2);
-        transform: translateY(-1px) scale(1.02);
-        box-shadow: 0 2px 8px rgba(255, 215, 0, 0.4);
+      .option-btn.selected {
+        border: 2px solid var(--background, var(--boxel-500));
+        background: var(--muted);
+        box-shadow: var(--boxel-box-shadow);
       }
 
-      .style-option.selected::after {
+      .option-btn.selected::after {
         content: '⭐';
         position: absolute;
         top: -10px;
@@ -1032,27 +898,32 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .option-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: var(--boxel-border-radius-xs);
+        filter: drop-shadow(4px 1px 1px rgba(0, 0, 0, 0.2));
+      }
+
+      .avataaars-option .option-image {
         width: 52px;
         height: 52px;
         border-radius: 50%;
         overflow: hidden;
-        border: 3px solid rgba(255, 255, 255, 0.3);
-        background: rgba(255, 215, 0, 0.1);
         display: flex;
         align-items: center;
         justify-content: center;
         transition: all 0.3s ease;
         flex-shrink: 0;
         position: relative;
+        filter: drop-shadow(4px 1px 1px rgba(0, 0, 0, 0.2));
       }
 
-      .style-option:hover .option-image {
+      .option-btn:hover .option-image {
         transform: scale(1.1) rotateZ(5deg);
-        border-color: rgba(255, 215, 0, 0.6);
       }
 
-      .style-option.selected .option-image {
-        border-color: rgba(255, 215, 0, 0.8);
+      .option-btn.selected .option-image {
         transform: scale(1.05);
       }
 
@@ -1065,10 +936,9 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .option-label {
-        font-size: 0.75rem;
-        color: rgba(255, 255, 255, 0.8);
-        font-weight: 500;
-        font-family: 'Inter', sans-serif;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted);
+        font-weight: 600;
         line-height: 1.3;
         max-width: 100%;
         text-transform: capitalize;
@@ -1076,111 +946,27 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        padding: 0 0.25rem;
+        padding: 0 var(--boxel-sp-4xs);
       }
 
-      /* Fixed: Remove blue hover color, keep white/gold theme */
-      .style-option:hover .option-label {
-        color: #ffd700;
+      .option-btn:hover .option-label {
+        color: var(--muted-foreground);
         font-weight: 600;
       }
 
-      .style-option.selected .option-label {
-        color: #ffd700;
+      .option-btn.selected .option-label {
+        color: var(--muted-foreground);
         font-weight: 600;
-        text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
       }
 
-      .random-btn {
-        padding: 1rem 1.5rem;
-        border: 3px solid #ff6b6b;
-        border-radius: 2px;
-        background: linear-gradient(
-          135deg,
-          #ff6b6b 0%,
-          #4ecdc4 25%,
-          #45b7d1 50%,
-          #96ceb4 75%,
-          #ffeaa7 100%
-        );
-        background-size: 300% 300%;
-        color: #ffffff;
-        cursor: pointer;
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        font-size: 1rem;
-        font-weight: 700;
-        font-family: 'Press Start 2P', cursive;
+      .header-buttons .random-btn,
+      .header-buttons .ai-suggestion-btn {
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        backdrop-filter: blur(15px);
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        box-shadow:
-          0 6px 20px rgba(255, 107, 107, 0.4),
-          inset 0 2px 0 rgba(255, 255, 255, 0.3);
-        position: relative;
-        overflow: hidden;
-        animation: marioKartMushroom 4s ease-in-out infinite;
-      }
-
-      @keyframes marioKartMushroom {
-        0%,
-        100% {
-          background-position: 0% 50%;
-          transform: scale(1);
-        }
-        25% {
-          background-position: 100% 0%;
-          transform: scale(1.02);
-        }
-        50% {
-          background-position: 100% 100%;
-          transform: scale(1);
-        }
-        75% {
-          background-position: 0% 100%;
-          transform: scale(1.02);
-        }
-      }
-
-      .random-btn::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(255, 255, 255, 0.4),
-          transparent
-        );
-        transition: left 0.6s ease;
-      }
-
-      .random-btn:hover::before {
-        left: 100%;
-      }
-
-      .random-btn:hover {
-        background: linear-gradient(
-          135deg,
-          #ff5252 0%,
-          #26a69a 25%,
-          #42a5f5 50%,
-          #66bb6a 75%,
-          #ffca28 100%
-        );
-        transform: translateY(-4px) scale(1.08);
-        box-shadow:
-          0 12px 35px rgba(255, 107, 107, 0.6),
-          0 0 40px rgba(78, 205, 196, 0.4);
-        border-color: #ff5252;
-      }
-
-      .random-btn:active {
-        transform: translateY(-2px) scale(1.05);
+        justify-content: center;
+        gap: var(--boxel-sp-xs);
       }
 
       .empty-styles {
@@ -1188,31 +974,321 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         justify-content: center;
         align-items: center;
         height: 200px;
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 0.875rem;
+        color: var(--muted);
+        font-size: var(--boxel-font-size-sm);
         text-align: center;
         font-style: italic;
       }
 
-      /* Responsive Design */
+      /* Container Queries for Responsive Design */
+      /* Also add media queries as fallback */
       @media (max-width: 1200px) {
         .avatar-creator {
-          grid-template-columns: 400px 1fr;
-          gap: 1.5rem;
-          padding: 1.5rem;
+          grid-template-columns: 380px 1fr;
+          gap: var(--boxel-sp-lg);
+          padding: var(--boxel-sp-lg);
         }
 
         .avatar-preview {
-          width: 260px;
-          height: 260px;
+          width: 240px;
+          height: 240px;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .avatar-creator {
+          grid-template-columns: 320px 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+
+        .avatar-preview {
+          width: 200px;
+          height: 200px;
+        }
+
+        .avatar-display {
+          padding: var(--boxel-sp);
+        }
+
+        .customization-panel {
+          padding: var(--boxel-sp);
         }
       }
 
       @media (max-width: 720px) {
         .avatar-creator {
-          padding: 0.75rem;
-          gap: 0.75rem;
           grid-template-columns: 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+
+        .avatar-display {
+          width: 100%;
+        }
+
+        .avatar-preview {
+          width: 180px;
+          height: 180px;
+        }
+      }
+
+      @media (max-width: 600px) {
+        .avatar-creator {
+          padding: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-xs);
+        }
+
+        .avatar-display {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .avatar-preview {
+          width: 160px;
+          height: 160px;
+          align-self: center;
+        }
+
+        .avatar-info {
+          gap: var(--boxel-sp-xs);
+        }
+
+        .url-copy-section {
+          margin-bottom: var(--boxel-sp-xs);
+        }
+
+        .header-buttons {
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .styles-grid {
+          gap: var(--boxel-sp-xs);
+        }
+      }
+
+      @media (max-width: 400px) {
+        .avatar-creator {
+          padding: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp-xxs);
+        }
+
+        .avatar-preview {
+          width: 140px;
+          height: 140px;
+        }
+
+        .panel-header {
+          flex-direction: column;
+          align-items: stretch;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .header-buttons {
+          flex-direction: row;
+          justify-content: center;
+        }
+
+        .styles-grid {
+          grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+          gap: var(--boxel-sp-4xs);
+        }
+
+        .customization-panel h3 {
+          font-size: var(--boxel-font-size);
+          font-weight: 600;
+          text-align: center;
+        }
+      }
+
+      @media (max-width: 300px) {
+        .avatar-preview {
+          width: 120px;
+          height: 120px;
+        }
+
+        .url-display-row {
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .copy-btn {
+          width: 100%;
+          height: 48px;
+        }
+
+        .url-input {
+          width: 100%;
+        }
+
+        .styles-grid {
+          grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+          gap: var(--boxel-sp-5xs);
+        }
+
+        .header-buttons {
+          flex-direction: column;
+        }
+      }
+
+      @container (max-width: 1200px) {
+        .avatar-creator {
+          grid-template-columns: 380px 1fr;
+          gap: var(--boxel-sp-lg);
+          padding: var(--boxel-sp-lg);
+        }
+
+        .avatar-preview {
+          width: 240px;
+          height: 240px;
+        }
+      }
+
+      @container (max-width: 900px) {
+        .avatar-creator {
+          grid-template-columns: 320px 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+
+        .avatar-preview {
+          width: 200px;
+          height: 200px;
+        }
+
+        .avatar-display {
+          padding: var(--boxel-sp);
+        }
+
+        .customization-panel {
+          padding: var(--boxel-sp);
+        }
+      }
+
+      @container (max-width: 720px) {
+        .avatar-creator {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+
+        .avatar-display {
+          width: 100%;
+        }
+
+        .avatar-preview {
+          width: 180px;
+          height: 180px;
+        }
+
+        .avatar-details {
+          display: none;
+        }
+      }
+
+      @container (max-width: 600px) {
+        .avatar-creator {
+          padding: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-xs);
+        }
+
+        .avatar-display {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .avatar-preview {
+          width: 160px;
+          height: 160px;
+          align-self: center;
+        }
+
+        .avatar-info {
+          gap: var(--boxel-sp-xs);
+        }
+
+        .url-copy-section {
+          margin-bottom: var(--boxel-sp-xs);
+        }
+
+        .header-buttons {
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .styles-grid {
+          gap: var(--boxel-sp-xs);
+        }
+      }
+
+      @container (max-width: 400px) {
+        .avatar-creator {
+          padding: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp-xxs);
+        }
+
+        .avatar-preview {
+          width: 140px;
+          height: 140px;
+        }
+
+        .panel-header {
+          flex-direction: column;
+          align-items: stretch;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .header-buttons {
+          flex-direction: row;
+          justify-content: center;
+        }
+
+        .category-nav {
+          flex-direction: row;
+          flex-wrap: nowrap;
+          gap: var(--boxel-sp-4xs);
+          overflow-x: auto;
+        }
+
+        .styles-grid {
+          grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+          gap: var(--boxel-sp-4xs);
+        }
+
+        .customization-panel h3 {
+          font-size: var(--boxel-font-size);
+          text-align: center;
+        }
+      }
+
+      @container (max-width: 300px) {
+        .avatar-preview {
+          width: 120px;
+          height: 120px;
+        }
+
+        .url-display-row {
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .copy-btn {
+          width: 100%;
+          height: 48px;
+        }
+
+        .url-input {
+          width: 100%;
+        }
+
+        .styles-grid {
+          grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+          gap: var(--boxel-sp-5xs);
+        }
+
+        .header-buttons {
+          flex-direction: column;
         }
       }
 
@@ -1233,104 +1309,6 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
 
       .customization-panel::-webkit-scrollbar-thumb:hover {
         background: rgba(255, 255, 255, 0.3);
-      }
-
-      .ai-suggestion-btn {
-        padding: 1rem 1.5rem;
-        border: 3px solid #4ecdc4;
-        border-radius: 2px;
-        background: linear-gradient(
-          135deg,
-          #4ecdc4 0%,
-          #45b7d1 25%,
-          #9b59b6 50%,
-          #e74c3c 75%,
-          #f39c12 100%
-        );
-        background-size: 300% 300%;
-        color: #ffffff;
-        cursor: pointer;
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        font-size: 1rem;
-        font-weight: 700;
-        font-family: 'Press Start 2P', cursive;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        backdrop-filter: blur(15px);
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        box-shadow:
-          0 6px 20px rgba(78, 205, 196, 0.4),
-          inset 0 2px 0 rgba(255, 255, 255, 0.3);
-        position: relative;
-        overflow: hidden;
-        animation: aiSuggestionPulse 3s ease-in-out infinite;
-      }
-
-      .ai-suggestion-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        animation: none;
-      }
-
-      @keyframes aiSuggestionPulse {
-        0%,
-        100% {
-          background-position: 0% 50%;
-          transform: scale(1);
-        }
-        25% {
-          background-position: 100% 0%;
-          transform: scale(1.01);
-        }
-        50% {
-          background-position: 100% 100%;
-          transform: scale(1);
-        }
-        75% {
-          background-position: 0% 100%;
-          transform: scale(1.01);
-        }
-      }
-
-      .ai-suggestion-btn::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(255, 255, 255, 0.4),
-          transparent
-        );
-        transition: left 0.6s ease;
-      }
-
-      .ai-suggestion-btn:hover:not(:disabled)::before {
-        left: 100%;
-      }
-
-      .ai-suggestion-btn:hover:not(:disabled) {
-        background: linear-gradient(
-          135deg,
-          #26a69a 0%,
-          #42a5f5 25%,
-          #8e44ad 50%,
-          #c0392b 75%,
-          #e67e22 100%
-        );
-        transform: translateY(-4px) scale(1.08);
-        box-shadow:
-          0 12px 35px rgba(78, 205, 196, 0.6),
-          0 0 40px rgba(155, 89, 182, 0.4);
-        border-color: #26a69a;
-      }
-
-      .ai-suggestion-btn:active:not(:disabled) {
-        transform: translateY(-2px) scale(1.05);
       }
     </style>
   </template>

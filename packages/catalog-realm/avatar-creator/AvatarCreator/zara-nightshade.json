@@ -9,13 +9,13 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Happy",
-        "topType": "Turban",
-        "hairColor": "Auburn",
-        "mouthType": "Smile",
-        "skinColor": "Pale",
-        "clotheType": "Overall",
-        "eyebrowType": "RaisedExcited",
+        "eyeType": "Hearts",
+        "topType": "Hijab",
+        "hairColor": "PastelPink",
+        "mouthType": "Tongue",
+        "skinColor": "Light",
+        "clotheType": "ShirtVNeck",
+        "eyebrowType": "SadConcernedNatural",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },
@@ -29,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/experiments/Theme/starry-night"
         }
       }
     }

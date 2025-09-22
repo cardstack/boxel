@@ -9,19 +9,19 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Default",
-        "topType": "ShortHairShortFlat",
-        "hairColor": "BrownDark",
-        "mouthType": "Smile",
-        "skinColor": "Light",
-        "clotheType": "BlazerShirt",
-        "eyebrowType": "Default",
+        "eyeType": "Dizzy",
+        "topType": "LongHairShavedSides",
+        "hairColor": "Auburn",
+        "mouthType": "Eating",
+        "skinColor": "Pale",
+        "clotheType": "ShirtCrewNeck",
+        "eyebrowType": "DefaultNatural",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Bruno Mars",
         "description": null,
         "thumbnailURL": null
       }

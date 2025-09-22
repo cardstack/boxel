@@ -8,7 +8,6 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Pichu",
       "avatar": {
         "eyeType": "Wink",
         "topType": "LongHairBun",
@@ -30,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/experiments/default/neo-brutalist"
         }
       }
     }

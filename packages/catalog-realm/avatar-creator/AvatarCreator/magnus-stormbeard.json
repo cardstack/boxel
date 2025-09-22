@@ -8,11 +8,10 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Magnus Stormbeard",
       "avatar": {
         "eyeType": "Default",
         "topType": "LongHairBob",
-        "hairColor": "SilverGray",
+        "hairColor": "Auburn",
         "mouthType": "Eating",
         "skinColor": "Yellow",
         "clotheType": "ShirtCrewNeck",
@@ -30,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/experiments/Theme/bubblegum"
         }
       }
     }

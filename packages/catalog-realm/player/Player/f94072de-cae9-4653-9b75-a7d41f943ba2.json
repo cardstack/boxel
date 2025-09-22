@@ -9,19 +9,19 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Hearts",
-        "topType": "ShortHairShortWaved",
-        "hairColor": "Brown",
-        "mouthType": "Twinkle",
+        "eyeType": "Happy",
+        "topType": "LongHairBob",
+        "hairColor": "Blonde",
+        "mouthType": "Smile",
         "skinColor": "Light",
-        "clotheType": "GraphicShirt",
-        "eyebrowType": "SadConcernedNatural",
+        "clotheType": "CollarSweater",
+        "eyebrowType": "Default",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Mary Hu",
         "description": null,
         "thumbnailURL": null
       }
@@ -29,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/experiments/default/playful-illustration"
         }
       }
     }
