@@ -14,7 +14,7 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { fn, get, array } from '@ember/helper';
+import { fn, get, array, concat } from '@ember/helper';
 import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
 // ⁸⁹ Drum Kit Definition - stores sound parameters for each kit
@@ -406,10 +406,13 @@ export class BeatPatternField extends FieldDef {
           }}</div>
         <div class='pattern-preview'>
           <div class='pattern-bars'>
-            {{#each (array 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)}}
+            {{#each
+              (array 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+              as |stepIndex|
+            }}
               <div
                 class='pattern-step
-                  {{if @model.patternData.kick.step "has-kick" ""}}'
+                  {{if (get @model.patternData.kick stepIndex) "has-kick" ""}}'
               ></div>
             {{/each}}
           </div>
@@ -487,7 +490,7 @@ export class BeatPatternCard extends CardDef {
               <span class='genre-tag'>{{@model.genre}}</span>
             {{/if}}
             {{#if @model.bpm}}
-              <span class='bpm-indicator'>{{@model.bpm}} BPM</span>
+              <span class='preset-bpm'>{{@model.bpm}} BPM</span>
             {{/if}}
           </div>
         </div>
@@ -840,6 +843,28 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         clap: new Array(16).fill(false),
         crash: new Array(16).fill(false),
       };
+    }
+  }
+
+  // Computed getter that creates a flattened step-state structure for easier template access
+  get stepStates() {
+    try {
+      const patterns = this.patterns;
+      const states: { [key: string]: boolean } = {};
+
+      Object.keys(patterns).forEach((instrument) => {
+        const instrumentPattern = patterns[instrument as keyof typeof patterns];
+        if (instrumentPattern) {
+          for (let step = 0; step < 16; step++) {
+            states[`${instrument}-${step}`] = instrumentPattern[step] || false;
+          }
+        }
+      });
+
+      return states;
+    } catch (e) {
+      console.error('Error creating step states:', e);
+      return {};
     }
   }
 
@@ -1483,7 +1508,11 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
               {{#each (array 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) as |step|}}
                 <button
                   class='step-button
-                    {{if (eq (get this.patterns instrument) step) "active" ""}}
+                    {{if
+                      (get this.stepStates (concat instrument "-" step))
+                      "active"
+                      ""
+                    }}
                     {{if (eq this.currentStep step) "current" ""}}
                     {{if
                       (or (eq step 0) (eq step 4) (eq step 8) (eq step 12))
@@ -1961,10 +1990,88 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         background: #475569;
       }
 
-      .step-button.active {
-        background: linear-gradient(135deg, #f59e0b, #f97316);
+      /* Instrument-specific colors for active steps */
+      .beat-grid .instrument-row:nth-child(2) .step-button.active {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        border-color: #ef4444;
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+      }
+
+      .beat-grid .instrument-row:nth-child(3) .step-button.active {
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        border-color: #3b82f6;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+      }
+
+      .beat-grid .instrument-row:nth-child(4) .step-button.active {
+        background: linear-gradient(135deg, #10b981, #059669);
+        border-color: #10b981;
+        box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+      }
+
+      .beat-grid .instrument-row:nth-child(5) .step-button.active {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
         border-color: #f59e0b;
-        box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+      }
+
+      .beat-grid .instrument-row:nth-child(6) .step-button.active {
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        border-color: #8b5cf6;
+        box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
+      }
+
+      .beat-grid .instrument-row:nth-child(7) .step-button.active {
+        background: linear-gradient(135deg, #ec4899, #db2777);
+        border-color: #ec4899;
+        box-shadow: 0 0 8px rgba(236, 72, 153, 0.6);
+      }
+
+      /* Enhanced current step with instrument colors */
+      .instrument-row .step-button.active.current {
+        transform: scale(1.15);
+      }
+
+      .instrument-row:nth-child(1) .step-button.active.current {
+        box-shadow:
+          inset 0px 0px 16px 1px rgb(255 255 255),
+          0 0 16px rgba(239, 68, 68, 0.8);
+        mix-blend-mode: screen;
+      }
+
+      .instrument-row:nth-child(2) .step-button.active.current {
+        box-shadow:
+          inset 0px 0px 16px 1px rgb(255 255 255),
+          0 0 16px rgba(59, 130, 246, 0.8);
+        mix-blend-mode: screen;
+      }
+
+      .instrument-row:nth-child(3) .step-button.active.current {
+        box-shadow:
+          inset 0px 0px 16px 1px rgb(255 255 255),
+          0 0 16px rgba(16, 185, 129, 0.8);
+        mix-blend-mode: screen;
+      }
+
+      .instrument-row:nth-child(4) .step-button.active.current {
+        box-shadow:
+          inset 0px 0px 16px 1px rgb(255 255 255),
+          0 0 16px rgba(245, 158, 11, 0.8);
+        mix-blend-mode: screen;
+      }
+
+      .instrument-row:nth-child(5) .step-button.active.current {
+        box-shadow:
+          inset 0px 0px 16px 1px rgb(255 255 255),
+          0 0 16px rgba(139, 92, 246, 0.8);
+        mix-blend-mode: screen;
+      }
+
+      .instrument-row:nth-child(6) .step-button.active.current {
+        box-shadow:
+          inset 0px 0px 16px 1px rgb(255 255 255),
+          0 0 16px rgba(236, 72, 153, 0.8);
+        mix-blend-mode: screen;
       }
 
       .step-button.current {
@@ -1977,7 +2084,8 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
       }
 
       .step-button.active.current {
-        box-shadow: 0 0 12px rgba(245, 158, 11, 0.8);
+        box-shadow: inset 0px 0px 16px 1px rgb(255 255 255);
+        mix-blend-mode: screen;
       }
 
       /* Enhanced Footer */

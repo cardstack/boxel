@@ -8,10 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Retro Arcade",
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Retro Arcade",
         "description": null,
         "thumbnailURL": null
       },

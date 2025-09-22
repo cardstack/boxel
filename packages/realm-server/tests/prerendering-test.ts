@@ -1,11 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
-  prerenderCard,
+  Prerenderer,
   type RenderResponse,
   type PermissionsMap,
 } from '../prerender/index';
-import { execSync } from 'child_process';
 
 import {
   setupBaseRealmServer,
@@ -19,11 +18,26 @@ module(basename(__filename), function () {
   module('prerender', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
+    let realmURL3 = 'http://127.0.0.1:4449/';
     let testUserId = '@user1:localhost';
     let permissions: PermissionsMap = {};
+    let prerenderer: Prerenderer;
+    const disposeAllRealms = async () => {
+      await Promise.all([
+        prerenderer.disposeRealm(realmURL1),
+        prerenderer.disposeRealm(realmURL2),
+        prerenderer.disposeRealm(realmURL3),
+      ]);
+    };
 
-    hooks.before(() => {
-      execSync('pnpm puppeteer browsers install chrome');
+    hooks.before(async () => {
+      prerenderer = new Prerenderer({
+        secretSeed: realmSecretSeed,
+        maxPages: 2,
+      });
+    });
+    hooks.after(async () => {
+      await prerenderer.stop();
     });
 
     setupBaseRealmServer(hooks, matrixURL);
@@ -126,6 +140,74 @@ module(basename(__filename), function () {
                 },
               },
             },
+            // A card that fires the boxel-render-error event (handled by the prerender route)
+            // and then blocks the event loop long enough that Ember health probe times out,
+            // causing data-prerender-status to be set to 'unusable' by the error handler without
+            // transitioning to the render-error route (so nothing overwrites our dataset).
+            'unusable-error.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { Component } from 'https://cardstack.com/base/card-api';
+              export class UnusableError extends CardDef {
+                @field name = contains(StringField);
+                static displayName = "Unusable Error";
+                static isolated = class extends Component {
+                  get trigger() {
+                    let error = new Error('forced unusable for test');
+                    window.dispatchEvent(new CustomEvent('boxel-render-error', { detail: { reason: error } }));
+                    // Synchronously block ~1s to ensure the EmberHealthService detects that Ember is not responsive
+                    let start = performance.now();
+                    while (performance.now() - start < 1000) {
+                      // busy wait
+                    }
+                    return '';
+                  }
+                  <template>{{this.trigger}}</template>
+                }
+              }
+            `,
+            '3.json': {
+              data: {
+                attributes: {
+                  name: 'Force Unusable',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './unusable-error',
+                    name: 'UnusableError',
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          realmURL: realmURL3,
+          permissions: {
+            [testUserId]: ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'dog.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { Component } from 'https://cardstack.com/base/card-api';
+              export class Dog extends CardDef {
+                @field name = contains(StringField);
+                static displayName = "Dog";
+                static embedded = <template>{{@fields.name}} wags tail</template>
+              }
+            `,
+            '1.json': {
+              data: {
+                attributes: {
+                  name: 'Taro',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog',
+                    name: 'Dog',
+                  },
+                },
+              },
+            },
           },
         },
       ],
@@ -133,19 +215,21 @@ module(basename(__filename), function () {
         permissions = {
           [realmURL1]: ['read', 'write', 'realm-owner'],
           [realmURL2]: ['read', 'write', 'realm-owner'],
+          [realmURL3]: ['read', 'write', 'realm-owner'],
         };
       },
     });
 
     module('basics', function (hooks) {
+      hooks.beforeEach(disposeAllRealms);
       let result: RenderResponse;
 
       hooks.before(async () => {
         const testCardURL = `${realmURL2}1`;
-        let { response } = await prerenderCard({
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
-          secretSeed: realmSecretSeed,
           permissions,
         });
         result = response;
@@ -216,13 +300,14 @@ module(basename(__filename), function () {
       });
     });
 
-    module('errors', function () {
+    module('errors', function (hooks) {
+      hooks.beforeEach(disposeAllRealms);
       test('error during render', async function (assert) {
         const testCardURL = `${realmURL2}2`;
-        let { response } = await prerenderCard({
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
-          secretSeed: realmSecretSeed,
           permissions,
         });
         let { error, ...restOfResult } = response;
@@ -250,10 +335,10 @@ module(basename(__filename), function () {
 
       test('render timeout', async function (assert) {
         const testCardURL = `${realmURL2}1`;
-        let result = await prerenderCard({
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
-          secretSeed: realmSecretSeed,
           permissions,
           opts: { timeoutMs: 4000, simulateTimeoutMs: 5000 },
         });
@@ -263,6 +348,210 @@ module(basename(__filename), function () {
         assert.strictEqual(error?.id, testCardURL);
         assert.strictEqual(error?.message, 'Render timed-out after 4000 ms');
         assert.strictEqual(error?.status, 504);
+      });
+
+      test('unusable triggers eviction and short-circuit', async function (assert) {
+        // Render the card that forces unusable
+        const unusableURL = `${realmURL2}3`;
+        let unusable = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: unusableURL,
+          userId: testUserId,
+          permissions,
+        });
+
+        // We should see an error with evict semantics and short-circuited payloads
+        assert.ok(unusable.response.error, 'error present for unusable');
+        assert.strictEqual(unusable.response.error?.id, unusableURL);
+        assert.strictEqual(
+          unusable.response.error?.message,
+          'forced unusable for test',
+        );
+        assert.strictEqual(unusable.response.error?.status, 500);
+        assert.strictEqual(
+          unusable.response.isolatedHTML,
+          null,
+          'isolatedHTML null when short-circuited',
+        );
+        assert.strictEqual(
+          unusable.response.embeddedHTML,
+          null,
+          'embeddedHTML null when short-circuited',
+        );
+        assert.strictEqual(
+          unusable.response.atomHTML,
+          null,
+          'atomHTML null when short-circuited',
+        );
+        assert.strictEqual(
+          unusable.response.iconHTML,
+          null,
+          'iconHTML null when short-circuited',
+        );
+        assert.deepEqual(
+          {
+            serialized: unusable.response.serialized,
+            searchDoc: unusable.response.searchDoc,
+            displayName: unusable.response.displayName,
+            types: unusable.response.types,
+          },
+          {
+            serialized: null,
+            searchDoc: null,
+            displayName: null,
+            types: null,
+          },
+          'meta fields are null when short-circuited',
+        );
+
+        // After unusable, the realm should be evicted; a subsequent render should not reuse
+        const healthyURL = `${realmURL2}1`;
+        let next = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: healthyURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.false(next.pool.reused, 'did not reuse after unusable eviction');
+      });
+    });
+
+    module('realm pooling', function (hooks) {
+      hooks.beforeEach(disposeAllRealms);
+      test('evicts on timeout and does not reuse', async function (assert) {
+        const testCardURL = `${realmURL2}1`;
+        // First render to initialize pool
+        let first = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.false(first.pool.reused, 'first call not reused');
+
+        // Now trigger a timeout; this should evict the realm
+        let timeoutRun = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+          opts: { timeoutMs: 1, simulateTimeoutMs: 5 },
+        });
+        assert.strictEqual(
+          timeoutRun.response.error?.title,
+          'Render timeout',
+          'got timeout error',
+        );
+
+        // A subsequent render should not reuse the previously pooled page
+        let afterTimeout = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.false(
+          afterTimeout.pool.reused,
+          'did not reuse after timeout eviction',
+        );
+      });
+
+      test('reuses the same page within a realm', async function (assert) {
+        const testCardURL = `${realmURL2}1`;
+        let first = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        let second = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.strictEqual(first.pool.realm, realmURL2, 'first realm matches');
+        assert.strictEqual(
+          second.pool.realm,
+          realmURL2,
+          'second realm matches',
+        );
+        assert.strictEqual(
+          first.pool.pageId,
+          second.pool.pageId,
+          'pageId reused',
+        );
+        assert.false(first.pool.reused, 'first call not reused');
+        assert.true(second.pool.reused, 'second call reused');
+      });
+
+      test('does not reuse across different realms', async function (assert) {
+        const testCardURL1 = `${realmURL1}1`;
+        const testCardURL2 = `${realmURL2}1`;
+        let r1 = await prerenderer.prerenderCard({
+          realm: realmURL1,
+          url: testCardURL1,
+          userId: testUserId,
+          permissions,
+        });
+        let r2 = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL2,
+          userId: testUserId,
+          permissions,
+        });
+        assert.notStrictEqual(
+          r1.pool.pageId,
+          r2.pool.pageId,
+          'distinct pages per realm',
+        );
+        assert.false(r1.pool.reused, 'first realm first call not reused');
+        assert.false(r2.pool.reused, 'second realm first call not reused');
+      });
+
+      test('evicts LRU when capacity reached', async function (assert) {
+        const cardA = `${realmURL1}1`;
+        const cardB = `${realmURL2}1`;
+        const cardC = `${realmURL3}1`;
+
+        let firstA = await prerenderer.prerenderCard({
+          realm: realmURL1,
+          url: cardA,
+          userId: testUserId,
+          permissions,
+        });
+        assert.false(firstA.pool.reused, 'first A not reused');
+
+        let firstB = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: cardB,
+          userId: testUserId,
+          permissions,
+        });
+        assert.false(firstB.pool.reused, 'first B not reused');
+
+        // Now adding C should evict the LRU (A), since maxPages=2
+        let firstC = await prerenderer.prerenderCard({
+          realm: realmURL3,
+          url: cardC,
+          userId: testUserId,
+          permissions,
+        });
+        assert.false(firstC.pool.reused, 'first C not reused');
+
+        // Returning to A should not reuse because it was evicted
+        let secondA = await prerenderer.prerenderCard({
+          realm: realmURL1,
+          url: cardA,
+          userId: testUserId,
+          permissions,
+        });
+        assert.false(secondA.pool.reused, 'A was evicted, so not reused');
+        assert.notStrictEqual(
+          firstA.pool.pageId,
+          secondA.pool.pageId,
+          'A got a new page after eviction',
+        );
       });
     });
   });

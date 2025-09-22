@@ -9,15 +9,18 @@ import {
   livenessCheck,
   fetchRequestFromContext,
 } from '../middleware';
-import { prerenderCard, type PermissionsMap } from './index';
+import { Prerenderer, type PermissionsMap } from './index';
 
 let log = logger('prerender-server');
 
-export function buildPrerenderApp(
-  secretSeed: string,
-): Koa<Koa.DefaultState, Koa.Context> {
+export function buildPrerenderApp(secretSeed: string): {
+  app: Koa<Koa.DefaultState, Koa.Context>;
+  prerenderer: Prerenderer;
+} {
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
+  let maxPages = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+  let prerenderer = new Prerenderer({ secretSeed, maxPages });
 
   router.head('/', livenessCheck);
   router.get('/', async (ctxt: Koa.Context) => {
@@ -50,15 +53,22 @@ export function buildPrerenderApp(
       let url = attrs.url as string | undefined;
       let userId = attrs.userId as string | undefined;
       let permissions = attrs.permissions as PermissionsMap | undefined;
+      let realm = attrs.realm as string | undefined;
 
-      if (!url || !userId || !permissions || typeof permissions !== 'object') {
+      if (
+        !url ||
+        !userId ||
+        !permissions ||
+        typeof permissions !== 'object' ||
+        !realm
+      ) {
         ctxt.status = 400;
         ctxt.body = {
           errors: [
             {
               status: 400,
               message:
-                'Missing or invalid required attributes: url, userId, permissions',
+                'Missing or invalid required attributes: url, userId, permissions, realm',
             },
           ],
         };
@@ -66,10 +76,10 @@ export function buildPrerenderApp(
       }
 
       let start = Date.now();
-      let { response, timings } = await prerenderCard({
+      let { response, timings, pool } = await prerenderer.prerenderCard({
+        realm,
         url,
         userId,
-        secretSeed,
         permissions,
       });
       let totalMs = Date.now() - start;
@@ -87,6 +97,7 @@ export function buildPrerenderApp(
             renderMs: timings.renderMs,
             totalMs,
           },
+          pool,
         },
       };
     } catch (err: any) {
@@ -124,13 +135,22 @@ export function buildPrerenderApp(
     log.error(`prerender server HTTP error: ${err.message}`);
   });
 
-  return app;
+  return { app, prerenderer };
 }
 
 export function createPrerenderHttpServer(options?: {
   secretSeed?: string;
 }): Server {
   let secretSeed = options?.secretSeed ?? process.env.REALM_SECRET_SEED ?? '';
-  let app = buildPrerenderApp(secretSeed);
-  return createServer(app.callback());
+  let { app, prerenderer } = buildPrerenderApp(secretSeed);
+  let server = createServer(app.callback());
+  server.on('close', async () => {
+    try {
+      await prerenderer.stop();
+    } catch (e: any) {
+      // Best-effort shutdown; log and continue
+      log.warn('Error stopping prerenderer on server close:', e?.message ?? e);
+    }
+  });
+  return server;
 }
