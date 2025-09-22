@@ -148,11 +148,16 @@ export interface RealmPermissions {
   [username: string]: RealmAction[] | null;
 }
 
-export interface FileWriteResult {
+// Result shape returned by RealmAdapter.write (does not include created)
+export interface AdapterWriteResult {
   path: string;
   lastModified: number;
-  created: number;
-  isNew: boolean;
+}
+
+export interface FileWriteResult extends AdapterWriteResult {
+  path: string;
+  lastModified: number;
+  created: number | null;
 }
 
 export interface WriteOptions {
@@ -176,7 +181,7 @@ export interface RealmAdapter {
 
   exists(path: LocalPath): Promise<boolean>;
 
-  write(path: LocalPath, contents: string): Promise<FileWriteResult>;
+  write(path: LocalPath, contents: string): Promise<AdapterWriteResult>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -540,8 +545,10 @@ export class Realm {
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
     await this.indexing();
-    let results: FileWriteResult[] = [];
     let urls: URL[] = [];
+    // Collect write results for all files we wrote
+    let results: { path: LocalPath; lastModified: number }[] = [];
+    let fileMetaRows: { path: LocalPath }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
@@ -549,7 +556,7 @@ export class Realm {
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+          if (invalidatedURLs.find((u) => hasExecutableExtension(u.href))) {
             this.#definitionsCache.invalidate();
           }
           invalidations = new Set([
@@ -560,6 +567,7 @@ export class Realm {
         },
       });
     };
+
     for (let [path, content] of files) {
       lastWriteType = currentWriteType ?? lastWriteType;
       currentWriteType = hasExecutableExtension(path)
@@ -598,13 +606,14 @@ export class Realm {
           throw e;
         }
       }
-      let { lastModified, created, isNew } = await this.#adapter.write(
-        path,
-        content,
-      );
-      results.push({ path, lastModified, created, isNew });
+      let { lastModified } = await this.#adapter.write(path, content);
+      results.push({ path, lastModified });
+      fileMetaRows.push({ path });
       urls.push(url);
     }
+
+    // persist file meta (created_at) to DB independent of index and retrieve created
+    let createdMap = await this.persistFileMeta(fileMetaRows);
     if (urls.length > 0) {
       await performIndex();
     }
@@ -614,7 +623,71 @@ export class Realm {
       invalidations: [...invalidations],
       clientRequestId,
     });
-    return results;
+    return results.map(({ path, lastModified }) => ({
+      path,
+      lastModified,
+      created: createdMap.get(path) ?? null,
+    }));
+  }
+
+  // persist created_at into realm_file_meta table using db adapter
+  private async persistFileMeta(
+    rows: { path: LocalPath }[],
+  ): Promise<Map<LocalPath, number>> {
+    let createdMap = new Map<LocalPath, number>();
+    if (!this.#dbAdapter || rows.length === 0) return createdMap;
+    const realmURL = this.url;
+    // Insert rows for all paths; do not overwrite existing ones
+    let expr: any[] = [
+      'INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES',
+    ];
+    let now = Math.floor(Date.now() / 1000);
+    rows.forEach((r, idx) => {
+      if (idx > 0) expr.push(',');
+      expr.push('(', param(realmURL), ',', param(r.path), ',', param(now), ')');
+    });
+    expr.push('ON CONFLICT (realm_url, file_path) DO NOTHING');
+    await query(this.#dbAdapter, expr);
+
+    // Fetch created_at for all affected paths (both pre-existing and new)
+    let allPaths = Array.from(new Set(rows.map((r) => r.path)));
+    if (allPaths.length > 0) {
+      let selectExpr: any[] = [
+        'SELECT file_path, created_at FROM realm_file_meta WHERE realm_url =',
+        param(realmURL),
+        'AND file_path IN',
+        '(',
+      ];
+      allPaths.forEach((p, idx) => {
+        if (idx > 0) selectExpr.push(',');
+        selectExpr.push(param(p));
+      });
+      selectExpr.push(')');
+      let rowsResult = await query(this.#dbAdapter, selectExpr);
+      for (let row of rowsResult) {
+        let path = String(row['file_path']);
+        let created = Number(row['created_at']);
+        createdMap.set(path as LocalPath, created);
+      }
+    }
+    return createdMap;
+  }
+
+  // remove file meta rows for deleted paths
+  private async removeFileMeta(paths: LocalPath[]): Promise<void> {
+    if (!this.#dbAdapter || paths.length === 0) return;
+    let expr: any[] = [
+      'DELETE FROM realm_file_meta WHERE realm_url =',
+      param(this.url),
+      'AND file_path IN',
+      '(',
+    ];
+    paths.forEach((p, idx) => {
+      if (idx > 0) expr.push(',');
+      expr.push(param(p));
+    });
+    expr.push(')');
+    await query(this.#dbAdapter, expr);
   }
 
   validate(json: any): AtomicPayloadValidationError[] {
@@ -872,6 +945,8 @@ export class Realm {
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
+    // Remove file meta for this path
+    await this.removeFileMeta([path]);
     await this.#realmIndexUpdater.update([url], {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
@@ -902,6 +977,8 @@ export class Realm {
 
     await Promise.all(trackPromises);
     await Promise.all(removePromises);
+    // Remove file meta for all deleted paths
+    await this.removeFileMeta(paths);
     await this.#realmIndexUpdater.update(urls, {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
@@ -1444,7 +1521,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { lastModified } = await this.write(
+    let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       {
@@ -1456,7 +1533,10 @@ export class Realm {
       body: null,
       init: {
         status: 204,
-        headers: { 'last-modified': formatRFC7231(lastModified * 1000) },
+        headers: {
+          'last-modified': formatRFC7231(lastModified * 1000),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
       },
       requestContext,
     });
@@ -1738,7 +1818,7 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
 
@@ -1773,6 +1853,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
@@ -1933,7 +2014,7 @@ export class Realm {
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1964,6 +2045,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,

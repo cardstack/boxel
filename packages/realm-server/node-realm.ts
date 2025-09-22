@@ -28,7 +28,7 @@ import { join } from 'path';
 import { Duplex } from 'node:stream';
 import type {
   RequestContext,
-  FileWriteResult,
+  AdapterWriteResult,
 } from '@cardstack/runtime-common/realm';
 import type {
   RealmEventContent,
@@ -176,23 +176,66 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  async write(path: string, contents: string): Promise<FileWriteResult> {
+  async write(path: string, contents: string): Promise<AdapterWriteResult> {
     let absolutePath = join(this.realmDir, path);
-    let exists = await this.exists(path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
-    let { mtime, birthtime } = statSync(absolutePath);
+    let { mtime } = statSync(absolutePath);
     return {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
-      created: unixTime(birthtime.getTime()),
-      isNew: !exists,
     };
   }
 
   async remove(path: LocalPath): Promise<void> {
     let absolutePath = join(this.realmDir, path);
     removeSync(absolutePath);
+  }
+
+  async initializeFromDirectory(sourcePath: string): Promise<void> {
+    if (!existsSync(sourcePath)) {
+      throw new Error(`Source directory does not exist: ${sourcePath}`);
+    }
+
+    let sourceStat = statSync(sourcePath);
+    if (!sourceStat.isDirectory()) {
+      throw new Error(`Source path is not a directory: ${sourcePath}`);
+    }
+
+    // Ensure the realm directory exists
+    ensureDirSync(this.realmDir);
+
+    // Recursively copy all files using the adapter's write method
+    await this._copyDirectoryRecursive(sourcePath, sourcePath);
+  }
+
+  private async _copyDirectoryRecursive(
+    sourceDir: string,
+    sourceRoot: string,
+  ): Promise<void> {
+    let entries = readdirSync(sourceDir, { withFileTypes: true });
+
+    for (let entry of entries) {
+      let entrySourcePath = join(sourceDir, entry.name);
+
+      if (entry.isDirectory()) {
+        await this._copyDirectoryRecursive(entrySourcePath, sourceRoot);
+      } else if (entry.isFile()) {
+        // Calculate relative path by removing the source root prefix
+        let relativePath = entrySourcePath.substring(sourceRoot.length + 1);
+
+        // Read file content and write using adapter's write method
+        let content = createReadStream(entrySourcePath);
+        let chunks: Buffer[] = [];
+
+        for await (const chunk of content) {
+          chunks.push(Buffer.from(chunk));
+        }
+
+        let fileContent = Buffer.concat(chunks).toString();
+        await this.write(relativePath, fileContent);
+      }
+    }
   }
 
   createStreamingResponse(

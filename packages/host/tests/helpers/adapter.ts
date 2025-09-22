@@ -10,7 +10,6 @@ import {
   hasExecutableExtension,
   Deferred,
   unixTime,
-  FileWriteResult,
 } from '@cardstack/runtime-common';
 
 import { LintResult } from '@cardstack/runtime-common/lint';
@@ -21,6 +20,7 @@ import {
   FileRef,
   Kind,
   RequestContext,
+  AdapterWriteResult,
   TokenClaims,
 } from '@cardstack/runtime-common/realm';
 
@@ -311,11 +311,11 @@ export class TestRealmAdapter implements RealmAdapter {
   async write(
     path: LocalPath,
     contents: string | object,
-  ): Promise<FileWriteResult> {
+  ): Promise<AdapterWriteResult> {
     let segments = path.split('/');
     let name = segments.pop()!;
     let dir = this.#traverse(segments, 'directory');
-    let exists = await this.exists(path);
+    await this.exists(path);
     if (dir.kind === 'file') {
       throw new Error(`treated file as a directory`);
     }
@@ -357,8 +357,6 @@ export class TestRealmAdapter implements RealmAdapter {
     return {
       path,
       lastModified,
-      created: lastModified,
-      isNew: !exists,
     };
   }
 
