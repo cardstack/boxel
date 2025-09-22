@@ -83,3 +83,7 @@
 ## PR Instructions
 
 - Always run `pnpm lint` in modified packages before committing
+
+## Base realm imports
+
+- Only card definitions (files run through the card loader) can use static ESM imports from `https://cardstack.com/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
