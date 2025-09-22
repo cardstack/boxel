@@ -1385,9 +1385,20 @@ export class Realm {
         requestContext,
       });
     }
+    let createdFromDb: number | null = null;
+    try {
+      createdFromDb = await this.getFileCreatedAt(ref.path);
+    } catch (_e) {
+      createdFromDb = null;
+    }
+    let createdHeader =
+      createdFromDb != null
+        ? { 'x-created': formatRFC7231(createdFromDb * 1000) }
+        : {};
+
     let headers = {
       ...(options?.defaultHeaders || {}),
-      'x-created': formatRFC7231(ref.created * 1000),
+      ...createdHeader,
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
@@ -1564,6 +1575,14 @@ export class Realm {
             requestContext,
           });
         }
+        // Build headers, adding x-created from DB when possible
+        let dbPath = this.paths.local(canonicalURL);
+        let createdAt: number | null = await this.getFileCreatedAt(dbPath);
+        let createdHeader: Record<string, string> =
+          createdAt != null
+            ? { 'x-created': formatRFC7231(createdAt * 1000) }
+            : {};
+
         return createResponse({
           body: source,
           init: {
@@ -1571,6 +1590,7 @@ export class Realm {
               ...(lastModified != null
                 ? { 'last-modified': formatRFC7231(lastModified * 1000) }
                 : {}),
+              ...createdHeader,
             },
           },
           requestContext,
@@ -1654,7 +1674,11 @@ export class Realm {
           }`,
         );
       }
-      return { canonicalURL: new URL(canonicalURL), lastModified, source };
+      return {
+        canonicalURL: new URL(canonicalURL),
+        lastModified,
+        source,
+      };
     }
     return undefined;
   }
@@ -2114,12 +2138,23 @@ export class Realm {
         });
       }
 
+      // Prefer created_at from DB for instance JSON
+      let pathForDb = this.paths.local(url) + '.json';
+      let createdAt: number | null = null;
+      try {
+        createdAt = await this.getFileCreatedAt(pathForDb);
+      } catch (_e) {
+        createdAt = null;
+      }
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             ...lastModifiedHeader(card),
+            ...(createdAt != null
+              ? { 'x-created': formatRFC7231(createdAt * 1000) }
+              : {}),
           },
         },
         requestContext,
@@ -2147,6 +2182,21 @@ export class Realm {
       init: { status: 204 },
       requestContext,
     });
+  }
+
+  // Look up created_at for a given file path from realm_file_meta
+  private async getFileCreatedAt(path: LocalPath): Promise<number | null> {
+    if (!this.#dbAdapter) return null;
+    let rows = await query(this.#dbAdapter, [
+      'SELECT created_at FROM realm_file_meta WHERE realm_url =',
+      param(this.url),
+      'AND file_path =',
+      param(path),
+    ]);
+    if (rows.length === 0) return null;
+    let created = rows[0]['created_at'];
+    if (created == null) return null;
+    return typeof created === 'string' ? parseInt(created) : Number(created);
   }
 
   private async directoryEntries(
