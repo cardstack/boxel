@@ -509,12 +509,13 @@ module(basename(__filename), function () {
         });
 
         test('removes file meta on delete', async function (assert) {
-          // create a new file
-          let path = '/meta-delete-test.txt';
+          // ensure an existing file (write like hello-world first)
+          let reqPath = '/hello-world.txt';
+          let dbPath = 'hello-world.txt';
           let post = await request
-            .post(path)
+            .post(reqPath)
             .set('Accept', 'application/vnd.card+source')
-            .send('hello');
+            .send('hello-world');
           assert.strictEqual(post.status, 204, 'HTTP 204 status');
           assert.ok(
             post.headers['x-created'],
@@ -526,7 +527,7 @@ module(basename(__filename), function () {
             'SELECT created_at FROM realm_file_meta WHERE realm_url =',
             param(testRealmHref),
             'AND file_path =',
-            param(path),
+            param(dbPath),
           ]);
           assert.strictEqual(
             rowsBefore.length,
@@ -536,7 +537,7 @@ module(basename(__filename), function () {
 
           // delete the file
           let del = await request
-            .delete(path)
+            .delete(reqPath)
             .set('Accept', 'application/vnd.card+source');
           assert.strictEqual(del.status, 204, 'HTTP 204 status');
 
@@ -545,7 +546,7 @@ module(basename(__filename), function () {
             'SELECT 1 FROM realm_file_meta WHERE realm_url =',
             param(testRealmHref),
             'AND file_path =',
-            param(path),
+            param(dbPath),
           ]);
           assert.strictEqual(
             rowsAfter.length,
