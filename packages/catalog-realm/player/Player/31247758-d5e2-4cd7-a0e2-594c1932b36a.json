@@ -9,13 +9,13 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Dizzy",
-        "topType": "LongHairShavedSides",
-        "hairColor": "Auburn",
-        "mouthType": "Eating",
-        "skinColor": "Pale",
-        "clotheType": "ShirtCrewNeck",
-        "eyebrowType": "DefaultNatural",
+        "eyeType": "Default",
+        "topType": "ShortHairShortFlat",
+        "hairColor": "BrownDark",
+        "mouthType": "Smile",
+        "skinColor": "Light",
+        "clotheType": "BlazerShirt",
+        "eyebrowType": "Default",
         "facialHairType": "Blank",
         "accessoriesType": "Blank"
       },
@@ -29,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/experiments/Theme/starry-night"
+          "self": null
         }
       }
     }
