@@ -555,8 +555,8 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         padding: var(--boxel-sp-xs);
         border-bottom: 1px solid var(--boxel-border-color);
         --boxel-filter-expanded-background: transparent;
-        --boxel-filter-hover-background: var(--boxel-300);
-        --boxel-filter-selected-background: var(--muted-foreground);
+        --boxel-filter-hover-background: var(--foreground);
+        --boxel-filter-selected-background: var(--foreground);
         --boxel-filter-selected-foreground: var(--background);
       }
 
@@ -697,7 +697,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         font-size: var(--boxel-font-size-xs);
         font-weight: var(--boxel-font-weight-semibold);
         text-align: center;
-        color: var(--boxel-dark);
+        color: var(--muted);
         line-height: 1.2;
       }
 
