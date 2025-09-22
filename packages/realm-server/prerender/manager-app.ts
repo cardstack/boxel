@@ -85,6 +85,10 @@ export function buildPrerenderManagerApp(): {
     100,
     Number(process.env.PRERENDER_HEALTHCHECK_TIMEOUT_MS ?? 1000),
   );
+  const healthcheckIntervalMs = Math.max(
+    0,
+    Number(process.env.PRERENDER_HEALTHCHECK_INTERVAL_MS ?? 0),
+  );
 
   // health
   router.head('/', async (ctxt) => {
@@ -295,6 +299,15 @@ export function buildPrerenderManagerApp(): {
         if (list.length === 0) registry.realms.delete(realm);
       }
     }
+  }
+
+  // Schedule periodic health sweeps if configured. Use unref so this interval
+  // won't keep the Node.js process alive on shutdown.
+  if (healthcheckIntervalMs > 0) {
+    const timer = setInterval(() => {
+      sweepServers().catch((e) => log.warn('Health sweep error:', e));
+    }, healthcheckIntervalMs);
+    (timer as any).unref?.();
   }
 
   // proxy prerender
