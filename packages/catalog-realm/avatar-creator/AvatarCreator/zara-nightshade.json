@@ -9,15 +9,15 @@
     "type": "card",
     "attributes": {
       "avatar": {
-        "eyeType": "Hearts",
-        "topType": "Hijab",
-        "hairColor": "PastelPink",
-        "mouthType": "Tongue",
-        "skinColor": "Light",
-        "clotheType": "ShirtVNeck",
-        "eyebrowType": "SadConcernedNatural",
-        "facialHairType": "Blank",
-        "accessoriesType": "Blank"
+        "eyeType": "Happy",
+        "topType": "LongHairBigHair",
+        "hairColor": "BrownDark",
+        "mouthType": "Smile",
+        "skinColor": "Tanned",
+        "clotheType": "Hoodie",
+        "eyebrowType": "Default",
+        "facialHairType": "BeardMedium",
+        "accessoriesType": "Prescription02"
       },
       "cardInfo": {
         "notes": null,

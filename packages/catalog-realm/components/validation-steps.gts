@@ -38,7 +38,7 @@ export default class ValidationSteps extends Component<ValidationStepsSignature>
       {{/if}}
     </section>
 
-    <style>
+    <style scoped>
       .validation-content {
         background-color: var(--validation-content-bg, rgba(0, 0, 0, 0.5));
         border-radius: var(--validation-content-border-radius, 15px);
