@@ -143,7 +143,7 @@ export default function handlePublishRealm({
         publishedRealmData = results[0];
         realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
 
-        let lastPublishedAt = new Date().toISOString();
+        let lastPublishedAt = Date.now();
         await query(dbAdapter, [
           `UPDATE published_realms SET last_published_at =`,
           param(lastPublishedAt),
@@ -159,7 +159,7 @@ export default function handlePublishRealm({
           owner_username: realmUsername,
           source_realm_url: sourceRealmURL,
           published_realm_url: publishedRealmURL,
-          last_published_at: new Date(),
+          last_published_at: Date.now(),
         });
 
         let results = (await query(
@@ -207,6 +207,7 @@ export default function handlePublishRealm({
       ensureDirSync(publishedRealmPath);
 
       if (existingPublishedRealm) {
+        realms.splice(realms.indexOf(existingPublishedRealm), 1);
         virtualNetwork.unmount(existingPublishedRealm.handle);
       }
       let realm = createAndMountRealm(
@@ -214,6 +215,7 @@ export default function handlePublishRealm({
         publishedRealmURL,
         realmUsername,
         new URL(sourceRealmURL),
+        false,
       );
       await realm.start();
 

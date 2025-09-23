@@ -173,6 +173,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-spacing: var(--boxel-sp-xs);
         --operator-mode-top-bar-item-height: var(--container-button-size);
         --operator-mode-bottom-bar-item-height: var(--container-button-size);
+        --submode-new-file-button-width: 96px;
       }
       :global(button:focus:not(:disabled)) {
         outline-color: var(

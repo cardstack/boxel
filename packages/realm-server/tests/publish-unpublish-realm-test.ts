@@ -571,5 +571,105 @@ module(basename(__filename), function () {
         'unpublished realm has lastPublishedAt as null',
       );
     });
+
+    test('POST /_publish-realm does not create duplicate realm instances on republish', async function (assert) {
+      let publishedRealmURL = 'http://testuser.localhost/test-realm/';
+
+      // First publish
+      let firstResponse = await request
+        .post('/_publish-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send(
+          JSON.stringify({
+            sourceRealmURL: testRealm.url,
+            publishedRealmURL: publishedRealmURL,
+          }),
+        );
+
+      assert.strictEqual(firstResponse.status, 201, 'First publish succeeds');
+
+      let republishResponse = await request
+        .post('/_publish-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send(
+          JSON.stringify({
+            sourceRealmURL: testRealm.url,
+            publishedRealmURL: publishedRealmURL,
+          }),
+        );
+
+      assert.strictEqual(republishResponse.status, 201, `Republish succeeds`);
+      assert.strictEqual(
+        republishResponse.body.data.id,
+        firstResponse.body.data.id,
+        `Republish uses same realm ID`,
+      );
+
+      // Now unpublish and verify clean removal
+      let unpublishResponse = await request
+        .post('/_unpublish-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send(
+          JSON.stringify({
+            publishedRealmURL: publishedRealmURL,
+          }),
+        );
+
+      assert.strictEqual(unpublishResponse.status, 200, 'Unpublish succeeds');
+
+      // Verify we can republish after unpublish without issues
+      let republishAfterUnpublishResponse = await request
+        .post('/_publish-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send(
+          JSON.stringify({
+            sourceRealmURL: testRealm.url,
+            publishedRealmURL: publishedRealmURL,
+          }),
+        );
+
+      assert.strictEqual(
+        republishAfterUnpublishResponse.status,
+        201,
+        'Republish after unpublish succeeds',
+      );
+      assert.notEqual(
+        republishAfterUnpublishResponse.body.data.id,
+        firstResponse.body.data.id,
+        'New realm ID generated after republish following unpublish',
+      );
+    });
   });
 });
