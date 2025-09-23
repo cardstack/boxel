@@ -61,7 +61,7 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
-import type { MockUtils } from './mock-matrix/_utils';
+import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 
 export {
   visitOperatorMode,
@@ -531,6 +531,25 @@ export function setupUserSubscription(matrixRoomId: string) {
       if (req.url.includes('_user')) {
         return new Response(JSON.stringify(userResponseBody));
       }
+      if (req.url.includes('_realm-auth')) {
+        return new Response(
+          JSON.stringify({
+            [testRealmURL]: createJWT(
+              {
+                user: '@testuser:localhost',
+                sessionRoom: getRoomIdForRealmAndUser(
+                  testRealmURL,
+                  '@testuser:localhost',
+                ),
+                permissions: ['read', 'write'],
+              },
+              '1d',
+              testRealmSecretSeed,
+            ),
+          }),
+          { status: 200 },
+        );
+      }
       if (req.url.includes('_server-session')) {
         let data = await req.json();
         if (!data.challenge) {
@@ -670,6 +689,12 @@ export function setupRealmServerEndpoints(
   endpoints?: RealmServerEndpoint[],
 ) {
   let defaultEndpoints: RealmServerEndpoint[] = [
+    {
+      route: '_realm-auth',
+      getResponse: async function (req: Request) {
+        return new Response(JSON.stringify({}), { status: 200 });
+      },
+    },
     {
       route: '_server-session',
       getResponse: async function (req: Request) {
