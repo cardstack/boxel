@@ -275,11 +275,11 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-publish-button]').isNotDisabled();
 
         await click('[data-test-publish-button]');
-        assert.dom('[data-test-publish-button]').hasText('Publishing...');
+        assert.dom('[data-test-publish-button]').hasText('Publishing…');
         assert.dom('[data-test-publish-button]').hasAttribute('disabled');
 
         await waitFor('[data-test-publish-realm-button].publishing');
-        assert.dom('[data-test-publish-realm-button]').hasText('Publishing...');
+        assert.dom('[data-test-publish-realm-button]').hasText('Publishing…');
         assert.dom('[data-test-publish-realm-button]').hasClass('publishing');
 
         await click('[data-test-publish-realm-button]');
@@ -299,7 +299,7 @@ module('Acceptance | host submode', function (hooks) {
           );
         });
 
-        assert.dom('[data-test-publish-realm-button]').hasText('Publish...');
+        assert.dom('[data-test-publish-realm-button]').hasText('Publish…');
         assert
           .dom('[data-test-publish-realm-button]')
           .doesNotHaveClass('publishing');
@@ -355,7 +355,7 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-unpublish-button]').exists();
         assert.dom('[data-test-open-site-button]').exists();
         await click('[data-test-unpublish-button]');
-        assert.dom('[data-test-unpublish-button]').hasText('Unpublishing...');
+        assert.dom('[data-test-unpublish-button]').hasText('Unpublishing…');
         unpublishDeferred.fulfill();
         await waitUntil(() => {
           return !document.querySelector('[data-test-unpublish-button]');

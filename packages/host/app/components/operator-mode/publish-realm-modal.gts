@@ -250,7 +250,7 @@ export default class PublishRealmModal extends Component<Signature> {
                     >
                       {{#if (this.isUnpublishingRealm this.generatedUrl)}}
                         <LoadingIndicator />
-                        Unpublishing...
+                        Unpublishing…
                       {{else}}
                         <Undo2 width='11' height='11' class='unpublish-icon' />
                         Unpublish
