@@ -133,7 +133,7 @@ export default function handlePublishRealm({
 
       if (!realmInfoResponse || realmInfoResponse.status !== 200) {
         log.warn(
-          `Failed to fetch realm info for public realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
+          `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
         );
         throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
       }
