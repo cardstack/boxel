@@ -7,6 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 
+import Undo2 from '@cardstack/boxel-icons/undo-2';
 import { formatDistanceToNow } from 'date-fns';
 
 import {
@@ -14,7 +15,6 @@ import {
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import config from '@cardstack/host/config/environment';
 
