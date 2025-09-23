@@ -509,34 +509,6 @@ export class GameResult extends CardDef {
             padding: 1rem;
           }
         }
-
-        /* Compact layout for small containers */
-        @container (max-width: 600px) {
-          .card-container {
-            flex-direction: row;
-            align-items: center;
-            justify-content: space-between;
-            text-align: left;
-            gap: 2rem;
-            padding: 1.5rem 2rem;
-          }
-
-          .game-section .game-header {
-            flex-direction: column;
-            gap: 0.5rem;
-          }
-
-          .details-section {
-            flex-direction: row;
-            max-width: none;
-            gap: 1rem;
-          }
-
-          .detail-group {
-            flex: 1;
-            min-width: 0;
-          }
-        }
       </style>
     </template>
   };
