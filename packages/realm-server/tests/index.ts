@@ -12,6 +12,8 @@ import './indexing-test';
 import './module-syntax-test';
 import './permissions/permission-checker-test';
 import './prerendering-test';
+import './prerender-server-test';
+import './prerender-manager-test';
 import './queue-test';
 import './realm-endpoints-test';
 import './realm-endpoints/directory-test';

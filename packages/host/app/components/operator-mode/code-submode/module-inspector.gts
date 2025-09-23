@@ -425,9 +425,15 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               @activeSpec={{this.activeSpec}}
               @specsForSelectedDefinition={{this.specsForSelectedDefinition}}
               @showCreateSpec={{this.showCreateSpec}}
-              as |SpecPreviewContent|
             >
-              <SpecPreviewContent class='non-preview-panel-content' />
+              <:loading as |SpecPreviewLoading|>
+                <div class='non-preview-panel-content'>
+                  <SpecPreviewLoading />
+                </div>
+              </:loading>
+              <:content as |SpecPreviewContent|>
+                <SpecPreviewContent class='non-preview-panel-content' />
+              </:content>
             </SpecPreview>
           {{/if}}
         </section>
@@ -464,6 +470,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       .module-inspector-content {
         overflow: auto;
+        padding: var(--boxel-sp-xs);
         height: 100%;
         background-color: var(--boxel-light);
       }

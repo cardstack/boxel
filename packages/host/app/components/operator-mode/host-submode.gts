@@ -1,22 +1,34 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import Refresh from '@cardstack/boxel-icons/refresh';
+
+import { restartableTask } from 'ember-concurrency';
+
+import perform from 'ember-concurrency/helpers/perform';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
+import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
+import PublishRealmModal from './publish-realm-modal';
 import SubmodeLayout from './submode-layout';
 
 interface HostSubmodeSignature {
@@ -27,6 +39,10 @@ interface HostSubmodeSignature {
 export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
+  @service private declare realm: RealmService;
+
+  @tracked isPublishRealmModalOpen = false;
+  @tracked isPublishingRealmPopoverOpen = false;
 
   get currentCardId() {
     return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
@@ -77,9 +93,37 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return 'host-mode-content';
   }
 
-  get containerClass() {
-    return 'container';
+  @action
+  openPublishRealmModal() {
+    this.isPublishRealmModalOpen = true;
   }
+
+  @action
+  closePublishRealmModal() {
+    this.isPublishRealmModalOpen = false;
+  }
+
+  @action
+  togglePublishingRealmPopover() {
+    this.isPublishingRealmPopoverOpen = !this.isPublishingRealmPopoverOpen;
+  }
+
+  get realmURL() {
+    return this.operatorModeStateService.realmURL.href;
+  }
+
+  get isPublishing() {
+    return this.realm.isPublishing(this.realmURL);
+  }
+
+  handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
+    await this.realm.publish(this.realmURL, publishedRealmURLs);
+    this.isPublishingRealmPopoverOpen = false;
+  });
+
+  handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
+    await this.realm.unpublish(this.realmURL, publishedRealmURL);
+  });
 
   <template>
     <SubmodeLayout
@@ -89,12 +133,37 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     >
       <div class='host-submode' style={{this.backgroundImageStyle}}>
         <div class='host-mode-top-bar'>
+          <div class='publish-button-container'>
+            {{#if this.isPublishing}}
+              <BoxelButton
+                @kind='primary'
+                @size='tall'
+                class='publish-realm-button publishing'
+                {{on 'click' this.togglePublishingRealmPopover}}
+                data-test-publish-realm-button
+              >
+                <Refresh width='22' height='22' class='publish-icon' />
+                Publishing…
+              </BoxelButton>
+            {{else}}
+              <BoxelButton
+                @kind='primary'
+                @size='tall'
+                class='publish-realm-button'
+                {{on 'click' this.openPublishRealmModal}}
+                data-test-publish-realm-button
+              >
+                <PublishSiteIcon width='22' height='22' class='publish-icon' />
+                Publish…
+              </BoxelButton>
+            {{/if}}
+            <PublishingRealmPopover
+              @isOpen={{this.isPublishingRealmPopoverOpen}}
+            />
+          </div>
         </div>
         <div class={{this.hostModeContentClass}}>
-          <CardContainer
-            @displayBoundaries={{true}}
-            class={{this.containerClass}}
-          >
+          <CardContainer @displayBoundaries={{true}} class='container'>
             {{#if this.operatorModeStateService.currentRealmInfo.publishable}}
               {{#if this.currentCard}}
                 <CardContainer class='card'>
@@ -128,7 +197,23 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       </div>
     </SubmodeLayout>
 
+    <PublishRealmModal
+      @isOpen={{this.isPublishRealmModalOpen}}
+      @onClose={{this.closePublishRealmModal}}
+      @handlePublish={{perform this.handlePublish}}
+      @handleUnpublish={{perform this.handleUnpublish}}
+    />
+
     <style scoped>
+      .host-submode-layout {
+        --submode-bar-item-border-radius: var(--boxel-border-radius);
+        --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
+        --submode-bar-item-outline: var(--boxel-border-flexible);
+        --operator-mode-left-column: calc(
+          21.5rem - var(--submode-new-file-button-width)
+        );
+      }
+
       .host-submode-layout :deep(.submode-switcher),
       .host-submode-layout :deep(.workspace-button) {
         border: 1px solid #ffffff59;
@@ -145,16 +230,59 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       .host-mode-top-bar {
         background-color: var(--boxel-700);
-        padding: var(--boxel-sp);
+        padding: var(--operator-mode-spacing);
         border-bottom: 1px solid var(--boxel-600);
         flex-shrink: 0;
         height: 60px;
+
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding-left: var(--operator-mode-left-column);
+      }
+
+      .publish-button-container {
+        position: relative;
       }
 
       .host-mode-top-bar-content {
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
+        padding-left: calc(
+          var(--operator-mode-left-column) + var(--submode-switcher-width) +
+            var(--operator-mode-spacing)
+        );
+      }
+
+      .publish-realm-button {
+        border: none;
+        border-radius: var(--submode-bar-item-border-radius);
+        box-shadow: var(--submode-bar-item-box-shadow);
+        outline: var(--submode-bar-item-outline);
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+
+      .publish-icon {
+        flex-shrink: 0;
+      }
+
+      .publish-realm-button.publishing {
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+        100% {
+          opacity: 1;
+        }
       }
 
       .host-mode-title {
@@ -188,6 +316,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         width: 100%;
         max-width: 100%;
         padding: 0;
+        border-radius: 0;
       }
 
       .card {
@@ -217,6 +346,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       .host-submode :deep(.boxel-card-container) {
         overflow: auto;
+      }
+
+      .host-mode-content.is-wide :deep(.boxel-card-container) {
+        border-radius: 0;
       }
     </style>
   </template>

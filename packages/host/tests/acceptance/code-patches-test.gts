@@ -1142,6 +1142,8 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-code-diff-editor]').doesNotExist();
     assert.dom('[data-test-editor]').exists();
 
+    assert.dom('[data-test-error-message]').doesNotExist();
+
     await click('[data-test-attached-file-dropdown-button="hello.txt"]');
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Generated Content"]')

@@ -79,6 +79,7 @@ import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
+import ImportIcon from '@cardstack/boxel-icons/import';
 import {
   callSerializeHook,
   cardClassFromResource,
@@ -2335,11 +2336,16 @@ export class CardDef extends BaseDef {
   }
 }
 
+export class CssImportField extends StringField {
+  static displayName = 'CSS Import';
+  static icon = ImportIcon;
+}
+
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
-  @field title = contains(StringField);
   @field cssVariables = contains(CSSField);
+  @field cssImports = containsMany(CssImportField);
 }
 
 export type BaseDefConstructor = typeof BaseDef;

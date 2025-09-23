@@ -1,3 +1,4 @@
+minimumReleaseAge: 1440 # Don’t install versions newer than 1 day
 packages:
   - packages/*
   - packages/boxel-motion/*
