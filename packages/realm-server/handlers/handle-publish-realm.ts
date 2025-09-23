@@ -207,6 +207,7 @@ export default function handlePublishRealm({
       ensureDirSync(publishedRealmPath);
 
       if (existingPublishedRealm) {
+        realms.splice(realms.indexOf(existingPublishedRealm), 1);
         virtualNetwork.unmount(existingPublishedRealm.handle);
       }
       let realm = createAndMountRealm(
