@@ -143,7 +143,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
                 data-test-publish-realm-button
               >
                 <Refresh width='22' height='22' class='publish-icon' />
-                Publishing...
+                Publishing…
               </BoxelButton>
             {{else}}
               <BoxelButton
@@ -154,7 +154,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
                 data-test-publish-realm-button
               >
                 <PublishSiteIcon width='22' height='22' class='publish-icon' />
-                Publish...
+                Publish…
               </BoxelButton>
             {{/if}}
             <PublishingRealmPopover

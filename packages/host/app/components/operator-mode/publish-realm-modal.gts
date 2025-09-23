@@ -14,7 +14,7 @@ import {
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { UndoArrow } from '@cardstack/boxel-ui/icons';
+import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import config from '@cardstack/host/config/environment';
 
@@ -252,11 +252,7 @@ export default class PublishRealmModal extends Component<Signature> {
                         <LoadingIndicator />
                         Unpublishing...
                       {{else}}
-                        <UndoArrow
-                          width='11'
-                          height='11'
-                          class='unpublish-icon'
-                        />
+                        <Undo2 width='11' height='11' class='unpublish-icon' />
                         Unpublish
                       {{/if}}
 
@@ -299,7 +295,7 @@ export default class PublishRealmModal extends Component<Signature> {
             >
               {{#if this.isPublishing}}
                 <LoadingIndicator />
-                Publishing...
+                Publishing…
               {{else}}
                 Publish to selected domains
               {{/if}}
@@ -330,10 +326,6 @@ export default class PublishRealmModal extends Component<Signature> {
 
       :deep(.dialog-box__header) {
         gap: var(--boxel-sp-xxxs);
-      }
-
-      :deep(.dialog-box__close) {
-        display: none;
       }
 
       .modal-subtitle {
