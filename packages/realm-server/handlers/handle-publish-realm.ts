@@ -24,7 +24,7 @@ import {
   setContextResponse,
 } from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
-import { RealmServerTokenClaim } from '../utils/jwt';
+import { RealmServerTokenClaim, createJWT } from '../utils/jwt';
 import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
@@ -127,6 +127,10 @@ export default function handlePublishRealm({
         new Request(`${sourceRealmURL}_info`, {
           headers: {
             Accept: SupportedMimeType.RealmInfo,
+            Authorization: `Bearer ${createJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-for-realm-info' },
+              realmSecretSeed,
+            )}`,
           },
         }),
       );
@@ -139,6 +143,10 @@ export default function handlePublishRealm({
       }
 
       let json = await realmInfoResponse.json();
+
+      console.log(
+        `checking json for realm ${sourceRealmURL}: ${JSON.stringify(json)}`,
+      );
 
       if (json.data.attributes.publishable !== true) {
         return sendResponseForUnprocessableEntity(
