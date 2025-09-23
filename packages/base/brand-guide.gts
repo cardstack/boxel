@@ -10,6 +10,7 @@ import {
   field,
 } from './card-api';
 import ColorField from './color';
+import URLField from './url';
 import { GridContainer, Swatch } from '@cardstack/boxel-ui/components';
 
 type Color = {
@@ -61,6 +62,20 @@ class FunctionalPaletteEmbedded extends Component<typeof FunctionalPalette> {
   }
 }
 
+export class CSSPropertyValueField extends StringField {
+  static displayName = 'CSS Property Value';
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <code class='css-property-value'>{{if
+          @model
+          @model
+          '/* not set */'
+        }}</code>
+    </template>
+  };
+}
+
 export class FunctionalPalette extends FieldDef {
   static displayName = 'Functional Palette';
   @field primary = contains(ColorField);
@@ -73,11 +88,42 @@ export class FunctionalPalette extends FieldDef {
   static embedded = FunctionalPaletteEmbedded;
 }
 
+class MarkUsageField extends FieldDef {
+  static displayName = 'Mark Usage';
+  @field clearanceRatio = contains(CSSPropertyValueField);
+  @field minHeight = contains(CSSPropertyValueField);
+  @field onLightBackground = contains(URLField);
+  @field onDarkBackground = contains(URLField);
+}
+
+class TypographyField extends FieldDef {
+  static displayName = 'Typography';
+  @field fontFamily = contains(CSSPropertyValueField);
+  @field fontSize = contains(CSSPropertyValueField);
+  @field fontWeight = contains(CSSPropertyValueField);
+  @field lineHeight = contains(CSSPropertyValueField);
+  @field letterSpacing = contains(CSSPropertyValueField);
+}
+
 export class BrandGuide extends CardDef {
   static displayName = 'Brand Guide';
 
   @field brandColorPalette = containsMany(CompoundColorField);
   @field functionalPalette = contains(FunctionalPalette);
+
+  // Mark Usage
+  @field primaryMark = contains(MarkUsageField);
+  @field secondaryMark = contains(MarkUsageField);
+  @field greyscaleMark = contains(MarkUsageField);
+  @field socialMediaProfileIcon = contains(URLField);
+
+  // Typography
+  @field headline = contains(TypographyField);
+  @field bodyCopy = contains(TypographyField);
+
+  // UI Components
+  // TODO
+  @field cornerRadius = contains(CSSPropertyValueField);
 
   // static isolated = class Isolated extends Component<typeof this> {
   //   <template>
