@@ -470,7 +470,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       .module-inspector-content {
         overflow: auto;
-        padding: var(--boxel-sp-xs);
         height: 100%;
         background-color: var(--boxel-light);
       }
