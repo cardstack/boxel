@@ -2141,11 +2141,7 @@ export class Realm {
       // Prefer created_at from DB for instance JSON
       let pathForDb = this.paths.local(url) + '.json';
       let createdAt: number | null = null;
-      try {
-        createdAt = await this.getCreatedTime(pathForDb);
-      } catch (_e) {
-        createdAt = null;
-      }
+      createdAt = await this.getCreatedTime(pathForDb);
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
