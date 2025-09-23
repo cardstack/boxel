@@ -397,12 +397,7 @@ export default class InteractSubmode extends Component {
       } else {
         let error = loadedCard;
         if (error.meta != null) {
-          let cardTitle = error.meta.cardTitle;
-          if (!cardTitle) {
-            throw new Error(
-              `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
-            );
-          }
+          let cardTitle = error.meta.cardTitle || 'Unknown';
           cardToDelete = {
             id: cardUrl.href,
             title: cardTitle,
