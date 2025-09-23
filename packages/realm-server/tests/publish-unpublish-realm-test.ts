@@ -186,7 +186,7 @@ module(basename(__filename), function () {
         assert.ok(response.body.data.id, 'published realm has an ID');
         assert.strictEqual(
           response.body.data.attributes.sourceRealmURL,
-          testRealm.url,
+          publishableRealmUrl,
           'source realm URL is correct',
         );
         assert.ok(
@@ -228,10 +228,27 @@ module(basename(__filename), function () {
           'index entries should reference the published realm URL',
         );
 
+        let sourceRealmPath = new URL(publishableRealmUrl).pathname;
+        let sourceRealmInfoPath = `${sourceRealmPath}_info`;
+
+        console.log(`about to get ${sourceRealmInfoPath}`);
         // Test that source realm info includes lastPublishedAt as an object
         let sourceRealmInfoResponse = await request
-          .get('/test/_info')
-          .set('Accept', 'application/vnd.api+json');
+          .get(sourceRealmInfoPath)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          );
+
+        console.log(
+          'got?',
+          sourceRealmInfoResponse.status,
+          sourceRealmInfoResponse.body,
+        );
 
         assert.strictEqual(
           sourceRealmInfoResponse.status,
