@@ -138,6 +138,19 @@ export class Batch {
     return [...this.#invalidations].filter((i) => !isDefinitionId(i));
   }
 
+  // Look up created_at for a given file path from realm_file_meta
+  async getCreatedTime(localPath: string): Promise<number | null> {
+    let rows = (await this.#query([
+      'SELECT created_at FROM realm_file_meta WHERE realm_url =',
+      param(this.realmURL.href),
+      'AND file_path =',
+      param(localPath),
+      'LIMIT 1',
+    ])) as { created_at: string }[];
+    let created = rows[0]?.created_at;
+    return created != null ? parseInt(created) : null;
+  }
+
   @Memoize()
   private get nodeResolvedInvalidations() {
     return [...this.invalidations].map(

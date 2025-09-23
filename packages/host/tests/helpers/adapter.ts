@@ -61,7 +61,6 @@ let shimmedModuleIndicator = '// this file is shimmed';
 export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = { kind: 'directory', contents: {} };
   #lastModified: Map<string, number> = new Map();
-  #resourceCreatedAt: Map<string, number> = new Map();
   #paths: RealmPaths;
   #subscriber: ((message: UpdateRealmEventContent) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
@@ -92,8 +91,7 @@ export class TestRealmAdapter implements RealmAdapter {
       }
       let url = this.#paths.fileURL(path);
       this.#lastModified.set(url.href, now);
-      this.#resourceCreatedAt.set(url.href, now);
-      dir.contents[last] = { kind: 'file', content };
+      ir.contents[last] = { kind: 'file', content };
       if (typeof content === 'object') {
         this.#potentialModulesAndInstances.push({ content, url });
       }
@@ -191,10 +189,6 @@ export class TestRealmAdapter implements RealmAdapter {
 
   get lastModifiedMap() {
     return this.#lastModified;
-  }
-
-  get resourceCreatedAtMap() {
-    return this.#resourceCreatedAt;
   }
 
   async lastModified(path: string): Promise<number | undefined> {
@@ -298,7 +292,6 @@ export class TestRealmAdapter implements RealmAdapter {
       path,
       content: fileRefContent,
       lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
-      created: this.#resourceCreatedAt.get(this.#paths.fileURL(path).href)!,
     };
 
     if (fileRefContent === shimmedModuleIndicator) {
@@ -340,8 +333,6 @@ export class TestRealmAdapter implements RealmAdapter {
         eventName: 'update',
         added: path,
       };
-
-      this.#resourceCreatedAt.set(this.#paths.fileURL(path).href, lastModified);
     }
 
     dir.contents[name] = {
