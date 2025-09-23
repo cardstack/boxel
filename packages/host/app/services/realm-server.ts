@@ -195,6 +195,12 @@ export default class RealmServerService extends Service {
       },
     });
 
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch tokens for accessible realms: ${response.status} - ${await response.text()}`,
+      );
+    }
+
     return response.json();
   }
 
