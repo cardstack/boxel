@@ -74,7 +74,7 @@ export default function handlePublishRealm({
       return;
     }
 
-    let sourceRealmURL = json.sourceRealmURL.endsWith('/')
+    let sourceRealmURL: string = json.sourceRealmURL.endsWith('/')
       ? json.sourceRealmURL
       : `${json.sourceRealmURL}/`;
     let publishedRealmURL = json.publishedRealmURL.endsWith('/')
@@ -123,32 +123,49 @@ export default function handlePublishRealm({
         throw new Error(`Source realm ${sourceRealmURL} not found`);
       }
 
-      let realmInfoResponse = await sourceRealm.handle(
-        new Request(`${sourceRealmURL}_info`, {
-          headers: {
-            Accept: SupportedMimeType.RealmInfo,
-            Authorization: `Bearer ${createJWT(
-              { user: ownerUserId, sessionRoom: 'session-room-for-realm-info' },
-              realmSecretSeed,
-            )}`,
-          },
-        }),
-      );
+      // let dmRooms =
+      //   (await matrixClient.getAccountDataFromServer<Record<string, string>>(
+      //     'boxel.session-rooms',
+      //   )) ?? {};
 
-      if (!realmInfoResponse || realmInfoResponse.status !== 200) {
-        log.warn(
-          `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
-        );
-        throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
-      }
+      // console.log('dmrooms', JSON.stringify(dmRooms, null, 2));
 
-      let json = await realmInfoResponse.json();
+      // let sessionRoomId = dmRooms[ownerUserId];
+
+      // let jwtThings = {
+      //   user: ownerUserId,
+      //   realm: sourceRealmURL,
+      //   sessionRoom: sessionRoomId,
+      //   permissions: ['read'],
+      // };
+
+      // console.log('jwtThings:', jwtThings);
+
+      // let realmInfoResponse = await sourceRealm.handle(
+      //   new Request(`${sourceRealmURL}_info`, {
+      //     headers: {
+      //       Accept: SupportedMimeType.RealmInfo,
+      //       Authorization: `Bearer ${sourceRealm.createJWT(jwtThings, '5m')}`,
+      //     },
+      //   }),
+      // );
+
+      // if (!realmInfoResponse || realmInfoResponse.status !== 200) {
+      //   log.warn(
+      //     `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
+      //   );
+      //   throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
+      // }
+
+      // let json = await realmInfoResponse.json();
+
+      let json = await sourceRealm.getRealmInfoFIXMEIsThisValid();
 
       console.log(
         `checking json for realm ${sourceRealmURL}: ${JSON.stringify(json)}`,
       );
 
-      if (json.data.attributes.publishable !== true) {
+      if (json.publishable !== true) {
         return sendResponseForUnprocessableEntity(
           ctxt,
           `Realm ${sourceRealmURL} is not publishable`,
