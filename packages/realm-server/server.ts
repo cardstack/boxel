@@ -14,6 +14,7 @@ import {
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
   PUBLISHED_DIRECTORY_NAME,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -342,7 +343,7 @@ export class RealmServer {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }): Promise<Realm> => {
+  }): Promise<{ realm: Realm; info: Partial<RealmInfo> }> => {
     let realmAtServerRoot = this.realms.find((r) => {
       let realmUrl = new URL(r.url);
 
@@ -400,11 +401,13 @@ export class RealmServer {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    writeJSONSync(join(realmPath, '.realm.json'), {
+    let info = {
       name,
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
-    });
+      publishable: true,
+    };
+    writeJSONSync(join(realmPath, '.realm.json'), info);
     writeJSONSync(join(realmPath, 'index.json'), {
       data: {
         type: 'card',
@@ -417,7 +420,10 @@ export class RealmServer {
       },
     });
 
-    return this.createAndMountRealm(realmPath, url, username);
+    return {
+      realm: this.createAndMountRealm(realmPath, url, username),
+      info,
+    };
   };
 
   private createAndMountRealm = (

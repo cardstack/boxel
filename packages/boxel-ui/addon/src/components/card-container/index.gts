@@ -66,11 +66,6 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     :global(.boxel-card-container--boundaries.hide-boundaries) {
       box-shadow: none;
     }
-    :global(.boxel-card-container .boxel-card-container) {
-      background-color: var(--card, var(--boxel-light));
-      border-radius: var(--radius, var(--boxel-border-radius));
-      color: var(--card-foreground, var(--boxel-dark));
-    }
   </style>
 </template>;
 
