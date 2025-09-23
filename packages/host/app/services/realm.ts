@@ -493,7 +493,11 @@ export default class RealmService extends Service {
   // treats that case as a read-then-write assertion failure. So instead we do
   // untracked reads from `realms` and pair them, at the right times, with
   // tracked reads from `currentKnownRealms` to establish dependencies.
-  realms: Map<string, RealmResource> = this.restoreSessions();
+  private _realms = this.restoreSessions();
+
+  get realms(): ReadonlyMap<string, RealmResource> {
+    return this._realms;
+  }
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
 
@@ -784,7 +788,7 @@ export default class RealmService extends Service {
     token: string | undefined = undefined,
   ): RealmResource {
     // this should be the only place we do the untracked read. It needs to be
-    // untracked so our `this.realms.set` below will not be an assertion.
+    // untracked so our `this._realms.set` below will not be an assertion.
     let resource = this.knownRealm(realmURL, false);
 
     if (resource && !resource?.token && token) {
@@ -793,7 +797,7 @@ export default class RealmService extends Service {
 
     if (!resource) {
       resource = this.createRealmResource(realmURL, token);
-      this.realms.set(realmURL, resource);
+      this._realms.set(realmURL, resource);
       // only after the set has happened can we safely do the tracked read to
       // establish our depenency.
       this.currentKnownRealms.add(realmURL);
