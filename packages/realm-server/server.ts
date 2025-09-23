@@ -6,6 +6,7 @@ import {
   logger,
   SupportedMimeType,
   insertPermissions,
+  param,
   query,
   Deferred,
   type VirtualNetwork,
@@ -13,6 +14,7 @@ import {
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
   PUBLISHED_DIRECTORY_NAME,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -230,6 +232,45 @@ export class RealmServer {
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
     if (ctxt.header.accept?.includes('text/html')) {
+      // If this is a /connect iframe request, is the origin a valid published realm?
+
+      let connectMatch = ctxt.request.path.match(/\/connect\/(.+)$/);
+
+      if (connectMatch) {
+        try {
+          let originParameter = new URL(decodeURIComponent(connectMatch[1]))
+            .href;
+
+          let publishedRealms = await query(this.dbAdapter, [
+            `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
+            param(`${originParameter}%`),
+          ]);
+
+          if (publishedRealms.length === 0) {
+            ctxt.status = 404;
+            ctxt.body = `Not Found: No published realm found for origin ${originParameter}`;
+
+            this.log.debug(
+              `Ignoring /connect request for origin ${originParameter}: no matching published realm`,
+            );
+
+            return;
+          }
+
+          ctxt.set(
+            'Content-Security-Policy',
+            `frame-ancestors ${originParameter}`,
+          );
+        } catch (error) {
+          ctxt.status = 400;
+          ctxt.body = 'Bad Request';
+
+          this.log.info(`Error processing /connect request: ${error}`);
+
+          return;
+        }
+      }
+
       ctxt.type = 'html';
       ctxt.body = await this.retrieveIndexHTML();
       return;
@@ -302,7 +343,7 @@ export class RealmServer {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }): Promise<Realm> => {
+  }): Promise<{ realm: Realm; info: Partial<RealmInfo> }> => {
     let realmAtServerRoot = this.realms.find((r) => {
       let realmUrl = new URL(r.url);
 
@@ -360,11 +401,13 @@ export class RealmServer {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    writeJSONSync(join(realmPath, '.realm.json'), {
+    let info = {
       name,
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
-    });
+      publishable: true,
+    };
+    writeJSONSync(join(realmPath, '.realm.json'), info);
     writeJSONSync(join(realmPath, 'index.json'), {
       data: {
         type: 'card',
@@ -377,7 +420,10 @@ export class RealmServer {
       },
     });
 
-    return this.createAndMountRealm(realmPath, url, username);
+    return {
+      realm: this.createAndMountRealm(realmPath, url, username),
+      info,
+    };
   };
 
   private createAndMountRealm = (

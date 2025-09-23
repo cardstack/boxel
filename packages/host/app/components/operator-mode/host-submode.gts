@@ -316,6 +316,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         width: 100%;
         max-width: 100%;
         padding: 0;
+        border-radius: 0;
       }
 
       .card {

@@ -1408,11 +1408,17 @@ export class Realm {
           'Insufficient permissions to perform this action',
         );
       }
-    } catch (e) {
+    } catch (e: any) {
       if (e instanceof TokenExpiredError) {
+        this.#log.warn(
+          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e instanceof JsonWebTokenError) {
+        this.#log.warn(
+          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
       throw e;

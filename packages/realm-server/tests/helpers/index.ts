@@ -128,7 +128,7 @@ let fastbootState:
   | undefined;
 
 export function cleanWhiteSpace(text: string) {
-  return text.replace(/\s+/g, ' ').trim();
+  return text.replace('<!---->', '').replace(/\s+/g, ' ').trim();
 }
 
 export function createVirtualNetwork() {
@@ -1037,7 +1037,7 @@ export const cardDefinition: Definition['fields'] = {
   },
   'cardInfo.theme.title': {
     type: 'contains',
-    isComputed: false,
+    isComputed: true,
     fieldOrCard: {
       name: 'StringField',
       module: 'https://cardstack.com/base/card-api',
@@ -1116,6 +1116,15 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
+  'cardInfo.theme.cssImports': {
+    type: 'containsMany',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CssImportField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
   'cardInfo.theme.cardInfo.theme': {
     type: 'linksTo',
     isComputed: false,
@@ -1136,7 +1145,7 @@ export const cardDefinition: Definition['fields'] = {
   },
   'cardInfo.theme.cardInfo.theme.title': {
     type: 'contains',
-    isComputed: false,
+    isComputed: true,
     fieldOrCard: {
       name: 'StringField',
       module: 'https://cardstack.com/base/card-api',
@@ -1206,6 +1215,15 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
+  'cardInfo.theme.cardInfo.theme.cssImports': {
+    type: 'containsMany',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CssImportField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
   'cardInfo.theme.cardInfo.theme.thumbnailURL': {
     type: 'contains',
     isComputed: true,
@@ -1235,7 +1253,7 @@ export const cardDefinition: Definition['fields'] = {
   },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
     type: 'contains',
-    isComputed: false,
+    isComputed: true,
     fieldOrCard: {
       name: 'StringField',
       module: 'https://cardstack.com/base/card-api',
@@ -1305,6 +1323,15 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
+    type: 'containsMany',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CssImportField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
     type: 'contains',
     isComputed: true,
@@ -1334,7 +1361,7 @@ export const cardDefinition: Definition['fields'] = {
   },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
     type: 'contains',
-    isComputed: false,
+    isComputed: true,
     fieldOrCard: {
       name: 'StringField',
       module: 'https://cardstack.com/base/card-api',
@@ -1394,6 +1421,15 @@ export const cardDefinition: Definition['fields'] = {
     isComputed: false,
     fieldOrCard: {
       name: 'CSSField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
+    type: 'containsMany',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CssImportField',
       module: 'https://cardstack.com/base/card-api',
     },
     isPrimitive: true,

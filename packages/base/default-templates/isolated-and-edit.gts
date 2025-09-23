@@ -1,102 +1,73 @@
-import { get } from '@ember/helper';
 import GlimmerComponent from '@glimmer/component';
-import type { CardDef, Format, BaseDef } from '../card-api';
+import type { CardDef, FieldsTypeFor, Format } from '../card-api';
 import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
-import { getFieldIcon } from '@cardstack/runtime-common';
-import CardInfo from './card-info';
-
-type Fields = Record<string, new () => GlimmerComponent>;
+import { getFieldIcon, getField } from '@cardstack/runtime-common';
+import CardInfoTemplates from './card-info';
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
-    fields: Fields & { cardInfo: Fields };
+    fields: FieldsTypeFor<CardDef>;
     format: Format;
   };
 }> {
-  private _headerFields: string[] = [
-    'title',
-    'description',
-    'thumbnailURL',
+  private specialFields: string[] = ['title', 'description', 'thumbnailURL'];
+  private excludedFields: string[] = [
+    'id',
+    'cardInfo',
+    ...this.specialFields,
     'theme',
   ];
-  private excludedFields: string[] = ['id', 'cardInfo', ...this._headerFields];
 
-  private get displayFields(): Fields | undefined {
+  // Logic: If special field (title,description,thumbnailUrl) is NOT computed,
+  // then display its edit format alongside other top-level fields.
+  private get specialDisplayFieldNames(): string[] | undefined {
+    let fieldNames = this.specialFields.filter((fieldName) => {
+      const field = getField(this.args.model.constructor, fieldName);
+      return field?.computeVia == undefined;
+    });
+
+    return fieldNames.length ? fieldNames : undefined;
+  }
+
+  // Fields to display in between the cardInfo header and notes footer
+  private get displayFields(): FieldsTypeFor<CardDef> | undefined {
+    let excludedFields = this.excludedFields.filter(
+      (name) => !this.specialDisplayFieldNames?.includes(name),
+    );
     let fields = Object.entries(this.args.fields).filter(
-      ([key]) => !this.excludedFields.includes(key),
+      ([key]) => !excludedFields.includes(key),
     );
     if (!fields.length) {
       return;
     }
-    return Object.fromEntries(fields) as Fields;
+    return Object.fromEntries(fields) as FieldsTypeFor<CardDef>;
   }
 
-  // this checks whether card is using the base card-def's `cardInfo` fields to compute card's `title`, `description`, or `thumbnail`
-  private isOwnField(card: typeof BaseDef, fieldName: string): boolean {
-    let prototype = card.prototype;
-    let result = false;
-    while (Object.getPrototypeOf(prototype).constructor.name !== 'BaseDef') {
-      result = Object.keys(
-        Object.getOwnPropertyDescriptors(prototype),
-      ).includes(fieldName);
-      if (result === true) {
-        return result;
-      }
-      prototype = Object.getPrototypeOf(prototype);
-    }
-    return result;
-  }
-
-  // hiding this field from Theme cards and applying its cssVariables to the current card
-  private get hideTheme() {
+  private get isThemeCard() {
     return Boolean(
       Object.entries(this.args.fields).find(([key]) => key === 'cssVariables'),
     );
   }
 
-  private get headerFields() {
-    return this.hideTheme
-      ? this._headerFields.filter((f) => f !== 'theme')
-      : this._headerFields;
-  }
-
   <template>
     <div class={{cn 'default-card-template' @format}}>
-      <Header
-        @hasBottomBorder={{true}}
-        class={{cn
-          'card-info-header'
-          card-info-edit-header=(eq @format 'edit')
-        }}
-      >
+      <Header @hasBottomBorder={{true}} class='card-info-header'>
         {{#if (eq @format 'isolated')}}
-          <CardInfo
+          <CardInfoTemplates.view
             @title={{@model.title}}
             @description={{@model.description}}
             @thumbnailURL={{@model.thumbnailURL}}
             @icon={{@model.constructor.icon}}
           />
         {{else}}
-          {{#each this.headerFields as |key|}}
-            <FieldContainer
-              @label={{startCase key}}
-              @icon={{getFieldIcon @model.cardInfo key}}
-              data-test-field={{key}}
-            >
-              {{#if (this.isOwnField @model.constructor key)}}
-                {{#let (get @fields key) as |Field|}}
-                  <Field />
-                {{/let}}
-              {{else}}
-                {{#let (get @fields.cardInfo key) as |Field|}}
-                  <Field />
-                {{/let}}
-              {{/if}}
-            </FieldContainer>
-          {{/each}}
+          <CardInfoTemplates.edit
+            @fields={{@fields}}
+            @model={{@model}}
+            @hideThemeChooser={{this.isThemeCard}}
+          />
         {{/if}}
       </Header>
       {{#if this.displayFields}}
@@ -107,7 +78,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
               @icon={{getFieldIcon @model key}}
               data-test-field={{key}}
             >
-              {{! @glint-ignore: unknown not assignable to type Element }}
               <Field class='in-isolated' />
             </FieldContainer>
           {{/each-in}}
@@ -117,7 +87,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         <FieldContainer
           @label='Notes'
           @icon={{getFieldIcon @model.cardInfo 'notes'}}
-          data-test-field='notes'
+          data-test-field='cardInfo-notes'
         >
           <@fields.cardInfo.notes />
         </FieldContainer>
@@ -130,14 +100,11 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       }
       .card-info-header {
         --boxel-header-min-height: 9.375rem; /* 150px */
-        --boxel-header-padding: var(--boxel-sp-lg);
+        --boxel-header-padding: var(--boxel-sp-xl);
         --boxel-header-gap: var(--boxel-sp-lg);
         --boxel-header-border-color: var(--hr-color);
         align-items: flex-start;
         background-color: var(--muted, var(--boxel-100));
-      }
-      .card-info-edit-header {
-        display: grid;
       }
       .card-info-header :deep(.info) {
         align-self: center;

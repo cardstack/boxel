@@ -796,7 +796,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -875,6 +875,15 @@ module(basename(__filename), function () {
               },
               isPrimitive: true,
             },
+            'author.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
             'author.cardInfo.theme.cardInfo.theme': {
               type: 'linksTo',
               isComputed: false,
@@ -895,7 +904,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -965,6 +974,15 @@ module(basename(__filename), function () {
               },
               isPrimitive: true,
             },
+            'author.cardInfo.theme.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
             'author.cardInfo.theme.cardInfo.theme.thumbnailURL': {
               type: 'contains',
               isComputed: true,
@@ -994,7 +1012,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -1069,6 +1087,15 @@ module(basename(__filename), function () {
                 },
                 isPrimitive: true,
               },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
               {
                 type: 'contains',
@@ -1102,7 +1129,7 @@ module(basename(__filename), function () {
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title':
               {
                 type: 'contains',
-                isComputed: false,
+                isComputed: true,
                 fieldOrCard: {
                   name: 'StringField',
                   module: 'https://cardstack.com/base/card-api',
@@ -1165,6 +1192,16 @@ module(basename(__filename), function () {
                 isComputed: false,
                 fieldOrCard: {
                   name: 'CSSField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports':
+              {
+                type: 'containsMany',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'CssImportField',
                   module: 'https://cardstack.com/base/card-api',
                 },
                 isPrimitive: true,
