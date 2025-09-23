@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import supertest, { SuperTest, Test } from 'supertest';
-import { existsSync, ensureDirSync, copySync } from 'fs-extra';
+import { readdirSync } from 'fs';
+import { existsSync, ensureDirSync, copySync, pathExistsSync } from 'fs-extra';
 import { basename, join } from 'path';
 import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
@@ -90,6 +91,36 @@ module(basename(__filename), function () {
       afterEach: async () => {
         await closeServer(testRealmHttpServer);
       },
+    });
+
+    test('POST /_publish-realm cannot publish a realm that is not publishable', async function (assert) {
+      let response = await request
+        .post('/_publish-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send(
+          JSON.stringify({
+            sourceRealmURL: testRealm.url,
+            publishedRealmURL: 'http://testuser.localhost/test-realm/',
+          }),
+        );
+
+      assert.strictEqual(response.status, 422, 'HTTP 422 status');
+      assert.strictEqual(
+        response.text,
+        `{"errors":["Realm ${testRealm.url} is not publishable"]}`,
+        'Error message says realm is not publishable',
+      );
+
+      let publishedDir = join(dir.name, 'realm_server_3', '_published');
+      assert.false(pathExistsSync(publishedDir));
     });
 
     test('POST /_publish-realm can publish realm successfully', async function (assert) {

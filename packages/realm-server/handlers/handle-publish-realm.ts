@@ -19,6 +19,7 @@ import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
+  sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
@@ -121,6 +122,31 @@ export default function handlePublishRealm({
       if (!sourceRealm) {
         throw new Error(`Source realm ${sourceRealmURL} not found`);
       }
+
+      let realmInfoResponse = await sourceRealm.handle(
+        new Request(`${sourceRealmURL}_info`, {
+          headers: {
+            Accept: SupportedMimeType.RealmInfo,
+          },
+        }),
+      );
+
+      if (!realmInfoResponse || realmInfoResponse.status !== 200) {
+        log.warn(
+          `Failed to fetch realm info for public realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
+        );
+        throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
+      }
+
+      let json = await realmInfoResponse.json();
+
+      if (json.data.attributes.publishable !== true) {
+        return sendResponseForUnprocessableEntity(
+          ctxt,
+          `Realm ${sourceRealmURL} is not publishable`,
+        );
+      }
+
       let existingPublishedRealm = realms.find(
         (r) => r.url === publishedRealmURL,
       );
