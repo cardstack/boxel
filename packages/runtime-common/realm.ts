@@ -1360,6 +1360,9 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
+      this.#log.warn(
+        `auth failed for ${request.method} ${request.url} missing auth header`,
+      );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
       );
@@ -1398,12 +1401,18 @@ export class Realm {
         JSON.stringify(token.permissions?.sort()) !==
           JSON.stringify(userPermissions.sort())
       ) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url}, for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+        );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
         );
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url}, for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+        );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
