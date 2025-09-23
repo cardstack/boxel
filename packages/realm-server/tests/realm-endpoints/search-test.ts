@@ -79,6 +79,34 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
         });
 
+        test('gets no results when asking for a type that the realm does not have knowledge of', async function (assert) {
+          let unknownTypeQuery: Query = {
+            filter: {
+              on: {
+                module: 'http://some-realm-server/some-realm/some-card',
+                name: 'SomeCard',
+              },
+              eq: {
+                firstName: 'Mango',
+              },
+            },
+          };
+
+          let response = await request
+            .get(`/_search?${stringify(unknownTypeQuery)}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+
+          assert.strictEqual(
+            json.data.length,
+            0,
+            'returned results count is correct',
+          );
+          assert.strictEqual(json.meta.page.total, 0, 'total count is correct');
+        });
+
         test('can paginate search results', async function (assert) {
           // Query for all persons to get multiple results
           let paginationQuery: Query = {

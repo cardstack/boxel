@@ -101,7 +101,10 @@ import {
   AtomicPayloadValidationError,
   filterAtomicOperations,
 } from './atomic-document';
-import { DefinitionsCache } from './definitions-cache';
+import {
+  DefinitionsCache,
+  isFilterRefersToNonexistentTypeError,
+} from './definitions-cache';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -588,8 +591,11 @@ export class Realm {
           content = JSON.stringify(serialized, null, 2);
         }
       } catch (e: any) {
-        if (e.message.includes('not found')) {
-          throw new Error(e);
+        if (
+          e.message?.includes?.('not found') ||
+          isFilterRefersToNonexistentTypeError(e)
+        ) {
+          throw e;
         }
       }
       let { lastModified, created, isNew } = await this.#adapter.write(

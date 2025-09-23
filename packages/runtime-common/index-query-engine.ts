@@ -58,7 +58,10 @@ import {
   type Definition,
   type FieldDefinition,
 } from './index-structure';
-import { DefinitionsCache } from './definitions-cache';
+import {
+  DefinitionsCache,
+  isFilterRefersToNonexistentTypeError,
+} from './definitions-cache';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 interface IndexedModule {
@@ -404,66 +407,80 @@ export class IndexQueryEngine {
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
   }> {
-    let conditions: CardExpression[] = [
-      ['i.realm_url = ', param(realmURL.href)],
-      ['is_deleted = FALSE OR is_deleted IS NULL'],
-    ];
+    try {
+      let conditions: CardExpression[] = [
+        ['i.realm_url = ', param(realmURL.href)],
+        ['is_deleted = FALSE OR is_deleted IS NULL'],
+      ];
 
-    if (opts.includeErrors) {
-      conditions.push(
-        any([
-          ['i.type =', param('instance')],
-          every([
-            ['i.type =', param('error')],
-            ['i.url ILIKE', param('%.json')],
+      if (opts.includeErrors) {
+        conditions.push(
+          any([
+            ['i.type =', param('instance')],
+            every([
+              ['i.type =', param('error')],
+              ['i.url ILIKE', param('%.json')],
+            ]),
           ]),
-        ]),
-      );
-    } else {
-      conditions.push(['i.type =', param('instance')]);
-    }
+        );
+      } else {
+        conditions.push(['i.type =', param('instance')]);
+      }
 
-    if (opts.cardUrls && opts.cardUrls.length > 0) {
-      conditions.push([
-        'i.url IN',
-        ...addExplicitParens(
-          separatedByCommas(opts.cardUrls.map((url) => [param(url)])),
-        ),
+      if (opts.cardUrls && opts.cardUrls.length > 0) {
+        conditions.push([
+          'i.url IN',
+          ...addExplicitParens(
+            separatedByCommas(opts.cardUrls.map((url) => [param(url)])),
+          ),
+        ]);
+      }
+
+      if (filter) {
+        conditions.push(this.filterCondition(filter, baseCardRef));
+      }
+
+      let everyCondition = every(conditions);
+      let query = [
+        ...selectClauseExpression,
+        `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+        'WHERE',
+        ...everyCondition,
+        'GROUP BY url',
+        ...this.orderExpression(sort),
+        ...(page
+          ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`]
+          : []),
+      ];
+      let queryCount = [
+        'SELECT COUNT(DISTINCT url) AS total',
+        `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
+        'WHERE',
+        ...everyCondition,
+      ];
+
+      let [results, totalResults] = await Promise.all([
+        this.#queryCards(query),
+        this.#queryCards(queryCount),
       ]);
+
+      return {
+        results,
+        meta: {
+          page: { total: Number(totalResults[0].total) },
+        },
+      };
+    } catch (error) {
+      if (isFilterRefersToNonexistentTypeError(error)) {
+        return {
+          results: [],
+          meta: {
+            page: { total: 0 },
+          },
+        };
+      }
+      throw error;
     }
-
-    if (filter) {
-      conditions.push(this.filterCondition(filter, baseCardRef));
-    }
-
-    let everyCondition = every(conditions);
-    let query = [
-      ...selectClauseExpression,
-      `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
-      'WHERE',
-      ...everyCondition,
-      'GROUP BY url',
-      ...this.orderExpression(sort),
-      ...(page ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`] : []),
-    ];
-    let queryCount = [
-      'SELECT COUNT(DISTINCT url) AS total',
-      `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
-      'WHERE',
-      ...everyCondition,
-    ];
-
-    let [results, totalResults] = await Promise.all([
-      this.#queryCards(query),
-      this.#queryCards(queryCount),
-    ]);
-
-    return {
-      results,
-      meta: {
-        page: { total: Number(totalResults[0].total) },
-      },
-    };
   }
 
   async search(
