@@ -235,7 +235,6 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
             <FieldContainer
               class='card-info-field theme-field'
               @label='Theme'
-              @tag='label'
               @icon={{ThemeIcon}}
               data-test-field='cardInfo-theme'
             >
