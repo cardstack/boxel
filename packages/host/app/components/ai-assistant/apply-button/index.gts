@@ -3,7 +3,6 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { BoxelButton, CircleSpinner } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, Exclamation } from '@cardstack/boxel-ui/icons';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 export type ApplyButtonState =
   | 'ready'
@@ -31,12 +30,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     {{#if (eq @state 'ready')}}
-      <BoxelButton
-        @kind='primary'
-        @size='small'
-        class='apply-button'
-        {{setCssVar boxel-button-text-color='var(--boxel-dark)'}}
-      >
+      <BoxelButton @kind='primary' @size='auto' class='apply-button'>
         {{#if (has-block)}}
           {{yield}}
         {{else if @actionVerb}}
@@ -56,11 +50,10 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     {{else if (eq @state 'preparing')}}
       <BoxelButton
         @kind='secondary-dark'
-        @size='small'
+        @size='auto'
         class='apply-button'
         tabindex='-1'
         disabled
-        {{setCssVar boxel-button-text-color='var(--boxel-200)'}}
       >
         Working…
       </BoxelButton>
@@ -108,6 +101,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     }
     .state-indicator.preparing .apply-button {
       --boxel-button-color: transparent;
+      --boxel-button-text-color: var(--boxel-200);
       border: 0;
       min-width: 74px;
     }
