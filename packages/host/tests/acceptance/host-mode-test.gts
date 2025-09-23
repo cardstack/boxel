@@ -170,7 +170,18 @@ module('Acceptance | host mode tests', function (hooks) {
     });
 
     assert.dom(`[data-test-card="${testHostModeRealmURL}Pet/mango"]`).exists();
+    assert.dom('[data-test-host-mode-container]').hasNoClass('is-wide');
     assert.strictEqual(getPageTitle(), 'Mango');
+
+    await percySnapshot(assert);
+  });
+
+  test('visiting a full width card in host mode', async function (assert) {
+    await visit('/test');
+
+    assert.dom(`[data-test-card="${testHostModeRealmURL}index"]`).exists();
+    assert.strictEqual(getPageTitle(), 'Test Workspace B');
+    assert.dom('[data-test-host-mode-container]').hasClass('is-wide');
 
     await percySnapshot(assert);
   });
