@@ -349,7 +349,7 @@ class RealmResource {
 
     let refreshMs = 0;
 
-    if (/*!this.claims.sessionRoom*/ false) {
+    if (!this.claims.sessionRoom) {
       // Force JWT renewal to ensure presence of sessionRoom property
       console.log(`JWT for realm ${this.url} has no session room, renewing`);
     } else {

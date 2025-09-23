@@ -556,7 +556,11 @@ export default class MatrixService extends Service {
 
         if (noRealmsLoggedIn) {
           // This means the user just clicked "Sign in". In this case
-          // we need to authenticate to all accessible realms–in one request, for performance reasons
+          // we want to authenticate to all accessible realms upfront so that
+          // we can display in the interface which ones are public and which ones
+          // are private. For performance reasons, we do this in a single request,
+          // instead of doing it for each realm individually (which is the case
+          // when creating new realms, or when individual realms' tokens get outdated)
           await this.realmServer.authenticateToAllAccessibleRealms();
         }
 
