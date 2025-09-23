@@ -13,6 +13,7 @@ import { sendResponseForError, setContextResponse } from '../middleware';
 export default function handleRealmAuth({
   dbAdapter,
   realmSecretSeed,
+  matrixClient,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -29,10 +30,18 @@ export default function handleRealmAuth({
       return;
     }
 
+    let dmRooms =
+      (await matrixClient.getAccountDataFromServer<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+
+    let sessionRoomId = dmRooms[user.matrixUserId];
+
     let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
       userId: matrixUserId,
       onlyOwnRealms: false,
     });
+
     let sessions: { [realm: string]: string } = {};
     for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
       sessions[realm] = createJWT(
@@ -40,7 +49,7 @@ export default function handleRealmAuth({
           user: matrixUserId,
           realm: realm,
           permissions,
-          sessionRoom: '',
+          sessionRoom: sessionRoomId,
         },
         '7d',
         realmSecretSeed,
