@@ -12,7 +12,6 @@ import {
   type QueuePublisher,
   type QueueRunner,
 } from '@cardstack/runtime-common';
-import { type RealmServer } from '../server';
 import { PgAdapter } from '@cardstack/postgres';
 import {
   setupDB,
@@ -31,7 +30,6 @@ const testRealm2URL = 'http://127.0.0.1:4445/test/';
 module(basename(__filename), function () {
   module('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
-    let testRealmServer: RealmServer;
     let testRealm: Realm;
     let dbAdapter: PgAdapter;
     let publisher: QueuePublisher;
@@ -61,24 +59,21 @@ module(basename(__filename), function () {
       runner: QueueRunner,
     ) {
       virtualNetwork = createVirtualNetwork();
-      ({
-        testRealm: testRealm,
-        testRealmServer: testRealmServer,
-        testRealmHttpServer: testRealmHttpServer,
-      } = await runTestRealmServer({
-        virtualNetwork,
-        testRealmDir,
-        realmsRootPath: join(dir.name, 'realm_server_3'),
-        realmURL: new URL(testRealm2URL),
-        dbAdapter,
-        publisher,
-        runner,
-        matrixURL,
-        permissions: {
-          '*': ['read', 'write'],
-          [ownerUserId]: DEFAULT_PERMISSIONS,
-        },
-      }));
+      ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
+        await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_3'),
+          realmURL: new URL(testRealm2URL),
+          dbAdapter,
+          publisher,
+          runner,
+          matrixURL,
+          permissions: {
+            '*': ['read', 'write'],
+            [ownerUserId]: DEFAULT_PERMISSIONS,
+          },
+        }));
       request = supertest(testRealmHttpServer);
     }
     setupBaseRealmServer(hooks, matrixURL);
