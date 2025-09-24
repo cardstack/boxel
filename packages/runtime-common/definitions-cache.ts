@@ -19,6 +19,7 @@ export class FilterRefersToNonexistentTypeError extends Error {
     if (opts?.cause !== undefined) {
       (this as any).cause = opts.cause;
     }
+    // make sure instances of this Error subclass behave like instances of the subclass should
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
