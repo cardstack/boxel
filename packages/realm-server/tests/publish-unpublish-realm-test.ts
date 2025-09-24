@@ -128,7 +128,7 @@ module(basename(__filename), function () {
 
       hooks.beforeEach(async () => {
         let endpoint = `test-realm-${uuidv4()}`;
-        let response = await request
+        let createSourceRealmResponse = await request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -151,7 +151,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        sourceRealmUrlString = response.body.data.id;
+        sourceRealmUrlString = createSourceRealmResponse.body.data.id;
 
         // Make the published realm public so reading _info doesn’t need a token
         dbAdapter.execute(`
