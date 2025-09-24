@@ -2705,10 +2705,6 @@ export class Realm {
     return realmInfo;
   }
 
-  async getRealmInfoFIXMEIsThisValid() {
-    return this.parseRealmInfo();
-  }
-
   private async realmInfo(
     _request: Request,
     requestContext: RequestContext,
