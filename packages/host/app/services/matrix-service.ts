@@ -481,9 +481,10 @@ export default class MatrixService extends Service {
     opts: {
       auth?: MatrixSDK.LoginResponse;
       refreshRoutes?: true;
+      loginToAllAccessibleRealmsInBulk?: false;
     } = {},
   ) {
-    let { auth, refreshRoutes } = opts;
+    let { auth, refreshRoutes, loginToAllAccessibleRealmsInBulk } = opts;
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {
@@ -550,17 +551,16 @@ export default class MatrixService extends Service {
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
 
-        let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
-          ([_url, realmResource]) => !realmResource.isLoggedIn,
-        );
+        // let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
+        //   ([_url, realmResource]) => !realmResource.isLoggedIn,
+        // );
 
-        if (noRealmsLoggedIn) {
+        if (loginToAllAccessibleRealmsInBulk) {
           // This means the user just clicked "Sign in". In this case
-          // we want to authenticate to all accessible realms upfront so that
-          // we can display in the interface which ones are public and which ones
-          // are private. For performance reasons, we do this in a single request,
-          // instead of doing it for each realm individually (which is the case
-          // when creating new realms, or when individual realms' tokens get outdated)
+          // we want to authenticate to all accessible realms in a single request,
+          // for performance reasons (otherwise we would make 2 auth requests for
+          // each realm, which could be a lot of requests).
+
           await this.realmServer.authenticateToAllAccessibleRealms();
         }
 
