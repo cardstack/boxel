@@ -350,7 +350,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: testRealm.url,
+              sourceRealmURL: publishableRealmUrl,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -375,7 +375,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: testRealm.url,
+              sourceRealmURL: publishableRealmUrl,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -413,7 +413,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: testRealm.url,
+              sourceRealmURL: publishableRealmUrl,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -468,7 +468,7 @@ module(basename(__filename), function () {
         );
         assert.strictEqual(
           unpublishResponse.body.data.attributes.sourceRealmURL,
-          testRealm.url,
+          publishableRealmUrl,
           'source realm URL is correct',
         );
         assert.strictEqual(
@@ -612,7 +612,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: testRealm.url,
+              sourceRealmURL: publishableRealmUrl,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -700,7 +700,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: testRealm.url,
+              sourceRealmURL: publishableRealmUrl,
               publishedRealmURL: publishedRealmURL,
             }),
           );
@@ -720,7 +720,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: testRealm.url,
+              sourceRealmURL: publishableRealmUrl,
               publishedRealmURL: publishedRealmURL,
             }),
           );
@@ -766,7 +766,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: testRealm.url,
+              sourceRealmURL: publishableRealmUrl,
               publishedRealmURL: publishedRealmURL,
             }),
           );
