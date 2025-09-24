@@ -19,7 +19,6 @@ import { htmlSafe } from '@ember/template';
 import {
   eq,
   gt,
-  lt,
   add,
   multiply,
   subtract,
@@ -38,13 +37,28 @@ import ValidationSteps, {
 } from '../components/validation-steps';
 import { realmURL } from '@cardstack/runtime-common';
 
-// Helper function for array slicing
-function slice(array: any[], start: number, end?: number): any[] {
-  return array?.slice(start, end) || [];
-}
+// Constants
+const suits = ['♠', '♣', '♥', '♦'] as const;
+const ranks = [
+  'A',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '10',
+  'J',
+  'Q',
+  'K',
+] as const;
+const numFoundations = 4;
+const numTableauPiles = 7;
 
 // Card interface
-interface Card {
+interface SolitaireCard {
   suit: string;
   rank: string;
   value: number;
@@ -52,24 +66,80 @@ interface Card {
   faceUp: boolean;
 }
 
+// Game state union type
+type GameState = 'notStarted' | 'playing' | 'gameOver';
+
 class IsolatedTemplate extends Component<typeof Solitaire> {
-  @tracked deck: Card[] = [];
-  @tracked stock: Card[] = [];
-  @tracked waste: Card[] = [];
-  @tracked foundations: Card[][] = [[], [], [], []];
-  @tracked tableau: Card[][] = [[], [], [], [], [], [], []];
-  @tracked selectedCard: Card | null = null;
+  @tracked deck: SolitaireCard[] = []; // 52 cards
+  @tracked stock: SolitaireCard[] = []; // Stock pile
+  @tracked waste: SolitaireCard[] = []; // Waste pile
+  @tracked foundations: SolitaireCard[][] = [[], [], [], []]; // 4 foundation piles
+  @tracked tableau: SolitaireCard[][] = [[], [], [], [], [], [], []]; // 7 tableau piles
+  @tracked selectedCard: SolitaireCard | null = null;
   @tracked selectedPile: { type: string; index: number } | null = null;
-  @tracked moves = 0;
-  @tracked isPlaying = false;
-  @tracked gameWon = false;
-  @tracked gameState = this.args.model.gameState || 'notStarted';
-  @tracked gameMessage = this.args.model.gameMessage || 'Start a new game';
-  @tracked showModal = false;
+  @tracked gameState: GameState =
+    (this.args.model.gameState as GameState) || 'notStarted';
 
   // Check if game can start - requires player
   get gameCanStart() {
     return !!this.args.model.player;
+  }
+
+  // Derived properties from gameState
+  get isPlaying() {
+    return this.gameState === 'playing';
+  }
+
+  get hasPlayerWon() {
+    return (
+      this.gameState === 'gameOver' &&
+      this.foundations.every((foundation) => foundation.length === 13)
+    );
+  }
+
+  get shouldShowGameOverModal() {
+    return this.gameState === 'gameOver';
+  }
+
+  get stockCardCount() {
+    return this.stock.length;
+  }
+
+  get hasStockCards() {
+    return this.stockCardCount > 0;
+  }
+
+  get hasWasteCards() {
+    return this.waste.length > 0;
+  }
+
+  get wasteStackCards() {
+    const lastIndex = this.waste.length - 1;
+    const startIndex = Math.max(0, lastIndex - 2);
+    return this.waste.slice(startIndex);
+  }
+
+  get wasteStackStartIndex() {
+    const lastIndex = this.waste.length - 1;
+    return Math.max(0, lastIndex - 2);
+  }
+
+  // Get status message based on current state
+  get gameStatusMessage() {
+    switch (this.gameState) {
+      case 'notStarted':
+        return this.gameCanStart
+          ? 'Start a new game'
+          : 'Link a player to start playing';
+      case 'playing':
+        return 'Make your moves!';
+      case 'gameOver':
+        return this.hasPlayerWon
+          ? '🎉 Congratulations! You won! 🎉'
+          : 'Game Over - No more moves available';
+      default:
+        return 'Start a new game';
+    }
   }
 
   // Generate validation steps for solitaire setup
@@ -115,42 +185,22 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
       this.args.model.gameState &&
       this.args.model.gameState !== 'notStarted'
     ) {
-      // We have saved state - restore it properly
       this.restoreGameState();
     } else {
-      // No existing game, initialize new game
-      this.initializeGame();
+      // Set initial state without calling initializeGame to avoid tracking conflicts
+      if (!this.args.model.gameState) {
+        this.gameState = 'notStarted';
+      }
     }
   }
 
-  willDestroy() {
-    super.willDestroy();
-  }
-
-  @action
-  initializeGame() {
-    // Create deck
-    this.deck = [];
-    const suits = ['♠', '♣', '♥', '♦'];
-    const ranks = [
-      'A',
-      '2',
-      '3',
-      '4',
-      '5',
-      '6',
-      '7',
-      '8',
-      '9',
-      '10',
-      'J',
-      'Q',
-      'K',
-    ];
+  // Helper method to create a standard 52-card deck
+  private createDeck(): SolitaireCard[] {
+    const deck: SolitaireCard[] = [];
 
     suits.forEach((suit) => {
       ranks.forEach((rank, index) => {
-        this.deck.push({
+        deck.push({
           suit,
           rank,
           value: index + 1,
@@ -160,102 +210,90 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
       });
     });
 
+    return deck;
+  }
+
+  // Helper method to deal cards to tableau and stock
+  private dealCards(): void {
+    // Initialize empty piles
+    this.tableau = Array(numTableauPiles)
+      .fill(null)
+      .map(() => []);
+    this.foundations = Array(numFoundations)
+      .fill(null)
+      .map(() => []);
+    this.waste = [];
+
+    let cardIndex = 0;
+
+    // Deal to tableau piles (1 card to first pile, 2 to second, etc.)
+    for (let pileIndex = 0; pileIndex < numTableauPiles; pileIndex++) {
+      for (let cardInPile = 0; cardInPile <= pileIndex; cardInPile++) {
+        const card = this.deck[cardIndex++];
+        // Only the top card in each pile is face up
+        if (cardInPile === pileIndex) {
+          card.faceUp = true;
+        }
+        this.tableau[pileIndex].push(card);
+      }
+    }
+
+    // Remaining cards go to stock
+    this.stock = this.deck.slice(cardIndex);
+  }
+
+  @action
+  initializeGame() {
+    // Create deck
+    this.deck = this.createDeck();
+
     // Shuffle
     for (let i = this.deck.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
     }
 
-    // Deal
-    this.tableau = [[], [], [], [], [], [], []];
-    this.foundations = [[], [], [], []];
-    this.waste = [];
-
-    let cardIndex = 0;
-    for (let i = 0; i < 7; i++) {
-      for (let j = 0; j <= i; j++) {
-        const card = this.deck[cardIndex++];
-        if (j === i) {
-          card.faceUp = true;
-        }
-        this.tableau[i].push(card);
-      }
-    }
-
-    // Rest to stock
-    this.stock = this.deck.slice(cardIndex);
-    this.moves = 0;
-    this.isPlaying = this.gameCanStart; // Only playable if player is linked
-    this.gameWon = false;
+    // Deal cards
+    this.dealCards();
     this.gameState = this.gameCanStart ? 'playing' : 'notStarted';
-    this.gameMessage = this.gameCanStart
-      ? 'Make your moves!'
-      : 'Link a player to start playing';
-    this.showModal = false;
-    this.selectedCard = null;
-    this.selectedPile = null;
+    this.args.model.gameState = this.gameState;
+    this.clearSelection();
 
     this.saveGameState();
   }
 
-  @action
-  drawCard() {
-    if (!this.gameCanStart || !this.isPlaying) return;
-
-    // Clear any existing selection when drawing new cards
+  @action clearSelection() {
     this.selectedCard = null;
     this.selectedPile = null;
-
-    if (this.stock.length === 0) {
-      // Return ALL waste cards to stock (not just displayed ones)
-      if (this.waste.length === 0) {
-        // No cards to recycle
-        return;
-      }
-
-      // Collect all cards from waste back to stock
-      const allWasteCards = [...this.waste];
-      allWasteCards.forEach((card) => (card.faceUp = false));
-      this.stock = allWasteCards.reverse();
-      this.waste = [];
-    } else {
-      // Draw up to 3 cards
-      const drawCount = Math.min(3, this.stock.length);
-      const newStock = [...this.stock];
-      const drawnCards = [];
-
-      for (let i = 0; i < drawCount; i++) {
-        const card = newStock.pop()!;
-        card.faceUp = true;
-        drawnCards.push(card);
-      }
-
-      // Add to existing waste pile
-      this.waste = [...this.waste, ...drawnCards];
-      this.stock = newStock;
-    }
-    this.moves++;
-    this.saveGameState();
-    this.checkWinCondition();
   }
 
   @action
-  selectCard(card: Card, pileType: string, pileIndex: number) {
+  selectCard(card: SolitaireCard, pileType: string, pileIndex: number) {
     if (!this.gameCanStart || !this.isPlaying || !card.faceUp) return;
+
+    // Special handling for waste pile - auto-move if possible
+    if (pileType === 'waste') {
+      this.autoMoveWasteCard(card);
+      return;
+    }
+
+    // Special handling for tableau pile - auto-move if possible
+    if (pileType === 'tableau') {
+      this.autoMoveTableauCard(card, pileIndex);
+      return;
+    }
 
     if (this.selectedCard === card) {
       // Deselect
-      this.selectedCard = null;
-      this.selectedPile = null;
+      this.clearSelection();
     } else if (this.selectedCard) {
       // Try to move to the clicked card's pile
       this.tryMove(pileType, pileIndex);
     } else {
-      // Select
+      // Select card and pile
       this.selectedCard = card;
       this.selectedPile = { type: pileType, index: pileIndex };
     }
-    this.checkWinCondition();
   }
 
   @action
@@ -263,39 +301,90 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     if (!this.selectedCard || !this.selectedPile) return;
 
     if (targetType === 'foundation') {
-      if (this.canMoveToFoundation(this.selectedCard, targetIndex)) {
-        this.moveToFoundation(targetIndex);
-      }
-    } else if (targetType === 'tableau') {
-      if (this.canMoveToTableau(this.selectedCard, targetIndex)) {
-        this.moveToTableau(targetIndex);
-      }
+      this.moveToFoundation(targetIndex);
+    } else {
+      this.moveToTableau(targetIndex);
     }
   }
 
-  @action
-  canMoveToFoundation(card: Card, foundationIndex: number): boolean {
-    const foundation = this.foundations[foundationIndex];
+  // Helper method to get the top card from a pile
+  private getTopCard(pile: SolitaireCard[]): SolitaireCard | null {
+    return pile.length > 0 ? pile[pile.length - 1] : null;
+  }
 
-    if (foundation.length === 0) {
+  @action
+  canMoveToFoundation(card: SolitaireCard, foundationIndex: number): boolean {
+    const foundation = this.foundations[foundationIndex];
+    const topCard = this.getTopCard(foundation);
+
+    // Empty foundation can only accept Aces
+    if (!topCard) {
       return card.rank === 'A';
     }
 
-    const topCard = foundation[foundation.length - 1];
+    // Must be same suit and one rank higher
     return card.suit === topCard.suit && card.value === topCard.value + 1;
   }
 
   @action
-  canMoveToTableau(card: Card, tableauIndex: number): boolean {
+  canMoveToTableau(card: SolitaireCard, tableauIndex: number): boolean {
     const pile = this.tableau[tableauIndex];
+    const topCard = this.getTopCard(pile);
 
-    if (pile.length === 0) {
+    // Empty tableau can only accept Kings
+    if (!topCard) {
       return card.rank === 'K';
     }
 
-    const topCard = pile[pile.length - 1];
-    // Check if the card being placed is one less in value and opposite color
+    // Must be opposite color and one rank lower
     return card.color !== topCard.color && card.value === topCard.value - 1;
+  }
+
+  // Helper method to check if a card can be moved (must be top card)
+  private canMoveCard(
+    card: SolitaireCard,
+    sourcePile: SolitaireCard[],
+  ): boolean {
+    return sourcePile.indexOf(card) === sourcePile.length - 1;
+  }
+
+  // Helper method to remove card from source pile
+  private removeCardFromSource(): void {
+    if (!this.selectedPile) return;
+
+    if (this.selectedPile.type === 'waste') {
+      this.waste = [...this.waste.slice(0, -1)];
+    } else if (this.selectedPile.type === 'tableau') {
+      const newTableau = [...this.tableau];
+      newTableau[this.selectedPile.index] = [
+        ...newTableau[this.selectedPile.index].slice(0, -1),
+      ];
+      this.tableau = newTableau;
+    }
+  }
+
+  // Helper method to add card to destination pile
+  private addCardToDestination(
+    destinationType: string,
+    destinationIndex: number,
+  ): void {
+    if (!this.selectedCard) return;
+
+    if (destinationType === 'foundation') {
+      const newFoundations = [...this.foundations];
+      newFoundations[destinationIndex] = [
+        ...newFoundations[destinationIndex],
+        this.selectedCard,
+      ];
+      this.foundations = newFoundations;
+    } else if (destinationType === 'tableau') {
+      const newTableau = [...this.tableau];
+      newTableau[destinationIndex] = [
+        ...newTableau[destinationIndex],
+        this.selectedCard,
+      ];
+      this.tableau = newTableau;
+    }
   }
 
   @action
@@ -303,46 +392,27 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     if (!this.selectedCard || !this.selectedPile) return;
 
     const sourcePile = this.getSourcePile();
-    const cardIndex = sourcePile.indexOf(this.selectedCard);
 
-    // Only allow moving the last card from waste or tableau to foundation
-    if (cardIndex === sourcePile.length - 1) {
-      if (this.selectedPile.type === 'waste') {
-        // Remove from waste
-        const newWaste = [...this.waste];
-        newWaste.pop();
-        this.waste = newWaste;
-      } else if (this.selectedPile.type === 'tableau') {
-        // Remove from tableau
-        const newTableau = [...this.tableau];
-        newTableau[this.selectedPile.index] = [
-          ...newTableau[this.selectedPile.index],
-        ];
-        newTableau[this.selectedPile.index].pop();
-        this.tableau = newTableau;
-      }
-
-      // Add to foundation
-      const newFoundations = [...this.foundations];
-      newFoundations[foundationIndex] = [
-        ...newFoundations[foundationIndex],
-        this.selectedCard,
-      ];
-      this.foundations = newFoundations;
-
-      // Flip new top card if needed
-      this.flipTopCard();
-
-      this.moves++;
-      this.saveGameState();
-      this.checkWinCondition();
-      // Clear selection first to prevent tracking issues
-      this.selectedCard = null;
-      this.selectedPile = null;
-    } else {
-      this.selectedCard = null;
-      this.selectedPile = null;
+    // Only allow moving the top card
+    if (!this.canMoveCard(this.selectedCard, sourcePile)) {
+      this.clearSelection();
+      return;
     }
+
+    // Validate the move
+    if (!this.canMoveToFoundation(this.selectedCard, foundationIndex)) {
+      this.clearSelection();
+      return;
+    }
+
+    // Execute the move
+    this.removeCardFromSource();
+    this.addCardToDestination('foundation', foundationIndex);
+    this.flipTopCard(this.selectedPile.type, this.selectedPile.index);
+
+    this.saveGameState();
+    this.clearSelection();
+    this.checkGameOver();
   }
 
   @action
@@ -350,47 +420,34 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     if (!this.selectedCard || !this.selectedPile) return;
 
     const sourcePile = this.getSourcePile();
-    const cardIndex = sourcePile.indexOf(this.selectedCard);
 
-    if (this.selectedPile.type === 'waste') {
-      // Can only move the last card from waste
-      if (cardIndex === this.waste.length - 1) {
-        const newWaste = [...this.waste];
-        const card = newWaste.pop()!;
-        this.waste = newWaste;
-
-        const newTableau = [...this.tableau];
-        newTableau[tableauIndex] = [...newTableau[tableauIndex], card];
-        this.tableau = newTableau;
-      }
-    } else if (this.selectedPile.type === 'tableau') {
-      // Move card and all cards on top of it
-      const sourceIndex = this.selectedPile.index;
-      const newTableau = [...this.tableau];
-
-      // Copy source pile and remove cards
-      const sourcePileCopy = [...newTableau[sourceIndex]];
-      const cardsToMove = sourcePileCopy.splice(cardIndex);
-      newTableau[sourceIndex] = sourcePileCopy;
-
-      // Add cards to destination
-      newTableau[tableauIndex] = [...newTableau[tableauIndex], ...cardsToMove];
-      this.tableau = newTableau;
+    // Only allow moving the top card
+    if (!this.canMoveCard(this.selectedCard, sourcePile)) {
+      this.clearSelection();
+      return;
     }
 
-    // Flip new top card if needed
-    this.flipTopCard();
+    // Validate the move
+    if (!this.canMoveToTableau(this.selectedCard, tableauIndex)) {
+      this.clearSelection();
+      return;
+    }
 
-    this.moves++;
+    // Ensure card stays face-up when moved
+    this.selectedCard.faceUp = true;
+
+    // Execute the move
+    this.removeCardFromSource();
+    this.addCardToDestination('tableau', tableauIndex);
+    this.flipTopCard(this.selectedPile.type, this.selectedPile.index);
+
     this.saveGameState();
-    this.checkWinCondition();
-    // Clear selection first to prevent tracking issues
-    this.selectedCard = null;
-    this.selectedPile = null;
+    this.clearSelection();
+    this.checkGameOver();
   }
 
   @action
-  getSourcePile(): Card[] {
+  getSourcePile(): SolitaireCard[] {
     if (!this.selectedPile) return [];
 
     if (this.selectedPile.type === 'waste') {
@@ -405,19 +462,84 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
   }
 
   @action
-  flipTopCard() {
-    if (!this.selectedPile || this.selectedPile.type !== 'tableau') return;
+  flipTopCard(sourcePileType: string, sourcePileIndex: number) {
+    // Only flip if the source was a tableau pile
+    if (sourcePileType !== 'tableau') return;
 
-    const pile = this.tableau[this.selectedPile.index];
+    const pile = this.tableau[sourcePileIndex];
     if (pile.length > 0 && !pile[pile.length - 1].faceUp) {
       pile[pile.length - 1].faceUp = true;
       this.saveGameState();
-      this.checkWinCondition();
     }
   }
 
   @action
-  doubleClickCard(card: Card, pileType: string, pileIndex: number) {
+  autoMoveWasteCard(card: SolitaireCard) {
+    // Only auto-move the top card from waste
+    if (this.waste.length === 0 || this.waste[this.waste.length - 1] !== card) {
+      return;
+    }
+
+    // First try to move to foundation (higher priority)
+    for (let i = 0; i < 4; i++) {
+      if (this.canMoveToFoundation(card, i)) {
+        this.selectedCard = card;
+        this.selectedPile = { type: 'waste', index: 0 };
+        this.moveToFoundation(i);
+        return;
+      }
+    }
+
+    // Then try to move to tableau
+    for (let i = 0; i < 7; i++) {
+      if (this.canMoveToTableau(card, i)) {
+        this.selectedCard = card;
+        this.selectedPile = { type: 'waste', index: 0 };
+        this.moveToTableau(i);
+        return;
+      }
+    }
+
+    // If no valid moves, just select the card for manual placement
+    this.selectedCard = card;
+    this.selectedPile = { type: 'waste', index: 0 };
+  }
+
+  @action
+  autoMoveTableauCard(card: SolitaireCard, sourcePileIndex: number) {
+    // Only auto-move the top card from tableau pile
+    const sourcePile = this.tableau[sourcePileIndex];
+    if (sourcePile.length === 0 || sourcePile[sourcePile.length - 1] !== card) {
+      return;
+    }
+
+    // First try to move to foundation (higher priority)
+    for (let i = 0; i < 4; i++) {
+      if (this.canMoveToFoundation(card, i)) {
+        this.selectedCard = card;
+        this.selectedPile = { type: 'tableau', index: sourcePileIndex };
+        this.moveToFoundation(i);
+        return;
+      }
+    }
+
+    // Then try to move to other tableau piles
+    for (let i = 0; i < 7; i++) {
+      if (i !== sourcePileIndex && this.canMoveToTableau(card, i)) {
+        this.selectedCard = card;
+        this.selectedPile = { type: 'tableau', index: sourcePileIndex };
+        this.moveToTableau(i);
+        return;
+      }
+    }
+
+    // If no valid moves, just select the card for manual placement
+    this.selectedCard = card;
+    this.selectedPile = { type: 'tableau', index: sourcePileIndex };
+  }
+
+  @action
+  doubleClickCard(card: SolitaireCard, pileType: string, pileIndex: number) {
     // Try to auto-move to foundation
     for (let i = 0; i < 4; i++) {
       if (this.canMoveToFoundation(card, i)) {
@@ -436,77 +558,102 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     }
   }
 
+  // Also update the drawCard method to be more aggressive about checking game over
   @action
-  checkWinCondition() {
-    const allFoundationsComplete = this.foundations.every(
-      (foundation) => foundation.length === 13,
-    );
+  drawCard() {
+    if (!this.gameCanStart || !this.isPlaying) return;
 
-    if (allFoundationsComplete && !this.gameWon) {
-      this.gameWon = true;
-      this.isPlaying = false;
-      this.gameState = 'gameOver';
-      this.gameMessage = '🎉 Congratulations! You won! 🎉';
-      this.showModal = true;
-      this.saveGameState();
-      this.recordGameResult();
-      return;
-    }
+    // Clear any existing selection when drawing new cards
+    this.clearSelection();
 
-    // Check if no more moves are possible
-    if (this.isGameOver()) {
-      this.gameWon = false;
-      this.isPlaying = false;
-      this.gameState = 'gameOver';
-      this.gameMessage = 'Game Over - No more moves available';
-      this.showModal = true;
-      this.saveGameState();
-      this.recordGameResult();
+    if (this.stock.length === 0) {
+      // Return ALL waste cards to stock when stock is empty
+      if (this.waste.length === 0) {
+        // No cards to recycle - check if game is over
+        this.checkGameOver();
+        return;
+      }
+
+      // Collect all cards from waste back to stock (face-down)
+      const allWasteCards = [...this.waste];
+      allWasteCards.forEach((card) => (card.faceUp = false));
+      this.stock = allWasteCards.reverse();
+      this.waste = [];
+    } else {
+      // Draw 1 card from stock to waste (face-up)
+      const newStock = [...this.stock];
+      const drawnCard = newStock.pop()!;
+      drawnCard.faceUp = true;
+
+      // Add the drawn card to waste
+      this.waste = [...this.waste, drawnCard];
+      this.stock = newStock;
     }
+    this.saveGameState();
+    // Check if game is over after drawing cards
+    this.checkGameOver();
   }
 
-  @action
+  get currentRealm() {
+    return this.args.model[realmURL];
+  }
+
+  // Check if the game is over (no more valid moves possible)
   isGameOver(): boolean {
-    // Check if there are any possible moves
-    // 1. Check if any card from waste can be moved
-    if (this.waste.length > 0) {
-      const topWasteCard = this.waste[this.waste.length - 1];
-      if (this.canMoveAnywhere(topWasteCard)) {
-        return false;
-      }
+    // Check if all foundations are complete (game won)
+    if (this.foundations.every((foundation) => foundation.length === 13)) {
+      return true;
     }
 
-    // 2. Check if any tableau card can be moved
-    for (let i = 0; i < this.tableau.length; i++) {
-      const pile = this.tableau[i];
-      for (let j = 0; j < pile.length; j++) {
-        const card = pile[j];
-        if (card.faceUp && this.canMoveAnywhere(card)) {
-          return false;
-        }
-      }
-    }
-
-    // 3. Check if we can draw more cards
-    if (this.stock.length > 0) {
-      return false;
-    }
-
-    return true;
+    // Check if there are any valid moves available
+    return !this.hasValidMoves();
   }
 
-  @action
-  canMoveAnywhere(card: Card): boolean {
-    // Check if card can move to any foundation
-    for (let i = 0; i < 4; i++) {
-      if (this.canMoveToFoundation(card, i)) {
+  // Check if there are any valid moves available
+  hasValidMoves(): boolean {
+    // If we can draw more cards, there are always potential moves
+    if (this.stock.length > 0) {
+      return true;
+    }
+
+    // Check if top waste card can be played
+    if (this.canPlayWasteCard()) {
+      return true;
+    }
+
+    // Check if any tableau cards can be played
+    if (this.canPlayTableauCards()) {
+      return true;
+    }
+
+    // Check if any waste cards (not just top) can be played
+    if (this.canPlayAnyWasteCard()) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // Helper method to check if the top waste card can be played
+  private canPlayWasteCard(): boolean {
+    if (this.waste.length === 0) return false;
+
+    const topWasteCard = this.waste[this.waste.length - 1];
+
+    // Check foundation moves
+    for (
+      let foundationIndex = 0;
+      foundationIndex < numFoundations;
+      foundationIndex++
+    ) {
+      if (this.canMoveToFoundation(topWasteCard, foundationIndex)) {
         return true;
       }
     }
 
-    // Check if card can move to any tableau pile
-    for (let i = 0; i < 7; i++) {
-      if (this.canMoveToTableau(card, i)) {
+    // Check tableau moves
+    for (let tableauIndex = 0; tableauIndex < numTableauPiles; tableauIndex++) {
+      if (this.canMoveToTableau(topWasteCard, tableauIndex)) {
         return true;
       }
     }
@@ -514,136 +661,136 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     return false;
   }
 
-  get currentRealm() {
-    return this.args.model[realmURL];
-  }
+  // Helper method to check if any tableau cards can be played
+  private canPlayTableauCards(): boolean {
+    for (let pileIndex = 0; pileIndex < numTableauPiles; pileIndex++) {
+      const pile = this.tableau[pileIndex];
+      if (pile.length === 0) continue;
 
-  // Restore game state from model
-  restoreGameState() {
-    this.gameState = this.args.model.gameState || 'notStarted';
-    this.gameMessage = this.args.model.gameMessage || 'Start a new game';
-    this.moves = this.args.model.moves || 0;
-    this.isPlaying = this.args.model.isPlaying || false;
-    this.gameWon = this.args.model.gameWon || false;
-    this.showModal = this.args.model.showModal || false;
+      const topCard = this.getTopCard(pile);
+      if (!topCard || !topCard.faceUp) continue;
 
-    // Restore card arrays
-    this.stock = this.convertCardsFromModel(this.args.model.stock || []);
-    this.waste = this.convertCardsFromModel(this.args.model.waste || []);
+      // Check foundation moves
+      for (
+        let foundationIndex = 0;
+        foundationIndex < numFoundations;
+        foundationIndex++
+      ) {
+        if (this.canMoveToFoundation(topCard, foundationIndex)) {
+          return true;
+        }
+      }
 
-    // Restore foundations (4 separate piles) - properly structured
-    this.foundations = [[], [], [], []];
-
-    // Try to restore from structured data first
-    if ((this.args.model as any).foundationPile0 !== undefined) {
-      this.foundations[0] = this.convertCardsFromModel(
-        (this.args.model as any).foundationPile0 || [],
-      );
-      this.foundations[1] = this.convertCardsFromModel(
-        (this.args.model as any).foundationPile1 || [],
-      );
-      this.foundations[2] = this.convertCardsFromModel(
-        (this.args.model as any).foundationPile2 || [],
-      );
-      this.foundations[3] = this.convertCardsFromModel(
-        (this.args.model as any).foundationPile3 || [],
-      );
-    } else if (
-      this.args.model.foundations &&
-      this.args.model.foundations.length > 0
-    ) {
-      // Fallback to old flattened format - distribute evenly (not ideal but better than nothing)
-      const foundationCards = this.convertCardsFromModel(
-        this.args.model.foundations,
-      );
-      foundationCards.forEach((card, index) => {
-        const foundationIndex = index % 4;
-        this.foundations[foundationIndex].push(card);
-      });
-    }
-
-    // Restore tableau (7 separate piles) - properly structured
-    this.tableau = [[], [], [], [], [], [], []];
-
-    // Try to restore from structured data first
-    if ((this.args.model as any).tableauPile0 !== undefined) {
-      this.tableau[0] = this.convertCardsFromModel(
-        (this.args.model as any).tableauPile0 || [],
-      );
-      this.tableau[1] = this.convertCardsFromModel(
-        (this.args.model as any).tableauPile1 || [],
-      );
-      this.tableau[2] = this.convertCardsFromModel(
-        (this.args.model as any).tableauPile2 || [],
-      );
-      this.tableau[3] = this.convertCardsFromModel(
-        (this.args.model as any).tableauPile3 || [],
-      );
-      this.tableau[4] = this.convertCardsFromModel(
-        (this.args.model as any).tableauPile4 || [],
-      );
-      this.tableau[5] = this.convertCardsFromModel(
-        (this.args.model as any).tableauPile5 || [],
-      );
-      this.tableau[6] = this.convertCardsFromModel(
-        (this.args.model as any).tableauPile6 || [],
-      );
-    } else if (this.args.model.tableau && this.args.model.tableau.length > 0) {
-      // Fallback to old flattened format - distribute according to deal pattern
-      const tableauCards = this.convertCardsFromModel(this.args.model.tableau);
-      let cardIndex = 0;
-      for (let pileIndex = 0; pileIndex < 7; pileIndex++) {
-        const cardsInThisPile = pileIndex + 1; // Pile 1 gets 1 card, pile 2 gets 2, etc.
-        for (
-          let i = 0;
-          i < cardsInThisPile && cardIndex < tableauCards.length;
-          i++
+      // Check other tableau moves
+      for (let targetIndex = 0; targetIndex < numTableauPiles; targetIndex++) {
+        if (
+          pileIndex !== targetIndex &&
+          this.canMoveToTableau(topCard, targetIndex)
         ) {
-          this.tableau[pileIndex].push(tableauCards[cardIndex]);
-          cardIndex++;
+          return true;
         }
       }
     }
 
-    // Ensure tableau follows solitaire rules (only last card face-up)
-    this.fixTableauFaceUpState();
-
-    // Clear any existing selection
-    this.selectedCard = null;
-    this.selectedPile = null;
+    return false;
   }
 
-  // Fix tableau face-up state to follow solitaire rules (only last card face-up)
-  @action
-  fixTableauFaceUpState() {
-    this.tableau.forEach((pile) => {
-      if (pile.length > 0) {
-        // Set all cards to face-down first
-        pile.forEach((card) => {
-          card.faceUp = false;
-        });
-        // Then set only the last card to face-up
-        pile[pile.length - 1].faceUp = true;
+  // Helper method to check if any waste card (not just top) can be played
+  private canPlayAnyWasteCard(): boolean {
+    for (let cardIndex = 0; cardIndex < this.waste.length; cardIndex++) {
+      const wasteCard = this.waste[cardIndex];
+
+      // Check foundation moves
+      for (
+        let foundationIndex = 0;
+        foundationIndex < numFoundations;
+        foundationIndex++
+      ) {
+        if (this.canMoveToFoundation(wasteCard, foundationIndex)) {
+          return true;
+        }
       }
-    });
+
+      // Check tableau moves
+      for (
+        let tableauIndex = 0;
+        tableauIndex < numTableauPiles;
+        tableauIndex++
+      ) {
+        if (this.canMoveToTableau(wasteCard, tableauIndex)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
-  // Convert cards from model format to component format
-  convertCardsFromModel(modelCards: any[]): Card[] {
+  // Check if game is over and update game state accordingly
+  checkGameOver() {
+    if (this.isGameOver()) {
+      this.gameState = 'gameOver';
+      this.args.model.gameState = 'gameOver';
+      this.saveGameState();
+      this.recordGameResult();
+    }
+  }
+
+  // Helper method to get pile field name by index
+  private getPileFieldName(
+    pileType: 'foundation' | 'tableau',
+    index: number,
+  ): string {
+    return `${pileType}Pile${index}`;
+  }
+
+  // Restore game state from model
+  restoreGameState() {
+    this.gameState = (this.args.model.gameState as GameState) || 'notStarted';
+
+    // Restore basic piles
+    this.stock = this.convertCardsFromFields(this.args.model.stock || []);
+    this.waste = this.convertCardsFromFields(this.args.model.waste || []);
+
+    // Restore foundation piles
+    this.foundations = Array(numFoundations)
+      .fill(null)
+      .map((_, index) => {
+        const fieldName = this.getPileFieldName('foundation', index);
+        return this.convertCardsFromFields(
+          (this.args.model as any)[fieldName] || [],
+        );
+      });
+
+    // Restore tableau piles
+    this.tableau = Array(numTableauPiles)
+      .fill(null)
+      .map((_, index) => {
+        const fieldName = this.getPileFieldName('tableau', index);
+        return this.convertCardsFromFields(
+          (this.args.model as any)[fieldName] || [],
+        );
+      });
+
+    this.clearSelection();
+  }
+
+  // Convert cards from field format to component format
+  convertCardsFromFields(modelCards: SolitaireField[]): SolitaireCard[] {
     return modelCards.map((card) => ({
       suit: card.suit,
       rank: card.rank,
       value: card.value,
-      color: card.color,
+      color: card.color as 'red' | 'black',
       faceUp: card.faceUp,
     }));
   }
 
-  // Convert cards from component format to model format
-  convertCardsToModel(cards: Card[]): any[] {
+  // Convert cards from component format to field format
+  convertCardsToFields(cards: SolitaireCard[]): SolitaireField[] {
     return cards.map(
       (card) =>
-        new SolitaireCardField({
+        new SolitaireField({
           suit: card.suit,
           rank: card.rank,
           value: card.value,
@@ -655,67 +802,46 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
 
   // Save game state back to model for persistence
   saveGameState() {
-    this.args.model.gameState = this.gameState;
-    this.args.model.gameMessage = this.gameMessage;
-    this.args.model.moves = this.moves;
-    this.args.model.isPlaying = this.isPlaying;
-    this.args.model.gameWon = this.gameWon;
-    this.args.model.showModal = this.showModal;
+    // Save basic piles
+    this.args.model.stock = this.convertCardsToFields(this.stock);
+    this.args.model.waste = this.convertCardsToFields(this.waste);
 
-    // Save card arrays
-    this.args.model.stock = this.convertCardsToModel(this.stock);
-    this.args.model.waste = this.convertCardsToModel(this.waste);
-
-    // Save foundations with structure information
-    (this.args.model as any).foundationPile0 = this.convertCardsToModel(
+    // Save foundation piles
+    this.args.model.foundationPile0 = this.convertCardsToFields(
       this.foundations[0] || [],
     );
-    (this.args.model as any).foundationPile1 = this.convertCardsToModel(
+    this.args.model.foundationPile1 = this.convertCardsToFields(
       this.foundations[1] || [],
     );
-    (this.args.model as any).foundationPile2 = this.convertCardsToModel(
+    this.args.model.foundationPile2 = this.convertCardsToFields(
       this.foundations[2] || [],
     );
-    (this.args.model as any).foundationPile3 = this.convertCardsToModel(
+    this.args.model.foundationPile3 = this.convertCardsToFields(
       this.foundations[3] || [],
     );
 
-    // Also save flattened foundations for backward compatibility
-    const allFoundationCards: Card[] = [];
-    this.foundations.forEach((pile) => {
-      allFoundationCards.push(...pile);
-    });
-    this.args.model.foundations = this.convertCardsToModel(allFoundationCards);
-
-    // Save tableau with structure information
-    (this.args.model as any).tableauPile0 = this.convertCardsToModel(
+    // Save tableau piles
+    this.args.model.tableauPile0 = this.convertCardsToFields(
       this.tableau[0] || [],
     );
-    (this.args.model as any).tableauPile1 = this.convertCardsToModel(
+    this.args.model.tableauPile1 = this.convertCardsToFields(
       this.tableau[1] || [],
     );
-    (this.args.model as any).tableauPile2 = this.convertCardsToModel(
+    this.args.model.tableauPile2 = this.convertCardsToFields(
       this.tableau[2] || [],
     );
-    (this.args.model as any).tableauPile3 = this.convertCardsToModel(
+    this.args.model.tableauPile3 = this.convertCardsToFields(
       this.tableau[3] || [],
     );
-    (this.args.model as any).tableauPile4 = this.convertCardsToModel(
+    this.args.model.tableauPile4 = this.convertCardsToFields(
       this.tableau[4] || [],
     );
-    (this.args.model as any).tableauPile5 = this.convertCardsToModel(
+    this.args.model.tableauPile5 = this.convertCardsToFields(
       this.tableau[5] || [],
     );
-    (this.args.model as any).tableauPile6 = this.convertCardsToModel(
+    this.args.model.tableauPile6 = this.convertCardsToFields(
       this.tableau[6] || [],
     );
-
-    // Also save flattened tableau for backward compatibility
-    const allTableauCards: Card[] = [];
-    this.tableau.forEach((pile) => {
-      allTableauCards.push(...pile);
-    });
-    this.args.model.tableau = this.convertCardsToModel(allTableauCards);
   }
 
   // Record game result when game ends
@@ -739,7 +865,7 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     }
 
     // Determine outcome based on game result
-    const outcome = this.gameWon ? 'Win' : 'Lose';
+    const outcome = this.hasPlayerWon ? 'Win' : 'Lose';
 
     // Create GameResult for player
     const playerGameResult = new GameResult({
@@ -775,16 +901,10 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
         </div>
       {{/unless}}
 
-      {{#if this.showModal}}
+      {{#if this.shouldShowGameOverModal}}
         <div class='win-modal'>
           <div class='win-content'>
-            {{#if this.gameWon}}
-              <h2>🎉 You Won! 🎉</h2>
-              <p>Completed in {{this.moves}} moves</p>
-            {{else}}
-              <h2>💀 Game Over 💀</h2>
-              <p>No more moves available</p>
-            {{/if}}
+            <h2>{{this.gameStatusMessage}}</h2>
             <button {{on 'click' this.initializeGame}}>Play Again</button>
           </div>
         </div>
@@ -794,9 +914,8 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
         <div class='header'>
           <h1>♠ Solitaire ♣</h1>
           <div class='stats'>
-            <span>Moves: {{this.moves}}</span>
           </div>
-          <div class='game-message'>{{this.gameMessage}}</div>
+          <div class='game-message'>{{this.gameStatusMessage}}</div>
           <div class='controls'>
             <button
               class='new-game-btn'
@@ -816,60 +935,49 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
                 class='stock pile'
                 {{on 'click' this.drawCard}}
               >
-                {{#if (gt this.stock.length 0)}}
+                {{#if this.hasStockCards}}
                   <div class='card face-down'>
                     <div class='card-back'></div>
                   </div>
-                  <span class='pile-count'>{{this.stock.length}}</span>
+                  <span class='pile-count'>{{this.stockCardCount}}</span>
                 {{else}}
                   <div class='empty-stock'>↻</div>
                 {{/if}}
               </button>
 
               <div class='waste pile'>
-                {{#if (gt this.waste.length 0)}}
+                {{#if this.hasWasteCards}}
                   <div class='waste-stack'>
-                    {{#let (subtract this.waste.length 1) as |lastIndex|}}
-                      {{#let (subtract lastIndex 2) as |startIndex|}}
-                        {{#each
-                          (slice
-                            this.waste
-                            (if (lt startIndex 0) 0 startIndex)
-                            this.waste.length
-                          )
-                          as |card index|
-                        }}
-                          <button
-                            type='button'
-                            class='card face-up
-                              {{if (eq this.selectedCard card) "selected"}}
-                              {{if
-                                (eq card (get this.waste lastIndex))
-                                "top-card"
-                              }}'
-                            style={{htmlSafe
-                              (concat 'left: ' (multiply index 30) 'px')
-                            }}
-                            {{on
-                              'click'
-                              (fn
-                                this.selectCard
+                    {{#each this.wasteStackCards as |card index|}}
+                      {{#let
+                        (add this.wasteStackStartIndex index)
+                        as |actualIndex|
+                      }}
+                        <button
+                          type='button'
+                          class='card face-up
+                            {{if (eq this.selectedCard card) "selected"}}
+                            {{if
+                              (eq
                                 card
-                                'waste'
-                                (add (if (lt startIndex 0) 0 startIndex) index)
+                                (get this.waste (subtract this.waste.length 1))
                               )
-                            }}
-                            {{on
-                              'dblclick'
-                              (fn
-                                this.doubleClickCard
-                                card
-                                'waste'
-                                (add (if (lt startIndex 0) 0 startIndex) index)
-                              )
-                            }}
-                          >
-                            <div class='card-content'>
+                              "top-card"
+                            }}'
+                          style={{htmlSafe
+                            (concat 'left: ' (multiply index 30) 'px')
+                          }}
+                          {{on
+                            'click'
+                            (fn this.selectCard card 'waste' actualIndex)
+                          }}
+                          {{on
+                            'dblclick'
+                            (fn this.doubleClickCard card 'waste' actualIndex)
+                          }}
+                        >
+                          <div class='card-content'>
+                            <div class='card-top'>
                               <span
                                 class='rank {{card.color}}'
                               >{{card.rank}}</span>
@@ -877,10 +985,23 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
                                 class='suit {{card.color}}'
                               >{{card.suit}}</span>
                             </div>
-                          </button>
-                        {{/each}}
+                            <div class='card-center'>
+                              <span
+                                class='suit {{card.color}}'
+                              >{{card.suit}}</span>
+                            </div>
+                            <div class='card-bottom'>
+                              <span
+                                class='rank {{card.color}}'
+                              >{{card.rank}}</span>
+                              <span
+                                class='suit {{card.color}}'
+                              >{{card.suit}}</span>
+                            </div>
+                          </div>
+                        </button>
                       {{/let}}
-                    {{/let}}
+                    {{/each}}
                   </div>
                 {{/if}}
               </div>
@@ -900,12 +1021,27 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
                     }}
                       <div class='card face-up'>
                         <div class='card-content'>
-                          <span
-                            class='rank {{topCard.color}}'
-                          >{{topCard.rank}}</span>
-                          <span
-                            class='suit {{topCard.color}}'
-                          >{{topCard.suit}}</span>
+                          <div class='card-top'>
+                            <span
+                              class='rank {{topCard.color}}'
+                            >{{topCard.rank}}</span>
+                            <span
+                              class='suit {{topCard.color}}'
+                            >{{topCard.suit}}</span>
+                          </div>
+                          <div class='card-center'>
+                            <span
+                              class='suit {{topCard.color}}'
+                            >{{topCard.suit}}</span>
+                          </div>
+                          <div class='card-bottom'>
+                            <span
+                              class='rank {{topCard.color}}'
+                            >{{topCard.rank}}</span>
+                            <span
+                              class='suit {{topCard.color}}'
+                            >{{topCard.suit}}</span>
+                          </div>
                         </div>
                       </div>
                     {{/let}}
@@ -955,8 +1091,27 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
                     >
                       {{#if card.faceUp}}
                         <div class='card-content'>
-                          <span class='rank {{card.color}}'>{{card.rank}}</span>
-                          <span class='suit {{card.color}}'>{{card.suit}}</span>
+                          <div class='card-top'>
+                            <span
+                              class='rank {{card.color}}'
+                            >{{card.rank}}</span>
+                            <span
+                              class='suit {{card.color}}'
+                            >{{card.suit}}</span>
+                          </div>
+                          <div class='card-center'>
+                            <span
+                              class='suit {{card.color}}'
+                            >{{card.suit}}</span>
+                          </div>
+                          <div class='card-bottom'>
+                            <span
+                              class='rank {{card.color}}'
+                            >{{card.rank}}</span>
+                            <span
+                              class='suit {{card.color}}'
+                            >{{card.suit}}</span>
+                          </div>
                         </div>
                       {{else}}
                         <div class='card-back'></div>
@@ -1069,6 +1224,31 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
         background: #666;
       }
 
+      .check-status-btn {
+        background: #ff9800;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        font-size: 1.1em;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+
+      .check-status-btn:hover {
+        background: #f57c00;
+      }
+
+      .check-status-btn:disabled {
+        background: #666;
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      .check-status-btn:disabled:hover {
+        background: #666;
+      }
+
       .game-board {
         max-width: 900px;
         margin: 0 auto;
@@ -1164,7 +1344,43 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding-top: 10px;
+        justify-content: space-between;
+        height: 100%;
+        padding: 8px;
+        position: relative;
+      }
+
+      .card-top {
+        position: absolute;
+        top: 4px;
+        left: 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 0.9em;
+        line-height: 1;
+      }
+
+      .card-bottom {
+        position: absolute;
+        bottom: 4px;
+        right: 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 0.9em;
+        line-height: 1;
+        transform: rotate(180deg);
+      }
+
+      .card-center {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        font-size: 1.8em;
+        line-height: 1;
       }
 
       .card:hover {
@@ -1307,7 +1523,7 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
 }
 
 // Card field definition for solitaire cards
-class SolitaireCardField extends FieldDef {
+class SolitaireField extends FieldDef {
   static displayName = 'Solitaire Card';
   @field suit = contains(StringField);
   @field rank = contains(StringField);
@@ -1321,32 +1537,25 @@ export class Solitaire extends CardDef {
 
   @field player = linksTo(() => Player);
   @field gameState = contains(StringField);
-  @field gameMessage = contains(StringField);
-  @field moves = contains(NumberField);
-  @field isPlaying = contains(BooleanField);
-  @field gameWon = contains(BooleanField);
-  @field showModal = contains(BooleanField);
 
   // Game state persistence
-  @field stock = containsMany(SolitaireCardField);
-  @field waste = containsMany(SolitaireCardField);
-  @field foundations = containsMany(SolitaireCardField);
-  @field tableau = containsMany(SolitaireCardField);
+  @field stock = containsMany(SolitaireField);
+  @field waste = containsMany(SolitaireField);
 
   // Structured foundation piles for proper state persistence
-  @field foundationPile0 = containsMany(SolitaireCardField);
-  @field foundationPile1 = containsMany(SolitaireCardField);
-  @field foundationPile2 = containsMany(SolitaireCardField);
-  @field foundationPile3 = containsMany(SolitaireCardField);
+  @field foundationPile0 = containsMany(SolitaireField);
+  @field foundationPile1 = containsMany(SolitaireField);
+  @field foundationPile2 = containsMany(SolitaireField);
+  @field foundationPile3 = containsMany(SolitaireField);
 
   // Structured tableau piles for proper state persistence
-  @field tableauPile0 = containsMany(SolitaireCardField);
-  @field tableauPile1 = containsMany(SolitaireCardField);
-  @field tableauPile2 = containsMany(SolitaireCardField);
-  @field tableauPile3 = containsMany(SolitaireCardField);
-  @field tableauPile4 = containsMany(SolitaireCardField);
-  @field tableauPile5 = containsMany(SolitaireCardField);
-  @field tableauPile6 = containsMany(SolitaireCardField);
+  @field tableauPile0 = containsMany(SolitaireField);
+  @field tableauPile1 = containsMany(SolitaireField);
+  @field tableauPile2 = containsMany(SolitaireField);
+  @field tableauPile3 = containsMany(SolitaireField);
+  @field tableauPile4 = containsMany(SolitaireField);
+  @field tableauPile5 = containsMany(SolitaireField);
+  @field tableauPile6 = containsMany(SolitaireField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Solitaire) {
