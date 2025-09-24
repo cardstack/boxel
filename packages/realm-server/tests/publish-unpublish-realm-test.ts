@@ -373,6 +373,19 @@ module(basename(__filename), function () {
           firstTimestamp,
           'Timestamp is updated on republish',
         );
+
+        let publishedRealmId = secondResponse.body.data.id;
+        let publishedDir = join(dir.name, 'realm_server_3', '_published');
+        let publishedRealmPath = join(publishedDir, publishedRealmId);
+
+        let publishedRealmConfig = readJsonSync(
+          join(publishedRealmPath, '.realm.json'),
+        );
+
+        assert.notOk(
+          publishedRealmConfig.publishable,
+          'published realm config should have publishable: false',
+        );
       });
 
       test('POST /_unpublish-realm can unpublish realm successfully', async function (assert) {
