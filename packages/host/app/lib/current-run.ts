@@ -405,9 +405,8 @@ export class CurrentRun {
       throw error;
     }
     let { content, lastModified } = fileRef;
-    // obtain created_at from DB for this file's local path
-    let resourceCreatedAtFromDB = await this.batch.getCreatedTime(localPath);
-    let resourceCreatedAt = resourceCreatedAtFromDB ?? 0;
+    // ensure created_at exists for this file and use it for resourceCreatedAt
+    let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url, fileRef);
     } else {
@@ -512,8 +511,7 @@ export class CurrentRun {
     let deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
     // DB created_at for modules
     let moduleLocalPath = this.#realmPaths.local(url);
-    let moduleCreatedAt =
-      (await this.batch.getCreatedTime(moduleLocalPath)) ?? 0;
+    let moduleCreatedAt = await this.batch.ensureFileCreatedAt(moduleLocalPath);
     await this.batch.updateEntry(url, {
       type: 'module',
       source: ref.content,

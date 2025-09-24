@@ -151,6 +151,31 @@ export class Batch {
     return created != null ? parseInt(created) : null;
   }
 
+  // Ensure a created_at row exists for this file in realm_file_meta and return it
+  async ensureFileCreatedAt(localPath: string): Promise<number> {
+    // Try existing first
+    let existing = await this.getCreatedTime(localPath);
+    if (existing != null) {
+      return existing;
+    }
+    // Insert and re-read
+    let now = Math.floor(Date.now() / 1000);
+    await this.#query([
+      'INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES',
+      '(',
+      param(this.realmURL.href),
+      ',',
+      param(localPath),
+      ',',
+      param(now),
+      ')',
+      'ON CONFLICT (realm_url, file_path) DO NOTHING',
+    ]);
+    // Re-read to get the authoritative value (handles race/clock)
+    let created = await this.getCreatedTime(localPath);
+    return created ?? now;
+  }
+
   @Memoize()
   private get nodeResolvedInvalidations() {
     return [...this.invalidations].map(

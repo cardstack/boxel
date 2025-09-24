@@ -130,7 +130,6 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
-  created: number;
 
   [key: symbol]: object;
 }
@@ -1385,20 +1384,9 @@ export class Realm {
         requestContext,
       });
     }
-    let createdFromDb: number | null = null;
-    try {
-      createdFromDb = await this.getCreatedTime(ref.path);
-    } catch (_e) {
-      createdFromDb = null;
-    }
-    let createdHeader =
-      createdFromDb != null
-        ? { 'x-created': formatRFC7231(createdFromDb * 1000) }
-        : {};
-
-    let headers = {
+    let createdFromDb = await this.getCreatedTime(ref.path);
+    let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
-      ...createdHeader,
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
@@ -1406,6 +1394,9 @@ export class Realm {
       etag: String(ref.lastModified),
       'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
     };
+    if (createdFromDb != null) {
+      headers['x-created'] = formatRFC7231(createdFromDb * 1000);
+    }
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
@@ -2252,10 +2243,14 @@ export class Realm {
         let innerPath = this.paths.local(
           new URL(`${this.paths.directoryURL(dir).href}${entry.name}`),
         );
+        let createdFromDb = await this.getCreatedTime(innerPath);
         meta = {
           kind: 'file',
           lastModified: (await this.#adapter.lastModified(innerPath)) ?? null,
-        };
+          ...(createdFromDb != null
+            ? { resourceCreatedAt: createdFromDb }
+            : {}),
+        } as FileMeta;
       } else {
         meta = { kind: 'directory' };
       }
