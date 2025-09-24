@@ -75,6 +75,7 @@ interface Signature {
         updateSubmode: (submode: Submode) => void;
       },
     ];
+    topBar: [];
   };
 }
 
@@ -417,6 +418,7 @@ export default class SubmodeLayout extends Component<Signature> {
                   }}
                 />
               {{/if}}
+              {{yield to='topBar'}}
             {{/if}}
           </div>
           {{#if this.workspaceChooserOpened}}
@@ -556,10 +558,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .top-left-menu {
-        width: var(--operator-mode-left-column);
-        position: absolute;
-        top: 0;
-        left: 0;
+        width: 100%;
         padding: var(--operator-mode-spacing);
         z-index: var(--host-top-left-menu-z-index);
 
