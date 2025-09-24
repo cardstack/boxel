@@ -397,11 +397,6 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
-  let realmServer = getService('realm-server');
-  if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    realmServer.setAvailableRealmURLs([realmURL]);
-  }
-
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
@@ -472,10 +467,73 @@ async function setupTestRealm({
   await worker.run();
   await realm.start();
 
+  let realmServer = getService('realm-server');
+  if (!realmServer.availableRealmURLs.includes(realmURL)) {
+    realmServer.setAvailableRealmURLs([realmURL]);
+  }
+
   return { realm, adapter };
 }
 
+export function setupMockAuthEndpoints() {
+  getService('network').mount(
+    async (req: Request) => {
+      if (req.url.includes('_realm-auth')) {
+        return new Response(
+          JSON.stringify({
+            [testRealmURL]: createJWT(
+              {
+                user: '@testuser:localhost',
+                sessionRoom: getRoomIdForRealmAndUser(
+                  testRealmURL,
+                  '@testuser:localhost',
+                ),
+                permissions: ['read', 'write'],
+              },
+              '1d',
+              testRealmSecretSeed,
+            ),
+          }),
+          { status: 200 },
+        );
+      }
+      if (req.url.includes('_server-session')) {
+        let data = await req.json();
+        if (!data.challenge) {
+          return new Response(
+            JSON.stringify({
+              challenge: 'test',
+              room: 'test-auth-session-room',
+            }),
+            {
+              status: 401,
+            },
+          );
+        } else {
+          return new Response('Ok', {
+            status: 200,
+            headers: {
+              Authorization: createJWT(
+                {
+                  user: '@testuser:localhost',
+                  sessionRoom: 'test-auth-session-room',
+                },
+                '1d',
+                testRealmSecretSeed,
+              ),
+            },
+          });
+        }
+      }
+      return null;
+    },
+    { prepend: true },
+  );
+}
+
 export function setupUserSubscription(matrixRoomId: string) {
+  // TODO: make this cleaner & separate the subscription setup from the auth setup
+  setupMockAuthEndpoints();
   const userResponseBody = {
     data: {
       type: 'user',
@@ -530,53 +588,6 @@ export function setupUserSubscription(matrixRoomId: string) {
     async (req: Request) => {
       if (req.url.includes('_user')) {
         return new Response(JSON.stringify(userResponseBody));
-      }
-      if (req.url.includes('_realm-auth')) {
-        return new Response(
-          JSON.stringify({
-            [testRealmURL]: createJWT(
-              {
-                user: '@testuser:localhost',
-                sessionRoom: getRoomIdForRealmAndUser(
-                  testRealmURL,
-                  '@testuser:localhost',
-                ),
-                permissions: ['read', 'write'],
-              },
-              '1d',
-              testRealmSecretSeed,
-            ),
-          }),
-          { status: 200 },
-        );
-      }
-      if (req.url.includes('_server-session')) {
-        let data = await req.json();
-        if (!data.challenge) {
-          return new Response(
-            JSON.stringify({
-              challenge: 'test',
-              room: matrixRoomId,
-            }),
-            {
-              status: 401,
-            },
-          );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: '@testuser:localhost',
-                  sessionRoom: matrixRoomId,
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
-        }
       }
       return null;
     },
@@ -691,7 +702,7 @@ export function setupRealmServerEndpoints(
   let defaultEndpoints: RealmServerEndpoint[] = [
     {
       route: '_realm-auth',
-      getResponse: async function (req: Request) {
+      getResponse: async function (_req: Request) {
         return new Response(JSON.stringify({}), { status: 200 });
       },
     },
