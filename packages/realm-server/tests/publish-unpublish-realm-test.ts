@@ -12,15 +12,16 @@ import {
   type QueuePublisher,
   type QueueRunner,
 } from '@cardstack/runtime-common';
+import { type RealmServer } from '../server';
 import { PgAdapter } from '@cardstack/postgres';
 import {
   setupDB,
   setupPermissionedRealm,
   runTestRealmServer,
   closeServer,
+  createJWT,
   createVirtualNetwork,
   realmSecretSeed,
-  realmServerSecretSeed,
   matrixURL,
   setupBaseRealmServer,
 } from './helpers';
@@ -31,6 +32,7 @@ const testRealm2URL = 'http://127.0.0.1:4445/test/';
 module(basename(__filename), function () {
   module('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
+    let testRealmServer: RealmServer;
     let testRealm: Realm;
     let dbAdapter: PgAdapter;
     let publisher: QueuePublisher;
@@ -60,21 +62,24 @@ module(basename(__filename), function () {
       runner: QueueRunner,
     ) {
       virtualNetwork = createVirtualNetwork();
-      ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
-        await runTestRealmServer({
-          virtualNetwork,
-          testRealmDir,
-          realmsRootPath: join(dir.name, 'realm_server_3'),
-          realmURL: new URL(testRealm2URL),
-          dbAdapter,
-          publisher,
-          runner,
-          matrixURL,
-          permissions: {
-            '*': ['read', 'write'],
-            [ownerUserId]: DEFAULT_PERMISSIONS,
-          },
-        }));
+      ({
+        testRealm: testRealm,
+        testRealmServer: testRealmServer,
+        testRealmHttpServer: testRealmHttpServer,
+      } = await runTestRealmServer({
+        virtualNetwork,
+        testRealmDir,
+        realmsRootPath: join(dir.name, 'realm_server_3'),
+        realmURL: new URL(testRealm2URL),
+        dbAdapter,
+        publisher,
+        runner,
+        matrixURL,
+        permissions: {
+          '*': ['read', 'write'],
+          [ownerUserId]: DEFAULT_PERMISSIONS,
+        },
+      }));
       request = supertest(testRealmHttpServer);
     }
     setupBaseRealmServer(hooks, matrixURL);
@@ -160,6 +165,11 @@ module(basename(__filename), function () {
         );
 
         publishableRealmUrl = response.body.data.id;
+
+        dbAdapter.execute(`
+          INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+          VALUES ('${publishableRealmUrl}', '*', true, true, true)
+        `);
       });
 
       test.only('POST /_publish-realm can publish realm successfully', async function (assert) {
@@ -233,16 +243,26 @@ module(basename(__filename), function () {
 
         console.log(`about to get ${sourceRealmInfoPath}`);
         // Test that source realm info includes lastPublishedAt as an object
+
+        // let sourceRealmHack = testRealmServer.realmsFIXMEHack.find((r) => {
+        //   return r.url === publishableRealmUrl;
+        // });
+
+        // console.log('found source realm url', sourceRealmHack?.url);
+
+        // if (!sourceRealmHack) {
+        //   throw new Error(
+        //     'Could not find source realm: ' + publishableRealmUrl,
+        //   );
+        // }
+
         let sourceRealmInfoResponse = await request
           .get(sourceRealmInfoPath)
-          .set('Accept', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: ownerUserId, sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          );
+          .set('Accept', 'application/vnd.api+json');
+        // .set(
+        //   'Authorization',
+        //   `Bearer ${createJWT(sourceRealmHack, ownerUserId, ['read'])}`,
+        // );
 
         console.log(
           'got?',
