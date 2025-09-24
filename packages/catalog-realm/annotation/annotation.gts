@@ -10,7 +10,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import UrlField from 'https://cardstack.com/base/url';
 import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
-import { fn, concat, get, array } from '@ember/helper';
+import { fn, concat, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -18,7 +18,6 @@ import { task } from 'ember-concurrency'; // ¹³ Task management
 import { htmlSafe } from '@ember/template';
 import {
   formatDateTime,
-  lt,
   eq,
   or,
   gt,
@@ -94,7 +93,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   @tracked selectedColor = '#ffeb3b';
   @tracked showNotes = false; // ²⁵ Start with sidebar hidden
   @tracked currentPage = 1;
-  @tracked pdfScale = 1.0; // ²⁶ PDF scaling factor
+  @tracked pdfScale: number | string = 1.0; // ²⁶ PDF scaling factor
   @tracked minScale = 0.5; // ²⁷ Minimum zoom level
   @tracked maxScale = 3.0; // ²⁸ Maximum zoom level
   @tracked totalPages = 1;
@@ -118,9 +117,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       // ¹⁰⁵ CRITICAL: Validate event originated from drawing layer
       const drawingLayer = event.currentTarget as HTMLElement;
       if (!drawingLayer || !drawingLayer.classList.contains('drawing-layer')) {
-        console.log(
-          'Drawing event did not originate from drawing layer, ignoring',
-        );
         return;
       }
 
@@ -136,7 +132,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
       // Validate coordinates are within canvas bounds
       if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
-        console.log('Drawing started outside canvas bounds, ignoring');
         return;
       }
 
@@ -153,7 +148,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       this.selectedTool !== 'drawing' ||
       !this.currentDrawingPath
     ) {
-      console.log('Invalid drawing state for continue event, ignoring');
       return;
     }
 
@@ -190,7 +184,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   }
 
   @action
-  stopDrawing(event?: MouseEvent) {
+  stopDrawing() {
     const wasDrawing = this.isDrawing;
     const pathLength = this.currentDrawingPath.length;
 
@@ -380,49 +374,29 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   }
 
   private saveAnnotations(annotations: Annotation[]) {
-    console.log('saveAnnotations called with:', annotations);
-
     if (this.args.model) {
       const annotationDataString = JSON.stringify(annotations);
-      console.log('Saving annotation data string:', annotationDataString);
 
       this.args.model.annotationData = annotationDataString;
       this.args.model.createdAt = this.createTimestamp();
-
-      console.log('Model updated:', {
-        annotationData: this.args.model.annotationData,
-        createdAt: this.args.model.createdAt,
-      });
     } else {
       console.error('No model available for saving annotations');
     }
   }
 
   private addAnnotation(annotation: Annotation) {
-    console.log('addAnnotation called with:', annotation);
-
     const annotations = this.getAnnotations();
-    console.log('Current annotations before adding:', annotations);
 
     // Create a new array with the new annotation
     const updatedAnnotations = [...annotations, annotation];
-    console.log('Annotations after adding:', updatedAnnotations);
 
     this.saveAnnotations(updatedAnnotations);
 
     // ⁷² Force re-render of annotations for the current page
     if (annotation.pageNumber === this.currentPage) {
-      console.log('Re-rendering annotations for current page:', {
-        annotationPage: annotation.pageNumber,
-        currentPage: this.currentPage,
-        annotationType: annotation.type,
-      });
-      this.renderAnnotations(this.currentPage);
-
       // ⁷³ Also trigger immediate redraw for drawings
       if (annotation.type === 'drawing') {
         setTimeout(() => {
-          console.log('Triggering immediate drawing redraw');
           this.redrawStoredAnnotations(this.currentPage);
         }, 50);
       }
@@ -435,14 +409,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       (ann) => ann.pageNumber === this.currentPage,
     );
 
-    console.log('Getting annotations for current page:', {
-      currentPage: this.currentPage,
-      totalAnnotations: allAnnotations.length,
-      pageAnnotations: currentPageAnnotations.length,
-      annotations: currentPageAnnotations,
-    });
-
-    return currentPageAnnotations;
+    return currentPageAnnotations as any;
   }
 
   private getAnnotationsForPage(pageNumber: number): Annotation[] {
@@ -450,17 +417,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     const pageAnnotations = allAnnotations.filter(
       (ann) => ann.pageNumber === pageNumber,
     );
-
-    console.log('getAnnotationsForPage debug:', {
-      requestedPage: pageNumber,
-      totalAnnotations: allAnnotations.length,
-      pageAnnotations: pageAnnotations.length,
-      pageAnnotationDetails: pageAnnotations.map((ann) => ({
-        id: ann.id,
-        type: ann.type,
-        pageNumber: ann.pageNumber,
-      })),
-    });
 
     return pageAnnotations;
   }
@@ -487,12 +443,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
       // Wait a moment for PDF.js to fully initialize
       await new Promise((resolve) => setTimeout(resolve, 100));
-
-      console.log('PDF.js loaded. Available components:', {
-        pdfjsLib: !!(globalThis as any).pdfjsLib,
-        TextLayerBuilder: !!(globalThis as any).pdfjsLib?.TextLayerBuilder,
-        getDocument: !!(globalThis as any).pdfjsLib?.getDocument,
-      });
     } catch (error) {
       console.error('Failed to load PDF.js', error);
       this.errorMessage = 'Failed to load PDF viewer';
@@ -540,9 +490,9 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
       // Render the saved page (or page 1 if no saved page)
       this.renderPage.perform(this.currentPage);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load PDF', error);
-      this.errorMessage = `Failed to load PDF: ${error.message}`;
+      this.errorMessage = `Failed to load PDF: ${error.message || error}`;
     }
   });
 
@@ -571,12 +521,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
         await new Promise((resolve) => setTimeout(resolve, 200));
         canvas = document.getElementById('pdf-canvas') as HTMLCanvasElement;
         canvasAttempts++;
-
-        if (!canvas) {
-          console.log(
-            `Canvas attempt ${canvasAttempts}/${maxCanvasAttempts} - not found yet`,
-          );
-        }
       }
 
       if (!canvas) {
@@ -643,15 +587,11 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       // Clear any existing text selection when rendering a new page
       this.clearTextSelection();
 
-      // Render annotations for this page
-      this.renderAnnotations(pageNum);
-
       // Render highlights in text layer
       this.renderPageHighlights(pageNum);
 
       // ⁷⁴ Important: Re-render any existing drawings after page render
       setTimeout(() => {
-        console.log('Post-render: redrawing annotations for page', pageNum);
         this.redrawStoredAnnotations(pageNum);
 
         // ⁷⁸ CRITICAL: Clean up any drawing preview elements from previous drawings
@@ -660,7 +600,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
       // Clear any previous error message
       this.errorMessage = '';
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to render page', error);
       this.errorMessage = `Failed to render page ${pageNum}: ${error.message}. Try refreshing the page.`;
     }
@@ -721,21 +661,9 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
         'mouseup',
         this.handlePDFTextSelection.bind(this),
       );
-
-      console.log('Text layer created for page', page.pageNumber);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create text layer', error);
     }
-  }
-
-  // Render all annotations for a specific page - FIXED to not interfere with PDF rendering
-  private renderAnnotations(pageNum: number) {
-    console.log(`renderAnnotations called for page ${pageNum}`);
-
-    // ⁴³ Don't render here - this gets called during page rendering and interferes
-    // Drawing annotations will be rendered by redrawStoredAnnotations() after page render
-    // This method is kept for compatibility but actual drawing happens elsewhere
-    console.log('renderAnnotations: Delegating to redrawStoredAnnotations');
   }
 
   // Render highlights in text layer, not on canvas
@@ -755,11 +683,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       (ann) => ann.type === 'highlight',
     ) as TextHighlight[];
 
-    console.log(
-      `Rendering ${highlights.length} highlights for page ${pageNum}`,
-    );
-
-    highlights.forEach((highlight, highlightIndex) => {
+    highlights.forEach((highlight) => {
       // Handle both single bounds (legacy) and multiple bounds (new)
       const boundsArray = Array.isArray(highlight.bounds)
         ? highlight.bounds
@@ -767,61 +691,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
       this.createTextLayerHighlight(boundsArray, highlight.color);
     });
-  }
-
-  private renderDrawing(
-    ctx: CanvasRenderingContext2D,
-    drawing: DrawingAnnotation,
-    currentScale: number = 1,
-  ) {
-    // ³² Save and restore canvas state for clean drawing
-    ctx.save();
-
-    drawing.paths.forEach((path) => {
-      ctx.strokeStyle = path.color;
-      ctx.lineWidth = path.thickness; // ³³ Don't scale thickness - drawings are stored at display scale
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      if (path.points.length < 2) return;
-
-      ctx.beginPath();
-      // ³⁴ Don't scale coordinates - they're already stored at display scale
-      ctx.moveTo(path.points[0].x, path.points[0].y);
-
-      for (let i = 1; i < path.points.length; i++) {
-        ctx.lineTo(path.points[i].x, path.points[i].y);
-      }
-
-      ctx.stroke();
-    });
-
-    ctx.restore();
-  }
-
-  private renderNote(
-    ctx: CanvasRenderingContext2D,
-    note: NoteAnnotation,
-    currentScale: number = 1,
-  ) {
-    // Draw a small note icon at the position
-    ctx.fillStyle = note.color || '#f59e0b';
-    ctx.beginPath();
-    ctx.arc(
-      note.position.x * currentScale,
-      note.position.y * currentScale,
-      8 * currentScale,
-      0,
-      2 * Math.PI,
-    );
-    ctx.fill();
-
-    // Draw a small "N" for note
-    ctx.fillStyle = 'white';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('N', note.position.x, note.position.y);
   }
 
   // Export annotations as JSON
@@ -860,7 +729,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   @action
   clearCurrentPageAnnotations() {
     if (this.args.model) {
-      console.log('Clearing annotations for current page');
       const allAnnotations = this.getAnnotations();
       const otherPageAnnotations = allAnnotations.filter(
         (ann) => ann.pageNumber !== this.currentPage,
@@ -876,7 +744,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
       // ³⁶ Re-render the entire page to clear all annotations properly
       this.renderPage.perform(this.currentPage);
-      console.log('Current page annotations cleared');
     }
   }
 
@@ -884,13 +751,11 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   private redrawStoredAnnotations(pageNum: number) {
     const canvas = document.getElementById('pdf-canvas') as HTMLCanvasElement;
     if (!canvas) {
-      console.warn('Canvas not found for redrawing annotations');
       return;
     }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      console.warn('Canvas context not found for redrawing annotations');
       return;
     }
 
@@ -907,26 +772,17 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
     // ⁷¹ CRITICAL: Filter annotations by exact page number
     const allAnnotations = this.getAnnotations();
-    console.log('All annotations:', allAnnotations);
-    console.log('Filtering for page:', pageNum);
 
     const pageAnnotations = allAnnotations.filter(
       (ann) => ann.pageNumber === pageNum,
     );
-    console.log('Page annotations found:', pageAnnotations);
 
     const drawings = pageAnnotations.filter(
       (ann) => ann.type === 'drawing',
     ) as DrawingAnnotation[];
 
-    console.log(
-      `Redrawing ${drawings.length} stored drawings for page ${pageNum}`,
-      drawings,
-    );
-
     // ⁷⁷ If no drawings for this page, ensure overlay is cleared and return
     if (drawings.length === 0) {
-      console.log(`No drawings for page ${pageNum} - overlay cleared`);
       return;
     }
 
@@ -958,15 +814,9 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     // Clear previous drawings (redundant but ensures clean state)
     drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
 
-    drawings.forEach((drawing, index) => {
-      console.log(
-        `Rendering stored drawing ${index + 1}/${drawings.length}:`,
-        drawing,
-      );
-
-      drawing.paths.forEach((path, pathIndex) => {
+    drawings.forEach((drawing) => {
+      drawing.paths.forEach((path) => {
         if (path.points.length < 2) {
-          console.log(`Skipping path ${pathIndex} - insufficient points`);
           return;
         }
 
@@ -990,11 +840,8 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
         }
 
         drawingCtx.stroke();
-        console.log(`Drew path ${pathIndex} with ${path.points.length} points`);
       });
     });
-
-    console.log(`Completed redrawing ${drawings.length} drawings`);
   }
 
   // ⁹⁷ Enhanced cleanup with error handling and safety checks
@@ -1005,7 +852,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
         // Also try to find any orphaned preview canvases in the document
         const orphanedPreviews = document.querySelectorAll('.drawing-preview');
         orphanedPreviews.forEach((preview) => {
-          console.log('Removing orphaned drawing preview canvas');
           preview.remove();
         });
         return;
@@ -1018,13 +864,9 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
         try {
           preview.remove();
         } catch (removeError) {
-          console.warn('Error removing preview canvas:', removeError);
+          console.warn('Error removing preview canvas:', removeError as any);
         }
       });
-
-      console.log(
-        `Cleaned up ${previewCanvases.length} drawing preview canvases`,
-      );
 
       // ⁹⁸ Also clear any temporary canvas contexts that might be lingering
       const tempCanvases = canvas.parentElement.querySelectorAll(
@@ -1035,11 +877,10 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
           tempCanvas.className.includes('preview') ||
           tempCanvas.className.includes('temp')
         ) {
-          console.log('Removing temporary canvas');
           tempCanvas.remove();
         }
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error during drawing preview cleanup:', error);
     }
   }
@@ -1051,7 +892,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     // If mouse enters the drawing area while button is pressed but no valid drawing state,
     // it means the drag started outside - ignore these events
     if (event.buttons > 0 && !this.isDrawing) {
-      console.log('External drag detected entering canvas, ignoring');
       event.preventDefault();
       event.stopPropagation();
       return false;
@@ -1061,8 +901,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
   @action
   clearTextSelection() {
-    console.log('Clearing text selection');
-
     // Clear stored selection data
     this.selectedText = '';
     this.selectionRange = null;
@@ -1071,7 +909,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     const selection = window.getSelection();
     if (selection) {
       selection.removeAllRanges();
-      console.log('Browser selection cleared');
     }
 
     // Remove visual highlight
@@ -1086,32 +923,8 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     // Hide selection action buttons if they exist
     const selectionActions = document.querySelector('.selection-actions');
     if (selectionActions) {
-      selectionActions.style.display = 'none';
+      (selectionActions as HTMLElement).style.display = 'none';
     }
-
-    console.log('Text selection fully cleared');
-  }
-
-  // Get the current scale factor for the current page
-  private getCurrentPageScale(): number {
-    const canvas = document.getElementById('pdf-canvas') as HTMLCanvasElement;
-    if (!canvas) return 1;
-
-    // Calculate scale based on canvas width vs natural width
-    const naturalWidth = canvas.width;
-    const displayWidth = canvas.offsetWidth;
-
-    if (naturalWidth > 0 && displayWidth > 0) {
-      const scale = displayWidth / naturalWidth;
-      console.log('Scale calculation:', {
-        naturalWidth,
-        displayWidth,
-        scale,
-      });
-      return scale;
-    }
-
-    return 1;
   }
 
   // Check if the current text selection is valid for the current page
@@ -1120,7 +933,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
     const range = selection.getRangeAt(0);
     const wrapper = this.getPageWrapper();
-    if (!wrapper) return;
+    if (!wrapper) return false;
     const textLayer = wrapper.querySelector('.textLayer');
 
     if (!textLayer) return false;
@@ -1194,6 +1007,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
           e.preventDefault();
           return false;
         }
+        return;
       };
 
       // Add temporary event listeners to prevent selection
@@ -1223,6 +1037,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       e.preventDefault();
       return false;
     }
+    return true;
   };
 
   @action
@@ -1233,15 +1048,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   @action
   toggleNotes() {
     this.showNotes = !this.showNotes;
-
-    // When notes visibility changes, the container size changes
-    // We need to re-render annotations at the new scale
-    setTimeout(() => {
-      if (this.pdfDoc && this.currentPage) {
-        console.log('Notes visibility changed, re-rendering annotations');
-        this.renderAnnotations(this.currentPage);
-      }
-    }, 100); // Small delay to ensure DOM has updated
   }
 
   // ¹⁸ Navigation actions
@@ -1286,16 +1092,16 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   // ²⁹ PDF scaling actions
   @action
   zoomIn() {
-    if (this.pdfScale < this.maxScale) {
-      this.pdfScale = Math.min(this.maxScale, this.pdfScale + 0.25);
+    if ((this.pdfScale as number) < this.maxScale) {
+      this.pdfScale = Math.min(this.maxScale, (this.pdfScale as number) + 0.25);
       this.renderPage.perform(this.currentPage);
     }
   }
 
   @action
   zoomOut() {
-    if (this.pdfScale > this.minScale) {
-      this.pdfScale = Math.max(this.minScale, this.pdfScale - 0.25);
+    if ((this.pdfScale as number) > this.minScale) {
+      this.pdfScale = Math.max(this.minScale, (this.pdfScale as number) - 0.25);
       this.renderPage.perform(this.currentPage);
     }
   }
@@ -1332,7 +1138,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
         // Load the PDF
         await this.loadPDF.perform(url);
-      } catch (error) {
+      } catch (error: any) {
         this.errorMessage = `Failed to upload file: ${error.message}`;
       }
     } else {
@@ -1342,10 +1148,9 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
   // ²⁰ Text selection handling
   @action
-  handleTextSelection(event: MouseEvent) {
+  handleTextSelection() {
     // ¹¹⁷ CRITICAL: Don't process text selection when in drawing mode
     if (this.selectedTool === 'drawing') {
-      console.log('Drawing mode active, ignoring general text selection');
       return;
     }
 
@@ -1358,9 +1163,9 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       if (this.selectedTool === 'highlight') {
         this.addTextHighlight();
       } else if (this.selectedTool === 'note') {
-        this.showAddNote = true;
+        this.showNotes = true;
       } else if (this.selectedTool === 'comment') {
-        this.showAddComment = true;
+        this.showNotes = true;
       }
     }
   }
@@ -1370,13 +1175,11 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   handlePDFTextSelection(event: MouseEvent) {
     // ¹¹⁴ CRITICAL: Don't process text selection when in drawing mode
     if (this.selectedTool === 'drawing') {
-      console.log('Drawing mode active, ignoring text selection');
       return;
     }
 
     // ¹¹⁶ CRITICAL: Also ignore if mouse was pressed outside and dragged in
     if (event.buttons > 0) {
-      console.log('Mouse drag detected, ignoring text selection');
       return;
     }
 
@@ -1386,20 +1189,15 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       if (selection && selection.toString().length > 0) {
         // Verify the selection is from the current page's text layer
         if (!this.isSelectionValid(selection)) {
-          console.log('Selection is from a different page, clearing...');
           this.clearTextSelection();
           return;
         }
 
         let rawText = selection.toString();
-        console.log('Raw text selected:', rawText);
 
         // Clean up the selected text to remove padding characters
         this.selectedText = this.cleanupSelectedText(rawText);
         this.selectionRange = selection.getRangeAt(0);
-
-        console.log('Cleaned text:', this.selectedText);
-        console.log('Selection range:', this.selectionRange);
 
         // Highlight the selected text in the text layer
         this.highlightSelectedText();
@@ -1422,33 +1220,19 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   ) {
     const wrapper = this.getPageWrapper();
     if (!wrapper) {
-      console.error('No page wrapper found for highlight rendering');
       return;
     }
-    const textLayer = wrapper.querySelector('.textLayer');
+    const textLayer = wrapper.querySelector('.textLayer') as HTMLElement;
     if (!textLayer) {
-      console.error('No text layer found for highlight rendering');
       return;
     }
-
-    console.log(
-      `Creating persistent highlights for ${bounds.length} bounds with color ${color}`,
-    );
 
     // Get current viewport scale for proper highlight positioning
-    const currentScale = this.getCurrentViewportScale();
-    console.log('Current viewport scale for highlights:', currentScale);
 
     // Convert normalized bounds back to text layer coordinates
     // The text layer size already reflects the current scale, so we don't need to scale again
     const textLayerWidth = textLayer.offsetWidth;
     const textLayerHeight = textLayer.offsetHeight;
-
-    console.log('Text layer dimensions:', {
-      textLayerWidth,
-      textLayerHeight,
-      currentScale,
-    });
 
     bounds.forEach((normalizedBound, index) => {
       const highlight = document.createElement('div');
@@ -1479,29 +1263,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       `;
 
       textLayer.appendChild(highlight);
-
-      console.log(`Created persistent highlight ${index}:`, {
-        normalized: normalizedBound,
-        pixel: { left, top, width, height },
-        scale: currentScale,
-        element: highlight,
-        computedStyle: window.getComputedStyle(highlight),
-      });
     });
-
-    console.log(
-      `Total highlights in text layer: ${
-        textLayer.querySelectorAll('.persistent-highlight').length
-      }`,
-    );
-  }
-
-  // Get the current scale factor for the current page viewport
-  private getCurrentViewportScale(): number {
-    // Use the tracked PDF scale directly - it should match the viewport scale exactly
-    return typeof this.pdfScale === 'number' && this.pdfScale > 0
-      ? this.pdfScale
-      : 1.0;
   }
 
   // Highlight the selected text temporarily in the text layer
@@ -1521,7 +1283,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     const rects = Array.from(this.selectionRange.getClientRects());
     const textLayerRect = textLayer.getBoundingClientRect();
 
-    rects.forEach((rect) => {
+    rects.forEach((rect: any) => {
       if (
         rect.width > 0 &&
         rect.height > 0 &&
@@ -1561,19 +1323,15 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     width: number;
     height: number;
   }> {
-    console.log('getTextSelectionBounds called');
-
     if (!this.selectionRange) {
-      console.log('No selection range available');
       return [];
     }
 
     // Get current viewport for normalization
     const wrapper = this.getPageWrapper();
-    if (!wrapper) return;
-    const textLayer = wrapper.querySelector('.textLayer');
+    if (!wrapper) return [];
+    const textLayer = wrapper.querySelector('.textLayer') as HTMLElement;
     if (!textLayer) {
-      console.log('No text layer found');
       return [];
     }
 
@@ -1581,23 +1339,9 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     const rects = Array.from(this.selectionRange.getClientRects());
     const textLayerRect = textLayer.getBoundingClientRect();
 
-    console.log('Selection debugging:', {
-      rectsCount: rects.length,
-      textLayerRect: {
-        x: textLayerRect.left,
-        y: textLayerRect.top,
-        w: textLayerRect.width,
-        h: textLayerRect.height,
-      },
-      viewportSize: {
-        w: textLayer.offsetWidth,
-        h: textLayer.offsetHeight,
-      },
-    });
-
     // Convert to normalized PDF coordinates (0-1 relative to page)
     const bounds = rects
-      .map((rect, index) => {
+      .map((rect: any) => {
         // Check if rect intersects with text layer
         if (
           rect.right < textLayerRect.left ||
@@ -1605,7 +1349,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
           rect.bottom < textLayerRect.top ||
           rect.top > textLayerRect.bottom
         ) {
-          console.log(`Rect ${index} outside text layer, skipping`);
           return null;
         }
 
@@ -1637,12 +1380,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
           Math.min(1 - normalizedBounds.y, normalizedBounds.height),
         );
 
-        console.log(`Rect ${index}:`, {
-          browser: rect,
-          relative: relativeToTextLayer,
-          normalized: normalizedBounds,
-        });
-
         return normalizedBounds;
       })
       .filter((bound): bound is NonNullable<typeof bound> => bound !== null);
@@ -1650,54 +1387,15 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     const validBounds = bounds.filter(
       (bound) => bound.width > 0 && bound.height > 0,
     );
-    console.log(
-      `Returning ${validBounds.length} valid normalized bounds out of ${bounds.length}`,
-    );
 
     return validBounds;
-  }
-
-  // Alternative text selection method using PDF.js text layer
-  private async getPDFTextSelection(): Promise<{
-    text: string;
-    bounds: { x: number; y: number; width: number; height: number };
-  } | null> {
-    if (!this.pdfDoc) return null;
-
-    try {
-      const page = await this.pdfDoc.getPage(this.currentPage);
-      const textContent = await page.getTextContent();
-
-      // For now, return a simple selection at mouse position
-      // This is a simplified approach - in a full implementation,
-      // you'd want to use PDF.js text layer for proper text selection
-      return {
-        text: this.selectedText || 'Selected text',
-        bounds: {
-          x: 100, // Default position
-          y: 100,
-          width: 200,
-          height: 20,
-        },
-      };
-    } catch (error) {
-      console.error('Failed to get PDF text content:', error);
-      return null;
-    }
   }
 
   // ²¹ Annotation actions
   @action
   addTextHighlight() {
-    console.log('addTextHighlight called with:', {
-      selectedText: this.selectedText,
-      selectedTool: this.selectedTool,
-      selectionRange: this.selectionRange,
-    });
-
     if (this.selectedText && this.args.model) {
       const boundsArray = this.getTextSelectionBounds();
-      console.log('Bounds calculated:', boundsArray);
 
       if (boundsArray.length > 0) {
         // Create highlight object
@@ -1712,8 +1410,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
           pageNumber: this.currentPage,
           createdAt: this.createTimestamp(),
         };
-
-        console.log('Creating highlight:', highlight);
 
         // CRITICAL: Create persistent highlight IMMEDIATELY for instant feedback
         const boundsForRender = Array.isArray(highlight.bounds)
@@ -1740,13 +1436,9 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
           }
         }
       } else {
-        console.error('No bounds could be calculated for highlight');
       }
     } else {
-      console.error('Cannot create highlight:', {
-        hasSelectedText: !!this.selectedText,
-        hasModel: !!this.args.model,
-      });
+      console.error('Cannot create highlight');
     }
   }
 
@@ -1768,9 +1460,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       const resizeObserver = new ResizeObserver(() => {
         // Re-render current page when container size changes
         if (this.pdfDoc && this.currentPage) {
-          console.log(
-            'Container size changed, re-rendering page and annotations',
-          );
           this.renderPage.perform(this.currentPage);
         }
       });
@@ -1786,11 +1475,10 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       !this.hasInitialized
     ) {
       this.hasInitialized = true;
-      console.log('Initializing PDF with URL:', this.args.model.documentUrl);
 
       // Add a small delay before starting PDF load to ensure UI is ready
       setTimeout(() => {
-        this.loadPDF.perform(this.args.model.documentUrl);
+        this.loadPDF.perform(this.args.model.documentUrl as string);
         // Set up resize observer after PDF is loaded
         this.setupResizeObserver();
       }, 100);
@@ -1815,7 +1503,6 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       }
     }
 
-    console.log('Retrying PDF load...');
     setTimeout(() => {
       this.initializePDF();
     }, 100);
@@ -2154,7 +1841,7 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
                     <span class='zoom-level'>{{if
                         (eq this.pdfScale 'fit-width')
                         'Fit'
-                        (concat (multiply this.pdfScale 100) '%')
+                        (concat (multiply (Number this.pdfScale) 100) '%')
                       }}</span>
 
                     <Button
@@ -4033,39 +3720,9 @@ export class AnnotationCard extends CardDef {
                   0
                 }}
                 annotations</span>
-              <span class='stat'>{{if
-                  @model.highlights
-                  @model.highlights.length
-                  0
-                }}
-                highlights</span>
             </div>
           </div>
 
-          {{#if (gt @model.notes.length 0)}}
-            <div class='recent-notes'>
-              <h5 class='notes-title'>Recent Notes</h5>
-              <div class='notes-preview'>
-                {{#each @model.notes as |note index|}}
-                  {{#if (lt index 2)}}
-                    <div class='note-preview'>
-                      <div class='note-text'>{{note}}</div>
-                      {{#if @model.createdAt}}
-                        <div class='note-time'>{{formatDateTime
-                            @model.createdAt
-                            relative=true
-                          }}</div>
-                      {{/if}}
-                    </div>
-                  {{/if}}
-                {{/each}}
-              </div>
-            </div>
-          {{else}}
-            <div class='no-notes'>
-              <p>No notes yet. Start annotating this document!</p>
-            </div>
-          {{/if}}
         </div>
       </div>
 
@@ -4167,8 +3824,7 @@ export class AnnotationCard extends CardDef {
             </svg>
             <div class='badge-content'>
               <div class='badge-title'>Annotations</div>
-              <div class='badge-count'>{{if @model.notes @model.notes.length 0}}
-                notes</div>
+
             </div>
           </div>
         </div>
@@ -4195,7 +3851,8 @@ export class AnnotationCard extends CardDef {
             <div class='strip-stats'>
               <span>{{if @model.annotations @model.annotations.length 0}}
                 marks</span>
-              <span>{{if @model.notes @model.notes.length 0}} notes</span>
+              <span>{{if @model.annotations @model.annotations.length 0}}
+                annotations</span>
             </div>
           </div>
         </div>
@@ -4230,28 +3887,7 @@ export class AnnotationCard extends CardDef {
                   }}</span>
                 <span class='stat-label'>annotations</span>
               </div>
-              <div class='stat'>
-                <span class='stat-value'>{{if
-                    @model.highlights
-                    @model.highlights.length
-                    0
-                  }}</span>
-                <span class='stat-label'>highlights</span>
-              </div>
-              <div class='stat'>
-                <span class='stat-value'>{{if
-                    @model.notes
-                    @model.notes.length
-                    0
-                  }}</span>
-                <span class='stat-label'>notes</span>
-              </div>
             </div>
-            {{#if (gt @model.notes.length 0)}}
-              <div class='recent-note'>
-                <div class='note-text'>{{get @model.notes 0}}</div>
-              </div>
-            {{/if}}
           </div>
         </div>
 
@@ -4288,22 +3924,6 @@ export class AnnotationCard extends CardDef {
                 </div>
                 <div class='card-stat'>
                   <span class='stat-value'>{{if
-                      @model.highlights
-                      @model.highlights.length
-                      0
-                    }}</span>
-                  <span class='stat-label'>Highlights</span>
-                </div>
-                <div class='card-stat'>
-                  <span class='stat-value'>{{if
-                      @model.notes
-                      @model.notes.length
-                      0
-                    }}</span>
-                  <span class='stat-label'>Notes</span>
-                </div>
-                <div class='card-stat'>
-                  <span class='stat-value'>{{if
                       @model.pageNumber
                       @model.pageNumber
                       1
@@ -4312,26 +3932,6 @@ export class AnnotationCard extends CardDef {
                 </div>
               </div>
             </div>
-            {{#if (gt @model.notes.length 0)}}
-              <div class='notes-section'>
-                <div class='section-title'>Recent Notes</div>
-                <div class='notes-list'>
-                  {{#each @model.notes as |note index|}}
-                    {{#if (lt index 3)}}
-                      <div class='note-item'>
-                        <div class='note-content'>{{note}}</div>
-                        {{#if @model.createdAt}}
-                          <div class='note-date'>{{formatDateTime
-                              @model.createdAt
-                              relative=true
-                            }}</div>
-                        {{/if}}
-                      </div>
-                    {{/if}}
-                  {{/each}}
-                </div>
-              </div>
-            {{/if}}
           </div>
         </div>
       </div>

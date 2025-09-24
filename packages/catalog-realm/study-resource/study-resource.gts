@@ -11,7 +11,6 @@ import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import UrlField from 'https://cardstack.com/base/url';
-import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
 import {
   formatDateTime,
   formatDuration,
@@ -26,6 +25,524 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open'; // ⁴ Icon import
+
+class StudyResourceIsolated extends Component<typeof StudyResource> {
+  // ⁸ Clean, focus-first isolated format
+  @tracked showNotes = false;
+
+  @action
+  async openResource() {
+    if (this.args.model?.url) {
+      window.open(this.args.model.url, '_blank', 'noopener,noreferrer');
+      await this.updateLastAccessed();
+    }
+  }
+
+  @action
+  async updateLastAccessed() {
+    if (this.args.model) {
+      try {
+        this.args.model.lastAccessed = new Date();
+      } catch (e) {
+        console.error('StudyResource: Error updating last accessed time', e);
+      }
+    }
+  }
+
+  @action
+  toggleNotes() {
+    this.showNotes = !this.showNotes;
+  }
+  <template>
+    <div class='study-resource-clean'>
+      <header class='resource-header'>
+        {{#if @model.subject}}
+          <div class='subject-badge'>
+            {{@model.subject}}
+            {{#if @model.difficulty}}
+              •
+              {{@model.difficulty}}
+            {{/if}}
+          </div>
+        {{/if}}
+
+        <h1 class='resource-title'>{{if
+            @model.resourceTitle
+            @model.resourceTitle
+            'Untitled Resource'
+          }}</h1>
+
+        <div class='resource-type'>
+          {{if @model.resourceType @model.resourceType 'Study Material'}}
+        </div>
+      </header>
+
+      <div class='resource-stage'>
+        <div class='resource-card'>
+
+          <div class='quick-stats'>
+            {{#if @model.estimatedTime}}
+              <div class='stat-item'>
+                <svg
+                  class='stat-icon'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  <circle cx='12' cy='12' r='10' />
+                  <polyline points='12,6 12,12 16,14' />
+                </svg>
+                {{formatDuration
+                  @model.estimatedTime
+                  unit='minutes'
+                  format='humanize'
+                }}
+              </div>
+            {{/if}}
+
+            {{#if @model.completionStatus}}
+              <div class='stat-item status-{{@model.completionStatus}}'>
+                <svg
+                  class='stat-icon'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  {{#if (eq @model.completionStatus 'completed')}}
+                    <path d='M20 6L9 17l-5-5' />
+                  {{else if (eq @model.completionStatus 'in_progress')}}
+                    <circle cx='12' cy='12' r='10' />
+                    <polyline points='12,6 12,12 16,14' />
+                  {{else}}
+                    <circle cx='12' cy='12' r='10' />
+                  {{/if}}
+                </svg>
+                {{#if (eq @model.completionStatus 'in_progress')}}
+                  In Progress
+                {{else if (eq @model.completionStatus 'not_started')}}
+                  Not Started
+                {{else if (eq @model.completionStatus 'completed')}}
+                  Completed
+                {{else}}
+                  {{@model.completionStatus}}
+                {{/if}}
+              </div>
+            {{/if}}
+
+          </div>
+
+          {{#if @model.progressPercentage}}
+            <div class='progress-section'>
+              <div class='progress-header'>
+                <span class='progress-label'>Study Progress</span>
+                <span
+                  class='progress-percent'
+                >{{@model.progressPercentage}}%</span>
+              </div>
+              <div class='progress-bar'>
+                <div
+                  class='progress-fill'
+                  style={{htmlSafe
+                    (concat 'width: ' @model.progressPercentage '%;')
+                  }}
+                ></div>
+              </div>
+            </div>
+          {{/if}}
+
+          {{#if @model.url}}
+            <div class='primary-action'>
+              <button class='access-button' {{on 'click' this.openResource}}>
+                <svg
+                  class='button-icon'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  <path
+                    d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'
+                  />
+                  <path
+                    d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'
+                  />
+                </svg>
+                Start Studying
+              </button>
+            </div>
+          {{/if}}
+        </div>
+      </div>
+
+      {{#if @model.notes}}
+        <div class='notes-section'>
+          <button class='notes-toggle' {{on 'click' this.toggleNotes}}>
+            <svg
+              class='toggle-icon'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              stroke-width='2'
+            >
+              <path
+                d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'
+              />
+              <polyline points='14,2 14,8 20,8' />
+              <line x1='16' y1='13' x2='8' y2='13' />
+              <line x1='16' y1='17' x2='8' y2='17' />
+              <line x1='10' y1='9' x2='8' y2='9' />
+            </svg>
+            {{if this.showNotes 'Hide Notes' 'Show Notes'}}
+          </button>
+
+          {{#if this.showNotes}}
+            <div class='notes-content'>
+              <@fields.notes />
+            </div>
+          {{/if}}
+        </div>
+      {{/if}}
+
+      {{#if (gt @model.tags.length 0)}}
+        <div class='tags-footer'>
+          {{#each @model.tags as |tag|}}
+            <span class='tag'>{{tag}}</span>
+          {{/each}}
+        </div>
+      {{/if}}
+    </div>
+
+    <style scoped>
+      .study-resource-clean {
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: 2rem;
+        height: 100%;
+        overflow-y: auto;
+        background: #f8fafc;
+
+        --primary: #1e3a8a;
+        --secondary: #059669;
+        --accent: #f59e0b;
+        --surface: #ffffff;
+        --text-primary: #1f2937;
+        --text-secondary: #6b7280;
+        --border: #e5e7eb;
+        --radius: 12px;
+      }
+
+      .resource-header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+      }
+
+      .subject-badge {
+        display: inline-block;
+        background: rgba(30, 58, 138, 0.1);
+        color: var(--primary);
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+      }
+
+      .resource-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 0.75rem 0;
+        line-height: 1.2;
+        letter-spacing: -0.025em;
+      }
+
+      .resource-type {
+        font-size: 1rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+
+      /* Resource stage - main focus */
+      .resource-stage {
+        margin-bottom: 2rem;
+      }
+
+      .resource-card {
+        background: var(--surface);
+        border-radius: var(--radius);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        border: 1px solid var(--border);
+        padding: 2rem;
+        transition: transform 0.2s ease;
+      }
+
+      .resource-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Quick stats row */
+      .quick-stats {
+        display: flex;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .stat-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+
+      .stat-icon {
+        width: 1.125rem;
+        height: 1.125rem;
+        opacity: 0.8;
+      }
+
+      .status-completed {
+        color: var(--secondary);
+      }
+
+      .status-in_progress {
+        color: var(--accent);
+      }
+
+      .status-not_started {
+        color: var(--text-secondary);
+      }
+
+      /* Progress section */
+      .progress-section {
+        margin-bottom: 2rem;
+      }
+
+      .progress-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+
+      .progress-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+      }
+
+      .progress-percent {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: var(--primary);
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 8px;
+        background: rgba(226, 232, 240, 0.6);
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border-radius: 4px;
+        transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .progress-fill::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.3),
+          transparent
+        );
+        animation: shimmer 2s infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
+      }
+
+      /* Primary action button */
+      .primary-action {
+        text-align: center;
+      }
+
+      .access-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        background: linear-gradient(135deg, var(--primary), #2563eb);
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        border-radius: var(--radius);
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 14px 0 rgba(30, 58, 138, 0.3);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .access-button::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+        transition: left 0.5s ease;
+      }
+
+      .access-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px -8px rgba(30, 58, 138, 0.5);
+      }
+
+      .access-button:hover::before {
+        left: 100%;
+      }
+
+      .button-icon {
+        width: 1.25rem;
+        height: 1.25rem;
+        transition: transform 0.3s ease;
+      }
+
+      .access-button:hover .button-icon {
+        transform: scale(1.1);
+      }
+
+      /* Notes section */
+      .notes-section {
+        margin-bottom: 2rem;
+      }
+
+      .notes-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--primary);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        width: 100%;
+        justify-content: center;
+      }
+
+      .notes-toggle:hover {
+        background: rgba(59, 130, 246, 0.15);
+        border-color: rgba(59, 130, 246, 0.3);
+      }
+
+      .toggle-icon {
+        width: 1rem;
+        height: 1rem;
+      }
+
+      .notes-content {
+        margin-top: 1rem;
+        padding: 1.5rem;
+        background: var(--surface);
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        font-size: 0.9375rem;
+        line-height: 1.6;
+      }
+
+      /* Tags footer */
+      .tags-footer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+        padding-top: 1.5rem;
+        border-top: 1px solid rgba(226, 232, 240, 0.6);
+      }
+
+      .tag {
+        background: rgba(148, 163, 184, 0.1);
+        color: var(--text-secondary);
+        padding: 0.375rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+      }
+
+      .tag:hover {
+        background: rgba(148, 163, 184, 0.2);
+        transform: translateY(-1px);
+      }
+
+      /* Mobile responsive */
+      @media (max-width: 768px) {
+        .study-resource-clean {
+          padding: 1rem;
+        }
+
+        .resource-title {
+          font-size: 1.5rem;
+        }
+
+        .resource-card {
+          padding: 1.5rem;
+        }
+
+        .quick-stats {
+          gap: 1rem;
+          justify-content: center;
+        }
+
+        .access-button {
+          padding: 0.875rem 1.5rem;
+          font-size: 0.9375rem;
+        }
+      }
+    </style>
+  </template>
+}
 
 export class StudyResource extends CardDef {
   // ⁵ Study Resource card
@@ -116,523 +633,7 @@ export class StudyResource extends CardDef {
     }
   }
 
-  static isolated = class Isolated extends Component<typeof StudyResource> {
-    // ⁸ Clean, focus-first isolated format
-    @tracked showNotes = false;
-
-    @action
-    async openResource() {
-      if (this.args.model?.url) {
-        window.open(this.args.model.url, '_blank', 'noopener,noreferrer');
-        await this.updateLastAccessed();
-      }
-    }
-
-    @action
-    async updateLastAccessed() {
-      if (this.args.model) {
-        try {
-          this.args.model.lastAccessed = new Date();
-        } catch (e) {
-          console.error('StudyResource: Error updating last accessed time', e);
-        }
-      }
-    }
-
-    @action
-    toggleNotes() {
-      this.showNotes = !this.showNotes;
-    }
-    <template>
-      <div class='study-resource-clean'>
-        <header class='resource-header'>
-          {{#if @model.subject}}
-            <div class='subject-badge'>
-              {{@model.subject}}
-              {{#if @model.difficulty}}
-                •
-                {{@model.difficulty}}
-              {{/if}}
-            </div>
-          {{/if}}
-
-          <h1 class='resource-title'>{{if
-              @model.resourceTitle
-              @model.resourceTitle
-              'Untitled Resource'
-            }}</h1>
-
-          <div class='resource-type'>
-            {{if @model.resourceType @model.resourceType 'Study Material'}}
-          </div>
-        </header>
-
-        <div class='resource-stage'>
-          <div class='resource-card'>
-
-            <div class='quick-stats'>
-              {{#if @model.estimatedTime}}
-                <div class='stat-item'>
-                  <svg
-                    class='stat-icon'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <circle cx='12' cy='12' r='10' />
-                    <polyline points='12,6 12,12 16,14' />
-                  </svg>
-                  {{formatDuration
-                    @model.estimatedTime
-                    unit='minutes'
-                    format='humanize'
-                  }}
-                </div>
-              {{/if}}
-
-              {{#if @model.completionStatus}}
-                <div class='stat-item status-{{@model.completionStatus}}'>
-                  <svg
-                    class='stat-icon'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    {{#if (eq @model.completionStatus 'completed')}}
-                      <path d='M20 6L9 17l-5-5' />
-                    {{else if (eq @model.completionStatus 'in_progress')}}
-                      <circle cx='12' cy='12' r='10' />
-                      <polyline points='12,6 12,12 16,14' />
-                    {{else}}
-                      <circle cx='12' cy='12' r='10' />
-                    {{/if}}
-                  </svg>
-                  {{#if (eq @model.completionStatus 'in_progress')}}
-                    In Progress
-                  {{else if (eq @model.completionStatus 'not_started')}}
-                    Not Started
-                  {{else if (eq @model.completionStatus 'completed')}}
-                    Completed
-                  {{else}}
-                    {{@model.completionStatus}}
-                  {{/if}}
-                </div>
-              {{/if}}
-
-            </div>
-
-            {{#if @model.progressPercentage}}
-              <div class='progress-section'>
-                <div class='progress-header'>
-                  <span class='progress-label'>Study Progress</span>
-                  <span
-                    class='progress-percent'
-                  >{{@model.progressPercentage}}%</span>
-                </div>
-                <div class='progress-bar'>
-                  <div
-                    class='progress-fill'
-                    style={{htmlSafe
-                      (concat 'width: ' @model.progressPercentage '%;')
-                    }}
-                  ></div>
-                </div>
-              </div>
-            {{/if}}
-
-            {{#if @model.url}}
-              <div class='primary-action'>
-                <button class='access-button' {{on 'click' this.openResource}}>
-                  <svg
-                    class='button-icon'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <path
-                      d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'
-                    />
-                    <path
-                      d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'
-                    />
-                  </svg>
-                  Start Studying
-                </button>
-              </div>
-            {{/if}}
-          </div>
-        </div>
-
-        {{#if @model.notes}}
-          <div class='notes-section'>
-            <button class='notes-toggle' {{on 'click' this.toggleNotes}}>
-              <svg
-                class='toggle-icon'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path
-                  d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'
-                />
-                <polyline points='14,2 14,8 20,8' />
-                <line x1='16' y1='13' x2='8' y2='13' />
-                <line x1='16' y1='17' x2='8' y2='17' />
-                <line x1='10' y1='9' x2='8' y2='9' />
-              </svg>
-              {{if this.showNotes 'Hide Notes' 'Show Notes'}}
-            </button>
-
-            {{#if this.showNotes}}
-              <div class='notes-content'>
-                <@fields.notes />
-              </div>
-            {{/if}}
-          </div>
-        {{/if}}
-
-        {{#if (gt @model.tags.length 0)}}
-          <div class='tags-footer'>
-            {{#each @model.tags as |tag|}}
-              <span class='tag'>{{tag}}</span>
-            {{/each}}
-          </div>
-        {{/if}}
-      </div>
-
-      <style scoped>
-        .study-resource-clean {
-          font-family:
-            'Inter',
-            -apple-system,
-            BlinkMacSystemFont,
-            sans-serif;
-          max-width: 42rem;
-          margin: 0 auto;
-          padding: 2rem;
-          height: 100%;
-          overflow-y: auto;
-          background: #f8fafc;
-
-          --primary: #1e3a8a;
-          --secondary: #059669;
-          --accent: #f59e0b;
-          --surface: #ffffff;
-          --text-primary: #1f2937;
-          --text-secondary: #6b7280;
-          --border: #e5e7eb;
-          --radius: 12px;
-        }
-
-        .resource-header {
-          text-align: center;
-          margin-bottom: 2.5rem;
-        }
-
-        .subject-badge {
-          display: inline-block;
-          background: rgba(30, 58, 138, 0.1);
-          color: var(--primary);
-          padding: 0.5rem 1rem;
-          border-radius: 8px;
-          font-size: 0.875rem;
-          font-weight: 600;
-          margin-bottom: 1rem;
-        }
-
-        .resource-title {
-          font-size: 2rem;
-          font-weight: 700;
-          color: var(--text-primary);
-          margin: 0 0 0.75rem 0;
-          line-height: 1.2;
-          letter-spacing: -0.025em;
-        }
-
-        .resource-type {
-          font-size: 1rem;
-          color: var(--text-secondary);
-          font-weight: 500;
-        }
-
-        /* Resource stage - main focus */
-        .resource-stage {
-          margin-bottom: 2rem;
-        }
-
-        .resource-card {
-          background: var(--surface);
-          border-radius: var(--radius);
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-          border: 1px solid var(--border);
-          padding: 2rem;
-          transition: transform 0.2s ease;
-        }
-
-        .resource-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Quick stats row */
-        .quick-stats {
-          display: flex;
-          gap: 1.5rem;
-          margin-bottom: 2rem;
-          flex-wrap: wrap;
-          justify-content: center;
-        }
-
-        .stat-item {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-          font-weight: 500;
-        }
-
-        .stat-icon {
-          width: 1.125rem;
-          height: 1.125rem;
-          opacity: 0.8;
-        }
-
-        .status-completed {
-          color: var(--secondary);
-        }
-
-        .status-in_progress {
-          color: var(--accent);
-        }
-
-        .status-not_started {
-          color: var(--text-secondary);
-        }
-
-        /* Progress section */
-        .progress-section {
-          margin-bottom: 2rem;
-        }
-
-        .progress-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 0.75rem;
-        }
-
-        .progress-label {
-          font-size: 0.875rem;
-          font-weight: 500;
-          color: var(--text-secondary);
-        }
-
-        .progress-percent {
-          font-size: 0.875rem;
-          font-weight: 700;
-          color: var(--primary);
-        }
-
-        .progress-bar {
-          width: 100%;
-          height: 8px;
-          background: rgba(226, 232, 240, 0.6);
-          border-radius: 4px;
-          overflow: hidden;
-          position: relative;
-        }
-
-        .progress-fill {
-          height: 100%;
-          background: linear-gradient(135deg, var(--primary), var(--secondary));
-          border-radius: 4px;
-          transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .progress-fill::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255, 255, 255, 0.3),
-            transparent
-          );
-          animation: shimmer 2s infinite;
-        }
-
-        @keyframes shimmer {
-          0% {
-            transform: translateX(-100%);
-          }
-          100% {
-            transform: translateX(100%);
-          }
-        }
-
-        /* Primary action button */
-        .primary-action {
-          text-align: center;
-        }
-
-        .access-button {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.75rem;
-          background: linear-gradient(135deg, var(--primary), #2563eb);
-          color: white;
-          border: none;
-          padding: 1rem 2rem;
-          border-radius: var(--radius);
-          font-size: 1rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 4px 14px 0 rgba(30, 58, 138, 0.3);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .access-button::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255, 255, 255, 0.2),
-            transparent
-          );
-          transition: left 0.5s ease;
-        }
-
-        .access-button:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px -8px rgba(30, 58, 138, 0.5);
-        }
-
-        .access-button:hover::before {
-          left: 100%;
-        }
-
-        .button-icon {
-          width: 1.25rem;
-          height: 1.25rem;
-          transition: transform 0.3s ease;
-        }
-
-        .access-button:hover .button-icon {
-          transform: scale(1.1);
-        }
-
-        /* Notes section */
-        .notes-section {
-          margin-bottom: 2rem;
-        }
-
-        .notes-toggle {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          background: rgba(59, 130, 246, 0.1);
-          color: var(--primary);
-          border: 1px solid rgba(59, 130, 246, 0.2);
-          padding: 0.75rem 1rem;
-          border-radius: 8px;
-          font-size: 0.875rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          width: 100%;
-          justify-content: center;
-        }
-
-        .notes-toggle:hover {
-          background: rgba(59, 130, 246, 0.15);
-          border-color: rgba(59, 130, 246, 0.3);
-        }
-
-        .toggle-icon {
-          width: 1rem;
-          height: 1rem;
-        }
-
-        .notes-content {
-          margin-top: 1rem;
-          padding: 1.5rem;
-          background: var(--surface);
-          border-radius: 8px;
-          border: 1px solid var(--border);
-          font-size: 0.9375rem;
-          line-height: 1.6;
-        }
-
-        /* Tags footer */
-        .tags-footer {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-          justify-content: center;
-          padding-top: 1.5rem;
-          border-top: 1px solid rgba(226, 232, 240, 0.6);
-        }
-
-        .tag {
-          background: rgba(148, 163, 184, 0.1);
-          color: var(--text-secondary);
-          padding: 0.375rem 0.75rem;
-          border-radius: 1rem;
-          font-size: 0.75rem;
-          font-weight: 500;
-          transition: all 0.2s ease;
-        }
-
-        .tag:hover {
-          background: rgba(148, 163, 184, 0.2);
-          transform: translateY(-1px);
-        }
-
-        /* Mobile responsive */
-        @media (max-width: 768px) {
-          .study-resource-clean {
-            padding: 1rem;
-          }
-
-          .resource-title {
-            font-size: 1.5rem;
-          }
-
-          .resource-card {
-            padding: 1.5rem;
-          }
-
-          .quick-stats {
-            gap: 1rem;
-            justify-content: center;
-          }
-
-          .access-button {
-            padding: 0.875rem 1.5rem;
-            font-size: 0.9375rem;
-          }
-        }
-      </style>
-    </template>
-  };
+  static isolated = StudyResourceIsolated;
 
   static embedded = class Embedded extends Component<typeof StudyResource> {
     // ¹⁰ Clean embedded format
@@ -708,10 +709,7 @@ export class StudyResource extends CardDef {
               <div
                 class='progress-fill'
                 style={{htmlSafe
-                  concat
-                  'width: '
-                  @model.progressPercentage
-                  '%;'
+                  (concat 'width: ' @model.progressPercentage '%;')
                 }}
               ></div>
             </div>
@@ -719,9 +717,9 @@ export class StudyResource extends CardDef {
           </div>
         {{/if}}
 
-        {{#if (gt @model.allTags.length 0)}}
+        {{#if (gt @model.tags.length 0)}}
           <div class='card-tags'>
-            {{#each @model.allTags as |tag index|}}
+            {{#each @model.tags as |tag index|}}
               {{#if (lt index 3)}}
                 <span class='tag'>{{tag}}</span>
               {{/if}}
@@ -960,7 +958,9 @@ export class StudyResource extends CardDef {
         <div class='badge-format'>
           <div class='resource-badge'>
             <div class='badge-icon status-{{@model.completionStatus}}'>
-              {{htmlSafe @model.statusIconSVG}}
+              {{#if @model.statusIconSVG}}{{htmlSafe
+                  @model.statusIconSVG
+                }}{{/if}}
             </div>
             <div class='badge-content'>
               <div class='badge-title'>{{if
@@ -993,7 +993,9 @@ export class StudyResource extends CardDef {
             </div>
             <div class='strip-right'>
               <div class='strip-status {{@model.completionStatus}}'>
-                {{htmlSafe @model.statusIconSVG}}
+                {{#if @model.statusIconSVG}}{{htmlSafe
+                    @model.statusIconSVG
+                  }}{{/if}}
               </div>
               {{#if @model.estimatedTime}}
                 <div class='strip-time'>{{@model.estimatedTime}}m</div>
@@ -1011,7 +1013,9 @@ export class StudyResource extends CardDef {
                   'Resource'
                 }}</h4>
               <div class='tile-status {{@model.completionStatus}}'>
-                {{htmlSafe @model.statusIconSVG}}
+                {{#if @model.statusIconSVG}}{{htmlSafe
+                    @model.statusIconSVG
+                  }}{{/if}}
               </div>
             </div>
 
@@ -1032,11 +1036,12 @@ export class StudyResource extends CardDef {
                   <div
                     class='progress-fill'
                     style={{htmlSafe
-                      concat
-                      'width: '
-                      @model.progressPercentage
-                      '%; background: '
-                      @model.progressColor
+                      (concat
+                        'width: '
+                        @model.progressPercentage
+                        '%; background: '
+                        @model.progressColor
+                      )
                     }}
                   ></div>
                 </div>
@@ -1076,7 +1081,9 @@ export class StudyResource extends CardDef {
                 </div>
               </div>
               <div class='card-status {{@model.completionStatus}}'>
-                {{htmlSafe @model.statusIconSVG}}
+                {{#if @model.statusIconSVG}}{{htmlSafe
+                    @model.statusIconSVG
+                  }}{{/if}}
               </div>
             </div>
 
@@ -1093,11 +1100,12 @@ export class StudyResource extends CardDef {
                     <div
                       class='progress-fill'
                       style={{htmlSafe
-                        concat
-                        'width: '
-                        @model.progressPercentage
-                        '%; background: '
-                        @model.progressColor
+                        (concat
+                          'width: '
+                          @model.progressPercentage
+                          '%; background: '
+                          @model.progressColor
+                        )
                       }}
                     ></div>
                   </div>
@@ -1134,16 +1142,16 @@ export class StudyResource extends CardDef {
                 {{/if}}
               </div>
 
-              {{#if (gt @model.allTags.length 0)}}
+              {{#if (gt @model.tags.length 0)}}
                 <div class='card-tags'>
-                  {{#each @model.allTags as |tag index|}}
+                  {{#each @model.tags as |tag index|}}
                     {{#if (lt index 3)}}
                       <span class='tag'>{{tag}}</span>
                     {{/if}}
                   {{/each}}
-                  {{#if (gt @model.allTags.length 3)}}
+                  {{#if (gt @model.tags.length 3)}}
                     <span class='tag-more'>+{{subtract
-                        @model.allTags.length
+                        (Number @model.tags.length)
                         3
                       }}</span>
                   {{/if}}

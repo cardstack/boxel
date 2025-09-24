@@ -19,7 +19,7 @@ import { PracticeQuizCard } from '../practice-quiz/practice-quiz';
 import { FocusTimerCard } from '../focus-timer/focus-timer';
 import { CalendarCard } from '../calendar/calendar'; // ¹¹⁸ New dynamic card imports
 import { AnnotationCard } from '../annotation/annotation';
-import { eq, gt, lt, and } from '@cardstack/boxel-ui/helpers'; // ³ Logic helpers
+import { eq, gt, lt } from '@cardstack/boxel-ui/helpers'; // ³ Logic helpers
 import { formatDuration } from '@cardstack/boxel-ui/helpers'; // ⁴ Format helpers
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -69,7 +69,7 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
       }
 
       // For linksToMany fields, we need to convert to array and filter valid sessions
-      const sessionArray = Array.isArray(sessions)
+      const sessionArray: StudySession[] = Array.isArray(sessions)
         ? sessions
         : Object.values(sessions || {});
 
@@ -199,279 +199,6 @@ class StudyHubIsolated extends Component<typeof StudyHub> {
       return `${minutes}m`;
     } catch (e) {
       return '0m';
-    }
-  }
-
-  // ²⁶ᵉ Dynamic mastery levels based on progress trackers
-  get masteringSubjects() {
-    try {
-      const trackers = this.args?.model?.progressTrackers;
-      // ³³⁵ Check if progressTrackers relationship exists in JSON
-      if (!trackers || !Array.isArray(trackers)) {
-        console.log('StudyHub: No progressTrackers found in instance');
-        return [];
-      }
-
-      return trackers
-        .filter((tracker) => {
-          const progress = tracker?.completionPercentage || 0;
-          return progress >= 70; // 70%+ is considered "mastering"
-        })
-        .map((tracker) => {
-          const progress = tracker?.completionPercentage || 0;
-          const subject =
-            tracker?.subject || tracker?.title || 'Unknown Subject';
-          return `${subject} (${progress}% mastery)`;
-        })
-        .slice(0, 5); // Show top 5
-    } catch (e) {
-      console.error('StudyHub: Error computing mastering subjects', e);
-      return [];
-    }
-  }
-
-  // ²⁶ᶠ Dynamic review schedule from flashcards
-  get dynamicReviewSchedule() {
-    try {
-      const flashcards = this.args?.model?.flashcards;
-      // ³²¹ Handle undefined flashcards gracefully
-      if (!flashcards || !Array.isArray(flashcards)) return [];
-
-      const today = new Date();
-      const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-
-      return flashcards
-        .filter((card) => {
-          const reviewDate = card?.nextReview
-            ? new Date(card.nextReview)
-            : null;
-          return reviewDate && reviewDate <= tomorrow;
-        })
-        .map((card) => {
-          const reviewDate = new Date(card.nextReview);
-          const isToday = reviewDate.toDateString() === today.toDateString();
-          const cardTitle = card?.question || card?.title || 'Flashcard';
-          return `${cardTitle} (due ${isToday ? 'today' : 'tomorrow'})`;
-        })
-        .slice(0, 6); // Show next 6 items
-    } catch (e) {
-      console.error('StudyHub: Error computing review schedule', e);
-      return [];
-    }
-  }
-
-  // ²⁶ᵍ Smart recommendations based on activity patterns
-  get smartRecommendations() {
-    try {
-      const recommendations = [];
-      const sessions = this.args?.model?.studySessions || [];
-      const goals = this.args?.model?.studyGoals || [];
-      const streak = this.args?.model?.currentStreak || 0;
-
-      // Streak-based recommendations
-      if (streak >= 7) {
-        recommendations.push(
-          `Amazing ${streak}-day streak! Consider setting a bigger weekly goal to challenge yourself.`,
-        );
-      } else if (streak >= 3) {
-        recommendations.push(
-          `Great ${streak}-day streak! Keep the momentum going to reach a full week.`,
-        );
-      } else if (streak === 0) {
-        recommendations.push(
-          'Start a new study session today to begin building your streak!',
-        );
-      }
-
-      // Goal-based recommendations
-      const incompleteGoals = goals.filter((goal) => !goal?.isCompleted);
-      if (incompleteGoals.length > 0) {
-        const oldestGoal = incompleteGoals.sort((a, b) => {
-          const dateA = a?.createdAt ? new Date(a.createdAt) : new Date();
-          const dateB = b?.createdAt ? new Date(b.createdAt) : new Date();
-          return dateA.getTime() - dateB.getTime();
-        })[0];
-
-        const goalTitle =
-          oldestGoal?.goalTitle || oldestGoal?.title || 'your oldest goal';
-        recommendations.push(
-          `Focus on completing "${goalTitle}" - it's been waiting for attention.`,
-        );
-      }
-
-      // Session pattern recommendations
-      if (sessions.length >= 3) {
-        const recentSessions = sessions.slice(-7); // Last 7 sessions
-        const avgDuration =
-          recentSessions.reduce((sum, s) => sum + (s?.duration || 0), 0) /
-          recentSessions.length;
-
-        if (avgDuration < 30) {
-          recommendations.push(
-            'Try longer study sessions (45-60 minutes) followed by breaks for better focus.',
-          );
-        } else if (avgDuration > 120) {
-          recommendations.push(
-            'Consider shorter, more frequent sessions to maintain concentration.',
-          );
-        }
-      }
-
-      return recommendations.slice(0, 4); // Show top 4 recommendations
-    } catch (e) {
-      console.error('StudyHub: Error generating recommendations', e);
-      return [];
-    }
-  }
-
-  // ²²³ Dynamic recent activity generator
-  get dynamicRecentActivity() {
-    try {
-      const activities = [];
-      const now = new Date();
-
-      // 1. Recent study sessions (last 7 days)
-      const sessions = this.args?.model?.studySessions || [];
-      const recentSessions = sessions
-        .filter((session) => {
-          try {
-            // ³¹⁷ Remove id requirement - focus on core data validation
-            if (!session || typeof session !== 'object' || !session?.startTime)
-              return false;
-            const sessionDate = new Date(session.startTime);
-            const daysDiff =
-              (now.getTime() - sessionDate.getTime()) / (1000 * 60 * 60 * 24);
-            return daysDiff <= 7;
-          } catch (e) {
-            console.warn('StudyHub: Invalid session for recent activity', {
-              session,
-              error: e,
-            });
-            return false;
-          }
-        })
-        .sort(
-          (a, b) =>
-            new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
-        )
-        .slice(0, 3); // Most recent 3 sessions
-
-      recentSessions.forEach((session) => {
-        const subject = session?.subject || session?.title || 'study session';
-        const duration = session?.duration || session?.actualDuration || 0;
-        const hoursAgo = Math.round(
-          (now.getTime() - new Date(session.startTime).getTime()) /
-            (1000 * 60 * 60),
-        );
-        activities.push(
-          `Completed ${subject} (${duration} min) ${hoursAgo}h ago`,
-        );
-      });
-
-      // 2. Recently completed goals (last 14 days)
-      const goals = this.args?.model?.studyGoals || [];
-      const completedGoals = goals
-        .filter((goal) => {
-          try {
-            // ³¹⁸ Remove id requirement - focus on essential data validation
-            if (
-              !goal ||
-              typeof goal !== 'object' ||
-              !goal?.isCompleted ||
-              !goal?.completedAt
-            )
-              return false;
-            const completedDate = new Date(goal.completedAt);
-            const daysDiff =
-              (now.getTime() - completedDate.getTime()) / (1000 * 60 * 60 * 24);
-            return daysDiff <= 14;
-          } catch (e) {
-            console.warn('StudyHub: Invalid goal data for recent activity', {
-              goal,
-              error: e,
-            });
-            return false;
-          }
-        })
-        .sort(
-          (a, b) =>
-            new Date(b.completedAt).getTime() -
-            new Date(a.completedAt).getTime(),
-        )
-        .slice(0, 2); // Most recent 2 completed goals
-
-      completedGoals.forEach((goal) => {
-        const title = goal?.goalTitle || goal?.title || 'goal';
-        const daysAgo = Math.round(
-          (now.getTime() - new Date(goal.completedAt).getTime()) /
-            (1000 * 60 * 60 * 24),
-        );
-        activities.push(`🎉 Achieved "${title}" ${daysAgo}d ago`);
-      });
-
-      // 3. New flashcards added (last 5 days)
-      const flashcards = this.args?.model?.flashcards || [];
-      const newFlashcards = flashcards.filter((card) => {
-        if (!card?.createdAt) return false;
-        const createdDate = new Date(card.createdAt);
-        const daysDiff =
-          (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
-        return daysDiff <= 5;
-      }).length;
-
-      if (newFlashcards > 0) {
-        activities.push(
-          `📝 Added ${newFlashcards} new flashcard${
-            newFlashcards > 1 ? 's' : ''
-          } this week`,
-        );
-      }
-
-      // 4. Recent achievements (last 30 days)
-      const achievements = this.args?.model?.achievements;
-      // ³³⁶ Check if achievements relationship exists in JSON
-      if (!achievements || !Array.isArray(achievements)) {
-        console.log('StudyHub: No achievements found in instance');
-        var safeAchievements = [];
-      } else {
-        var safeAchievements = achievements;
-      }
-      const recentAchievements = safeAchievements
-        .filter((achievement) => {
-          if (!achievement?.unlockedAt) return false;
-          const unlockedDate = new Date(achievement.unlockedAt);
-          const daysDiff =
-            (now.getTime() - unlockedDate.getTime()) / (1000 * 60 * 60 * 24);
-          return daysDiff <= 30;
-        })
-        .sort(
-          (a, b) =>
-            new Date(b.unlockedAt).getTime() - new Date(a.unlockedAt).getTime(),
-        )
-        .slice(0, 1); // Most recent achievement
-
-      recentAchievements.forEach((achievement) => {
-        const title = achievement?.title || achievement?.name || 'achievement';
-        const daysAgo = Math.round(
-          (now.getTime() - new Date(achievement.unlockedAt).getTime()) /
-            (1000 * 60 * 60 * 24),
-        );
-        activities.push(`🏆 Unlocked "${title}" ${daysAgo}d ago`);
-      });
-
-      // Default message if no recent activity
-      if (activities.length === 0) {
-        activities.push(
-          'Welcome to your Study Hub! Start your first study session to see activity here.',
-          'Add study goals and resources to track your learning progress.',
-          'Create flashcards and take practice quizzes to enhance retention.',
-        );
-      }
-
-      return activities.slice(0, 6); // Limit to 6 most relevant activities
-    } catch (e) {
-      console.error('StudyHub: Error generating dynamic activity', e);
-      return ['Start studying to see your recent activity here!'];
     }
   }
 
@@ -2525,7 +2252,7 @@ export class StudyHub extends CardDef {
               </div>
               <div class='metric'>
                 <span class='metric-value'>{{if
-                    (and @model.studyResources @model.studyResources.length)
+                    (Number @model.studyResources.length)
                     @model.studyResources.length
                     0
                   }}</span>
@@ -2533,7 +2260,7 @@ export class StudyHub extends CardDef {
               </div>
               <div class='metric'>
                 <span class='metric-value'>{{if
-                    (and @model.studyGoals @model.studyGoals.length)
+                    (Number @model.studyGoals.length)
                     @model.studyGoals.length
                     0
                   }}</span>
@@ -2576,7 +2303,7 @@ export class StudyHub extends CardDef {
                 <div class='metric'>
                   <span class='metric-value'>{{if
                       @model.studyResources
-                      @model.studyResources.length
+                      (Number @model.studyResources.length)
                       0
                     }}</span>
                   <span class='metric-label'>resources</span>
