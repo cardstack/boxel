@@ -595,6 +595,28 @@ export default class MatrixService extends Service {
     }
   }
 
+  async loginToRealms() {
+    // This is where we would actually load user-specific choices out of the
+    // user's profile based on this.client.getUserId();
+    let activeRealms = this.realmServer.availableRealmURLs;
+
+    await Promise.all(
+      activeRealms.map(async (realmURL: string) => {
+        try {
+          // Our authorization-middleware can login automatically after seeing a
+          // 401, but this preemptive login makes it possible to see
+          // canWrite===true on realms that are publicly readable.
+          await this.realm.login(realmURL);
+        } catch (err) {
+          console.warn(
+            `Unable to establish session with realm ${realmURL}`,
+            err,
+          );
+        }
+      }),
+    );
+  }
+
   private async initSlidingSync(accountData?: { realms: string[] } | null) {
     let lists: Map<string, MSC3575List> = new Map();
     lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
