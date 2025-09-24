@@ -21,6 +21,7 @@ interface MenuItemOptions {
   subtext?: string;
   subtextComponent?: ComponentLike;
   tabindex: number | string;
+  tags: string[];
   url: string;
 }
 export class MenuItem {
@@ -40,6 +41,7 @@ export class MenuItem {
   subtext?: string;
   postscript?: string;
   subtextComponent?: ComponentLike;
+  tags: string[];
 
   constructor(text: string, type: string, options: Partial<MenuItemOptions>) {
     this.text = text;
@@ -57,6 +59,7 @@ export class MenuItem {
     this.subtext = options.subtext;
     this.postscript = options.postscript;
     this.subtextComponent = options.subtextComponent;
+    this.tags = options.tags || [];
   }
 }
 

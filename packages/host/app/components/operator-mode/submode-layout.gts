@@ -598,6 +598,7 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
+        width: var(--submode-new-file-button-width);
       }
 
       .profile-icon-button {

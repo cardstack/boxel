@@ -3,6 +3,7 @@ import {
   type QueuePublisher,
   type Realm,
   type VirtualNetwork,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -47,6 +48,7 @@ export type CreateRoutesArgs = {
     url: string,
     username: string,
     copiedFromRealm?: URL,
+    enableFileWatcher?: boolean,
   ) => Realm;
   createRealm: ({
     ownerUserId,
@@ -60,10 +62,14 @@ export type CreateRoutesArgs = {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }) => Promise<Realm>;
+  }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
-  sendEvent: (user: string, eventType: string) => Promise<void>;
+  sendEvent: (
+    user: string,
+    eventType: string,
+    data?: Record<string, any>,
+  ) => Promise<void>;
   validPublishedRealmDomains?: string[];
   assetsURL: URL;
 };

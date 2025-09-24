@@ -15,7 +15,7 @@ import {
 
 import CardService from '@cardstack/host/services/card-service';
 
-import { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 
 import type { Model as ParentModel } from '../render';
 

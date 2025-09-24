@@ -56,7 +56,7 @@ import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
 import ENV from '@cardstack/host/config/environment';
 
-import { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
