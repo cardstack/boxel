@@ -91,7 +91,7 @@ export class TestRealmAdapter implements RealmAdapter {
       }
       let url = this.#paths.fileURL(path);
       this.#lastModified.set(url.href, now);
-      ir.contents[last] = { kind: 'file', content };
+      dir.contents[last] = { kind: 'file', content };
       if (typeof content === 'object') {
         this.#potentialModulesAndInstances.push({ content, url });
       }

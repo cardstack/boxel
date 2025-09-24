@@ -24,6 +24,8 @@ import {
   type RealmInfo,
   type TokenClaims,
   IndexWriter,
+  query,
+  param,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
@@ -615,6 +617,25 @@ export function delay(delayAmountMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayAmountMs);
   });
+}
+
+// --- Created-at test utilities ---
+// Returns created_at (epoch seconds) from realm_file_meta for a given local file path like 'Pet/mango.json'.
+export async function getFileCreatedAt(
+  realm: Realm,
+  localPath: string,
+): Promise<number | null> {
+  let db = await getDbAdapter();
+  let rows = await query(db, [
+    'SELECT created_at FROM realm_file_meta WHERE realm_url =',
+    param(realm.url),
+    'AND file_path =',
+    param(localPath),
+  ]);
+  if (rows.length === 0) return null;
+  let created = rows[0]['created_at'];
+  if (created == null) return null;
+  return typeof created === 'string' ? parseInt(created) : Number(created);
 }
 
 function changedEntry(
