@@ -24,7 +24,7 @@ import {
   setContextResponse,
 } from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
-import { RealmServerTokenClaim, createJWT } from '../utils/jwt';
+import { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
@@ -118,29 +118,6 @@ export default function handlePublishRealm({
     }
 
     try {
-      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
-      if (!sourceRealm) {
-        throw new Error(`Source realm ${sourceRealmURL} not found`);
-      }
-
-      // let dmRooms =
-      //   (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-      //     'boxel.session-rooms',
-      //   )) ?? {};
-
-      // console.log('dmrooms', JSON.stringify(dmRooms, null, 2));
-
-      // let sessionRoomId = dmRooms[ownerUserId];
-
-      let jwtThings = {
-        user: ownerUserId,
-        realm: sourceRealmURL,
-        // sessionRoom: sessionRoomId,
-        permissions: ['read'],
-      };
-
-      // console.log('jwtThings:', jwtThings);
-
       let realmInfoResponse = await virtualNetwork.handle(
         new Request(`${sourceRealmURL}_info`, {
           headers: {
@@ -156,15 +133,9 @@ export default function handlePublishRealm({
         throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
       }
 
-      let json = await realmInfoResponse.json();
+      let realmInfoJson = await realmInfoResponse.json();
 
-      // let json = await sourceRealm.getRealmInfoFIXMEIsThisValid();
-
-      console.log(
-        `checking json for realm ${sourceRealmURL}: ${JSON.stringify(json)}`,
-      );
-
-      if (json.data.attributes.publishable !== true) {
+      if (realmInfoJson.data.attributes.publishable !== true) {
         return sendResponseForUnprocessableEntity(
           ctxt,
           `Realm ${sourceRealmURL} is not publishable`,

@@ -19,7 +19,6 @@ import {
   setupPermissionedRealm,
   runTestRealmServer,
   closeServer,
-  createJWT,
   createVirtualNetwork,
   realmSecretSeed,
   matrixURL,
@@ -157,15 +156,9 @@ module(basename(__filename), function () {
             }),
           );
 
-        console.log(
-          'response from creating publishable realm',
-          response.ok,
-          response.status,
-          response.body,
-        );
-
         publishableRealmUrl = response.body.data.id;
 
+        // Make the published realm public so reading _info doesn’t need a token
         dbAdapter.execute(`
           INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
           VALUES ('${publishableRealmUrl}', '*', true, true, true)
@@ -241,34 +234,9 @@ module(basename(__filename), function () {
         let sourceRealmPath = new URL(publishableRealmUrl).pathname;
         let sourceRealmInfoPath = `${sourceRealmPath}_info`;
 
-        console.log(`about to get ${sourceRealmInfoPath}`);
-        // Test that source realm info includes lastPublishedAt as an object
-
-        // let sourceRealmHack = testRealmServer.realmsFIXMEHack.find((r) => {
-        //   return r.url === publishableRealmUrl;
-        // });
-
-        // console.log('found source realm url', sourceRealmHack?.url);
-
-        // if (!sourceRealmHack) {
-        //   throw new Error(
-        //     'Could not find source realm: ' + publishableRealmUrl,
-        //   );
-        // }
-
         let sourceRealmInfoResponse = await request
           .get(sourceRealmInfoPath)
           .set('Accept', 'application/vnd.api+json');
-        // .set(
-        //   'Authorization',
-        //   `Bearer ${createJWT(sourceRealmHack, ownerUserId, ['read'])}`,
-        // );
-
-        console.log(
-          'got?',
-          sourceRealmInfoResponse.status,
-          sourceRealmInfoResponse.body,
-        );
 
         assert.strictEqual(
           sourceRealmInfoResponse.status,
