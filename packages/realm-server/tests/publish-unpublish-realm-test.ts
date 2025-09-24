@@ -172,7 +172,7 @@ module(basename(__filename), function () {
         `);
       });
 
-      test.only('POST /_publish-realm can publish realm successfully', async function (assert) {
+      test('POST /_publish-realm can publish realm successfully', async function (assert) {
         let response = await request
           .post('/_publish-realm')
           .set('Accept', 'application/vnd.api+json')
