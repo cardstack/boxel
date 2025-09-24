@@ -50,6 +50,7 @@ const ColorPicker: TemplateOnlyComponent<Signature> = <template>
       }
       .color-text-input {
         padding-left: var(--color-picker-width);
+        transition: none;
       }
       .color-input-container {
         position: absolute;

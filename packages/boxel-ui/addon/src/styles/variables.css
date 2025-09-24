@@ -14,14 +14,17 @@
   --boxel-font-xs: var(--boxel-font-size-xs) / calc(15 / 11)
     var(--boxel-font-family);
 
+  --_boxel-size-base: 1rem; /* base font-size and spacing */
+
   /* font-sizes */
-  --boxel-font-size-xxl: 2.5rem; /* 40px */
-  --boxel-font-size-xl: 2rem; /* 32px */
-  --boxel-font-size-lg: 1.375rem; /* 22px */
-  --boxel-font-size-med: 1.25rem; /* 20px */
-  --boxel-font-size: 1rem; /* default - 16px */
-  --boxel-font-size-sm: 0.8125rem; /* 13px */
-  --boxel-font-size-xs: 0.6875rem; /* 11px */
+  --_boxel-font-size-base: var(--_boxel-size-base);
+  --boxel-font-size-xxl: calc(var(--boxel-font-size) * 2.5); /* 40px */
+  --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
+  --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
+  --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25); /* 20px */
+  --boxel-font-size: var(--_boxel-font-size-base); /* default - 16px */
+  --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125); /* 13px */
+  --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
 
   /* letter-spacing */
   /* Note: the px conversion is using default font_size = 16px (1rem) */
@@ -35,8 +38,7 @@
   --boxel-lsp-xxs: 0.005em; /* 0.08px */
 
   /* Modular scale for spacing */
-  --_boxel-sp-unit: 0.25rem;
-  --boxel-spacing: calc(var(--_boxel-sp-unit) * 4); /* base size (1rem) */
+  --boxel-spacing: var(--_boxel-size-base);
   --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
   --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio)); /* 2.17px */
   --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 2.88px */

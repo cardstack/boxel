@@ -239,6 +239,10 @@ export default class BoxelInput extends Component<Signature> {
             'error error error'
             'helper helper helper';
           width: 100%;
+
+          font-size: var(--boxel-font-size-sm);
+          line-height: calc(18 / 13);
+          letter-spacing: var(--boxel-lsp-xs);
         }
 
         .boxel-input {

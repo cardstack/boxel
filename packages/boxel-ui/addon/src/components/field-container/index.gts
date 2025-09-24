@@ -101,6 +101,8 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       .boxel-field__icon {
         flex-shrink: 0;
+        width: var(--boxel-font-size);
+        height: auto;
       }
 
       .content {

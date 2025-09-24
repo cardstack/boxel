@@ -44,27 +44,69 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       ends up in nearly every card's prerendered HTML
   }}
   <style scoped>
-    :global(.boxel-card-container) {
-      position: relative;
-      background-color: var(--background, var(--boxel-light));
-      border-radius: var(--radius, var(--boxel-border-radius));
-      color: var(--foreground, var(--boxel-dark));
-      font-family: var(--font-sans, var(--boxel-font-family));
-      transition:
-        max-width var(--boxel-transition),
-        box-shadow var(--boxel-transition);
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      box-shadow: var(--shadow);
+    @layer boxelComponentL1 {
+      :global(.boxel-card-container) {
+        position: relative;
+        background-color: var(--background, var(--boxel-light));
+        border-radius: var(--radius, var(--boxel-border-radius));
+        color: var(--foreground, var(--boxel-dark));
+        font-family: var(--font-sans, var(--boxel-font-family));
+        transition:
+          max-width var(--boxel-transition),
+          box-shadow var(--boxel-transition);
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+      :global(.boxel-card-container--boundaries) {
+        box-shadow:
+          0 0 0 1px var(--border, var(--boxel-border-color)),
+          var(--shadow, 0 0 0 1px var(--boxel-border-color));
+      }
+      :global(.boxel-card-container--boundaries.hide-boundaries) {
+        box-shadow: none;
+      }
     }
-    :global(.boxel-card-container--boundaries) {
-      box-shadow:
-        0 0 0 1px var(--border, var(--boxel-border-color)),
-        var(--shadow, 0 0 0 1px var(--boxel-border-color));
-    }
-    :global(.boxel-card-container--boundaries.hide-boundaries) {
-      box-shadow: none;
+
+    @layer themed {
+      :global(.boxel-card-container) {
+        /* font-size */
+        --boxel-font-size-xxl: calc(var(--boxel-font-size) * 2.5); /* 40px */
+        --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
+        --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
+        --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25); /* 20px */
+        --boxel-font-size: var(--typescale-body, var(--_boxel-font-size-base));
+        --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125); /* 13px */
+        --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
+
+        /* spacing */
+        --boxel-spacing: calc(
+          var(--spacing, calc(var(--boxel-font-size) / 4)) * 4
+        );
+        --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio));
+        --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio));
+        --boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio));
+        --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio));
+        --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));
+        --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio));
+        --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio));
+        --boxel-sp: var(--boxel-spacing);
+        --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio));
+        --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio));
+        --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));
+        --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio));
+
+        /* border-radius */
+        --boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
+        --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
+        --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 3px);
+        --boxel-border-radius: var(--radius, var(--_boxel-radius));
+        --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
+        --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
+        --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
+        --boxel-form-control-border-radius: var(--radius, var(--_boxel-radius));
+      }
     }
   </style>
 </template>;

@@ -48,11 +48,17 @@ const Swatch: TemplateOnlyComponent<Signature> = <template>
         max-width: 100%;
         padding: 0;
         background-color: var(--swatch-background, transparent);
-        border: var(--boxel-border);
+        border: 1px solid
+          color-mix(
+            in oklab,
+            var(--border, var(--boxel-border-color)),
+            var(--foreground, var(--boxel-dark)) 10%
+          );
         border-radius: var(--boxel-border-radius);
       }
       .preview.round {
         flex-shrink: 0;
+        aspect-ratio: 1;
         border-radius: 50%;
         order: -1;
       }

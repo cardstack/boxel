@@ -3,6 +3,7 @@ import { startCase } from 'lodash';
 import {
   CardDef,
   Component,
+  CSSField,
   FieldDef,
   StringField,
   contains,
@@ -13,38 +14,37 @@ import ColorField from './color';
 import URLField from './url';
 import { GridContainer, Swatch } from '@cardstack/boxel-ui/components';
 
-type Color = {
-  name?: string;
-  value?: string;
-};
-
 export class CompoundColorField extends FieldDef {
   static displayName = 'Color';
   @field name = contains(StringField);
   @field value = contains(ColorField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <Swatch @label={{@model.name}} @color={{@model.value}} />
+    </template>
+  };
 }
 
-const ViewPalette: TemplateOnlyComponent<{ Args: { colors?: Color[] } }> =
-  <template>
-    <GridContainer class='view-palette'>
-      {{#each @colors as |color|}}
-        <Swatch @label={{color.name}} @color={{color.value}} />
-      {{/each}}
-    </GridContainer>
-    <style scoped>
-      .view-palette {
-        grid-template-columns: repeat(auto-fill, 7rem);
-        gap: var(--boxel-sp);
-      }
-      :deep(.label) {
-        font-weight: 600;
-      }
-    </style>
-  </template>;
+const PaletteComponent: TemplateOnlyComponent<{
+  Args: { colors?: { name?: string; value?: string | null }[] };
+}> = <template>
+  <GridContainer class='view-palette'>
+    {{#each @colors as |color|}}
+      <Swatch @label={{color.name}} @color={{color.value}} />
+    {{/each}}
+  </GridContainer>
+  <style scoped>
+    .view-palette {
+      grid-template-columns: repeat(auto-fill, 7rem);
+      gap: var(--boxel-sp);
+    }
+  </style>
+</template>;
 
 class FunctionalPaletteEmbedded extends Component<typeof FunctionalPalette> {
   <template>
-    <ViewPalette @colors={{this.palette}} />
+    <PaletteComponent @colors={{this.palette}} />
     <style scoped>
       .functional-palette {
         grid-template-columns: repeat(auto-fill, 7rem);
@@ -53,12 +53,14 @@ class FunctionalPaletteEmbedded extends Component<typeof FunctionalPalette> {
     </style>
   </template>
 
-  private get palette(): Color[] | undefined {
-    console.log(Object.keys(this.args.fields));
-    return Object.keys(this.args.fields)?.map((fieldName) => ({
-      name: startCase(fieldName),
-      value: this.args.model?.[fieldName] ?? 'n/a',
-    }));
+  private get palette() {
+    return Object.keys(this.args.fields)
+      ?.map((fieldName) => ({
+        name: startCase(fieldName),
+
+        value: (this.args.model as Record<string, any>)?.[fieldName],
+      }))
+      .filter((item) => Boolean(item.value));
   }
 }
 
@@ -80,10 +82,13 @@ export class FunctionalPalette extends FieldDef {
   static displayName = 'Functional Palette';
   @field primary = contains(ColorField);
   @field secondary = contains(ColorField);
+  @field background = contains(ColorField);
+  @field foreground = contains(ColorField);
+  @field border = contains(ColorField);
+  @field muted = contains(ColorField);
+  @field accent = contains(ColorField);
   @field dark = contains(ColorField);
   @field light = contains(ColorField);
-  @field neutral = contains(ColorField);
-  @field accent = contains(ColorField);
 
   static embedded = FunctionalPaletteEmbedded;
 }
@@ -124,6 +129,53 @@ export class BrandGuide extends CardDef {
   // UI Components
   // TODO
   @field cornerRadius = contains(CSSPropertyValueField);
+  @field cssVariables = contains(CSSField, {
+    computeVia: function (this: BrandGuide) {
+      return this.computeCSSFromFields();
+    },
+  });
+
+  private computeCSSFromFields() {
+    const cssBlocks: string[] = [];
+
+    const rootVars: string[] = [];
+    // colors
+    this.addCSSVar(rootVars, '--primary', this.functionalPalette.primary);
+    this.addCSSVar(rootVars, '--secondary', this.functionalPalette.secondary);
+    this.addCSSVar(rootVars, '--background', this.functionalPalette.background);
+    this.addCSSVar(rootVars, '--foreground', this.functionalPalette.foreground);
+    this.addCSSVar(rootVars, '--border', this.functionalPalette.border);
+    this.addCSSVar(rootVars, '--muted', this.functionalPalette.muted);
+    this.addCSSVar(rootVars, '--accent', this.functionalPalette.accent);
+
+    // typography
+    this.addCSSVar(rootVars, '--font-sans', this.bodyCopy.fontFamily);
+
+    this.addCSSVar(rootVars, '--typescale-h1', this.headline.fontSize);
+    this.addCSSVar(rootVars, '--typescale-body', this.bodyCopy.fontSize);
+    this.addCSSVar(rootVars, '--lineheight-base', this.bodyCopy.lineHeight);
+
+    // other
+    this.addCSSVar(rootVars, '--radius', this.cornerRadius);
+    // this.addCSSVar(rootVars, '--spacing', this.spacing);
+
+    if (rootVars.length > 0) {
+      cssBlocks.push(`:root {\n${rootVars.join('\n')}\n}`);
+    }
+
+    return cssBlocks.join('\n\n');
+  }
+
+  private addCSSVar(
+    vars: string[],
+    property: string,
+    value: string | undefined | null,
+  ): void {
+    let val = value?.replace(';', '')?.trim();
+    if (val?.length) {
+      vars.push(`  ${property}: ${val};`);
+    }
+  }
 
   // static isolated = class Isolated extends Component<typeof this> {
   //   <template>

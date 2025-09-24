@@ -1,4 +1,4 @@
-@layer reset, utilities, boxelComponentL1, boxelComponentL2;
+@layer reset, utilities, boxelComponentL1, boxelComponentL2, themed;
 
 @layer reset {
   * {

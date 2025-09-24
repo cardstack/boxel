@@ -98,8 +98,19 @@ export default class ColorPalette extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
       .swatch-button {
+        --_swatch-border: color-mix(
+          in oklab,
+          var(--swatch-color),
+          var(--foreground, var(--boxel-dark)) 10%
+        );
+        --_swatch-border-selected: color-mix(
+          in oklab,
+          var(--border, var(--boxel-border-color)),
+          var(--foreground, var(--boxel-dark)) 20%
+        );
         width: var(--swatch-size);
         height: var(--swatch-size);
+        aspect-ratio: 1;
         border: 2px solid transparent;
         border-radius: 50%;
         padding: 2px;
@@ -113,14 +124,17 @@ export default class ColorPalette extends Component<Signature> {
         height: 100%;
         border-radius: 50%;
         background-color: var(--swatch-color);
+        box-shadow: inset 0 0 0 1px var(--_swatch-border);
       }
       .swatch-button:hover:not(:disabled) {
         cursor: pointer;
         transform: scale(1.1);
       }
       .swatch-button.selected {
-        background-color: var(--boxel-light);
-        border-color: var(--border, var(--boxel-800));
+        border-color: var(--_swatch-border-selected);
+      }
+      .swatch-button.selected::before {
+        box-shadow: none;
       }
       .remove {
         vertical-align: text-bottom;
