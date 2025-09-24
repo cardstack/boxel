@@ -90,8 +90,8 @@ export { provide as provideConsumeContext } from 'ember-provide-consume-context/
 export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
   // to be appearing in date/time serialization in some envs
-  // eslint-disable-next-line no-irregular-whitespace
-  return text.replace(/[\s ]+/g, ' ').trim();
+
+  return text.replace('<!---->', '').replace(/[\s]+/g, ' ').trim();
 }
 
 export function getMonacoContent(
@@ -432,6 +432,8 @@ async function setupTestRealm({
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
+    dbAdapter,
+    queuePublisher: queue,
     runnerOptsManager: runnerOptsMgr,
     indexRunner,
     virtualNetwork,

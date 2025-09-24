@@ -1,0 +1,1319 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { eq, gt } from '@cardstack/boxel-ui/helpers';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { TrackedMap } from 'tracked-built-ins';
+import { task } from 'ember-concurrency';
+import { BoxelButton, BoxelInput } from '@cardstack/boxel-ui/components';
+
+import {
+  AvataaarsModel,
+  DEFAULT_AVATAR_VALUES,
+  getAvataarsUrl,
+  generateRandomAvatarModel,
+  getCategoryOptions,
+  getOptionPreviewUrl,
+  getCurrentSelectionForCategory,
+  updateAvatarModelForCategory,
+  playClickSound,
+} from '../../external/avataar-utils';
+
+import { SuggestAvatar } from '../../commands/suggest-avatar';
+
+interface AvatarCreatorArgs {
+  model: AvataaarsModel;
+  context?: any;
+  onUpdate?: (model: AvataaarsModel) => void;
+}
+
+export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs> {
+  @tracked selectedCategory = 'hair';
+  @tracked copySuccess = false;
+
+  // Internal mutable avatar state using TrackedMap
+  @tracked currentModel = new TrackedMap([
+    ['topType', this.args.model?.topType || DEFAULT_AVATAR_VALUES.topType],
+    [
+      'accessoriesType',
+      this.args.model?.accessoriesType || DEFAULT_AVATAR_VALUES.accessoriesType,
+    ],
+    [
+      'hairColor',
+      this.args.model?.hairColor || DEFAULT_AVATAR_VALUES.hairColor,
+    ],
+    [
+      'facialHairType',
+      this.args.model?.facialHairType || DEFAULT_AVATAR_VALUES.facialHairType,
+    ],
+    [
+      'clotheType',
+      this.args.model?.clotheType || DEFAULT_AVATAR_VALUES.clotheType,
+    ],
+    ['eyeType', this.args.model?.eyeType || DEFAULT_AVATAR_VALUES.eyeType],
+    [
+      'eyebrowType',
+      this.args.model?.eyebrowType || DEFAULT_AVATAR_VALUES.eyebrowType,
+    ],
+    [
+      'mouthType',
+      this.args.model?.mouthType || DEFAULT_AVATAR_VALUES.mouthType,
+    ],
+    [
+      'skinColor',
+      this.args.model?.skinColor || DEFAULT_AVATAR_VALUES.skinColor,
+    ],
+  ]);
+
+  // Get Avataaars URL for the image
+  get avataaarsUrl() {
+    // Convert TrackedMap to object for getAvataarsUrl function
+    const modelObj = Object.fromEntries(this.currentModel.entries());
+    return getAvataarsUrl(modelObj as AvataaarsModel);
+  }
+
+  get currentCategoryOptions() {
+    return getCategoryOptions(this.selectedCategory);
+  }
+
+  selectCategory = (category: string) => {
+    this.selectedCategory = category;
+  };
+
+  generateRandomAvatar = () => {
+    // Play click sound
+    playClickSound();
+
+    // Generate random avatar using the utility function
+    const randomAvatar = generateRandomAvatarModel();
+
+    // Apply random selections to internal state - reassign entire TrackedMap
+    this.currentModel = new TrackedMap(Object.entries(randomAvatar));
+
+    // Notify parent component of the change
+    this.args.onUpdate?.(randomAvatar);
+  };
+
+  selectAvataaarsOption = (option: { value: string; label: string }) => {
+    // Get current model as object
+    const currentModelObj = Object.fromEntries(
+      this.currentModel.entries(),
+    ) as AvataaarsModel;
+
+    // Update using the utility function
+    const updatedModel = updateAvatarModelForCategory(
+      currentModelObj,
+      this.selectedCategory,
+      option.value,
+    );
+
+    // Update internal state
+    this.currentModel = new TrackedMap(Object.entries(updatedModel));
+
+    // Notify parent component of the change
+    this.args.onUpdate?.(updatedModel);
+  };
+
+  copyAvataaarsUrl = () => {
+    try {
+      // Play click sound
+      playClickSound();
+      navigator.clipboard.writeText(this.avataaarsUrl);
+      this.copySuccess = true;
+      // Reset success state after 2 seconds
+      //DO WE NEED THIS?
+      setTimeout(() => {
+        this.copySuccess = false;
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy URL:', error);
+    }
+  };
+
+  // Generate preview URL for each option
+  getOptionPreviewUrl = (option: { value: string; label: string }) => {
+    const currentModelObj = Object.fromEntries(
+      this.currentModel.entries(),
+    ) as AvataaarsModel;
+    return getOptionPreviewUrl(
+      currentModelObj,
+      this.selectedCategory,
+      option.value,
+    );
+  };
+
+  // Getters for template use - these properly track TrackedMap changes
+  get topType() {
+    return this.currentModel.get('topType');
+  }
+
+  get hairColor() {
+    return this.currentModel.get('hairColor');
+  }
+
+  get mouthType() {
+    return this.currentModel.get('mouthType');
+  }
+
+  get skinColor() {
+    return this.currentModel.get('skinColor');
+  }
+
+  get eyeType() {
+    return this.currentModel.get('eyeType');
+  }
+
+  get eyebrowType() {
+    return this.currentModel.get('eyebrowType');
+  }
+
+  get clotheType() {
+    return this.currentModel.get('clotheType');
+  }
+
+  get currentSelection() {
+    try {
+      const currentModelObj = Object.fromEntries(
+        this.currentModel.entries(),
+      ) as AvataaarsModel;
+      return getCurrentSelectionForCategory(
+        currentModelObj,
+        this.selectedCategory,
+      );
+    } catch (error) {
+      console.warn('Error getting current selection:', error);
+      return null;
+    }
+  }
+
+  _suggestAvatar = task(async () => {
+    try {
+      let commandContext = this.args.context?.commandContext;
+      if (!commandContext) {
+        throw new Error(
+          'Command context does not exist. Please switch to Interact Mode',
+        );
+      }
+
+      let suggestCommand = new SuggestAvatar(commandContext);
+      await suggestCommand.execute({
+        name: 'Avatar',
+      });
+    } catch (error) {
+      console.error('Error suggesting avatar:', error);
+      alert('There was an error getting avatar suggestions. Please try again.');
+    }
+  });
+
+  suggestAvatar = () => {
+    this._suggestAvatar.perform();
+  };
+
+  isOptionSelected = (option: { value: string; label: string }) => {
+    return this.currentSelection === option.value;
+  };
+
+  <template>
+    <div class='avatar-creator'>
+      <div class='avatar-display'>
+        <div class='avatar-preview'>
+          <img
+            src={{this.avataaarsUrl}}
+            alt='Avatar Avatar'
+            class='avatar-image'
+          />
+        </div>
+
+        <div class='avatar-info'>
+          <div class='url-copy-section'>
+            <div class='url-display-row'>
+              <BoxelInput
+                @value={{this.avataaarsUrl}}
+                @placeholder='Avatar URL'
+                @readonly={{true}}
+                class='url-input'
+                aria-label='Avatar URL'
+              />
+              <button
+                class='copy-btn {{if this.copySuccess "copied"}}'
+                {{on 'click' this.copyAvataaarsUrl}}
+                title='Copy Avatar URL'
+              >
+                {{#if this.copySuccess}}
+                  ✓
+                {{else}}
+                  📋
+                {{/if}}
+              </button>
+            </div>
+            {{#if this.copySuccess}}
+              <div class='copy-feedback'>Avatar URL copied to clipboard!</div>
+            {{/if}}
+          </div>
+
+          <div class='avatar-details'>
+            {{#if this.topType}}
+              <div class='detail-item'>
+                <strong>Hair:</strong>
+                {{this.topType}}
+              </div>
+            {{/if}}
+            {{#if this.hairColor}}
+              <div class='detail-item'>
+                <strong>Hair Color:</strong>
+                {{this.hairColor}}
+              </div>
+            {{/if}}
+            {{#if this.mouthType}}
+              <div class='detail-item'>
+                <strong>Mouth:</strong>
+                {{this.mouthType}}
+              </div>
+            {{/if}}
+            {{#if this.skinColor}}
+              <div class='detail-item'>
+                <strong>Skin:</strong>
+                {{this.skinColor}}
+              </div>
+            {{/if}}
+            {{#if this.eyeType}}
+              <div class='detail-item'>
+                <strong>Eyes:</strong>
+                {{this.eyeType}}
+              </div>
+            {{/if}}
+            {{#if this.eyebrowType}}
+              <div class='detail-item'>
+                <strong>Eyebrows:</strong>
+                {{this.eyebrowType}}
+              </div>
+            {{/if}}
+            {{#if this.clotheType}}
+              <div class='detail-item'>
+                <strong>Clothes:</strong>
+                {{this.clotheType}}
+              </div>
+            {{/if}}
+          </div>
+        </div>
+      </div>
+
+      <div class='customization-panel'>
+        <div class='panel-header'>
+          <h3>Customize Your Avatar</h3>
+          <div class='header-buttons'>
+            <BoxelButton
+              @kind='secondary'
+              @size='tall'
+              class='random-btn'
+              {{on 'click' this.generateRandomAvatar}}
+            >
+              🎲 Random
+            </BoxelButton>
+            <BoxelButton
+              @kind='primary'
+              @size='tall'
+              class='ai-suggestion-btn'
+              @loading={{this._suggestAvatar.isRunning}}
+              {{on 'click' this.suggestAvatar}}
+            >
+              {{#if this._suggestAvatar.isRunning}}
+                🤖 Suggesting...
+              {{else}}
+                ✨ AI Suggest
+              {{/if}}
+            </BoxelButton>
+          </div>
+        </div>
+
+        <div class='category-nav'>
+          <BoxelButton
+            @kind={{if (eq this.selectedCategory 'hair') 'primary' 'secondary'}}
+            @size='small'
+            class='category-btn
+              {{if (eq this.selectedCategory "hair") "active"}}'
+            data-category='hair'
+            {{on 'click' (fn this.selectCategory 'hair')}}
+          >
+            Hair Style
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'hairColor')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
+            class='category-btn
+              {{if (eq this.selectedCategory "hairColor") "active"}}'
+            data-category='hairColor'
+            {{on 'click' (fn this.selectCategory 'hairColor')}}
+          >
+            Hair Color
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if (eq this.selectedCategory 'eyes') 'primary' 'secondary'}}
+            @size='small'
+            class='category-btn
+              {{if (eq this.selectedCategory "eyes") "active"}}'
+            data-category='eyes'
+            {{on 'click' (fn this.selectCategory 'eyes')}}
+          >
+            Eyes
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'eyebrows')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
+            class='category-btn
+              {{if (eq this.selectedCategory "eyebrows") "active"}}'
+            data-category='eyebrows'
+            {{on 'click' (fn this.selectCategory 'eyebrows')}}
+          >
+            Eyebrows
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'mouth')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
+            class='category-btn
+              {{if (eq this.selectedCategory "mouth") "active"}}'
+            data-category='mouth'
+            {{on 'click' (fn this.selectCategory 'mouth')}}
+          >
+            Mouth
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'skinTone')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
+            class='category-btn
+              {{if (eq this.selectedCategory "skinTone") "active"}}'
+            data-category='skinTone'
+            {{on 'click' (fn this.selectCategory 'skinTone')}}
+          >
+            Skin
+          </BoxelButton>
+          <BoxelButton
+            @kind={{if
+              (eq this.selectedCategory 'clothes')
+              'primary'
+              'secondary'
+            }}
+            @size='small'
+            class='category-btn
+              {{if (eq this.selectedCategory "clothes") "active"}}'
+            data-category='clothes'
+            {{on 'click' (fn this.selectCategory 'clothes')}}
+          >
+            Clothes
+          </BoxelButton>
+        </div>
+
+        <div class='styles-grid-container'>
+          <h4>{{this.selectedCategory}} Options</h4>
+
+          {{#if (gt this.currentCategoryOptions.length 0)}}
+            <div class='styles-grid'>
+              {{#each this.currentCategoryOptions as |option|}}
+                <button
+                  type='button'
+                  class='option-btn avataaars-option
+                    {{if (this.isOptionSelected option) "selected"}}'
+                  {{on 'click' (fn this.selectAvataaarsOption option)}}
+                >
+                  <div class='option-preview'>
+                    <div class='option-image'>
+                      <img
+                        src={{this.getOptionPreviewUrl option}}
+                        alt={{option.label}}
+                        class='preview-avatar'
+                        loading='lazy'
+                      />
+                    </div>
+                    <div class='option-label'>{{option.label}}</div>
+                  </div>
+                </button>
+              {{/each}}
+            </div>
+          {{else}}
+            <div class='empty-styles'>No
+              {{this.selectedCategory}}
+              options available</div>
+          {{/if}}
+        </div>
+      </div>
+    </div>
+
+    <style scoped>
+      .avatar-creator {
+        container-type: inline-size;
+        display: grid;
+        grid-template-columns: 420px 1fr;
+        gap: var(--boxel-sp-xl);
+        padding: var(--boxel-sp-xl);
+        min-height: 100vh;
+        background: var(--background);
+        color: var(--foreground);
+        position: relative;
+        overflow: hidden;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .avatar-creator::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image:
+    /* Racing track lines */
+          linear-gradient(
+            90deg,
+            transparent 48%,
+            rgba(255, 255, 255, 0.1) 49%,
+            rgba(255, 255, 255, 0.1) 51%,
+            transparent 52%
+          ),
+          linear-gradient(
+            0deg,
+            transparent 48%,
+            rgba(255, 255, 255, 0.08) 49%,
+            rgba(255, 255, 255, 0.08) 51%,
+            transparent 52%
+          );
+        background-size:
+          60px 60px,
+          60px 60px;
+        pointer-events: none;
+        z-index: 0;
+        animation: trackMove 8s linear infinite;
+      }
+
+      @keyframes trackMove {
+        0% {
+          transform: translateX(0) translateY(0);
+        }
+        100% {
+          transform: translateX(60px) translateY(60px);
+        }
+      }
+
+      .avatar-display {
+        background: transparent;
+        border: 4px solid var(--background);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-xl);
+        backdrop-filter: blur(15px);
+        box-shadow: var(--boxel-box-shadow-lg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--boxel-sp-lg);
+        position: relative;
+        z-index: 1;
+        animation: marioKartBounce 3s ease-in-out infinite;
+        height: fit-content;
+      }
+
+      @keyframes marioKartBounce {
+        0%,
+        100% {
+          transform: translateY(0px);
+        }
+        50% {
+          transform: translateY(-8px);
+        }
+      }
+
+      .avatar-preview {
+        width: 280px;
+        height: 280px;
+        border: 6px solid var(--background);
+        border-radius: 50%;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        background: linear-gradient(
+          135deg,
+          var(--boxel-500) 0%,
+          var(--boxel-600) 50%,
+          var(--boxel-700) 100%
+        );
+        background-size: 200% 200%;
+        animation: marioKartRainbow 6s ease infinite;
+        box-shadow: var(--boxel-box-shadow-xl);
+        transition: all 0.3s ease;
+      }
+
+      .avatar-preview:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 60px rgba(52, 152, 219, 0.6);
+      }
+
+      @keyframes marioKartRainbow {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+        }
+      }
+
+      .avatar-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 18px;
+        filter: brightness(1.1) contrast(1.05) saturate(1.1);
+      }
+
+      .avatar-info {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+
+      /* URL Copy Section Styles - Following avatar.gts pattern */
+      .url-copy-section {
+        flex: 1;
+      }
+
+      .url-display-row {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .url-input {
+        flex: 1;
+        padding: var(--boxel-sp-xs);
+        border: 2px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius-xs);
+        font-size: var(--boxel-font-size-sm);
+        background: var(--muted);
+        color: var(--muted-foreground);
+      }
+
+      /* Override BoxelInput styles for URL input */
+      .url-input :deep(input) {
+        background: var(--boxel-light);
+        border: 2px solid var(--background, var(--boxel-500));
+        color: var(--foreground);
+        font-size: var(--boxel-font-size-sm);
+        padding: var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
+      .url-input :deep(input:focus) {
+        border-color: var(--background, var(--boxel-500));
+        box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.2);
+      }
+
+      .copy-btn {
+        width: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--secondary, var(--boxel-highlight));
+        color: white;
+        border: none;
+        border-radius: var(--boxel-border-radius-xs);
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .copy-btn:hover {
+        background: var(--secondary-hover, var(--boxel-highlight-hover));
+        transform: translateY(-1px);
+      }
+
+      .copy-btn.copied {
+        background: var(--boxel-dark, var(--boxel-success));
+      }
+
+      .copy-feedback {
+        margin-top: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        background: rgba(39, 174, 96, 0.2);
+        border: 1px solid var(--boxel-success);
+        border-radius: var(--boxel-border-radius-xs);
+        color: var(--boxel-success);
+        font-size: var(--boxel-font-size-sm);
+        text-align: center;
+        animation: fadeInUp 0.3s ease;
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes textShimmer {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+        }
+      }
+
+      .avatar-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        width: 100%;
+        background: var(--accent, rgba(52, 73, 94, 0.2));
+        padding: 1.25rem;
+        border-radius: 2px;
+        border: 2px solid var(--background, rgba(255, 255, 255, 0.2));
+        border-radius: var(--boxel-border-radius);
+      }
+
+      .detail-item {
+        font-size: 0.875rem;
+        color: var(--card-foreground, var(--boxel-100));
+        background: var(--card, var(--boxel-400));
+        padding: 0.75rem;
+        border-radius: 2px;
+        border-left: 4px solid var(--card-foreground, var(--boxel-highlight));
+        font-weight: 600;
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .detail-item:hover::before {
+        left: 100%;
+      }
+
+      .detail-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .detail-item strong {
+        color: var(--card-foreground, var(--boxel-100));
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+        display: block;
+        margin-bottom: 0.25rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .customization-panel {
+        background: var(--accent, rgba(52, 73, 94, 0.2));
+        border: 3px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-xl);
+        backdrop-filter: blur(15px);
+        box-shadow: var(--boxel-box-shadow-lg);
+        height: 100%;
+        position: relative;
+        z-index: 1;
+      }
+
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp-xl);
+        padding-bottom: var(--boxel-sp);
+        border-bottom: 1px solid var(--boxel-border-color);
+      }
+
+      .header-buttons {
+        display: flex;
+        gap: var(--boxel-sp);
+        align-items: center;
+      }
+
+      .customization-panel h3 {
+        margin: 0;
+        color: var(--accent-foreground, var(--foreground));
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 600;
+        letter-spacing: -0.025em;
+      }
+
+      .category-nav {
+        display: flex;
+        justify-content: flex-start;
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp-xl);
+        flex-wrap: wrap;
+        align-items: center;
+        overflow-x: auto;
+      }
+
+      .category-nav .category-btn {
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        flex: 1;
+        min-width: 120px;
+        justify-content: center;
+        border-radius: var(--boxel-border-radius-xs);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      /* Override BoxelButton border radius for category buttons */
+      .category-nav .category-btn :deep(button) {
+        border-radius: var(--boxel-border-radius-xs);
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
+      }
+
+      /* Remove old category button specific styling since using BoxelButton */
+
+      .styles-grid-container {
+        min-height: 300px;
+        background: var(--background);
+        color: var(--foreground);
+        padding: var(--boxel-sp-lg);
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--border, var(--boxel-border-color));
+      }
+
+      .styles-grid-container h4 {
+        margin: 0 0 var(--boxel-sp-lg) 0;
+        color: var(--card-foreground);
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        text-transform: capitalize;
+        letter-spacing: -0.025em;
+      }
+
+      .styles-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: var(--boxel-sp);
+        padding: 0;
+      }
+
+      .option-btn {
+        aspect-ratio: 1;
+        padding: var(--boxel-sp-xxs);
+        background: var(--card, var(--boxel-100));
+        border: 2px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .option-btn:hover {
+        border: 2px solid var(--accent-foreground, var(--boxel-500));
+        background: var(--accent);
+        transform: translateY(-1px);
+        box-shadow: var(--boxel-box-shadow-sm);
+      }
+
+      .option-btn.selected {
+        border: 2px solid var(--accent-foreground, var(--boxel-500));
+        background: var(--accent);
+        box-shadow: var(--boxel-box-shadow);
+      }
+
+      .option-btn.selected::after {
+        content: '⭐';
+        position: absolute;
+        top: -10px;
+        right: -10px;
+        background: linear-gradient(45deg, #ffd700, #ffa500);
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        animation: marioKartStar 1s ease-in-out infinite;
+        box-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
+      }
+
+      @keyframes marioKartStar {
+        0%,
+        100% {
+          transform: rotate(0deg) scale(1);
+        }
+        50% {
+          transform: rotate(180deg) scale(1.2);
+        }
+      }
+
+      .avataaars-option {
+        min-height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem;
+      }
+
+      .option-preview {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        text-align: center;
+        width: 100%;
+        height: 100%;
+      }
+
+      .option-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: var(--boxel-border-radius-xs);
+        filter: drop-shadow(4px 1px 1px rgba(0, 0, 0, 0.2));
+      }
+
+      .avataaars-option .option-image {
+        width: 52px;
+        height: 52px;
+        border: none;
+        border-radius: 50%;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        flex-shrink: 0;
+        position: relative;
+        filter: drop-shadow(4px 1px 1px rgba(0, 0, 0, 0.2));
+      }
+
+      .option-btn:hover .option-image {
+        transform: scale(1.1) rotateZ(5deg);
+      }
+
+      .option-btn.selected .option-image {
+        transform: scale(1.05);
+      }
+
+      .preview-avatar {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+        filter: brightness(1.1) contrast(1.05);
+      }
+
+      .option-label {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--card-foreground);
+        font-weight: 600;
+        line-height: 1.3;
+        max-width: 100%;
+        text-transform: capitalize;
+        transition: color 0.3s ease;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 0 var(--boxel-sp-4xs);
+      }
+
+      .option-btn:hover .option-label {
+        color: var(--card-foreground);
+        font-weight: 600;
+      }
+
+      .option-btn.selected .option-label {
+        color: var(--accent-foreground);
+        font-weight: 600;
+      }
+
+      .header-buttons .random-btn,
+      .header-buttons .ai-suggestion-btn {
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .empty-styles {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 200px;
+        color: var(--muted);
+        font-size: var(--boxel-font-size-sm);
+        text-align: center;
+        font-style: italic;
+      }
+
+      /* Container Queries for Responsive Design */
+      /* Also add media queries as fallback */
+      @media (max-width: 1200px) {
+        .avatar-creator {
+          grid-template-columns: 380px 1fr;
+          gap: var(--boxel-sp-lg);
+          padding: var(--boxel-sp-lg);
+        }
+
+        .avatar-preview {
+          width: 240px;
+          height: 240px;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .avatar-creator {
+          grid-template-columns: 320px 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+
+        .avatar-preview {
+          width: 200px;
+          height: 200px;
+        }
+
+        .avatar-display {
+          padding: var(--boxel-sp);
+        }
+
+        .customization-panel {
+          padding: var(--boxel-sp);
+        }
+      }
+
+      @media (max-width: 720px) {
+        .avatar-creator {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+
+        .avatar-display {
+          width: 100%;
+        }
+
+        .avatar-preview {
+          width: 180px;
+          height: 180px;
+        }
+      }
+
+      @media (max-width: 600px) {
+        .avatar-creator {
+          padding: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-xs);
+        }
+
+        .avatar-display {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .avatar-preview {
+          width: 160px;
+          height: 160px;
+          align-self: center;
+        }
+
+        .avatar-info {
+          gap: var(--boxel-sp-xs);
+        }
+
+        .url-copy-section {
+          margin-bottom: var(--boxel-sp-xs);
+        }
+
+        .header-buttons {
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .styles-grid {
+          gap: var(--boxel-sp-xs);
+        }
+      }
+
+      @media (max-width: 400px) {
+        .avatar-creator {
+          padding: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp-xxs);
+        }
+
+        .avatar-preview {
+          width: 140px;
+          height: 140px;
+        }
+
+        .panel-header {
+          flex-direction: column;
+          align-items: stretch;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .header-buttons {
+          flex-direction: row;
+          justify-content: center;
+        }
+
+        .styles-grid {
+          grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+          gap: var(--boxel-sp-4xs);
+        }
+
+        .customization-panel h3 {
+          font-size: var(--boxel-font-size);
+          font-weight: 600;
+          text-align: center;
+        }
+      }
+
+      @media (max-width: 300px) {
+        .avatar-preview {
+          width: 120px;
+          height: 120px;
+        }
+
+        .url-display-row {
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .copy-btn {
+          width: 100%;
+          height: 48px;
+        }
+
+        .url-input {
+          width: 100%;
+        }
+
+        .styles-grid {
+          grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+          gap: var(--boxel-sp-5xs);
+        }
+
+        .header-buttons {
+          flex-direction: column;
+        }
+      }
+
+      @container (max-width: 1200px) {
+        .avatar-creator {
+          grid-template-columns: 380px 1fr;
+          gap: var(--boxel-sp-lg);
+          padding: var(--boxel-sp-lg);
+        }
+
+        .avatar-preview {
+          width: 240px;
+          height: 240px;
+        }
+      }
+
+      @container (max-width: 900px) {
+        .avatar-creator {
+          grid-template-columns: 320px 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+
+        .avatar-preview {
+          width: 200px;
+          height: 200px;
+        }
+
+        .avatar-display {
+          padding: var(--boxel-sp);
+        }
+
+        .customization-panel {
+          padding: var(--boxel-sp);
+        }
+      }
+
+      @container (max-width: 720px) {
+        .avatar-creator {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+
+        .avatar-display {
+          width: 100%;
+        }
+
+        .avatar-preview {
+          width: 180px;
+          height: 180px;
+        }
+
+        .avatar-details {
+          display: none;
+        }
+      }
+
+      @container (max-width: 600px) {
+        .avatar-creator {
+          padding: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-xs);
+        }
+
+        .avatar-display {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .avatar-preview {
+          width: 160px;
+          height: 160px;
+          align-self: center;
+        }
+
+        .avatar-info {
+          gap: var(--boxel-sp-xs);
+        }
+
+        .url-copy-section {
+          margin-bottom: var(--boxel-sp-xs);
+        }
+
+        .header-buttons {
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .styles-grid {
+          gap: var(--boxel-sp-xs);
+        }
+      }
+
+      @container (max-width: 400px) {
+        .avatar-creator {
+          padding: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp-xxs);
+        }
+
+        .avatar-preview {
+          width: 140px;
+          height: 140px;
+        }
+
+        .panel-header {
+          flex-direction: column;
+          align-items: stretch;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .header-buttons {
+          flex-direction: row;
+          justify-content: center;
+        }
+
+        .category-nav {
+          flex-direction: row;
+          flex-wrap: nowrap;
+          gap: var(--boxel-sp-4xs);
+          overflow-x: auto;
+        }
+
+        .styles-grid {
+          grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+          gap: var(--boxel-sp-4xs);
+        }
+
+        .customization-panel h3 {
+          font-size: var(--boxel-font-size);
+          text-align: center;
+        }
+      }
+
+      @container (max-width: 300px) {
+        .avatar-preview {
+          width: 120px;
+          height: 120px;
+        }
+
+        .url-display-row {
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+
+        .copy-btn {
+          width: 100%;
+          height: 48px;
+        }
+
+        .url-input {
+          width: 100%;
+        }
+
+        .styles-grid {
+          grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+          gap: var(--boxel-sp-5xs);
+        }
+
+        .header-buttons {
+          flex-direction: column;
+        }
+      }
+
+      /* Scrollbar styling */
+      .customization-panel::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .customization-panel::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+      }
+
+      .customization-panel::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+      }
+
+      .customization-panel::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+    </style>
+  </template>
+}

@@ -106,7 +106,9 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     }
   }
 
-  class LocalCategoryCard extends Category {}
+  class LocalCategoryCard extends Category {
+    static displayName = 'Local Category'
+  }
 
   export class RandomClass {}
 
@@ -370,21 +372,25 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-module-inspector-view="schema"]');
       await selectDeclaration('LocalCategoryCard');
-      assert.dom('[data-test-incompatible-nonexports]').doesNotExist();
       await togglePlaygroundPanel();
       assert
         .dom('[data-test-playground-panel]')
         .doesNotExist(
-          'playground preview is not available for LocalCategory (local card def)',
+          'playground panel exists for Category (exported card def)',
         );
-      assert.dom('[data-test-incompatible-nonexports]').exists();
+      assert.dom('[data-test-playground-incompatible-message]').exists();
+      assert
+        .dom('[data-test-playground-incompatible-message] span')
+        .containsText('Playground is not currently supported for this type.');
 
       await selectDeclaration('RandomClass');
       assert
         .dom('[data-test-module-inspector-view="preview"]')
-        .doesNotExist(
-          'does not exist for RandomClass (not a card or field def)',
-        );
+        .exists('inspector exists for RandomClass (not a card or field def)');
+      assert.dom('[data-test-playground-incompatible-message]').exists();
+      assert
+        .dom('[data-test-playground-incompatible-message] span')
+        .containsText('Playground is not currently supported for this type.');
 
       await selectDeclaration('BlogPost');
       assert
@@ -1759,7 +1765,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       await click('[data-test-edit-button]');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"] input')
+        .dom(
+          '[data-test-playground-panel] [data-test-field="cardInfo-name"] input',
+        )
         .hasValue('Delilah');
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert.dom('[data-test-format-chooser]').exists();
@@ -1790,7 +1798,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
 
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"] input')
+        .dom(
+          '[data-test-playground-panel] [data-test-field="cardInfo-name"] input',
+        )
         .hasValue('Delilah');
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert.dom('[data-test-format-chooser]').exists();
@@ -1838,7 +1848,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Card Error: Link Not Found');
       assert.dom('[data-test-card-error]').exists();
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
@@ -1867,7 +1877,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
         .containsText('Lila');
       assert
         .dom('[data-test-error-container]')

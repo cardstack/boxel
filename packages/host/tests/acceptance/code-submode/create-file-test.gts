@@ -446,7 +446,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         )
         .hasAttribute('aria-label', 'Test Workspace A');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
-      assert.dom('[data-test-field="title"] input').hasValue('');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue('');
       assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileURL}.json`);
 
       await deferred.promise;
@@ -505,7 +505,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         )
         .hasAttribute('aria-label', 'Test Workspace B');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
-      assert.dom('[data-test-field="title"] input').hasValue('');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue('');
       assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
       await deferred.promise;

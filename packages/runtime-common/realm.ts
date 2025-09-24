@@ -881,6 +881,36 @@ export class Realm {
     });
   }
 
+  async deleteAll(paths: LocalPath[]): Promise<void> {
+    let urls: URL[] = [];
+    let trackPromises: Promise<void>[] = [];
+    let removePromises: Promise<void>[] = [];
+
+    for (let path of paths) {
+      let url = this.paths.fileURL(path);
+      urls.push(url);
+      this.sendIndexInitiationEvent(url.href);
+      trackPromises.push(this.trackOwnWrite(path, { isDelete: true }));
+      removePromises.push(this.#adapter.remove(path));
+    }
+
+    await Promise.all(trackPromises);
+    await Promise.all(removePromises);
+    await this.#realmIndexUpdater.update(urls, {
+      delete: true,
+      onInvalidation: (invalidatedURLs: URL[]) => {
+        if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+          this.#definitionsCache.invalidate();
+        }
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: invalidatedURLs.map((u) => u.href),
+        });
+      },
+    });
+  }
+
   get realmIndexUpdater() {
     return this.#realmIndexUpdater;
   }
@@ -1330,6 +1360,9 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
+      this.#log.warn(
+        `auth failed for ${request.method} ${request.url} missing auth header`,
+      );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
       );
@@ -1368,21 +1401,33 @@ export class Realm {
         JSON.stringify(token.permissions?.sort()) !==
           JSON.stringify(userPermissions.sort())
       ) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url}, for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+        );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
         );
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url}, for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+        );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
       }
-    } catch (e) {
+    } catch (e: any) {
       if (e instanceof TokenExpiredError) {
+        this.#log.warn(
+          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e instanceof JsonWebTokenError) {
+        this.#log.warn(
+          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
       throw e;

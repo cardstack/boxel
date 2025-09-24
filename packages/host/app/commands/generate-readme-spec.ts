@@ -18,45 +18,28 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
 > {
   @service declare private commandService: CommandService;
 
-  private static getGenerateReadmeUserPrompt(ref: {
-    name: string;
-    module: string;
-  }) {
-    return `Create README documentation for this spec (${ref.name} from ${ref.module}) with a brief description and usage examples.`;
-  }
-  private static getGenerateReadmeSystemPrompt(
+  private static getUserPrompt(
     ref: {
       name: string;
       module: string;
     },
     specType: SpecType,
   ) {
-    return `YOU ARE a proficient Boxel developer creating GitHub-style documentation for a code ${ref.name} imported from ${ref.module}. You are dealing with "code" of ${specType}
-
-    Our spec describes different types of "code" or otherwise (referred to as "specType")
-    - Card
-    - Field
-    - Command
-    - Component
-
-    Use this structure to develop the documentation for these different types:
-
-• **Import**: Show how to es6 import the code in module scope based upon the code ref (${ref.name} imported from ${ref.module}). Do not include .gts extension.
-• **Define Field**: Only for card or field, show how we would link the card or field inside a consuming card (e.g., @field myCard = linksTo(CardName) for cards, @field myField = contains(FieldName) for fields)
-• **Invoke Template**: Only for card or field, show how to call it in templates using the fields API with format arguments (e.g., <@fields.myField @format='atom'/>)
-• **Dependencies**: Describe the special dependencies of this code (We only want KEY dependencies). Try to include import of other specs and/or extenrnal cdn 
-• **Usage and Examples**: Show the primary way to use the code (Include the MOST obvious way to use). Keep it SIMPLE.
-
-  Here are some examples you can offer based upon the type of the spec:
-  - Card: show linksTo() and new CardDefName() instantiation 
-  - Field: show contains() and new FieldName() instantiation
-  - Command: show how to instantiate and execute commands (e.g., new CommandName(context).execute(input))
-  - Component: show how to use glimmer component in templates (e.g., <MyComponent />) 
-
-Additional Notes:
-- DO NOT include the title header inside of the readme. 
-- If skill cards are provided, use them for context but don't reference them in the output.`;
+    return `Generate README documentation for a spec of type ${specType} that has code ref of (name:${ref.name}, module:${ref.module}). Show how to import and use it in inside a consuming card.`;
   }
+  private static SYSTEM_PROMPT = `YOU ARE a bot responsible to Github README documentation for specs/code. 
+
+Reference the Spec Documentation inside boxel-development skill for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with these 4 sections:
+
+• **Summary**: Brief summary of what the spec does 
+• **Import**: Show the ES6 import statmenet of the spec. Omit .gts extension.
+• **Usage as a Field**: Show how to use the spec as a field within a consuming card/field. Only display this section for card or field.
+• **Template Usage**: Show how to invoke the spec inside a template within a consuming card/field
+
+Requirements:
+- Keep examples simple and practical
+- DO NOT include title headers
+`;
 
   static actionVerb = 'Generate README for Spec';
   description =
@@ -80,13 +63,11 @@ Additional Notes:
       this.commandService.commandContext,
     );
 
-    let userPrompt = GenerateReadmeSpecCommand.getGenerateReadmeUserPrompt(
-      input.spec.ref,
-    );
-    let systemPrompt = GenerateReadmeSpecCommand.getGenerateReadmeSystemPrompt(
+    let userPrompt = GenerateReadmeSpecCommand.getUserPrompt(
       input.spec.ref,
       input.spec.specType as SpecType,
     );
+    let systemPrompt = GenerateReadmeSpecCommand.SYSTEM_PROMPT;
 
     const result = await generateReadmeCommand.execute({
       codeRef: {

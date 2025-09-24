@@ -120,7 +120,6 @@ module('Unit | Service | code-semantics', function (hooks) {
     service.getSelectedDeclaration(undefined, 'TestClass', true);
     service.getModuleError(undefined, true);
     service.getIsLoading(undefined, true);
-    service.getIsLoadingNewModule(undefined, true);
 
     assert.ok(declarations, 'getDeclarations handles undefined file');
     assert.ok(true, 'all methods handle undefined file without error');

@@ -6,16 +6,10 @@ import {
   registerUser,
 } from '../docker/synapse';
 import {
-  appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import {
-  assertLoggedIn,
-  login,
-  registerRealmUsers,
-  waitUntil,
-} from '../helpers';
+import { registerRealmUsers, waitUntil } from '../helpers';
 
 test.describe('Host mode', () => {
   let synapse: SynapseInstance;
@@ -52,27 +46,51 @@ test.describe('Host mode', () => {
     await expect(connectIframe.locator('[data-test-connect]')).toBeVisible();
   });
 
-  // Doesn’t work reliably in CI
-  test.skip('connect button shows session when logged in', async ({ page }) => {
-    let serverIndexUrl = new URL(appURL).origin;
-    await login(page, 'user1', 'pass', {
-      url: serverIndexUrl,
-    });
-
-    await assertLoggedIn(page);
-
+  test('clicking connect button logs in on main site and redirects back to host mode', async ({
+    page,
+  }) => {
     await page.goto('http://published.localhost:4205/mango.json');
 
     await waitUntil(() => page.locator('iframe').isVisible());
 
     let connectIframe = page.frameLocator('iframe');
+    await connectIframe.locator('[data-test-connect]').click();
 
-    if (await connectIframe.locator('[data-test-connect]').isVisible()) {
-      await connectIframe.locator('[data-test-connect]').click();
-    }
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-login-btn]').click();
 
-    await expect(connectIframe.locator('[data-test-session]')).toHaveText(
-      '@user1:localhost',
+    await expect(page).toHaveURL('http://published.localhost:4205/mango.json');
+
+    await expect(
+      connectIframe.locator(
+        '[data-test-profile-icon-userid="@user1:localhost"]',
+      ),
+    ).toBeVisible();
+  });
+
+  test('visiting connect route with known origin includes a matching frame-ancestors CSP', async ({
+    page,
+  }) => {
+    let response = await page.goto(
+      'http://localhost:4205/connect/http%3A%2F%2Fpublished.localhost%3A4205%2F',
+    );
+
+    expect(response?.headers()['content-security-policy']).toBe(
+      'frame-ancestors http://published.localhost:4205/',
+    );
+  });
+
+  test('visiting connect route with origin not in published_realms returns 404', async ({
+    page,
+  }) => {
+    let response = await page.goto(
+      'http://localhost:4205/connect/http%3A%2F%2Fexample.com',
+    );
+
+    expect(response?.status()).toBe(404);
+    expect(await page.textContent('body')).toContain(
+      'No published realm found for origin http://example.com',
     );
   });
 });

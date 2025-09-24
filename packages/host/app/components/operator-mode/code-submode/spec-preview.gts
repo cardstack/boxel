@@ -56,7 +56,6 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     activeSpec: Spec | undefined;
-    isLoadingNewModule: boolean;
     isPanelOpen: boolean;
     selectedDeclaration?: ModuleDeclaration;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
@@ -66,18 +65,18 @@ interface Signature {
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {
-    default: [
-      | WithBoundArgs<
-          typeof SpecPreviewContent,
-          | 'showCreateSpec'
-          | 'canWrite'
-          | 'onSelectSpec'
-          | 'activeSpec'
-          | 'isLoading'
-          | 'allSpecs'
-          | 'viewSpecInPlayground'
-        >
-      | WithBoundArgs<typeof SpecPreviewLoading, never>,
+    loading: [WithBoundArgs<typeof SpecPreviewLoading, never>];
+    content: [
+      WithBoundArgs<
+        typeof SpecPreviewContent,
+        | 'showCreateSpec'
+        | 'canWrite'
+        | 'onSelectSpec'
+        | 'activeSpec'
+        | 'isLoading'
+        | 'allSpecs'
+        | 'viewSpecInPlayground'
+      >,
     ];
   };
 }
@@ -306,28 +305,14 @@ interface SpecPreviewLoadingSignature {
 
 const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
   <template>
-    <div class='container'>
-      <div class='loading'>
-        <LoadingIndicator class='loading-icon' />
-        Loading...
-      </div>
+    <div class='loading'>
+      <LoadingIndicator />
     </div>
     <style scoped>
-      .container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        height: 100%;
-        width: 100%;
-      }
       .loading {
-        display: inline-flex;
-      }
-      .loading-icon {
-        display: inline-block;
-        margin-right: var(--boxel-sp-xxxs);
-        vertical-align: middle;
+        display: flex;
+        justify-content: center;
+        margin: 30vh auto;
       }
     </style>
   </template>;
@@ -348,7 +333,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   get isLoading() {
-    return this.args.isLoadingNewModule;
+    return false;
   }
 
   private viewSpecInPlayground = (spec: CardDefOrId) => {
@@ -361,7 +346,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   <template>
     {{#if this.isLoading}}
-      {{yield (component SpecPreviewLoading)}}
+      {{yield (component SpecPreviewLoading) to='loading'}}
     {{else}}
       {{yield
         (component
@@ -374,6 +359,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           allSpecs=@specsForSelectedDefinition
           viewSpecInPlayground=this.viewSpecInPlayground
         )
+        to='content'
       }}
     {{/if}}
   </template>

@@ -349,6 +349,8 @@ jobs:
             "module-syntax-test.ts",
             "permissions/permission-checker-test.ts",
             "prerendering-test.ts",
+            "prerender-server-test.ts",
+            "prerender-manager-test.ts",
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",
@@ -365,6 +367,7 @@ jobs:
             "virtual-network-test.ts",
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",
+            "publish-unpublish-realm-test.ts",
           ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2

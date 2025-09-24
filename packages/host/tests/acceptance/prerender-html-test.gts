@@ -502,6 +502,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   hooks.afterEach(function () {
     delete (globalThis as any).__lazilyLoadLinks;
+    delete (globalThis as any).__boxelRenderContext;
     delete (globalThis as any).__boxel_definitions_recursing_depth;
   });
 
@@ -510,7 +511,7 @@ module('Acceptance | prerender | html', function (hooks) {
     await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
     assert
       .dom(
-        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="title"]`,
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="cardTitle"]`,
       )
       .containsText('Paper', 'isolated format is rendered');
   });

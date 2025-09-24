@@ -274,7 +274,9 @@ let autoMigrate = migrateDB || undefined;
     grafanaSecret: GRAFANA_SECRET,
     dbAdapter,
     queue,
-    assetsURL: dist,
+    assetsURL: process.env.ASSETS_URL_OVERRIDE
+      ? new URL(process.env.ASSETS_URL_OVERRIDE)
+      : dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,

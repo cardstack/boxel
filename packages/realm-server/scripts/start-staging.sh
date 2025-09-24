@@ -5,6 +5,7 @@ pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
+  BOXEL_HOST_URL=https://realms-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   VALID_PUBLISHED_REALM_DOMAINS='staging.boxel.dev,staging.boxel.build' \
   ts-node \

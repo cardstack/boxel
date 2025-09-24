@@ -25,10 +25,10 @@ export type PatchData = {
 // Shared type produced by the host app when visiting the render.meta route and
 // consumed by the server.
 export interface PrerenderMeta {
-  serialized: LooseSingleCardDocument;
-  searchDoc: Record<string, any>;
-  displayName: string;
-  types: string[];
+  serialized: LooseSingleCardDocument | null;
+  searchDoc: Record<string, any> | null;
+  displayName: string | null;
+  types: string[] | null;
 }
 
 export { Deferred } from './deferred';

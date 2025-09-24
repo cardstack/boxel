@@ -517,7 +517,10 @@ export default class CodeEditor extends Component<Signature> {
         border-color: #454545;
       }
       .loading {
-        margin: 40vh auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
       }
     </style>
   </template>

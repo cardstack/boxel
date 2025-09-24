@@ -12,6 +12,10 @@ function getDOMPurify() {
   return domPurify;
 }
 
+/** `sanitizeHtml` (and `sanitizeHtmlSafe` with return type HtmlSafe) is also
+ * available as imports from `@cardstack/boxel-ui/helpers`. Due to issues this
+ * package has regarding imports from `@ember/template`, this method exists in
+ * duplicate places. */
 export function sanitizeHtml(html: string) {
   let domPurify = getDOMPurify();
   return domPurify.sanitize(html);

@@ -796,7 +796,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -875,6 +875,15 @@ module(basename(__filename), function () {
               },
               isPrimitive: true,
             },
+            'author.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
             'author.cardInfo.theme.cardInfo.theme': {
               type: 'linksTo',
               isComputed: false,
@@ -895,7 +904,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -965,6 +974,15 @@ module(basename(__filename), function () {
               },
               isPrimitive: true,
             },
+            'author.cardInfo.theme.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
             'author.cardInfo.theme.cardInfo.theme.thumbnailURL': {
               type: 'contains',
               isComputed: true,
@@ -994,7 +1012,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -1069,6 +1087,15 @@ module(basename(__filename), function () {
                 },
                 isPrimitive: true,
               },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
               {
                 type: 'contains',
@@ -1102,7 +1129,7 @@ module(basename(__filename), function () {
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title':
               {
                 type: 'contains',
-                isComputed: false,
+                isComputed: true,
                 fieldOrCard: {
                   name: 'StringField',
                   module: 'https://cardstack.com/base/card-api',
@@ -1165,6 +1192,16 @@ module(basename(__filename), function () {
                 isComputed: false,
                 fieldOrCard: {
                   name: 'CSSField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports':
+              {
+                type: 'containsMany',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'CssImportField',
                   module: 'https://cardstack.com/base/card-api',
                 },
                 isPrimitive: true,
@@ -2444,44 +2481,46 @@ module(basename(__filename), function () {
     ) {
       setupPermissionedRealms(hooks, {
         // provider
-        realm1: {
-          realmURL: testRealm1URL,
-          permissions: permissions.provider,
-          fileSystem: {
-            'article.gts': `
+        realms: [
+          {
+            realmURL: testRealm1URL,
+            permissions: permissions.provider,
+            fileSystem: {
+              'article.gts': `
               import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
               export class Article extends CardDef {
                 @field title = contains(StringField);
               }
             `,
+            },
           },
-        },
-        // consumer
-        realm2: {
-          realmURL: testRealm2URL,
-          permissions: permissions.consumer,
-          fileSystem: {
-            'website.gts': `
+          // consumer
+          {
+            realmURL: testRealm2URL,
+            permissions: permissions.consumer,
+            fileSystem: {
+              'website.gts': `
               import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
               import { Article } from "${testRealm1URL}article" // importing from another realm;
               export class Website extends CardDef {
                 @field linkedArticle = linksTo(Article);
               }`,
-            'website-1.json': {
-              data: {
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: './website',
-                    name: 'Website',
+              'website-1.json': {
+                data: {
+                  attributes: {},
+                  meta: {
+                    adoptsFrom: {
+                      module: './website',
+                      name: 'Website',
+                    },
                   },
                 },
               },
             },
           },
-        },
-        onRealmSetup({ realm2 }) {
+        ],
+        onRealmSetup({ realms: [_, realm2] }) {
           testRealm2 = realm2.realm;
         },
       });

@@ -1,5 +1,8 @@
+import { getOwner } from '@ember/owner';
+import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
@@ -24,13 +27,17 @@ import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
+
 import config from '@cardstack/host/config/environment';
+
+import type IndexController from '@cardstack/host/controllers/index';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -43,6 +50,8 @@ export interface HostModeComponentSignature {
 
 export class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare commandService: CommandService;
+  @service private declare matrixService: MatrixService;
+  @service private declare router: RouterService;
   @service private declare store: StoreService;
 
   @provide(GetCardContextName)
@@ -66,7 +75,9 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   get connectUrl() {
-    return `${config.realmServerURL}connect`;
+    return `${config.realmServerURL}connect/${encodeURIComponent(
+      window.location.origin,
+    )}`;
   }
 
   get isError() {
@@ -94,6 +105,19 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     return false;
   }
 
+  get hostModeContainerClass() {
+    if (this.isError) {
+      return 'host-mode-container';
+    }
+
+    // Check if the card prefers wide format
+    if ((this.card.constructor as typeof CardDef).prefersWideFormat) {
+      return 'host-mode-container is-wide';
+    }
+
+    return 'host-mode-container';
+  }
+
   @provide(CardContextName)
   // @ts-expect-error 'context' is declared but not used
   private get context(): CardContext {
@@ -108,11 +132,46 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   addMessageListener = modifier((element: HTMLElement) => {
-    let messageHandler = (event: MessageEvent) => {
-      // TODO if this becomes anything more significant than just showing
-      // the button, the origin should be verified.
+    let messageHandler = async (event: MessageEvent) => {
+      if (eventHasValidOrigin(event)) {
+        console.debug(
+          'received message, origin validated',
+          event.data,
+          event.origin,
+        );
+      } else {
+        console.debug(
+          'ignoring message from invalid origin',
+          event.data,
+          event.origin,
+        );
+
+        return;
+      }
+
       if (event.data === 'ready') {
         element.classList.remove('not-loaded');
+      } else if (event.data === 'login') {
+        let indexController = getOwner(this)!.lookup(
+          'controller:index',
+        ) as IndexController;
+
+        let transitionQueryParameters = new URLSearchParams({
+          authRedirect: window.location.href,
+        });
+
+        if (indexController.hostModeOrigin) {
+          transitionQueryParameters.set(
+            'hostModeOrigin',
+            indexController.hostModeOrigin,
+          );
+        }
+
+        await this.matrixService.ready;
+
+        let loginUrl = new URL(config.realmServerURL);
+        loginUrl.search = transitionQueryParameters.toString();
+        window.location.href = loginUrl.toString();
       }
     };
 
@@ -131,29 +190,37 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         {{@model.id}}
       </div>
     {{else}}
-      <iframe
-        class='connect not-loaded'
-        title='connect'
-        src={{this.connectUrl}}
-        {{this.addMessageListener}}
-      />
-      <section
-        class='host-mode-container'
-        style={{this.backgroundImageStyle}}
-        data-test-host-mode-container
-      >
-        <CardContainer class='card'>
-          <CardRenderer
-            class='stack-item-preview'
-            @card={{this.card}}
-            @format='isolated'
-          />
 
-        </CardContainer>
-      </section>
+      <div class='host-wrapper'>
+        <iframe
+          class='connect not-loaded'
+          title='connect'
+          src={{this.connectUrl}}
+          {{this.addMessageListener}}
+        />
+        <section
+          class={{this.hostModeContainerClass}}
+          style={{this.backgroundImageStyle}}
+          data-test-host-mode-container
+        >
+          <CardContainer class='card'>
+            <CardRenderer
+              class='stack-item-preview'
+              @card={{this.card}}
+              @format='isolated'
+            />
+
+          </CardContainer>
+        </section>
+      </div>
     {{/if}}
 
     <style scoped>
+      .host-wrapper {
+        position: relative;
+        min-height: 100vh;
+      }
+
       .host-mode-container {
         display: flex;
         justify-content: center;
@@ -164,12 +231,26 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         padding: var(--boxel-sp);
       }
 
+      .host-mode-container.is-wide {
+        padding: 0;
+      }
+
       .card {
         width: 50rem;
       }
 
+      .host-mode-container.is-wide .card {
+        width: 100%;
+        max-width: 100%;
+        height: 100vh;
+      }
+
+      .host-mode-container.is-wide :deep(.boxel-card-container) {
+        border-radius: 0;
+      }
+
       .connect {
-        position: fixed;
+        position: absolute;
         top: var(--boxel-sp);
         right: var(--boxel-sp);
         width: 10rem;
@@ -178,6 +259,8 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         background: transparent;
         opacity: 1;
         transition: opacity 0.2s ease-in-out;
+        z-index: 1000;
+        pointer-events: auto;
       }
 
       .connect.not-loaded {
@@ -189,3 +272,12 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
 }
 
 export default RouteTemplate(HostModeComponent);
+
+function eventHasValidOrigin(event: MessageEvent) {
+  if (isDevelopingApp()) {
+    // During development, allow messages from any origin
+    return true;
+  }
+
+  return new URL(config.realmServerURL).href.startsWith(event.origin);
+}
