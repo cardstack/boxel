@@ -21,12 +21,15 @@ import {
   RealmPermissions,
   Worker,
   RunnerOptionsManager,
+  IndexWriter,
   type RealmInfo,
   type TokenClaims,
-  IndexWriter,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
+  type Prerenderer,
+  type FromScratchArgsWithPermissions,
+  type IncrementalArgsWithPermissions,
   insertPermissions,
   unixTime,
 } from '@cardstack/runtime-common';
@@ -240,26 +243,25 @@ class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
   #indexWriter: IndexWriter | undefined;
-  #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
+  #prerenderer: Prerenderer | undefined;
+  #fromScratch:
+    | ((args: FromScratchArgsWithPermissions) => Promise<IndexResults>)
+    | undefined;
   #incremental:
-    | ((
-        urls: URL[],
-        realmURL: URL,
-        operation: 'update' | 'delete',
-        ignoreData: Record<string, string>,
-      ) => Promise<IndexResults>)
+    | ((args: IncrementalArgsWithPermissions) => Promise<IndexResults>)
     | undefined;
   setup(
-    fromScratch: (realmURL: URL) => Promise<IndexResults>,
-    incremental: (
-      urls: URL[],
-      realmURL: URL,
-      operation: 'update' | 'delete',
-      ignoreData: Record<string, string>,
+    fromScratch: (
+      args: FromScratchArgsWithPermissions,
     ) => Promise<IndexResults>,
+    incremental: (
+      args: IncrementalArgsWithPermissions,
+    ) => Promise<IndexResults>,
+    prerenderer: Prerenderer,
   ) {
     this.#fromScratch = fromScratch;
     this.#incremental = incremental;
+    this.#prerenderer = prerenderer;
   }
   async configureRunner(
     registerRunner: RunnerRegistration,
@@ -289,6 +291,12 @@ class MockLocalIndexer extends Service {
       throw new Error(`indexWriter not registered with MockLocalIndexer`);
     }
     return this.#indexWriter;
+  }
+  get prerenderer() {
+    if (!this.#prerenderer) {
+      throw new Error(`prerenderer not registered with MockLocalIndexer`);
+    }
+    return this.#prerenderer;
   }
 }
 
@@ -440,6 +448,7 @@ async function setupTestRealm({
     matrixURL: baseTestMatrix.url,
     secretSeed: testRealmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
+    prerenderer: localIndexer.prerenderer,
   });
 
   realm = new Realm({

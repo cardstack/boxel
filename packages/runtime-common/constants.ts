@@ -1,6 +1,6 @@
 import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
-import { RealmPermissions } from './realm';
+import { RealmPermissions } from './index';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
