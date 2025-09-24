@@ -840,7 +840,6 @@ export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
-  // debugger;
   return JSON.parse(atob(payload)) as JWTPayload;
 }
 

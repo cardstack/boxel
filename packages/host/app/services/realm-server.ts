@@ -381,8 +381,6 @@ export default class RealmServerService extends Service {
 
   private loggingIn: Promise<void> | undefined;
 
-  // login happens lazily as you need to interact with realm server which
-  // currently only constitutes creating realms
   async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
       return;
