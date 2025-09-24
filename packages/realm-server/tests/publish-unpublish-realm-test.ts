@@ -123,8 +123,8 @@ module(basename(__filename), function () {
       assert.false(pathExistsSync(publishedDir));
     });
 
-    module('with a publishable realm', function (hooks) {
-      let publishableRealmUrl: string;
+    module('with a publishable source realm', function (hooks) {
+      let sourceRealmUrlString: string;
 
       hooks.beforeEach(async () => {
         let endpoint = `test-realm-${uuidv4()}`;
@@ -151,12 +151,12 @@ module(basename(__filename), function () {
             }),
           );
 
-        publishableRealmUrl = response.body.data.id;
+        sourceRealmUrlString = response.body.data.id;
 
         // Make the published realm public so reading _info doesn’t need a token
         dbAdapter.execute(`
           INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
-          VALUES ('${publishableRealmUrl}', '*', true, true, true)
+          VALUES ('${sourceRealmUrlString}', '*', true, true, true)
         `);
       });
 
@@ -174,7 +174,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: publishableRealmUrl,
+              sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -184,7 +184,7 @@ module(basename(__filename), function () {
         assert.ok(response.body.data.id, 'published realm has an ID');
         assert.strictEqual(
           response.body.data.attributes.sourceRealmURL,
-          publishableRealmUrl,
+          sourceRealmUrlString,
           'source realm URL is correct',
         );
         assert.ok(
@@ -226,7 +226,7 @@ module(basename(__filename), function () {
           'index entries should reference the published realm URL',
         );
 
-        let sourceRealmPath = new URL(publishableRealmUrl).pathname;
+        let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
         let sourceRealmInfoPath = `${sourceRealmPath}_info`;
 
         let sourceRealmInfoResponse = await request
@@ -313,7 +313,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: publishableRealmUrl,
+              sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -338,7 +338,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: publishableRealmUrl,
+              sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -376,7 +376,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: publishableRealmUrl,
+              sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -431,7 +431,7 @@ module(basename(__filename), function () {
         );
         assert.strictEqual(
           unpublishResponse.body.data.attributes.sourceRealmURL,
-          publishableRealmUrl,
+          sourceRealmUrlString,
           'source realm URL is correct',
         );
         assert.strictEqual(
@@ -575,7 +575,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: publishableRealmUrl,
+              sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL: 'http://testuser.localhost/test-realm/',
             }),
           );
@@ -663,7 +663,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: publishableRealmUrl,
+              sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL: publishedRealmURL,
             }),
           );
@@ -683,7 +683,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: publishableRealmUrl,
+              sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL: publishedRealmURL,
             }),
           );
@@ -729,7 +729,7 @@ module(basename(__filename), function () {
           )
           .send(
             JSON.stringify({
-              sourceRealmURL: publishableRealmUrl,
+              sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL: publishedRealmURL,
             }),
           );
