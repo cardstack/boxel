@@ -120,6 +120,7 @@ export {
   cardTypeIcon,
   getFieldIcon,
 } from './helpers/card-type-display-name';
+export * from './helpers/ensure-extension';
 export * from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
