@@ -10,12 +10,10 @@ import { setupRenderingTest } from '../helpers/setup';
 let getDefaultCardMenuItems: any;
 
 class DummyCard {
-  id?: string;
-  title?: string;
-  constructor(id?: string, title?: string) {
-    this.id = id;
-    this.title = title;
-  }
+  constructor(
+    public id?: string,
+    public title?: string,
+  ) {}
 }
 
 module('Unit | card-menu-items', function (hooks) {
