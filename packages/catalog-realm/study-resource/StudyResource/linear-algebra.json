@@ -9,7 +9,7 @@
       "difficulty": "beginner",
       "estimatedTime": 60,
       "completionStatus": "completed",
-      "tags": "mathematics,linear-algebra,foundations",
+      "tags": ["Mathematics","Linear algebra","Foundations"],
       "notes": "Excellent foundation course. Need to review eigenvectors before ML course.",
       "lastAccessed": "2025-01-12T09:15:00.000Z"
     },

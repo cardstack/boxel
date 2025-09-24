@@ -9,7 +9,11 @@
     "type": "card",
     "attributes": {
       "url": "https://example.com/dsa-textbook",
-      "tags": "algorithms,data-structures,coding",
+      "tags": [
+        "Algorithms",
+        "Data structures",
+        "Coding"
+      ],
       "notes": "Currently on Chapter 5: Trees and Graphs. Need to practice more implementation problems.",
       "subject": "Computer Science",
       "cardInfo": {
@@ -19,7 +23,7 @@
         "thumbnailURL": null
       },
       "difficulty": "intermediate",
-      "lastAccessed": "2025-09-11T06:34:18.082Z",
+      "lastAccessed": "2025-09-24T03:20:37.777Z",
       "resourceType": "textbook",
       "estimatedTime": 240,
       "resourceTitle": "Data Structures & Algorithms Textbook",

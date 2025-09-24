@@ -4,6 +4,7 @@ import {
   field,
   contains,
   Component,
+  containsMany,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
@@ -38,7 +39,7 @@ export class StudyResource extends CardDef {
   @field difficulty = contains(StringField); // beginner, intermediate, advanced
   @field estimatedTime = contains(NumberField); // minutes
   @field completionStatus = contains(StringField); // not_started, in_progress, completed
-  @field tags = contains(StringField); // ²²² Comma-separated tags
+  @field tags = containsMany(StringField); // ²²² Individual tag fields
   @field notes = contains(MarkdownField);
   @field lastAccessed = contains(DatetimeField);
   @field progressPercentage = contains(NumberField); // ²²³ 0-100 completion percentage
@@ -54,20 +55,6 @@ export class StudyResource extends CardDef {
       }
     },
   });
-
-  // ²²⁴ Safe tags parsing with error handling
-  get allTags() {
-    try {
-      if (!this.tags || typeof this.tags !== 'string') return [];
-      return this.tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0);
-    } catch (e) {
-      console.error('StudyResource: Error parsing tags', e);
-      return [];
-    }
-  }
 
   // ²²⁵ Progress indicator helpers
   get progressColor() {
@@ -248,10 +235,7 @@ export class StudyResource extends CardDef {
                   <div
                     class='progress-fill'
                     style={{htmlSafe
-                      concat
-                      'width: '
-                      @model.progressPercentage
-                      '%;'
+                      (concat 'width: ' @model.progressPercentage '%;')
                     }}
                   ></div>
                 </div>
@@ -311,9 +295,9 @@ export class StudyResource extends CardDef {
           </div>
         {{/if}}
 
-        {{#if (gt @model.allTags.length 0)}}
+        {{#if (gt @model.tags.length 0)}}
           <div class='tags-footer'>
-            {{#each @model.allTags as |tag|}}
+            {{#each @model.tags as |tag|}}
               <span class='tag'>{{tag}}</span>
             {{/each}}
           </div>

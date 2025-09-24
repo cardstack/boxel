@@ -8,7 +8,13 @@
     },
     "type": "card",
     "attributes": {
-      "tags": "algorithms,complexity,big-o,analysis,fundamentals",
+      "tags": [
+        "Algorithms",
+        "Complexity",
+        "Big-o",
+        "Analysis",
+        "Fundamentals"
+      ],
       "content": "## Big-O Notation\n\n### Common Complexities\n- O(1): Constant time - best case scenario\n- O(log n): Logarithmic - binary search, balanced trees\n- O(n): Linear - single loop through data\n- O(n log n): Linearithmic - efficient sorting algorithms\n- O(n²): Quadratic - nested loops, bubble sort\n- O(2ⁿ): Exponential - recursive algorithms without memoization\n\n### Analysis Rules\n1. **Drop constants** - O(2n) becomes O(n)\n2. **Drop lower-order terms** - O(n² + n) becomes O(n²)\n3. **Focus on worst-case scenario** - consider the input that takes longest\n4. **Consider space complexity too** - memory usage matters\n\n### Practical Examples\n- **Array access**: O(1)\n- **Linear search**: O(n)\n- **Binary search**: O(log n)\n- **Merge sort**: O(n log n)\n- **Bubble sort**: O(n²)",
       "subject": "Computer Science",
       "cardInfo": {

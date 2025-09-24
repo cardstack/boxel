@@ -4,6 +4,7 @@ import {
   field,
   contains,
   Component,
+  containsMany,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
 import DatetimeField from 'https://cardstack.com/base/datetime';
@@ -30,7 +31,7 @@ export class StudyNoteCard extends CardDef {
   @field noteTitle = contains(StringField); // ⁶ Essential fields only
   @field content = contains(MarkdownField);
   @field subject = contains(StringField);
-  @field tags = contains(StringField); // ⁷ Comma-separated: "algorithms,complexity,sorting"
+  @field tags = containsMany(StringField); // ⁷ Individual tag fields for easy editing
   @field createdAt = contains(DatetimeField);
   @field lastModified = contains(DatetimeField);
 
@@ -45,20 +46,6 @@ export class StudyNoteCard extends CardDef {
       }
     },
   });
-
-  // ⁹ Safe tags parsing
-  get allTags() {
-    try {
-      if (!this.tags || typeof this.tags !== 'string') return [];
-      return this.tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0);
-    } catch (e) {
-      console.error('StudyNote: Error parsing tags', e);
-      return [];
-    }
-  }
 
   static isolated = class Isolated extends Component<typeof StudyNoteCard> {
     // ¹⁰ Clean, focus-first isolated format
@@ -153,7 +140,7 @@ export class StudyNoteCard extends CardDef {
           {{/if}}
         </main>
 
-        {{#if (gt @model.allTags.length 0)}}
+        {{#if (gt @model.tags.length 0)}}
           <footer class='note-footer'>
             <div class='tags-section'>
               <svg
@@ -169,7 +156,7 @@ export class StudyNoteCard extends CardDef {
                 <line x1='7' y1='7' x2='7.01' y2='7' />
               </svg>
               <div class='tags-container'>
-                {{#each @model.allTags as |tag|}}
+                {{#each @model.tags as |tag|}}
                   <span class='tag'>{{tag}}</span>
                 {{/each}}
               </div>
@@ -436,18 +423,15 @@ export class StudyNoteCard extends CardDef {
             </div>
           {{/if}}
 
-          {{#if (gt @model.allTags.length 0)}}
+          {{#if (gt @model.tags.length 0)}}
             <div class='tags-preview'>
-              {{#each @model.allTags as |tag index|}}
+              {{#each @model.tags as |tag index|}}
                 {{#if (lt index 2)}}
                   <span class='tag'>{{tag}}</span>
                 {{/if}}
               {{/each}}
-              {{#if (gt @model.allTags.length 2)}}
-                <span class='tag-more'>+{{subtract
-                    @model.allTags.length
-                    2
-                  }}</span>
+              {{#if (gt @model.tags.length 2)}}
+                <span class='tag-more'>+{{subtract @model.tags.length 2}}</span>
               {{/if}}
             </div>
           {{/if}}

@@ -9,7 +9,7 @@
       "difficulty": "advanced",
       "estimatedTime": 90,
       "completionStatus": "not_started",
-      "tags": "machine-learning,statistics,python",
+      "tags": ["Machine learning","Statistics","Python"],
       "notes": "Recommended by my mentor. Start after completing linear algebra review.",
       "lastAccessed": null
     },
