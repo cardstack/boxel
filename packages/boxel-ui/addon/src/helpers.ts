@@ -24,7 +24,12 @@ import formatPeriod from './helpers/format-period.ts';
 import formatRelativeTime from './helpers/format-relative-time.ts';
 import { add, divide, multiply, subtract } from './helpers/math-helpers.ts';
 import menuDivider, { MenuDivider } from './helpers/menu-divider.ts';
-import menuItem, { MenuItem, menuItemFunc } from './helpers/menu-item.ts';
+import menuItem, {
+  type MenuItemOptions,
+  MenuItem,
+  menuItemFunc,
+  toMenuItems,
+} from './helpers/menu-item.ts';
 import optional from './helpers/optional.ts';
 import pick from './helpers/pick.ts';
 import { sanitizeHtml, sanitizeHtmlSafe } from './helpers/sanitize-html.ts';
@@ -42,6 +47,7 @@ import {
 } from './helpers/truth-helpers.ts';
 
 export {
+  type MenuItemOptions,
   add,
   and,
   bool,
@@ -87,4 +93,5 @@ export {
   sanitizeHtmlSafe,
   substring,
   subtract,
+  toMenuItems,
 };

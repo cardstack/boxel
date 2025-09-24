@@ -11,7 +11,7 @@ import {
   BoxelButton,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -94,12 +94,14 @@ export default class CardRendererPanel extends Component<Signature> {
     if (!this.args.card) {
       return [];
     }
-    return this.args.card[getCardMenuItems]?.({
-      canEdit: this.realm.canWrite(this.args.card.id),
-      cardCrudFunctions: {},
-      menuContext: 'code-mode-preview',
-      commandContext: this.commandService.commandContext,
-    });
+    return toMenuItems(
+      this.args.card[getCardMenuItems]({
+        canEdit: this.realm.canWrite(this.args.card.id),
+        cardCrudFunctions: {},
+        menuContext: 'code-mode-preview',
+        commandContext: this.commandService.commandContext,
+      }),
+    );
   }
 
   private get canEditCard() {

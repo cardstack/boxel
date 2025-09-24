@@ -27,7 +27,11 @@ import {
   CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
+import {
+  MenuItem,
+  getContrastColor,
+  toMenuItems,
+} from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconTrash } from '@cardstack/boxel-ui/icons';
@@ -379,7 +383,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // Add "Select All" option if not all cards are selected
     if (!allSelected && totalAvailableCount > selectedCount) {
       menuItems.push(
-        new MenuItem('Select All', 'action', {
+        new MenuItem({
+          label: 'Select All',
           icon: SelectAllIcon,
           action: this.selectAll,
           disabled: false,
@@ -389,7 +394,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     // Add "Deselect All" option
     menuItems.push(
-      new MenuItem('Deselect All', 'action', {
+      new MenuItem({
+        label: 'Deselect All',
         icon: DeselectIcon,
         action: this.clearSelections,
       }),
@@ -400,15 +406,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     // Add "Delete N items" option
     menuItems.push(
-      new MenuItem(
-        `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
-        'action',
-        {
-          action: this.confirmAndDeleteSelected,
-          icon: IconTrash,
-          dangerous: true,
-        },
-      ),
+      new MenuItem({
+        label: `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
+        action: this.confirmAndDeleteSelected,
+        icon: IconTrash,
+        dangerous: true,
+      }),
     );
 
     return {
@@ -439,7 +442,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
     return [
-      new MenuItem('Delete Card', 'action', {
+      new MenuItem({
+        label: 'Delete Card',
         action: () =>
           this.cardIdentifier &&
           this.cardCrudFunctions.deleteCard?.(this.cardIdentifier),
@@ -455,13 +459,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
 
-    return (
+    return toMenuItems(
       this.card?.[getCardMenuItems]?.({
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         commandContext: this.args.commandContext,
-      }) ?? []
+      }) ?? [],
     );
   }
 
