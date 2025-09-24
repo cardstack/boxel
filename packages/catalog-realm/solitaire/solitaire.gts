@@ -236,11 +236,7 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     }
     this.moves++;
     this.saveGameState();
-
-    // Defer win condition check to prevent tracking issues
-    setTimeout(() => {
-      this.checkWinCondition();
-    }, 0);
+    this.checkWinCondition();
   }
 
   @action
@@ -259,8 +255,6 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
       this.selectedCard = card;
       this.selectedPile = { type: pileType, index: pileIndex };
     }
-
-    // Check win condition after any selection change
     this.checkWinCondition();
   }
 
@@ -341,13 +335,10 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
 
       this.moves++;
       this.saveGameState();
-
+      this.checkWinCondition();
       // Clear selection first to prevent tracking issues
       this.selectedCard = null;
       this.selectedPile = null;
-
-      // Check win condition after moving to foundation
-      this.checkWinCondition();
     } else {
       this.selectedCard = null;
       this.selectedPile = null;
@@ -392,13 +383,10 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
 
     this.moves++;
     this.saveGameState();
-
+    this.checkWinCondition();
     // Clear selection first to prevent tracking issues
     this.selectedCard = null;
     this.selectedPile = null;
-
-    // Check win condition after each move
-    this.checkWinCondition();
   }
 
   @action
@@ -424,8 +412,6 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     if (pile.length > 0 && !pile[pile.length - 1].faceUp) {
       pile[pile.length - 1].faceUp = true;
       this.saveGameState();
-
-      // Check win condition after flipping a card (might reveal new moves)
       this.checkWinCondition();
     }
   }
@@ -438,7 +424,6 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
         this.selectedCard = card;
         this.selectedPile = { type: pileType, index: pileIndex };
         this.moveToFoundation(i);
-        // checkWinCondition is already called in moveToFoundation
         return;
       }
     }
@@ -448,43 +433,35 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
   emptyPileClick(pileType: string, pileIndex: number) {
     if (this.selectedCard && pileType === 'tableau') {
       this.tryMove(pileType, pileIndex);
-      // checkWinCondition is already called in tryMove -> moveToTableau
     }
   }
 
   @action
   checkWinCondition() {
-    // Check if all foundations have 13 cards (Ace to King)
     const allFoundationsComplete = this.foundations.every(
       (foundation) => foundation.length === 13,
     );
 
     if (allFoundationsComplete && !this.gameWon) {
-      // Use setTimeout to prevent tracking issues
-      setTimeout(() => {
-        this.gameWon = true;
-        this.isPlaying = false;
-        this.gameState = 'gameOver';
-        this.gameMessage = '🎉 Congratulations! You won! 🎉';
-        this.showModal = true;
-        this.saveGameState();
-        this.recordGameResult();
-      }, 0);
+      this.gameWon = true;
+      this.isPlaying = false;
+      this.gameState = 'gameOver';
+      this.gameMessage = '🎉 Congratulations! You won! 🎉';
+      this.showModal = true;
+      this.saveGameState();
+      this.recordGameResult();
       return;
     }
 
     // Check if no more moves are possible
     if (this.isGameOver()) {
-      // Use setTimeout to prevent tracking issues
-      setTimeout(() => {
-        this.gameWon = false;
-        this.isPlaying = false;
-        this.gameState = 'gameOver';
-        this.gameMessage = 'Game Over - No more moves available';
-        this.showModal = true;
-        this.saveGameState();
-        this.recordGameResult();
-      }, 0);
+      this.gameWon = false;
+      this.isPlaying = false;
+      this.gameState = 'gameOver';
+      this.gameMessage = 'Game Over - No more moves available';
+      this.showModal = true;
+      this.saveGameState();
+      this.recordGameResult();
     }
   }
 
@@ -678,71 +655,67 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
 
   // Save game state back to model for persistence
   saveGameState() {
-    // Use setTimeout to prevent tracking issues during rendering
-    setTimeout(() => {
-      this.args.model.gameState = this.gameState;
-      this.args.model.gameMessage = this.gameMessage;
-      this.args.model.moves = this.moves;
-      this.args.model.isPlaying = this.isPlaying;
-      this.args.model.gameWon = this.gameWon;
-      this.args.model.showModal = this.showModal;
+    this.args.model.gameState = this.gameState;
+    this.args.model.gameMessage = this.gameMessage;
+    this.args.model.moves = this.moves;
+    this.args.model.isPlaying = this.isPlaying;
+    this.args.model.gameWon = this.gameWon;
+    this.args.model.showModal = this.showModal;
 
-      // Save card arrays
-      this.args.model.stock = this.convertCardsToModel(this.stock);
-      this.args.model.waste = this.convertCardsToModel(this.waste);
+    // Save card arrays
+    this.args.model.stock = this.convertCardsToModel(this.stock);
+    this.args.model.waste = this.convertCardsToModel(this.waste);
 
-      // Save foundations with structure information
-      (this.args.model as any).foundationPile0 = this.convertCardsToModel(
-        this.foundations[0] || [],
-      );
-      (this.args.model as any).foundationPile1 = this.convertCardsToModel(
-        this.foundations[1] || [],
-      );
-      (this.args.model as any).foundationPile2 = this.convertCardsToModel(
-        this.foundations[2] || [],
-      );
-      (this.args.model as any).foundationPile3 = this.convertCardsToModel(
-        this.foundations[3] || [],
-      );
+    // Save foundations with structure information
+    (this.args.model as any).foundationPile0 = this.convertCardsToModel(
+      this.foundations[0] || [],
+    );
+    (this.args.model as any).foundationPile1 = this.convertCardsToModel(
+      this.foundations[1] || [],
+    );
+    (this.args.model as any).foundationPile2 = this.convertCardsToModel(
+      this.foundations[2] || [],
+    );
+    (this.args.model as any).foundationPile3 = this.convertCardsToModel(
+      this.foundations[3] || [],
+    );
 
-      // Also save flattened foundations for backward compatibility
-      const allFoundationCards: Card[] = [];
-      this.foundations.forEach((pile) => {
-        allFoundationCards.push(...pile);
-      });
-      this.args.model.foundations =
-        this.convertCardsToModel(allFoundationCards);
+    // Also save flattened foundations for backward compatibility
+    const allFoundationCards: Card[] = [];
+    this.foundations.forEach((pile) => {
+      allFoundationCards.push(...pile);
+    });
+    this.args.model.foundations = this.convertCardsToModel(allFoundationCards);
 
-      // Save tableau with structure information
-      (this.args.model as any).tableauPile0 = this.convertCardsToModel(
-        this.tableau[0] || [],
-      );
-      (this.args.model as any).tableauPile1 = this.convertCardsToModel(
-        this.tableau[1] || [],
-      );
-      (this.args.model as any).tableauPile2 = this.convertCardsToModel(
-        this.tableau[2] || [],
-      );
-      (this.args.model as any).tableauPile3 = this.convertCardsToModel(
-        this.tableau[3] || [],
-      );
-      (this.args.model as any).tableauPile4 = this.convertCardsToModel(
-        this.tableau[4] || [],
-      );
-      (this.args.model as any).tableauPile5 = this.convertCardsToModel(
-        this.tableau[5] || [],
-      );
-      (this.args.model as any).tableauPile6 = this.convertCardsToModel(
-        this.tableau[6] || [],
-      );
+    // Save tableau with structure information
+    (this.args.model as any).tableauPile0 = this.convertCardsToModel(
+      this.tableau[0] || [],
+    );
+    (this.args.model as any).tableauPile1 = this.convertCardsToModel(
+      this.tableau[1] || [],
+    );
+    (this.args.model as any).tableauPile2 = this.convertCardsToModel(
+      this.tableau[2] || [],
+    );
+    (this.args.model as any).tableauPile3 = this.convertCardsToModel(
+      this.tableau[3] || [],
+    );
+    (this.args.model as any).tableauPile4 = this.convertCardsToModel(
+      this.tableau[4] || [],
+    );
+    (this.args.model as any).tableauPile5 = this.convertCardsToModel(
+      this.tableau[5] || [],
+    );
+    (this.args.model as any).tableauPile6 = this.convertCardsToModel(
+      this.tableau[6] || [],
+    );
 
-      // Also save flattened tableau for backward compatibility
-      const allTableauCards: Card[] = [];
-      this.tableau.forEach((pile) => {
-        allTableauCards.push(...pile);
-      });
-      this.args.model.tableau = this.convertCardsToModel(allTableauCards);
-    }, 0);
+    // Also save flattened tableau for backward compatibility
+    const allTableauCards: Card[] = [];
+    this.tableau.forEach((pile) => {
+      allTableauCards.push(...pile);
+    });
+    this.args.model.tableau = this.convertCardsToModel(allTableauCards);
   }
 
   // Record game result when game ends
