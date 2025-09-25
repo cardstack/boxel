@@ -55,7 +55,6 @@ import { setupApplicationTest } from '../helpers/setup';
 const testRealm2URL = `http://test-realm/test2/`;
 const testRealm3URL = `http://test-realm/test3/`;
 
-let matrixRoomId: string;
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
 
@@ -72,7 +71,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

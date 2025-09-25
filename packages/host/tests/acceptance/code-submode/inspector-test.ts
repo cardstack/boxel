@@ -397,7 +397,6 @@ const localInheritSource = `
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
-  let matrixRoomId: string;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -417,7 +416,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       [testRealmURL2]: ['read', 'write'],
     });
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

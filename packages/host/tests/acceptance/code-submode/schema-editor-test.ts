@@ -241,7 +241,6 @@ const ambiguousDisplayNamesCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let monacoService: MonacoService;
 
@@ -257,7 +256,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

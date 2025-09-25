@@ -35,7 +35,6 @@ import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
-let matrixRoomId: string;
 module('Acceptance | code submode | editor tests', function (hooks) {
   let monacoService: MonacoService;
   let adapter: TestRealmAdapter;
@@ -53,7 +52,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

@@ -18,8 +18,6 @@ import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-let matrixRoomId: string;
-
 module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -34,7 +32,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

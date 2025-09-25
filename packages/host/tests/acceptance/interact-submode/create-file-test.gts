@@ -201,8 +201,6 @@ const userRealmFiles: Record<string, any> = {
   },
 };
 
-let matrixRoomId: string;
-
 module('Acceptance | interact submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -239,7 +237,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       }),
     ]);
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

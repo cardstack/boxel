@@ -36,7 +36,6 @@ import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-let matrixRoomId = '';
 let mockedFileContent = 'Hello, world!';
 
 const testCardContent = `
@@ -84,7 +83,7 @@ module('Acceptance | Code patches tests', function (hooks) {
       return new Response(mockedFileContent);
     };
 
-    matrixRoomId = await createAndJoinRoom({
+    await createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

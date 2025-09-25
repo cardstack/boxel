@@ -188,7 +188,6 @@ const friendCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 let monacoService: MonacoService;
 module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -202,7 +201,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

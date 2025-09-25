@@ -172,7 +172,6 @@ const filesB: Record<string, any> = {
   },
 };
 
-let matrixRoomId: string;
 module('Acceptance | code submode | create-file tests', function (hooks) {
   async function openNewFileModal(
     menuSelection: string,
@@ -217,7 +216,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       mockMatrixUtils,
     }));
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

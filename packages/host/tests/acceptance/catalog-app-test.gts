@@ -136,7 +136,6 @@ const blogAppCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | Catalog | catalog app tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -150,7 +149,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
   let { getRoomIds, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

@@ -248,7 +248,6 @@ const polymorphicFieldCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | Spec preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -264,7 +263,7 @@ module('Acceptance | Spec preview', function (hooks) {
     mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });

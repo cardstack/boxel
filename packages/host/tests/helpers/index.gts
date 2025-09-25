@@ -57,11 +57,10 @@ import {
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
+import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
-
-import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 
 export {
   visitOperatorMode,
