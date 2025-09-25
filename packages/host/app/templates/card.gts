@@ -192,12 +192,6 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     {{else}}
 
       <div class='host-wrapper'>
-        <iframe
-          class='connect not-loaded'
-          title='connect'
-          src={{this.connectUrl}}
-          {{this.addMessageListener}}
-        />
         <section
           class={{this.hostModeContainerClass}}
           style={{this.backgroundImageStyle}}
