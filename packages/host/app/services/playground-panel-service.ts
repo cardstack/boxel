@@ -11,10 +11,10 @@ import { isCardInstance, localId, isLocalId } from '@cardstack/runtime-common';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import {
-  type CardDef,
-  type BaseDef,
-  type Format,
+import type {
+  CardDef,
+  BaseDef,
+  Format,
 } from 'https://cardstack.com/base/card-api';
 
 import OperatorModeStateService from './operator-mode-state-service';
