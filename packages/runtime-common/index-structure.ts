@@ -92,5 +92,5 @@ export interface PublishedRealmTable {
   owner_username: string;
   source_realm_url: string;
   published_realm_url: string;
-  last_published_at: number;
+  last_published_at: string;
 }
