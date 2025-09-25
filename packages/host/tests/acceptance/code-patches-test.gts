@@ -26,6 +26,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   getMonacoContent,
 } from '../helpers';
@@ -44,10 +45,10 @@ import StringField from 'https://cardstack.com/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
-  
+
   @field name = contains(StringField);
   @field description = contains(StringField);
-  
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div data-test-test-card>
@@ -87,7 +88,8 @@ module('Acceptance | Code patches tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     await setupAcceptanceTestRealm({
       mockMatrixUtils,

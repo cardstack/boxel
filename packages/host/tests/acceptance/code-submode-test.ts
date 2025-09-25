@@ -35,6 +35,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   assertMessages,
 } from '../helpers';
@@ -433,7 +434,8 @@ module('Acceptance | code submode tests', function (_hooks) {
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -544,7 +546,8 @@ module('Acceptance | code submode tests', function (_hooks) {
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       monacoService = getService('monaco-service');
 

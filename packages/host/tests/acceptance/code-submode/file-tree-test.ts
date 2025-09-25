@@ -23,6 +23,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -213,7 +214,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     const numStubFiles = 100;
     let stubFiles: Record<string, string> = {};

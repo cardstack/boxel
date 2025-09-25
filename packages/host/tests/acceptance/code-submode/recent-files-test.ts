@@ -23,6 +23,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -205,7 +206,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
     monacoService = getService('monaco-service');
 
     // this seeds the loader used during index which obtains url mappings

@@ -9,6 +9,7 @@ import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
   testRealmURL,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -31,7 +32,8 @@ module('Acceptance | basic tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;

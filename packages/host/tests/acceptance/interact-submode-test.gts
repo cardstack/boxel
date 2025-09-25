@@ -44,6 +44,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
   assertMessages,
@@ -75,7 +76,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');

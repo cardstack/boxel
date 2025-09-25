@@ -53,6 +53,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
 
@@ -100,7 +101,8 @@ module('Acceptance | Commands tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';

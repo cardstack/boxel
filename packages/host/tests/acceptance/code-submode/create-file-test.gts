@@ -14,6 +14,7 @@ import {
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -220,7 +221,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     getService('network').mount(
       async (req: Request) => {

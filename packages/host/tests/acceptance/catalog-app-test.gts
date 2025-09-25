@@ -21,6 +21,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL as mockCatalogURL,
+  setupAuthEndpoints,
   setupUserSubscription,
   setupAcceptanceTestRealm,
   visitOperatorMode,
@@ -153,7 +154,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
     // this setup test realm is pretending to be a mock catalog
     await setupAcceptanceTestRealm({
       realmURL: mockCatalogURL,

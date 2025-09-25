@@ -17,6 +17,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   percySnapshot,
   type TestContextWithSave,
@@ -267,7 +268,8 @@ module('Acceptance | Spec preview', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader

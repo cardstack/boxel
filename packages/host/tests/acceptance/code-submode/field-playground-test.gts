@@ -10,6 +10,7 @@ import {
   assertMessages,
   percySnapshot,
   setupAcceptanceTestRealm,
+  setupAuthEndpoints,
   setupLocalIndexing,
   setupUserSubscription,
   testRealmURL,
@@ -225,7 +226,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -1075,7 +1077,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       await setupAcceptanceTestRealm({
         mockMatrixUtils,

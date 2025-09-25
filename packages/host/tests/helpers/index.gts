@@ -475,7 +475,7 @@ async function setupTestRealm({
   return { realm, adapter };
 }
 
-export function setupMockAuthEndpoints() {
+export function setupAuthEndpoints() {
   getService('network').mount(
     async (req: Request) => {
       if (req.url.includes('_realm-auth')) {
@@ -531,9 +531,7 @@ export function setupMockAuthEndpoints() {
   );
 }
 
-export function setupUserSubscription(matrixRoomId: string) {
-  // TODO: make this cleaner & separate the subscription setup from the auth setup
-  setupMockAuthEndpoints();
+export function setupUserSubscription() {
   const userResponseBody = {
     data: {
       type: 'user',

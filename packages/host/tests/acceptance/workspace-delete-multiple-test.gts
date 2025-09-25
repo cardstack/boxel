@@ -10,6 +10,7 @@ import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
   testRealmURL,
+  setupAuthEndpoints,
   setupUserSubscription,
   visitOperatorMode,
 } from '../helpers';
@@ -37,7 +38,8 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;

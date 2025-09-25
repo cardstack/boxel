@@ -20,6 +20,7 @@ import {
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
+  setupAuthEndpoints,
   setupLocalIndexing,
   setupOnSave,
   setupUserSubscription,
@@ -176,7 +177,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -1335,7 +1337,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -1497,7 +1500,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
       setActiveRealms([testRealmURL]);
       setRealmPermissions({
         [testRealmURL]: ['read', 'write'],

@@ -11,6 +11,7 @@ import {
   setupOnSave,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -242,7 +243,8 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     getService('network').mount(
       async (req: Request) => {

@@ -26,6 +26,7 @@ import {
   setMonacoContent,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   withSlowSave,
   type TestContextWithSave,
@@ -56,7 +57,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     monacoService = getService('monaco-service');
 

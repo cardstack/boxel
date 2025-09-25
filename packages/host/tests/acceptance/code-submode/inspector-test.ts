@@ -35,6 +35,7 @@ import {
   setupAcceptanceTestRealm,
   setupOnSave,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
   setMonacoContent,
@@ -420,7 +421,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
