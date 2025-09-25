@@ -24,6 +24,7 @@ import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type RealmService from '../services/realm';
 
 type ListingType = 'card' | 'app' | 'skill';
 const listingSubClass: Record<'card' | 'app' | 'skill', string> = {
@@ -61,6 +62,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
 
   description = 'Create catalog listing command';
 
@@ -91,9 +93,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   private sanitizeDeps(deps: string[]) {
     return deps.filter((dep) => {
+      // Exclude scoped CSS requests
       if (isScopedCSSRequest(dep)) {
         return false;
       }
+      // Exclude known global/package/icon sources
       if (
         [
           'https://cardstack.com',
@@ -103,7 +107,14 @@ export default class ListingCreateCommand extends HostBaseCommand<
       ) {
         return false;
       }
-      return true;
+
+      // Only allow deps that belong to a realm we can read
+      const url = new URL(dep);
+      const realmURL = this.realm.realmOfURL(url);
+      if (!realmURL) {
+        return false;
+      }
+      return this.realm.canRead(realmURL.href);
     });
   }
 
