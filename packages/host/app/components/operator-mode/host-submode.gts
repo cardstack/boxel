@@ -222,17 +222,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         background-size: cover;
       }
 
-      .host-mode-top-bar {
+      .host-submode-layout :deep(.top-left-menu) {
         background-color: var(--boxel-700);
-        padding: var(--operator-mode-spacing);
         border-bottom: 1px solid var(--boxel-600);
-        flex-shrink: 0;
-        height: 60px;
-
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        padding-left: var(--operator-mode-left-column);
       }
 
       .publish-button-container {
