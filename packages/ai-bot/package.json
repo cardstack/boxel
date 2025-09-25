@@ -6,7 +6,7 @@
     "@cardstack/runtime-common": "workspace:*",
     "@sentry/node": "catalog:",
     "@types/lodash": "catalog:",
-    "@types/node": "^18.18.5",
+    "@types/node": "catalog:",
     "@types/stream-chain": "catalog:",
     "@types/stream-json": "catalog:",
     "lodash": "catalog:",

@@ -8,7 +8,7 @@
     "@playwright/test": "catalog:",
     "@types/fs-extra": "catalog:",
     "@types/jsonwebtoken": "catalog:",
-    "@types/node": "^18.18.5",
+    "@types/node": "catalog:",
     "@types/uuid": "catalog:",
     "fs-extra": "catalog:",
     "jsonwebtoken": "catalog:",
