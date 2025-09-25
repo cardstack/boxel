@@ -553,8 +553,7 @@ export default class MatrixService extends Service {
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
 
         if (loginToAllAccessibleRealmsInBulk) {
-          // This means the user just clicked "Sign in". In this case
-          // we want to authenticate to all accessible realms in a single request,
+          // In this case we want to authenticate to all accessible realms in a single request,
           // for performance reasons (otherwise we would make 2 auth requests for
           // each realm, which could be a lot of requests).
 
