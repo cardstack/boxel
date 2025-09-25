@@ -782,6 +782,11 @@ export default class InteractSubmode extends Component {
         --submode-bar-item-outline: var(--boxel-border-flexible);
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
       }
+
+      .interact-submode-layout :deep(.top-bar) {
+        position: absolute;
+      }
+
       .interact-submode {
         display: flex;
         justify-content: center;
