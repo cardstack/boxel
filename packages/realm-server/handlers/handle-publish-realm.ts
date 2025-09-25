@@ -13,12 +13,13 @@ import {
   fetchRealmPermissions,
   uuidv4,
 } from '@cardstack/runtime-common';
-import { ensureDirSync, copySync } from 'fs-extra';
+import { ensureDirSync, copySync, readJsonSync, writeJsonSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
+  sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
@@ -73,7 +74,7 @@ export default function handlePublishRealm({
       return;
     }
 
-    let sourceRealmURL = json.sourceRealmURL.endsWith('/')
+    let sourceRealmURL: string = json.sourceRealmURL.endsWith('/')
       ? json.sourceRealmURL
       : `${json.sourceRealmURL}/`;
     let publishedRealmURL = json.publishedRealmURL.endsWith('/')
@@ -117,10 +118,30 @@ export default function handlePublishRealm({
     }
 
     try {
-      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
-      if (!sourceRealm) {
-        throw new Error(`Source realm ${sourceRealmURL} not found`);
+      let realmInfoResponse = await virtualNetwork.handle(
+        new Request(`${sourceRealmURL}_info`, {
+          headers: {
+            Accept: SupportedMimeType.RealmInfo,
+          },
+        }),
+      );
+
+      if (!realmInfoResponse || realmInfoResponse.status !== 200) {
+        log.warn(
+          `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
+        );
+        throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
       }
+
+      let realmInfoJson = await realmInfoResponse.json();
+
+      if (realmInfoJson.data.attributes.publishable !== true) {
+        return sendResponseForUnprocessableEntity(
+          ctxt,
+          `Realm ${sourceRealmURL} is not publishable`,
+        );
+      }
+
       let existingPublishedRealm = realms.find(
         (r) => r.url === publishedRealmURL,
       );
@@ -205,6 +226,15 @@ export default function handlePublishRealm({
       let publishedRealmPath = join(publishedDir, publishedRealmData.id);
       copySync(sourceRealmPath, publishedRealmPath);
       ensureDirSync(publishedRealmPath);
+
+      let newlyPublishedRealmConfig = readJsonSync(
+        join(publishedRealmPath, '.realm.json'),
+      );
+      newlyPublishedRealmConfig.publishable = false;
+      writeJsonSync(
+        join(publishedRealmPath, '.realm.json'),
+        newlyPublishedRealmConfig,
+      );
 
       if (existingPublishedRealm) {
         realms.splice(realms.indexOf(existingPublishedRealm), 1);
