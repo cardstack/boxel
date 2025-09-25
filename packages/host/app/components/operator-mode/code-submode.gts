@@ -641,8 +641,6 @@ export default class CodeSubmode extends Component<Signature> {
           data-test-code-mode
           data-test-save-idle={{not this.isSaving}}
         >
-          <div class='code-mode-top-bar'>
-          </div>
           <ResizablePanelGroup
             @orientation='horizontal'
             @onLayoutChange={{this.onHorizontalLayoutChange}}

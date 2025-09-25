@@ -567,10 +567,6 @@ export default class SubmodeLayout extends Component<Signature> {
         gap: var(--operator-mode-spacing);
       }
 
-      .code-submode-layout .top-left-menu {
-        background-color: var(--code-mode-top-bar-background-color);
-      }
-
       .boxel-title {
         color: var(--boxel-light);
         font: 900 var(--boxel-font-size-med) 'Rustica';
