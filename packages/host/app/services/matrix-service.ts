@@ -298,6 +298,7 @@ export default class MatrixService extends Service {
             await this.realmServer.setAvailableRealmURLs(
               e.event.content.realms,
             );
+            await this.loginToRealms();
             await this.loadMoreAuthRooms(e.event.content.realms);
           }
         },
