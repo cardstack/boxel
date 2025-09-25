@@ -31,7 +31,7 @@ import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import {
   extractCssVariables,
-  getStyleConversions,
+  sanitizeHtmlSafe,
 } from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
 import { isEqual, flatMap } from 'lodash';
@@ -39,7 +39,6 @@ import { initSharedState } from './shared-state';
 import { and, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
-import sanitizedHtml from './helpers/sanitized-html';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 
@@ -235,11 +234,7 @@ export function getBoxComponent(
       cardDef && 'cssVariables' in cardDef
         ? (cardDef as Theme).cssVariables
         : cardDef?.cardInfo?.theme?.cssVariables;
-    return sanitizedHtml(
-      [getStyleConversions(), extractCssVariables(css)]
-        .filter(Boolean)
-        .join(''),
-    );
+    return sanitizeHtmlSafe(extractCssVariables(css));
   }
 
   function getCssImports(card?: CardDef) {
