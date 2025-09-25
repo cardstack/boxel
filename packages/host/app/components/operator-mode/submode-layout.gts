@@ -419,18 +419,19 @@ export default class SubmodeLayout extends Component<Signature> {
                 />
               {{/if}}
               {{yield to='topBar'}}
-              <button
-                class='profile-icon-button'
-                {{on 'click' this.toggleProfileSummary}}
-                data-test-profile-icon-button
-              >
-                <Avatar
-                  @isReady={{this.matrixService.profile.loaded}}
-                  @userId={{this.matrixService.userId}}
-                  @displayName={{this.matrixService.profile.displayName}}
-                />
-              </button>
             {{/if}}
+
+            <button
+              class='profile-icon-button'
+              {{on 'click' this.toggleProfileSummary}}
+              data-test-profile-icon-button
+            >
+              <Avatar
+                @isReady={{this.matrixService.profile.loaded}}
+                @userId={{this.matrixService.userId}}
+                @displayName={{this.matrixService.profile.displayName}}
+              />
+            </button>
           </div>
           {{#if this.workspaceChooserOpened}}
             <WorkspaceChooser />
