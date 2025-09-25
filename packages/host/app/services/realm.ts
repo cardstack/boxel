@@ -492,7 +492,7 @@ export default class RealmService extends Service {
   // treats that case as a read-then-write assertion failure. So instead we do
   // untracked reads from `realms` and pair them, at the right times, with
   // tracked reads from `currentKnownRealms` to establish dependencies.
-  private realms = this.restoreSessions();
+  private realms: Map<string, RealmResource> = this.restoreSessions();
 
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
