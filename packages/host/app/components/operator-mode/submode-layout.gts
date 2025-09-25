@@ -419,6 +419,17 @@ export default class SubmodeLayout extends Component<Signature> {
                 />
               {{/if}}
               {{yield to='topBar'}}
+              <button
+                class='profile-icon-button'
+                {{on 'click' this.toggleProfileSummary}}
+                data-test-profile-icon-button
+              >
+                <Avatar
+                  @isReady={{this.matrixService.profile.loaded}}
+                  @userId={{this.matrixService.userId}}
+                  @displayName={{this.matrixService.profile.displayName}}
+                />
+              </button>
             {{/if}}
           </div>
           {{#if this.workspaceChooserOpened}}
@@ -432,17 +443,6 @@ export default class SubmodeLayout extends Component<Signature> {
               updateSubmode=this.updateSubmode
             )
           }}
-          <button
-            class='profile-icon-button'
-            {{on 'click' this.toggleProfileSummary}}
-            data-test-profile-icon-button
-          >
-            <Avatar
-              @isReady={{this.matrixService.profile.loaded}}
-              @userId={{this.matrixService.userId}}
-              @displayName={{this.matrixService.profile.displayName}}
-            />
-          </button>
           {{#if @onCardSelectFromSearch}}
             <SearchSheet
               @mode={{this.searchSheetMode}}
@@ -564,10 +564,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
         display: flex;
         align-items: center;
-      }
-      .top-left-menu
-        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
-        margin-left: var(--operator-mode-spacing);
+        gap: var(--operator-mode-spacing);
       }
 
       .code-submode-layout .top-left-menu {
@@ -603,11 +600,12 @@ export default class SubmodeLayout extends Component<Signature> {
       .profile-icon-button {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
-        position: absolute;
-        top: var(--operator-mode-spacing);
-        right: var(--operator-mode-spacing);
-        padding: 0;
+
         background: none;
+
+        padding: 0;
+        margin-left: auto;
+
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
