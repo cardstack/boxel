@@ -10,14 +10,16 @@
     "attributes": {
       "name": "Calendar",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/screenshot_01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/screenshot_03.png"
       ],
       "summary": "A comprehensive calendar component for date management and scheduling",
       "cardInfo": {
         "notes": "Supports multiple view modes and customizable calendar names",
         "title": "Calendar",
         "description": "An interactive calendar card that provides month and year views with date selection capabilities. Perfect for scheduling, event planning, and date-based applications.",
-        "thumbnailURL": null
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/thumbnail.png"
       }
     },
     "relationships": {

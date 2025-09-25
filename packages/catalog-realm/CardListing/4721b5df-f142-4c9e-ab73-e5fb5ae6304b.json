@@ -1,0 +1,67 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Study Session",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/study-session-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/study-session-listing/screenshot_02.png"
+      ],
+      "summary": "A comprehensive study session management card for tracking academic progress, planning study time, and monitoring learning outcomes.",
+      "cardInfo": {
+        "notes": "Includes fields for session title, subject, time tracking (planned vs actual duration), completion status, and detailed notes. Can be used for individual study sessions, group study coordination, or academic progress monitoring.",
+        "title": "Study Session",
+        "description": "Track and manage your study sessions with this comprehensive card that includes session planning, time tracking, subject organization, and progress monitoring features. Perfect for students, educators, and self-learners who want to optimize their study habits and measure learning effectiveness.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-session-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/2a870145-9f84-4cca-baa2-e5ef5d2d24e9"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../study-session/StudySession/math-problems"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/knowledge-management"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
