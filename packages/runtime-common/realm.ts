@@ -2243,10 +2243,14 @@ export class Realm {
         let innerPath = this.paths.local(
           new URL(`${this.paths.directoryURL(dir).href}${entry.name}`),
         );
+        let createdFromDb = await this.getCreatedTime(innerPath);
         meta = {
           kind: 'file',
           lastModified: (await this.#adapter.lastModified(innerPath)) ?? null,
-        };
+          ...(createdFromDb != null
+            ? { resourceCreatedAt: createdFromDb }
+            : {}),
+        } as FileMeta;
       } else {
         meta = { kind: 'directory' };
       }
