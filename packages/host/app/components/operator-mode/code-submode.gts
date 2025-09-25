@@ -881,7 +881,7 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .code-submode-layout
-        :deep(.ember-basic-dropdown-content-wormhole-origin) {
+        :deep(.top-bar .ember-basic-dropdown-content-wormhole-origin) {
         position: absolute;
       }
 
