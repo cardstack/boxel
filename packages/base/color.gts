@@ -1,17 +1,21 @@
 import { Component, StringField } from './card-api';
-import { ColorPalette } from '@cardstack/boxel-ui/components';
-import { ColorPicker } from '@cardstack/boxel-ui/components';
+import { ColorPalette, Swatch } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import PaintBucket from '@cardstack/boxel-icons/paint-bucket';
 
-class View extends Component<typeof ColorPalette> {
+class View extends Component<typeof ColorField> {
   <template>
-    <ColorPicker @color={{@model}} @disabled={{true}} @showHexString={{true}} />
+    <Swatch @color={{@model}} @style='round' />
   </template>
 }
 
-class EditView extends Component<typeof ColorPalette> {
+class EditView extends Component<typeof ColorField> {
   <template>
-    <ColorPalette @color={{@model}} @onChange={{@set}} />
+    <ColorPalette
+      @color={{@model}}
+      @onChange={{@set}}
+      @disabled={{not @canEdit}}
+    />
   </template>
 }
 
