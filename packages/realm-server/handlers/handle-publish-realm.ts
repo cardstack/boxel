@@ -164,7 +164,7 @@ export default function handlePublishRealm({
         publishedRealmData = results[0];
         realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
 
-        let lastPublishedAt = Date.now();
+        let lastPublishedAt = Date.now().toString();
         await query(dbAdapter, [
           `UPDATE published_realms SET last_published_at =`,
           param(lastPublishedAt),
@@ -180,7 +180,7 @@ export default function handlePublishRealm({
           owner_username: realmUsername,
           source_realm_url: sourceRealmURL,
           published_realm_url: publishedRealmURL,
-          last_published_at: Date.now(),
+          last_published_at: Date.now().toString(),
         });
 
         let results = (await query(

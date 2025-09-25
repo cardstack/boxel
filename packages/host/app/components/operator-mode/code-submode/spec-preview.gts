@@ -41,7 +41,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
