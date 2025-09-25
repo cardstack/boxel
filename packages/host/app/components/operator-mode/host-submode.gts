@@ -208,11 +208,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         );
       }
 
-      .host-submode-layout :deep(.submode-switcher),
-      .host-submode-layout :deep(.workspace-button) {
-        border: 1px solid #ffffff59;
-      }
-
       .host-submode {
         display: flex;
         flex-direction: column;
@@ -224,7 +219,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       .host-submode-layout :deep(.top-left-menu) {
         background-color: var(--boxel-700);
-        border-bottom: 1px solid var(--boxel-600);
       }
 
       .publish-button-container {
