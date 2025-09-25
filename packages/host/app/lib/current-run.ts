@@ -103,7 +103,7 @@ export class CurrentRun {
   #prerenderer: Prerenderer;
   #userId: string;
   #permissions: RealmPermissions;
-  #realmURL: URL; // TODO make this a string
+  #realmURL: URL;
   #realmInfo?: RealmInfo;
   #jobInfo?: JobInfo;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
