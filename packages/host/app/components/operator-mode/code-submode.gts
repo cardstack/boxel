@@ -887,9 +887,8 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .code-submode-layout
-        :deep(.top-left-menu)
-        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
-        margin-left: var(--operator-mode-spacing);
+        :deep(.ember-basic-dropdown-content-wormhole-origin) {
+        position: absolute;
       }
 
       .module-inspector-container {
