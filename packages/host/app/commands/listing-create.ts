@@ -22,9 +22,9 @@ import CreateSpecCommand from './create-specs';
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
-import type RealmService from '../services/realm';
 
 type ListingType = 'card' | 'app' | 'skill';
 const listingSubClass: Record<'card' | 'app' | 'skill', string> = {
