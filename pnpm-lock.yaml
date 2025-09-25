@@ -585,6 +585,9 @@ catalogs:
     tmp:
       specifier: ^0.2.1
       version: 0.2.3
+    typescript:
+      specifier: 5.1.6
+      version: 5.1.6
     typescript-memoize:
       specifier: ^1.1.1
       version: 1.1.1
@@ -728,7 +731,7 @@ importers:
         specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
 
   packages/ai-bot:
@@ -777,10 +780,10 @@ importers:
         version: 1.8.0
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@18.19.54)(typescript@5.8.3)
+        version: 10.9.2(@types/node@18.19.54)(typescript@5.1.6)
       typescript:
-        specifier: ~5.8.3
-        version: 5.8.3
+        specifier: 'catalog:'
+        version: 5.1.6
     devDependencies:
       '@cardstack/local-types':
         specifier: workspace:*
@@ -911,7 +914,7 @@ importers:
         specifier: 1.3.0
         version: 1.3.0
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
     devDependencies:
       '@babel/core':
@@ -1062,7 +1065,7 @@ importers:
         specifier: 'catalog:'
         version: 5.1.2
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
     devDependencies:
       '@babel/core':
@@ -1387,7 +1390,7 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
       webpack:
         specifier: 'catalog:'
@@ -1498,7 +1501,7 @@ importers:
         specifier: ^3.2.0
         version: 3.3.0
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
     devDependencies:
       '@babel/core':
@@ -1827,7 +1830,7 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
       webpack:
         specifier: 'catalog:'
@@ -1937,7 +1940,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
       vite:
         specifier: 'catalog:'
@@ -2445,7 +2448,7 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
       uuid:
         specifier: 'catalog:'
@@ -2511,7 +2514,7 @@ importers:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@18.19.54)(typescript@5.1.6)
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
       uuid:
         specifier: 'catalog:'
@@ -2762,7 +2765,7 @@ importers:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@18.19.54)(typescript@5.1.6)
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
       typescript-memoize:
         specifier: 'catalog:'
@@ -3066,7 +3069,7 @@ importers:
         specifier: 'catalog:'
         version: 8.57.1
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
 
   packages/workspace-sync-cli:
@@ -3102,7 +3105,7 @@ importers:
         specifier: ^4.0.0
         version: 4.20.3
       typescript:
-        specifier: ~5.1.6
+        specifier: 'catalog:'
         version: 5.1.6
 
   vendor/ember-concurrency-async-plugin:
@@ -5303,67 +5306,56 @@ packages:
     resolution: {integrity: sha512-y/qUMOpJxBMy8xCXD++jeu8t7kzjlOCkoxxajL58G62PJGBZVl/Gwpm7JK9+YvlB701rcQTzjUZ1JgUoPTnoQA==}
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-arm-musleabihf@4.40.0':
     resolution: {integrity: sha512-GoCsPibtVdJFPv/BOIvBKO/XmwZLwaNWdyD8TKlXuqp0veo2sHE+A/vpMQ5iSArRUz/uaoj4h5S6Pn0+PdhRjg==}
     cpu: [arm]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-arm64-gnu@4.40.0':
     resolution: {integrity: sha512-L5ZLphTjjAD9leJzSLI7rr8fNqJMlGDKlazW2tX4IUF9P7R5TMQPElpH82Q7eNIDQnQlAyiNVfRPfP2vM5Avvg==}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-arm64-musl@4.40.0':
     resolution: {integrity: sha512-ATZvCRGCDtv1Y4gpDIXsS+wfFeFuLwVxyUBSLawjgXK2tRE6fnsQEkE4csQQYWlBlsFztRzCnBvWVfcae/1qxQ==}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-loongarch64-gnu@4.40.0':
     resolution: {integrity: sha512-wG9e2XtIhd++QugU5MD9i7OnpaVb08ji3P1y/hNbxrQ3sYEelKJOq1UJ5dXczeo6Hj2rfDEL5GdtkMSVLa/AOg==}
     cpu: [loong64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-powerpc64le-gnu@4.40.0':
     resolution: {integrity: sha512-vgXfWmj0f3jAUvC7TZSU/m/cOE558ILWDzS7jBhiCAFpY2WEBn5jqgbqvmzlMjtp8KlLcBlXVD2mkTSEQE6Ixw==}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-gnu@4.40.0':
     resolution: {integrity: sha512-uJkYTugqtPZBS3Z136arevt/FsKTF/J9dEMTX/cwR7lsAW4bShzI2R0pJVw+hcBTWF4dxVckYh72Hk3/hWNKvA==}
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-musl@4.40.0':
     resolution: {integrity: sha512-rKmSj6EXQRnhSkE22+WvrqOqRtk733x3p5sWpZilhmjnkHkpeCgWsFFo0dGnUGeA+OZjRl3+VYq+HyCOEuwcxQ==}
     cpu: [riscv64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-s390x-gnu@4.40.0':
     resolution: {integrity: sha512-SpnYlAfKPOoVsQqmTFJ0usx0z84bzGOS9anAC0AZ3rdSo3snecihbhFTlJZ8XMwzqAcodjFU4+/SM311dqE5Sw==}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-x64-gnu@4.40.0':
     resolution: {integrity: sha512-RcDGMtqF9EFN8i2RYN2W+64CdHruJ5rPqrlYw+cgM3uOVPSsnAQps7cpjXe9be/yDp8UC7VLoCoKC8J3Kn2FkQ==}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-x64-musl@4.40.0':
     resolution: {integrity: sha512-HZvjpiUmSNx5zFgwtQAV1GaGazT2RWvqeDi0hV+AtC8unqqDSsaFjPxfsO6qPtKRRg25SisACWnJ37Yio8ttaw==}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-win32-arm64-msvc@4.40.0':
     resolution: {integrity: sha512-UtZQQI5k/b8d7d3i9AZmA/t+Q4tk3hOC0tMOMSq2GlMYOfxbesxG4mJSeDp0EHs30N9bsfwUvs3zF4v/RzOeTQ==}
@@ -26467,24 +26459,6 @@ snapshots:
       diff: 4.0.2
       make-error: 1.3.6
       typescript: 5.1.6
-      v8-compile-cache-lib: 3.0.1
-      yn: 3.1.1
-
-  ts-node@10.9.2(@types/node@18.19.54)(typescript@5.8.3):
-    dependencies:
-      '@cspotcode/source-map-support': 0.8.1
-      '@tsconfig/node10': 1.0.9
-      '@tsconfig/node12': 1.0.11
-      '@tsconfig/node14': 1.0.3
-      '@tsconfig/node16': 1.0.4
-      '@types/node': 18.19.54
-      acorn: 8.14.1
-      acorn-walk: 8.2.0
-      arg: 4.1.3
-      create-require: 1.1.1
-      diff: 4.0.2
-      make-error: 1.3.6
-      typescript: 5.8.3
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
 
