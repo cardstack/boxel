@@ -882,25 +882,12 @@ export default class CodeSubmode extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      /* FIXME what of these needs to remain */
-      .cxode-mode-top-bar {
-        position: absolute;
-        top: 0;
-        right: 0;
-        left: var(--operator-mode-left-column);
-        padding-block: var(--operator-mode-spacing);
-        padding-right: var(--operator-mode-spacing);
-        display: flex;
-        z-index: 1;
-        width: calc(
-          100% -
-            calc(
-              var(--operator-mode-left-column) + var(--container-button-size) +
-                var(--operator-mode-spacing)
-            )
-        );
+      .code-submode-layout :deep(.top-left-menu) {
+        background-color: #74707d;
       }
-      .xcode-mode-top-bar
+
+      .code-submode-layout
+        :deep(.top-left-menu)
         > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
         margin-left: var(--operator-mode-spacing);
       }
