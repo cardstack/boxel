@@ -385,7 +385,7 @@ export default class SubmodeLayout extends Component<Signature> {
         as |ResizablePanel ResizeHandle|
       >
         <ResizablePanel class='main-panel'>
-          <div class='top-left-menu'>
+          <div class='top-bar'>
             <IconButton
               @icon={{BoxelIcon}}
               @width='40px'
@@ -557,10 +557,10 @@ export default class SubmodeLayout extends Component<Signature> {
         z-index: var(--host-ai-panel-z-index);
       }
 
-      .top-left-menu {
+      .top-bar {
         width: 100%;
         padding: var(--operator-mode-spacing);
-        z-index: var(--host-top-left-menu-z-index);
+        z-index: var(--host-top-bar-z-index);
 
         display: flex;
         align-items: center;

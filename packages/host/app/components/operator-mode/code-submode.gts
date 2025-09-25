@@ -880,7 +880,7 @@ export default class CodeSubmode extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .code-submode-layout :deep(.top-left-menu) {
+      .code-submode-layout :deep(.top-bar) {
         background-color: #74707d;
       }
 

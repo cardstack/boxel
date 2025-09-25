@@ -217,7 +217,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         background-size: cover;
       }
 
-      .host-submode-layout :deep(.top-left-menu) {
+      .host-submode-layout :deep(.top-bar) {
         background-color: var(--boxel-700);
       }
 
