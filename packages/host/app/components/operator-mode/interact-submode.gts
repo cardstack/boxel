@@ -600,7 +600,8 @@ export default class InteractSubmode extends Component {
     if (cardTypes.length) {
       cardTypes.map(({ name, icon, ref }) => {
         menuItems.push(
-          new MenuItem(name, 'action', {
+          new MenuItem({
+            label: name,
             action: () => this.createNewFromRecentType.perform(ref),
             icon,
           }),
@@ -613,12 +614,14 @@ export default class InteractSubmode extends Component {
   private get createNewMenuItems(): (MenuItem | MenuDivider)[] {
     let recentCardMenuItems = this.getRecentCardMenuItems();
     let menuItems = [
-      new MenuItem('Choose a card type...', 'action', {
+      new MenuItem({
+        label: 'Choose a card type...',
         action: () => this.createCardInstance.perform(),
         icon: IconSearch,
       }),
       new MenuDivider(),
-      new MenuItem('Open Code Mode', 'action', {
+      new MenuItem({
+        label: 'Open Code Mode',
         action: this.createFileInCodeSubmode,
         subtextComponent: CodeSubmodeNewFileOptions,
         icon: IconCode,

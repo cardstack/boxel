@@ -56,7 +56,8 @@ export default class CardHeaderUsage extends Component {
     publishable: null,
   };
   @tracked moreOptionsMenuItems: MenuItem[] = [
-    new MenuItem('Copy Card URL', 'action', {
+    new MenuItem({
+      label: 'Copy Card URL',
       action: () => console.log('Copy Card URL'),
       icon: IconLink,
       disabled: false,
@@ -73,20 +74,23 @@ export default class CardHeaderUsage extends Component {
   @tracked utilityMenu?: CardHeaderUtilityMenu = {
     triggerText: '2 Selected',
     menuItems: [
-      new MenuItem('Deselect All', 'action', {
+      new MenuItem({
+        label: 'Deselect All',
         icon: DeselectIcon,
         action: () => {
           console.log('Deselect all');
           console.log('Delete 2 items');
         },
       }),
-      new MenuItem('Select All', 'action', {
+      new MenuItem({
+        label: 'Select All',
         icon: SelectAllIcon,
         action: () => {
           console.log('Select all');
         },
       }),
-      new MenuItem('Delete 2 items', 'action', {
+      new MenuItem({
+        label: 'Delete 2 items',
         dangerous: true,
         icon: IconTrash,
         action: () => {

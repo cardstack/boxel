@@ -79,7 +79,8 @@ export default class SortDropdown extends Component<Signature> {
     }
     return (this.args.options as SortOption[]).map(
       (option) =>
-        new MenuItem(option.displayName, 'action', {
+        new MenuItem({
+          label: option.displayName,
           action: () => this.args.onSelect(option),
         }),
     );
