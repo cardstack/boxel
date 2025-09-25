@@ -46,13 +46,14 @@ export default class CardPrerender extends Component {
   @service private declare fastboot: { isFastBoot: boolean };
   @service private declare localIndexer: LocalIndexer;
   @tracked private renderComponent: BoxComponent | undefined;
+  @tracked private format: Format | undefined;
 
   <template>
     {{#unless this.isFastboot}}
       {{#if this.renderComponent}}
-        {{! TODO add status for 'ready' or 'error' !}}
+        {{! TODO add status for 'ready' or 'error' after we clean up error doc shape !}}
         <div data-prerender>
-          <this.renderComponent />
+          <this.renderComponent @format={{this.format}} />
         </div>
       {{/if}}
     {{/unless}}
@@ -84,83 +85,121 @@ export default class CardPrerender extends Component {
     return this.fastboot.isFastBoot;
   }
 
-  // TODO use EC?
   private async prerender({
-    realm: _realm,
     url,
-    userId: _userId,
-    permissions: _permissions,
+    realm,
+    userId,
+    permissions,
   }: {
     realm: string;
     url: string;
     userId: string;
     permissions: RealmPermissions;
   }): Promise<RenderResponse> {
-    // TODO handle JWTs
-    let isolatedHTML = await this.renderHTML(url, 'isolated');
-    let meta = await this.renderMeta(url);
-    let atomHTML = await this.renderHTML(url, 'atom');
-    let iconHTML = await this.renderIcon(url);
-    let embeddedHTML: Record<string, string> | null = null;
-    let fittedHTML: Record<string, string> | null = null;
-    if (meta?.types) {
-      embeddedHTML = await this.renderAncestors(url, 'embedded', meta.types);
-      fittedHTML = await this.renderAncestors(url, 'fitted', meta.types);
+    try {
+      let results = await this.prerenderTask.perform({
+        url,
+        realm,
+        userId,
+        permissions,
+      });
+      return results;
+    } catch (e: any) {
+      if (!didCancel(e)) {
+        throw e;
+      }
     }
-    return {
-      ...meta,
-      isolatedHTML,
-      atomHTML,
-      embeddedHTML,
-      fittedHTML,
-      iconHTML,
-    };
-  }
-
-  // TODO use try/catch to handle render errors
-  // TODO use EC?
-  private async renderHTML(url: string, format: Format, ancestorLevel = 0) {
-    let routeInfo = await this.router.recognizeAndLoad(
-      `/render/${encodeURIComponent(url)}/html/${format}/${ancestorLevel}`,
+    throw new Error(
+      `card-prerender component is missing or being destroyed before prerender of url ${url} was completed`,
     );
-    this.renderComponent = routeInfo.attributes.Component;
-    await new Promise<void>((r) => scheduleOnce('afterRender', this, r));
-    let el = document.querySelector('[data-prerender]');
-    return el?.children[0]?.innerHTML?.trim() ?? null;
   }
 
-  // TODO use EC?
-  private async renderAncestors(
-    url: string,
-    format: 'embedded' | 'fitted',
-    types: string[],
-  ) {
-    let ancestors: Record<string, string> = {};
-    for (let i = 0; i < types.length; i++) {
-      let res = await this.renderHTML(url, format, i);
-      ancestors[types[i]] = res as string;
-    }
-    return ancestors;
-  }
+  private prerenderTask = enqueueTask(
+    async ({
+      url,
+    }: {
+      realm: string;
+      url: string;
+      userId: string;
+      permissions: RealmPermissions;
+    }) => {
+      let isolatedHTML = await this.renderHTML.perform(url, 'isolated');
+      let meta = await this.renderMeta.perform(url);
+      let atomHTML = await this.renderHTML.perform(url, 'atom');
+      let iconHTML = await this.renderIcon.perform(url);
+      let embeddedHTML: Record<string, string> | null = null;
+      let fittedHTML: Record<string, string> | null = null;
+      if (meta?.types) {
+        embeddedHTML = await this.renderAncestors.perform(
+          url,
+          'embedded',
+          meta.types,
+        );
+        fittedHTML = await this.renderAncestors.perform(
+          url,
+          'fitted',
+          meta.types,
+        );
+      }
+      return {
+        ...meta,
+        isolatedHTML,
+        atomHTML,
+        embeddedHTML,
+        fittedHTML,
+        iconHTML,
+      };
+    },
+  );
 
-  // TODO use EC?
-  private async renderMeta(url: string) {
+  // TODO use try/catch to handle render errors after we clean up error doc shape
+  private renderHTML = enqueueTask(
+    async (
+      url: string,
+      format: Format,
+      ancestorLevel = 0,
+      capture: 'innerHTML' | 'outerHTML' = 'innerHTML',
+    ) => {
+      let routeInfo = await this.router.recognizeAndLoad(
+        `/render/${encodeURIComponent(url)}/html/${format}/${ancestorLevel}`,
+      );
+      this.format = format;
+      this.renderComponent = routeInfo.attributes.Component;
+      await new Promise<void>((r) => scheduleOnce('afterRender', this, r));
+      let el = document.querySelector('[data-prerender]');
+      let captured = el?.children[0]?.[capture]?.trim() ?? null;
+      return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
+    },
+  );
+
+  private renderAncestors = enqueueTask(
+    async (url: string, format: 'embedded' | 'fitted', types: string[]) => {
+      let ancestors: Record<string, string> = {};
+      for (let i = 0; i < types.length; i++) {
+        let res = await this.renderHTML.perform(url, format, i, 'outerHTML');
+        ancestors[types[i]] = res as string;
+      }
+      return ancestors;
+    },
+  );
+
+  private renderMeta = enqueueTask(async (url: string) => {
     let routeInfo = await this.router.recognizeAndLoad(
       `/render/${encodeURIComponent(url)}/meta`,
     );
     return routeInfo.attributes as PrerenderMeta;
-  }
+  });
 
-  // TODO use EC?
-  private async renderIcon(url: string) {
+  private renderIcon = enqueueTask(async (url: string) => {
     let routeInfo = await this.router.recognizeAndLoad(
       `/render/${encodeURIComponent(url)}/icon`,
     );
     this.renderComponent = routeInfo.attributes.Component;
     await new Promise<void>((r) => scheduleOnce('afterRender', this, r));
     let el = document.querySelector('[data-prerender]');
-    return el?.children[0]?.outerHTML?.trim() ?? null;
-  }
+    let captured = el?.children[0]?.outerHTML?.trim() ?? null;
+    return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
+  });
 
   private async fromScratch({
     realmURL,
@@ -329,4 +368,15 @@ function getRunnerOpts(optsId: number): RunnerOpts {
   return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(
     optsId,
   );
+}
+
+function cleanCapturedHTML(html: string): string {
+  if (!html) {
+    return html;
+  }
+  const emberIdAttr = /\s+id=(?:"ember\d+"|'ember\d+'|ember\d+)(?=[\s>])/g;
+  const emptyDataAttr = /\s+(data-[A-Za-z0-9:_-]+)=(?:""|''|(?=[\s>]))/g;
+  let cleaned = html.replace(emberIdAttr, '');
+  cleaned = cleaned.replace(emptyDataAttr, ' $1');
+  return cleaned;
 }
