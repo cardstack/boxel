@@ -18,7 +18,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
   p,

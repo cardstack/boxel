@@ -11,7 +11,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import CardRenderer from '../card-renderer';
 

@@ -13,12 +13,13 @@ import {
   fetchRealmPermissions,
   uuidv4,
 } from '@cardstack/runtime-common';
-import { ensureDirSync, copySync } from 'fs-extra';
+import { ensureDirSync, copySync, readJsonSync, writeJsonSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
+  sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
@@ -73,7 +74,7 @@ export default function handlePublishRealm({
       return;
     }
 
-    let sourceRealmURL = json.sourceRealmURL.endsWith('/')
+    let sourceRealmURL: string = json.sourceRealmURL.endsWith('/')
       ? json.sourceRealmURL
       : `${json.sourceRealmURL}/`;
     let publishedRealmURL = json.publishedRealmURL.endsWith('/')
@@ -117,10 +118,30 @@ export default function handlePublishRealm({
     }
 
     try {
-      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
-      if (!sourceRealm) {
-        throw new Error(`Source realm ${sourceRealmURL} not found`);
+      let realmInfoResponse = await virtualNetwork.handle(
+        new Request(`${sourceRealmURL}_info`, {
+          headers: {
+            Accept: SupportedMimeType.RealmInfo,
+          },
+        }),
+      );
+
+      if (!realmInfoResponse || realmInfoResponse.status !== 200) {
+        log.warn(
+          `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
+        );
+        throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
       }
+
+      let realmInfoJson = await realmInfoResponse.json();
+
+      if (realmInfoJson.data.attributes.publishable !== true) {
+        return sendResponseForUnprocessableEntity(
+          ctxt,
+          `Realm ${sourceRealmURL} is not publishable`,
+        );
+      }
+
       let existingPublishedRealm = realms.find(
         (r) => r.url === publishedRealmURL,
       );
@@ -143,7 +164,7 @@ export default function handlePublishRealm({
         publishedRealmData = results[0];
         realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
 
-        let lastPublishedAt = Date.now();
+        let lastPublishedAt = Date.now().toString();
         await query(dbAdapter, [
           `UPDATE published_realms SET last_published_at =`,
           param(lastPublishedAt),
@@ -159,7 +180,7 @@ export default function handlePublishRealm({
           owner_username: realmUsername,
           source_realm_url: sourceRealmURL,
           published_realm_url: publishedRealmURL,
-          last_published_at: Date.now(),
+          last_published_at: Date.now().toString(),
         });
 
         let results = (await query(
@@ -205,6 +226,15 @@ export default function handlePublishRealm({
       let publishedRealmPath = join(publishedDir, publishedRealmData.id);
       copySync(sourceRealmPath, publishedRealmPath);
       ensureDirSync(publishedRealmPath);
+
+      let newlyPublishedRealmConfig = readJsonSync(
+        join(publishedRealmPath, '.realm.json'),
+      );
+      newlyPublishedRealmConfig.publishable = false;
+      writeJsonSync(
+        join(publishedRealmPath, '.realm.json'),
+        newlyPublishedRealmConfig,
+      );
 
       if (existingPublishedRealm) {
         realms.splice(realms.indexOf(existingPublishedRealm), 1);
