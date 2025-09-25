@@ -808,15 +808,11 @@ export default class CodeSubmode extends Component<Signature> {
             </:content>
           </DeleteModal>
         {{/if}}
-        <CreateFileModal
-          @owner={{this}}
-          @onCreate={{this.setupCreateFileModal}}
-        />
-        <FromElseWhere @name='schema-editor-modal' />
-        <FromElseWhere @name='playground-field-picker' />
-        {{! FIXME do these need to be inside SubmodeLayout?}}
       </:default>
     </SubmodeLayout>
+    <CreateFileModal @owner={{this}} @onCreate={{this.setupCreateFileModal}} />
+    <FromElseWhere @name='schema-editor-modal' />
+    <FromElseWhere @name='playground-field-picker' />
 
     <style scoped>
       :global(:root) {
