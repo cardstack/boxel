@@ -4,7 +4,6 @@ import { module, test } from 'qunit';
 
 import { specRef, type Realm } from '@cardstack/runtime-common';
 
-import { BULK_GENERATED_ITEM_COUNT } from '@cardstack/host/components/operator-mode/code-submode/playground/instance-chooser-dropdown';
 import ENV from '@cardstack/host/config/environment';
 
 import {
@@ -1034,8 +1033,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can request AI assistant to bulk generate samples', async function (assert) {
-      const prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples on this card's spec.`;
-      const menuItem = `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`;
+      const prompt = `Generate 3 additional examples on this card's spec.`;
+      const menuItem = `Generate 3 examples with AI`;
       const commandMessage = {
         from: 'testuser',
         message: prompt,

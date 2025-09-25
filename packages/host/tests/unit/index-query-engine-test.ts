@@ -16,7 +16,6 @@ import {
   getFieldDefinitions,
   type ResolvedCodeRef,
   type Definition,
-  type CodeRef,
   type LooseCardResource,
 } from '@cardstack/runtime-common';
 import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
@@ -1109,48 +1108,21 @@ module('Unit | query', function (hooks) {
     );
   });
 
-  test(`gives a good error when query refers to missing card`, async function (assert) {
+  test(`returns empty results when query refers to missing card`, async function (assert) {
     await setupIndex(dbAdapter, []);
 
-    try {
-      await indexQueryEngine.search(new URL(testRealmURL), {
-        filter: {
-          on: {
-            module: `${testRealmURL}nonexistent`,
-            name: 'Nonexistent',
-          },
-          eq: { nonExistentField: 'hello' },
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: {
+          module: `${testRealmURL}nonexistent`,
+          name: 'Nonexistent',
         },
-      });
-      throw new Error('failed to throw expected exception');
-    } catch (err: any) {
-      assert.strictEqual(
-        err.message,
-        `Your filter refers to a nonexistent type: import { Nonexistent } from "${testRealmURL}nonexistent"`,
-      );
-    }
-    let cardRef: CodeRef = {
-      type: 'fieldOf',
-      field: 'name',
-      card: {
-        module: `${testRealmURL}nonexistent`,
-        name: 'Nonexistent',
+        eq: { nonExistentField: 'hello' },
       },
-    };
-    try {
-      await indexQueryEngine.search(new URL(testRealmURL), {
-        filter: {
-          on: cardRef,
-          eq: { name: 'Simba' },
-        },
-      });
-      throw new Error('failed to throw expected exception');
-    } catch (err: any) {
-      assert.strictEqual(
-        err.message,
-        `Your filter refers to a nonexistent type: ${stringify(cardRef)}`,
-      );
-    }
+    });
+
+    assert.strictEqual(cards.length, 0, 'no cards are returned');
+    assert.strictEqual(meta.page.total, 0, 'total count is zero');
   });
 
   test(`gives a good error when query refers to missing field`, async function (assert) {

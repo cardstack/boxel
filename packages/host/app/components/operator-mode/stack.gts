@@ -13,8 +13,8 @@ import {
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
 import type {
-  CardDef,
   CreateCardFn,
+  DeleteCardFn,
   EditCardFn,
   SaveCardFn,
   ViewCardFn,
@@ -35,13 +35,13 @@ interface Signature {
     viewCard: ViewCardFn;
     editCard: EditCardFn;
     saveCard: SaveCardFn;
+    deleteCard: DeleteCardFn;
     commandContext: CommandContext;
     close: (stackItem: StackItem) => void;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
       stackItem: StackItem,
     ) => void;
-    requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     setupStackItem: (
       model: StackItem,
       componentAPI: StackItemComponentAPI,
@@ -64,6 +64,7 @@ export default class OperatorModeStack extends Component<Signature> {
       saveCard: this.args.saveCard,
       editCard: this.args.editCard,
       viewCard: this.args.viewCard,
+      deleteCard: this.args.deleteCard,
     };
   }
 
@@ -110,9 +111,9 @@ export default class OperatorModeStack extends Component<Signature> {
             @item={{item}}
             @index={{i}}
             @stackItems={{@stackItems}}
-            @requestDeleteCard={{@requestDeleteCard}}
             @commandContext={{@commandContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
+            @requestDeleteCard={{@deleteCard}}
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}
             @setupStackItem={{this.setupStackItem}}
