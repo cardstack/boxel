@@ -93,10 +93,6 @@ class RealmResource {
     });
   }
 
-  get isLoggedIn() {
-    return this.auth.type === 'logged-in';
-  }
-
   get url(): string {
     return this.realmURL;
   }
@@ -493,7 +489,6 @@ export default class RealmService extends Service {
   // untracked reads from `realms` and pair them, at the right times, with
   // tracked reads from `currentKnownRealms` to establish dependencies.
   private realms: Map<string, RealmResource> = this.restoreSessions();
-
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
 
