@@ -24,14 +24,13 @@ import {
   type RealmInfo,
   type TokenClaims,
   IndexWriter,
-  query,
-  param,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
   insertPermissions,
   unixTime,
 } from '@cardstack/runtime-common';
+import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 
 import {
   testHostModeRealmURL,
@@ -626,16 +625,7 @@ export async function getFileCreatedAt(
   localPath: string,
 ): Promise<number | null> {
   let db = await getDbAdapter();
-  let rows = await query(db, [
-    'SELECT created_at FROM realm_file_meta WHERE realm_url =',
-    param(realm.url),
-    'AND file_path =',
-    param(localPath),
-  ]);
-  if (rows.length === 0) return null;
-  let created = rows[0]['created_at'];
-  if (created == null) return null;
-  return typeof created === 'string' ? parseInt(created) : Number(created);
+  return getCreatedTime(db, realm.url, localPath);
 }
 
 function changedEntry(

@@ -15,6 +15,7 @@ import {
   isUrlLike,
 } from './index';
 import { transpileJS } from './transpile';
+import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
   type Expression,
   param,
@@ -140,40 +141,13 @@ export class Batch {
 
   // Look up created_at for a given file path from realm_file_meta
   async getCreatedTime(localPath: string): Promise<number | null> {
-    let rows = (await this.#query([
-      'SELECT created_at FROM realm_file_meta WHERE realm_url =',
-      param(this.realmURL.href),
-      'AND file_path =',
-      param(localPath),
-      'LIMIT 1',
-    ])) as { created_at: string }[];
-    let created = rows[0]?.created_at;
-    return created != null ? parseInt(created) : null;
+    // delegate to shared helper
+    return getCreatedTime(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
   // Ensure a created_at row exists for this file in realm_file_meta and return it
   async ensureFileCreatedAt(localPath: string): Promise<number> {
-    // Try existing first
-    let existing = await this.getCreatedTime(localPath);
-    if (existing != null) {
-      return existing;
-    }
-    // Insert and re-read
-    let now = Math.floor(Date.now() / 1000);
-    await this.#query([
-      'INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES',
-      '(',
-      param(this.realmURL.href),
-      ',',
-      param(localPath),
-      ',',
-      param(now),
-      ')',
-      'ON CONFLICT (realm_url, file_path) DO NOTHING',
-    ]);
-    // Re-read to get the authoritative value (handles race/clock)
-    let created = await this.getCreatedTime(localPath);
-    return created ?? now;
+    return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
   @Memoize()

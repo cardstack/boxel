@@ -6,6 +6,7 @@ import {
 } from './document-types';
 import { isMeta, type CardResource } from './resource-types';
 import { RealmPaths, LocalPath, join } from './paths';
+import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
 import {
   systemError,
   notFound,
@@ -633,60 +634,22 @@ export class Realm {
   private async persistFileMeta(
     rows: { path: LocalPath }[],
   ): Promise<Map<LocalPath, number>> {
-    let createdMap = new Map<LocalPath, number>();
-    if (!this.#dbAdapter || rows.length === 0) return createdMap;
-    const realmURL = this.url;
-    // Insert rows for all paths; do not overwrite existing ones
-    let expr: any[] = [
-      'INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES',
-    ];
-    let now = Math.floor(Date.now() / 1000);
-    rows.forEach((r, idx) => {
-      if (idx > 0) expr.push(',');
-      expr.push('(', param(realmURL), ',', param(r.path), ',', param(now), ')');
-    });
-    expr.push('ON CONFLICT (realm_url, file_path) DO NOTHING');
-    await query(this.#dbAdapter, expr);
-
-    // Fetch created_at for all affected paths (both pre-existing and new)
-    let allPaths = Array.from(new Set(rows.map((r) => r.path)));
-    if (allPaths.length > 0) {
-      let selectExpr: any[] = [
-        'SELECT file_path, created_at FROM realm_file_meta WHERE realm_url =',
-        param(realmURL),
-        'AND file_path IN',
-        '(',
-      ];
-      allPaths.forEach((p, idx) => {
-        if (idx > 0) selectExpr.push(',');
-        selectExpr.push(param(p));
-      });
-      selectExpr.push(')');
-      let rowsResult = await query(this.#dbAdapter, selectExpr);
-      for (let row of rowsResult) {
-        let path = String(row['file_path']);
-        let created = Number(row['created_at']);
-        createdMap.set(path as LocalPath, created);
-      }
-    }
-    return createdMap;
+    if (!this.#dbAdapter || rows.length === 0) return new Map();
+    const createdMap = await persistFileMeta(
+      this.#dbAdapter,
+      this.url,
+      rows.map((r) => r.path),
+    );
+    // maintain LocalPath typing on keys
+    return new Map(
+      Array.from(createdMap.entries()).map(([p, c]) => [p as LocalPath, c]),
+    );
   }
 
   // remove file meta rows for deleted paths
   private async removeFileMeta(paths: LocalPath[]): Promise<void> {
     if (!this.#dbAdapter || paths.length === 0) return;
-    let expr: any[] = [
-      'DELETE FROM realm_file_meta WHERE realm_url =',
-      param(this.url),
-      'AND file_path IN',
-      '(',
-    ];
-    paths.forEach((p, idx) => {
-      if (idx > 0) expr.push(',');
-      expr.push(param(p));
-    });
-    expr.push(')');
-    await query(this.#dbAdapter, expr);
+    await removeFileMeta(this.#dbAdapter, this.url, paths);
   }
 
   validate(json: any): AtomicPayloadValidationError[] {
@@ -2174,16 +2137,7 @@ export class Realm {
   // Look up created_at for a given file path from realm_file_meta
   private async getCreatedTime(path: LocalPath): Promise<number | null> {
     if (!this.#dbAdapter) return null;
-    let rows = await query(this.#dbAdapter, [
-      'SELECT created_at FROM realm_file_meta WHERE realm_url =',
-      param(this.url),
-      'AND file_path =',
-      param(path),
-    ]);
-    if (rows.length === 0) return null;
-    let created = rows[0]['created_at'];
-    if (created == null) return null;
-    return typeof created === 'string' ? parseInt(created) : Number(created);
+    return getCreatedTime(this.#dbAdapter, this.url, path);
   }
 
   private async directoryEntries(
