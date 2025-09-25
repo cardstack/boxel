@@ -148,7 +148,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
             data-test-publish-realm-button
           >
             <PublishSiteIcon width='22' height='22' class='publish-icon' />
-            Publish…
+            Publish Site
           </BoxelButton>
         {{/if}}
         <PublishingRealmPopover @isOpen={{this.isPublishingRealmPopoverOpen}} />
