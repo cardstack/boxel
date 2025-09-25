@@ -1,7 +1,13 @@
 import { module, test } from 'qunit';
 import supertest, { SuperTest, Test } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
-import { existsSync, ensureDirSync, copySync, pathExistsSync } from 'fs-extra';
+import {
+  existsSync,
+  ensureDirSync,
+  copySync,
+  pathExistsSync,
+  readJsonSync,
+} from 'fs-extra';
 import { basename, join } from 'path';
 import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
@@ -211,6 +217,14 @@ module(basename(__filename), function () {
           'published realm has index.json',
         );
 
+        let publishedRealmConfig = readJsonSync(
+          join(publishedRealmPath, '.realm.json'),
+        );
+        assert.notOk(
+          publishedRealmConfig.publishable,
+          'published realm config should have publishable: false',
+        );
+
         // Verify that boxel_index entries exist for the published realm
         let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
         let indexResults = await dbAdapter.execute(
@@ -358,6 +372,19 @@ module(basename(__filename), function () {
           secondResponse.body.data.attributes.lastPublishedAt,
           firstTimestamp,
           'Timestamp is updated on republish',
+        );
+
+        let publishedRealmId = secondResponse.body.data.id;
+        let publishedDir = join(dir.name, 'realm_server_3', '_published');
+        let publishedRealmPath = join(publishedDir, publishedRealmId);
+
+        let publishedRealmConfig = readJsonSync(
+          join(publishedRealmPath, '.realm.json'),
+        );
+
+        assert.notOk(
+          publishedRealmConfig.publishable,
+          'published realm config should have publishable: false',
         );
       });
 

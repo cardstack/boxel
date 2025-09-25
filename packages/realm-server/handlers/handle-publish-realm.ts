@@ -13,7 +13,7 @@ import {
   fetchRealmPermissions,
   uuidv4,
 } from '@cardstack/runtime-common';
-import { ensureDirSync, copySync } from 'fs-extra';
+import { ensureDirSync, copySync, readJsonSync, writeJsonSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import {
   fetchRequestFromContext,
@@ -226,6 +226,15 @@ export default function handlePublishRealm({
       let publishedRealmPath = join(publishedDir, publishedRealmData.id);
       copySync(sourceRealmPath, publishedRealmPath);
       ensureDirSync(publishedRealmPath);
+
+      let newlyPublishedRealmConfig = readJsonSync(
+        join(publishedRealmPath, '.realm.json'),
+      );
+      newlyPublishedRealmConfig.publishable = false;
+      writeJsonSync(
+        join(publishedRealmPath, '.realm.json'),
+        newlyPublishedRealmConfig,
+      );
 
       if (existingPublishedRealm) {
         realms.splice(realms.indexOf(existingPublishedRealm), 1);
