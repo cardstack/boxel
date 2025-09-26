@@ -17,7 +17,7 @@ import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -153,25 +153,27 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!cardId) {
       return [];
     }
-    return (
+    return toMenuItems(
       this.card?.[getCardMenuItems]?.({
         canEdit: this.realm.canWrite(cardId),
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',
         commandContext: this.commandService.commandContext,
         format: this.format,
-      }) || []
+      }) || [],
     );
   }
 
   private get afterMenuOptions(): MenuItem[] {
     let menuItems: MenuItem[] = [
-      new MenuItem('Create new instance', 'action', {
+      new MenuItem({
+        label: 'Create new instance',
         action: () => this.createNew(),
         icon: this.createNewIsRunning ? LoadingIndicator : IconPlusThin,
         disabled: this.createNewIsRunning || !this.canWriteRealm,
       }),
-      new MenuItem('Choose another instance', 'action', {
+      new MenuItem({
+        label: 'Choose another instance',
         action: () => this.chooseInstance(),
         icon: Folder,
       }),

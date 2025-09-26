@@ -79,17 +79,20 @@ export default class AttachedFileDropdownMenu extends Component<{
       this.args.version === 'diff-editor' ? 'Generated' : 'Submitted';
 
     const items = [
-      new MenuItem('Open in Code Mode', 'action', {
+      new MenuItem({
+        label: 'Open in Code Mode',
         action: this.openInCodeMode,
         icon: IconCode,
         disabled: !this.args.file?.sourceUrl,
       }),
-      new MenuItem(`Copy ${submittedOrGenerated} Content`, 'action', {
+      new MenuItem({
+        label: `Copy ${submittedOrGenerated} Content`,
         action: this.copySubmittedContentTask.perform,
         icon: Copy,
         disabled: !this.args.file?.sourceUrl || this.args.isNewFile,
       }),
-      new MenuItem(`Restore ${submittedOrGenerated} Content`, 'action', {
+      new MenuItem({
+        label: `Restore ${submittedOrGenerated} Content`,
         action: this.toggleRestorePatchedFileModal,
         icon: Undo2,
         dangerous: true,
