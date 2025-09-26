@@ -676,7 +676,8 @@ export class CurrentRun {
           let {
             serialized,
             searchDoc,
-            displayName,
+            displayNames,
+            deps,
             types,
             isolatedHTML,
             atomHTML,
@@ -697,8 +698,8 @@ export class CurrentRun {
             lastModified,
             resourceCreatedAt,
             types: types!,
-            displayNames: [displayName!], // TODO this needs to be all display names in type heirarchy
-            deps: new Set([]), // TODO add this to /render route
+            displayNames: displayNames ?? [],
+            deps: new Set(deps ?? []),
           });
           return;
         }
