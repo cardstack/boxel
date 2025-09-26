@@ -740,7 +740,10 @@ export default class CodeSubmode extends Component<Signature> {
                     @isReadOnly={{this.isReadOnly}}
                   />
                 {{else if this.isLoading}}
-                  <LoadingIndicator class='loading-indicator' />
+                  <LoadingIndicator
+                    @color='var(--boxel-light)'
+                    class='loading-indicator'
+                  />
                 {{/if}}
               </InnerContainer>
             </ResizablePanel>
