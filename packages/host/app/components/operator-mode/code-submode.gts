@@ -837,10 +837,6 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .code-mode {
-        height: 100%;
-        max-height: 100vh;
-        left: 0;
-        right: 0;
         overflow: auto;
         flex: 1;
         background-color: #74707d;

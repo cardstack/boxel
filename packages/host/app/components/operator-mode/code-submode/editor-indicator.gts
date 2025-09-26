@@ -22,7 +22,7 @@ const CodeSubmodeEditorIndicator: TemplateOnlyComponent<Signature> = <template>
       display: flex;
       align-items: center;
       height: 2.5rem;
-      bottom: var(--top-bar-height);
+      bottom: 0;
       right: 0;
       padding: 0 var(--boxel-sp-xxs) 0 var(--boxel-sp-sm);
       border-top-left-radius: var(--boxel-border-radius);
