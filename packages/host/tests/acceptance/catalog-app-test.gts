@@ -135,6 +135,18 @@ const blogAppCardSource = `
   }
 `;
 
+const cardWithUnrecognisedImports = `
+  import { field, CardDef, linksTo } from 'https://cardstack.com/base/card-api';
+  // External import that should be ignored by sanitizeDeps
+  import { Chess as _ChessJS } from 'https://cdn.jsdelivr.net/npm/chess.js/+esm';
+  import { Author } from './author/author';
+
+  export class UnrecognisedImports extends CardDef {
+    static displayName = 'Unrecognised Imports';
+    @field author = linksTo(Author);
+  }
+`;
+
 let matrixRoomId: string;
 module('Acceptance | Catalog | catalog app tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -164,6 +176,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         'fields/contact-link.gts': contactLinkFieldSource,
         'app-card.gts': appCardSource,
         'blog-app/blog-app.gts': blogAppCardSource,
+        'card-with-unrecognised-imports.gts': cardWithUnrecognisedImports,
         'author/Author/example.json': {
           data: {
             type: 'card',
@@ -176,6 +189,18 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               adoptsFrom: {
                 module: `${mockCatalogURL}author/author`,
                 name: 'Author',
+              },
+            },
+          },
+        },
+        'UnrecognisedImports/example.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: `${mockCatalogURL}card-with-unrecognised-imports`,
+                name: 'UnrecognisedImports',
               },
             },
           },
@@ -1490,6 +1515,41 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             listing.specs.some((spec) => spec.ref.name === 'AuthorCompany'),
             true,
             'Listing should have an AuthorCompany spec',
+          );
+        }
+      });
+
+      test('listing will only create specs with recognised imports from realms it can read from', async function (assert) {
+        const cardId = mockCatalogURL + 'UnrecognisedImports/example';
+        const commandService = getService('command-service');
+        const command = new ListingCreateCommand(commandService.commandContext);
+        await command.execute({
+          openCardId: cardId,
+        });
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${mockCatalogURL}index`,
+        });
+        await verifySubmode(assert, 'code');
+        const instanceFolder = 'CardListing/';
+        await openDir(assert, instanceFolder);
+        const listingId = await verifyJSONWithUUIDInFolder(
+          assert,
+          instanceFolder,
+        );
+        if (listingId) {
+          const listing = (await getService('store').get(
+            listingId,
+          )) as CardListing;
+          assert.ok(listing, 'Listing should be created');
+          assert.strictEqual(
+            listing.specs.every(
+              (spec) =>
+                spec.ref.module != 'https://cdn.jsdelivr.net/npm/chess.js/+esm',
+            ),
+            true,
+            'Listing should does not have unrecognised import',
           );
         }
       });

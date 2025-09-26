@@ -408,7 +408,8 @@ export default class CodeSubmode extends Component<Signature> {
       }
       let displayName = capitalize(startCase(id));
       return [
-        new MenuItem(displayName, 'action', {
+        new MenuItem({
+          label: displayName,
           action: () => this.createFile.perform({ id, displayName }),
           subtext: description,
           icon,
@@ -739,7 +740,10 @@ export default class CodeSubmode extends Component<Signature> {
                       @isReadOnly={{this.isReadOnly}}
                     />
                   {{else if this.isLoading}}
-                    <LoadingIndicator class='loading-indicator' />
+                    <LoadingIndicator
+                      @color='var(--boxel-light)'
+                      class='loading-indicator'
+                    />
                   {{/if}}
                 </InnerContainer>
               </ResizablePanel>
