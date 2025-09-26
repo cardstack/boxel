@@ -875,6 +875,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
       .instance-chooser-container {
         position: sticky;
+        bottom: var(--playground-padding);
         border: 1px solid var(--boxel-450);
         margin: 0 auto;
         width: 380px;
