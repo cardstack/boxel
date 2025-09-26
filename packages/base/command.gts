@@ -269,6 +269,10 @@ export class ListingCreateInput extends CardDef {
   @field targetRealm = contains(StringField);
 }
 
+export class ListingCreateResult extends CardDef {
+  @field listing = linksTo(CardDef);
+}
+
 export class VisitCardsInput extends CardDef {
   @field query = contains(QueryField);
   @field commandRef = contains(CodeRefField);
