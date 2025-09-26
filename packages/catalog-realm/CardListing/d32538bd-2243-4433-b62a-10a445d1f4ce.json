@@ -1,0 +1,77 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Focus Timer",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/focus-timer-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/focus-timer-listing/screenshot_02.png"
+      ],
+      "summary": "A Pomodoro-style focus timer to help manage study and work sessions with customizable intervals and progress tracking",
+      "cardInfo": {
+        "notes": "Features session tracking, progress monitoring, and flexible timer configurations",
+        "title": "Focus Timer Card",
+        "description": "A productivity tool that implements the Pomodoro Technique with customizable focus and break durations. Perfect for students, professionals, and anyone looking to improve their focus and time management skills.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/focus-timer-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/7287d325-38bd-4243-8433-362a10a445d1"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../focus-timer/FocusTimerCard/algorithm-study-timer"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/goals-habits"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/skills-training"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
