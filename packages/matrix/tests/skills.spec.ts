@@ -416,6 +416,7 @@ test.describe('Skills', () => {
     await page.locator('[data-test-message-idx="0"]').waitFor();
 
     // Update the uploaded skill card
+    await page.locator('[data-test-filter-list-item="Skill"]').click();
     await page.locator(`[data-cards-grid-item="${skillCard}"]`).click();
     await page.locator('[data-test-edit-button]').click();
     await page
