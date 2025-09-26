@@ -221,15 +221,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         background-color: var(--boxel-700);
       }
 
-      .publish-button-container {
-        position: relative;
-        border: 1px solid var(--boxel-highlight);
-        border-radius: var(--submode-bar-item-border-radius);
-        /*box-shadow: var(--submode-bar-item-box-shadow);*/
-        outline: var(--submode-bar-item-outline);
-        outline-color: var(--boxel-highlight);
-      }
-
       .host-mode-top-bar-content {
         display: flex;
         align-items: center;
@@ -241,13 +232,17 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       }
 
       .publish-realm-button {
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
-        outline: var(--submode-bar-item-outline);
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
+      }
+
+      .publish-realm-button:focus:not(:disabled) {
+        outline-offset: 1px;
       }
 
       .publish-icon {
