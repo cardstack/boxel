@@ -1,6 +1,12 @@
 import Service from '@ember/service';
 
-import { type IndexResults, type IndexWriter } from '@cardstack/runtime-common';
+import {
+  type IndexResults,
+  type IndexWriter,
+  type Prerenderer,
+  type FromScratchArgsWithPermissions,
+  type IncrementalArgsWithPermissions,
+} from '@cardstack/runtime-common';
 
 import { type TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 
@@ -8,19 +14,22 @@ import { type TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 // for the test-realm-adapter
 export default class LocalIndexer extends Service {
   setup(
-    _fromScratch: (realmURL: URL) => Promise<IndexResults>,
-    _incremental: (
-      urls: URL[],
-      realmURL: URL,
-      operation: 'update' | 'delete',
-      ignoreData: Record<string, string>,
+    _fromScratch: (
+      args: FromScratchArgsWithPermissions,
     ) => Promise<IndexResults>,
+    _incremental: (
+      args: IncrementalArgsWithPermissions,
+    ) => Promise<IndexResults>,
+    _prerenderer: Prerenderer,
   ) {}
   get adapter(): TestRealmAdapter {
     return {} as TestRealmAdapter;
   }
   get indexWriter(): IndexWriter {
     return {} as IndexWriter;
+  }
+  get prerenderer() {
+    return {} as Prerenderer;
   }
 }
 
