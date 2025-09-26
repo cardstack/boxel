@@ -525,6 +525,7 @@ export default class SubmodeLayout extends Component<Signature> {
         --submode-bar-item-border-radius: var(--boxel-border-radius);
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
+        --top-bar-height: 60px;
         display: flex;
         height: 100%;
       }
