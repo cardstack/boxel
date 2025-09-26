@@ -1600,6 +1600,30 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           );
         }
       });
+
+      test('after create command, listing card opens on stack in interact mode', async function (assert) {
+        const cardId = mockCatalogURL + 'author/Author/example';
+        const commandService = getService('command-service');
+        const command = new ListingCreateCommand(commandService.commandContext);
+
+        let r = await command.execute({
+          openCardId: cardId,
+        });
+
+        await verifySubmode(assert, 'interact');
+
+        let listing = r?.listing;
+        let listingId = listing?.id;
+
+        if (listingId) {
+          await waitForCardOnStack(listingId);
+          assert
+            .dom(`[data-test-stack-card="${listingId}"]`)
+            .exists(
+              'Created listing card is displayed on stack after command execution',
+            );
+        }
+      });
     });
     skip('"use"', async function () {
       skip('card listing', async function (assert) {
