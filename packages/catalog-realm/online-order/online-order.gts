@@ -8,6 +8,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import EmailField from 'https://cardstack.com/base/email';
+import AddressField from 'https://cardstack.com/base/address';
 
 import { Pill } from '@cardstack/boxel-ui/components';
 import {
@@ -133,7 +134,7 @@ class IsolatedTemplate extends Component<typeof OnlineOrder> {
                   <span class='detail-label'>Shipping:</span>
                   <span
                     class='detail-value shipping-address'
-                  >{{@model.shippingAddress}}</span>
+                  >{{@model.shippingAddress.fullAddress}}</span>
                 </div>
               {{/if}}
 
@@ -787,9 +788,22 @@ class FittedTemplate extends Component<typeof OnlineOrder> {
 
   get shortAddress() {
     try {
-      const address = this.args?.model?.shippingAddress ?? '';
-      const lines = address.split('\n');
-      return lines[1] || lines[0] || 'No address';
+      const address = this.args?.model?.shippingAddress;
+      if (!address) return 'No address';
+
+      // Use city and country for short address, or fall back to full address
+      const city = address?.city;
+      const country = address.country?.name;
+
+      if (city && country) {
+        return `${city}, ${country}`;
+      } else if (city) {
+        return city;
+      } else if (country) {
+        return country;
+      } else {
+        return address.fullAddress || 'No address';
+      }
     } catch (e) {
       return 'No address';
     }
@@ -1343,7 +1357,7 @@ export class OnlineOrder extends CardDef {
   @field orderStatus = contains(StringField);
   @field orderTotal = contains(NumberField);
   @field orderDate = contains(DatetimeField);
-  @field shippingAddress = contains(StringField);
+  @field shippingAddress = contains(AddressField);
   @field paymentMethod = contains(StringField);
   @field trackingNumber = contains(StringField);
 
