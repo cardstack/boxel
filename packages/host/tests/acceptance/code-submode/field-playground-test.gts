@@ -271,6 +271,40 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
               },
             },
           },
+          'Spec/comment-2.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                ref: {
+                  name: 'Comment',
+                  module: '../blog-post',
+                },
+                specType: 'field',
+                containedExamples: [
+                  {
+                    title: 'Spec 2 Example 1',
+                  },
+                ],
+                title: 'Comment spec II',
+              },
+              meta: {
+                fields: {
+                  containedExamples: [
+                    {
+                      adoptsFrom: {
+                        module: '../blog-post',
+                        name: 'Comment',
+                      },
+                    },
+                  ],
+                },
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/spec',
+                  name: 'Spec',
+                },
+              },
+            },
+          },
           'Spec/comment-1.json': {
             data: {
               type: 'card',
@@ -303,40 +337,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                         name: 'Comment',
                       },
                     },
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'Comment',
-                      },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'Spec/comment-2.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'Comment',
-                  module: '../blog-post',
-                },
-                specType: 'field',
-                containedExamples: [
-                  {
-                    title: 'Spec 2 Example 1',
-                  },
-                ],
-                title: 'Comment spec II',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
                     {
                       adoptsFrom: {
                         module: '../blog-post',

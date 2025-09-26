@@ -28,7 +28,7 @@ import { join } from 'path';
 import { Duplex } from 'node:stream';
 import type {
   RequestContext,
-  FileWriteResult,
+  AdapterWriteResult,
 } from '@cardstack/runtime-common/realm';
 import type {
   RealmEventContent,
@@ -172,21 +172,17 @@ export class NodeAdapter implements RealmAdapter {
         return lazyStream;
       },
       lastModified: unixTime(stat.mtime.getTime()),
-      created: unixTime(stat.birthtime.getTime()),
     };
   }
 
-  async write(path: string, contents: string): Promise<FileWriteResult> {
+  async write(path: string, contents: string): Promise<AdapterWriteResult> {
     let absolutePath = join(this.realmDir, path);
-    let exists = await this.exists(path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
-    let { mtime, birthtime } = statSync(absolutePath);
+    let { mtime } = statSync(absolutePath);
     return {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
-      created: unixTime(birthtime.getTime()),
-      isNew: !exists,
     };
   }
 

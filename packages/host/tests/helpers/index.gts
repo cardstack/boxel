@@ -30,6 +30,7 @@ import {
   insertPermissions,
   unixTime,
 } from '@cardstack/runtime-common';
+import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 
 import {
   testHostModeRealmURL,
@@ -615,6 +616,16 @@ export function delay(delayAmountMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayAmountMs);
   });
+}
+
+// --- Created-at test utilities ---
+// Returns created_at (epoch seconds) from realm_file_meta for a given local file path like 'Pet/mango.json'.
+export async function getFileCreatedAt(
+  realm: Realm,
+  localPath: string,
+): Promise<number | null> {
+  let db = await getDbAdapter();
+  return getCreatedTime(db, realm.url, localPath);
 }
 
 function changedEntry(

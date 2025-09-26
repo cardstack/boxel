@@ -240,6 +240,15 @@ module(basename(__filename), function () {
       let newCardId = postResponse.body.data.id;
       let newCardPath = new URL(newCardId).pathname;
 
+      assert.ok(
+        postResponse.body.data.meta.resourceCreatedAt,
+        'created date should be set for new JSON file',
+      );
+      assert.ok(
+        postResponse.headers['x-created'],
+        'x-created header should be set for new JSON file',
+      );
+
       await waitForIncrementalIndexEvent(
         getMessagesSince,
         realmEventTimestampStart,
@@ -498,6 +507,7 @@ module(basename(__filename), function () {
       let json = response.body;
       for (let relationship of Object.values(json.data.relationships)) {
         delete (relationship as any).meta.lastModified;
+        delete (relationship as any).meta.resourceCreatedAt;
       }
       assert.deepEqual(
         json,
