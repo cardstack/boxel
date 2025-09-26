@@ -19,7 +19,6 @@ import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
-  sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
