@@ -354,6 +354,13 @@ export default class FileDefManagerImpl
   }
 
   async downloadContentAsText(url: string): Promise<string> {
+    const cachedEntry = this.downloadCache.get(url);
+    if (
+      cachedEntry &&
+      Date.now() - cachedEntry.timestamp < CACHE_EXPIRATION_MS
+    ) {
+      return cachedEntry.content;
+    }
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${this.client.getAccessToken()}`,
@@ -362,7 +369,21 @@ export default class FileDefManagerImpl
     if (!response.ok) {
       throw new Error(`HTTP error. Status: ${response.status}`);
     }
-    return await response.text();
+    const content = await response.text();
+    this.downloadCache.set(url, {
+      content,
+      timestamp: Date.now(),
+    });
+    // Update cache
+    this.downloadCache.set(url, {
+      content,
+      timestamp: Date.now(),
+    });
+    // Clean up cache if it gets too large
+    if (this.downloadCache.size > 100) {
+      this.cleanupCache();
+    }
+    return content;
   }
 
   async downloadAsFileInBrowser(serializedFile: SerializedFile) {
@@ -398,27 +419,7 @@ export default class FileDefManagerImpl
       throw new Error(`Unsupported file type: ${serializedFile.contentType}`);
     }
 
-    // Check cache first
-    const cachedEntry = this.downloadCache.get(serializedFile.url);
-    if (
-      cachedEntry &&
-      Date.now() - cachedEntry.timestamp < CACHE_EXPIRATION_MS
-    ) {
-      return JSON.parse(cachedEntry.content) as LooseSingleCardDocument;
-    }
-
     const content = await this.downloadContentAsText(serializedFile.url);
-
-    // Update cache
-    this.downloadCache.set(serializedFile.url, {
-      content,
-      timestamp: Date.now(),
-    });
-
-    // Clean up cache if it gets too large
-    if (this.downloadCache.size > 100) {
-      this.cleanupCache();
-    }
 
     return JSON.parse(content) as LooseSingleCardDocument;
   }
