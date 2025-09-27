@@ -60,7 +60,7 @@ export default class RenderRoute extends Route<Model> {
     // Add a "pseudo field" to the search doc for the card type. We use the
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards
-    searchDoc._cardType = displayNames[0];
+    searchDoc._cardType = getFriendlyCardType(Klass);
 
     return {
       serialized,
@@ -104,4 +104,12 @@ function getDisplayNames(klass: typeof BaseDef): string[] {
     current = Reflect.getPrototypeOf(current) as typeof BaseDef | undefined;
   }
   return displayNames;
+}
+
+function getFriendlyCardType(card: typeof CardDef) {
+  if (card.displayName === 'Card') {
+    return card.name;
+  } else {
+    return card.displayName;
+  }
 }
