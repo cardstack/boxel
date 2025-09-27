@@ -27,7 +27,8 @@ export type PatchData = {
 export interface PrerenderMeta {
   serialized: SingleCardDocument | null;
   searchDoc: Record<string, any> | null;
-  displayName: string | null;
+  displayNames: string[] | null;
+  deps: string[] | null;
   types: string[] | null;
 }
 

@@ -298,7 +298,8 @@ export class Prerenderer {
         let meta: PrerenderMeta = {
           serialized: null,
           searchDoc: null,
-          displayName: null,
+          displayNames: null,
+          deps: null,
           types: null,
         };
         return {
@@ -350,7 +351,8 @@ export class Prerenderer {
         meta = {
           serialized: null,
           searchDoc: null,
-          displayName: null,
+          displayNames: null,
+          deps: null,
           types: null,
         };
       } else {

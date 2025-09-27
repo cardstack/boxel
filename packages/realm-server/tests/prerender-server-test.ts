@@ -11,6 +11,7 @@ import {
 } from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
 import { Prerenderer } from '../prerender';
+import { baseCardRef } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
   module('Prerender server', function (hooks) {
@@ -88,10 +89,10 @@ module(basename(__filename), function () {
       assert.strictEqual(res.status, 201, 'HTTP 201');
       assert.strictEqual(res.body.data.type, 'prerender-result', 'type ok');
       assert.strictEqual(res.body.data.id, url, 'id is url');
-      assert.strictEqual(
-        res.body.data.attributes.displayName,
-        'Pet',
-        'displayName ok',
+      assert.deepEqual(
+        res.body.data.attributes.displayNames,
+        ['Pet', 'Card'],
+        'displayNames ok',
       );
       assert.strictEqual(
         res.body.data.attributes.searchDoc?.name,
@@ -106,6 +107,23 @@ module(basename(__filename), function () {
       assert.ok(
         /Maple/.test(res.body.data.attributes.isolatedHTML ?? ''),
         'isolatedHTML contains the instance title',
+      );
+      // spot check a few deps, as the whole list is overwhelming...
+      assert.ok(
+        res.body.data.attributes.deps?.includes(baseCardRef.module),
+        `${baseCardRef.module} is a dep`,
+      );
+      assert.ok(
+        res.body.data.attributes.deps?.includes(`${testRealmHref}pet`),
+        `${testRealmHref}pet is a dep`,
+      );
+      assert.ok(
+        (res.body.data.attributes.deps as string[]).find((d) =>
+          d.match(
+            /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+          ),
+        ),
+        `glimmer scoped css from ${baseCardRef.module} is a dep`,
       );
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
       assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
