@@ -63,6 +63,7 @@ const stubTagId = `${mockCatalogURL}Tag/stub`;
 
 //specs
 const authorSpecId = `${mockCatalogURL}Spec/author`;
+const unknownSpecId = `${mockCatalogURL}Spec/unknown-no-type`;
 
 //examples
 const authorExampleId = `${mockCatalogURL}author/Author/example`;
@@ -290,6 +291,28 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
           },
         },
+        'Spec/unknown-no-type.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              readMe: 'Spec without specType to trigger unknown grouping',
+              ref: {
+                name: 'UnknownNoType',
+                module: `${mockCatalogURL}unknown/unknown-no-type`,
+              },
+            },
+            // intentionally omitting specType so it falls into 'unknown'
+            containedExamples: [],
+            title: 'UnknownNoType',
+            description: 'Spec lacking specType',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
         'Listing/author.json': {
           data: {
             type: 'card',
@@ -383,6 +406,25 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               'tags.0': {
                 links: {
                   self: calculatorTagId,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'CardListing',
+              },
+            },
+          },
+        },
+        'Listing/unknown-only.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            relationships: {
+              'specs.0': {
+                links: {
+                  self: unknownSpecId,
                 },
               },
             },
@@ -1434,6 +1476,37 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .dom('[data-test-catalog-listing-embedded-categories-section]')
         .containsText('Writing');
       await this.pauseTest();
+    });
+
+    test('listing with spec that has a missing specType groups it under unknown (accordion assertion)', async function (assert) {
+      const unknownListingId = `${mockCatalogURL}Listing/unknown-only`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: unknownListingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom(
+          '[data-test-catalog-listing-embedded-specs-section] [data-test-accordion-item]',
+        )
+        .exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-catalog-listing-embedded-specs-section] [data-test-accordion-item="unknown"]',
+        )
+        .exists('Unknown group item exists');
+
+      assert
+        .dom(
+          '[data-test-catalog-listing-embedded-specs-section] [data-test-accordion-item="unknown"]',
+        )
+        .containsText('unknown (1)');
     });
 
     test('remix button does not exist when a listing has no specs', async function (assert) {
