@@ -394,7 +394,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         width: 100%;
         height: auto;
         border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-sm);
         background-color: var(--boxel-100);
       }
       .info-box :deep(.markdown-content p) {
@@ -450,7 +450,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         scrollbar-width: thin;
       }
       .images-item {
-        flex: 0 0 240px;
         background-color: var(--boxel-200);
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
@@ -502,14 +501,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         padding-inline-start: 0;
       }
 
-      /* generic paired sections (flex) */
-      .group {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxl);
-        margin-top: var(--boxel-sp);
-      }
-      /* dedicated 2-col grid for categories + tags */
       .two-col {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
