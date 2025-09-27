@@ -20,6 +20,7 @@ import {
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
+  setupAuthEndpoints,
   setupLocalIndexing,
   setupOnSave,
   setupUserSubscription,
@@ -147,8 +148,6 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
-let matrixRoomId: string;
-
 module('Acceptance | code-submode | card playground', function (_hooks) {
   module('single realm', function (hooks) {
     let realm: Realm;
@@ -172,11 +171,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
       let { CardsGrid } = cardsGrid;
 
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -1331,11 +1331,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -1493,11 +1494,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     `;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
       setActiveRealms([testRealmURL]);
       setRealmPermissions({
         [testRealmURL]: ['read', 'write'],

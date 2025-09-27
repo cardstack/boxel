@@ -14,6 +14,7 @@ import {
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -171,7 +172,6 @@ const filesB: Record<string, any> = {
   },
 };
 
-let matrixRoomId: string;
 module('Acceptance | code submode | create-file tests', function (hooks) {
   async function openNewFileModal(
     menuSelection: string,
@@ -216,11 +216,12 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       mockMatrixUtils,
     }));
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     getService('network').mount(
       async (req: Request) => {

@@ -21,6 +21,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL as mockCatalogURL,
+  setupAuthEndpoints,
   setupUserSubscription,
   setupAcceptanceTestRealm,
   visitOperatorMode,
@@ -147,7 +148,6 @@ const cardWithUnrecognisedImports = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | Catalog | catalog app tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -161,11 +161,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
   let { getRoomIds, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
     // this setup test realm is pretending to be a mock catalog
     await setupAcceptanceTestRealm({
       realmURL: mockCatalogURL,

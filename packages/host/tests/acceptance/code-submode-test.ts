@@ -35,6 +35,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   assertMessages,
 } from '../helpers';
@@ -406,7 +407,6 @@ const notFoundAdoptionInstance = `{
 }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
     let personalRealmURL: string;
@@ -429,11 +429,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     }
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -540,11 +541,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       monacoService = getService('monaco-service');
 

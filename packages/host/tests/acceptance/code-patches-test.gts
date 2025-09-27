@@ -26,6 +26,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   getMonacoContent,
 } from '../helpers';
@@ -35,7 +36,6 @@ import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-let matrixRoomId = '';
 let mockedFileContent = 'Hello, world!';
 
 const testCardContent = `
@@ -44,10 +44,10 @@ import StringField from 'https://cardstack.com/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
-  
+
   @field name = contains(StringField);
   @field description = contains(StringField);
-  
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div data-test-test-card>
@@ -83,11 +83,12 @@ module('Acceptance | Code patches tests', function (hooks) {
       return new Response(mockedFileContent);
     };
 
-    matrixRoomId = await createAndJoinRoom({
+    await createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     await setupAcceptanceTestRealm({
       mockMatrixUtils,

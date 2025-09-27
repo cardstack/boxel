@@ -36,6 +36,7 @@ import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupAuthEndpoints,
   setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -181,7 +182,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';

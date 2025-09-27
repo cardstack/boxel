@@ -19,6 +19,7 @@ import {
   openRoot,
   registerRealmUsers,
   setupUserSubscribed,
+  setupPermissions,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 
@@ -38,6 +39,7 @@ test.describe('Login', () => {
     await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page, appURL);
     await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
   });
   test.afterEach(async () => {
     await realmServer.stop();

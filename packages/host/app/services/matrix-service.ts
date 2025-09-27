@@ -482,9 +482,10 @@ export default class MatrixService extends Service {
     opts: {
       auth?: MatrixSDK.LoginResponse;
       refreshRoutes?: true;
+      loginToAllAccessibleRealmsInBulk?: boolean;
     } = {},
   ) {
-    let { auth, refreshRoutes } = opts;
+    let { auth, refreshRoutes, loginToAllAccessibleRealmsInBulk } = opts;
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {
@@ -550,6 +551,15 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
+
+        if (loginToAllAccessibleRealmsInBulk) {
+          // In this case we want to authenticate to all accessible realms in a single request,
+          // for performance reasons (otherwise we would make 2 auth requests for
+          // each realm, which could be a lot of requests).
+
+          await this.realmServer.authenticateToAllAccessibleRealms();
+        }
+
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(

@@ -40,6 +40,7 @@ import {
   visitOperatorMode,
   createJWT,
   testRealmSecretSeed,
+  setupAuthEndpoints,
   setupUserSubscription,
   setupRealmServerEndpoints,
 } from '../helpers';
@@ -82,7 +83,8 @@ module('Acceptance | operator mode tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     setExpiresInSec(60 * 60);
 

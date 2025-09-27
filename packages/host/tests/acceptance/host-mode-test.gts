@@ -15,12 +15,11 @@ import {
   setupOnSave,
   testHostModeRealmURL,
   setupAcceptanceTestRealm,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-
-let matrixRoomId: string;
 
 let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
   /\/test\/?$/,
@@ -61,11 +60,12 @@ module('Acceptance | host mode tests', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     setExpiresInSec(60 * 60);
 
