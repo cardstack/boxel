@@ -3,11 +3,13 @@ import Owner from '@ember/owner';
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { MockSDK } from './mock-matrix/_sdk';
 import { MockSlidingSync } from './mock-matrix/_sliding-sync';
-import { MockUtils } from './mock-matrix/_utils';
+import { MockUtils, getRoomIdForRealmAndUser } from './mock-matrix/_utils';
 
 export const testRealmServerMatrixUsername = 'realm_server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
@@ -53,6 +55,15 @@ export function setupMockMatrix(
   });
 
   hooks.beforeEach(async function () {
+    if (!opts.directRooms && opts.loggedInAs) {
+      opts.directRooms = [
+        ...(opts.activeRealms?.map((realmURL) =>
+          getRoomIdForRealmAndUser(realmURL, opts.loggedInAs!),
+        ) ?? []),
+        getRoomIdForRealmAndUser(baseRealm.url, opts.loggedInAs),
+      ];
+    }
+
     testState.owner = this.owner;
     testState.opts = { ...opts };
     let sdk = new MockSDK(testState.opts, this.owner);

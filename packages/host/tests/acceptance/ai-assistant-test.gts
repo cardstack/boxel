@@ -2871,6 +2871,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-option="Copy File History"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitFor('[data-test-user-message]');
 
     const thirdRoomId = matrixService.currentRoomId;
     assert.ok(thirdRoomId, 'Should have third room ID');
