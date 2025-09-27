@@ -1509,6 +1509,42 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .containsText('unknown (1)');
     });
 
+    test('unknown-only listing shows all default fallback texts', async function (assert) {
+      const unknownListingId = `${mockCatalogURL}Listing/unknown-only`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: unknownListingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-summary-section]')
+        .containsText('No Summary Provided');
+      assert
+        .dom('[data-test-catalog-listing-embedded-license-section]')
+        .containsText('No License Provided');
+      assert
+        .dom('[data-test-catalog-listing-embedded-images-section]')
+        .containsText('No Images Provided');
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples-section]')
+        .containsText('No Examples Provided');
+      assert
+        .dom('[data-test-catalog-listing-embedded-categories-section]')
+        .containsText('No Categories Provided');
+      assert
+        .dom('[data-test-catalog-listing-embedded-tags-section]')
+        .containsText('No Tags Provided');
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills-section]')
+        .containsText('No Skills Provided');
+    });
+
     test('remix button does not exist when a listing has no specs', async function (assert) {
       await visitOperatorMode({
         stacks: [
