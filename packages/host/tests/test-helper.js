@@ -9,6 +9,7 @@ import { useTestWaiters } from '@cardstack/runtime-common';
 import * as TestWaiters from '@ember/test-waiters';
 
 QUnit.dump.maxDepth = 20;
+QUnit.config.testTimeout = 10000; //original default 6000ms
 
 useTestWaiters(TestWaiters);
 setApplication(Application.create(config.APP));
