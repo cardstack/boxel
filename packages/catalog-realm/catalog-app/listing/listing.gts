@@ -11,7 +11,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
 import type {
   GetAllRealmMetasResult,
@@ -437,23 +437,28 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         border: 0.5px solid var(--boxel-200);
       }
 
+      /* horizontally scrollable images list */
       .images-list {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        display: flex;
+        flex-wrap: nowrap;
         gap: var(--boxel-sp);
         list-style: none;
-        margin-block: 0;
-        padding-inline-start: 0;
+        margin: 0;
+        padding: 0 0 var(--boxel-sp-xs) 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
       }
       .images-item {
+        flex: 0 0 240px;
         background-color: var(--boxel-200);
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
-        padding: var(--boxel-sp-sm);
+        padding: var(--boxel-sp);
         display: flex;
         align-items: center;
-        min-height: 160px;
+        justify-content: center;
       }
       .images-item img {
         width: 100%;
@@ -466,6 +471,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         transition:
           transform 0.3s ease,
           box-shadow 0.3s ease;
+      }
+      .images-item img:hover {
+        box-shadow:
+          0 15px 20px rgba(0, 0, 0, 0.2),
+          0 7px 10px rgba(0, 0, 0, 0.12);
       }
 
       .app-listing-examples {
