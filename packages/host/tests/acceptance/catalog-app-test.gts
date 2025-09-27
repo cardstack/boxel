@@ -46,6 +46,12 @@ const emptyListingId = `${mockCatalogURL}Listing/empty`;
 const pirateSkillListingId = `${mockCatalogURL}SkillListing/pirate-skill`;
 const incompleteSkillListingId = `${mockCatalogURL}Listing/incomplete-skill`;
 const apiDocumentationStubListingId = `${mockCatalogURL}Listing/api-documentation-stub`;
+//license
+const mitLicenseId = `${mockCatalogURL}License/mit`;
+//category
+const writingCategoryId = `${mockCatalogURL}Category/writing`;
+//publisher
+const publisherId = `${mockCatalogURL}Publisher/boxel-publisher`;
 
 //skills
 const pirateSkillId = `${mockCatalogURL}Skill/pirate-speak`;
@@ -245,6 +251,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
+              readMe: 'This is the author spec readme',
               ref: {
                 name: 'Author',
                 module: `${mockCatalogURL}author/author`,
@@ -289,6 +296,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             attributes: {
               name: 'Author',
               title: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
+              summary: 'A card for representing an author.',
             },
             relationships: {
               'specs.0': {
@@ -306,11 +314,55 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   self: calculatorTagId,
                 },
               },
+              'categories.0': {
+                links: {
+                  self: writingCategoryId,
+                },
+              },
+              license: {
+                links: {
+                  self: mitLicenseId,
+                },
+              },
+              publisher: {
+                links: {
+                  self: publisherId,
+                },
+              },
             },
             meta: {
               adoptsFrom: {
                 module: `${catalogRealmURL}catalog-app/listing/listing`,
                 name: 'CardListing',
+              },
+            },
+          },
+        },
+        'Publisher/boxel-publisher.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Boxel Publishing',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/publisher`,
+                name: 'Publisher',
+              },
+            },
+          },
+        },
+        'License/mit.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'MIT License',
+              content: 'MIT License',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/license`,
+                name: 'License',
               },
             },
           },
@@ -386,10 +438,29 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 },
               },
             },
+            'categories.0': {
+              links: {
+                self: writingCategoryId,
+              },
+            },
             meta: {
               adoptsFrom: {
                 module: `${catalogRealmURL}catalog-app/listing/listing`,
                 name: 'SkillListing',
+              },
+            },
+          },
+        },
+        'Category/writing.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Writing',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/category`,
+                name: 'Category',
               },
             },
           },
@@ -1311,85 +1382,58 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .hasText('Author - Mike Dane');
     });
 
-    skip('display of sections when viewing listing details', async function (assert) {
-      const homeworkGraderId = `${mockCatalogURL}CardListing/cbe2c79b-60aa-4dca-bc13-82b610e31653`;
+    test('display of sections when viewing listing details', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
             {
-              id: homeworkGraderId,
+              id: authorListingId,
               format: 'isolated',
             },
           ],
         ],
       });
 
-      //sections exists
       assert
         .dom('[data-test-catalog-listing-embedded-summary-section]')
-        .exists();
+        .containsText('A card for representing an author');
+
+      // Publisher (rendered in header)
+      assert
+        .dom('[data-test-app-listing-header-publisher]')
+        .containsText('By Boxel Publishing');
+
       assert
         .dom('[data-test-catalog-listing-embedded-license-section]')
-        .exists();
+        .containsText('MIT License');
+
       assert
         .dom('[data-test-catalog-listing-embedded-images-section]')
-        .exists();
+        .exists({ count: 1 });
       assert
         .dom('[data-test-catalog-listing-embedded-examples-section]')
         .exists();
-      assert
-        .dom('[data-test-catalog-listing-embedded-categories-section]')
-        .exists();
-      assert.dom('[data-test-catalog-listing-embedded-specs-section]').exists();
-      assert
-        .dom('[data-test-catalog-listing-embedded-skills-section]')
-        .exists();
-
-      //content exists
-      assert.dom('[data-test-catalog-listing-embedded-images]').exists();
-      assert.dom('[data-test-catalog-listing-embedded-examples]').exists();
-      assert.dom('[data-test-catalog-listing-embedded-categories]').exists();
-      assert.dom('[data-test-catalog-listing-embedded-skills]').exists();
-
-      assert
-        .dom('[data-test-catalog-listing-embedded-summary-section]')
-        .containsText(
-          'An AI-assisted card for grading assignments. Define questions, collect student answers, and trigger grading through a linked AI skill. The system creates an assistant room, sends the assignment and skill, and executes a grading command. The AI returns a letter grade, individual question scores, and markdown-formatted feedback, which are displayed in a styled summary.',
-        );
-      assert
-        .dom('[data-test-catalog-listing-embedded-license-section]')
-        .containsText('No License Provided');
-
-      assert
-        .dom('[data-test-catalog-listing-embedded-images] li')
-        .exists({ count: 3 });
 
       assert
         .dom('[data-test-catalog-listing-embedded-examples] li')
-        .exists({ count: 2 });
-      assert
-        .dom('[data-test-catalog-listing-embedded-examples] li:first-child')
-        .containsText('Basic Arithmetic');
-      assert
-        .dom('[data-test-catalog-listing-embedded-examples] li:last-child')
-        .containsText('US History');
-      assert
-        .dom('[data-test-catalog-listing-embedded-categories] li')
         .exists({ count: 1 });
+      assert.dom('[data-test-catalog-listing-embedded-tags-section]').exists();
+
+      // Spec: should include the Author spec
       assert
-        .dom('[data-test-catalog-listing-embedded-categories] li:first-child')
-        .containsText('Education & Courses');
+        .dom('[data-test-catalog-listing-embedded-specs-section]')
+        .containsText('Author');
+
+      // Only assert what the mocked Author listing actually provides (specs, example, tag).
+      assert.dom('[data-test-catalog-listing-embedded-specs-section]').exists();
+
       assert
-        .dom('[data-test-catalog-listing-embedded-skills] li')
-        .exists({ count: 1 });
+        .dom('[data-test-catalog-listing-embedded-tags]')
+        .containsText('Calculator');
       assert
-        .dom('[data-test-catalog-listing-embedded-skills] li:first-child')
-        .containsText('Grading Skill');
-      assert.dom('[data-test-accordion-item="card"]').exists();
-      await click('[data-test-accordion-item="card"] button');
-      assert
-        .dom('[data-test-selected-accordion-item="card"]')
-        .containsText('Homework');
+        .dom('[data-test-catalog-listing-embedded-categories-section]')
+        .containsText('Writing');
+      await this.pauseTest();
     });
 
     test('remix button does not exist when a listing has no specs', async function (assert) {
