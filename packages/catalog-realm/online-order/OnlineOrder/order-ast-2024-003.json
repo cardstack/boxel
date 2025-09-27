@@ -1,29 +1,44 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OnlineOrder",
+        "module": "../online-order"
+      }
+    },
     "type": "card",
     "attributes": {
-      "orderNumber": "AST-2024-003",
-      "customerEmail": "james.wright.fitness@gmail.com",
-      "orderStatus": "processing",
-      "orderTotal": 324.78,
+      "cardInfo": {
+        "notes": "Business delivery - processing large order for fitness center expansion",
+        "title": "Fitness Equipment Order",
+        "description": "Large wellness equipment order for Wright Fitness Training Center including specialized gym equipment",
+        "thumbnailURL": null
+      },
       "orderDate": "2025-01-04T11:45:00.000Z",
-      "shippingAddress": "J. Wright\n2847 Mountain View Drive\nDenver, CO 80205\nUnited States",
+      "orderTotal": 324.78,
+      "orderNumber": "AST-2024-003",
+      "orderStatus": "processing",
+      "customerEmail": "james.wright.fitness@gmail.com",
       "paymentMethod": "Apple Pay",
-      "trackingNumber": null,
-      "title": "AST-2024-003",
-      "description": "Large order being processed - includes multiple wellness products and salt lamp for home gym setup."
+      "trackingNumber": "1Z999AA9876543211",
+      "shippingAddress": {
+        "city": "Denver",
+        "state": "Colorado",
+        "country": {
+          "code": "US",
+          "name": "United States of America"
+        },
+        "postalCode": "80202",
+        "poBoxNumber": "1847",
+        "addressLine1": "Wright Fitness Training Center",
+        "addressLine2": "Business Office"
+      }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../online-order",
-        "name": "OnlineOrder"
       }
     }
   }
