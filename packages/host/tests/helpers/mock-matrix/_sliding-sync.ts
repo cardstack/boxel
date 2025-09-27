@@ -11,7 +11,6 @@ export class MockSlidingSync extends SlidingSync {
   private _client: MatrixSDK.MatrixClient;
   private _lists: Record<string, MSC3575List>;
   private lifecycleCallbacks: Function[] = [];
-  private listCallbacks: Function[] = [];
 
   constructor(
     proxyBaseUrl: string,
@@ -29,18 +28,12 @@ export class MockSlidingSync extends SlidingSync {
     if (event === SlidingSyncEvent.Lifecycle) {
       this.lifecycleCallbacks.push(callback);
     }
-    if (event === SlidingSyncEvent.List) {
-      this.listCallbacks.push(callback);
-    }
     return this;
   }
 
   emit(event: string, ...args: any[]) {
     if (event === SlidingSyncEvent.Lifecycle) {
       this.lifecycleCallbacks.forEach((cb) => cb(...args));
-    }
-    if (event === SlidingSyncEvent.List) {
-      this.listCallbacks.forEach((cb) => cb(...args));
     }
     return true;
   }

@@ -462,9 +462,9 @@ export default class MatrixService extends Service {
       backgroundURL,
     });
     let { realms = [] } =
-      (await this.client.getAccountDataFromServer<{ realms: string[] }>(
+      ((await this.client.getAccountDataFromServer(
         APP_BOXEL_REALMS_EVENT_TYPE,
-      )) ?? {};
+      )) as { realms: string[] }) ?? {};
     realms.push(personalRealmURL.href);
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, { realms });
     await this.realmServer.setAvailableRealmURLs(realms);
@@ -547,9 +547,9 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        let accountDataContent = await this._client.getAccountDataFromServer<{
-          realms: string[];
-        }>(APP_BOXEL_REALMS_EVENT_TYPE);
+        let accountDataContent = (await this._client.getAccountDataFromServer(
+          APP_BOXEL_REALMS_EVENT_TYPE,
+        )) as { realms: string[] } | null;
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(

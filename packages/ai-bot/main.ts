@@ -49,13 +49,11 @@ import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
 import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireLock, releaseLock } from './lib/queries';
-import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
+import { DebugLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import { type MatrixClient } from 'matrix-js-sdk';
-
-// Silence FetchHttpApi Matrix SDK logs
-matrixLogger.setLevel('warn');
+import { debug } from 'debug';
 
 let log = logger('ai-bot');
 
@@ -176,8 +174,12 @@ let assistant: Assistant;
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
+  let matrixDebugLogger = !process.env.DISABLE_MATRIX_JS_LOGGING
+    ? new DebugLogger(debug(`matrix-js-sdk:${aiBotUsername}`))
+    : undefined;
   let client = createClient({
     baseUrl: matrixUrl,
+    logger: matrixDebugLogger,
   });
   let auth = await client
     .loginWithPassword(
