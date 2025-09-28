@@ -1475,7 +1475,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       assert
         .dom('[data-test-catalog-listing-embedded-categories-section]')
         .containsText('Writing');
-      await this.pauseTest();
     });
 
     test('listing with spec that has a missing specType groups it under unknown (accordion assertion)', async function (assert) {
