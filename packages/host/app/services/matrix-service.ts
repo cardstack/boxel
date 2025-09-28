@@ -552,7 +552,11 @@ export default class MatrixService extends Service {
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
 
-        if (loginToAllAccessibleRealmsInBulk) {
+        let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
+          ([_url, realmResource]) => !realmResource.isLoggedIn,
+        );
+
+        if (noRealmsLoggedIn) {
           // In this case we want to authenticate to all accessible realms in a single request,
           // for performance reasons (otherwise we would make 2 auth requests for
           // each realm, which could be a lot of requests).

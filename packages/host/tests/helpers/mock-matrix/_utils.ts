@@ -10,6 +10,7 @@ import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+import { setupAuthEndpoints } from '../';
 
 type IEvent = MatrixSDK.IEvent;
 
@@ -48,6 +49,8 @@ export class MockUtils {
   setRealmPermissions = (permissions: Record<string, string[]>) => {
     this.testState.opts!.realmPermissions = permissions;
     (this.testState.owner!.lookup('service:realm') as RealmService).logout();
+
+    setupAuthEndpoints(permissions);
   };
   simulateRemoteMessage = (
     roomId: string,

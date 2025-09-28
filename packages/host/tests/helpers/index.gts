@@ -39,7 +39,7 @@ import {
 } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { Realm } from '@cardstack/runtime-common/realm';
+import { Realm, RealmAction } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
@@ -474,27 +474,30 @@ async function setupTestRealm({
   return { realm, adapter };
 }
 
-export function setupAuthEndpoints() {
+export function setupAuthEndpoints(
+  realmPermissions: Record<string, string[]> = { [testRealmURL]: ['read'] },
+) {
   getService('network').mount(
     async (req: Request) => {
       if (req.url.includes('_realm-auth')) {
-        return new Response(
-          JSON.stringify({
-            [testRealmURL]: createJWT(
-              {
-                user: '@testuser:localhost',
-                sessionRoom: getRoomIdForRealmAndUser(
-                  testRealmURL,
-                  '@testuser:localhost',
-                ),
-                permissions: ['read', 'write'],
-              },
-              '1d',
-              testRealmSecretSeed,
-            ),
-          }),
-          { status: 200 },
-        );
+        const authTokens: Record<string, string> = {};
+        for (const [realmURL, permissions] of Object.entries(
+          realmPermissions,
+        )) {
+          authTokens[realmURL] = createJWT(
+            {
+              user: '@testuser:localhost',
+              sessionRoom: getRoomIdForRealmAndUser(
+                realmURL,
+                '@testuser:localhost',
+              ),
+              permissions: permissions as RealmAction[],
+            },
+            '1d',
+            testRealmSecretSeed,
+          );
+        }
+        return new Response(JSON.stringify(authTokens), { status: 200 });
       }
       if (req.url.includes('_server-session')) {
         let data = await req.json();

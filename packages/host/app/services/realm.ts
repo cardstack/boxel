@@ -93,6 +93,10 @@ class RealmResource {
     });
   }
 
+  get isLoggedIn() {
+    return this.auth.type === 'logged-in';
+  }
+
   get url(): string {
     return this.realmURL;
   }
