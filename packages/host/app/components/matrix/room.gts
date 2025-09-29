@@ -61,8 +61,8 @@ import type PlaygroundPanelService from '@cardstack/host/services/playground-pan
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
 import AiAssistantActionBar from '../ai-assistant/action-bar';

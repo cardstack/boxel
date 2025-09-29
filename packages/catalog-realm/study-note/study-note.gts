@@ -9,321 +9,19 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { formatDateTime, gt, lt, subtract } from '@cardstack/boxel-ui/helpers'; // ³ Formatters
+import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
+import {
+  formatDateTime,
+  eq,
+  gt,
+  lt,
+  subtract,
+} from '@cardstack/boxel-ui/helpers'; // ³ Formatters
+import { concat } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import NotebookIcon from '@cardstack/boxel-icons/notebook'; // ⁴ Icon import
-
-class StudyNoteIsolated extends Component<typeof StudyNoteCard> {
-  // ¹⁰ Clean, focus-first isolated format
-  @tracked isExpanded = false;
-
-  @action
-  toggleExpanded() {
-    this.isExpanded = !this.isExpanded;
-  }
-
-  <template>
-    <div class='study-note-clean'>
-      <header class='note-header'>
-        {{#if @model.subject}}
-          <div class='subject-badge'>
-            {{@model.subject}}
-          </div>
-        {{/if}}
-
-        <h1 class='note-title'>{{if
-            @model.noteTitle
-            @model.noteTitle
-            'Untitled Note'
-          }}</h1>
-
-        <div class='note-meta'>
-          {{#if @model.createdAt}}
-            <div class='created-date'>
-              <svg
-                class='meta-icon'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <rect x='3' y='4' width='18' height='18' rx='2' ry='2' />
-                <line x1='16' y1='2' x2='16' y2='6' />
-                <line x1='8' y1='2' x2='8' y2='6' />
-                <line x1='3' y1='10' x2='21' y2='10' />
-              </svg>
-              {{formatDateTime @model.createdAt size='medium'}}
-            </div>
-          {{/if}}
-
-          {{#if @model.lastModified}}
-            <div class='modified-date'>
-              <svg
-                class='meta-icon'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M12 20h9' />
-                <path
-                  d='M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'
-                />
-              </svg>
-              Modified
-              {{formatDateTime @model.lastModified size='short'}}
-            </div>
-          {{/if}}
-        </div>
-      </header>
-
-      <main class='note-content'>
-        {{#if @model.content}}
-          <div class='content-area'>
-            <@fields.content />
-          </div>
-        {{else}}
-          <div class='empty-content'>
-            <svg
-              class='empty-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path
-                d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'
-              />
-              <polyline points='14,2 14,8 20,8' />
-              <line x1='16' y1='13' x2='8' y2='13' />
-              <line x1='16' y1='17' x2='8' y2='17' />
-              <line x1='10' y1='9' x2='8' y2='9' />
-            </svg>
-            <p>Start writing your study notes here!</p>
-            <span class='empty-hint'>Use markdown for formatting: **bold**,
-              *italic*, \`code\`</span>
-          </div>
-        {{/if}}
-      </main>
-
-      {{#if (gt @model.tags.length 0)}}
-        <footer class='note-footer'>
-          <div class='tags-section'>
-            <svg
-              class='tags-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path
-                d='M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'
-              />
-              <line x1='7' y1='7' x2='7.01' y2='7' />
-            </svg>
-            <div class='tags-container'>
-              {{#each @model.tags as |tag|}}
-                <span class='tag'>{{tag}}</span>
-              {{/each}}
-            </div>
-          </div>
-        </footer>
-      {{/if}}
-    </div>
-
-    <style scoped>
-      .study-note-clean {
-        font-family:
-          'Inter',
-          -apple-system,
-          BlinkMacSystemFont,
-          sans-serif;
-        max-width: 50rem;
-        margin: 0 auto;
-        padding: 2rem;
-        height: 100%;
-        overflow-y: auto;
-        background: #f8fafc;
-
-        --primary: #1e3a8a;
-        --secondary: #059669;
-        --accent: #f59e0b;
-        --surface: #ffffff;
-        --text-primary: #1f2937;
-        --text-secondary: #6b7280;
-        --border: #e5e7eb;
-        --radius: 12px;
-      }
-
-      /* Clean header */
-      .note-header {
-        text-align: center;
-        margin-bottom: 3rem;
-      }
-
-      .subject-badge {
-        display: inline-block;
-        background: rgba(30, 58, 138, 0.1);
-        color: var(--primary);
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        font-size: 0.875rem;
-        font-weight: 600;
-        margin-bottom: 1.5rem;
-      }
-
-      .note-title {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin: 0 0 1.5rem 0;
-        line-height: 1.1;
-        letter-spacing: -0.025em;
-      }
-
-      .note-meta {
-        display: flex;
-        align-items: center;
-        gap: 1.5rem;
-        justify-content: center;
-        flex-wrap: wrap;
-        color: var(--text-secondary);
-        font-size: 0.9375rem;
-      }
-
-      .created-date,
-      .modified-date {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-weight: 500;
-      }
-
-      .meta-icon {
-        width: 1.125rem;
-        height: 1.125rem;
-        opacity: 0.8;
-      }
-
-      /* Content area - reading focused */
-      .note-content {
-        margin-bottom: 3rem;
-      }
-
-      .content-area {
-        background: var(--surface);
-        border-radius: var(--radius);
-        padding: 3rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid var(--border);
-        font-size: 1.0625rem;
-        line-height: 1.7;
-        color: var(--text-primary);
-      }
-
-      .empty-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 4rem 2rem;
-        text-align: center;
-        color: var(--text-secondary);
-        background: var(--surface);
-        border-radius: var(--radius);
-        border: 2px dashed var(--border);
-      }
-
-      .empty-icon {
-        width: 4rem;
-        height: 4rem;
-        margin-bottom: 1.5rem;
-        color: var(--border);
-        opacity: 0.6;
-      }
-
-      .empty-content p {
-        font-size: 1.125rem;
-        margin: 0 0 0.5rem 0;
-        font-weight: 500;
-      }
-
-      .empty-hint {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        opacity: 0.8;
-      }
-
-      /* Tags footer */
-      .note-footer {
-        padding: 2rem 0 0;
-        border-top: 1px solid rgba(226, 232, 240, 0.6);
-      }
-
-      .tags-section {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        justify-content: center;
-      }
-
-      .tags-icon {
-        width: 1.25rem;
-        height: 1.25rem;
-        color: var(--text-secondary);
-        opacity: 0.7;
-      }
-
-      .tags-container {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        justify-content: center;
-      }
-
-      .tag {
-        background: rgba(148, 163, 184, 0.1);
-        color: var(--text-secondary);
-        padding: 0.375rem 0.75rem;
-        border-radius: 1rem;
-        font-size: 0.75rem;
-        font-weight: 500;
-        transition: all 0.2s ease;
-      }
-
-      .tag:hover {
-        background: rgba(148, 163, 184, 0.2);
-        transform: translateY(-1px);
-      }
-
-      /* Mobile responsive */
-      @media (max-width: 768px) {
-        .study-note-clean {
-          padding: 1rem;
-        }
-
-        .note-title {
-          font-size: 1.875rem;
-        }
-
-        .content-area {
-          padding: 2rem 1.5rem;
-          font-size: 1rem;
-        }
-
-        .note-meta {
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        .tags-container {
-          justify-content: center;
-        }
-      }
-    </style>
-  </template>
-}
 
 export class StudyNoteCard extends CardDef {
   // ⁵ Study note card definition - simplified
@@ -349,7 +47,316 @@ export class StudyNoteCard extends CardDef {
     },
   });
 
-  static isolated = StudyNoteIsolated;
+  static isolated = class Isolated extends Component<typeof StudyNoteCard> {
+    // ¹⁰ Clean, focus-first isolated format
+    @tracked isExpanded = false;
+
+    @action
+    toggleExpanded() {
+      this.isExpanded = !this.isExpanded;
+    }
+
+    <template>
+      <div class='study-note-clean'>
+        <header class='note-header'>
+          {{#if @model.subject}}
+            <div class='subject-badge'>
+              {{@model.subject}}
+            </div>
+          {{/if}}
+
+          <h1 class='note-title'>{{if
+              @model.noteTitle
+              @model.noteTitle
+              'Untitled Note'
+            }}</h1>
+
+          <div class='note-meta'>
+            {{#if @model.createdAt}}
+              <div class='created-date'>
+                <svg
+                  class='meta-icon'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  <rect x='3' y='4' width='18' height='18' rx='2' ry='2' />
+                  <line x1='16' y1='2' x2='16' y2='6' />
+                  <line x1='8' y1='2' x2='8' y2='6' />
+                  <line x1='3' y1='10' x2='21' y2='10' />
+                </svg>
+                {{formatDateTime @model.createdAt size='medium'}}
+              </div>
+            {{/if}}
+
+            {{#if @model.lastModified}}
+              <div class='modified-date'>
+                <svg
+                  class='meta-icon'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  <path d='M12 20h9' />
+                  <path
+                    d='M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'
+                  />
+                </svg>
+                Modified
+                {{formatDateTime @model.lastModified size='short'}}
+              </div>
+            {{/if}}
+          </div>
+        </header>
+
+        <main class='note-content'>
+          {{#if @model.content}}
+            <div class='content-area'>
+              <@fields.content />
+            </div>
+          {{else}}
+            <div class='empty-content'>
+              <svg
+                class='empty-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <path
+                  d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'
+                />
+                <polyline points='14,2 14,8 20,8' />
+                <line x1='16' y1='13' x2='8' y2='13' />
+                <line x1='16' y1='17' x2='8' y2='17' />
+                <line x1='10' y1='9' x2='8' y2='9' />
+              </svg>
+              <p>Start writing your study notes here!</p>
+              <span class='empty-hint'>Use markdown for formatting: **bold**,
+                *italic*, \`code\`</span>
+            </div>
+          {{/if}}
+        </main>
+
+        {{#if (gt @model.tags.length 0)}}
+          <footer class='note-footer'>
+            <div class='tags-section'>
+              <svg
+                class='tags-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <path
+                  d='M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'
+                />
+                <line x1='7' y1='7' x2='7.01' y2='7' />
+              </svg>
+              <div class='tags-container'>
+                {{#each @model.tags as |tag|}}
+                  <span class='tag'>{{tag}}</span>
+                {{/each}}
+              </div>
+            </div>
+          </footer>
+        {{/if}}
+      </div>
+
+      <style scoped>
+        .study-note-clean {
+          font-family:
+            'Inter',
+            -apple-system,
+            BlinkMacSystemFont,
+            sans-serif;
+          max-width: 50rem;
+          margin: 0 auto;
+          padding: 2rem;
+          height: 100%;
+          overflow-y: auto;
+          background: #f8fafc;
+
+          --primary: #1e3a8a;
+          --secondary: #059669;
+          --accent: #f59e0b;
+          --surface: #ffffff;
+          --text-primary: #1f2937;
+          --text-secondary: #6b7280;
+          --border: #e5e7eb;
+          --radius: 12px;
+        }
+
+        /* Clean header */
+        .note-header {
+          text-align: center;
+          margin-bottom: 3rem;
+        }
+
+        .subject-badge {
+          display: inline-block;
+          background: rgba(30, 58, 138, 0.1);
+          color: var(--primary);
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          margin-bottom: 1.5rem;
+        }
+
+        .note-title {
+          font-size: 2.5rem;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0 0 1.5rem 0;
+          line-height: 1.1;
+          letter-spacing: -0.025em;
+        }
+
+        .note-meta {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+          justify-content: center;
+          flex-wrap: wrap;
+          color: var(--text-secondary);
+          font-size: 0.9375rem;
+        }
+
+        .created-date,
+        .modified-date {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-weight: 500;
+        }
+
+        .meta-icon {
+          width: 1.125rem;
+          height: 1.125rem;
+          opacity: 0.8;
+        }
+
+        /* Content area - reading focused */
+        .note-content {
+          margin-bottom: 3rem;
+        }
+
+        .content-area {
+          background: var(--surface);
+          border-radius: var(--radius);
+          padding: 3rem;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          border: 1px solid var(--border);
+          font-size: 1.0625rem;
+          line-height: 1.7;
+          color: var(--text-primary);
+        }
+
+        .empty-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 4rem 2rem;
+          text-align: center;
+          color: var(--text-secondary);
+          background: var(--surface);
+          border-radius: var(--radius);
+          border: 2px dashed var(--border);
+        }
+
+        .empty-icon {
+          width: 4rem;
+          height: 4rem;
+          margin-bottom: 1.5rem;
+          color: var(--border);
+          opacity: 0.6;
+        }
+
+        .empty-content p {
+          font-size: 1.125rem;
+          margin: 0 0 0.5rem 0;
+          font-weight: 500;
+        }
+
+        .empty-hint {
+          font-size: 0.875rem;
+          color: var(--text-secondary);
+          opacity: 0.8;
+        }
+
+        /* Tags footer */
+        .note-footer {
+          padding: 2rem 0 0;
+          border-top: 1px solid rgba(226, 232, 240, 0.6);
+        }
+
+        .tags-section {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          justify-content: center;
+        }
+
+        .tags-icon {
+          width: 1.25rem;
+          height: 1.25rem;
+          color: var(--text-secondary);
+          opacity: 0.7;
+        }
+
+        .tags-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          justify-content: center;
+        }
+
+        .tag {
+          background: rgba(148, 163, 184, 0.1);
+          color: var(--text-secondary);
+          padding: 0.375rem 0.75rem;
+          border-radius: 1rem;
+          font-size: 0.75rem;
+          font-weight: 500;
+          transition: all 0.2s ease;
+        }
+
+        .tag:hover {
+          background: rgba(148, 163, 184, 0.2);
+          transform: translateY(-1px);
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+          .study-note-clean {
+            padding: 1rem;
+          }
+
+          .note-title {
+            font-size: 1.875rem;
+          }
+
+          .content-area {
+            padding: 2rem 1.5rem;
+            font-size: 1rem;
+          }
+
+          .note-meta {
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          .tags-container {
+            justify-content: center;
+          }
+        }
+      </style>
+    </template>
+  };
 
   static embedded = class Embedded extends Component<typeof StudyNoteCard> {
     // ¹¹ Clean embedded format
@@ -424,10 +431,7 @@ export class StudyNoteCard extends CardDef {
                 {{/if}}
               {{/each}}
               {{#if (gt @model.tags.length 2)}}
-                <span class='tag-more'>+{{subtract
-                    (Number @model.tags.length)
-                    2
-                  }}</span>
+                <span class='tag-more'>+{{subtract @model.tags.length 2}}</span>
               {{/if}}
             </div>
           {{/if}}
