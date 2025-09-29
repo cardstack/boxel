@@ -1,0 +1,118 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StudyHub",
+        "module": "../study-hub"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "hubName": "Alex's Study Hub",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "weeklyGoal": 600
+    },
+    "relationships": {
+      "flashcards.0": {
+        "links": {
+          "self": "../../flashcard/FlashcardCard/binary-search-complexity"
+        }
+      },
+      "flashcards.1": {
+        "links": {
+          "self": "../../flashcard/FlashcardCard/eigenvalues-definition"
+        }
+      },
+      "studyGoals.0": {
+        "links": {
+          "self": "../../study-goal/StudyGoal/complete-textbook"
+        }
+      },
+      "studyGoals.1": {
+        "links": {
+          "self": "../../study-goal/StudyGoal/daily-coding"
+        }
+      },
+      "studyGoals.2": {
+        "links": {
+          "self": "../../study-goal/StudyGoal/algebra-review"
+        }
+      },
+      "studyNotes.0": {
+        "links": {
+          "self": "../../study-note/StudyNoteCard/big-o-notation-summary"
+        }
+      },
+      "studyNotes.1": {
+        "links": {
+          "self": "../../study-note/StudyNoteCard/matrix-operations-notes"
+        }
+      },
+      "annotations.0": {
+        "links": {
+          "self": "../../annotation/AnnotationCard/dsa-textbook-annotations"
+        }
+      },
+      "focusTimers.0": {
+        "links": {
+          "self": "../../focus-timer/FocusTimerCard/algorithm-study-timer"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "studySessions.0": {
+        "links": {
+          "self": "../../study-session/StudySession/algorithm-analysis"
+        }
+      },
+      "studySessions.1": {
+        "links": {
+          "self": "../../study-session/StudySession/math-problems"
+        }
+      },
+      "studySessions.2": {
+        "links": {
+          "self": "../../study-session/StudySession/coding-prep"
+        }
+      },
+      "studyResources.0": {
+        "links": {
+          "self": "../../study-resource/StudyResource/dsa-textbook"
+        }
+      },
+      "studyResources.1": {
+        "links": {
+          "self": "../../study-resource/StudyResource/ml-course"
+        }
+      },
+      "studyResources.2": {
+        "links": {
+          "self": "../../study-resource/StudyResource/linear-algebra"
+        }
+      },
+      "practiceQuizzes.0": {
+        "links": {
+          "self": "../../practice-quiz/PracticeQuizCard/data-structures-quiz"
+        }
+      },
+      "achievements": {
+        "links": {
+          "self": null
+        }
+      },
+      "studyCalendar": {
+        "links": {
+          "self": "../../calendar/CalendarCard/2c3c78cd-fa4f-4988-b098-c8d099557fba"
+        }
+      }
+    }
+  }
+}

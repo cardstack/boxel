@@ -1,0 +1,113 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Calendar",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/screenshot_03.png"
+      ],
+      "summary": "A comprehensive calendar component for date management and scheduling",
+      "cardInfo": {
+        "notes": "Supports multiple view modes and customizable calendar names",
+        "title": "Calendar",
+        "description": "An interactive calendar card that provides month and year views with date selection capabilities. Perfect for scheduling, event planning, and date-based applications.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/calendar-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/cb92d052-87e5-406e-b2de-ca40e62dddee"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/50cb92d0-5287-45a0-ae72-deca40e62ddd"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../calendar/CalendarCard/2c3c78cd-fa4f-4988-b098-c8d099557fba"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../calendar/CalendarEvent/61c055c6-d258-4283-af57-0a61b5afc2a0"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../calendar/CalendarEvent/374c08c6-211e-4306-b6f8-3b8aa4a21356"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../calendar/CalendarEvent/biology-exam-review-sept12"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../calendar/CalendarEvent/calculus-study-group-sept2"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../calendar/CalendarEvent/chemistry-lab-prep-sept3"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../calendar/CalendarEvent/cs-project-meeting-sept10"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../calendar/CalendarEvent/literature-discussion-sept9"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../calendar/CalendarEvent/physics-tutoring-sept5"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/project-management"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
