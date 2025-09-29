@@ -106,11 +106,11 @@ puts "💎"
     ) as HTMLElement;
     let directChildren = messageElement.children;
     assert.strictEqual(directChildren[0]?.tagName, 'P');
-    assert.true(directChildren[1]?.tagName == 'SECTION');
+    assert.strictEqual(directChildren[1]?.tagName, 'SECTION');
     assert.true(directChildren[1]?.classList.contains('code-block'));
 
     assert.strictEqual(directChildren[2]?.tagName, 'P');
-    assert.true(directChildren[3]?.tagName == 'SECTION');
+    assert.strictEqual(directChildren[3]?.tagName, 'SECTION');
     assert.true(directChildren[3]?.classList.contains('code-block'));
     assert.strictEqual(directChildren[4]?.tagName, 'P');
 
