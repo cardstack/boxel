@@ -95,7 +95,6 @@ export default class RenderRoute extends Route<Model> {
   deactivate() {
     (globalThis as any)._lazilyLoadLinks = undefined;
     (globalThis as any)._boxelRenderContext = undefined;
-    (globalThis as any).__renderInstance = undefined;
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
     window.removeEventListener('boxel-render-error', this.errorHandler);
@@ -164,9 +163,6 @@ export default class RenderRoute extends Route<Model> {
     await this.store.loaded();
     state.set('ready', true);
 
-    // this is to support in-browser rendering, where we actually don't have the
-    // ability to lookup the parent route using RouterService.recognizeAndLoad()
-    (globalThis as any).__renderInstance = instance;
     return {
       instance,
       get ready(): boolean {
