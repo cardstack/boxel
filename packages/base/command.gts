@@ -382,6 +382,7 @@ export class CreateSpecsInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field module = contains(StringField);
   @field targetRealm = contains(StringField);
+  @field autoGenerateReadme = contains(BooleanField);
 }
 
 export class CreateSpecsResult extends CardDef {
