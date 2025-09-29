@@ -748,7 +748,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     urlParameters = new URLSearchParams(url);
     let operatorModeStateParam = urlParameters.get('operatorModeState');
 
-    assert.true(operatorModeStateParam);
+    assert.ok(operatorModeStateParam);
     assert.true(
       JSON.parse(operatorModeStateParam ?? '{}').workspaceChooserOpened,
     );
