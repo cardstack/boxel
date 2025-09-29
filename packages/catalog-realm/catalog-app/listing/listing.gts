@@ -394,7 +394,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         width: 100%;
         height: auto;
         border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-sm);
+        padding: var(--boxel-sp);
         background-color: var(--boxel-100);
       }
       .info-box :deep(.markdown-content p) {
@@ -454,10 +454,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-sm);
         display: flex;
         align-items: center;
         justify-content: center;
+        flex: 0 0 35%;
       }
       .images-item img {
         width: 100%;
@@ -470,11 +471,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         transition:
           transform 0.3s ease,
           box-shadow 0.3s ease;
-      }
-      .images-item img:hover {
-        box-shadow:
-          0 15px 20px rgba(0, 0, 0, 0.2),
-          0 7px 10px rgba(0, 0, 0, 0.12);
       }
 
       .app-listing-examples {
@@ -523,16 +519,12 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         }
         .license-statistic,
         .stats-container,
-        .pricing-plans,
-        .images-list {
+        .pricing-plans {
           grid-template-columns: repeat(2, 1fr);
         }
       }
 
       @container app-listing-embedded (inline-size <= 360px) {
-        .images-list {
-          grid-template-columns: repeat(1, 1fr);
-        }
         .examples-list {
           grid-template-columns: 1fr;
         }
