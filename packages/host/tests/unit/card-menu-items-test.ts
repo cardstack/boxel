@@ -1,21 +1,13 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
-
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import type {
-  CardDef,
-  GetCardMenuItemParams,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { setupRenderingTest } from '../helpers/setup';
 
-let getDefaultCardMenuItems: (
-  card: CardDef,
-  params: GetCardMenuItemParams,
-) => MenuItemOptions[];
+let getDefaultCardMenuItems: any;
 
 class DummyCard {
   constructor(
@@ -48,7 +40,7 @@ module('Unit | card-menu-items', function (hooks) {
       commandContext: {} as any,
     });
 
-    let texts = items.map((i: MenuItemOptions) => i.label);
+    let texts = items.map((i: any) => i.text);
     assert.ok(texts.includes('Copy Card URL'), 'contains Copy Card URL');
     assert.ok(
       texts.includes('New Card of This Type'),
@@ -69,7 +61,7 @@ module('Unit | card-menu-items', function (hooks) {
       commandContext: {} as any,
     });
 
-    let texts = items.map((i: MenuItemOptions) => i.label);
+    let texts = items.map((i: any) => i.text);
     assert.ok(
       texts.includes('Copy to Workspace'),
       'contains Copy to Workspace',
@@ -89,10 +81,10 @@ module('Unit | card-menu-items', function (hooks) {
       format: 'isolated',
     });
 
-    let hasCreateListing = items.some((i: MenuItemOptions) =>
-      i.label.includes('Create listing with AI'),
+    let hasCreateListing = items.some((i: any) =>
+      i.text.includes('Create listing with AI'),
     );
-    let hasSampleDataTagged = items.some((i: MenuItemOptions) =>
+    let hasSampleDataTagged = items.some((i: any) =>
       (i.tags || []).includes('playground-sample-data'),
     );
 
@@ -116,7 +108,7 @@ module('Unit | card-menu-items', function (hooks) {
       format: 'isolated',
     });
 
-    let texts = items.map((i: MenuItemOptions) => i.label);
+    let texts = items.map((i: any) => i.text);
     assert.ok(texts.includes('Copy Card URL'), 'contains Copy Card URL');
     assert.ok(
       texts.includes('Open in Interact Mode'),

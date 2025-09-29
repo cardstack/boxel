@@ -134,9 +134,6 @@ let autoMigrate = migrateDB || undefined;
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
-    prerenderer: async () => {
-      throw new Error(`prerenderer not implemented yet`);
-    },
   });
 
   await worker.run();

@@ -14,57 +14,23 @@
         "description": null,
         "thumbnailURL": null
       },
-      "gameState": "gameOver",
+      "gameState": "betting",
       "casinoName": "Casino de Monte-Carlo",
-      "currentBet": 200,
-      "dealerHand": [
-        {
-          "suit": "spades",
-          "value": "Q",
-          "faceUp": true
-        },
-        {
-          "suit": "clubs",
-          "value": "3",
-          "faceUp": false
-        }
-      ],
-      "playerHand": [
-        {
-          "suit": "clubs",
-          "value": "6",
-          "faceUp": true
-        },
-        {
-          "suit": "hearts",
-          "value": "J",
-          "faceUp": true
-        },
-        {
-          "suit": "hearts",
-          "value": "Q",
-          "faceUp": true
-        }
-      ],
-      "statistics": {
-        "wins": 3,
-        "losses": 1,
-        "earnings": -45
-      },
+      "dealerHand": [],
+      "playerHand": [],
       "dealerScore": 0,
-      "gameMessage": "Bust! You lose.",
-      "playerChips": 4955,
+      "gameMessage": "Click Deal to start a new game",
       "playerScore": 0
     },
     "relationships": {
-      "dealer": {
+      "players.0": {
         "links": {
-          "self": null
+          "self": "../../player/Player/blackjack-bot"
         }
       },
-      "player": {
+      "players.1": {
         "links": {
-          "self": null
+          "self": "../../Player/c45ce9d7-95b3-4324-800a-01bd3d20e703"
         }
       },
       "cardInfo.theme": {

@@ -7,7 +7,10 @@ interface Signature {
   Return: MenuDivider;
 }
 export class MenuDivider {
-  isDivider = true;
+  type: string;
+  constructor() {
+    this.type = 'divider';
+  }
 }
 
 export default helper<Signature>(function (): MenuDivider {
