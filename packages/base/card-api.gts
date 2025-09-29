@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -148,7 +148,6 @@ export {
   serializeCard,
   type BoxComponent,
   type DeserializeOpts,
-  type GetCardMenuItemParams,
   type JSONAPISingleResourceDocument,
   type ResourceID,
   type SerializeOpts,
@@ -2348,7 +2347,7 @@ export class CardDef extends BaseDef {
     return realmURLString ? new URL(realmURLString) : undefined;
   }
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItem[] {
     return getDefaultCardMenuItems(this, params);
   }
 }

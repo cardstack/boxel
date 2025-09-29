@@ -118,10 +118,6 @@ export default class DetailPanel extends Component<Signature> {
     return this.isModule && this.declarations.length > 0;
   }
 
-  private get showInThisEmptyFilePanel() {
-    return this.isModule && this.isEmptyFile;
-  }
-
   private get codePath() {
     return this.operatorModeStateService.state.codePath;
   }
@@ -347,10 +343,6 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  private get isEmptyFile() {
-    return this.args.readyFile?.content.match(/^\s*$/);
-  }
-
   private get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
   }
@@ -420,32 +412,6 @@ export default class DetailPanel extends Component<Signature> {
               @items={{this.buildSelectorItems}}
               data-test-in-this-file-selector
             />
-          </BaseContainer>
-        </PanelSection>
-      {{/if}}
-
-      {{#if this.showInThisEmptyFilePanel}}
-        <PanelSection as |PanelHeader|>
-          <PanelHeader aria-label='In This Empty File Header'>
-            In This File
-          </PanelHeader>
-          <BaseContainer as |BaseHeader|>
-            <BaseHeader
-              @title={{@readyFile.name}}
-              data-test-current-module-name={{@readyFile.name}}
-            >
-              {{#if (this.realm.canWrite @readyFile.url)}}
-                <IconButton
-                  @icon={{IconTrash}}
-                  @width='15'
-                  @height='15'
-                  {{on 'click' (fn @delete this.codePath)}}
-                  class='delete-module-button'
-                  aria-label='Delete Module'
-                  data-test-delete-module-button
-                />
-              {{/if}}
-            </BaseHeader>
           </BaseContainer>
         </PanelSection>
       {{/if}}
