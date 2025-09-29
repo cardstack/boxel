@@ -299,7 +299,7 @@ module('Acceptance | host submode', function (hooks) {
           );
         });
 
-        assert.dom('[data-test-publish-realm-button]').hasText('Publish Site');
+        assert.dom('[data-test-publish-realm-button]').hasText('Publish…');
         assert
           .dom('[data-test-publish-realm-button]')
           .doesNotHaveClass('publishing');

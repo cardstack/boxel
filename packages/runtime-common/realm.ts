@@ -41,8 +41,6 @@ import {
   type DirectoryMeta,
   type ResolvedCodeRef,
   type FieldDefinition,
-  type RealmPermissions,
-  type RealmAction,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
@@ -142,6 +140,12 @@ export interface TokenClaims {
   realm: string;
   sessionRoom: string;
   permissions: RealmPermissions['user'];
+}
+
+export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
+
+export interface RealmPermissions {
+  [username: string]: RealmAction[] | null;
 }
 
 export interface FileWriteResult {
@@ -985,7 +989,7 @@ export class Realm {
     );
 
     let userIds = Object.entries(permissions)
-      .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
+      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
       .map(([userId]) => userId);
     if (userIds.length > 1) {
       // we want to use the realm's human owner for the realm and not the bot
