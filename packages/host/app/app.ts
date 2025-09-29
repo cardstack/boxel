@@ -13,6 +13,8 @@ import '@cardstack/boxel-ui/styles/variables.css';
 import 'ember-power-select/styles';
 import 'ember-power-calendar/styles';
 
+// FIXME: remove, just to trigger host tests
+
 export default class App extends Application {
   modulePrefix = config.modulePrefix;
   podModulePrefix = config.podModulePrefix;
