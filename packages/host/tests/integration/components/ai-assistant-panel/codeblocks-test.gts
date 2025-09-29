@@ -435,7 +435,7 @@ const data = {
     );
 
     await waitUntil(() => document.getElementsByClassName('view-lines')[1]);
-    assert.equal(
+    assert.strictEqual(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
         .innerText,
       '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
