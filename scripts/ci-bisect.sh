@@ -33,6 +33,32 @@ OPTIONS_FILE=$CI_BISECT_DIR/options
 OWNER=$(echo "$REPO_URL_BASE" | awk -F/ '{print $(NF-1)}')
 REPO=$(echo "$REPO_URL_BASE" | awk -F/ '{print $NF}')
 
+# Optional: run bisect in a dedicated worktree so this script remains usable
+# even when checking out very old commits that predate it. Enabled by default.
+# Set BISect_USE_WORKTREE=0 to disable.
+USE_WORKTREE=${BISect_USE_WORKTREE:-1}
+WORKTREE_DIR="$REPO_ROOT/.git/ci-bisect/wt"
+
+# Bootstrap: if using worktree and we're not already inside the worktree,
+# create it (detached at HEAD) and re-exec the saved helper from .git.
+if [[ "$USE_WORKTREE" == "1" && "${BISect_IN_WT:-}" != "1" ]]; then
+  # Ensure a saved copy of this script exists under .git
+  mkdir -p "$REPO_ROOT/.git/ci-bisect/scripts"
+  if [[ -f "$REPO_ROOT/scripts/ci-bisect.sh" ]]; then
+    cp "$REPO_ROOT/scripts/ci-bisect.sh" "$REPO_ROOT/.git/ci-bisect/scripts/ci-bisect.sh" 2>/dev/null || true
+    chmod +x "$REPO_ROOT/.git/ci-bisect/scripts/ci-bisect.sh" 2>/dev/null || true
+  fi
+  # Create or update the worktree detached at current HEAD
+  if [[ ! -d "$WORKTREE_DIR/.git" ]]; then
+    git worktree add --detach "$WORKTREE_DIR" >/dev/null 2>&1 || true
+  fi
+  # Re-exec inside the worktree, using the saved helper to avoid relying on
+  # the script existing at that historical revision.
+  if [[ -x "$REPO_ROOT/.git/ci-bisect/scripts/ci-bisect.sh" ]]; then
+    BISect_IN_WT=1 exec bash "$REPO_ROOT/.git/ci-bisect/scripts/ci-bisect.sh" "$@"
+  fi
+fi
+
 # Optional: overlay workflow and this script into each tested revision so CI always runs as intended.
 # Enable by setting BISect_COPY_CI=1. Paths can be customized below.
 OVERLAY_ENABLE=${BISect_COPY_CI:-0}
