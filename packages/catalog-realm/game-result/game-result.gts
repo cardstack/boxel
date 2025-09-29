@@ -5,7 +5,6 @@ import {
   field,
   FieldDef,
   Component,
-  getCardMeta,
 } from 'https://cardstack.com/base/card-api';
 
 import StringField from 'https://cardstack.com/base/string';
@@ -202,12 +201,7 @@ export class GameResult extends CardDef {
   @field game = linksTo(() => CardDef);
   @field outcome = contains(PlayerOutcomeField);
   @field ref = contains(AbsoluteCodeRefField);
-  @field createdAt = contains(DatetimeField, {
-    computeVia: function (this: GameResult) {
-      let lastModified = getCardMeta(this, 'lastModified');
-      return lastModified ? new Date(lastModified * 1000) : undefined;
-    },
-  });
+  @field createdAt = contains(DatetimeField);
   @field title = contains(StringField, {
     computeVia: function (this: GameResult) {
       return this.game.title ?? 'Untitled Game Result';

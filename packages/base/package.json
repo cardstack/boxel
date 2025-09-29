@@ -22,7 +22,7 @@
     "ember-template-lint": "catalog:",
     "matrix-js-sdk": "catalog:",
     "super-fast-md5": "catalog:",
-    "tracked-built-ins": "catalog:"
+    "tracked-built-ins": "^2.0.1"
   },
   "peerDependencies": {
     "ember-provide-consume-context": "^0.7.0",
