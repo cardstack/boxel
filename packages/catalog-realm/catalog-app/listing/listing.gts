@@ -458,7 +458,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         display: flex;
         align-items: center;
         justify-content: center;
-        flex: 0 0 35%;
+        flex: 0 0 30%;
+        min-width: 200px;
       }
       .images-item img {
         width: 100%;
