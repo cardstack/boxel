@@ -25,48 +25,10 @@ export type PatchData = {
 // Shared type produced by the host app when visiting the render.meta route and
 // consumed by the server.
 export interface PrerenderMeta {
-  serialized: SingleCardDocument | null;
+  serialized: LooseSingleCardDocument | null;
   searchDoc: Record<string, any> | null;
   displayName: string | null;
   types: string[] | null;
-}
-
-export interface RenderResponse extends PrerenderMeta {
-  isolatedHTML: string | null;
-  atomHTML: string | null;
-  embeddedHTML: Record<string, string> | null;
-  fittedHTML: Record<string, string> | null;
-  iconHTML: string | null;
-  error?: RenderError;
-}
-
-export interface RenderError {
-  error: string;
-  id?: string;
-  status: number;
-  title?: string;
-  message: string;
-  realm?: string;
-  meta: {
-    lastKnownGoodHtml: string | null;
-    cardTitle: string | null;
-    scopedCssUrls: string[];
-    stack: string | null;
-  };
-  evict?: boolean;
-}
-
-export type Prerenderer = (args: {
-  realm: string;
-  url: string;
-  userId: string;
-  permissions: RealmPermissions;
-}) => Promise<RenderResponse>;
-
-export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
-
-export interface RealmPermissions {
-  [username: string]: RealmAction[];
 }
 
 export { Deferred } from './deferred';
@@ -158,7 +120,6 @@ export {
   cardTypeIcon,
   getFieldIcon,
 } from './helpers/card-type-display-name';
-export * from './helpers/ensure-extension';
 export * from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
@@ -186,6 +147,7 @@ export type {
   FileRef,
   RealmInfo,
   TokenClaims,
+  RealmPermissions,
   RealmSession,
 } from './realm';
 
@@ -318,7 +280,6 @@ export async function chooseFile<T extends FieldDef>(): Promise<
 }
 
 import { type CardErrorJSONAPI } from './error';
-import { SingleCardDocument } from './document-types';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;

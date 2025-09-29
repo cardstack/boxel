@@ -58,6 +58,11 @@
           "self": "../../annotation/AnnotationCard/dsa-textbook-annotations"
         }
       },
+      "annotations.1": {
+        "links": {
+          "self": "../../annotation/AnnotationCard/linear-algebra-highlights"
+        }
+      },
       "focusTimers.0": {
         "links": {
           "self": "../../focus-timer/FocusTimerCard/algorithm-study-timer"

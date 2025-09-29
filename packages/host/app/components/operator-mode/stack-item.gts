@@ -13,6 +13,7 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
+import Captions from '@cardstack/boxel-icons/captions';
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { restartableTask, timeout, dropTask } from 'ember-concurrency';
@@ -27,14 +28,10 @@ import {
   CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import {
-  MenuItem,
-  getContrastColor,
-  toMenuItems,
-} from '@cardstack/boxel-ui/helpers';
+import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
-import { IconTrash } from '@cardstack/boxel-ui/icons';
+import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Permissions,
@@ -50,13 +47,15 @@ import {
   cardTypeIcon,
   CommandContext,
   realmURL,
+  identifyCard,
   CardContextName,
   CardCrudFunctionsContextName,
-  getCardMenuItems,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+
+import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
 
 import type {
   CardContext,
@@ -383,8 +382,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // Add "Select All" option if not all cards are selected
     if (!allSelected && totalAvailableCount > selectedCount) {
       menuItems.push(
-        new MenuItem({
-          label: 'Select All',
+        new MenuItem('Select All', 'action', {
           icon: SelectAllIcon,
           action: this.selectAll,
           disabled: false,
@@ -394,8 +392,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     // Add "Deselect All" option
     menuItems.push(
-      new MenuItem({
-        label: 'Deselect All',
+      new MenuItem('Deselect All', 'action', {
         icon: DeselectIcon,
         action: this.clearSelections,
       }),
@@ -406,12 +403,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     // Add "Delete N items" option
     menuItems.push(
-      new MenuItem({
-        label: `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
-        action: this.confirmAndDeleteSelected,
-        icon: IconTrash,
-        dangerous: true,
-      }),
+      new MenuItem(
+        `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
+        'action',
+        {
+          action: this.confirmAndDeleteSelected,
+          icon: IconTrash,
+          dangerous: true,
+        },
+      ),
     );
 
     return {
@@ -442,14 +442,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
     return [
-      new MenuItem({
-        label: 'Delete Card',
+      new MenuItem('Delete Card', 'action', {
         action: () =>
           this.cardIdentifier &&
-          this.cardCrudFunctions.deleteCard?.(this.cardIdentifier),
+          this.args.requestDeleteCard &&
+          this.args.requestDeleteCard(this.cardIdentifier),
         icon: IconTrash,
         dangerous: true,
-        disabled: !this.cardCrudFunctions.deleteCard,
       }),
     ];
   }
@@ -459,14 +458,46 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
 
-    return toMenuItems(
-      this.card?.[getCardMenuItems]?.({
-        canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
-        cardCrudFunctions: this.cardCrudFunctions,
-        menuContext: 'interact',
-        commandContext: this.args.commandContext,
-      }) ?? [],
-    );
+    let menuItems: MenuItem[] = [
+      new MenuItem('Copy Card URL', 'action', {
+        action: () =>
+          this.card ? copyCardURLToClipboard(this.card) : undefined,
+        icon: IconLink,
+        disabled: !this.url,
+      }),
+    ];
+    if (
+      !this.isIndexCard && // workspace index card cannot be deleted
+      this.url &&
+      this.realm.canWrite(this.url)
+    ) {
+      menuItems.push(
+        new MenuItem('New Card of This Type', 'action', {
+          action: () => {
+            if (!this.card) {
+              return;
+            }
+            let ref = identifyCard(this.card.constructor);
+            if (!ref) {
+              return;
+            }
+            this.cardCrudFunctions.createCard(ref, undefined, {
+              realmURL: this.operatorModeStateService.getWritableRealmURL(),
+            });
+          },
+          icon: this.card ? (cardTypeIcon(this.card) as any) : Captions,
+          disabled: !this.card,
+        }),
+        new MenuItem('Delete', 'action', {
+          action: () =>
+            this.card ? this.args.requestDeleteCard!(this.card) : undefined,
+          icon: IconTrash,
+          dangerous: true,
+          disabled: !this.url,
+        }),
+      );
+    }
+    return menuItems;
   }
 
   @cached
