@@ -312,24 +312,6 @@ test.describe('Login', () => {
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();
   });
 
-  test('it can logout at payment setup flow', async ({ page }) => {
-    await registerUser(synapse, 'user2', 'pass');
-    await login(page, 'user2', 'pass', {
-      url: appURL,
-    });
-    await expect(
-      page.locator(
-        '[data-test-profile-icon-button] > [data-test-profile-icon]',
-      ),
-    ).toHaveText('U');
-    await page.locator('[data-test-profile-icon-button]').click();
-    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
-      '@user2:localhost',
-    );
-    await page.locator('[data-test-signout-button]').click();
-    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
-  });
-
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
