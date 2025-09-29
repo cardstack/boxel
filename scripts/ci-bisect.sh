@@ -21,12 +21,15 @@ BRANCH_NAME=${BISect_BRANCH:-ci-bisect}
 REMOTE=${BISect_REMOTE:-origin}
 DEFAULT_REMOTE_HEAD=$(git remote show "$REMOTE" | sed -n 's/^\s*HEAD branch: //p')
 REPO_URL_BASE=$(git remote get-url "$REMOTE" | sed -E 's#^git@github.com:#https://github.com/#; s#\.git$##')
+REPO_ROOT=$(git rev-parse --show-toplevel)
 
-# Optional: overlay a workflow file into each tested revision so CI always runs as intended.
-# Enable by setting BISect_COPY_CI=1. Path can be set with BISect_CI_PATH (default .github/workflows/ci.yaml)
+# Optional: overlay workflow and this script into each tested revision so CI always runs as intended.
+# Enable by setting BISect_COPY_CI=1. Paths can be customized below.
 OVERLAY_ENABLE=${BISect_COPY_CI:-0}
 OVERLAY_PATH=${BISect_CI_PATH:-.github/workflows/ci.yaml}
 OVERLAY_STORE=${BISect_CI_STORE:-.git/ci-bisect/ci.yaml}
+OVERLAY_SCRIPT_PATH=${BISect_SCRIPT_PATH:-scripts/ci-bisect.sh}
+OVERLAY_SCRIPT_STORE=${BISect_SCRIPT_STORE:-.git/ci-bisect/ci-bisect.sh}
 
 ensure_clean() {
   if ! git diff --quiet; then
@@ -40,37 +43,63 @@ ensure_clean() {
 }
 
 overlay_capture() {
-  # Capture the current ci.yaml content into .git, for reuse on every step
+  # Capture the current workflow and script content into .git for reuse on every step
   if [[ "$OVERLAY_ENABLE" != "1" ]]; then
     return 0
   fi
   mkdir -p "$(dirname "$OVERLAY_STORE")"
   if [[ -f "$OVERLAY_PATH" ]]; then
-    cp "$OVERLAY_PATH" "$OVERLAY_STORE"
+    cp "$REPO_ROOT/$OVERLAY_PATH" "$OVERLAY_STORE" 2>/dev/null || cp "$OVERLAY_PATH" "$OVERLAY_STORE" 2>/dev/null || true
     echo "Captured overlay from $OVERLAY_PATH -> $OVERLAY_STORE"
   else
-    echo "Warning: BISect_COPY_CI=1 but $OVERLAY_PATH not found; skipping overlay capture" >&2
+    echo "Warning: BISect_COPY_CI=1 but $OVERLAY_PATH not found; skipping workflow capture" >&2
+  fi
+  # Capture the current script as well so subsequent steps include it
+  mkdir -p "$(dirname "$OVERLAY_SCRIPT_STORE")"
+  if [[ -f "$REPO_ROOT/$OVERLAY_SCRIPT_PATH" ]]; then
+    cp "$REPO_ROOT/$OVERLAY_SCRIPT_PATH" "$OVERLAY_SCRIPT_STORE"
+    echo "Captured overlay script from $OVERLAY_SCRIPT_PATH -> $OVERLAY_SCRIPT_STORE"
+  elif [[ -f "$OVERLAY_SCRIPT_PATH" ]]; then
+    cp "$OVERLAY_SCRIPT_PATH" "$OVERLAY_SCRIPT_STORE"
+    echo "Captured overlay script from $OVERLAY_SCRIPT_PATH -> $OVERLAY_SCRIPT_STORE"
+  else
+    echo "Warning: Could not find $OVERLAY_SCRIPT_PATH to capture; skipping script capture" >&2
   fi
 }
 
 overlay_apply_if_present() {
-  # Apply stored overlay to working tree before committing marker
+  # Apply stored overlay(s) to working tree before committing marker
+  local applied=0
   if [[ -f "$OVERLAY_STORE" ]]; then
     mkdir -p "$(dirname "$OVERLAY_PATH")"
     cp "$OVERLAY_STORE" "$OVERLAY_PATH"
     git add "$OVERLAY_PATH"
     echo "Applied overlay to $OVERLAY_PATH"
+    applied=1
+  fi
+  if [[ -f "$OVERLAY_SCRIPT_STORE" ]]; then
+    mkdir -p "$(dirname "$OVERLAY_SCRIPT_PATH")"
+    cp "$OVERLAY_SCRIPT_STORE" "$OVERLAY_SCRIPT_PATH"
+    git add "$OVERLAY_SCRIPT_PATH"
+    echo "Applied overlay to $OVERLAY_SCRIPT_PATH"
+    applied=1
+  fi
+  if [[ $applied -eq 1 ]]; then
     return 0
   fi
   return 1
 }
 
 tested_sha() {
-  # If HEAD is a marker commit, extract the tested SHA from its subject.
-  local subj
+  # If HEAD is a marker commit, extract just the tested SHA from its subject.
+  local subj rem first
   subj=$(git show -s --format=%s HEAD 2>/dev/null || true)
   case "$subj" in
-    "ci-bisect: test "*) echo "${subj#ci-bisect: test }" ;;
+    "ci-bisect: test "*)
+      rem=${subj#ci-bisect: test }
+      first=${rem%%[[:space:]]*}
+      echo "$first"
+      ;;
     *) git rev-parse HEAD ;;
   esac
 }
@@ -152,15 +181,22 @@ case "${1:-}" in
   step) shift; cmd_step "$@";;
   status) shift; cmd_status "$@";;
   abort) shift; cmd_abort "$@";;
+  refresh-overlay) shift; overlay_capture; echo "Overlay refreshed.";;
   *) cat <<USAGE
 ci-bisect.sh help
   start <good_commit> [bad]
   step good|bad|skip
   status
   abort
+  refresh-overlay
 Environment:
   BISect_BRANCH (default: ci-bisect)
   BISect_REMOTE (default: origin)
+  BISect_COPY_CI=1 to enable overlay of workflow and script
+  BISect_CI_PATH (default: .github/workflows/ci.yaml)
+  BISect_CI_STORE (default: .git/ci-bisect/ci.yaml)
+  BISect_SCRIPT_PATH (default: scripts/ci-bisect.sh)
+  BISect_SCRIPT_STORE (default: .git/ci-bisect/ci-bisect.sh)
 USAGE
      ;;
  esac
