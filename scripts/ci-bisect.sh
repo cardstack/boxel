@@ -236,6 +236,7 @@ cmd_step() {
   # If restricting to PR merges only, auto-skip non-merge candidates
   if [[ "$PR_MERGES_ONLY" == "1" ]]; then
     if ! is_pr_merge_commit "$tested"; then
+      echo "--merges-only: skipping non-merge candidate $(git rev-parse --short=12 "$tested") before verdict"
       git bisect skip "$tested"
       # After skipping, bisect will check out the next candidate.
       if git rev-parse -q --verify HEAD >/dev/null; then
@@ -252,6 +253,13 @@ cmd_step() {
   esac
   # After stepping, bisect will check out the next candidate.
   if git rev-parse -q --verify HEAD >/dev/null; then
+    # Enforce --merges-only post-advance as well: skip forward until HEAD is a PR merge
+    if [[ "$PR_MERGES_ONLY" == "1" ]]; then
+      while git rev-parse -q --verify HEAD >/dev/null && ! is_pr_merge_commit HEAD; do
+        echo "--merges-only: skipping non-merge candidate $(git rev-parse --short=12 HEAD) after verdict"
+        git bisect skip
+      done
+    fi
     push_current
   fi
 }
