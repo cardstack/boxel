@@ -1470,7 +1470,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       assert.dom('[data-test-catalog-listing-embedded-specs-section]').exists();
 
       assert
-        .dom('[data-test-catalog-listing-embedded-tags]')
+        .dom('[data-test-catalog-listing-embedded-tags-section]')
         .containsText('Calculator');
       assert
         .dom('[data-test-catalog-listing-embedded-categories-section]')
