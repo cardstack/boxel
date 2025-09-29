@@ -133,11 +133,12 @@ module.exports = {
     },
     {
       // test files
-      files: ['tests/**/*-test.{js,ts}'],
+      files: ['tests/**/*-test.{gts,js,ts}'],
       extends: ['plugin:qunit/recommended'],
       rules: {
         'qunit/require-expect': 'off',
         'qunit/no-conditional-assertions': 'off',
+        'boxel-monorepo/no-pause-test': 'error',
       },
     },
     {
