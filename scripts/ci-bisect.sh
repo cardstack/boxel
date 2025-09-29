@@ -253,13 +253,13 @@ cmd_start() {
   if bisect_active; then
     push_current
   else
-    echo "Bisect ended (no candidates). Not pushing; run 'status' or 'classify-skipped' if needed."
-    # Decorate with classification of skipped commits, if any
+    echo "Bisect ended (no candidates). Not pushing; run 'status' or 'classify-final' if needed."
+    # Decorate with classification of final candidates, if any
     if git rev-parse -q --verify BISECT_HEAD >/dev/null 2>&1; then
       : # still active, nothing to do
     else
       # We can still read the bisect log here
-      cmd_classify_skipped || true
+      cmd_classify_final || true
     fi
   fi
 }
@@ -299,9 +299,9 @@ cmd_step() {
     if bisect_active; then
       push_current
     else
-      echo "Bisect ended (likely only skipped commits left)." 
-      # Decorate with classification before aborting, while log is available
-      cmd_classify_skipped || true
+      echo "Bisect ended (likely only skipped commits left)."
+      # Decorate full final candidate set before aborting, while log is available
+      cmd_classify_final || true
       echo "Auto-aborting to restore state."
       git bisect reset || true
     fi
@@ -376,6 +376,31 @@ cmd_classify_skipped() {
   cmd_classify $skipped
 }
 
+# Collect and classify the final candidate set (skipped + bad bound)
+collect_final_candidates() {
+  local bisect_log skipped bad_bound
+  bisect_log=$(git bisect log 2>/dev/null || true)
+  skipped=$(printf "%s\n" "$bisect_log" | awk '/git bisect skip/ {print $NF}')
+  bad_bound=$(printf "%s\n" "$bisect_log" | awk '/^git bisect start/ {gsub(/[\047\[\]]/, "", $4); print $4; exit}')
+  if [[ -n "$skipped" ]]; then
+    printf "%s\n" $skipped
+  fi
+  if [[ -n "$bad_bound" ]]; then
+    printf "%s\n" "$bad_bound"
+  fi
+}
+
+cmd_classify_final() {
+  local list
+  list=$(collect_final_candidates | awk 'NF>0' | sort -u)
+  if [[ -z "$list" ]]; then
+    echo "No final candidates found in bisect log."; return 0
+  fi
+  echo "Classifying final candidates (skipped + bad bound, USE_GH=$USE_GH):"
+  # shellcheck disable=SC2086
+  cmd_classify $list
+}
+
 load_options
 
 # Parse global flags before subcommand
@@ -386,7 +411,7 @@ while [[ $# -gt 0 ]]; do
     --no-merges-only)
       PR_MERGES_ONLY=0; shift ;;
     --) shift; break ;;
-  start|step|status|abort|refresh-overlay|test|classify|classify-skipped)
+  start|step|status|abort|refresh-overlay|test|classify|classify-skipped|classify-final)
       break ;;
     *) break ;;
   esac
@@ -402,6 +427,7 @@ case "${1:-}" in
   refresh-overlay) shift; overlay_capture; echo "Overlay refreshed.";;
   classify) shift; cmd_classify "$@";;
   classify-skipped) shift; cmd_classify_skipped;;
+  classify-final) shift; cmd_classify_final;;
   test)
     shift
     # Test an arbitrary commit/ref by generating a synthetic commit on top of main and pushing it
@@ -462,6 +488,7 @@ Examples:
     ./scripts/ci-bisect.sh start <good-sha>
   ./scripts/ci-bisect.sh --merges-only start <good-sha>
   ./scripts/ci-bisect.sh classify-skipped   # classify skipped commits at the end
+  ./scripts/ci-bisect.sh classify-final     # classify final candidates at the end
   ./scripts/ci-bisect.sh classify <sha...>  # classify specific commits
 Environment:
   BISect_BRANCH (default: ci-bisect)
