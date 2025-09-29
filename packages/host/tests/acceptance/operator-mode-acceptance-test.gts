@@ -748,9 +748,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     urlParameters = new URLSearchParams(url);
     let operatorModeStateParam = urlParameters.get('operatorModeState');
 
+    assert.true(operatorModeStateParam);
     assert.true(
-      operatorModeStateParam &&
-        JSON.parse(operatorModeStateParam).workspaceChooserOpened,
+      JSON.parse(operatorModeStateParam ?? '{}').workspaceChooserOpened,
     );
     await percySnapshot(assert);
   });

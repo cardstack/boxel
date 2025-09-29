@@ -106,15 +106,12 @@ puts "💎"
     ) as HTMLElement;
     let directChildren = messageElement.children;
     assert.strictEqual(directChildren[0]?.tagName, 'P');
-    assert.ok(
-      directChildren[1]?.tagName == 'SECTION' &&
-        directChildren[1]?.classList.contains('code-block'),
-    );
+    assert.true(directChildren[1]?.tagName == 'SECTION');
+    assert.true(directChildren[1]?.classList.contains('code-block'));
+
     assert.strictEqual(directChildren[2]?.tagName, 'P');
-    assert.ok(
-      directChildren[3]?.tagName == 'SECTION' &&
-        directChildren[3]?.classList.contains('code-block'),
-    );
+    assert.true(directChildren[3]?.tagName == 'SECTION');
+    assert.true(directChildren[3]?.classList.contains('code-block'));
     assert.strictEqual(directChildren[4]?.tagName, 'P');
 
     assert.dom('.monaco-editor').exists({ count: 2 });
