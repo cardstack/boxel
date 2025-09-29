@@ -465,18 +465,20 @@ export default class SubmodeLayout extends Component<Signature> {
               <AskAiContainer />
             {{/if}}
           {{/if}}
-          <AiAssistantButton
-            class='chat-btn'
-            @isActive={{this.aiAssistantPanelService.isOpen}}
-            {{on
-              'click'
-              (if
-                this.aiAssistantPanelService.isOpen
-                this.aiAssistantPanelService.closePanel
-                this.aiAssistantPanelService.openPanel
-              )
-            }}
-          />
+          {{#if (not this.aiAssistantPanelService.hideAiAssistant)}}
+            <AiAssistantButton
+              class='chat-btn'
+              @isActive={{this.aiAssistantPanelService.isOpen}}
+              {{on
+                'click'
+                (if
+                  this.aiAssistantPanelService.isOpen
+                  this.aiAssistantPanelService.closePanel
+                  this.aiAssistantPanelService.openPanel
+                )
+              }}
+            />
+          {{/if}}
           {{#if this.profileSummaryOpened}}
             <ProfileInfoPopover
               {{onClickOutside

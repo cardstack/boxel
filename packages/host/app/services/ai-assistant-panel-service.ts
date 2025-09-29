@@ -88,8 +88,14 @@ export default class AiAssistantPanelService extends Service {
     return this.commandModuleResource.module as typeof CommandModule;
   }
 
+  get hideAiAssistant() {
+    return this.operatorModeStateService.state.submode === Submodes.Host;
+  }
+
   get isOpen() {
-    return this.operatorModeStateService.aiAssistantOpen;
+    return (
+      this.operatorModeStateService.aiAssistantOpen && !this.hideAiAssistant
+    );
   }
 
   get isFocusPillVisible() {
