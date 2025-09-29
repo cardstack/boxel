@@ -175,7 +175,7 @@ module('Integration | commands | search-google-images', function (hooks) {
       '0.50',
       'Should have correct formatted search time',
     );
-    assert.strictEqual(result.hasNextPage, true, 'Should have next page');
+    assert.true(result.hasNextPage, 'Should have next page');
     assert.strictEqual(
       result.nextPageStartIndex,
       3,

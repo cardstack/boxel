@@ -1658,14 +1658,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             2,
             'Listing should have two specs',
           );
-          assert.strictEqual(
+          assert.true(
             listing.specs.some((spec) => spec.ref.name === 'Author'),
-            true,
             'Listing should have an Author spec',
           );
-          assert.strictEqual(
+          assert.true(
             listing.specs.some((spec) => spec.ref.name === 'AuthorCompany'),
-            true,
             'Listing should have an AuthorCompany spec',
           );
         }
@@ -1695,12 +1693,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             listingId,
           )) as CardListing;
           assert.ok(listing, 'Listing should be created');
-          assert.strictEqual(
+          assert.true(
             listing.specs.every(
               (spec) =>
                 spec.ref.module != 'https://cdn.jsdelivr.net/npm/chess.js/+esm',
             ),
-            true,
             'Listing should does not have unrecognised import',
           );
         }
@@ -1738,9 +1735,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           );
           ['Author', 'AuthorCompany', 'BlogPost', 'BlogApp', 'AppCard'].forEach(
             (specName) => {
-              assert.strictEqual(
+              assert.true(
                 listing.specs.some((spec) => spec.ref.name === specName),
-                true,
                 `Listing should have a ${specName} spec`,
               );
             },
