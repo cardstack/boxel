@@ -511,7 +511,7 @@ export function setupAuthEndpoints(
           return new Response(
             JSON.stringify({
               challenge: 'test',
-              room: 'test-auth-session-room',
+              room: 'test-auth-realm-server-session-room',
             }),
             {
               status: 401,
@@ -524,7 +524,7 @@ export function setupAuthEndpoints(
               Authorization: createJWT(
                 {
                   user: '@testuser:localhost',
-                  sessionRoom: 'test-auth-session-room',
+                  sessionRoom: 'test-auth-realm-server-session-room',
                 },
                 '1d',
                 testRealmSecretSeed,
