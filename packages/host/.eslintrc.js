@@ -24,7 +24,7 @@ module.exports = {
           ],
         },
       },
-      plugins: ['ember', '@typescript-eslint', 'window-mock'],
+      plugins: ['ember', '@typescript-eslint', 'boxel-monorepo'],
       extends: [
         'eslint:recommended',
         'plugin:ember/recommended',
@@ -47,8 +47,8 @@ module.exports = {
         '@typescript-eslint/no-non-null-assertion': 'off',
         'no-undef': 'off',
         'ember/no-runloop': 'off',
-        'window-mock/mock-window-only': 'error',
-        'window-mock/wrapped-setup-helpers-only': 'error',
+        'boxel-monorepo/mock-window-only': 'error',
+        'boxel-monorepo/wrapped-setup-helpers-only': 'error',
       },
     },
     {
@@ -68,7 +68,7 @@ module.exports = {
         },
         warnOnUnsupportedTypeScriptVersion: false,
       },
-      plugins: ['ember', 'window-mock', '@cardstack/boxel'],
+      plugins: ['ember', 'boxel-monorepo', '@cardstack/boxel'],
       extends: [
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended',
@@ -96,8 +96,8 @@ module.exports = {
         'ember/no-tracked-properties-from-args': 'off',
         'ember/no-runloop': 'off',
         'node/no-deprecated-api': 'off',
-        'window-mock/mock-window-only': 'error',
-        'window-mock/wrapped-setup-helpers-only': 'error',
+        'boxel-monorepo/mock-window-only': 'error',
+        'boxel-monorepo/wrapped-setup-helpers-only': 'error',
         '@cardstack/boxel/template-missing-invokable': [
           'error',
           { invokables: MISSING_INVOKABLES_CONFIG.invokables },

@@ -1259,7 +1259,7 @@ importers:
         version: 2.10.0(@glint/template@1.3.0)(webpack@5.99.6)
       ember-cli:
         specifier: ^5.4.1
-        version: 5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6)
+        version: 5.4.1(babel-core@6.26.3)(lodash@4.17.21)
       ember-cli-babel:
         specifier: ^8.2.0
         version: 8.2.0(@babel/core@7.26.10)
@@ -1268,7 +1268,7 @@ importers:
         version: 3.0.0
       ember-cli-dependency-checker:
         specifier: ^3.3.2
-        version: 3.3.2(ember-cli@5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6))
+        version: 3.3.2(ember-cli@5.4.1(babel-core@6.26.3)(lodash@4.17.21))
       ember-cli-deploy:
         specifier: ^1.0.2
         version: 1.0.2
@@ -1705,7 +1705,7 @@ importers:
         version: 2.10.0(@glint/template@1.3.0)(webpack@5.99.6)
       ember-cli:
         specifier: ^5.4.1
-        version: 5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6)
+        version: 5.4.1(babel-core@6.26.3)(lodash@4.17.21)
       ember-cli-babel:
         specifier: ^8.2.0
         version: 8.2.0(@babel/core@7.26.10)
@@ -1714,7 +1714,7 @@ importers:
         version: 3.0.0
       ember-cli-dependency-checker:
         specifier: ^3.3.2
-        version: 3.3.2(ember-cli@5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6))
+        version: 3.3.2(ember-cli@5.4.1(babel-core@6.26.3)(lodash@4.17.21))
       ember-cli-deploy:
         specifier: ^1.0.2
         version: 1.0.2
@@ -1944,9 +1944,9 @@ importers:
         version: 6.3.2(@types/node@24.3.0)(terser@5.39.0)(tsx@4.20.3)(yaml@2.5.1)
       vitest:
         specifier: 'catalog:'
-        version: 2.1.9(@types/node@24.3.0)(jsdom@25.0.1)(terser@5.39.0)
+        version: 2.1.9(@types/node@24.3.0)(terser@5.39.0)
 
-  packages/eslint-plugin-window-mock: {}
+  packages/eslint-plugin-boxel-monorepo: {}
 
   packages/experiments-realm:
     dependencies:
@@ -2191,7 +2191,7 @@ importers:
         version: 8.0.4(patch_hash=19b0fc5d4bd8b9aa296c4065fa5e33bdbb965db0b277810b596eacd0b9e2f428)(2ae94f35bd5e6e6dafa095817afdf7bd)
       ember-cli:
         specifier: ~5.4.1
-        version: 5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6)
+        version: 5.4.1(babel-core@6.26.3)(lodash@4.17.21)
       ember-cli-app-version:
         specifier: ^6.0.1
         version: 6.0.1(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
@@ -2203,7 +2203,7 @@ importers:
         version: 3.0.0
       ember-cli-dependency-checker:
         specifier: ^3.3.2
-        version: 3.3.2(ember-cli@5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6))
+        version: 3.3.2(ember-cli@5.4.1(babel-core@6.26.3)(lodash@4.17.21))
       ember-cli-deploy:
         specifier: ^1.0.2
         version: 1.0.2
@@ -2324,6 +2324,9 @@ importers:
       eslint-config-prettier:
         specifier: 'catalog:'
         version: 9.1.0(eslint@8.57.1)
+      eslint-plugin-boxel-monorepo:
+        specifier: workspace:*
+        version: link:../eslint-plugin-boxel-monorepo
       eslint-plugin-ember:
         specifier: 'catalog:'
         version: 12.5.0(@babel/core@7.26.10)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)
@@ -2342,9 +2345,6 @@ importers:
       eslint-plugin-qunit-dom:
         specifier: 'catalog:'
         version: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841(eslint@8.57.1)
-      eslint-plugin-window-mock:
-        specifier: workspace:*
-        version: link:../eslint-plugin-window-mock
       ethers:
         specifier: 'catalog:'
         version: 6.6.2
@@ -2437,7 +2437,7 @@ importers:
         version: 1.0.1
       testem:
         specifier: 'catalog:'
-        version: 3.10.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6)
+        version: 3.10.1(babel-core@6.26.3)(lodash@4.17.21)
       testem-multi-reporter:
         specifier: 'catalog:'
         version: 1.2.0
@@ -2754,7 +2754,7 @@ importers:
         version: 6.2.4
       testem:
         specifier: 'catalog:'
-        version: 3.10.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6)
+        version: 3.10.1(babel-core@6.26.3)(lodash@4.17.21)
       tmp:
         specifier: 'catalog:'
         version: 0.2.3
@@ -2886,7 +2886,7 @@ importers:
         version: link:../../vendor/ember-concurrency-async-plugin
       ember-eslint-parser:
         specifier: 0.5.9
-        version: 0.5.9(patch_hash=0db1e9515cbf9f5b3d3c6509af8967c918c176106e534408441992dd448f2545)(@babel/core@7.26.10)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)
+        version: 0.5.9(patch_hash=0db1e9515cbf9f5b3d3c6509af8967c918c176106e534408441992dd448f2545)(@babel/core@7.26.10)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)
       ember-source:
         specifier: 'catalog:'
         version: 5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)
@@ -16996,20 +16996,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.8.3)':
-    dependencies:
-      '@typescript-eslint/scope-manager': 7.18.0
-      '@typescript-eslint/types': 7.18.0
-      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.8.3)
-      '@typescript-eslint/visitor-keys': 7.18.0
-      debug: 4.4.0(supports-color@8.1.1)
-      eslint: 8.57.1
-    optionalDependencies:
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-    optional: true
-
   '@typescript-eslint/scope-manager@5.62.0':
     dependencies:
       '@typescript-eslint/types': 5.62.0
@@ -17064,22 +17050,6 @@ snapshots:
       typescript: 5.1.6
     transitivePeerDependencies:
       - supports-color
-
-  '@typescript-eslint/typescript-estree@7.18.0(typescript@5.8.3)':
-    dependencies:
-      '@typescript-eslint/types': 7.18.0
-      '@typescript-eslint/visitor-keys': 7.18.0
-      debug: 4.4.0(supports-color@8.1.1)
-      globby: 11.1.0
-      is-glob: 4.0.3
-      minimatch: 9.0.5
-      semver: 7.7.1
-      ts-api-utils: 1.4.3(typescript@5.8.3)
-    optionalDependencies:
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-    optional: true
 
   '@typescript-eslint/utils@5.62.0(eslint@8.57.1)(typescript@5.1.6)':
     dependencies:
@@ -19030,15 +19000,13 @@ snapshots:
       ora: 3.4.0
       through2: 3.0.2
 
-  consolidate@0.16.0(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(mustache@4.2.0)(underscore@1.13.6):
+  consolidate@0.16.0(babel-core@6.26.3)(lodash@4.17.21)(mustache@4.2.0):
     dependencies:
       bluebird: 3.7.2
     optionalDependencies:
       babel-core: 6.26.3
-      handlebars: 4.7.8
       lodash: 4.17.21
       mustache: 4.2.0
-      underscore: 1.13.6
 
   content-disposition@0.5.4:
     dependencies:
@@ -19797,10 +19765,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-cli-dependency-checker@3.3.2(ember-cli@5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6)):
+  ember-cli-dependency-checker@3.3.2(ember-cli@5.4.1(babel-core@6.26.3)(lodash@4.17.21)):
     dependencies:
       chalk: 2.4.2
-      ember-cli: 5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6)
+      ember-cli: 5.4.1(babel-core@6.26.3)(lodash@4.17.21)
       find-yarn-workspace-root: 1.2.1
       is-git-url: 1.0.0
       resolve: 1.22.10
@@ -20163,7 +20131,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-cli@5.4.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6):
+  ember-cli@5.4.1(babel-core@6.26.3)(lodash@4.17.21):
     dependencies:
       '@pnpm/find-workspace-dir': 6.0.3
       broccoli: 3.5.2
@@ -20241,7 +20209,7 @@ snapshots:
       sort-package-json: 1.57.0
       symlink-or-copy: 1.3.1
       temp: 0.9.4
-      testem: 3.10.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6)
+      testem: 3.10.1(babel-core@6.26.3)(lodash@4.17.21)
       tiny-lr: 2.0.0
       tree-sync: 2.1.0
       walk-sync: 3.0.0
@@ -20408,21 +20376,6 @@ snapshots:
       svg-tags: 1.0.0
     optionalDependencies:
       '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.1.6)
-    transitivePeerDependencies:
-      - eslint
-
-  ember-eslint-parser@0.5.9(patch_hash=0db1e9515cbf9f5b3d3c6509af8967c918c176106e534408441992dd448f2545)(@babel/core@7.26.10)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1):
-    dependencies:
-      '@babel/core': 7.26.10(supports-color@8.1.1)
-      '@babel/eslint-parser': 7.27.0(@babel/core@7.26.10)(eslint@8.57.1)
-      '@glimmer/syntax': 0.92.3
-      content-tag: 2.0.3
-      eslint-scope: 7.2.2
-      html-tags: 3.3.1
-      mathml-tag-names: 2.1.3
-      svg-tags: 1.0.0
-    optionalDependencies:
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.8.3)
     transitivePeerDependencies:
       - eslint
 
@@ -26159,7 +26112,7 @@ snapshots:
 
   testem-multi-reporter@1.2.0: {}
 
-  testem@3.10.1(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(underscore@1.13.6):
+  testem@3.10.1(babel-core@6.26.3)(lodash@4.17.21):
     dependencies:
       '@xmldom/xmldom': 0.8.10
       backbone: 1.5.0
@@ -26167,7 +26120,7 @@ snapshots:
       charm: 1.0.2
       commander: 2.20.3
       compression: 1.7.4
-      consolidate: 0.16.0(babel-core@6.26.3)(handlebars@4.7.8)(lodash@4.17.21)(mustache@4.2.0)(underscore@1.13.6)
+      consolidate: 0.16.0(babel-core@6.26.3)(lodash@4.17.21)(mustache@4.2.0)
       execa: 1.0.0
       express: 4.18.2
       fireworm: 0.7.2
@@ -26446,11 +26399,6 @@ snapshots:
   ts-api-utils@1.4.3(typescript@5.1.6):
     dependencies:
       typescript: 5.1.6
-
-  ts-api-utils@1.4.3(typescript@5.8.3):
-    dependencies:
-      typescript: 5.8.3
-    optional: true
 
   ts-node@10.9.2(@types/node@18.19.54)(typescript@5.1.6):
     dependencies:
@@ -26820,7 +26768,7 @@ snapshots:
       tsx: 4.20.3
       yaml: 2.5.1
 
-  vitest@2.1.9(@types/node@24.3.0)(jsdom@25.0.1)(terser@5.39.0):
+  vitest@2.1.9(@types/node@24.3.0)(terser@5.39.0):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(vite@5.4.18(@types/node@24.3.0)(terser@5.39.0))
@@ -26844,7 +26792,6 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.3.0
-      jsdom: 25.0.1
     transitivePeerDependencies:
       - less
       - lightningcss

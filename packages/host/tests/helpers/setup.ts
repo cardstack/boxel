@@ -1,4 +1,4 @@
-/* eslint-disable window-mock/wrapped-setup-helpers-only */
+/* eslint-disable boxel-monorepo/wrapped-setup-helpers-only */
 // This is the one place we allow these to be used directly.
 
 import {
