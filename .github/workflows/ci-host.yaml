@@ -18,10 +18,6 @@ on:
       - "pnpm-lock.yaml"
   workflow_dispatch:
 
-env:
-  HOST_SHARD_INDEXES: "[1,2,3,4,5,6,7,8,9,10,11,12,13,14]"
-  HOST_SHARD_TOTAL: 14
-
 permissions:
   checks: write
   contents: read
@@ -35,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: ${{ fromJson(env.HOST_SHARD_INDEXES) }}
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -76,7 +72,8 @@ jobs:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
-          HOST_TEST_PARTITION_COUNT: ${{ env.HOST_SHARD_TOTAL }}
+          # Keep this in sync with the matrix shardIndex list above (single source of truth there)
+          HOST_TEST_PARTITION_COUNT: 14
         working-directory: packages/host
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
@@ -137,9 +134,35 @@ jobs:
           echo "Listing artifacts for run ${GITHUB_RUN_ID}"
           gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts --paginate > artifacts.json
 
-          echo "Selecting latest artifact per shard"
-          missing=0
-          for i in $(seq 1 "${HOST_SHARD_TOTAL}"); do
+          echo "Deriving shard list from available artifacts"
+          shards=$(jq -r '.artifacts[] | select(.name|startswith("host-test-report-")) | select(.expired==false) | .name' artifacts.json \
+            | sed -E 's/^host-test-report-([0-9]+)$/\1/' \
+            | grep -E '^[0-9]+$' \
+            | sort -n | uniq)
+
+          if [ -z "$shards" ]; then
+            echo "ERROR: No shard artifacts found" >&2
+            exit 1
+          fi
+
+          max=$(echo "$shards" | tail -n1)
+          count=$(echo "$shards" | wc -l | tr -d ' ')
+          echo "Found shard numbers: $shards (count=$count, max=$max)"
+
+          # Ensure shards are contiguous from 1..max
+          missing_list=""
+            for i in $(seq 1 "$max"); do
+              if ! echo "$shards" | grep -q "^$i$"; then
+                missing_list="$missing_list $i"
+              fi
+            done
+          if [ -n "$missing_list" ]; then
+            echo "ERROR: Missing shard artifacts for shard(s):$missing_list" >&2
+            exit 1
+          fi
+
+          echo "Selecting and downloading latest artifact per shard"
+          for i in $shards; do
             name="host-test-report-$i"
             id=$(jq -r --arg n "$name" '
               .artifacts
@@ -149,29 +172,21 @@ jobs:
               | .id // empty
             ' artifacts.json)
             if [ -z "$id" ] || [ "$id" = "null" ]; then
-              echo "ERROR: No artifact found for $name" >&2
-              missing=1
-              continue
+              echo "ERROR: Unexpectedly missing artifact id for $name" >&2
+              exit 1
             fi
             echo "Downloading $name (artifact id $id)"
             zipFile="$name.zip"
             gh api repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip > "$zipFile"
-            # Expect exactly one XML per shard; unzip (strip paths) into destination
             unzip -j "$zipFile" -d all-host-reports >/dev/null
             rm "$zipFile"
           done
 
           ls -l all-host-reports
 
-          if [ "$missing" = 1 ]; then
-            echo "One or more shard artifacts were missing" >&2
-            exit 1
-          fi
-
-          count=$(ls all-host-reports/*.xml 2>/dev/null | wc -l | tr -d ' ')
-
-          if [ "$count" -ne "${HOST_SHARD_TOTAL}" ]; then
-            echo "Expected ${HOST_SHARD_TOTAL} shard reports, found $count" >&2
+          xml_count=$(ls all-host-reports/*.xml 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$xml_count" -ne "$count" ]; then
+            echo "ERROR: Expected $count xml reports matching shard count, found $xml_count" >&2
             exit 1
           fi
 
