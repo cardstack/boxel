@@ -276,17 +276,15 @@ cmd_start() {
       git rev-parse -q --verify HEAD >/dev/null || break
     done
   fi
-  if bisect_active; then
+  # Always push the selected candidate to CI, even if bisect_active appears false
+  if git rev-parse -q --verify HEAD >/dev/null; then
     push_current
-  else
-    echo "Bisect ended (no candidates). Not pushing; run 'status' or 'classify-final' if needed."
-    # Decorate with classification of final candidates, if any
-    if git rev-parse -q --verify BISECT_HEAD >/dev/null 2>&1; then
-      : # still active, nothing to do
-    else
-      # We can still read the bisect log here
-      cmd_classify_final || true
-    fi
+  fi
+  # If bisect appears to have concluded immediately (e.g., only skipped remained), add context
+  if ! bisect_active; then
+    echo "Note: bisect appears concluded after start (likely only skipped commits remained)."
+    echo "Decorating final candidates before you decide next steps:"
+    cmd_classify_final || true
   fi
 }
 
@@ -503,7 +501,7 @@ Notes:
   multiple overlay paths via BISect_CI_PATHS (space-separated).
   - Each push is a synthetic commit parented on the latest '$DEFAULT_REMOTE_HEAD'
     so GitHub treats it as new code on top of main (not "behind main").
-  - Bisect step branches: "$BISect_BRANCH-<shortsha>".
+  - Bisect step branches: "${BISect_BRANCH:-ci-bisect}-<shortsha>".
   - Direct test branches:  "${BISect_TEST_BRANCH_PREFIX:-ci-test}-<shortsha>".
 
 Examples:
