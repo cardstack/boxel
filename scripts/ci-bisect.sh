@@ -3,12 +3,17 @@ set -euo pipefail
 
 # ci-bisect.sh — assist git bisect by pushing each step to CI
 # Usage:
-#   ./scripts/ci-bisect.sh start <good_commit> [<bad_ref>]
-#   ./scripts/ci-bisect.sh step good|bad|skip
-#   ./scripts/ci-bisect.sh status
-#   ./scripts/ci-bisect.sh abort
+#   ./scripts/ci-bisect.sh start <good_commit> [<bad_ref>]  # initialize and push first candidate
+#   ./scripts/ci-bisect.sh step good|bad|skip                # mark verdict and push next
+#   ./scripts/ci-bisect.sh status                           # show bisect log + tested commit
+#   ./scripts/ci-bisect.sh abort                            # reset bisect to original state
+#   ./scripts/ci-bisect.sh refresh-overlay                  # re-capture workflow/script overlay
+#   ./scripts/ci-bisect.sh test <commit>                    # push CI for an arbitrary commit
 #
-# It uses the branch name 'ci-bisect' on origin. Change via $BISect_BRANCH
+# Branches: uses base name 'ci-bisect' (configurable via $BISect_BRANCH), and
+# pushes each step to a new branch 'ci-bisect-<tested-short-sha>' on origin.
+# Optional overlay (enable with BISect_COPY_CI=1) copies the workflow and this
+# script into each tested revision so GitHub runs all jobs.
 #
 # Implementation detail:
 # - For every tested revision, we create an empty commit with message
@@ -197,13 +202,60 @@ case "${1:-}" in
   status) shift; cmd_status "$@";;
   abort) shift; cmd_abort "$@";;
   refresh-overlay) shift; overlay_capture; echo "Overlay refreshed.";;
+  test)
+    shift
+    # Test an arbitrary commit/ref by generating a synthetic commit on top of main and pushing it
+    # Usage: ci-bisect.sh test <commit>
+    ensure_clean
+    overlay_capture
+    target=${1:?-"Provide a commit/ref to test"}
+    # Save current ref to restore later
+    current_ref=$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)
+    trap 'git checkout -q "$current_ref" >/dev/null 2>&1 || true' EXIT
+    git checkout -q "$target"
+    tested=$(git rev-parse HEAD)
+    tested_short=$(git rev-parse --short=12 HEAD)
+    # Create marker and possibly overlay
+    make_marker_commit
+    # Build synthetic commit parented on latest remote default branch
+    git fetch --no-tags --prune "$REMOTE" >/dev/null 2>&1 || true
+    parent_ref="refs/remotes/$REMOTE/$DEFAULT_REMOTE_HEAD"
+    parent_sha=$(git rev-parse "$parent_ref")
+    tree=$(git rev-parse HEAD^{tree})
+    new_commit=$(GIT_AUTHOR_DATE="$(date -u)" GIT_COMMITTER_DATE="$(date -u)" \
+      git commit-tree "$tree" -p "$parent_sha" -m "ci-test: test $tested [rebased-on-$DEFAULT_REMOTE_HEAD]")
+    prefix=${BISect_TEST_BRANCH_PREFIX:-ci-test}
+    branch_dyn="$prefix-$tested_short"
+    echo "Pushing $new_commit (tree from tested $tested_short on parent $DEFAULT_REMOTE_HEAD) -> $REMOTE/$branch_dyn"
+    git push -f "$REMOTE" "$new_commit":"refs/heads/$branch_dyn"
+    echo "Pushed. Branch head commit: $REPO_URL_BASE/commit/$new_commit"
+    echo "Branch checks: $REPO_URL_BASE/actions?query=branch%3A$branch_dyn"
+    echo "Tested revision: $REPO_URL_BASE/commit/$tested"
+    # Restore original ref
+    git checkout -q "$current_ref"
+    trap - EXIT
+    ;;
   *) cat <<USAGE
 ci-bisect.sh help
-  start <good_commit> [bad]
-  step good|bad|skip
-  status
-  abort
-  refresh-overlay
+  start <good_commit> [bad]   Initialize bisect and push first candidate to CI
+  step good|bad|skip          Mark verdict for current candidate and push next
+  status                      Show bisect log and current tested commit
+  abort                       Reset bisect to original state
+  refresh-overlay             Re-capture workflow/script from working tree
+  test <commit>               Push CI for an arbitrary commit without bisecting
+
+Notes:
+  - When BISect_COPY_CI=1, the workflow file and this script are overlaid into
+    each tested revision before pushing, to force full CI runs.
+  - Each push is a synthetic commit parented on the latest '$DEFAULT_REMOTE_HEAD'
+    so GitHub treats it as new code on top of main (not "behind main").
+  - Bisect step branches: "$BISect_BRANCH-<shortsha>".
+  - Direct test branches:  "${BISect_TEST_BRANCH_PREFIX:-ci-test}-<shortsha>".
+
+Examples:
+  BISect_COPY_CI=1 ./scripts/ci-bisect.sh start <good-sha> [bad-ref]
+  ./scripts/ci-bisect.sh step good   # or bad/skip
+  BISect_COPY_CI=1 ./scripts/ci-bisect.sh test <sha>
 Environment:
   BISect_BRANCH (default: ci-bisect)
   BISect_REMOTE (default: origin)
@@ -212,6 +264,7 @@ Environment:
   BISect_CI_STORE (default: .git/ci-bisect/ci.yaml)
   BISect_SCRIPT_PATH (default: scripts/ci-bisect.sh)
   BISect_SCRIPT_STORE (default: .git/ci-bisect/ci-bisect.sh)
+  BISect_TEST_BRANCH_PREFIX (default: ci-test)
 USAGE
      ;;
  esac
