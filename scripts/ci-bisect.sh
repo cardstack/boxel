@@ -32,9 +32,21 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # Enable by setting BISect_COPY_CI=1. Paths can be customized below.
 OVERLAY_ENABLE=${BISect_COPY_CI:-0}
 OVERLAY_PATH=${BISect_CI_PATH:-.github/workflows/ci.yaml}
-OVERLAY_STORE=${BISect_CI_STORE:-.git/ci-bisect/ci.yaml}
 OVERLAY_SCRIPT_PATH=${BISect_SCRIPT_PATH:-scripts/ci-bisect.sh}
-OVERLAY_SCRIPT_STORE=${BISect_SCRIPT_STORE:-.git/ci-bisect/ci-bisect.sh}
+
+# Derive default STORE locations from the PATHs under .git/ci-bisect/<PATH>,
+# while allowing explicit overrides via BISect_CI_STORE and BISect_SCRIPT_STORE.
+derive_store_path() {
+  local p="$1"
+  # strip leading ./ if present
+  p="${p#./}"
+  echo ".git/ci-bisect/$p"
+}
+
+DEFAULT_OVERLAY_STORE=$(derive_store_path "$OVERLAY_PATH")
+DEFAULT_OVERLAY_SCRIPT_STORE=$(derive_store_path "$OVERLAY_SCRIPT_PATH")
+OVERLAY_STORE=${BISect_CI_STORE:-$DEFAULT_OVERLAY_STORE}
+OVERLAY_SCRIPT_STORE=${BISect_SCRIPT_STORE:-$DEFAULT_OVERLAY_SCRIPT_STORE}
 
 ensure_clean() {
   if ! git diff --quiet; then
@@ -261,9 +273,9 @@ Environment:
   BISect_REMOTE (default: origin)
   BISect_COPY_CI=1 to enable overlay of workflow and script
   BISect_CI_PATH (default: .github/workflows/ci.yaml)
-  BISect_CI_STORE (default: .git/ci-bisect/ci.yaml)
+  BISect_CI_STORE (default: derived from path => .git/ci-bisect/<C I PATH>)
   BISect_SCRIPT_PATH (default: scripts/ci-bisect.sh)
-  BISect_SCRIPT_STORE (default: .git/ci-bisect/ci-bisect.sh)
+  BISect_SCRIPT_STORE (default: derived from path => .git/ci-bisect/<SCRIPT PATH>)
   BISect_TEST_BRANCH_PREFIX (default: ci-test)
 USAGE
      ;;
