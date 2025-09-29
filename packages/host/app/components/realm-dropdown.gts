@@ -172,10 +172,9 @@ export default class RealmDropdown extends Component<Signature> {
   get menuItems(): MenuItem[] {
     return this.realms.map(
       (realm) =>
-        new MenuItem({
-          label: realm.name,
+        new MenuItem(realm.name, 'action', {
           action: () => this.args.onSelect(realm),
-          checked: realm.name === this.selectedRealm?.name,
+          selected: realm.name === this.selectedRealm?.name,
           iconURL: realm.iconURL ?? undefined,
           subtext: !realm.canWrite ? 'READ ONLY' : undefined,
         }),

@@ -31,14 +31,15 @@ export class SuggestAvatar extends Command<
       let result = await useAiAssistantCommand.execute({
         roomName: `Avatar Suggestions: ${name || 'Unnamed Avatar'}`,
         openRoom: true,
-        prompt: `Please suggest two example avatar prompts: one describing a visual style and one referencing a celebrity's look. Then ask if these examples are helpful or if different suggestions are needed.`,
+        prompt:
+          'Please edit the following card with an avatar based upon params of https://getavataaars.com/. The params supported are: topType, accessoriesType, hairColor, facialHairType, clotheType, eyeType, eyebrowType, mouthType and skinColor.',
       });
 
       if (result.roomId) {
         let setActiveLLMCommand = new SetActiveLLMCommand(this.commandContext);
         await setActiveLLMCommand.execute({
           roomId: result.roomId,
-          mode: 'ask',
+          mode: 'act',
         });
       }
     } catch (error: any) {

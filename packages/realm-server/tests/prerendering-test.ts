@@ -1,10 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
-  type RealmPermissions,
+  Prerenderer,
   type RenderResponse,
-} from '@cardstack/runtime-common';
-import { Prerenderer } from '../prerender/index';
+  type PermissionsMap,
+} from '../prerender/index';
 
 import {
   setupBaseRealmServer,
@@ -20,7 +20,7 @@ module(basename(__filename), function () {
     let realmURL2 = 'http://127.0.0.1:4448/';
     let realmURL3 = 'http://127.0.0.1:4449/';
     let testUserId = '@user1:localhost';
-    let permissions: RealmPermissions = {};
+    let permissions: PermissionsMap = {};
     let prerenderer: Prerenderer;
     const disposeAllRealms = async () => {
       await Promise.all([

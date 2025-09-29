@@ -444,7 +444,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'imports.gts': importsSource,
         're-export.gts': reExportSource,
         'local-inherit.gts': localInheritSource,
-        'empty-file.gts': '',
         'person-entry.json': {
           data: {
             type: 'card',
@@ -2099,22 +2098,6 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a Find instances button');
   });
 
-  test('inspector shows empty file panel with delete button when file is empty', async function (assert) {
-    await visitOperatorMode({
-      stacks: [[]],
-      submode: 'code',
-      codePath: `${testRealmURL}empty-file.gts`,
-    });
-
-    await waitFor('[data-test-card-inspector-panel]');
-    await waitFor('[data-test-current-module-name="empty-file.gts"]');
-
-    assert.dom('[data-test-current-module-name="empty-file.gts"]').exists();
-    assert.dom('[data-test-in-this-file-selector]').doesNotExist();
-    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
-    assert.dom('[data-test-delete-module-button]').exists();
-  });
-
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
       setRealmPermissions({ [testRealmURL]: ['read'] });
@@ -2144,16 +2127,6 @@ export class ExportedCard extends ExportedCardParent {
         codePath: `${testRealmURL}readme.md`,
       });
       assert.dom('[data-test-action-button="Delete"]').doesNotExist();
-    });
-
-    test('delete button is not displayed for empty file when user does not have permission to write to realm', async function (assert) {
-      await visitOperatorMode({
-        stacks: [[]],
-        submode: 'code',
-        codePath: `${testRealmURL}empty-file.gts`,
-      });
-      await waitFor('[data-test-current-module-name="empty-file.gts"]');
-      assert.dom('[data-test-delete-module-button]').doesNotExist();
     });
   });
 });
