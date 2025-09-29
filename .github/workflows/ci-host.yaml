@@ -18,6 +18,10 @@ on:
       - "pnpm-lock.yaml"
   workflow_dispatch:
 
+env:
+  HOST_SHARD_INDEXES: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14]'
+  HOST_SHARD_TOTAL: 14
+
 permissions:
   checks: write
   contents: read
@@ -31,8 +35,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-        shardTotal: [14]
+        shardIndex: ${{ fromJson(env.HOST_SHARD_INDEXES) }}
+        shardTotal: [${{ env.HOST_SHARD_TOTAL }}]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -117,15 +121,60 @@ jobs:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Download JUnit reports from GitHub Actions Artifacts
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
-        with:
-          path: all-host-reports
-          pattern: host-test-report-*
-          merge-multiple: true
+      # Download only the latest artifact for each shard. This is robust against
+      # "Rerun failing jobs" where only some shards are re-executed (and thus have
+      # newer artifacts) while successful shards keep their older artifacts. Using
+      # pattern+merge would pull ALL historical artifacts for the workflow run.
+      # We instead enumerate artifacts, pick the newest (by created_at) per shard
+      # name, and download by artifact ID.
+      - name: Download latest JUnit shard reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
 
-      - run: ls
-      - run: ls all-host-reports
+          mkdir -p all-host-reports
+
+          echo "Listing artifacts for run ${GITHUB_RUN_ID}"
+          gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts --paginate > artifacts.json
+
+          echo "Selecting latest artifact per shard"
+          missing=0
+          for i in $(seq 1 "${HOST_SHARD_TOTAL}"); do
+            name="host-test-report-$i"
+            id=$(jq -r --arg n "$name" '
+              .artifacts
+              | map(select(.name==$n and .expired==false))
+              | sort_by(.created_at)
+              | last
+              | .id // empty
+            ' artifacts.json)
+            if [ -z "$id" ] || [ "$id" = "null" ]; then
+              echo "ERROR: No artifact found for $name" >&2
+              missing=1
+              continue
+            fi
+            echo "Downloading $name (artifact id $id)"
+            zipFile="$name.zip"
+            gh api repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip > "$zipFile"
+            # Expect exactly one XML per shard; unzip (strip paths) into destination
+            unzip -j "$zipFile" -d all-host-reports >/dev/null
+            rm "$zipFile"
+          done
+
+          ls -l all-host-reports
+
+          if [ "$missing" = 1 ]; then
+            echo "One or more shard artifacts were missing" >&2
+            exit 1
+          fi
+
+          count=$(ls all-host-reports/*.xml 2>/dev/null | wc -l | tr -d ' ')
+
+          if [ "$count" -ne "${HOST_SHARD_TOTAL}" ]; then
+            echo "Expected ${HOST_SHARD_TOTAL} shard reports, found $count" >&2
+            exit 1
+          fi
 
       - name: Merge reports
         run: npx junit-report-merger host.xml "./all-host-reports/*.xml"
