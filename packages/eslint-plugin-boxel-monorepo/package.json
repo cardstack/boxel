@@ -1,7 +1,7 @@
 {
-  "name": "eslint-plugin-window-mock",
+  "name": "eslint-plugin-boxel-monorepo",
   "version": "1.0.0",
-  "description": "",
+  "description": "Lint rules for developers working within the Boxel monorepo",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
