@@ -350,6 +350,7 @@ export async function setupAcceptanceTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  setupAuthEndpoints(permissions);
   return await setupTestRealm({
     contents,
     realmURL,
