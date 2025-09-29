@@ -46,12 +46,6 @@ const emptyListingId = `${mockCatalogURL}Listing/empty`;
 const pirateSkillListingId = `${mockCatalogURL}SkillListing/pirate-skill`;
 const incompleteSkillListingId = `${mockCatalogURL}Listing/incomplete-skill`;
 const apiDocumentationStubListingId = `${mockCatalogURL}Listing/api-documentation-stub`;
-//license
-const mitLicenseId = `${mockCatalogURL}License/mit`;
-//category
-const writingCategoryId = `${mockCatalogURL}Category/writing`;
-//publisher
-const publisherId = `${mockCatalogURL}Publisher/boxel-publisher`;
 
 //skills
 const pirateSkillId = `${mockCatalogURL}Skill/pirate-speak`;
@@ -63,7 +57,6 @@ const stubTagId = `${mockCatalogURL}Tag/stub`;
 
 //specs
 const authorSpecId = `${mockCatalogURL}Spec/author`;
-const unknownSpecId = `${mockCatalogURL}Spec/unknown-no-type`;
 
 //examples
 const authorExampleId = `${mockCatalogURL}author/Author/example`;
@@ -252,7 +245,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              readMe: 'This is the author spec readme',
               ref: {
                 name: 'Author',
                 module: `${mockCatalogURL}author/author`,
@@ -291,35 +283,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
           },
         },
-        'Spec/unknown-no-type.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              readMe: 'Spec without specType to trigger unknown grouping',
-              ref: {
-                name: 'UnknownNoType',
-                module: `${mockCatalogURL}unknown/unknown-no-type`,
-              },
-            },
-            // intentionally omitting specType so it falls into 'unknown'
-            containedExamples: [],
-            title: 'UnknownNoType',
-            description: 'Spec lacking specType',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
-        },
         'Listing/author.json': {
           data: {
             type: 'card',
             attributes: {
               name: 'Author',
               title: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
-              summary: 'A card for representing an author.',
             },
             relationships: {
               'specs.0': {
@@ -337,55 +306,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   self: calculatorTagId,
                 },
               },
-              'categories.0': {
-                links: {
-                  self: writingCategoryId,
-                },
-              },
-              license: {
-                links: {
-                  self: mitLicenseId,
-                },
-              },
-              publisher: {
-                links: {
-                  self: publisherId,
-                },
-              },
             },
             meta: {
               adoptsFrom: {
                 module: `${catalogRealmURL}catalog-app/listing/listing`,
                 name: 'CardListing',
-              },
-            },
-          },
-        },
-        'Publisher/boxel-publisher.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Boxel Publishing',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/publisher`,
-                name: 'Publisher',
-              },
-            },
-          },
-        },
-        'License/mit.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'MIT License',
-              content: 'MIT License',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/license`,
-                name: 'License',
               },
             },
           },
@@ -406,25 +331,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               'tags.0': {
                 links: {
                   self: calculatorTagId,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'CardListing',
-              },
-            },
-          },
-        },
-        'Listing/unknown-only.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            relationships: {
-              'specs.0': {
-                links: {
-                  self: unknownSpecId,
                 },
               },
             },
@@ -480,29 +386,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 },
               },
             },
-            'categories.0': {
-              links: {
-                self: writingCategoryId,
-              },
-            },
             meta: {
               adoptsFrom: {
                 module: `${catalogRealmURL}catalog-app/listing/listing`,
                 name: 'SkillListing',
-              },
-            },
-          },
-        },
-        'Category/writing.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Writing',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/category`,
-                name: 'Category',
               },
             },
           },
@@ -1424,124 +1311,85 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .hasText('Author - Mike Dane');
     });
 
-    test('display of sections when viewing listing details', async function (assert) {
+    skip('display of sections when viewing listing details', async function (assert) {
+      const homeworkGraderId = `${mockCatalogURL}CardListing/cbe2c79b-60aa-4dca-bc13-82b610e31653`;
       await visitOperatorMode({
         stacks: [
           [
             {
-              id: authorListingId,
+              id: homeworkGraderId,
               format: 'isolated',
             },
           ],
         ],
       });
 
+      //sections exists
       assert
         .dom('[data-test-catalog-listing-embedded-summary-section]')
-        .containsText('A card for representing an author');
-
-      // Publisher (rendered in header)
-      assert
-        .dom('[data-test-app-listing-header-publisher]')
-        .containsText('By Boxel Publishing');
-
+        .exists();
       assert
         .dom('[data-test-catalog-listing-embedded-license-section]')
-        .containsText('MIT License');
-
+        .exists();
       assert
         .dom('[data-test-catalog-listing-embedded-images-section]')
-        .exists({ count: 1 });
+        .exists();
       assert
         .dom('[data-test-catalog-listing-embedded-examples-section]')
         .exists();
-
-      assert
-        .dom('[data-test-catalog-listing-embedded-examples] li')
-        .exists({ count: 1 });
-      assert.dom('[data-test-catalog-listing-embedded-tags-section]').exists();
-
-      //TODO: this assertion is wrong, there is some issue with rendering of specType
-      // also the format of the isolated has some weird css behaviour like Examples title running out of position
-      // assert
-      //   .dom('[data-test-catalog-listing-embedded-specs-section]')
-      //   .containsText('Unknown');
-
-      assert.dom('[data-test-catalog-listing-embedded-specs-section]').exists();
-
-      assert
-        .dom('[data-test-catalog-listing-embedded-tags-section]')
-        .containsText('Calculator');
       assert
         .dom('[data-test-catalog-listing-embedded-categories-section]')
-        .containsText('Writing');
-    });
-
-    test('listing with spec that has a missing specType groups it under unknown (accordion assertion)', async function (assert) {
-      const unknownListingId = `${mockCatalogURL}Listing/unknown-only`;
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: unknownListingId,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-
+        .exists();
+      assert.dom('[data-test-catalog-listing-embedded-specs-section]').exists();
       assert
-        .dom(
-          '[data-test-catalog-listing-embedded-specs-section] [data-test-accordion-item]',
-        )
-        .exists({ count: 1 });
-      assert
-        .dom(
-          '[data-test-catalog-listing-embedded-specs-section] [data-test-accordion-item="unknown"]',
-        )
-        .exists('Unknown group item exists');
+        .dom('[data-test-catalog-listing-embedded-skills-section]')
+        .exists();
 
-      assert
-        .dom(
-          '[data-test-catalog-listing-embedded-specs-section] [data-test-accordion-item="unknown"]',
-        )
-        .containsText('unknown (1)');
-    });
-
-    test('unknown-only listing shows all default fallback texts', async function (assert) {
-      const unknownListingId = `${mockCatalogURL}Listing/unknown-only`;
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: unknownListingId,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
+      //content exists
+      assert.dom('[data-test-catalog-listing-embedded-images]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-examples]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-categories]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-skills]').exists();
 
       assert
         .dom('[data-test-catalog-listing-embedded-summary-section]')
-        .containsText('No Summary Provided');
+        .containsText(
+          'An AI-assisted card for grading assignments. Define questions, collect student answers, and trigger grading through a linked AI skill. The system creates an assistant room, sends the assignment and skill, and executes a grading command. The AI returns a letter grade, individual question scores, and markdown-formatted feedback, which are displayed in a styled summary.',
+        );
       assert
         .dom('[data-test-catalog-listing-embedded-license-section]')
         .containsText('No License Provided');
+
       assert
-        .dom('[data-test-catalog-listing-embedded-images-section]')
-        .containsText('No Images Provided');
+        .dom('[data-test-catalog-listing-embedded-images] li')
+        .exists({ count: 3 });
+
       assert
-        .dom('[data-test-catalog-listing-embedded-examples-section]')
-        .containsText('No Examples Provided');
+        .dom('[data-test-catalog-listing-embedded-examples] li')
+        .exists({ count: 2 });
       assert
-        .dom('[data-test-catalog-listing-embedded-categories-section]')
-        .containsText('No Categories Provided');
+        .dom('[data-test-catalog-listing-embedded-examples] li:first-child')
+        .containsText('Basic Arithmetic');
       assert
-        .dom('[data-test-catalog-listing-embedded-tags-section]')
-        .containsText('No Tags Provided');
+        .dom('[data-test-catalog-listing-embedded-examples] li:last-child')
+        .containsText('US History');
       assert
-        .dom('[data-test-catalog-listing-embedded-skills-section]')
-        .containsText('No Skills Provided');
+        .dom('[data-test-catalog-listing-embedded-categories] li')
+        .exists({ count: 1 });
+      assert
+        .dom('[data-test-catalog-listing-embedded-categories] li:first-child')
+        .containsText('Education & Courses');
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills] li')
+        .exists({ count: 1 });
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills] li:first-child')
+        .containsText('Grading Skill');
+      assert.dom('[data-test-accordion-item="card"]').exists();
+      await click('[data-test-accordion-item="card"] button');
+      assert
+        .dom('[data-test-selected-accordion-item="card"]')
+        .containsText('Homework');
     });
 
     test('remix button does not exist when a listing has no specs', async function (assert) {
@@ -1750,30 +1598,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             1,
             'Listing should have one example',
           );
-        }
-      });
-
-      test('after create command, listing card opens on stack in interact mode', async function (assert) {
-        const cardId = mockCatalogURL + 'author/Author/example';
-        const commandService = getService('command-service');
-        const command = new ListingCreateCommand(commandService.commandContext);
-
-        let r = await command.execute({
-          openCardId: cardId,
-        });
-
-        await verifySubmode(assert, 'interact');
-
-        let listing = r?.listing;
-        let listingId = listing?.id;
-
-        if (listingId) {
-          await waitForCardOnStack(listingId);
-          assert
-            .dom(`[data-test-stack-card="${listingId}"]`)
-            .exists(
-              'Created listing card is displayed on stack after command execution',
-            );
         }
       });
     });

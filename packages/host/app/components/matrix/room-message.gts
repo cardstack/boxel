@@ -149,7 +149,6 @@ export default class RoomMessage extends Component<Signature> {
         @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
-        {{! @glint-ignore }}
         @profileAvatar={{component
           Avatar
           isReady=true
