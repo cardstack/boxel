@@ -269,7 +269,7 @@ module('Integration | commands | summarize-session', function (hooks) {
       assert.ok(error instanceof Error, 'Error should be an Error instance');
       const errorMessage = (error as Error).message;
       assert.true(
-        errorMessage.includes('OpenRouter API error'),
+        errorMessage.includes('Failed to generate summary'),
         'Error message should indicate API failure',
       );
     }
