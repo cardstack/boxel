@@ -70,7 +70,6 @@ const NewFileButton: TemplateOnlyComponent<Signature> = <template>
       padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
       justify-content: flex-start;
       gap: var(--boxel-sp-xxs);
-      flex-shrink: 0;
     }
     .new-file-dropdown-trigger:focus:not(:disabled) {
       outline-offset: 1px;

@@ -55,8 +55,7 @@ class ListingTypeGuessser {
 }
 
 export default class ListingCreateCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ListingCreateInput,
-  typeof BaseCommandModule.ListingCreateResult
+  typeof BaseCommandModule.ListingCreateInput
 > {
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
@@ -121,7 +120,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   protected async run(
     input: BaseCommandModule.ListingCreateInput,
-  ): Promise<BaseCommandModule.ListingCreateResult> {
+  ): Promise<undefined> {
     const cardAPI = await this.loadCardAPI();
 
     let { openCardId, targetRealm: targetRealmFromInput } = input;
@@ -213,13 +212,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const listing = await this.store.add(listingDoc, {
       realm: targetRealm,
     });
-    if (!listing.id) {
-      throw new Error('Failed to create listing card');
-    }
-    await this.operatorModeStateService.openCardInInteractMode(listing.id);
 
     await new UseAiAssistantCommand(this.commandContext).execute({
-      prompt: `Update information for the listing, find the possible category and tags for the listing based in catalog-realm and update the listing card ${listing.id}`,
+      prompt: `Update information for the listing and redirect to the listing, find the possible category and tags for the listing based in catalog-realm`,
       roomId: 'new',
       openRoom: true,
       llmModel: 'anthropic/claude-sonnet-4',
@@ -231,10 +226,5 @@ export default class ListingCreateCommand extends HostBaseCommand<
         skillCardURL('catalog-listing'),
       ],
     });
-
-    let commandModule = await this.loadCommandModule();
-    const { ListingCreateResult } = commandModule;
-
-    return new ListingCreateResult({ listing });
   }
 }
