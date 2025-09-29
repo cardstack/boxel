@@ -9,7 +9,6 @@ import {
   CodeRef,
   identifyCard,
   internalKeyFor,
-  type SingleCardDocument,
   type PrerenderMeta,
 } from '@cardstack/runtime-common';
 
@@ -26,19 +25,11 @@ export default class RenderRoute extends Route<Model> {
 
   async model() {
     let api = await this.cardService.getAPI();
-    let parentModel = this.modelFor('render') as ParentModel;
-    let instance: CardDef;
-    if (!parentModel) {
-      // this is to support in-browser rendering, where we actually don't have the
-      // ability to lookup the parent route using RouterService.recognizeAndLoad()
-      instance = (globalThis as any).__renderInstance;
-    } else {
-      instance = parentModel.instance;
-    }
+    let { instance } = this.modelFor('render') as ParentModel;
 
     let serialized = api.serializeCard(instance, {
       includeComputeds: true,
-    }) as SingleCardDocument;
+    });
 
     let Klass = getClass(instance);
 
