@@ -99,7 +99,10 @@ export class ServerState {
       { origin_server_ts: timestamp, state_key: sender },
     );
 
-    if (!roomId.includes('test-session-room-realm')) {
+    if (
+      !roomId.includes('test-session-room-realm') &&
+      roomId !== 'test-auth-realm-server-session-room'
+    ) {
       this.addRoomEvent(
         sender,
         {

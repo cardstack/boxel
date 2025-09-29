@@ -91,6 +91,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     directRooms: [
       getRoomIdForRealmAndUser(testRealmURL, '@testuser:localhost'),
       getRoomIdForRealmAndUser(baseRealm.url, '@testuser:localhost'),
+      'test-auth-realm-server-session-room',
     ],
   });
 
