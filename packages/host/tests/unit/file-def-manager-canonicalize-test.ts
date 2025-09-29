@@ -1,30 +1,11 @@
 import { module, test } from 'qunit';
 
+import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
+
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 
 module('Unit | file-def-manager canonicalize', function () {
   test('canonicalizeMatrixMediaKey normalizes various Matrix URLs to mxc://host/id', function (assert) {
-    let fakeClient: any = {
-      getAccessToken() {
-        return 'fake-token';
-      },
-      uploadContent() {
-        return Promise.resolve({ content_uri: 'mxc://localhost/FAKE' });
-      },
-      mxcUrlToHttp(mxc: string) {
-        return `http://localhost/_matrix/media/v3/download/localhost/${mxc.split('/').pop()}`;
-      },
-    };
-
-    // minimal constructor args
-    const dummyApi = {} as any;
-    let manager = new FileDefManagerImpl({
-      owner: null as unknown as any,
-      client: fakeClient,
-      getCardAPI: () => dummyApi,
-      getFileAPI: () => dummyApi,
-    }) as any;
-
     let cases = [
       {
         in: 'mxc://localhost/abc123',
@@ -45,7 +26,7 @@ module('Unit | file-def-manager canonicalize', function () {
     ];
 
     for (let c of cases) {
-      let got = manager.canonicalizeMatrixMediaKey(c.in);
+      let got = canonicalizeMatrixMediaKey(c.in);
       assert.strictEqual(got, c.out, `canonicalized ${c.in} => ${got}`);
     }
   });
