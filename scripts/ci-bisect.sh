@@ -34,6 +34,9 @@ OVERLAY_ENABLE=${BISect_COPY_CI:-0}
 OVERLAY_PATH=${BISect_CI_PATH:-.github/workflows/ci.yaml}
 OVERLAY_SCRIPT_PATH=${BISect_SCRIPT_PATH:-scripts/ci-bisect.sh}
 
+# Allow multiple overlay paths (space-separated) via BISect_CI_PATHS; falls back to single OVERLAY_PATH
+OVERLAY_PATHS=${BISect_CI_PATHS:-$OVERLAY_PATH}
+
 # Derive default STORE locations from the PATHs under .git/ci-bisect/<PATH>,
 # while allowing explicit overrides via BISect_CI_STORE and BISect_SCRIPT_STORE.
 derive_store_path() {
@@ -43,9 +46,8 @@ derive_store_path() {
   echo ".git/ci-bisect/$p"
 }
 
-DEFAULT_OVERLAY_STORE=$(derive_store_path "$OVERLAY_PATH")
 DEFAULT_OVERLAY_SCRIPT_STORE=$(derive_store_path "$OVERLAY_SCRIPT_PATH")
-OVERLAY_STORE=${BISect_CI_STORE:-$DEFAULT_OVERLAY_STORE}
+# For multiple overlay paths, stores are derived per path, so no single OVERLAY_STORE is used.
 OVERLAY_SCRIPT_STORE=${BISect_SCRIPT_STORE:-$DEFAULT_OVERLAY_SCRIPT_STORE}
 
 ensure_clean() {
@@ -60,17 +62,24 @@ ensure_clean() {
 }
 
 overlay_capture() {
-  # Capture the current workflow and script content into .git for reuse on every step
+  # Capture the current workflow(s) and script content into .git for reuse on every step
   if [[ "$OVERLAY_ENABLE" != "1" ]]; then
     return 0
   fi
-  mkdir -p "$(dirname "$OVERLAY_STORE")"
-  if [[ -f "$OVERLAY_PATH" ]]; then
-    cp "$REPO_ROOT/$OVERLAY_PATH" "$OVERLAY_STORE" 2>/dev/null || cp "$OVERLAY_PATH" "$OVERLAY_STORE" 2>/dev/null || true
-    echo "Captured overlay from $OVERLAY_PATH -> $OVERLAY_STORE"
-  else
-    echo "Warning: BISect_COPY_CI=1 but $OVERLAY_PATH not found; skipping workflow capture" >&2
-  fi
+  for p in $OVERLAY_PATHS; do
+    local store
+    store=$(derive_store_path "$p")
+    mkdir -p "$(dirname "$store")"
+    if [[ -f "$REPO_ROOT/$p" ]]; then
+      cp "$REPO_ROOT/$p" "$store"
+      echo "Captured overlay from $p -> $store"
+    elif [[ -f "$p" ]]; then
+      cp "$p" "$store"
+      echo "Captured overlay from $p -> $store"
+    else
+      echo "Warning: BISect_COPY_CI=1 but $p not found; skipping" >&2
+    fi
+  done
   # Capture the current script as well so subsequent steps include it
   mkdir -p "$(dirname "$OVERLAY_SCRIPT_STORE")"
   if [[ -f "$REPO_ROOT/$OVERLAY_SCRIPT_PATH" ]]; then
@@ -87,13 +96,17 @@ overlay_capture() {
 overlay_apply_if_present() {
   # Apply stored overlay(s) to working tree before committing marker
   local applied=0
-  if [[ -f "$OVERLAY_STORE" ]]; then
-    mkdir -p "$(dirname "$OVERLAY_PATH")"
-    cp "$OVERLAY_STORE" "$OVERLAY_PATH"
-    git add "$OVERLAY_PATH"
-    echo "Applied overlay to $OVERLAY_PATH"
-    applied=1
-  fi
+  for p in $OVERLAY_PATHS; do
+    local store
+    store=$(derive_store_path "$p")
+    if [[ -f "$store" ]]; then
+      mkdir -p "$(dirname "$p")"
+      cp "$store" "$p"
+      git add "$p"
+      echo "Applied overlay to $p"
+      applied=1
+    fi
+  done
   if [[ -f "$OVERLAY_SCRIPT_STORE" ]]; then
     mkdir -p "$(dirname "$OVERLAY_SCRIPT_PATH")"
     cp "$OVERLAY_SCRIPT_STORE" "$OVERLAY_SCRIPT_PATH"
@@ -258,7 +271,8 @@ ci-bisect.sh help
 
 Notes:
   - When BISect_COPY_CI=1, the workflow file and this script are overlaid into
-    each tested revision before pushing, to force full CI runs.
+  each tested revision before pushing, to force full CI runs. You can provide
+  multiple overlay paths via BISect_CI_PATHS (space-separated).
   - Each push is a synthetic commit parented on the latest '$DEFAULT_REMOTE_HEAD'
     so GitHub treats it as new code on top of main (not "behind main").
   - Bisect step branches: "$BISect_BRANCH-<shortsha>".
@@ -268,11 +282,14 @@ Examples:
   BISect_COPY_CI=1 ./scripts/ci-bisect.sh start <good-sha> [bad-ref]
   ./scripts/ci-bisect.sh step good   # or bad/skip
   BISect_COPY_CI=1 ./scripts/ci-bisect.sh test <sha>
+  BISect_COPY_CI=1 BISect_CI_PATHS=".github/workflows/ci.yaml packages/host/scripts/test-wait-for-servers.sh" \
+    ./scripts/ci-bisect.sh start <good-sha>
 Environment:
   BISect_BRANCH (default: ci-bisect)
   BISect_REMOTE (default: origin)
   BISect_COPY_CI=1 to enable overlay of workflow and script
   BISect_CI_PATH (default: .github/workflows/ci.yaml)
+  BISect_CI_PATHS (optional, space-separated list; overrides BISect_CI_PATH)
   BISect_CI_STORE (default: derived from path => .git/ci-bisect/<C I PATH>)
   BISect_SCRIPT_PATH (default: scripts/ci-bisect.sh)
   BISect_SCRIPT_STORE (default: derived from path => .git/ci-bisect/<SCRIPT PATH>)
