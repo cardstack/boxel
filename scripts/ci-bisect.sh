@@ -123,15 +123,30 @@ make_marker_commit() {
 }
 
 push_current() {
-  # Ensure we push a new commit so GH treats it as new work
+  # Create a marker commit (may include overlay files), then produce a synthetic
+  # commit whose parent is the latest $DEFAULT_REMOTE_HEAD (e.g., origin/main)
+  # so that from GitHub's perspective this appears as a fresh update on top of main.
   make_marker_commit
-  local push_sha branch_head tested
-  push_sha=$(git rev-parse --short=12 HEAD)
+
+  # Ensure we have up-to-date remote refs
+  git fetch --no-tags --prune "$REMOTE" >/dev/null 2>&1 || true
+
+  local tested tested_short parent_ref parent_sha tree new_commit branch_dyn
   tested=$(tested_sha)
-  echo "Pushing $push_sha (tests for $tested) -> $REMOTE/$BRANCH_NAME"
-  git push -f "$REMOTE" HEAD:"refs/heads/$BRANCH_NAME"
-  echo "Pushed. Branch head commit: $REPO_URL_BASE/commit/$(git rev-parse HEAD)"
-  echo "Branch checks: $REPO_URL_BASE/actions?query=branch%3A$BRANCH_NAME"
+  tested_short=$(git rev-parse --short=12 "$tested")
+  parent_ref="refs/remotes/$REMOTE/$DEFAULT_REMOTE_HEAD"
+  parent_sha=$(git rev-parse "$parent_ref")
+  tree=$(git rev-parse HEAD^{tree})
+
+  # Create a synthetic commit: same tree as marker commit, parented to origin/main
+  new_commit=$(GIT_AUTHOR_DATE="$(date -u)" GIT_COMMITTER_DATE="$(date -u)" \
+    git commit-tree "$tree" -p "$parent_sha" -m "ci-bisect: test $tested [rebased-on-$DEFAULT_REMOTE_HEAD]")
+
+  branch_dyn="$BRANCH_NAME-$tested_short"
+  echo "Pushing $new_commit (tree from tested $tested_short on parent $DEFAULT_REMOTE_HEAD) -> $REMOTE/$branch_dyn"
+  git push -f "$REMOTE" "$new_commit":"refs/heads/$branch_dyn"
+  echo "Pushed. Branch head commit: $REPO_URL_BASE/commit/$new_commit"
+  echo "Branch checks: $REPO_URL_BASE/actions?query=branch%3A$branch_dyn"
   echo "Tested revision: $REPO_URL_BASE/commit/$tested"
 }
 
