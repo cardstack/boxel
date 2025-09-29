@@ -16,7 +16,7 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 
-import { bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
+import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 
 import {
   cardTypeDisplayName,
@@ -137,7 +137,7 @@ export default class RoomMessageCommand extends Component<Signature> {
         menuContext: 'ai-assistant',
         commandContext: this.commandService.commandContext,
       }) ?? [];
-    return menuItems;
+    return toMenuItems(menuItems);
   }
 
   @cached

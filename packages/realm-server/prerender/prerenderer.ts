@@ -1,6 +1,9 @@
 import {
   type PrerenderMeta,
   type CardErrorJSONAPI,
+  type RealmPermissions,
+  type RenderResponse,
+  type RenderError,
   uuidv4,
   logger,
   Deferred,
@@ -19,26 +22,12 @@ import {
   renderIcon,
   renderMeta,
   RenderCapture,
-  RenderError,
   withTimeout,
   transitionTo,
 } from './utils';
 
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
-
-export type PermissionsMap = {
-  [realm: string]: ('read' | 'write' | 'realm-owner')[];
-};
-
-export interface RenderResponse extends PrerenderMeta {
-  isolatedHTML: string | null;
-  atomHTML: string | null;
-  embeddedHTML: Record<string, string> | null;
-  fittedHTML: Record<string, string> | null;
-  iconHTML: string | null;
-  error?: RenderError;
-}
 
 export class Prerenderer {
   #browser: Browser | null = null;
@@ -206,7 +195,7 @@ export class Prerenderer {
     realm: string;
     url: string;
     userId: string;
-    permissions: PermissionsMap;
+    permissions: RealmPermissions;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
   }): Promise<{
     response: RenderResponse;

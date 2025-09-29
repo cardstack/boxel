@@ -34,7 +34,7 @@ import {
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
 
 import GlimmerComponent from '@glimmer/component';
@@ -1079,22 +1079,23 @@ export class Spec extends CardDef {
   @field title = contains(SpecTitleField);
   @field description = contains(SpecDescriptionField);
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItem[] {
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getCardMenuItems](params);
     if (this.specType !== 'field') {
       return menuItems;
     }
-    let sampleDataStartIndex = menuItems.findIndex((item: MenuItem) =>
-      item.tags.includes('playground-sample-data'),
+    let sampleDataStartIndex = menuItems.findIndex((item: MenuItemOptions) =>
+      item.tags?.includes('playground-sample-data'),
     );
-    let sampleDataItemCount = menuItems.filter((item: MenuItem) =>
-      item.tags.includes('playground-sample-data'),
+    let sampleDataItemCount = menuItems.filter((item: MenuItemOptions) =>
+      item.tags?.includes('playground-sample-data'),
     ).length;
     menuItems.splice(
       sampleDataStartIndex,
       sampleDataItemCount,
       ...[
-        new MenuItem(`Fill in sample data with AI`, 'action', {
+        {
+          label: 'Fill in sample data with AI',
           action: async () => {
             await new PopulateFieldSpecExampleCommand(
               params.commandContext,
@@ -1104,28 +1105,25 @@ export class Spec extends CardDef {
           },
           icon: AiBwIcon,
           tags: ['playground-sample-data'],
-        }),
-        new MenuItem(
-          `Generate ${GENERATED_EXAMPLE_COUNT} examples with AI`,
-          'action',
-          {
-            action: async () => {
-              await new GenerateExamplesForFieldSpecCommand(
-                params.commandContext,
-              ).execute({
-                count: GENERATED_EXAMPLE_COUNT,
-                codeRef: codeRefWithAbsoluteURL(
-                  this.ref,
-                  new URL(this.id),
-                ) as ResolvedCodeRef,
-                realm: this[realmURL]?.href,
-                exampleCard: this,
-              });
-            },
-            icon: AiBwIcon,
-            tags: ['playground-sample-data'],
+        },
+        {
+          label: `Generate ${GENERATED_EXAMPLE_COUNT} examples with AI`,
+          action: async () => {
+            await new GenerateExamplesForFieldSpecCommand(
+              params.commandContext,
+            ).execute({
+              count: GENERATED_EXAMPLE_COUNT,
+              codeRef: codeRefWithAbsoluteURL(
+                this.ref,
+                new URL(this.id),
+              ) as ResolvedCodeRef,
+              realm: this[realmURL]?.href,
+              exampleCard: this,
+            });
           },
-        ),
+          icon: AiBwIcon,
+          tags: ['playground-sample-data'],
+        },
       ],
     );
     return menuItems;
