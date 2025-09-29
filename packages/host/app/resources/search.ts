@@ -22,7 +22,7 @@ import {
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 

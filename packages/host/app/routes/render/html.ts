@@ -1,6 +1,4 @@
 import Route from '@ember/routing/route';
-import RouterService from '@ember/routing/router-service';
-import { service } from '@ember/service';
 
 import { isValidFormat } from '@cardstack/runtime-common';
 
@@ -21,8 +19,6 @@ export interface Model {
 }
 
 export default class RenderRoute extends Route<Model> {
-  @service declare router: RouterService;
-
   async model({
     format,
     ancestor_level,
@@ -30,16 +26,7 @@ export default class RenderRoute extends Route<Model> {
     format: string;
     ancestor_level: string;
   }) {
-    let parentModel = this.modelFor('render') as ParentModel;
-    let instance: CardDef;
-    if (!parentModel) {
-      // this is to support in-browser rendering, where we actually don't have the
-      // ability to lookup the parent route using RouterService.recognizeAndLoad()
-      instance = (globalThis as any).__renderInstance;
-    } else {
-      instance = parentModel.instance;
-    }
-
+    let { instance } = this.modelFor('render') as ParentModel;
     if (!isValidFormat(format)) {
       throw new Error('todo: invalid format');
     }
