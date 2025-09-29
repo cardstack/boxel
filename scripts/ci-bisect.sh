@@ -12,8 +12,9 @@ set -euo pipefail
 #
 # Branches: base name 'ci-bisect' (config via $BISect_BRANCH); each step pushes to 'ci-bisect-<shortsha>'.
 # Overlay: enable with BISect_COPY_CI=1; copies specified files (and this script) into each tested revision.
-# Merges-only: default OFF. Use --merges-only to consider only commits with subject
-# starting "Merge pull request". This setting persists across runs (sticky).
+# Merges-only: default OFF. Use --merges-only to consider only PR-related commits
+# (classic GitHub merges and squashed PR merges via offline heuristics). This
+# setting persists across runs (sticky).
 #
 # Implementation detail:
 # - For every tested revision, we create an empty commit with message
@@ -29,6 +30,8 @@ REPO_URL_BASE=$(git remote get-url "$REMOTE" | sed -E 's#^git@github.com:#https:
 REPO_ROOT=$(git rev-parse --show-toplevel)
 CI_BISECT_DIR=.git/ci-bisect
 OPTIONS_FILE=$CI_BISECT_DIR/options
+OWNER=$(echo "$REPO_URL_BASE" | awk -F/ '{print $(NF-1)}')
+REPO=$(echo "$REPO_URL_BASE" | awk -F/ '{print $NF}')
 
 # Optional: overlay workflow and this script into each tested revision so CI always runs as intended.
 # Enable by setting BISect_COPY_CI=1. Paths can be customized below.
@@ -52,14 +55,28 @@ DEFAULT_OVERLAY_SCRIPT_STORE=$(derive_store_path "$OVERLAY_SCRIPT_PATH")
 # For multiple overlay paths, stores are derived per path, so no single OVERLAY_STORE is used.
 OVERLAY_SCRIPT_STORE=${BISect_SCRIPT_STORE:-$DEFAULT_OVERLAY_SCRIPT_STORE}
 
-# Option: Only evaluate PR merge commits (subject starts with 'Merge pull request')
+# Option: Only evaluate PR-related commits (classic GH merge or squashed PR merge)
 PR_MERGES_ONLY=${BISect_PR_MERGES_ONLY:-0}
 
 is_pr_merge_commit() {
   local sha=${1:-HEAD}
-  local subj
+  local subj parents nparents
   subj=$(git show -s --format=%s "$sha" 2>/dev/null || true)
-  [[ "$subj" == Merge\ pull\ request* ]]
+  parents=$(git show -s --format=%P "$sha" 2>/dev/null || true)
+  if [[ -n "$parents" ]]; then
+    nparents=$(wc -w <<<"$parents")
+  else
+    nparents=0
+  fi
+  # Heuristic 1: true GH merge commit (2+ parents + standard subject)
+  if [[ $nparents -ge 2 && "$subj" == Merge\ pull\ request\ * ]]; then
+    return 0
+  fi
+  # Heuristic 2: squashed PR merge (single parent, subject ends with "(#<number>)")
+  if [[ $nparents -eq 1 && "$subj" =~ \(#([0-9]+)\)$ ]]; then
+    return 0
+  fi
+  return 1
 }
 
 # Persisted options handling
@@ -77,6 +94,9 @@ save_options() {
     echo "PR_MERGES_ONLY=${PR_MERGES_ONLY}"
   } > "$OPTIONS_FILE"
 }
+
+# Optional: use GitHub CLI to detect PR association (covers rebase merges)
+USE_GH=${BISect_USE_GH:-0}
 
 ensure_clean() {
   if ! git diff --quiet; then
@@ -148,10 +168,12 @@ overlay_apply_if_present() {
   return 1
 }
 
-tested_sha() {
 # Detect whether a bisect session is currently active
 bisect_active() {
   git rev-parse -q --verify BISECT_HEAD >/dev/null 2>&1
+}
+
+tested_sha() {
   # If HEAD is a marker commit, extract just the tested SHA from its subject.
   local subj rem first
   subj=$(git show -s --format=%s HEAD 2>/dev/null || true)
@@ -232,6 +254,13 @@ cmd_start() {
     push_current
   else
     echo "Bisect ended (no candidates). Not pushing; run 'status' or 'classify-skipped' if needed."
+    # Decorate with classification of skipped commits, if any
+    if git rev-parse -q --verify BISECT_HEAD >/dev/null 2>&1; then
+      : # still active, nothing to do
+    else
+      # We can still read the bisect log here
+      cmd_classify_skipped || true
+    fi
   fi
 }
 
@@ -270,7 +299,10 @@ cmd_step() {
     if bisect_active; then
       push_current
     else
-      echo "Bisect ended (likely only skipped commits left). Auto-aborting to restore state."
+      echo "Bisect ended (likely only skipped commits left)." 
+      # Decorate with classification before aborting, while log is available
+      cmd_classify_skipped || true
+      echo "Auto-aborting to restore state."
       git bisect reset || true
     fi
   fi
@@ -288,6 +320,62 @@ cmd_abort() {
   git bisect reset || true
 }
 
+# Classify a commit's PR provenance with offline heuristics and optional gh lookup
+classify_commit() {
+  local sha=${1:-HEAD}
+  local subj parents nparents pr_nums="" kind="none"
+  subj=$(git show -s --format=%s "$sha" 2>/dev/null || true)
+  parents=$(git show -s --format=%P "$sha" 2>/dev/null || true)
+  if [[ -n "$parents" ]]; then
+    nparents=$(wc -w <<<"$parents")
+  else
+    nparents=0
+  fi
+  if [[ $nparents -ge 2 && "$subj" == Merge\ pull\ request\ * ]]; then
+    kind="classic-merge"
+    if [[ "$subj" =~ \#([0-9]+) ]]; then pr_nums=${BASH_REMATCH[1]}; fi
+  elif [[ $nparents -eq 1 && "$subj" =~ \(#([0-9]+)\)$ ]]; then
+    kind="squash-merge"; pr_nums=${BASH_REMATCH[1]}
+  elif [[ "$USE_GH" == "1" ]] && command -v gh >/dev/null 2>&1; then
+    pr_nums=$(gh api "repos/${OWNER}/${REPO}/commits/${sha}/pulls" --jq '.[].number' 2>/dev/null | paste -sd, -)
+    if [[ -n "$pr_nums" ]]; then kind="gh-associated"; fi
+  fi
+  local short
+  short=$(git rev-parse --short=12 "$sha" 2>/dev/null || echo "$sha")
+  if [[ -n "$pr_nums" ]]; then
+    echo "$short  $kind (PR #$pr_nums)"
+  else
+    if [[ "$kind" == "none" ]]; then
+      echo "$short"
+    else
+      echo "$short  $kind"
+    fi
+  fi
+}
+
+cmd_classify() {
+  if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 classify <sha...>" >&2; return 2
+  fi
+  for s in "$@"; do
+    classify_commit "$s"
+  done
+}
+
+cmd_classify_skipped() {
+  local skipped
+  # Avoid pipefail abort if 'git bisect log' fails (no session). Capture then process.
+  local bisect_log
+  bisect_log=$(git bisect log 2>/dev/null || true)
+  skipped=$(printf "%s\n" "$bisect_log" | awk '/git bisect skip/ {print $NF}' | sort -u)
+  if [[ -z "$skipped" ]]; then
+    echo "No skipped commits found in bisect log."; return 0
+  fi
+  echo "Classifying skipped commits (USE_GH=$USE_GH):"
+  # shellcheck disable=SC2086
+  cmd_classify $skipped
+}
+
 load_options
 
 # Parse global flags before subcommand
@@ -298,7 +386,7 @@ while [[ $# -gt 0 ]]; do
     --no-merges-only)
       PR_MERGES_ONLY=0; shift ;;
     --) shift; break ;;
-    start|step|status|abort|refresh-overlay|test)
+  start|step|status|abort|refresh-overlay|test|classify|classify-skipped)
       break ;;
     *) break ;;
   esac
@@ -312,6 +400,8 @@ case "${1:-}" in
   status) shift; cmd_status "$@";;
   abort) shift; cmd_abort "$@";;
   refresh-overlay) shift; overlay_capture; echo "Overlay refreshed.";;
+  classify) shift; cmd_classify "$@";;
+  classify-skipped) shift; cmd_classify_skipped;;
   test)
     shift
     # Test an arbitrary commit/ref by generating a synthetic commit on top of main and pushing it
@@ -371,6 +461,8 @@ Examples:
   BISect_COPY_CI=1 BISect_CI_PATHS=".github/workflows/ci.yaml packages/host/scripts/test-wait-for-servers.sh" \
     ./scripts/ci-bisect.sh start <good-sha>
   ./scripts/ci-bisect.sh --merges-only start <good-sha>
+  ./scripts/ci-bisect.sh classify-skipped   # classify skipped commits at the end
+  ./scripts/ci-bisect.sh classify <sha...>  # classify specific commits
 Environment:
   BISect_BRANCH (default: ci-bisect)
   BISect_REMOTE (default: origin)
@@ -382,6 +474,7 @@ Environment:
   BISect_SCRIPT_STORE (default: derived from path => .git/ci-bisect/<SCRIPT PATH>)
   BISect_TEST_BRANCH_PREFIX (default: ci-test)
   BISect_PR_MERGES_ONLY=1 to test only commits with subject starting "Merge pull request"
+  BISect_USE_GH=1 to consult gh for PR association (covers rebase merges)
 Flags:
   --merges-only / --no-merges-only  Toggle PR merges only mode (persists in .git/ci-bisect/options)
 Defaults:
