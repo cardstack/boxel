@@ -2,14 +2,14 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import { Server, createServer } from 'http';
 import * as Sentry from '@sentry/node';
-import { logger, type RealmPermissions } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
   fullRequestURL,
   livenessCheck,
   fetchRequestFromContext,
 } from '../middleware';
-import { Prerenderer } from './index';
+import { Prerenderer, type PermissionsMap } from './index';
 
 let log = logger('prerender-server');
 
@@ -52,7 +52,7 @@ export function buildPrerenderApp(secretSeed: string): {
       let attrs = body?.data?.attributes ?? {};
       let url = attrs.url as string | undefined;
       let userId = attrs.userId as string | undefined;
-      let permissions = attrs.permissions as RealmPermissions | undefined;
+      let permissions = attrs.permissions as PermissionsMap | undefined;
       let realm = attrs.realm as string | undefined;
 
       if (
