@@ -289,7 +289,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       <hr class='divider' />
 
-      <div class='two-col'>
+      <section class='two-col'>
         <section
           class='app-listing-categories'
           data-test-catalog-listing-embedded-categories-section
@@ -312,7 +312,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             <p class='no-data-text'>No Tags Provided</p>
           {{/if}}
         </section>
-      </div>
+      </section>
 
       <hr class='divider' />
       <section
