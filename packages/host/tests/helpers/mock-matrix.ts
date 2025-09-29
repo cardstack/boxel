@@ -73,11 +73,6 @@ export function setupMockMatrix(
       );
 
       let { createAndJoinRoom, getRoomIds } = mockUtils;
-      createAndJoinRoom({
-        sender: loggedInAs,
-        name: 'test-auth-realm-server-session-room',
-        id: 'test-auth-realm-server-session-room',
-      });
 
       if (opts.activeRealms) {
         for (let realmURL of opts.activeRealms) {
@@ -95,6 +90,12 @@ export function setupMockMatrix(
           }
         }
       }
+
+      createAndJoinRoom({
+        sender: loggedInAs,
+        name: 'test-auth-realm-server-session-room',
+        id: 'test-auth-realm-server-session-room',
+      });
     }
 
     this.owner.register(
