@@ -149,6 +149,9 @@ overlay_apply_if_present() {
 }
 
 tested_sha() {
+# Detect whether a bisect session is currently active
+bisect_active() {
+  git rev-parse -q --verify BISECT_HEAD >/dev/null 2>&1
   # If HEAD is a marker commit, extract just the tested SHA from its subject.
   local subj rem first
   subj=$(git show -s --format=%s HEAD 2>/dev/null || true)
@@ -225,7 +228,11 @@ cmd_start() {
       git rev-parse -q --verify HEAD >/dev/null || break
     done
   fi
-  push_current
+  if bisect_active; then
+    push_current
+  else
+    echo "Bisect ended (no candidates). Not pushing; run 'status' or 'classify-skipped' if needed."
+  fi
 }
 
 cmd_step() {
@@ -260,7 +267,12 @@ cmd_step() {
         git bisect skip
       done
     fi
-    push_current
+    if bisect_active; then
+      push_current
+    else
+      echo "Bisect ended (likely only skipped commits left). Auto-aborting to restore state."
+      git bisect reset || true
+    fi
   fi
 }
 
