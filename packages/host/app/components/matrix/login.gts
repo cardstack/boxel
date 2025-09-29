@@ -213,7 +213,6 @@ export default class Login extends Component<Signature> {
       await this.matrixService.start({
         auth,
         refreshRoutes: true,
-        loginToAllAccessibleRealmsInBulk: true,
       });
     } else {
       throw new Error(

@@ -482,10 +482,9 @@ export default class MatrixService extends Service {
     opts: {
       auth?: MatrixSDK.LoginResponse;
       refreshRoutes?: true;
-      loginToAllAccessibleRealmsInBulk?: boolean;
     } = {},
   ) {
-    let { auth, refreshRoutes, loginToAllAccessibleRealmsInBulk } = opts;
+    let { auth, refreshRoutes } = opts;
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {

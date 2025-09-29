@@ -6,11 +6,12 @@ import RealmService from '@cardstack/host/services/realm';
 
 import type { RealmEvent } from 'https://cardstack.com/base/matrix-event';
 
+import { setupAuthEndpoints } from '../';
+
 import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import { setupAuthEndpoints } from '../';
 
 type IEvent = MatrixSDK.IEvent;
 
