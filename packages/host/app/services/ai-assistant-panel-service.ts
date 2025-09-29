@@ -529,9 +529,7 @@ export default class AiAssistantPanelService extends Service {
                 clearInterval(interval);
                 resolve();
               }
-              // cast here is because @types/node is polluting our definition of
-              // setInterval on the browser.
-            }, 250) as unknown as number;
+            }, 250);
           }),
         ]);
       }

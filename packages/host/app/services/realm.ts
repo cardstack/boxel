@@ -402,8 +402,9 @@ class RealmResource {
         let lastPublishedAt = results.reduce(
           (acc, result) => {
             if (result.status === 'fulfilled' && result.value) {
-              acc[result.value.data.attributes.publishedRealmURL] =
-                result.value.data.attributes.lastPublishedAt;
+              acc[result.value.data.attributes.publishedRealmURL] = Number(
+                result.value.data.attributes.lastPublishedAt,
+              );
             }
             return acc;
           },

@@ -21,13 +21,10 @@ import {
   type ResponseWithNodeStream,
   type RealmInfo,
   type LintArgs,
-  type Prerenderer,
-  type RealmPermissions,
   systemInitiatedPriority,
   QueuePublisher,
   DBAdapter,
   fetchAllRealmsWithOwners,
-  fetchUserPermissions,
 } from '.';
 import { MatrixClient } from './matrix-client';
 import { lintFix } from './lint';
@@ -72,18 +69,22 @@ export interface FullReindexArgs {
 }
 
 export type RunnerRegistration = (
-  fromScratch: (args: FromScratchArgsWithPermissions) => Promise<IndexResults>,
-  incremental: (args: IncrementalArgsWithPermissions) => Promise<IndexResults>,
+  fromScratch: (realmURL: URL) => Promise<IndexResults>,
+  incremental: (
+    urls: URL[],
+    realmURL: URL,
+    operation: 'update' | 'delete',
+    ignoreData: Record<string, string>,
+  ) => Promise<IndexResults>,
 ) => Promise<void>;
 
 export interface RunnerOpts {
   _fetch: typeof fetch;
   reader: Reader;
-  prerenderer: Prerenderer;
   registerRunner: RunnerRegistration;
   indexWriter: IndexWriter;
   jobInfo?: JobInfo;
-  reportStatus?(args: StatusArgs): void;
+  reportStatus?: (args: StatusArgs) => void;
 }
 
 export interface WorkerArgs extends JSONTypes.Object {
@@ -97,10 +98,6 @@ export interface IncrementalArgs extends WorkerArgs {
   ignoreData: Record<string, string>;
 }
 
-export type IncrementalArgsWithPermissions = IncrementalArgs & {
-  permissions: RealmPermissions;
-};
-
 export interface IncrementalResult {
   invalidations: string[];
   ignoreData: Record<string, string>;
@@ -108,10 +105,6 @@ export interface IncrementalResult {
 }
 
 export type FromScratchArgs = WorkerArgs;
-
-export type FromScratchArgsWithPermissions = FromScratchArgs & {
-  permissions: RealmPermissions;
-};
 
 export interface FromScratchResult extends JSONTypes.Object {
   ignoreData: Record<string, string>;
@@ -166,7 +159,6 @@ export class Worker {
   #indexWriter: IndexWriter;
   #queue: QueueRunner;
   #dbAdapter: DBAdapter;
-  #prerenderer: Prerenderer;
   #queuePublisher: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
@@ -174,12 +166,15 @@ export class Worker {
   #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
   #fromScratch:
-    | ((
-        args: FromScratchArgsWithPermissions & { boom?: true },
-      ) => Promise<IndexResults>)
+    | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
     | undefined;
   #incremental:
-    | ((args: IncrementalArgsWithPermissions) => Promise<IndexResults>)
+    | ((
+        urls: URL[],
+        realmURL: URL,
+        operation: 'update' | 'delete',
+        ignoreData: Record<string, string>,
+      ) => Promise<IndexResults>)
     | undefined;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
   #realmServerMatrixUsername;
@@ -196,7 +191,6 @@ export class Worker {
     realmServerMatrixUsername,
     secretSeed,
     reportStatus,
-    prerenderer,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -208,7 +202,6 @@ export class Worker {
     matrixURL: URL;
     realmServerMatrixUsername: string;
     secretSeed: string;
-    prerenderer: Prerenderer;
     reportStatus?: (args: StatusArgs) => void;
   }) {
     this.#queue = queue;
@@ -222,7 +215,6 @@ export class Worker {
     this.#realmServerMatrixUsername = realmServerMatrixUsername;
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
-    this.#prerenderer = prerenderer;
   }
 
   async run() {
@@ -297,10 +289,9 @@ export class Worker {
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch,
       jobInfo: args.jobInfo,
-      reader: getReader(_fetch, args.realmURL),
+      reader: getReader(_fetch, new URL(args.realmURL)),
       indexWriter: this.#indexWriter,
       reportStatus: this.#reportStatus,
-      prerenderer: this.#prerenderer,
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
         this.#incremental = incremental;
@@ -449,19 +440,9 @@ export class Worker {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
       }
-      let realmUserId = userIdFromUsername(
-        args.realmUsername,
-        this.#matrixURL.href,
+      let { ignoreData, stats } = await this.#fromScratch(
+        new URL(args.realmURL),
       );
-      let permissions = await fetchUserPermissions(
-        this.#dbAdapter,
-        realmUserId,
-      );
-      let { ignoreData, stats } = await this.#fromScratch({
-        ...args,
-        realmUsername: realmUserId, // we fashion JWT from this which needs to be full matrix userid
-        permissions,
-      });
       this.#log.debug(
         `${jobIdentity(args.jobInfo)} completed from-scratch indexing for realm ${
           args.realmURL
@@ -486,19 +467,12 @@ export class Worker {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
       }
-      let realmUserId = userIdFromUsername(
-        args.realmUsername,
-        this.#matrixURL.href,
+      let { ignoreData, stats, invalidations } = await this.#incremental(
+        args.urls.map((u) => new URL(u)),
+        new URL(args.realmURL),
+        args.operation,
+        { ...args.ignoreData },
       );
-      let permissions = await fetchUserPermissions(
-        this.#dbAdapter,
-        realmUserId,
-      );
-      let { ignoreData, stats, invalidations } = await this.#incremental({
-        ...args,
-        realmUsername: realmUserId, // we fashion JWT from this which needs to be full matrix userid
-        permissions,
-      });
       this.#log.debug(
         `${jobIdentity(args.jobInfo)} completed incremental indexing for  ${args.urls.join()}:\n${JSON.stringify(
           { ...stats, invalidations },
@@ -518,7 +492,7 @@ export class Worker {
 
 export function getReader(
   _fetch: typeof globalThis.fetch,
-  realmURL: string,
+  realmURL: URL,
 ): Reader {
   return {
     readFile: async (url: URL) => {
@@ -566,7 +540,7 @@ export function getReader(
       } else {
         created = lastModified; // Default created to lastModified if no created header is present
       }
-      let path = new RealmPaths(new URL(realmURL)).local(url);
+      let path = new RealmPaths(realmURL).local(url);
       return {
         content,
         lastModified,
@@ -580,7 +554,7 @@ export function getReader(
     },
 
     mtimes: async () => {
-      let response = await _fetch(`${realmURL}_mtimes`, {
+      let response = await _fetch(`${realmURL.href}_mtimes`, {
         headers: {
           Accept: SupportedMimeType.Mtimes,
         },

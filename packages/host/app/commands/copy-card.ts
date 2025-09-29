@@ -34,21 +34,15 @@ export default class CopyCardToRealmCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CopyCardToRealmInput,
   ): Promise<BaseCommandModule.CopyCardResult> {
-    let targetRealm =
-      input.targetRealm || this.realm.defaultWritableRealm?.path;
-    if (!targetRealm) {
-      throw new Error('No writable realm available to copy card to');
-    }
-
-    if (!this.realm.canWrite(targetRealm)) {
-      throw new Error(`Do not have write permissions to ${targetRealm}`);
+    if (!this.realm.canWrite(input.targetRealm)) {
+      throw new Error(`Do not have write permissions to ${input.targetRealm}`);
     }
     let doc = await this.cardService.serializeCard(input.sourceCard, {
       useAbsoluteURL: true,
     });
     delete doc.data.id;
     let newCardId = await this.store.create(doc, {
-      realm: targetRealm,
+      realm: input.targetRealm,
       localDir: input.localDir,
     });
     if (typeof newCardId !== 'string') {

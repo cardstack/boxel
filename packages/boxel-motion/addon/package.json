@@ -48,7 +48,7 @@
     "file-loader": "catalog:",
     "macro-decorators": "catalog:",
     "style-value-types": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "~5.1.6"
   },
   "devDependencies": {
     "@babel/core": "catalog:",
@@ -88,9 +88,9 @@
     "rollup-plugin-copy": "catalog:"
   },
   "peerDependencies": {
-    "@glint/environment-ember-loose": "catalog:",
+    "@glint/environment-ember-loose": "1.3.0",
     "ember-source": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "^5.1.6"
   },
   "engines": {
     "node": "20"
