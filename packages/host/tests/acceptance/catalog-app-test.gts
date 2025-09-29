@@ -831,7 +831,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
   }
 
-  module('catalog index', async function (hooks) {
+  module('catalog index', function (hooks) {
     hooks.beforeEach(async function () {
       await visitOperatorMode({
         stacks: [
@@ -846,7 +846,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       await waitForShowcase();
     });
 
-    module('listing fitted', async function () {
+    module('listing fitted', function () {
       test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
         await selectTab('Cards');
         await waitForGrid();
@@ -1093,9 +1093,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
-    module('navigation', async function () {
+    module('navigation', function () {
       // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
-      module('show results as per catalog tab selected', async function () {
+      module('show results as per catalog tab selected', function () {
         test('switch to showcase tab', async function (assert) {
           await selectTab('Showcase');
           await waitForShowcase();
@@ -1352,7 +1352,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
   });
 
-  module('listing isolated', async function (hooks) {
+  module('listing isolated', function (hooks) {
     hooks.beforeEach(async function () {
       await visitOperatorMode({
         stacks: [
@@ -1601,14 +1601,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
   });
 
-  module('listing commands', async function (hooks) {
+  module('listing commands', function (hooks) {
     hooks.beforeEach(async function () {
       // we always run a command inside interact mode
       await visitOperatorMode({
         stacks: [[]],
       });
     });
-    module('"build"', async function () {
+    module('"build"', function () {
       test('card listing', async function (assert) {
         await visitOperatorMode({
           stacks: [
@@ -1628,7 +1628,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .containsText('Build', 'Build button exist in listing');
       });
     });
-    module('"create"', async function () {
+    module('"create"', function () {
       test('card listing with single dependency module', async function (assert) {
         const cardId = mockCatalogURL + 'author/Author/example';
         const commandService = getService('command-service');
@@ -1797,7 +1797,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await verifyJSONWithUUIDInFolder(assert, instanceFolder);
       });
     });
-    module('"install"', async function () {
+    module('"install"', function () {
       test('card listing', async function (assert) {
         const listingName = 'author';
 
@@ -1873,7 +1873,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await verifyFileInFileTree(assert, instancePath);
       });
     });
-    module('"remix"', async function () {
+    module('"remix"', function () {
       test('card listing: installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
         const listingName = 'author';
         const listingId = `${mockCatalogURL}Listing/${listingName}`;
