@@ -8,12 +8,7 @@ import {
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import RecordGameResultCommand from '../commands/record-game-result';
-import {
-  GameResult,
-  GameStatusField,
-  PlayerOutcomeField,
-  type GameResultStatusType,
-} from '../game-result/game-result';
+import { GameResult, GameStatusField } from '../game-result/game-result';
 import { Player } from '../player/player';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -511,19 +506,6 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     }
   }
 
-  // Determine dealer outcome (opposite of player outcome)
-  determineDealerOutcome(
-    playerOutcome: GameResultStatusType,
-  ): GameResultStatusType {
-    if (playerOutcome === 'Win') {
-      return 'Lose';
-    } else if (playerOutcome === 'Lose') {
-      return 'Win';
-    } else {
-      return 'Draw';
-    }
-  }
-
   get currentRealm() {
     return this.args.model[realmURL];
   }
@@ -535,6 +517,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
   }
 
   _recordGameResult = task(async () => {
+    const outcome = this.determineGameOutcome();
     const game = this.args.model;
     const createdAt = new Date();
 
@@ -543,50 +526,24 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
       name: 'BlackjackGame',
     };
 
+    const gameResult = new GameResult({
+      game,
+      status: new GameStatusField({
+        label: outcome,
+      }),
+      createdAt,
+      ref: codeRef,
+    });
+
     const commandContext = this.args.context?.commandContext;
     if (!commandContext) {
       throw new Error('Command context not available. Please try again.');
     }
 
-    // Create GameResult for player
-    const playerOutcome = this.determineGameOutcome();
-    const playerGameResult = new GameResult({
-      game,
-      outcome: new PlayerOutcomeField({
-        player: this.args.model.player,
-        outcome: new GameStatusField({
-          label: playerOutcome,
-        }),
-      }),
-      createdAt,
-      ref: codeRef,
+    await new RecordGameResultCommand(commandContext).execute({
+      card: gameResult,
+      realm: this.currentRealm!.href,
     });
-
-    // Create GameResult for dealer (opposite outcome)
-    const dealerOutcome = this.determineDealerOutcome(playerOutcome);
-    const dealerGameResult = new GameResult({
-      game,
-      outcome: new PlayerOutcomeField({
-        player: this.args.model.dealer,
-        outcome: new GameStatusField({
-          label: dealerOutcome,
-        }),
-      }),
-      createdAt,
-      ref: codeRef,
-    });
-
-    // Record both game results
-    await Promise.all([
-      new RecordGameResultCommand(commandContext).execute({
-        card: playerGameResult,
-        realm: this.currentRealm!.href,
-      }),
-      new RecordGameResultCommand(commandContext).execute({
-        card: dealerGameResult,
-        realm: this.currentRealm!.href,
-      }),
-    ]);
   });
 
   // Save game state back to model for persistence

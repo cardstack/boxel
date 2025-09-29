@@ -17,6 +17,8 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 
+import { BULK_GENERATED_ITEM_COUNT } from '@cardstack/host/components/operator-mode/code-submode/playground/instance-chooser-dropdown';
+
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
@@ -1291,8 +1293,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can request AI assistant to bulk generate samples', async function (assert) {
-      const prompt = `Generate 3 additional instances of the specified card definition, populated with sample data`;
-      const menuItem = `Generate 3 examples with AI`;
+      const prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples of the attached card instance.`;
+      const menuItem = `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`;
       const commandMessage = {
         from: 'testuser',
         message: prompt,

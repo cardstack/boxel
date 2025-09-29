@@ -282,9 +282,6 @@ export async function createRealm({
       matrixURL: matrixConfig.url,
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
-      prerenderer: async () => {
-        throw new Error(`prerenderer not implemented yet`);
-      },
     });
   }
   let realmServerMatrixClient = new MatrixClient({
@@ -353,9 +350,6 @@ export async function runBaseRealmServer(
     matrixURL,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
-    prerenderer: async () => {
-      throw new Error(`prerenderer not implemented yet`);
-    },
   });
   let { realm: testBaseRealm } = await createRealm({
     dir: basePath,
@@ -433,9 +427,6 @@ export async function runTestRealmServer({
     matrixURL,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
-    prerenderer: async () => {
-      throw new Error(`prerenderer not implemented yet`);
-    },
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({

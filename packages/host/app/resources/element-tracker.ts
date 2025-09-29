@@ -5,7 +5,7 @@ import { SafeString } from '@ember/template';
 import Modifier from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type {
+import {
   CardDef,
   Format,
   FieldType,

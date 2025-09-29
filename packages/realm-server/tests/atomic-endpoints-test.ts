@@ -703,9 +703,10 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 500);
           assert.strictEqual(response.body.errors.length, 1);
           assert.strictEqual(response.body.errors[0].title, 'Write Error');
-          assert.strictEqual(
-            response.body.errors[0].detail,
-            `Your filter refers to a nonexistent type: import { Place } from "${testRealmHref}place-modules/place"`,
+          assert.ok(
+            response.body.errors[0].detail.includes(
+              `Error: tried to get definition for {"module":"${testRealmHref}place-modules/place","name":"Place"}, but got 404`,
+            ),
             'error message is correct',
           );
         });

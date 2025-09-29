@@ -299,7 +299,7 @@ module('Acceptance | host submode', function (hooks) {
           );
         });
 
-        assert.dom('[data-test-publish-realm-button]').hasText('Publish Site');
+        assert.dom('[data-test-publish-realm-button]').hasText('Publish…');
         assert
           .dom('[data-test-publish-realm-button]')
           .doesNotHaveClass('publishing');
@@ -330,10 +330,8 @@ module('Acceptance | host submode', function (hooks) {
                 attributes: {
                   ...testRealmInfo,
                   lastPublishedAt: {
-                    ['http://testuser.localhost:4201/test/']: (
-                      new Date().getTime() -
-                      3 * 24 * 60 * 60 * 1000
-                    ).toString(), //3 days ago,
+                    ['http://testuser.localhost:4201/test/']:
+                      new Date().getTime() - 3 * 24 * 60 * 60 * 1000, //3 days ago,
                   },
                 },
               },

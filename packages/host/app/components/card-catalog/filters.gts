@@ -21,8 +21,7 @@ export default class CardCatalogFilters extends Component<Signature> {
     }
     return Object.entries(this.args.availableRealms).map(
       ([realmUrl, realmInfo]) => {
-        return new MenuItem({
-          label: realmInfo.name,
+        return new MenuItem(realmInfo.name, 'action', {
           action: () => {
             let isSelected = this.args.selectedRealmUrls.includes(realmUrl);
 
@@ -34,7 +33,7 @@ export default class CardCatalogFilters extends Component<Signature> {
 
             return false;
           },
-          checked: this.args.selectedRealmUrls.includes(realmUrl),
+          selected: this.args.selectedRealmUrls.includes(realmUrl),
           iconURL: realmInfo.iconURL ?? 'default-realm-icon.png',
         });
       },

@@ -14,7 +14,7 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 

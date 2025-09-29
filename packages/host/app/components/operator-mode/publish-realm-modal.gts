@@ -64,22 +64,17 @@ export default class PublishRealmModal extends Component<Signature> {
     }
 
     const publishedUrl = this.generatedUrl;
-    const publishedAt = realmInfo.lastPublishedAt[publishedUrl]
-      ? Number(realmInfo.lastPublishedAt[publishedUrl])
-      : null;
+    const publishedAtValue = realmInfo.lastPublishedAt[publishedUrl];
 
-    if (!publishedAt) {
+    if (!publishedAtValue) {
       return null;
     }
 
     try {
+      let publishedAt = new Date(publishedAtValue);
       return formatDistanceToNow(publishedAt, { addSuffix: true });
     } catch (error) {
-      console.warn(
-        'Failed to parse published date:',
-        new Date(publishedAt),
-        error,
-      );
+      console.warn('Failed to parse published date:', publishedAtValue, error);
       return null;
     }
   }

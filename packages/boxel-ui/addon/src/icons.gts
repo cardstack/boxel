@@ -3,7 +3,6 @@
 
 import type { Icon } from './icons/types.ts';
 
-import AiBw from './icons/ai-bw.gts';
 import ArrowLeft from './icons/arrow-left.gts';
 import ArrowRight from './icons/arrow-right.gts';
 import ArrowTopLeft from './icons/arrow-top-left.gts';
@@ -75,7 +74,6 @@ import Upload from './icons/upload.gts';
 import Warning from './icons/warning.gts';
 
 export const ALL_ICON_COMPONENTS = [
-  AiBw,
   ArrowLeft,
   ArrowRight,
   ArrowTopLeft,
@@ -148,7 +146,6 @@ export const ALL_ICON_COMPONENTS = [
 ];
 export {
   type Icon,
-  AiBw,
   ArrowLeft,
   ArrowRight,
   ArrowTopLeft,

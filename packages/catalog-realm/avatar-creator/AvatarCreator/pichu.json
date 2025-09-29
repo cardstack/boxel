@@ -29,7 +29,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/experiments/Theme/retro-arcade"
+          "self": "http://localhost:4201/experiments/default/neo-brutalist"
         }
       }
     }

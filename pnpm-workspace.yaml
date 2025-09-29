@@ -29,7 +29,6 @@ catalog:
   "@eslint/eslintrc": ^2.1.4
   "@eslint/js": ^8.57.1
   "@floating-ui/dom": ^1.6.3
-  "@glint/environment-ember-loose": ^1.5.2
   "@koa/cors": ^4.0.0
   "@koa/router": ^12.0.0
   "@lucide/lab": ^0.1.2
@@ -68,7 +67,6 @@ catalog:
   "@types/matrix-js-sdk": ^11.0.1
   "@types/mime-types": ^2.1.1
   "@types/ms": ^0.7.34
-  "@types/node": "^24.3.0"
   "@types/pg": ^8.11.5
   "@types/pluralize": ^0.0.30
   "@types/qs": ^6.9.17
@@ -214,8 +212,6 @@ catalog:
   testem: ^3.10.1
   testem-multi-reporter: ^1.2.0
   tmp: ^0.2.1
-  tracked-built-ins: ^4.0.0
-  typescript: ~5.8.3
   typescript-memoize: ^1.1.1
   uuid: ^9.0.1
   validate-peer-dependencies: ^1.1.0

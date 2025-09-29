@@ -18,6 +18,8 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type { FieldOption, SelectedInstance } from './playground-panel';
 
+export const BULK_GENERATED_ITEM_COUNT = 3;
+
 const getItemTitle = (selection: SelectedInstance | undefined) => {
   if (!selection) {
     return;
@@ -71,7 +73,6 @@ const BeforeOptions: TemplateOnlyComponent = <template>
 interface AfterOptionsSignature {
   Args: {
     menuItems: MenuItem[];
-    closeMenu?: () => void;
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
@@ -79,7 +80,7 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     <span class='title'>
       Action
     </span>
-    <Menu @items={{@menuItems}} @closeMenu={{@closeMenu}} />
+    <Menu @items={{@menuItems}} />
   </div>
   <style scoped>
     .after-options {
@@ -136,14 +137,6 @@ interface OptionsDropdownSignature {
   };
 }
 
-function closeInstanceChooser() {
-  (
-    document.querySelector(
-      '[data-playground-instance-chooser][aria-expanded="true"]',
-    ) as BoxelSelect | null
-  )?.click();
-}
-
 export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
   <template>
     <BoxelSelect
@@ -162,7 +155,6 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
       @afterOptionsComponent={{component
         AfterOptions
         menuItems=@afterMenuOptions
-        closeMenu=closeInstanceChooser
       }}
       @verticalPosition='above'
       data-playground-instance-chooser

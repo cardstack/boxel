@@ -397,7 +397,12 @@ export default class InteractSubmode extends Component {
       } else {
         let error = loadedCard;
         if (error.meta != null) {
-          let cardTitle = error.meta.cardTitle || 'Unknown';
+          let cardTitle = error.meta.cardTitle;
+          if (!cardTitle) {
+            throw new Error(
+              `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
+            );
+          }
           cardToDelete = {
             id: cardUrl.href,
             title: cardTitle,
@@ -600,8 +605,7 @@ export default class InteractSubmode extends Component {
     if (cardTypes.length) {
       cardTypes.map(({ name, icon, ref }) => {
         menuItems.push(
-          new MenuItem({
-            label: name,
+          new MenuItem(name, 'action', {
             action: () => this.createNewFromRecentType.perform(ref),
             icon,
           }),
@@ -614,14 +618,12 @@ export default class InteractSubmode extends Component {
   private get createNewMenuItems(): (MenuItem | MenuDivider)[] {
     let recentCardMenuItems = this.getRecentCardMenuItems();
     let menuItems = [
-      new MenuItem({
-        label: 'Choose a card type...',
+      new MenuItem('Choose a card type...', 'action', {
         action: () => this.createCardInstance.perform(),
         icon: IconSearch,
       }),
       new MenuDivider(),
-      new MenuItem({
-        label: 'Open Code Mode',
+      new MenuItem('Open Code Mode', 'action', {
         action: this.createFileInCodeSubmode,
         subtextComponent: CodeSubmodeNewFileOptions,
         icon: IconCode,
@@ -738,7 +740,7 @@ export default class InteractSubmode extends Component {
                 @viewCard={{fn this.viewCard stackIndex}}
                 @saveCard={{this.saveCard}}
                 @editCard={{fn this.editCard stackIndex}}
-                @deleteCard={{this.requestDeleteCard}}
+                @requestDeleteCard={{this.requestDeleteCard}}
                 @commandContext={{this.commandService.commandContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
@@ -785,11 +787,6 @@ export default class InteractSubmode extends Component {
         --submode-bar-item-outline: var(--boxel-border-flexible);
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
       }
-
-      .interact-submode-layout :deep(.top-bar) {
-        position: absolute;
-      }
-
       .interact-submode {
         display: flex;
         justify-content: center;

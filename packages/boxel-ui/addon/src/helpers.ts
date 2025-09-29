@@ -1,4 +1,3 @@
-import { copyCardURLToClipboard } from './helpers/clipboard.ts';
 import cn from './helpers/cn.ts';
 import compact from './helpers/compact.ts';
 import { getContrastColor } from './helpers/contrast-color.ts';
@@ -24,12 +23,7 @@ import formatPeriod from './helpers/format-period.ts';
 import formatRelativeTime from './helpers/format-relative-time.ts';
 import { add, divide, multiply, subtract } from './helpers/math-helpers.ts';
 import menuDivider, { MenuDivider } from './helpers/menu-divider.ts';
-import menuItem, {
-  type MenuItemOptions,
-  MenuItem,
-  menuItemFunc,
-  toMenuItems,
-} from './helpers/menu-item.ts';
+import menuItem, { MenuItem, menuItemFunc } from './helpers/menu-item.ts';
 import optional from './helpers/optional.ts';
 import pick from './helpers/pick.ts';
 import { sanitizeHtml, sanitizeHtmlSafe } from './helpers/sanitize-html.ts';
@@ -47,13 +41,11 @@ import {
 } from './helpers/truth-helpers.ts';
 
 export {
-  type MenuItemOptions,
   add,
   and,
   bool,
   cn,
   compact,
-  copyCardURLToClipboard,
   cssVar,
   currencyFormat,
   dayjsFormat,
@@ -93,5 +85,4 @@ export {
   sanitizeHtmlSafe,
   substring,
   subtract,
-  toMenuItems,
 };
