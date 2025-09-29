@@ -2,18 +2,18 @@
 set -euo pipefail
 
 # ci-bisect.sh — assist git bisect by pushing each step to CI
-# Usage:
-#   ./scripts/ci-bisect.sh start <good_commit> [<bad_ref>]  # initialize and push first candidate
-#   ./scripts/ci-bisect.sh step good|bad|skip                # mark verdict and push next
-#   ./scripts/ci-bisect.sh status                           # show bisect log + tested commit
-#   ./scripts/ci-bisect.sh abort                            # reset bisect to original state
-#   ./scripts/ci-bisect.sh refresh-overlay                  # re-capture workflow/script overlay
-#   ./scripts/ci-bisect.sh test <commit>                    # push CI for an arbitrary commit
+# Usage (global flags first):
+#   ./scripts/ci-bisect.sh [--merges-only|--no-merges-only] start <good_commit> [<bad_ref>]  # init + push first
+#   ./scripts/ci-bisect.sh [--merges-only|--no-merges-only] step good|bad|skip               # mark + push next
+#   ./scripts/ci-bisect.sh [--merges-only|--no-merges-only] status                           # show bisect status
+#   ./scripts/ci-bisect.sh [--merges-only|--no-merges-only] abort                            # reset bisect
+#   ./scripts/ci-bisect.sh refresh-overlay                                                   # re-capture overlay
+#   ./scripts/ci-bisect.sh test <commit>                                                     # CI test a commit
 #
-# Branches: uses base name 'ci-bisect' (configurable via $BISect_BRANCH), and
-# pushes each step to a new branch 'ci-bisect-<tested-short-sha>' on origin.
-# Optional overlay (enable with BISect_COPY_CI=1) copies the workflow and this
-# script into each tested revision so GitHub runs all jobs.
+# Branches: base name 'ci-bisect' (config via $BISect_BRANCH); each step pushes to 'ci-bisect-<shortsha>'.
+# Overlay: enable with BISect_COPY_CI=1; copies specified files (and this script) into each tested revision.
+# Merges-only: default OFF. Use --merges-only to consider only commits with subject
+# starting "Merge pull request". This setting persists across runs (sticky).
 #
 # Implementation detail:
 # - For every tested revision, we create an empty commit with message
@@ -27,6 +27,8 @@ REMOTE=${BISect_REMOTE:-origin}
 DEFAULT_REMOTE_HEAD=$(git remote show "$REMOTE" | sed -n 's/^\s*HEAD branch: //p')
 REPO_URL_BASE=$(git remote get-url "$REMOTE" | sed -E 's#^git@github.com:#https://github.com/#; s#\.git$##')
 REPO_ROOT=$(git rev-parse --show-toplevel)
+CI_BISECT_DIR=.git/ci-bisect
+OPTIONS_FILE=$CI_BISECT_DIR/options
 
 # Optional: overlay workflow and this script into each tested revision so CI always runs as intended.
 # Enable by setting BISect_COPY_CI=1. Paths can be customized below.
@@ -49,6 +51,32 @@ derive_store_path() {
 DEFAULT_OVERLAY_SCRIPT_STORE=$(derive_store_path "$OVERLAY_SCRIPT_PATH")
 # For multiple overlay paths, stores are derived per path, so no single OVERLAY_STORE is used.
 OVERLAY_SCRIPT_STORE=${BISect_SCRIPT_STORE:-$DEFAULT_OVERLAY_SCRIPT_STORE}
+
+# Option: Only evaluate PR merge commits (subject starts with 'Merge pull request')
+PR_MERGES_ONLY=${BISect_PR_MERGES_ONLY:-0}
+
+is_pr_merge_commit() {
+  local sha=${1:-HEAD}
+  local subj
+  subj=$(git show -s --format=%s "$sha" 2>/dev/null || true)
+  [[ "$subj" == Merge\ pull\ request* ]]
+}
+
+# Persisted options handling
+load_options() {
+  if [[ -f "$OPTIONS_FILE" ]]; then
+    # shellcheck disable=SC1090
+    . "$OPTIONS_FILE"
+  fi
+}
+
+save_options() {
+  mkdir -p "$CI_BISECT_DIR"
+  {
+    echo "# ci-bisect persisted options"
+    echo "PR_MERGES_ONLY=${PR_MERGES_ONLY}"
+  } > "$OPTIONS_FILE"
+}
 
 ensure_clean() {
   if ! git diff --quiet; then
@@ -189,6 +217,14 @@ cmd_start() {
   echo "Starting bisect: good=$good bad=$bad"
   git bisect reset || true
   git bisect start "$bad" "$good"
+  # If restricting to PR merges only and current candidate isn't a merge, advance until it is
+  if [[ "$PR_MERGES_ONLY" == "1" ]]; then
+    while ! is_pr_merge_commit HEAD; do
+      git bisect skip
+      # Stop if bisect is done
+      git rev-parse -q --verify HEAD >/dev/null || break
+    done
+  fi
   push_current
 }
 
@@ -197,6 +233,17 @@ cmd_step() {
   # Attribute verdict to the actual tested commit (parent of our marker if present)
   local tested
   tested=$(tested_sha)
+  # If restricting to PR merges only, auto-skip non-merge candidates
+  if [[ "$PR_MERGES_ONLY" == "1" ]]; then
+    if ! is_pr_merge_commit "$tested"; then
+      git bisect skip "$tested"
+      # After skipping, bisect will check out the next candidate.
+      if git rev-parse -q --verify HEAD >/dev/null; then
+        push_current
+      fi
+      return 0
+    fi
+  fi
   case "$verdict" in
     good) git bisect good "$tested";;
     bad) git bisect bad "$tested";;
@@ -220,6 +267,24 @@ cmd_status() {
 cmd_abort() {
   git bisect reset || true
 }
+
+load_options
+
+# Parse global flags before subcommand
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --merges-only)
+      PR_MERGES_ONLY=1; shift ;;
+    --no-merges-only)
+      PR_MERGES_ONLY=0; shift ;;
+    --) shift; break ;;
+    start|step|status|abort|refresh-overlay|test)
+      break ;;
+    *) break ;;
+  esac
+done
+
+save_options
 
 case "${1:-}" in
   start) shift; cmd_start "$@";;
@@ -262,6 +327,7 @@ case "${1:-}" in
     ;;
   *) cat <<USAGE
 ci-bisect.sh help
+  [--merges-only|--no-merges-only]
   start <good_commit> [bad]   Initialize bisect and push first candidate to CI
   step good|bad|skip          Mark verdict for current candidate and push next
   status                      Show bisect log and current tested commit
@@ -284,6 +350,7 @@ Examples:
   BISect_COPY_CI=1 ./scripts/ci-bisect.sh test <sha>
   BISect_COPY_CI=1 BISect_CI_PATHS=".github/workflows/ci.yaml packages/host/scripts/test-wait-for-servers.sh" \
     ./scripts/ci-bisect.sh start <good-sha>
+  ./scripts/ci-bisect.sh --merges-only start <good-sha>
 Environment:
   BISect_BRANCH (default: ci-bisect)
   BISect_REMOTE (default: origin)
@@ -294,6 +361,11 @@ Environment:
   BISect_SCRIPT_PATH (default: scripts/ci-bisect.sh)
   BISect_SCRIPT_STORE (default: derived from path => .git/ci-bisect/<SCRIPT PATH>)
   BISect_TEST_BRANCH_PREFIX (default: ci-test)
+  BISect_PR_MERGES_ONLY=1 to test only commits with subject starting "Merge pull request"
+Flags:
+  --merges-only / --no-merges-only  Toggle PR merges only mode (persists in .git/ci-bisect/options)
+Defaults:
+  - PR merges only: OFF by default. When toggled via flags, the setting is saved and reused.
 USAGE
      ;;
  esac
