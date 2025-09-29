@@ -1435,7 +1435,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
-      await this.pauseTest();
 
       assert
         .dom('[data-test-catalog-listing-embedded-summary-section]')
