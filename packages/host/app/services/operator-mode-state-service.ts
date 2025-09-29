@@ -41,7 +41,7 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import { Format } from 'https://cardstack.com/base/card-api';
 
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 

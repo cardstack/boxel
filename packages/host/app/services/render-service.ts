@@ -24,10 +24,10 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
-import type {
-  CardDef,
-  Format,
-  CardStore,
+import {
+  type CardDef,
+  type Format,
+  type CardStore,
 } from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';

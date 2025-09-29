@@ -1,6 +1,6 @@
 import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
-import { RealmPermissions } from './index';
+import { RealmPermissions } from './realm';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
@@ -27,15 +27,14 @@ export const skillCardRef: ResolvedCodeRef = {
 
 export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
-export const fields = Symbol.for('cardstack-fields');
-export const fieldSerializer = Symbol.for('cardstack-field-serializer');
-export const fieldsUntracked = Symbol.for('cardstack-fields-untracked');
-export const getCardMenuItems = Symbol.for('cardstack-get-card-menu-items');
-export const isBaseInstance = Symbol.for('isBaseInstance');
+export const realmURL = Symbol.for('cardstack-realm-url');
 export const localId = Symbol.for('cardstack-local-id');
 export const meta = Symbol.for('cardstack-meta');
-export const realmURL = Symbol.for('cardstack-realm-url');
+export const fields = Symbol.for('cardstack-fields');
 export const relativeTo = Symbol.for('cardstack-relative-to');
+export const fieldSerializer = Symbol.for('cardstack-field-serializer');
+export const fieldsUntracked = Symbol.for('cardstack-fields-untracked');
+export const isBaseInstance = Symbol.for('isBaseInstance');
 
 export const aiBotUsername = 'aibot';
 
