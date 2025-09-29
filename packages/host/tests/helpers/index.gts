@@ -353,16 +353,20 @@ export async function setupAcceptanceTestRealm({
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
+  permissions,
   mockMatrixUtils,
 }: {
   contents: RealmContents;
   realmURL?: string;
   mockMatrixUtils: MockUtils;
+  permissions?: Record<string, string[]>;
 }) {
+  setupAuthEndpoints(permissions);
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: false,
+    permissions: permissions as RealmPermissions,
     mockMatrixUtils,
   });
 }
@@ -475,7 +479,9 @@ async function setupTestRealm({
 }
 
 export function setupAuthEndpoints(
-  realmPermissions: Record<string, string[]> = { [testRealmURL]: ['read'] },
+  realmPermissions: Record<string, string[]> = {
+    [testRealmURL]: ['read', 'write'],
+  },
 ) {
   getService('network').mount(
     async (req: Request) => {
