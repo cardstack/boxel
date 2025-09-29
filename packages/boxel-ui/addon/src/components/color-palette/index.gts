@@ -58,6 +58,7 @@ export default class ColorPalette extends Component<Signature> {
                   class={{cn 'swatch-button' selected=(eq color this.color)}}
                   style={{cssVar swatch-color=color}}
                   {{on 'click' (fn @onChange color)}}
+                  aria-label={{color}}
                 />
               </:trigger>
               <:content>
@@ -76,7 +77,7 @@ export default class ColorPalette extends Component<Signature> {
     </div>
 
     <style scoped>
-      @layer boxelComponentL4 {
+      @layer boxelComponentL3 {
         .color-palette-group {
           max-width: var(--boxel-palette-max-width, 18.75rem);
           display: grid;
