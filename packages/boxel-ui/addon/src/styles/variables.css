@@ -1,13 +1,13 @@
 :root {
   /* internal variables used for base scaling defaults - do not override */
-  --_boxel-fontSize: 1rem; /* 16px */
+  --_boxel-font-size: 1rem; /* 16px */
   --_boxel-spacing: 1rem; /* 16px */
   --_boxel-radius: 0.625rem; /* 10px */
   --_boxel-sp-unit: 0.25rem; /* 4px */
   /* end of internal variables */
 
   /* boxel base variable defaults  */
-  --boxel-fontSize: var(--_boxel-fontSize); /* 16px */
+  --boxel-font-size: var(--_boxel-font-size); /* 16px */
   --boxel-spacing: var(--_boxel-spacing); /* 16px */
   --boxel-radius: var(--_boxel-radius); /* 10px */
 
@@ -35,8 +35,8 @@
   --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
   --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
   --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25); /* 20px */
-  --boxel-font-size: var(--boxel-fontSize); /* 16px */
-  --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125); /* 13px */
+  --boxel-font-size: var(--boxel-font-size); /* 16px (base) */
+  --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125); /* 13px (body) */
   --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
 
   /* line-height for corresponding font-size */
@@ -44,7 +44,7 @@
   --boxel-lineheight-lg: calc(30 / 22); /* 1.3636 */
   --boxel-lineheight-med: calc(28 / 20); /* 1.4 */
   --boxel-lineheight: calc(22 / 16); /* 1.375 */
-  --boxel-lineheight-sm: calc(18 / 13); /* 1.3846 (default) */
+  --boxel-lineheight-sm: calc(18 / 13); /* 1.3846 (body) */
   --boxel-lineheight-xs: calc(15 / 11); /* 1.3636 */
   /* additional line-height options */
   --boxel-lineheight-100: 1;
