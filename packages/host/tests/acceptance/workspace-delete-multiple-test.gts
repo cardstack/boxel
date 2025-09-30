@@ -162,7 +162,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify cards were deleted
     let remainingCards = findAll('[data-test-cards-grid-item]');
-    assert.equal(remainingCards.length, 1, 'Two cards were deleted');
+    assert.strictEqual(remainingCards.length, 1, 'Two cards were deleted');
 
     // Verify selection mode is cleared
     assert
@@ -319,7 +319,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify no cards were deleted
     let remainingCards = findAll('[data-test-cards-grid-item]');
-    assert.equal(
+    assert.strictEqual(
       remainingCards.length,
       initialCardCount,
       'No cards were deleted after canceling',
