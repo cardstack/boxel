@@ -117,12 +117,11 @@ jobs:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
 
-      # Download only the latest artifact for each shard. This is robust against
-      # "Rerun failing jobs" where only some shards are re-executed (and thus have
-      # newer artifacts) while successful shards keep their older artifacts. Using
-      # pattern+merge would pull ALL historical artifacts for the workflow run.
-      # We instead enumerate artifacts, pick the newest (by created_at) per shard
-      # name, and download by artifact ID.
+      # Download only the latest artifact for each shard. Using
+      # actions/download-artifact collects every artifact, even when
+      # “Rerun failing jobs” has been used. This fetches all artifact metadata
+      # and determines the newest artifact to download for each shard’s job.
+
       - name: Download latest JUnit shard reports
         env:
           GH_TOKEN: ${{ github.token }}
@@ -175,7 +174,9 @@ jobs:
               echo "ERROR: Unexpectedly missing artifact id for $name" >&2
               exit 1
             fi
+
             echo "Downloading $name (artifact id $id)"
+
             zipFile="$name.zip"
             gh api repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip > "$zipFile"
             unzip -j "$zipFile" -d all-host-reports >/dev/null
@@ -185,6 +186,7 @@ jobs:
           ls -l all-host-reports
 
           xml_count=$(ls all-host-reports/*.xml 2>/dev/null | wc -l | tr -d ' ')
+
           if [ "$xml_count" -ne "$count" ]; then
             echo "ERROR: Expected $count xml reports matching shard count, found $xml_count" >&2
             exit 1
