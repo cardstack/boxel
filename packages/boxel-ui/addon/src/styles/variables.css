@@ -35,7 +35,7 @@
   --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
   --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
   --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25); /* 20px */
-  --boxel-font-size: var(--boxel-font-size); /* 16px (base) */
+  /* --boxel-font-size: 16px; (base - declared on line 10) */
   --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125); /* 13px (body) */
   --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
 
