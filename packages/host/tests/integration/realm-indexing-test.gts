@@ -1467,7 +1467,7 @@ module(`Integration | realm indexing`, function (hooks) {
         `<div
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
           data-test-boxel-card-container
-          style="--boxel-example: 1px;"
+          style
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="embedded"
           data-test-field-component-card> <h1> Fancy Person Embedded Card: Germaine - hot pink </h1> </div>`,
@@ -1493,7 +1493,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-test-boxel-card-container
-        style="--boxel-example: 1px;"
+        style
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card> <h1> Person Embedded Card: Germaine </h1> </div>`),
@@ -1510,7 +1510,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-test-boxel-card-container
-        style="--boxel-example: 1px;"
+        style
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card>
@@ -1606,7 +1606,7 @@ module(`Integration | realm indexing`, function (hooks) {
         `<div
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
           data-test-boxel-card-container
-          style="--boxel-example: 1px;"
+          style
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="fitted"
           data-test-field-component-card> <h1> Fancy Person Fitted Card: Germaine - hot pink </h1> </div>`,
@@ -1632,7 +1632,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
       data-test-boxel-card-container
-      style="--boxel-example: 1px;"
+      style
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="fitted"
       data-test-field-component-card> <h1> Person Fitted Card: Germaine </h1> </div>`),
@@ -1649,7 +1649,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
       data-test-boxel-card-container
-      style="--boxel-example: 1px;"
+      style
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="embedded"
       data-test-field-component-card>
