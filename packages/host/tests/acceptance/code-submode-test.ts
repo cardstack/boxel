@@ -487,6 +487,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           },
         },
       });
+
+      setupAuthEndpoints({
+        [catalogRealmURL]: ['read'],
+        [additionalRealmURL]: ['read', 'write', 'realm-owner'],
+        [personalRealmURL]: ['read', 'write', 'realm-owner'],
+      });
     });
 
     test('default realm is the personal realm', async function (assert) {
