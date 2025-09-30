@@ -59,6 +59,23 @@ if [[ "$USE_WORKTREE" == "1" && "${BISect_IN_WT:-}" != "1" ]]; then
   fi
 fi
 
+# Ensure a stable invoker exists regardless of historical checkout state
+ensure_stable_invoker() {
+  mkdir -p "$REPO_ROOT/.git/ci-bisect"
+  local wrapper="$REPO_ROOT/.git/ci-bisect/ci-bisect"
+  cat > "$wrapper" <<'WRAP'
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+exec bash "$repo_root/.git/ci-bisect/scripts/ci-bisect.sh" "$@"
+WRAP
+  chmod +x "$wrapper" 2>/dev/null || true
+  # Configure a git alias for easy invocation from any revision
+  git config alias.ci-bisect "!f() { bash .git/ci-bisect/scripts/ci-bisect.sh \"$@\"; }; f" 2>/dev/null || true
+}
+
+ensure_stable_invoker
+
 # Optional: overlay workflow and this script into each tested revision so CI always runs as intended.
 # Enable by setting BISect_COPY_CI=1. Paths can be customized below.
 OVERLAY_ENABLE=${BISect_COPY_CI:-0}
