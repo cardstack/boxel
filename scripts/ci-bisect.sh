@@ -335,19 +335,48 @@ cmd_step() {
     if bisect_active; then
       push_current
     else
-      # Bisect has concluded (commonly due to only skipped commits remaining). If HEAD
-      # is still a valid candidate (e.g., a merges-only PR), push it once so CI runs.
+      # Bisect has concluded (often due to only skipped commits). First, push HEAD if it's a valid
+      # merges-only candidate so CI runs, then automatically reseed a new bisect using the most
+      # recent good/bad bounds gleaned from the bisect log, and continue.
       if git rev-parse -q --verify HEAD >/dev/null; then
         if [[ "$PR_MERGES_ONLY" != "1" ]] || is_pr_merge_commit HEAD; then
           echo "Bisect ended, but pushing last candidate $(git rev-parse --short=12 HEAD) to CI for visibility."
           push_current || true
         fi
       fi
-      echo "Bisect ended (likely only skipped commits left)."
-      # Decorate full final candidate set before aborting, while log is available
-      cmd_classify_final || true
-      echo "Auto-aborting to restore state."
-      git bisect reset || true
+      echo "Bisect ended (likely only skipped commits left). Attempting to reseed with latest good/bad bounds..."
+      local good_bound bad_bound
+      good_bound=$(bisect_log_last_good); bad_bound=$(bisect_log_last_bad)
+      if [[ -z "$good_bound" ]]; then good_bound=$(bisect_log_start_good); fi
+      if [[ -z "$bad_bound" ]]; then bad_bound=$(bisect_log_start_bad); fi
+      if [[ -n "$good_bound" && -n "$bad_bound" ]]; then
+        echo "Reseeding: good=$good_bound bad=$bad_bound"
+        git bisect reset || true
+        git bisect start "$bad_bound" "$good_bound"
+        if [[ "$PR_MERGES_ONLY" == "1" ]]; then
+          while ! is_pr_merge_commit HEAD; do
+            desc=$(classify_commit HEAD 2>/dev/null || true)
+            if [[ -n "${desc:-}" ]]; then
+              echo "--merges-only: reseed skipping candidate ${desc}"
+            else
+              echo "--merges-only: reseed skipping non-merge candidate $(git rev-parse --short=12 HEAD)"
+            fi
+            git bisect skip
+            git rev-parse -q --verify HEAD >/dev/null || break
+          done
+        fi
+        if git rev-parse -q --verify HEAD >/dev/null; then
+          push_current
+        else
+          echo "Reseed found no candidates."
+        fi
+      else
+        echo "Could not determine bounds to reseed."
+        # Decorate full final candidate set before aborting, while log is available
+        cmd_classify_final || true
+        echo "Auto-aborting to restore state."
+        git bisect reset || true
+      fi
     fi
   fi
 }
@@ -443,6 +472,23 @@ cmd_classify_final() {
   echo "Classifying final candidates (skipped + bad bound, USE_GH=$USE_GH):"
   # shellcheck disable=SC2086
   cmd_classify $list
+}
+
+# Helpers to read bounds from `git bisect log`
+bisect_log_start_bad() {
+  git bisect log 2>/dev/null | awk '/^git bisect start/ {gsub(/[\047\[\]]/, "", $4); print $4; exit}'
+}
+
+bisect_log_start_good() {
+  git bisect log 2>/dev/null | awk '/^git bisect start/ {gsub(/[\047\[\]]/, "", $5); print $5; exit}'
+}
+
+bisect_log_last_good() {
+  git bisect log 2>/dev/null | awk '/^git bisect good/ {gsub(/[\047\[\]]/, "", $4); print $4}' | tail -n1
+}
+
+bisect_log_last_bad() {
+  git bisect log 2>/dev/null | awk '/^git bisect bad/ {gsub(/[\047\[\]]/, "", $4); print $4}' | tail -n1
 }
 
 load_options
