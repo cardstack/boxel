@@ -87,17 +87,17 @@ class CardInfoView extends GlimmerComponent<ViewSignature> {
       }
       .card-info-title {
         margin-block: 0;
-        font-size: var(--boxel-font-size);
-        font-weight: 600;
+        font-size: var(--typescale-h1, var(--boxel-font-size));
+        font-weight: var(--font-weight-h1, var(--boxel-font-weight-semibold));
         letter-spacing: var(--boxel-lsp-sm);
-        line-height: calc(22 / 16);
+        line-height: var(--lineheight-h1, var(--boxel-lineheight));
       }
       .card-info-description {
         margin-block: 0;
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 400;
+        font-size: var(--typescale-body, var(--boxel-font-size-sm));
+        font-weight: var(--font-weight-base, 400);
         letter-spacing: var(--boxel-lsp-sm);
-        line-height: calc(18 / 13);
+        line-height: var(--lineheight-base, var(--boxel-lineheight-sm));
       }
       .info > * + * {
         margin-top: var(--boxel-sp-xs);

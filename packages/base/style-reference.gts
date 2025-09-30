@@ -139,25 +139,25 @@ export default class StyleReference extends Theme {
 
   @field themeName = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.styleName || 'Untitled Style';
+      return this.title;
     },
   });
 
-  @field title = contains(StringField, {
+  @field title: string = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.styleName || this.themeName || 'Untitled Style';
+      return this.cardInfo.title ?? this.styleName ?? 'Untitled Style';
     },
   });
 
   @field description = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.visualDNA;
+      return this.cardInfo.description ?? this.visualDNA;
     },
   });
 
   @field thumbnailURL = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.wallpaperImages?.[0];
+      return this.cardInfo?.thumbnailURL ?? this.wallpaperImages?.[0];
     },
   });
 
