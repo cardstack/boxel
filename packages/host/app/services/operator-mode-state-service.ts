@@ -20,6 +20,7 @@ import {
   isLocalId,
   SupportedMimeType,
   internalKeyFor,
+  realmURL as realmURLSymbol,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -1053,13 +1054,30 @@ export default class OperatorModeStateService extends Service {
 
   openCardInInteractMode(id: string, format: Format = 'isolated') {
     this.clearStacks();
+    // Determine realm URL. If id is a localId, look up the instance in the store to read its realm.
+    let realmHref: string | undefined;
+    if (isLocalId(id)) {
+      let instance = this.store.peek(id);
+      if (instance && isCardInstance(instance)) {
+        realmHref = (instance as any)[realmURLSymbol]?.href;
+      }
+    } else {
+      realmHref = this.realm.url(id) ?? undefined;
+    }
+    if (!realmHref) {
+      // Fallback to default readable realm so UI still opens; this should be unusual.
+      realmHref = this.realm.defaultReadableRealm.path;
+    }
+    if (!realmHref.endsWith('/')) {
+      realmHref = realmHref + '/';
+    }
     let indexItem = new StackItem({
-      id: `${this.realm.url(id)}index`,
+      id: `${realmHref}index`,
       stackIndex: 0,
       format: 'isolated',
     });
     let newItem = new StackItem({
-      id,
+      id, // keep provided id (may be localId) so later replacement on save works
       stackIndex: 0,
       format,
     });

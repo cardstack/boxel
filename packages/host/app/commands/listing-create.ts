@@ -153,10 +153,12 @@ export default class ListingCreateCommand extends HostBaseCommand<
       },
     };
     const listing = await this.store.add(listingDoc, { realm: targetRealm });
-    if (!listing.id) {
-      throw new Error('Failed to create listing card');
+    // Always use the transient symbol-based localId; ignore any persisted id at this stage
+    const listingId = (listing as any)[(cardAPI as any).localId];
+    if (!listingId) {
+      throw new Error('Failed to create listing card (no localId)');
     }
-    await this.operatorModeStateService.openCardInInteractMode(listing.id);
+    await this.operatorModeStateService.openCardInInteractMode(listingId);
 
     const commandModule = await this.loadCommandModule();
     const listingCard = listing as CardAPI.CardDef; // ensure correct type
