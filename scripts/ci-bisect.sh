@@ -362,12 +362,22 @@ cmd_step() {
     fi
   fi
   case "$verdict" in
-    good) git bisect good "$tested";;
-    bad) git bisect bad "$tested";;
-    skip) git bisect skip "$tested";;
+  # git bisect may exit non-zero when only skipped commits remain or when it concludes;
+  # do not abort the script (set -e) so we can run our automatic finalize/reseed logic.
+  good) git bisect good "$tested" || true;;
+  bad)  git bisect bad  "$tested" || true;;
+  skip) git bisect skip "$tested" || true;;
     *) echo "Unknown: $verdict"; exit 2;;
   esac
-  # After stepping, bisect will check out the next candidate.
+  # After stepping, bisect will check out the next candidate (HEAD may be absent when only skips remain).
+  if ! git rev-parse -q --verify HEAD >/dev/null; then
+    echo "Bisect ended without a checkout (only skipped commits likely)."
+    cmd_classify_final || true
+    echo "Review the decorated candidates above. You can now:"
+    echo "  - Test a specific commit:   ./scripts/ci-bisect.sh test <sha>"
+    echo "  - Rerun bisect without merges-only in this range."
+    return 0
+  fi
   if git rev-parse -q --verify HEAD >/dev/null; then
     # Enforce --merges-only post-advance as well: skip forward until HEAD is a PR merge
     if [[ "$PR_MERGES_ONLY" == "1" ]]; then
