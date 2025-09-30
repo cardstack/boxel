@@ -1320,8 +1320,7 @@ module(`Integration | realm indexing`, function (hooks) {
         (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
         {};
       assertInnerHtmlMatches(assert, isolatedHtml!, `<h1> Van Gogh </h1>`);
-      assert.strictEqual(
-        false,
+      assert.false(
         isolatedHtml!.includes('id="ember'),
         `isolated HTML does not include ember ID's`,
       );
@@ -1335,13 +1334,11 @@ module(`Integration | realm indexing`, function (hooks) {
         fittedHtml![`${testRealmURL}person/Person`],
         `<h1> Person Fitted Card: Van Gogh </h1>`,
       );
-      assert.strictEqual(
-        false,
+      assert.false(
         Object.values(embeddedHtml!).join('').includes('id="ember'),
         `embeddedHtml HTML does not include ember ID's`,
       );
-      assert.strictEqual(
-        false,
+      assert.false(
         Object.values(fittedHtml!).join('').includes('id="ember'),
         `fittedHtml HTML does not include ember ID's`,
       );
@@ -1394,8 +1391,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
       'atom html is correct',
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       atomHtml!.includes('id="ember'),
       `atom HTML does not include ember ID's`,
     );
@@ -1452,8 +1448,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let { embeddedHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      false,
+    assert.false(
       Object.values(embeddedHtml!).join('').includes('id="ember'),
       `Embedded HTML does not include ember ID's`,
     );
@@ -1499,8 +1494,7 @@ module(`Integration | realm indexing`, function (hooks) {
         data-test-field-component-card> <h1> Person Embedded Card: Germaine </h1> </div>`),
       `${testRealmURL}person/Person embedded HTML is correct`,
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person embedded HTML does not include ember ID's`,
     );
@@ -1533,8 +1527,7 @@ module(`Integration | realm indexing`, function (hooks) {
       `${cardDefRefURL} embedded HTML is correct`,
     );
 
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![cardDefRefURL].includes('id="ember'),
       `${cardDefRefURL} fitted HTML does not include ember ID's`,
     );
@@ -1591,8 +1584,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let { embeddedHtml, fittedHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      false,
+    assert.false(
       Object.values(fittedHtml!).join('').includes('id="ember'),
       `Fitted HTML does not include ember ID's`,
     );
@@ -1638,8 +1630,7 @@ module(`Integration | realm indexing`, function (hooks) {
       data-test-field-component-card> <h1> Person Fitted Card: Germaine </h1> </div>`),
       `${testRealmURL}person/Person fitted HTML is correct`,
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       fittedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person fitted HTML does not include ember ID's`,
     );
@@ -1669,8 +1660,7 @@ module(`Integration | realm indexing`, function (hooks) {
       `${cardDefRefURL} embedded HTML is correct`,
     );
 
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![cardDefRefURL].includes('id="ember'),
       `${cardDefRefURL} embedded HTML does not include ember ID's`,
     );
