@@ -166,7 +166,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
       this.autoLinkTag(listingCard),
       this.autoLinkCategory(listingCard),
       this.autoLinkLicense(listingCard),
-      this.autoLinkPublisher(listingCard),
       this.linkSpecs(listingCard, openCardId, targetRealm),
     ]);
     //we don't need to call this save card
@@ -302,13 +301,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
       name: 'License',
     } as ResolvedCodeRef);
     (listing as any).license = instances[0];
-  }
-  private async autoLinkPublisher(listing: CardAPI.CardDef) {
-    const instances = await this.askAiCardToLink({
-      module: `${this.catalogRealm}catalog-app/listing/publisher`,
-      name: 'Publisher',
-    } as ResolvedCodeRef);
-    (listing as any).publisher = instances[0];
   }
   private async autoLinkTag(listing: CardAPI.CardDef) {
     const instances = await this.askAiCardToLink({
