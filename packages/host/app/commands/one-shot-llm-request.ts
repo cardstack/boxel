@@ -134,6 +134,11 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? a
         skillCards: loadedSkillCards.map((c) => c.id),
       });
 
+      // Always log full prompt content
+      oneShotLogger.debug('llm prompt full', {
+        messages: generationMessages,
+      });
+
       const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
         this.commandService.commandContext,
       );
@@ -160,7 +165,7 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? a
         usage: responseData.usage || null,
       });
       const output = responseData.choices?.[0]?.message?.content || null;
-      oneShotLogger.info('llm request complete', {
+      oneShotLogger.debug('llm request complete', {
         outputPreview: output ? String(output).slice(0, 120) : null,
       });
 
