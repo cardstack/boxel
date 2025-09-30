@@ -48,12 +48,6 @@ export default class CardList extends Component<Signature> {
             {{#each cards key='url' as |card|}}
               <li
                 class={{cn 'boxel-card-list-item' instance-error=card.isError}}
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
                 data-test-instance-error={{card.isError}}
                 data-test-cards-grid-item={{removeFileExtension card.url}}
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}

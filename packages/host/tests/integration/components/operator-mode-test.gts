@@ -1138,7 +1138,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/burcu"] .field-component-card`,
+    );
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
@@ -1759,13 +1761,15 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     await waitFor('[data-test-person]');
 
     await waitFor('[data-test-cards-grid-item]');
-    await click('[data-test-cards-grid-item]');
+    await click('[data-test-cards-grid-item] .field-component-card');
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom(`[data-test-stack-card-index="2"]`).exists();
     await click('[data-test-stack-card-index="0"] [data-test-card-header]');
@@ -1793,7 +1797,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await waitFor(`[data-test-stack-card-index="1"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     assert
@@ -1821,7 +1827,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await waitFor(`[data-test-stack-card-index="1"]`);
 
     assert
@@ -1845,7 +1853,9 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/burcu"] .field-component-card`,
+    );
     await waitFor(`[data-test-stack-card-index="1"]`);
 
     await click(`[data-test-open-search-field]`);
@@ -1881,7 +1891,9 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     for (let i = 1; i <= 11; i++) {
-      await click(`[data-test-cards-grid-item="${testRealmURL}Person/${i}"]`);
+      await click(
+        `[data-test-cards-grid-item="${testRealmURL}Person/${i}"] .field-component-card`,
+      );
       await waitFor(
         `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"]`,
       );
@@ -2414,7 +2426,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-overlay-selected]').doesNotExist();
 
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
       'mouseenter',
     );
     await click(`[data-test-overlay-select="${testRealmURL}Person/fadhlan"]`);
@@ -2424,23 +2436,35 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-overlay-selected]').exists({ count: 1 });
 
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/jackie"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/jackie"] .field-component-card`,
       'mouseenter',
     );
     await click(`[data-test-overlay-select="${testRealmURL}Pet/jackie"]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Author/1"]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}BlogPost/2"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Author/1"] .field-component-card`,
+    );
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}BlogPost/2"] .field-component-card`,
+    );
     assert.dom('[data-test-overlay-selected]').exists({ count: 4 });
 
-    await click(`[data-test-cards-grid-item="${testRealmURL}Pet/jackie"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/jackie"] .field-component-card`,
+    );
     assert.dom('[data-test-overlay-selected]').exists({ count: 3 });
 
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}BlogPost/2"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}BlogPost/2"] .field-component-card`,
+    );
     await click(`[data-test-overlay-select="${testRealmURL}Author/1"]`);
     assert.dom('[data-test-overlay-selected]').doesNotExist();
 
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await waitFor(`[data-test-stack-card-index="1"]`, { count: 1 });
   });
 
@@ -2960,7 +2984,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] .field-component-card`,
+    );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
     await click(
@@ -3023,7 +3049,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/burcu"] .field-component-card`,
+    );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     assert
@@ -3254,7 +3282,10 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
-    await triggerEvent(`[data-test-cards-grid-item]`, 'mouseenter');
+    await triggerEvent(
+      `[data-test-cards-grid-item] .field-component-card`,
+      'mouseenter',
+    );
     await click(`[data-test-overlay-card] [data-test-overlay-more-options]`);
     await click('[data-test-boxel-menu-item-text="Delete"]');
 
@@ -3311,7 +3342,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
 
     await waitFor(`[data-test-stack-card-index="0"]`);

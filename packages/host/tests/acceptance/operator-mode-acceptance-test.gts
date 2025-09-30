@@ -508,7 +508,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       submode: Submodes.Interact,
     });
 
-    await click(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
+    );
     await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
 
     await percySnapshot(assert); /* snapshot for special styling */
@@ -577,7 +579,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
         await percySnapshot(assert);
         await click(
-          `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+          `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
         );
 
         assert.dom(`[data-test-card-error]`).exists();
@@ -590,7 +592,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         await click('[data-test-boxel-filter-list-button="All Cards"]');
 
         await triggerEvent(
-          `[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]`,
+          `[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"] .field-component-card`,
           'mouseenter',
         );
         await click(

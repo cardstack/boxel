@@ -1,7 +1,6 @@
 import { click, findAll, triggerEvent, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { pauseTest } from 'ember-testing/lib/helpers/pause_test';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -95,17 +94,15 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
   });
 
   async function selectCard(cardPath: string) {
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}${cardPath}"]`,
-      'mouseenter',
+    let cardSelector = `[data-test-cards-grid-item="${testRealmURL}${cardPath}"] .field-component-card`;
+    await triggerEvent(cardSelector, 'mouseenter');
+    await waitFor(
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
     );
     await click(
       `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
     );
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}${cardPath}"]`,
-      'mouseleave',
-    );
+    await triggerEvent(cardSelector, 'mouseleave');
   }
 
   test('can select multiple cards and delete them via bulk delete', async function (assert) {
@@ -208,8 +205,6 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .dom('.utility-menu-trigger')
       .doesNotExist('Selection summary is cleared after deselect');
 
-    pauseTest();
-    // Verify overlay checkboxes are not checked
     assert.dom('[data-test-overlay-card]').doesNotExist();
   });
 
