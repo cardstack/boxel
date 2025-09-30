@@ -126,75 +126,69 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   });
 
   <template>
-    <SubmodeLayout
-      class='host-submode-layout'
-      data-test-host-submode
-      as |layout|
-    >
-      <div class='host-submode' style={{this.backgroundImageStyle}}>
-        <div class='host-mode-top-bar'>
-          <div class='publish-button-container'>
-            {{#if this.isPublishing}}
-              <BoxelButton
-                @kind='primary'
-                @size='tall'
-                class='publish-realm-button publishing'
-                {{on 'click' this.togglePublishingRealmPopover}}
-                data-test-publish-realm-button
-              >
-                <Refresh width='22' height='22' class='publish-icon' />
-                Publishing…
-              </BoxelButton>
-            {{else}}
-              <BoxelButton
-                @kind='primary'
-                @size='tall'
-                class='publish-realm-button'
-                {{on 'click' this.openPublishRealmModal}}
-                data-test-publish-realm-button
-              >
-                <PublishSiteIcon width='22' height='22' class='publish-icon' />
-                Publish…
-              </BoxelButton>
-            {{/if}}
-            <PublishingRealmPopover
-              @isOpen={{this.isPublishingRealmPopoverOpen}}
-            />
-          </div>
-        </div>
-        <div class={{this.hostModeContentClass}}>
-          <CardContainer @displayBoundaries={{true}} class='container'>
-            {{#if this.operatorModeStateService.currentRealmInfo.publishable}}
-              {{#if this.currentCard}}
-                <CardContainer class='card'>
-                  <CardRenderer
-                    class='card-preview'
-                    @card={{this.currentCard}}
-                    @format='isolated'
-                    data-test-host-submode-card={{this.currentCard.id}}
-                  />
-                </CardContainer>
-              {{else if this.isError}}
-                <div data-test-host-submode-error class='error-message'>
-                  <p>Card not found: {{this.currentCardId}}</p>
-                </div>
-              {{else if this.isLoading}}
-                <div class='loading-message'>
-                  <p>Loading card...</p>
+    <SubmodeLayout class='host-submode-layout' data-test-host-submode>
+      <:topBar>
+        {{#if this.isPublishing}}
+          <BoxelButton
+            @kind='primary'
+            @size='tall'
+            class='publish-realm-button publishing'
+            {{on 'click' this.togglePublishingRealmPopover}}
+            data-test-publish-realm-button
+          >
+            <Refresh width='22' height='22' class='publish-icon' />
+            Publishing…
+          </BoxelButton>
+        {{else}}
+          <BoxelButton
+            @kind='primary'
+            @size='tall'
+            class='publish-realm-button'
+            {{on 'click' this.openPublishRealmModal}}
+            data-test-publish-realm-button
+          >
+            <PublishSiteIcon width='22' height='22' class='publish-icon' />
+            Publish Site
+          </BoxelButton>
+        {{/if}}
+        <PublishingRealmPopover @isOpen={{this.isPublishingRealmPopoverOpen}} />
+      </:topBar>
+      <:default as |layout|>
+        <div class='host-submode' style={{this.backgroundImageStyle}}>
+          <div class={{this.hostModeContentClass}}>
+            <CardContainer @displayBoundaries={{true}} class='container'>
+              {{#if this.operatorModeStateService.currentRealmInfo.publishable}}
+                {{#if this.currentCard}}
+                  <CardContainer class='card'>
+                    <CardRenderer
+                      class='card-preview'
+                      @card={{this.currentCard}}
+                      @format='isolated'
+                      data-test-host-submode-card={{this.currentCard.id}}
+                    />
+                  </CardContainer>
+                {{else if this.isError}}
+                  <div data-test-host-submode-error class='error-message'>
+                    <p>Card not found: {{this.currentCardId}}</p>
+                  </div>
+                {{else if this.isLoading}}
+                  <div class='loading-message'>
+                    <p>Loading card...</p>
+                  </div>
+                {{/if}}
+              {{else}}
+                <div class='non-publishable-message'>
+                  <p>This file is not in a publishable realm.</p>
+                  <BoxelButton
+                    {{on 'click' (fn layout.updateSubmode 'interact')}}
+                    data-test-switch-to-interact
+                  >View in Interact mode</BoxelButton>
                 </div>
               {{/if}}
-            {{else}}
-              <div class='non-publishable-message'>
-                <p>This file is not in a publishable realm.</p>
-                <BoxelButton
-                  {{on 'click' (fn layout.updateSubmode 'interact')}}
-                  data-test-switch-to-interact
-                >View in Interact mode</BoxelButton>
-              </div>
-            {{/if}}
-          </CardContainer>
+            </CardContainer>
+          </div>
         </div>
-      </div>
+      </:default>
     </SubmodeLayout>
 
     <PublishRealmModal
@@ -214,11 +208,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         );
       }
 
-      .host-submode-layout :deep(.submode-switcher),
-      .host-submode-layout :deep(.workspace-button) {
-        border: 1px solid #ffffff59;
-      }
-
       .host-submode {
         display: flex;
         flex-direction: column;
@@ -228,21 +217,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         background-size: cover;
       }
 
-      .host-mode-top-bar {
+      .host-submode-layout :deep(.top-bar) {
         background-color: var(--boxel-700);
-        padding: var(--operator-mode-spacing);
-        border-bottom: 1px solid var(--boxel-600);
-        flex-shrink: 0;
-        height: 60px;
-
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        padding-left: var(--operator-mode-left-column);
-      }
-
-      .publish-button-container {
-        position: relative;
       }
 
       .host-mode-top-bar-content {
@@ -256,13 +232,17 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       }
 
       .publish-realm-button {
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
-        outline: var(--submode-bar-item-outline);
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
+      }
+
+      .publish-realm-button:focus:not(:disabled) {
+        outline-offset: 1px;
       }
 
       .publish-icon {
