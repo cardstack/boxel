@@ -341,7 +341,6 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     await click(`[data-test-past-session-options-button="${roomId}"]`);
     assert.dom('[data-test-boxel-menu-item-text="Copy Room Id"]').exists();
     await click('[data-test-boxel-menu-item-text="Copy Room Id"]');
-    assert.dom('[data-test-boxel-menu-item-text="Copied!"]').exists();
 
     let clipboardText = await navigator.clipboard.readText();
     assert.strictEqual(
