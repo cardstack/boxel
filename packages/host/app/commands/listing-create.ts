@@ -276,7 +276,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async autoPatchName(listing: CardAPI.CardDef) {
     const name = await this.getStringPatch({
       systemPrompt:
-        'You are an expert catalog curator for tech products. Produce ONLY the concise human-friendly title (3-8 words) for this listing. Output just the title text—no quotes, no JSON, no punctuation beyond normal word separators, and no extra commentary.',
+        'You are an expert catalog curator for tech products. Produce ONLY the concise human-friendly title (3 words max) for this listing. Output just the title text—no quotes, no JSON, no punctuation beyond normal word separators, and no extra commentary.',
       userPrompt:
         'Provide a short, clear, human-friendly title (3-8 words) for this listing. Avoid quotes, punctuation except hyphens/spaces, and version numbers.',
     });
