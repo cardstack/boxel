@@ -340,13 +340,20 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
 
     await click(`[data-test-past-session-options-button="${roomId}"]`);
     assert.dom('[data-test-boxel-menu-item-text="Copy Room Id"]').exists();
-    await click('[data-test-boxel-menu-item-text="Copy Room Id"]');
 
-    let clipboardText = await navigator.clipboard.readText();
+    let originalWriteText = navigator.clipboard.writeText;
+    let clipboardText;
+    navigator.clipboard.writeText = async (text: string) => {
+      clipboardText = text;
+      return Promise.resolve();
+    };
+    await click('[data-test-boxel-menu-item-text="Copy Room Id"]');
     assert.strictEqual(
       clipboardText,
       roomId,
       'Room ID was copied to clipboard',
     );
+    assert.dom('[data-test-boxel-menu-item-text="Copied!"]').exists();
+    navigator.clipboard.writeText = originalWriteText;
   });
 });
