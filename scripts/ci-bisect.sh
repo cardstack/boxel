@@ -287,12 +287,6 @@ cmd_start() {
   if git rev-parse -q --verify HEAD >/dev/null; then
     push_current
   fi
-  # If bisect appears to have concluded immediately (e.g., only skipped remained), add context
-  if ! bisect_active; then
-    echo "Note: bisect appears concluded after start (likely only skipped commits remained)."
-    echo "Decorating final candidates before you decide next steps:"
-    cmd_classify_final || true
-  fi
 }
 
 cmd_step() {
