@@ -323,6 +323,14 @@ cmd_step() {
     if bisect_active; then
       push_current
     else
+      # Bisect has concluded (commonly due to only skipped commits remaining). If HEAD
+      # is still a valid candidate (e.g., a merges-only PR), push it once so CI runs.
+      if git rev-parse -q --verify HEAD >/dev/null; then
+        if [[ "$PR_MERGES_ONLY" != "1" ]] || is_pr_merge_commit HEAD; then
+          echo "Bisect ended, but pushing last candidate $(git rev-parse --short=12 HEAD) to CI for visibility."
+          push_current || true
+        fi
+      fi
       echo "Bisect ended (likely only skipped commits left)."
       # Decorate full final candidate set before aborting, while log is available
       cmd_classify_final || true
