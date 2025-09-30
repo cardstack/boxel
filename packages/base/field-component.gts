@@ -225,15 +225,29 @@ export function getBoxComponent(
     };
   }
 
+  function isThemeCard(cardDef?: CardDef): cardDef is Theme {
+    if (cardDef && 'cssVariables' in cardDef) {
+      let field = getField(cardDef, 'cssVariables');
+      return field?.card?.name === 'CSSField';
+    }
+    return false;
+  }
+
   function getThemeStyles(cardDef?: CardDef) {
     if (!extractCssVariables) {
       return htmlSafe('');
     }
-    let css =
-      cardDef && 'cssVariables' in cardDef
-        ? (cardDef as Theme).cssVariables
-        : cardDef?.cardInfo?.theme?.cssVariables;
+    let css = isThemeCard(cardDef)
+      ? cardDef.cssVariables
+      : cardDef?.cardInfo?.theme?.cssVariables;
     return sanitizeHtmlSafe(extractCssVariables(css));
+  }
+
+  function hasTheme(cardDef?: CardDef) {
+    if (isThemeCard(cardDef)) {
+      return Boolean(cardDef?.cssVariables?.trim());
+    }
+    return cardDef?.cardInfo?.theme != null;
   }
 
   function getCssImports(card?: CardDef) {
@@ -276,6 +290,7 @@ export function getBoxComponent(
                       >
                         <CardContainer
                           @displayBoundaries={{displayContainer}}
+                          @isThemed={{hasTheme card}}
                           @cssImports={{getCssImports card}}
                           class={{cn
                             'field-component-card'
@@ -288,7 +303,7 @@ export function getBoxComponent(
                             fieldType=field.fieldType
                             fieldName=field.name
                           }}
-                          style={{getThemeStyles model.value}}
+                          style={{getThemeStyles card}}
                           data-test-card={{card.id}}
                           data-test-card-format={{effectiveFormats.cardDef}}
                           data-test-field-component-card

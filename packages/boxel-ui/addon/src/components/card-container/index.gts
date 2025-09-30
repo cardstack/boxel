@@ -8,6 +8,7 @@ interface Signature {
   Args: {
     cssImports?: string[];
     displayBoundaries?: boolean;
+    isThemed?: boolean;
     tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
@@ -22,6 +23,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       class={{cn
         'boxel-card-container'
         boxel-card-container--boundaries=@displayBoundaries
+        boxel-card-container--themed=@isThemed
       }}
       data-test-boxel-card-container
       ...attributes
@@ -55,13 +57,6 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       height: 100%;
       width: 100%;
       overflow: hidden;
-      box-shadow: var(--shadow);
-
-      font-family: var(--font-family-base, var(--font-sans));
-      font-size: var(--typescale-body);
-      font-weight: var(--font-weight-body);
-      letter-spacing: var(--tracking-normal);
-      line-height: var(--lineheight-base);
     }
     :global(.boxel-card-container--boundaries) {
       box-shadow:
@@ -72,7 +67,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       box-shadow: none;
     }
 
-    :global(.boxel-card-container) {
+    :global(.boxel-card-container--themed) {
       --theme-spacing: calc(var(--spacing) * 4);
       /* setting boxel base css variable overrides, with boxel defaults as fallback */
       --boxel-font-size: var(--typescale-body, var(--_boxel-font-size));
@@ -109,6 +104,13 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
       --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
       --boxel-form-control-border-radius: var(--boxel-border-radius);
+
+      font-family: var(--font-family-base, var(--font-sans));
+      font-size: var(--typescale-body);
+      font-weight: var(--font-weight-body);
+      letter-spacing: var(--tracking-normal);
+      line-height: var(--lineheight-base);
+      box-shadow: var(--shadow);
     }
   </style>
 </template>;
