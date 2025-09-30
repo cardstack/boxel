@@ -135,6 +135,18 @@ index 6e4d0ddff19d8798ee537c36ac9cf14d44ed7bad..07727ab2cbf3243ae32b6b2af457d1ab
  }
  
  /**
+diff --git a/src/filter-component.ts b/src/filter-component.ts
+index c27cc0b2978e75372c4a30484b1b915f719a9967..4357ea98092175cd201cf5461e63a94704291420 100644
+--- a/src/filter-component.ts
++++ b/src/filter-component.ts
+@@ -108,6 +108,7 @@ export class FilterComponent {
+                 senders: this.filterJson.senders,
+                 not_senders: this.filterJson.not_senders,
+                 contains_url: this.filterJson.contains_url,
++                ['org.matrix.msc3874.not_rel_types']: this.filterJson['org.matrix.msc3874.not_rel_types'] || [],
+                 [FILTER_RELATED_BY_SENDERS.name]: this.filterJson[FILTER_RELATED_BY_SENDERS.name],
+                 [FILTER_RELATED_BY_REL_TYPES.name]: this.filterJson[FILTER_RELATED_BY_REL_TYPES.name],
+             }).filter(([_key, value]) => value),
 diff --git a/src/filter.ts b/src/filter.ts
 index 3b12c9c318cff9a5c83ee1544d7980f2d788665b..fe9d112db8dafe73ac5ac25940b8e54766881984 100644
 --- a/src/filter.ts

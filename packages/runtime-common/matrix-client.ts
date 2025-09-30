@@ -60,6 +60,7 @@ export class MatrixClient {
       if (!this.access) {
         throw new Error(`Missing matrix access token`);
       }
+      console.log('accessToken', this.access.accessToken);
       options.headers = {
         ...options.headers,
         'Content-Type': 'application/json',
