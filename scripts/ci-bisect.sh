@@ -271,6 +271,13 @@ cmd_start() {
   # If restricting to PR merges only and current candidate isn't a merge, advance until it is
   if [[ "$PR_MERGES_ONLY" == "1" ]]; then
     while ! is_pr_merge_commit HEAD; do
+      # Log what we're skipping during initial selection
+      desc=$(classify_commit HEAD 2>/dev/null || true)
+      if [[ -n "${desc:-}" ]]; then
+        echo "--merges-only: start skipping candidate ${desc}"
+      else
+        echo "--merges-only: start skipping non-merge candidate $(git rev-parse --short=12 HEAD)"
+      fi
       git bisect skip
       # Stop if bisect is done
       git rev-parse -q --verify HEAD >/dev/null || break
@@ -296,7 +303,7 @@ cmd_step() {
   # If restricting to PR merges only, auto-skip non-merge candidates
   if [[ "$PR_MERGES_ONLY" == "1" ]]; then
     if ! is_pr_merge_commit "$tested"; then
-      echo "--merges-only: skipping non-merge candidate $(git rev-parse --short=12 "$tested") before verdict"
+  echo "--merges-only: skipping candidate $(classify_commit "$tested" 2>/dev/null || echo $(git rev-parse --short=12 "$tested")) before verdict"
       git bisect skip "$tested"
       # After skipping, bisect will check out the next candidate.
       if git rev-parse -q --verify HEAD >/dev/null; then
@@ -316,7 +323,12 @@ cmd_step() {
     # Enforce --merges-only post-advance as well: skip forward until HEAD is a PR merge
     if [[ "$PR_MERGES_ONLY" == "1" ]]; then
       while git rev-parse -q --verify HEAD >/dev/null && ! is_pr_merge_commit HEAD; do
-        echo "--merges-only: skipping non-merge candidate $(git rev-parse --short=12 HEAD) after verdict"
+        desc=$(classify_commit HEAD 2>/dev/null || true)
+        if [[ -n "${desc:-}" ]]; then
+          echo "--merges-only: skipping candidate ${desc} after verdict"
+        else
+          echo "--merges-only: skipping non-merge candidate $(git rev-parse --short=12 HEAD) after verdict"
+        fi
         git bisect skip
       done
     fi
