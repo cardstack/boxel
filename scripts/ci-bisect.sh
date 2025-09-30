@@ -2,19 +2,13 @@
 set -euo pipefail
 
 # ci-bisect.sh — assist git bisect by pushing each step to CI
-# Usage (global flags first):
-#   ./scripts/ci-bisect.sh [--merges-only|--no-merges-only] start <good_commit> [<bad_ref>]  # init + push first
-#   ./scripts/ci-bisect.sh [--merges-only|--no-merges-only] step good|bad|skip               # mark + push next
-#   ./scripts/ci-bisect.sh [--merges-only|--no-merges-only] status                           # show bisect status
-#   ./scripts/ci-bisect.sh [--merges-only|--no-merges-only] abort                            # reset bisect
-#   ./scripts/ci-bisect.sh refresh-overlay                                                   # re-capture overlay
-#   ./scripts/ci-bisect.sh test <commit>                                                     # CI test a commit
+# Usage:
+#   ./scripts/ci-bisect.sh start <good_commit> [<bad_ref>]
+#   ./scripts/ci-bisect.sh step good|bad|skip
+#   ./scripts/ci-bisect.sh status
+#   ./scripts/ci-bisect.sh abort
 #
-# Branches: base name 'ci-bisect' (config via $BISect_BRANCH); each step pushes to 'ci-bisect-<shortsha>'.
-# Overlay: enable with BISect_COPY_CI=1; copies specified files (and this script) into each tested revision.
-# Merges-only: default OFF. Use --merges-only to consider only PR-related commits
-# (classic GitHub merges and squashed PR merges via offline heuristics). This
-# setting persists across runs (sticky).
+# It uses the branch name 'ci-bisect' on origin. Change via $BISect_BRANCH
 #
 # Implementation detail:
 # - For every tested revision, we create an empty commit with message
@@ -28,10 +22,20 @@ REMOTE=${BISect_REMOTE:-origin}
 DEFAULT_REMOTE_HEAD=$(git remote show "$REMOTE" | sed -n 's/^\s*HEAD branch: //p')
 REPO_URL_BASE=$(git remote get-url "$REMOTE" | sed -E 's#^git@github.com:#https://github.com/#; s#\.git$##')
 REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Internal state and repo metadata
 CI_BISECT_DIR=.git/ci-bisect
 OPTIONS_FILE=$CI_BISECT_DIR/options
 OWNER=$(echo "$REPO_URL_BASE" | awk -F/ '{print $(NF-1)}')
 REPO=$(echo "$REPO_URL_BASE" | awk -F/ '{print $NF}')
+
+# Optional: overlay workflow and this script into each tested revision so CI always runs as intended.
+# Enable by setting BISect_COPY_CI=1. Paths can be customized below.
+OVERLAY_ENABLE=${BISect_COPY_CI:-0}
+OVERLAY_PATH=${BISect_CI_PATH:-.github/workflows/ci.yaml}
+OVERLAY_STORE=${BISect_CI_STORE:-.git/ci-bisect/ci.yaml}
+OVERLAY_SCRIPT_PATH=${BISect_SCRIPT_PATH:-scripts/ci-bisect.sh}
+OVERLAY_SCRIPT_STORE=${BISect_SCRIPT_STORE:-.git/ci-bisect/ci-bisect.sh}
 
 # Optional: run bisect in a dedicated worktree so this script remains usable
 # even when checking out very old commits that predate it. Enabled by default.
@@ -42,11 +46,11 @@ WORKTREE_DIR="$REPO_ROOT/.git/ci-bisect/wt"
 # Bootstrap: if using worktree and we're not already inside the worktree,
 # create it (detached at HEAD) and re-exec the saved helper from .git.
 if [[ "$USE_WORKTREE" == "1" && "${BISect_IN_WT:-}" != "1" ]]; then
-  # Ensure a saved copy of this script exists under .git
-  mkdir -p "$REPO_ROOT/.git/ci-bisect/scripts"
+  # Ensure a saved copy of this script exists under .git at a stable path
+  mkdir -p "$REPO_ROOT/.git/ci-bisect"
   if [[ -f "$REPO_ROOT/scripts/ci-bisect.sh" ]]; then
-    cp "$REPO_ROOT/scripts/ci-bisect.sh" "$REPO_ROOT/.git/ci-bisect/scripts/ci-bisect.sh" 2>/dev/null || true
-    chmod +x "$REPO_ROOT/.git/ci-bisect/scripts/ci-bisect.sh" 2>/dev/null || true
+    cp "$REPO_ROOT/scripts/ci-bisect.sh" "$REPO_ROOT/.git/ci-bisect/ci-bisect.sh" 2>/dev/null || true
+    chmod +x "$REPO_ROOT/.git/ci-bisect/ci-bisect.sh" 2>/dev/null || true
   fi
   # Create or update the worktree detached at current HEAD
   if [[ ! -d "$WORKTREE_DIR/.git" ]]; then
@@ -54,10 +58,36 @@ if [[ "$USE_WORKTREE" == "1" && "${BISect_IN_WT:-}" != "1" ]]; then
   fi
   # Re-exec inside the worktree, using the saved helper to avoid relying on
   # the script existing at that historical revision.
-  if [[ -x "$REPO_ROOT/.git/ci-bisect/scripts/ci-bisect.sh" ]]; then
-    BISect_IN_WT=1 exec bash "$REPO_ROOT/.git/ci-bisect/scripts/ci-bisect.sh" "$@"
+  if [[ -x "$REPO_ROOT/.git/ci-bisect/ci-bisect.sh" ]]; then
+    BISect_IN_WT=1 exec bash "$REPO_ROOT/.git/ci-bisect/ci-bisect.sh" "$@"
   fi
 fi
+
+# Stable invoker: keep a copy of this script in .git so it's callable even when
+# the checked-out revision doesn't contain scripts/ci-bisect.sh (common during bisect).
+install_stable_invoker() {
+  mkdir -p "$(dirname "$OVERLAY_SCRIPT_STORE")"
+  if [[ -f "$REPO_ROOT/$OVERLAY_SCRIPT_PATH" ]]; then
+    cp "$REPO_ROOT/$OVERLAY_SCRIPT_PATH" "$OVERLAY_SCRIPT_STORE" 2>/dev/null || true
+  elif [[ -f "$OVERLAY_SCRIPT_PATH" ]]; then
+    cp "$OVERLAY_SCRIPT_PATH" "$OVERLAY_SCRIPT_STORE" 2>/dev/null || true
+  fi
+  chmod +x "$OVERLAY_SCRIPT_STORE" 2>/dev/null || true
+
+  local wrapper
+  wrapper="$REPO_ROOT/.git/ci-bisect/ci-bisect"
+  mkdir -p "$(dirname "$wrapper")"
+  cat > "$wrapper" <<'WRAP'
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+STORE="$ROOT/.git/ci-bisect/ci-bisect.sh"
+exec bash "$STORE" "$@"
+WRAP
+  chmod +x "$wrapper" 2>/dev/null || true
+
+  git config alias.ci-bisect '!f() { ROOT=$(git rev-parse --show-toplevel); bash "$ROOT/.git/ci-bisect/ci-bisect" "$@"; }; f' 2>/dev/null || true
+}
 
 # Ensure a stable invoker exists regardless of historical checkout state
 ensure_stable_invoker() {
@@ -67,11 +97,11 @@ ensure_stable_invoker() {
 #!/usr/bin/env bash
 set -euo pipefail
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-exec bash "$repo_root/.git/ci-bisect/scripts/ci-bisect.sh" "$@"
+exec bash "$repo_root/.git/ci-bisect/ci-bisect.sh" "$@"
 WRAP
   chmod +x "$wrapper" 2>/dev/null || true
   # Configure a git alias for easy invocation from any revision
-  git config alias.ci-bisect "!f() { bash .git/ci-bisect/scripts/ci-bisect.sh \"$@\"; }; f" 2>/dev/null || true
+  git config alias.ci-bisect '!f() { ROOT=$(git rev-parse --show-toplevel); bash "$ROOT/.git/ci-bisect/ci-bisect" "$@"; }; f' 2>/dev/null || true
 }
 
 ensure_stable_invoker
@@ -154,6 +184,8 @@ ensure_clean() {
 
 overlay_capture() {
   # Capture the current workflow(s) and script content into .git for reuse on every step
+  # Ensure the stable invoker exists even if overlays are disabled.
+  install_stable_invoker
   if [[ "$OVERLAY_ENABLE" != "1" ]]; then
     return 0
   fi
@@ -281,14 +313,15 @@ cmd_start() {
   good=${1:?"Provide known-good commit (sha or ref)"}
   bad=${2:-HEAD}
   ensure_clean
+  # Ensure stable invoker exists so later steps can use .git/ci-bisect/ci-bisect or `git ci-bisect`
+  install_stable_invoker
   overlay_capture
   echo "Starting bisect: good=$good bad=$bad"
   git bisect reset || true
   git bisect start "$bad" "$good"
   # If restricting to PR merges only and current candidate isn't a merge, advance until it is
   if [[ "$PR_MERGES_ONLY" == "1" ]]; then
-    while ! is_pr_merge_commit HEAD; do
-      # Log what we're skipping during initial selection
+    while git rev-parse -q --verify HEAD >/dev/null && ! is_pr_merge_commit HEAD; do
       desc=$(classify_commit HEAD 2>/dev/null || true)
       if [[ -n "${desc:-}" ]]; then
         echo "--merges-only: start skipping candidate ${desc}"
@@ -296,25 +329,23 @@ cmd_start() {
         echo "--merges-only: start skipping non-merge candidate $(git rev-parse --short=12 HEAD)"
       fi
       git bisect skip
-      # Stop if bisect is done
-      git rev-parse -q --verify HEAD >/dev/null || break
     done
   fi
-  # Always push the selected candidate to CI, even if bisect_active appears false
-  if git rev-parse -q --verify HEAD >/dev/null; then
-    push_current
-  fi
+  push_current
+  echo "Tip: If this script disappears on historical checkouts, run: .git/ci-bisect/ci-bisect step <good|bad|skip> (or 'git ci-bisect step <...>')"
 }
 
 cmd_step() {
   local verdict=${1:?"Provide one of: good|bad|skip"}
+  # Re-install stable invoker in case we came from a revision that lacked it
+  install_stable_invoker
   # Attribute verdict to the actual tested commit (parent of our marker if present)
   local tested
   tested=$(tested_sha)
-  # If restricting to PR merges only, auto-skip non-merge candidates
+  # If restricting to PR merges only, auto-skip non-merge candidates before applying a verdict
   if [[ "$PR_MERGES_ONLY" == "1" ]]; then
     if ! is_pr_merge_commit "$tested"; then
-  echo "--merges-only: skipping candidate $(classify_commit "$tested" 2>/dev/null || echo $(git rev-parse --short=12 "$tested")) before verdict"
+      echo "--merges-only: skipping candidate $(classify_commit "$tested" 2>/dev/null || echo $(git rev-parse --short=12 "$tested")) before verdict"
       git bisect skip "$tested"
       # After skipping, bisect will check out the next candidate.
       if git rev-parse -q --verify HEAD >/dev/null; then
@@ -391,6 +422,7 @@ cmd_step() {
       fi
     fi
   fi
+  echo "Tip: If this script disappears on historical checkouts, run: .git/ci-bisect/ci-bisect step <good|bad|skip> (or 'git ci-bisect step <...>')"
 }
 
 cmd_status() {
