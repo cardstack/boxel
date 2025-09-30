@@ -328,7 +328,10 @@ cmd_start() {
       else
         echo "--merges-only: start skipping non-merge candidate $(git rev-parse --short=12 HEAD)"
       fi
-      git bisect skip
+      if ! git bisect skip; then
+        cmd_classify_final || true
+        break
+      fi
     done
   fi
   push_current
@@ -346,7 +349,11 @@ cmd_step() {
   if [[ "$PR_MERGES_ONLY" == "1" ]]; then
     if ! is_pr_merge_commit "$tested"; then
       echo "--merges-only: skipping candidate $(classify_commit "$tested" 2>/dev/null || echo $(git rev-parse --short=12 "$tested")) before verdict"
-      git bisect skip "$tested"
+      if ! git bisect skip "$tested"; then
+        cmd_classify_final || true
+        # No further push; bisect ended. Reseed logic below will handle next steps.
+        :
+      fi
       # After skipping, bisect will check out the next candidate.
       if git rev-parse -q --verify HEAD >/dev/null; then
         push_current
@@ -380,6 +387,8 @@ cmd_step() {
       # Bisect has concluded (often due to only skipped commits). First, push HEAD if it's a valid
       # merges-only candidate so CI runs, then automatically reseed a new bisect using the most
       # recent good/bad bounds gleaned from the bisect log, and continue.
+      # Also print a decorated classification of the final candidate set for quick inspection.
+      cmd_classify_final || true
       if git rev-parse -q --verify HEAD >/dev/null; then
         if [[ "$PR_MERGES_ONLY" != "1" ]] || is_pr_merge_commit HEAD; then
           echo "Bisect ended, but pushing last candidate $(git rev-parse --short=12 HEAD) to CI for visibility."
@@ -513,7 +522,6 @@ cmd_classify_final() {
   if [[ -z "$list" ]]; then
     echo "No final candidates found in bisect log."; return 0
   fi
-  echo "Classifying final candidates (skipped + bad bound, USE_GH=$USE_GH):"
   # shellcheck disable=SC2086
   cmd_classify $list
 }
