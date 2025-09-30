@@ -509,6 +509,7 @@ export function setupAuthEndpoints(
                 '@testuser:localhost',
               ),
               permissions: permissions as RealmAction[],
+              realm: realmURL,
             },
             '1d',
             testRealmSecretSeed,
