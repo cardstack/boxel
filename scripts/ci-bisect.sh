@@ -323,11 +323,6 @@ cmd_start() {
   if [[ "$PR_MERGES_ONLY" == "1" ]]; then
     while git rev-parse -q --verify HEAD >/dev/null && ! is_pr_merge_commit HEAD; do
       desc=$(classify_commit HEAD 2>/dev/null || true)
-      if [[ -n "${desc:-}" ]]; then
-        echo "--merges-only: start skipping candidate ${desc}"
-      else
-        echo "--merges-only: start skipping non-merge candidate $(git rev-parse --short=12 HEAD)"
-      fi
       if ! git bisect skip; then
         cmd_classify_final || true
         break
