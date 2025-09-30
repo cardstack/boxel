@@ -68,6 +68,7 @@ export class MockClient implements ExtendedClient {
 
   private txnCtr = 0;
   private fileDefManager: FileDefManager;
+  slidingSyncInstance: any;
 
   constructor(
     private owner: Owner,
@@ -108,11 +109,22 @@ export class MockClient implements ExtendedClient {
     opts?: MatrixSDK.IStartClientOpts | undefined,
   ): Promise<void> {
     if (opts?.slidingSync) {
+      this.slidingSyncInstance = opts.slidingSync;
       await opts.slidingSync.start();
     }
 
     this.serverState.onEvent((serverEvent: IEvent) => {
       this.emitEvent(new MatrixEvent(serverEvent));
+    });
+
+    this.serverState.onSlidingSyncEvent((roomId, roomName) => {
+      if (this.slidingSyncInstance) {
+        this.slidingSyncInstance.triggerRoomSync(
+          roomId,
+          roomName,
+          this.serverState,
+        );
+      }
     });
 
     this.emitEvent(
@@ -670,6 +682,16 @@ export class MockClient implements ExtendedClient {
           event.content,
         );
       }
+    }
+
+    if (this.slidingSyncInstance) {
+      setTimeout(() => {
+        this.slidingSyncInstance.triggerRoomSync(
+          roomId,
+          name,
+          this.serverState,
+        );
+      }, 0);
     }
 
     return { room_id: roomId };
