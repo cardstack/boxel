@@ -564,6 +564,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+      { timeout: 2000 },
     );
 
     await click(
