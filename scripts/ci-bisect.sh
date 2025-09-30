@@ -366,7 +366,8 @@ cmd_step() {
           done
         fi
         if git rev-parse -q --verify HEAD >/dev/null; then
-          push_current
+          echo "Reseed complete. Next candidate is at $(git rev-parse --short=12 HEAD)."
+          echo "No push performed on reseed to keep one-CI-push-per-step. Run 'step good|bad|skip' next."
         else
           echo "Reseed found no candidates."
         fi
