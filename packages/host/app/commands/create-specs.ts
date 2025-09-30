@@ -25,10 +25,11 @@ import {
   isCardOrFieldDeclaration,
 } from '../services/module-contents-service';
 
+import GenerateReadmeSpecCommand from './generate-readme-spec';
+
 import type CardService from '../services/card-service';
 import type ModuleContentsService from '../services/module-contents-service';
 import type StoreService from '../services/store';
-import GenerateReadmeSpecCommand from './generate-readme-spec';
 
 class SpecTypeGuesser {
   constructor(private declaration: ModuleDeclaration) {}
