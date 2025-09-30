@@ -49,7 +49,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   description = 'Create a catalog listing for an example card';
 
   #cardAPI?: typeof CardAPI;
-  private serializedCardString?: string; // JSON string of serialized example card
+  private serializedCardString?: string; // serialized JSON of example card
   private adoptedCodeRef?: ResolvedCodeRef; // resolved adopted code ref for example card
 
   async loadCardAPI() {
@@ -128,13 +128,14 @@ export default class ListingCreateCommand extends HostBaseCommand<
       this.adoptedCodeRef = undefined;
     }
 
-    // serialize once and stash as a string for downstream prompts
+    // serialize once for guessListingType context
     try {
       const serialized = await this.cardService.serializeCard(exampleCard);
       this.serializedCardString = JSON.stringify(serialized?.data, null, 2);
     } catch {
       this.serializedCardString = undefined;
     }
+
     const listingType = await this.guessListingType(exampleCard);
 
     const listingDoc: LooseSingleCardDocument = {
@@ -185,11 +186,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
       const oneShot = new OneShotLlmRequestCommand(this.commandContext);
       const name = (exampleCard as any).name || '';
       const summary = (exampleCard as any).summary || '';
+      const systemPrompt =
+        'Respond ONLY with one token: card, app, or skill. No JSON, no punctuation.';
       const serializedSnippet = this.serializedCardString
         ? this.serializedCardString.slice(0, 1500)
         : '';
-      const systemPrompt =
-        'Respond ONLY with one token: card, app, or skill. No JSON, no punctuation.';
       const userPrompt = `ID: ${exampleCard.id || 'unknown'}\nName: ${name}\nSummary: ${summary}\n${serializedSnippet ? `Card JSON (truncated):\n\n\`\`\`json\n${serializedSnippet}\n\`\`\`` : ''}`;
       const result = await oneShot.execute({
         systemPrompt,
@@ -245,10 +246,14 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const instances = result.instances ?? [];
     const summariesString = this.instancesToPromptString(instances);
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-    const systemPrompt =
-      'You are an expert catalog curator. Select the most relevant 1 or 2 ids (maximum 2) from the provided list. Output ONLY a JSON array of 1 or 2 id strings. No commentary.';
+    const systemPrompt = `You are an expert catalog curator. Select the most relevant 1 or 2 ids that represent ${searchTypeCodeRef.name} (maximum 2) from the provided list. Output ONLY a JSON array of 1 or 2 id strings. No commentary.`;
     const userPrompt = `Options (id :: title):\n${summariesString}\n\nRules:\n- Return a JSON array with 1 or 2 ids (max 2).\n- No duplicates.\n- Only use ids from the list.\nOutput examples: ["idA"] or ["idA","idB"].`;
-    const r = await oneShot.execute({ systemPrompt, userPrompt });
+    const r = await oneShot.execute({
+      systemPrompt,
+      userPrompt,
+      llmModel: 'openai/gpt-5-nano',
+      ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
+    });
     // If adoptedCodeRef exists, re-run with code context for potential refinement (optional simple approach)
     if (!r.output) return [];
     return this.parseLinkingOutput(r.output, instances);
@@ -359,12 +364,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
   }): Promise<string | undefined> {
     const { systemPrompt, userPrompt } = opts;
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-    const serializedSnippet = this.serializedCardString
-      ? this.serializedCardString.slice(0, 1200)
-      : '';
     const result = await oneShot.execute({
       systemPrompt,
-      userPrompt: `${userPrompt}\n${serializedSnippet ? `Card JSON (truncated):\n\n\`\`\`json\n${serializedSnippet}\n\`\`\`` : ''}`,
+      userPrompt,
       llmModel: 'openai/gpt-4.1-nano',
       ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
     });
