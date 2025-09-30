@@ -394,17 +394,10 @@ cmd_step() {
     if bisect_active; then
       push_current
     else
-      # Bisect has concluded (often due to only skipped commits). First, push HEAD if it's a valid
-      # merges-only candidate so CI runs, then automatically reseed a new bisect using the most
-      # recent good/bad bounds gleaned from the bisect log, and continue.
+      # Bisect has concluded (often due to only skipped commits). Automatically reseed a new bisect
+      # using the most recent good/bad bounds gleaned from the bisect log, and continue.
       # Also print a decorated classification of the final candidate set for quick inspection.
       cmd_classify_final || true
-      if git rev-parse -q --verify HEAD >/dev/null; then
-        if [[ "$PR_MERGES_ONLY" != "1" ]] || is_pr_merge_commit HEAD; then
-          echo "Bisect ended, but pushing last candidate $(git rev-parse --short=12 HEAD) to CI for visibility."
-          push_current || true
-        fi
-      fi
       echo "Bisect ended (likely only skipped commits left). Attempting to reseed with latest good/bad bounds..."
       local good_bound bad_bound
       good_bound=$(bisect_log_last_good); bad_bound=$(bisect_log_last_bad)
