@@ -44,6 +44,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
   assertMessages,
@@ -54,7 +55,6 @@ import { setupApplicationTest } from '../helpers/setup';
 const testRealm2URL = `http://test-realm/test2/`;
 const testRealm3URL = `http://test-realm/test3/`;
 
-let matrixRoomId: string;
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
 
@@ -71,11 +71,12 @@ module('Acceptance | interact submode tests', function (hooks) {
     mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -851,6 +852,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         }
         if (json.data.attributes?.firstName === null) {
           // Because we create an empty card, upon choosing a catalog item, we must skip the scenario where attributes null
+          // eslint-disable-next-line qunit/no-early-return
           return;
         }
         id = url.href;
@@ -2036,6 +2038,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             ev.eventName === 'index' &&
             ev.indexType === 'incremental-index-initiation'
           ) {
+            // eslint-disable-next-line qunit/no-early-return
             return; // ignore the index initiation event
           }
           ev = ev as IncrementalIndexEventContent;
