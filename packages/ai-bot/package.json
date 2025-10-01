@@ -22,10 +22,12 @@
     "@cardstack/local-types": "workspace:*",
     "@sinonjs/fake-timers": "catalog:",
     "@types/fs-extra": "catalog:",
+    "@types/pg": "catalog:",
     "@types/qunit": "catalog:",
     "@types/sinonjs__fake-timers": "catalog:",
     "concurrently": "catalog:",
     "fs-extra": "catalog:",
+    "pg": "catalog:",
     "qunit": "^2.24.1"
   },
   "scripts": {
