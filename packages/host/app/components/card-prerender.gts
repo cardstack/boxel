@@ -121,7 +121,7 @@ export default class CardPrerender extends Component {
     );
   }
 
-  // This emulates the job the the Prerenderer that runs in the server
+  // This emulates the job of the Prerenderer that runs in the server
   private prerenderTask = enqueueTask(
     async ({
       url,
