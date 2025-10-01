@@ -1,5 +1,6 @@
 import Koa from 'koa';
 import {
+  fetchUserPermissions,
   query,
   SupportedMimeType,
   logger,
@@ -23,9 +24,11 @@ import {
   sendResponseForUnprocessableEntity,
   setContextResponse,
 } from '../middleware';
+import { createJWT } from '../jwt';
 import { type CreateRoutesArgs } from '../routes';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
+import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
 const log = logger('handle-publish');
@@ -118,10 +121,41 @@ export default function handlePublishRealm({
     }
 
     try {
+      let token = ctxt.state.token as RealmServerTokenClaim;
+      let { user: matrixUserId } = token;
+      let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
+
+      if (!user) {
+        throw new Error('User in JWT not found');
+      }
+
+      let dmRooms =
+        (await matrixClient.getAccountDataFromServer<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+
+      let sessionRoomId = dmRooms[user.matrixUserId];
+
+      let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
+        userId: matrixUserId,
+      });
+
+      let sourceRealmSession = createJWT(
+        {
+          user: matrixUserId,
+          realm: sourceRealmURL,
+          permissions: permissionsForAllRealms[sourceRealmURL],
+          sessionRoom: sessionRoomId,
+        },
+        '7d',
+        realmSecretSeed,
+      );
+
       let realmInfoResponse = await virtualNetwork.handle(
         new Request(`${sourceRealmURL}_info`, {
           headers: {
             Accept: SupportedMimeType.RealmInfo,
+            Authorization: sourceRealmSession,
           },
         }),
       );
