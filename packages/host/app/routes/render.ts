@@ -8,25 +8,25 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   formattedError,
-  isCardErrorJSONAPI,
-  isCardError,
   CardError,
   type CardErrorsJSONAPI,
-  type CardErrorJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
-  type ErrorEntry,
 } from '@cardstack/runtime-common';
-import { serializableError } from '@cardstack/runtime-common/error';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import EmberHealthService from '../services/ember-health';
-import LoaderService from '../services/loader-service';
-import NetworkService from '../services/network';
-import RealmService from '../services/realm';
-import RealmServerService from '../services/realm-server';
-import StoreService from '../services/store';
+import {
+  renderErrorHandler,
+  errorJsonApiToErrorEntry,
+} from '../lib/render-error-handler';
+
+import type EmberHealthService from '../services/ember-health';
+import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
+import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 
 export type Model = { instance: CardDef; ready: boolean };
 
@@ -40,75 +40,19 @@ export default class RenderRoute extends Route<Model> {
   @service declare emberHealth: EmberHealthService;
 
   errorHandler = (event: Event) => {
-    let [_a, _b, encodedId] = (this.router.currentURL ?? '').split('/');
-    let id = encodedId ? decodeURIComponent(encodedId) : undefined;
-    let reason =
-      'reason' in event
-        ? (event as any).reason
-        : (event as CustomEvent).detail?.reason;
-    // Coerce stringified JSON into objects so our type guards work
-    if (typeof reason === 'string') {
-      try {
-        reason = JSON.parse(reason);
-      } catch (_e) {
-        // leave as string
-      }
-    }
-    let element: HTMLElement = document.querySelector('[data-prerender]')!;
-    let errorPayload: RenderError;
-    if (reason) {
-      if (isCardError(reason)) {
-        errorPayload = {
-          type: 'error',
-          error: { ...reason, stack: reason.stack },
-        };
-      } else if (isCardErrorJSONAPI(reason)) {
-        errorPayload = errorJsonApiToErrorEntry({ ...reason });
-      } else if (
-        typeof reason === 'object' &&
-        reason !== null &&
-        'errors' in (reason as any) &&
-        Array.isArray((reason as any).errors) &&
-        (reason as any).errors.length > 0
-      ) {
-        errorPayload = errorJsonApiToErrorEntry({
-          ...(reason as any).errors[0],
-          id,
-        });
-      } else {
-        errorPayload = {
-          type: 'error',
-          error:
-            reason instanceof CardError
-              ? { ...serializableError(reason) }
-              : {
-                  id,
-                  message: reason.message,
-                  stack: reason.stack,
-                  status: 500,
-                },
-        };
-      }
-    } else {
-      errorPayload = {
-        type: 'error',
-        error: new CardError('indexing failed', { status: 500, id }),
-      };
-    }
-    element.innerHTML = `${JSON.stringify(errorPayload)}`;
-    // Defer setting prerender status until we know Ember health
-    void this.emberHealth
-      .isResponsive()
-      .then((alive) => {
-        element.dataset.emberAlive = alive ? 'true' : 'false';
-        element.dataset.prerenderStatus = alive ? 'error' : 'unusable';
-      })
-      .catch(() => {
-        element.dataset.emberAlive = 'false';
-        element.dataset.prerenderStatus = 'unusable';
-      });
-
-    event.preventDefault?.();
+    renderErrorHandler({
+      event,
+      setPrerenderStatus(status) {
+        let element: HTMLElement = document.querySelector('[data-prerender]')!;
+        element.dataset.prerenderStatus = status;
+      },
+      setError(error) {
+        let element: HTMLElement = document.querySelector('[data-prerender]')!;
+        element.innerHTML = error;
+      },
+      healthCheck: this.emberHealth.isResponsive,
+      currentURL: this.router.currentURL,
+    });
     (globalThis as any)._lazilyLoadLinks = undefined;
     (globalThis as any)._boxelRenderContext = undefined;
   };
@@ -182,6 +126,7 @@ export default class RenderRoute extends Route<Model> {
 
       instance = await this.store.add(enhancedDoc, {
         relativeTo: new URL(id),
+        realm: realmURL,
         doNotPersist: true,
       });
     }
@@ -232,12 +177,4 @@ export default class RenderRoute extends Route<Model> {
     this.router.transitionTo('render-error', serializedError);
     return false;
   }
-}
-
-function errorJsonApiToErrorEntry(errorJSONAPI: CardErrorJSONAPI): ErrorEntry {
-  let error = CardError.fromCardErrorJsonAPI(errorJSONAPI);
-  return {
-    type: 'error',
-    error,
-  };
 }

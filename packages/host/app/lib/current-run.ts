@@ -23,6 +23,7 @@ import {
   unixTime,
   jobIdentity,
   getFieldDefinitions,
+  modulesConsumedInMeta,
   type ResolvedCodeRef,
   type Definition,
   type Batch,
@@ -669,7 +670,6 @@ export class CurrentRun {
           userId: this.#userId,
           permissions: this.#permissions,
         });
-        // TODO test this
         if ('error' in renderResult && renderResult.error) {
           let renderError = renderResult.error;
           if (
@@ -678,8 +678,11 @@ export class CurrentRun {
           ) {
             renderError.error.deps = renderError.error.deps ?? [];
             renderError.error.deps.push(
-              renderError.error.id.replace(/\.json$/, ''),
+              ...modulesConsumedInMeta(resource.meta),
             );
+            let deps = new Set(renderError.error.deps);
+            deps.add(renderError.error.id);
+            renderError.error.deps = [...deps];
           }
           log.warn(
             `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,

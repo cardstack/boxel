@@ -136,6 +136,7 @@ export * from './fetcher';
 export * from './scoped-css';
 export * from './utils';
 export * from './authorization-middleware';
+export * from './resource-types';
 export * from './query';
 export * from './formats';
 export * from './db-types';
