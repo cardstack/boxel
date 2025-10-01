@@ -70,7 +70,7 @@
     "ember-cli-htmlbars": "^6.3.0",
     "ember-resources": "catalog:",
     "ember-source": "catalog:",
-    "ember-template-imports": "^4.3.0",
+    "ember-template-imports": "^4.1.1",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "eslint-plugin-import": "catalog:",
