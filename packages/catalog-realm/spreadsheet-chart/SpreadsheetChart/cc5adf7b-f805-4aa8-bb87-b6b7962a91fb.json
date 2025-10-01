@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SpreadsheetChart",
+        "module": "../spreadsheet-chart"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "topN": null,
+      "xHeader": "",
+      "yHeader": "Survived",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "chartType": "stackedBar",
+      "percentMode": false,
+      "binaryHeader": null,
+      "categoryHeader": "Survived"
+    },
+    "relationships": {
+      "source": {
+        "links": {
+          "self": "../../spreadsheet/df7bf805-6aa8-4b87-b6b7-962a91fbae44"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
