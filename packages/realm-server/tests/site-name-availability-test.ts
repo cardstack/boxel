@@ -3,7 +3,7 @@ import { basename } from 'path';
 import { PgAdapter } from '@cardstack/postgres';
 import { query, insert, asExpressions } from '@cardstack/runtime-common';
 import { prepareTestDB } from './helpers';
-import handleCheckSiteNameAvailabilityRequest from '../handlers/handle-check-site-name-availability';
+import { handleCheckSiteNameAvailabilityRequest } from '../handlers/handle-check-site-name-availability';
 import Koa from 'koa';
 
 module(basename(__filename), function () {

@@ -26,7 +26,7 @@ function getEnvironmentDomain(): string {
   }
 }
 
-export default function handleCheckSiteNameAvailabilityRequest({
+export function handleCheckSiteNameAvailabilityRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {

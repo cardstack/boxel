@@ -30,7 +30,7 @@ import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
-import handleCheckSiteNameAvailabilityRequest from './handlers/handle-check-site-name-availability';
+import { handleCheckSiteNameAvailabilityRequest } from './handlers/handle-check-site-name-availability';
 import handleRealmAuth from './handlers/handle-realm-auth';
 
 export type CreateRoutesArgs = {
