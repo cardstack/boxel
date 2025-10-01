@@ -83,9 +83,8 @@ module(basename(__filename), function () {
         );
 
         const responseBody = JSON.parse(ctx.body);
-        assert.strictEqual(
+        assert.false(
           responseBody.available,
-          false,
           `Should be unavailable for subdomain: ${subdomain}`,
         );
         assert.ok(
@@ -112,9 +111,8 @@ module(basename(__filename), function () {
           responseBody,
           `Should have response body for subdomain: ${subdomain}`,
         );
-        assert.strictEqual(
+        assert.true(
           responseBody.available,
-          true,
           `Should be available for subdomain: ${subdomain}`,
         );
         assert.strictEqual(
@@ -157,9 +155,8 @@ module(basename(__filename), function () {
 
       const responseBody = JSON.parse(ctx.body);
       assert.ok(responseBody, 'Should have response body');
-      assert.strictEqual(
+      assert.false(
         responseBody.available,
-        false,
         'Should be unavailable for claimed subdomain',
       );
       assert.strictEqual(
@@ -220,9 +217,8 @@ module(basename(__filename), function () {
 
       const responseBody = JSON.parse(ctx.body);
       assert.ok(responseBody, 'Should have response body');
-      assert.strictEqual(
+      assert.true(
         responseBody.available,
-        true,
         'Should be available for removed subdomain',
       );
       assert.strictEqual(
