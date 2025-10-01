@@ -74,6 +74,11 @@ import { InvalidQueryError, assertQuery, parseQuery } from './query';
 import type { Readable } from 'stream';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
+import {
+  getSessionRoom as fetchSessionRoom,
+  setSessionRoom as persistSessionRoom,
+  getAllSessionRooms,
+} from './session-room-queries';
 import { mergeRelationships } from './merge-relationships';
 import { MatrixClient, getMatrixUsername } from './matrix-client';
 
@@ -203,6 +208,7 @@ export interface RealmAdapter {
   broadcastRealmEvent(
     event: RealmEventContent,
     matrixClient: MatrixClient,
+    sessionRooms: Record<string, string>,
   ): Promise<void>;
 
   // optional, set this to override _lint endpoint behavior in tests
@@ -1061,6 +1067,12 @@ export class Realm {
           );
         },
       } as Utils,
+      {
+        getSessionRoom: (matrixUserId: string) =>
+          fetchSessionRoom(this.#dbAdapter, matrixUserId),
+        setSessionRoom: (matrixUserId: string, roomId: string) =>
+          persistSessionRoom(this.#dbAdapter, matrixUserId, roomId),
+      },
     );
 
     return await matrixBackendAuthentication.createSession(request);
@@ -2902,7 +2914,12 @@ export class Realm {
   }
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
+    let sessionRooms = await getAllSessionRooms(this.#dbAdapter);
+    await this.#adapter.broadcastRealmEvent(
+      event,
+      this.#matrixClient,
+      sessionRooms,
+    );
   }
 
   private async createRequestContext(): Promise<RequestContext> {

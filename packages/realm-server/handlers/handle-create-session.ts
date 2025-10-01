@@ -1,7 +1,13 @@
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  logger,
+  SupportedMimeType,
+  getSessionRoom as fetchSessionRoom,
+  setSessionRoom as persistSessionRoom,
+} from '@cardstack/runtime-common';
 import {
   MatrixBackendAuthentication,
   Utils,
+  SessionRoomStore,
 } from '@cardstack/runtime-common/matrix-backend-authentication';
 import Koa from 'koa';
 import { createJWT } from '../utils/jwt';
@@ -17,7 +23,17 @@ const log = logger('realm-server');
 export default function handleCreateSessionRequest({
   matrixClient,
   realmSecretSeed,
+  dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let sessionRoomStore: SessionRoomStore = {
+    getSessionRoom(matrixUserId) {
+      return fetchSessionRoom(dbAdapter, matrixUserId);
+    },
+    setSessionRoom(matrixUserId, roomId) {
+      return persistSessionRoom(dbAdapter, matrixUserId, roomId);
+    },
+  };
+
   let matrixBackendAuthentication = new MatrixBackendAuthentication(
     matrixClient,
     realmSecretSeed,
@@ -38,6 +54,7 @@ export default function handleCreateSessionRequest({
       createJWT: async (user: string, sessionRoom: string) =>
         createJWT({ user, sessionRoom }, realmSecretSeed),
     } as Utils,
+    sessionRoomStore,
   );
 
   return async function (ctxt: Koa.Context, _next: Koa.Next) {

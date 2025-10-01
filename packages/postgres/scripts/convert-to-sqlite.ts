@@ -125,6 +125,15 @@ function createColumns(
           ) {
             column.push('DEFAULT', '(hex(randomblob(16)))');
             break;
+          } else if (
+            constraint.expr.type === 'func_call' &&
+            constraint.expr.name.type === 'identifier'
+          ) {
+            let funcName = constraint.expr.name.name.toLowerCase();
+            if (funcName === 'current_timestamp' || funcName === 'now') {
+              column.push('DEFAULT', 'CURRENT_TIMESTAMP');
+              break;
+            }
           } else {
             throw new Error(
               `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
