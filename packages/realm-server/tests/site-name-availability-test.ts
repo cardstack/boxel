@@ -7,7 +7,7 @@ import handleCheckSiteNameAvailabilityRequest from '../handlers/handle-check-sit
 import Koa from 'koa';
 
 module(basename(__filename), function () {
-  module.only('site name availability endpoint', function (hooks) {
+  module('site name availability endpoint', function (hooks) {
     let dbAdapter: PgAdapter;
     let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
