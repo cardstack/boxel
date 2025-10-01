@@ -10,9 +10,14 @@ import {
   formattedError,
   isCardErrorJSONAPI,
   isCardError,
+  CardError,
   type CardErrorsJSONAPI,
+  type CardErrorJSONAPI,
   type LooseSingleCardDocument,
+  type RenderError,
+  type ErrorEntry,
 } from '@cardstack/runtime-common';
+import { serializableError } from '@cardstack/runtime-common/error';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -50,10 +55,15 @@ export default class RenderRoute extends Route<Model> {
       }
     }
     let element: HTMLElement = document.querySelector('[data-prerender]')!;
-    let payload: any;
+    let errorPayload: RenderError;
     if (reason) {
-      if (isCardErrorJSONAPI(reason) || isCardError(reason)) {
-        payload = reason;
+      if (isCardError(reason)) {
+        errorPayload = {
+          type: 'error',
+          error: { ...reason, stack: reason.stack },
+        };
+      } else if (isCardErrorJSONAPI(reason)) {
+        errorPayload = errorJsonApiToErrorEntry({ ...reason });
       } else if (
         typeof reason === 'object' &&
         reason !== null &&
@@ -61,14 +71,31 @@ export default class RenderRoute extends Route<Model> {
         Array.isArray((reason as any).errors) &&
         (reason as any).errors.length > 0
       ) {
-        payload = (reason as any).errors[0];
+        errorPayload = errorJsonApiToErrorEntry({
+          ...(reason as any).errors[0],
+          id,
+        });
       } else {
-        payload = formattedError(id, reason).errors[0];
+        errorPayload = {
+          type: 'error',
+          error:
+            reason instanceof CardError
+              ? { ...serializableError(reason) }
+              : {
+                  id,
+                  message: reason.message,
+                  stack: reason.stack,
+                  status: 500,
+                },
+        };
       }
     } else {
-      payload = { message: 'indexing failed' };
+      errorPayload = {
+        type: 'error',
+        error: new CardError('indexing failed', { status: 500, id }),
+      };
     }
-    element.innerHTML = `${JSON.stringify(payload)}`;
+    element.innerHTML = `${JSON.stringify(errorPayload)}`;
     // Defer setting prerender status until we know Ember health
     void this.emberHealth
       .isResponsive()
@@ -180,8 +207,15 @@ export default class RenderRoute extends Route<Model> {
     transition.abort();
     let serializedError: string;
     try {
-      JSON.parse(error.message);
-      serializedError = error.message;
+      let cardError: CardError = JSON.parse(error.message);
+      serializedError = JSON.stringify(
+        {
+          type: 'error',
+          error: cardError,
+        } as RenderError,
+        null,
+        2,
+      );
     } catch (e) {
       let current: Transition['to'] | null = transition?.to;
       let id: string | undefined;
@@ -191,13 +225,19 @@ export default class RenderRoute extends Route<Model> {
           current = current?.parent;
         }
       } while (current && !id);
-      serializedError = JSON.stringify(
-        formattedError(id, error).errors[0],
-        null,
-        2,
-      );
+      let errorJSONAPI = formattedError(id, error).errors[0];
+      let errorPayload = errorJsonApiToErrorEntry(errorJSONAPI);
+      serializedError = JSON.stringify(errorPayload, null, 2);
     }
     this.router.transitionTo('render-error', serializedError);
     return false;
   }
+}
+
+function errorJsonApiToErrorEntry(errorJSONAPI: CardErrorJSONAPI): ErrorEntry {
+  let error = CardError.fromCardErrorJsonAPI(errorJSONAPI);
+  return {
+    type: 'error',
+    error,
+  };
 }

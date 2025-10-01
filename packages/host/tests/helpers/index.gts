@@ -222,7 +222,7 @@ export async function capturePrerenderResult(
   let status = element.dataset.prerenderStatus as 'ready' | 'error';
   if (status === 'error') {
     // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
-    return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
+    return { status, value: element.innerHTML!.replace(/}[^}]*$/, '}') };
   } else {
     return { status, value: element.children[0][capture]! };
   }

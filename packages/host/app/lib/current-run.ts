@@ -669,8 +669,22 @@ export class CurrentRun {
           userId: this.#userId,
           permissions: this.#permissions,
         });
+        // TODO test this
         if ('error' in renderResult && renderResult.error) {
-          // TODO need to add error doc in the correct shape
+          let renderError = renderResult.error;
+          if (
+            renderError.error.id &&
+            renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
+          ) {
+            renderError.error.deps = renderError.error.deps ?? [];
+            renderError.error.deps.push(
+              renderError.error.id.replace(/\.json$/, ''),
+            );
+          }
+          log.warn(
+            `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
+          );
+          await this.updateEntry(instanceURL, renderError);
           return;
         } else {
           let {
