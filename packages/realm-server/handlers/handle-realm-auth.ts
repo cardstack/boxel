@@ -4,6 +4,7 @@ import { type CreateRoutesArgs } from '../routes';
 import {
   SupportedMimeType,
   fetchUserPermissions,
+  getSessionRoom,
 } from '@cardstack/runtime-common';
 import { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
@@ -30,12 +31,7 @@ export default function handleRealmAuth({
       return;
     }
 
-    let dmRooms =
-      (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-
-    let sessionRoomId = dmRooms[user.matrixUserId];
+    let sessionRoomId = await getSessionRoom(dbAdapter, user.matrixUserId);
 
     let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
       userId: matrixUserId,

@@ -44,6 +44,7 @@ import {
   passwordFromSeed,
   getMatrixUsername,
 } from '@cardstack/runtime-common/matrix-client';
+import { getSessionRoom } from '@cardstack/runtime-common';
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -680,15 +681,12 @@ export class RealmServer {
     eventType: string,
     data?: Record<string, any>,
   ) => {
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let roomId = dmRooms[user];
+    let roomId = await getSessionRoom(this.dbAdapter, user);
     if (!roomId) {
       console.error(
         `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
       );
+      return;
     }
 
     await this.matrixClient.sendEvent(roomId, 'm.room.message', {

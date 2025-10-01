@@ -226,6 +226,7 @@ export class NodeAdapter implements RealmAdapter {
   async broadcastRealmEvent(
     event: RealmEventContent,
     matrixClient: MatrixClient,
+    sessionRooms: Record<string, string>,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
 
@@ -236,22 +237,12 @@ export class NodeAdapter implements RealmAdapter {
       return;
     }
 
-    let dmRooms;
+    realmEventsLog.debug(
+      'Sending to dm rooms',
+      Object.values(sessionRooms),
+    );
 
-    try {
-      dmRooms =
-        (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-          'boxel.session-rooms',
-        )) ?? {};
-    } catch (e) {
-      realmEventsLog.error('Error getting account data', e);
-      return;
-    }
-
-    realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
-
-    for (let userId of Object.keys(dmRooms)) {
-      let roomId = dmRooms[userId];
+    for (let [userId, roomId] of Object.entries(sessionRooms)) {
       try {
         await matrixClient.sendEvent(roomId, APP_BOXEL_REALM_EVENT_TYPE, event);
       } catch (e) {
