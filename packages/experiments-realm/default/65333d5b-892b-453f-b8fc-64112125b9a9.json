@@ -1,0 +1,79 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "bodyCopy": {
+        "color": "#000000",
+        "fontSize": "14px",
+        "fontFamily": "'Noto Sans', 'Helvetica Neue', sans-serif",
+        "fontWeight": "500",
+        "lineHeight": "1.4"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "IKEA",
+        "description": "Guide to brand elements and visual style",
+        "thumbnailURL": "https://cdn.brandfetch.io/idLsXYVLUs/w/400/h/400/theme/dark/icon.png?c=1dxbfHSJFAPEGdCLU4o5B"
+      },
+      "headline": {
+        "color": "#000000",
+        "fontSize": "28px",
+        "fontFamily": "'Noto Sans', 'Helvetica Neue', sans-serif",
+        "fontWeight": "600",
+        "lineHeight": "1.6"
+      },
+      "styleName": null,
+      "visualDNA": null,
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap"
+      ],
+      "spacingUnit": null,
+      "cornerRadius": "0px",
+      "inspirations": [],
+      "primaryMark1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "primaryMark2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "secondaryMark1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "secondaryMark2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "wallpaperImages": [],
+      "brandColorPalette": [
+        {
+          "name": "Candlelight",
+          "value": "#FFDA1A"
+        },
+        {
+          "name": "White",
+          "value": "#FFFFFF"
+        },
+        {
+          "name": "Cobalt",
+          "value": "#0051BA"
+        }
+      ],
+      "functionalPalette": {
+        "light": "#FFFFFF",
+        "accent": "#FFD500",
+        "neutral": "#F5F5F5",
+        "primary": "#0058A3",
+        "secondary": "#FFD500"
+      },
+      "primaryMarkGreyscale1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "primaryMarkGreyscale2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "socialMediaProfileIcon": "https://cdn.brandfetch.io/idLsXYVLUs/w/400/h/400/theme/dark/icon.png?c=1dxbfHSJFAPEGdCLU4o5B",
+      "secondaryMarkGreyscale1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "secondaryMarkGreyscale2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1dxbfHSJFAPEGdCLU4o5B"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
