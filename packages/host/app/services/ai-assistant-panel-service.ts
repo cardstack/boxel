@@ -88,13 +88,13 @@ export default class AiAssistantPanelService extends Service {
     return this.commandModuleResource.module as typeof CommandModule;
   }
 
-  get hideAiAssistant() {
+  get isAiAssistantHidden() {
     return this.operatorModeStateService.state.submode === Submodes.Host;
   }
 
   get isOpen() {
     return (
-      this.operatorModeStateService.aiAssistantOpen && !this.hideAiAssistant
+      this.operatorModeStateService.aiAssistantOpen && !this.isAiAssistantHidden
     );
   }
 
