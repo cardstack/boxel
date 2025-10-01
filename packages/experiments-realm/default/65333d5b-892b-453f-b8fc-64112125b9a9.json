@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "bodyCopy": {
-        "color": "#000000",
+        "color": "#333",
         "fontSize": "14px",
         "fontFamily": "'Noto Sans', 'Helvetica Neue', sans-serif",
         "fontWeight": "500",
@@ -22,7 +22,7 @@
         "thumbnailURL": "https://cdn.brandfetch.io/idLsXYVLUs/w/400/h/400/theme/dark/icon.png?c=1dxbfHSJFAPEGdCLU4o5B"
       },
       "headline": {
-        "color": "#000000",
+        "color": "#000",
         "fontSize": "28px",
         "fontFamily": "'Noto Sans', 'Helvetica Neue', sans-serif",
         "fontWeight": "600",
@@ -34,10 +34,10 @@
         "https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap"
       ],
       "spacingUnit": null,
-      "cornerRadius": "0px",
+      "cornerRadius": "10px",
       "inspirations": [],
-      "primaryMark1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
-      "primaryMark2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "primaryMark1": "https://www.ikea.com/global/assets/logos/brand/ikea.svg",
+      "primaryMark2": "https://www.ikea.com/global/assets/logos/brand/ikea.svg",
       "secondaryMark1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1dxbfHSJFAPEGdCLU4o5B",
       "secondaryMark2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1dxbfHSJFAPEGdCLU4o5B",
       "wallpaperImages": [],
@@ -62,11 +62,11 @@
         "primary": "#0058A3",
         "secondary": "#FFD500"
       },
-      "primaryMarkGreyscale1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
-      "primaryMarkGreyscale2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "primaryMarkGreyscale1": "",
+      "primaryMarkGreyscale2": "",
       "socialMediaProfileIcon": "https://cdn.brandfetch.io/idLsXYVLUs/w/400/h/400/theme/dark/icon.png?c=1dxbfHSJFAPEGdCLU4o5B",
-      "secondaryMarkGreyscale1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1dxbfHSJFAPEGdCLU4o5B",
-      "secondaryMarkGreyscale2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1dxbfHSJFAPEGdCLU4o5B"
+      "secondaryMarkGreyscale1": "",
+      "secondaryMarkGreyscale2": ""
     },
     "relationships": {
       "cardInfo.theme": {

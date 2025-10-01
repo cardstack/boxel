@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { concat } from '@ember/helper';
 import { startCase } from 'lodash';
 import {
   Component,
@@ -18,21 +19,34 @@ import {
   GridContainer,
   Swatch,
 } from '@cardstack/boxel-ui/components';
-import { cn, sanitizeHtmlSafe } from '@cardstack/boxel-ui/helpers';
+import {
+  cn,
+  cssVar,
+  sanitizeHtmlSafe,
+  getContrastColor,
+} from '@cardstack/boxel-ui/helpers';
 import { getField } from '@cardstack/runtime-common';
-import UrlField from './url';
-import setBackgroundImage from './helpers/set-background-image';
 
 class BrandGuideIsolated extends Component<typeof BrandGuide> {
   <template>
     <article class='brand-guide'>
-      <BoxelContainer @tag='header' @display='flex' class='header-section'>
+      <BoxelContainer
+        @tag='header'
+        @display='flex'
+        class='header-section'
+        style={{cssVar
+          primary-foreground=(getContrastColor
+            @model.functionalPalette.primary
+            @model.headline.color
+            @model.functionalPalette.light
+          )
+        }}
+      >
         <h1><@fields.title /></h1>
         {{#if @model.description}}
           <p><@fields.description /></p>
         {{/if}}
       </BoxelContainer>
-
       <BoxelContainer
         @tag='section'
         @display='grid'
@@ -52,13 +66,51 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         class='content-section mark-usage-section'
       >
         <h2>Mark Usage</h2>
+        <FieldContainer @label='Clearance Area' @vertical={{true}}>
+          <div class='preview-field'>
+            <p>Scales in proportion to size of logo used</p>
+            <PreviewContainer class='preview-grid container-group'>
+              <PreviewContainer @hideBoundaries={{true}} @radius='none'>
+                <@fields.primaryMark1
+                  class='mark-clearance primary-clearance'
+                />
+              </PreviewContainer>
+              <PreviewContainer @hideBoundaries={{true}} @radius='none'>
+                <@fields.secondaryMark1
+                  class='mark-clearance secondary-clearance'
+                />
+              </PreviewContainer>
+            </PreviewContainer>
+          </div>
+        </FieldContainer>
+        {{! minimum size }}
+        <FieldContainer @label='Minimum Size' @vertical={{true}}>
+          <div class='preview-field'>
+            <p>For screen use</p>
+            <PreviewContainer class='preview-grid container-group'>
+              <PreviewContainer @hideBoundaries={{true}} @radius='none'>
+                <span class='annotation'><@fields.primaryMarkMinHeight /></span>
+                <@fields.primaryMark1 class='mark-height primary-height' />
+              </PreviewContainer>
+              <PreviewContainer @hideBoundaries={{true}} @radius='none'>
+                <span class='annotation'>
+                  <@fields.secondaryMarkMinHeight />
+                </span>
+                <@fields.secondaryMark1 class='mark-height secondary-height' />
+              </PreviewContainer>
+            </PreviewContainer>
+          </div>
+        </FieldContainer>
+        {{! primary mark }}
         <GridContainer class='preview-grid'>
           <FieldContainer @label='Primary Mark 1' @vertical={{true}}>
             <div class='preview-field'>
               {{#let (getField @model 'primaryMark1') as |f|}}
                 <p>{{f.description}}</p>
               {{/let}}
-              <@fields.primaryMark1 />
+              <PreviewContainer>
+                <@fields.primaryMark1 />
+              </PreviewContainer>
             </div>
           </FieldContainer>
           <FieldContainer @label='Primary Mark 2' @vertical={{true}}>
@@ -66,17 +118,22 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
               {{#let (getField @model 'primaryMark2') as |f|}}
                 <p>{{f.description}}</p>
               {{/let}}
-              <@fields.primaryMark2 class='inverse' />
+              <PreviewContainer @variant='primary'>
+                <@fields.primaryMark2 />
+              </PreviewContainer>
             </div>
           </FieldContainer>
         </GridContainer>
+        {{! secondary mark }}
         <GridContainer class='preview-grid'>
           <FieldContainer @label='Secondary Mark 1' @vertical={{true}}>
             <div class='preview-field'>
               {{#let (getField @model 'secondaryMark1') as |f|}}
                 <p>{{f.description}}</p>
               {{/let}}
-              <@fields.secondaryMark1 />
+              <PreviewContainer>
+                <@fields.secondaryMark1 />
+              </PreviewContainer>
             </div>
           </FieldContainer>
           <FieldContainer @label='Secondary Mark 2' @vertical={{true}}>
@@ -84,18 +141,72 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
               {{#let (getField @model 'secondaryMark2') as |f|}}
                 <p>{{f.description}}</p>
               {{/let}}
-              <@fields.secondaryMark2 class='inverse' />
+              <PreviewContainer @variant='primary'>
+                <@fields.secondaryMark2 class='inverse' />
+              </PreviewContainer>
             </div>
           </FieldContainer>
         </GridContainer>
+        {{! greyscale versions }}
         <FieldContainer @label='Greyscale versions' @vertical={{true}}>
           <div class='preview-field'>
             <p>When full color option is not available, for display on light &
               dark backgrounds</p>
-            <GridContainer class='preview-grid has-container no-gap rounded'>
-              <PreviewContainer />
-              <PreviewContainer @variant='inverse' />
-            </GridContainer>
+            <PreviewContainer class='preview-grid container-group'>
+              <PreviewContainer @hideBoundaries={{true}} @radius='none'>
+                {{#if @model.primaryMarkGreyscale1}}
+                  <@fields.primaryMarkGreyscale1 />
+                {{else}}
+                  <@fields.primaryMark1 class='grayscale' />
+                {{/if}}
+                {{#if @model.secondaryMarkGreyscale1}}
+                  <@fields.secondaryMarkGreyscale1 />
+                {{else if @model.secondaryMark1}}
+                  <@fields.secondaryMark1 class='grayscale' />
+                {{/if}}
+              </PreviewContainer>
+              <PreviewContainer
+                @variant='inverse'
+                @hideBoundaries={{true}}
+                @radius='none'
+              >
+                {{#if @model.primaryMarkGreyscale2}}
+                  <@fields.primaryMarkGreyscale2 />
+                {{else}}
+                  <@fields.primaryMark2 class='grayscale' />
+                {{/if}}
+                {{#if @model.secondaryMarkGreyscale2}}
+                  <@fields.primaryMarkGreyscale2 />
+                {{else if @model.secondaryMark2}}
+                  <@fields.secondaryMark2 class='grayscale' />
+                {{/if}}
+              </PreviewContainer>
+            </PreviewContainer>
+          </div>
+        </FieldContainer>
+        {{! social media icon }}
+        <FieldContainer @label='Social media/profile icon' @vertical={{true}}>
+          <div class='preview-field'>
+            {{#let (getField @model 'socialMediaProfileIcon') as |field|}}
+              <p>{{field.description}}</p>
+            {{/let}}
+            <PreviewContainer class='preview-grid container-group'>
+              <PreviewContainer @hideBoundaries={{true}} @radius='none'>
+                <PreviewContainer @size='icon'>
+                  <@fields.socialMediaProfileIcon />
+                </PreviewContainer>
+              </PreviewContainer>
+              <PreviewContainer
+                class='media-handle-group'
+                @hideBoundaries={{true}}
+                @radius='none'
+              >
+                <PreviewContainer @size='icon'>
+                  <@fields.socialMediaProfileIcon />
+                </PreviewContainer>
+                <span class='media-handle'>@username</span>
+              </PreviewContainer>
+            </PreviewContainer>
           </div>
         </FieldContainer>
       </BoxelContainer>
@@ -133,15 +244,25 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         margin-block: 0;
       }
       .brand-guide {
+        --annotation: rgba(255 0 0 / 0.15);
+        --annotation-foreground: rgb(255 0 0);
         --boxel-container-padding: var(--boxel-sp-xxl);
+        --container-border: 1px solid
+          color-mix(
+            in oklab,
+            var(--border, var(--muted, var(--boxel-100))) 90%,
+            var(--foreground, var(--boxel-dark))
+          );
         height: 100%;
       }
       .header-section {
-        padding: var(--boxel-sp-xl);
+        min-height: 23.125rem; /* 370px */
         flex-direction: column;
         justify-content: center;
         align-items: center;
         gap: 0;
+        background-color: var(--primary);
+        color: var(--primary-foreground);
       }
       .content-section + .content-section {
         border-top: var(--boxel-border);
@@ -152,29 +273,52 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         gap: var(--boxel-sp-xs);
       }
       .preview-grid {
+        display: grid;
         grid-template-columns: 1fr 1fr;
       }
-      .no-gap {
+      .container-group {
+        --boxel-container-padding: 0;
         gap: 0;
       }
-      .no-gap > :deep(*) {
-        border-radius: 0;
+      .container-group > * + * {
+        border-left: var(--container-border);
       }
-      .no-gap :deep(:first-child) {
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-left-radius: var(--boxel-border-radius);
+      .grayscale {
+        filter: grayscale(1);
       }
-      .has-container {
-        border: 1px solid
-          color-mix(
-            in oklab,
-            var(--border, var(--muted, var(--boxel-100))) 90%,
-            var(--foreground, var(--boxel-dark))
-          );
+      .media-handle-group {
+        gap: var(--boxel-sp-xs);
       }
-      .rounded {
-        border-radius: var(--boxel-border-radius);
-        overflow: hidden;
+      .media-handle {
+        font-weight: var(--boxel-font-weight-semibold);
+      }
+      .mark-clearance {
+        min-width: initial;
+        border-color: var(--annotation);
+        border-style: solid;
+        border-width: var(--mark-clearance, 0px);
+        box-sizing: content-box;
+      }
+      .primary-clearance {
+        --mark-clearance: var(--logo-primary-clearance);
+      }
+      .secondary-clearance {
+        --mark-clearance: var(--logo-secondary-clearance);
+      }
+      .annotation {
+        color: var(--annotation-foreground);
+        font-weight: var(--boxel-font-weight-bold);
+      }
+      .mark-height {
+        min-width: initial;
+        padding-left: var(--boxel-sp-xs);
+        border-left: 4px solid var(--annotation);
+      }
+      .primary-height {
+        --logo-min-height: var(--logo-primary-min-height);
+      }
+      .secondary-height {
+        --logo-min-height: var(--logo-secondary-min-height);
       }
     </style>
   </template>
@@ -182,9 +326,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 
 class PreviewContainer extends GlimmerComponent<{
   Args: {
-    variant?: 'default' | 'inverse' | 'muted' | string;
-    displayContainer?: boolean;
-    rounded?: boolean;
+    hideBoundaries?: boolean;
+    radius?: 'default' | 'round' | 'none'; // default is curved
+    size?: 'default' | 'icon';
+    variant?: 'default' | 'inverse' | 'muted' | 'primary'; // default is light-mode
   };
   Blocks: { default: [] };
   Element: HTMLElement;
@@ -193,41 +338,66 @@ class PreviewContainer extends GlimmerComponent<{
     <BoxelContainer
       class={{cn
         'preview-container'
-        (if @variant @variant 'default')
-        has-container=@displayContainer
-        rounded=@rounded
+        (if @variant (concat 'variant-' @variant) 'variant-default')
+        (if @size (concat 'size-' @size) 'size-default')
+        (if @radius (concat 'radius-' @radius) 'radius-default')
+        (unless @hideBoundaries 'display-boundaries')
       }}
-      @display='flex'
       ...attributes
     >
       {{yield}}
     </BoxelContainer>
     <style scoped>
-      .preview-container {
-        min-height: 11.25rem;
-        align-items: center;
-        justify-content: center;
-        background-color: var(--background, var(--boxel-light));
-        color: var(--foreground, var(--boxel-dark));
-      }
-      .inverse {
-        background-color: var(--foreground, var(--boxel-dark));
-        color: var(--background, var(--boxel-light));
-      }
-      .muted {
-        background-color: var(--muted, var(--boxel-100));
-        color: var(--foreground, var(--boxel-dark));
-      }
-      .rounded {
-        border-radius: var(--boxel-border-radius);
-      }
-      .has-container {
-        border: 1px solid
-          color-mix(
-            in oklab,
-            var(--border, var(--muted, var(--boxel-100))) 90%,
-            var(--foreground, var(--boxel-dark))
-          );
+      @layer boxelComponentL1 {
+        .preview-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: var(--boxel-sp);
+          max-width: 100%;
+          overflow: hidden;
+        }
+        .size-default {
+          --boxel-container-padding: var(--boxel-sp-xl);
+          width: 100%;
+          min-height: 11.25rem; /* 180px */
+        }
+        .size-icon {
+          --boxel-container-padding: 0;
+          flex-shrink: 0;
+          width: var(--boxel-icon-size); /* 40px */
+          height: var(--boxel-icon-size); /* 40px */
+          aspect-ratio: 1;
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        .display-boundaries {
+          border: var(--container-border, var(--boxel-border));
+        }
+        .variant-default {
+          background-color: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .variant-inverse {
+          background-color: var(--foreground, var(--boxel-dark));
+          color: var(--background, var(--boxel-light));
+        }
+        .variant-primary {
+          background-color: var(--primary, var(--boxel-dark));
+          color: var(--primary-foreground, var(--boxel-light));
+        }
+        .variant-muted {
+          background-color: var(--muted, var(--boxel-100));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .radius-default {
+          border-radius: var(--boxel-border-radius);
+        }
+        .radius-round {
+          border-radius: 50%;
+        }
+        .radius-none {
+          border-radius: 0;
+        }
       }
     </style>
   </template>
@@ -287,25 +457,24 @@ class FunctionalPaletteEmbedded extends Component<typeof FunctionalPalette> {
   }
 }
 
-export class MarkField extends UrlField {
+export class MarkField extends URLField {
   static displayName = 'Mark URL';
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <PreviewContainer
-        @displayContainer={{true}}
-        @rounded={{true}}
+      <img
+        class='mark-image'
+        src={{@model}}
+        role='presentation'
         {{! @glint-ignore }}
         ...attributes
-      >
-        <div class='mark-image' style={{setBackgroundImage @model}} />
-      </PreviewContainer>
+      />
       <style scoped>
-        .mark-image {
-          width: 100%;
-          min-height: inherit;
-          background-repeat: no-repeat;
-          background-position: center;
-          background-size: contain;
+        @layer {
+          .mark-image {
+            min-width: 50%;
+            width: auto;
+            height: var(--logo-min-height, 2.5rem);
+          }
         }
       </style>
     </template>
@@ -352,7 +521,7 @@ class TypographyField extends FieldDef {
           <p>{{this.styleSummary}}</p>
           <PreviewContainer
             @variant='muted'
-            @rounded={{true}}
+            @hideBoundaries={{true}}
             class='typography-preview'
             style={{this.styles}}
           >
@@ -447,6 +616,8 @@ export default class BrandGuide extends StyleReference {
 
   // Mark Usage
   // primary mark
+  @field primaryMarkClearanceRatio = contains(StringField);
+  @field primaryMarkMinHeight = contains(StringField);
   @field primaryMark1 = contains(MarkField, {
     description: 'For use on light background',
   });
@@ -460,6 +631,8 @@ export default class BrandGuide extends StyleReference {
     description: 'Greyscale version for use on dark background',
   });
   // secondary mark
+  @field secondaryMarkClearanceRatio = contains(StringField);
+  @field secondaryMarkMinHeight = contains(StringField);
   @field secondaryMark1 = contains(MarkField, {
     description: 'For use on light background',
   });
@@ -473,7 +646,7 @@ export default class BrandGuide extends StyleReference {
     description: 'Greyscale version for use on dark background',
   });
   // social media mark
-  @field socialMediaProfileIcon = contains(URLField, {
+  @field socialMediaProfileIcon = contains(MarkField, {
     description:
       'For social media purposes or any small format usage requiring 1:1 aspect ratio',
   });
@@ -492,6 +665,12 @@ export default class BrandGuide extends StyleReference {
     },
   });
 
+  private calcForeground(bgColor?: string) {
+    let darkColor = this.bodyCopy.color ?? '#000';
+    let lightColor = this.functionalPalette.light ?? '#fff';
+    return getContrastColor(bgColor, darkColor, lightColor);
+  }
+
   private computeCSSFromFields() {
     const cssBlocks: string[] = [];
 
@@ -502,6 +681,52 @@ export default class BrandGuide extends StyleReference {
     this.addCSSVar(rootVars, '--background', this.functionalPalette.light);
     this.addCSSVar(rootVars, '--muted', this.functionalPalette.neutral);
     this.addCSSVar(rootVars, '--accent', this.functionalPalette.accent);
+    this.addCSSVar(
+      rootVars,
+      '--primary-foreground',
+      this.calcForeground(this.functionalPalette.primary),
+    );
+    this.addCSSVar(
+      rootVars,
+      '--secondary-foreground',
+      this.calcForeground(this.functionalPalette.secondary),
+    );
+    this.addCSSVar(
+      rootVars,
+      '--muted-foreground',
+      this.calcForeground(this.functionalPalette.neutral),
+    );
+    this.addCSSVar(
+      rootVars,
+      '--accent-foreground',
+      this.calcForeground(this.functionalPalette.accent),
+    );
+
+    // mark usage
+    if (this.primaryMarkMinHeight && this.primaryMarkClearanceRatio) {
+      this.addCSSVar(
+        rootVars,
+        '--logo-primary-clearance',
+        `calc(${this.primaryMarkMinHeight} * ${this.primaryMarkClearanceRatio})`,
+      );
+    }
+    if (this.secondaryMarkMinHeight && this.secondaryMarkClearanceRatio) {
+      this.addCSSVar(
+        rootVars,
+        '--logo-secondary-clearance',
+        `calc(${this.secondaryMarkMinHeight} * ${this.secondaryMarkClearanceRatio})`,
+      );
+    }
+    this.addCSSVar(
+      rootVars,
+      '--logo-primary-min-height',
+      this.primaryMarkMinHeight,
+    );
+    this.addCSSVar(
+      rootVars,
+      '--logo-secondary-min-height',
+      this.secondaryMarkMinHeight,
+    );
 
     // typography
     this.addCSSVar(
