@@ -22,6 +22,7 @@ import {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
+  SearchCardSummaryField,
 } from './commands/search-card-result';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
@@ -337,6 +338,7 @@ export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
+  SearchCardSummaryField,
 };
 
 export class RealmInfoField extends FieldDef {
@@ -382,11 +384,12 @@ export class CreateSpecsInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field module = contains(StringField);
   @field targetRealm = contains(StringField);
+  @field autoGenerateReadme = contains(BooleanField);
 }
 
 export class CreateSpecsResult extends CardDef {
-  @field newSpecs = linksToMany(Spec); // only newly created specs
-  @field specs = linksToMany(Spec); // all specs newly created and pre-existing ones
+  @field newSpecs = linksToMany(Spec);
+  @field specs = linksToMany(Spec);
 }
 
 export class PatchFieldsInput extends CardDef {
