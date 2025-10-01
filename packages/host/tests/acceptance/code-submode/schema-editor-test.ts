@@ -21,6 +21,7 @@ import {
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
 } from '../../helpers';
@@ -240,7 +241,6 @@ const ambiguousDisplayNamesCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let monacoService: MonacoService;
 
@@ -256,11 +256,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -564,6 +565,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+      { timeout: 2000 },
     );
 
     await click(

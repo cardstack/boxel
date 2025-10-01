@@ -326,9 +326,8 @@ module('Integration | Command | show-card', function (hooks) {
 
       await command.execute({ cardId });
 
-      assert.strictEqual(
+      assert.false(
         mockOperatorModeStateService.state.workspaceChooserOpened,
-        false,
         'Workspace chooser is closed after showing card',
       );
     });

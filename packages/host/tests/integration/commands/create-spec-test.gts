@@ -13,6 +13,7 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupAuthEndpoints,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -43,6 +44,7 @@ module('Integration | Command | create-specs', function (hooks) {
   );
 
   hooks.beforeEach(async function () {
+    setupAuthEndpoints();
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: testRealmURL,

@@ -34,6 +34,7 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { RealmAction } from '@cardstack/runtime-common';
 import {
   testHostModeRealmURL,
   testRealmInfo,
@@ -60,11 +61,10 @@ import {
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
+import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
-
-import type { MockUtils } from './mock-matrix/_utils';
 
 export {
   visitOperatorMode,
@@ -350,6 +350,7 @@ export async function setupAcceptanceTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  setupAuthEndpoints();
   return await setupTestRealm({
     contents,
     realmURL,
@@ -362,16 +363,20 @@ export async function setupAcceptanceTestRealm({
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
+  permissions,
   mockMatrixUtils,
 }: {
   contents: RealmContents;
   realmURL?: string;
+  permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  setupAuthEndpoints();
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: false,
+    permissions: permissions as RealmPermissions,
     mockMatrixUtils,
   });
 }
@@ -404,11 +409,6 @@ async function setupTestRealm({
   let { queue } = getService('queue');
 
   realmURL = realmURL ?? testRealmURL;
-
-  let realmServer = getService('realm-server');
-  if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    realmServer.setAvailableRealmURLs([realmURL]);
-  }
 
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
@@ -481,10 +481,77 @@ async function setupTestRealm({
   await worker.run();
   await realm.start();
 
+  let realmServer = getService('realm-server');
+  if (!realmServer.availableRealmURLs.includes(realmURL)) {
+    realmServer.setAvailableRealmURLs([realmURL]);
+  }
+
   return { realm, adapter };
 }
 
-export function setupUserSubscription(matrixRoomId: string) {
+export function setupAuthEndpoints(
+  realmPermissions: Record<string, string[]> = {
+    [testRealmURL]: ['read', 'write'],
+  },
+) {
+  getService('network').mount(
+    async (req: Request) => {
+      if (req.url.includes('_realm-auth')) {
+        const authTokens: Record<string, string> = {};
+        for (const [realmURL, permissions] of Object.entries(
+          realmPermissions,
+        )) {
+          authTokens[realmURL] = createJWT(
+            {
+              user: '@testuser:localhost',
+              sessionRoom: getRoomIdForRealmAndUser(
+                realmURL,
+                '@testuser:localhost',
+              ),
+              permissions: permissions as RealmAction[],
+              realm: realmURL,
+            },
+            '1d',
+            testRealmSecretSeed,
+          );
+        }
+        return new Response(JSON.stringify(authTokens), { status: 200 });
+      }
+      if (req.url.includes('_server-session')) {
+        let data = await req.json();
+        if (!data.challenge) {
+          return new Response(
+            JSON.stringify({
+              challenge: 'test',
+              room: 'test-auth-realm-server-session-room',
+            }),
+            {
+              status: 401,
+            },
+          );
+        } else {
+          return new Response('Ok', {
+            status: 200,
+            headers: {
+              Authorization: createJWT(
+                {
+                  user: '@testuser:localhost',
+                  sessionRoom: 'test-auth-realm-server-session-room',
+                },
+                '1d',
+                testRealmSecretSeed,
+              ),
+            },
+          });
+        }
+      }
+      return null;
+    },
+    { prepend: true },
+  );
+}
+
+export function setupUserSubscription() {
   const userResponseBody = {
     data: {
       type: 'user',
@@ -539,34 +606,6 @@ export function setupUserSubscription(matrixRoomId: string) {
     async (req: Request) => {
       if (req.url.includes('_user')) {
         return new Response(JSON.stringify(userResponseBody));
-      }
-      if (req.url.includes('_server-session')) {
-        let data = await req.json();
-        if (!data.challenge) {
-          return new Response(
-            JSON.stringify({
-              challenge: 'test',
-              room: matrixRoomId,
-            }),
-            {
-              status: 401,
-            },
-          );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: '@testuser:localhost',
-                  sessionRoom: matrixRoomId,
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
-        }
       }
       return null;
     },
@@ -679,6 +718,12 @@ export function setupRealmServerEndpoints(
   endpoints?: RealmServerEndpoint[],
 ) {
   let defaultEndpoints: RealmServerEndpoint[] = [
+    {
+      route: '_realm-auth',
+      getResponse: async function (_req: Request) {
+        return new Response(JSON.stringify({}), { status: 200 });
+      },
+    },
     {
       route: '_server-session',
       getResponse: async function (req: Request) {
