@@ -1,4 +1,9 @@
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  linksTo,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
@@ -24,6 +29,9 @@ export class SuggestAvatar extends Command<
   protected async run(input: SuggestAvatarInput): Promise<undefined> {
     let { name } = input;
 
+    let skillCardId = new URL('../Skill/avatar-suggestion', import.meta.url)
+      .href;
+
     try {
       let useAiAssistantCommand = new UseAiAssistantCommand(
         this.commandContext,
@@ -31,7 +39,9 @@ export class SuggestAvatar extends Command<
       let result = await useAiAssistantCommand.execute({
         roomName: `Avatar Suggestions: ${name || 'Unnamed Avatar'}`,
         openRoom: true,
-        prompt: `Please suggest two example avatar prompts: one describing a visual style and one referencing a celebrity's look. Then ask if these examples are helpful or if different suggestions are needed.`,
+        prompt: `Please suggest two example avatar prompts: one describing a visual style and one referencing a celebrity's look.`,
+        skillCardIds: [skillCardId],
+        llmModel: 'anthropic/claude-sonnet-4',
       });
 
       if (result.roomId) {
