@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "unit": "year",
+      "count": 1,
+      "scope": "calendar",
+      "resetBasis": "calendar-year",
+      "eligibleBookingNightsMin": null,
+      "maxUsesPerPeriod": null,
+      "minAmount": null,
+      "minAmountCurrency": null,
+      "notes": null,
+      "title": "1 year (calendar)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "TimePeriod"
+      }
+    }
+  }
+}

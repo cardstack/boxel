@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "membershipProgram": "Marriott Bonvoy",
+      "statusLevel": "Gold Elite",
+      "autoEnrollment": false,
+      "enrollmentInstructions": "Enroll via your American Express account to activate Gold Elite status; terms apply.",
+      "benefitsList": [
+        "Upgrades to enhanced rooms upon check-in when available",
+        "Available at participating hotels when booked with a Qualifying Rate"
+      ],
+      "partner": "Marriott Bonvoy",
+      "enrollmentRequired": true,
+      "conditions": null,
+      "title": "Marriott Bonvoy Gold Elite"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "MembershipBenefit"
+      }
+    }
+  }
+}

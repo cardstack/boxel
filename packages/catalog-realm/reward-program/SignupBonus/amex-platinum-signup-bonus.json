@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "bonusType": "points",
+      "pointsAmount": 80000,
+      "bonusCurrency": "Membership Rewards",
+      "spendRequirementAmount": 8000,
+      "spendRequirementCurrency": "USD",
+      "spendWindowDays": 180,
+      "description": "Earn 80,000 Membership Rewards points after you spend $8,000 on purchases in your first 6 months of Card Membership.",
+      "title": "80,000 Membership Rewards"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "SignupBonus"
+      }
+    }
+  }
+}

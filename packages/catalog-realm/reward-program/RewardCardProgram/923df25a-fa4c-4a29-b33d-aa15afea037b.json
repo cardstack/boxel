@@ -1,0 +1,822 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RewardCardProgram",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "Premium business credit card offering over $3,500 in annual value.",
+      "issuer": "American Express",
+      "network": "American Express",
+      "cardInfo": {
+        "notes": null,
+        "title": "Business Platinum Card",
+        "description": "Premium business credit card with extensive travel and business benefits",
+        "thumbnailURL": "https://icm.aexp-static.com/Internet/Acquisition/US_en/AppContent/OneSite/open/aurora/aurora-hero-card.jpg"
+      },
+      "cardName": "Business Platinum Card from American Express",
+      "annualFee": 895,
+      "amexLogoUrl": "https://cdn.brandfetch.io/id5WXF6Iyd/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "signupBonus": {
+        "bonusType": "points",
+        "description": "Earn 250,000 Membership Rewards® Points after you spend $20,000 in eligible purchases on your Card within the first 3 months of Card Membership.†",
+        "pointsAmount": 250000,
+        "bonusCurrency": "Membership Rewards",
+        "spendWindowDays": 90,
+        "spendRequirementAmount": 20000,
+        "spendRequirementCurrency": "USD"
+      },
+      "earningRules": [
+        {
+          "category": "Travel - Amex Travel",
+          "rateMultiplier": 5,
+          "appliesTo": "Flights and prepaid hotels booked on AmexTravel.com",
+          "capAmount": null,
+          "capCurrency": null,
+          "capPeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "conditions": "Earn 5X Membership Rewards® points on flights and prepaid hotels booked on AmexTravel.com.‡"
+        },
+        {
+          "category": "Business Purchases",
+          "rateMultiplier": 2,
+          "appliesTo": "Key business categories or single purchases of $5,000 or more",
+          "capAmount": 2000000,
+          "capCurrency": "USD",
+          "capPeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "conditions": "Earn 2X points on eligible purchases in key business categories, or on single purchases of $5K or more. Purchases eligible for multiple additional point bonuses will only receive the highest eligible bonus. Earn 2X on up to $2 million of these purchases per calendar year.‡ Eligible purchases at US: Construction material and hardware suppliers Electronic goods retailers and software & cloud system providers Shipping providers Each eligible purchase of $5,000 or more"
+        },
+        {
+          "category": "Other Purchases",
+          "rateMultiplier": 1,
+          "appliesTo": "All other eligible purchases",
+          "capAmount": null,
+          "capCurrency": null,
+          "capPeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "conditions": "1X POINTS On Other Eligible Purchases Terms and limitations apply.‡"
+        }
+      ],
+      "otherBenefits": [
+        {
+          "name": "35% Points Back on Flights",
+          "benefitType": "Points Back",
+          "description": "Get 35% points back after you use Pay with Points for flights booked through Amex Travel with your selected qualifying airline.",
+          "conditions": "Must use Pay with Points for flight bookings through Amex Travel. Must select qualifying airline. Points back applied automatically after booking.",
+          "maxValue": 1000000,
+          "maxValueUnit": "points",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": "calendar-year",
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          }
+        }
+      ],
+      "programEndDate": null,
+      "programStartDate": "2025-09-18",
+      "annualFeeCurrency": "USD",
+      "statementBenefits": [
+        {
+          "name": "The Global Lounge Collection",
+          "partner": "Centurion Lounges & Partners",
+          "benefitKind": "access",
+          "amount": 850,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.americanexpress.com/us/credit-cards/benefits/detail/airport-lounge-access/",
+          "conditions": "Over $850 of annual value with access to Centurion Lounges, 10 complimentary Delta Sky Club visits when flying on an eligible Delta flight, Priority Pass Select membership (enrollment required), and other select partner lounges.",
+          "details": [
+            "Centurion Lounge access",
+            "10 Delta Sky Club visits per year",
+            "Priority Pass Select membership",
+            "Select partner lounges"
+          ]
+        },
+        {
+          "name": "Hotel Credit",
+          "partner": "Fine Hotels + Resorts / The Hotel Collection",
+          "benefitKind": "statement-credit",
+          "amount": 600,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": 300,
+          "minSpendCurrency": "USD",
+          "programURL": "https://www.americanexpress.com/us/travel/",
+          "conditions": "Credits are applied automatically to eligible bookings. No enrollment required. Must book through AmexTravel.com to qualify.",
+          "details": [
+            "Statement credits up to $300 semi-annually on prepaid bookings through Amex Travel with Fine Hotels + Resorts® or The Hotel Collection®. The Hotel Collection requires a minimum two-night stay.‡"
+          ]
+        },
+        {
+          "name": "Airline Fee Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 200,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.americanexpress.com/us/credit-cards/benefits/detail/airline-fee-credit/",
+          "conditions": "Select one qualifying airline per calendar year. Covers incidental fees like baggage fees, seat upgrades, in-flight purchases. Does not cover airfare. Must purchase directly from airline.",
+          "details": [
+            "Statement credits up to $200 per calendar year for incidental fees charged by your one selected qualifying airline.‡"
+          ]
+        },
+        {
+          "name": "CLEAR Plus Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 209,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.clearme.com/",
+          "conditions": "Credit automatically applied when CLEAR Plus membership fee is charged to the card. Covers membership fee but excludes taxes and fees. Must use card for CLEAR Plus payment.",
+          "details": [
+            "Statement credits up to $209 per calendar year for an auto-renewing CLEAR® Plus Membership, excluding taxes and fees.‡"
+          ]
+        },
+        {
+          "name": "Hilton Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 200,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": 50,
+          "minSpendCurrency": "USD",
+          "programURL": "https://hiltonhonors.com/en_US/enroll/",
+          "conditions": "Must enroll in benefit and have Hilton for Business account. Credits apply quarterly ($50 max per quarter). Must purchase directly with Hilton properties or hilton.com.",
+          "details": [
+            "Hilton for Business members can get statement credits of up to $50 quarterly on eligible purchases made directly with Hilton. Enrollment required. If you do not already have a Hilton for Business account, you will be registered for one at the time you enroll in the benefit.‡"
+          ]
+        },
+        {
+          "name": "Dell Technologies Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 1150,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": 5000,
+          "minSpendCurrency": "USD",
+          "programURL": "https://www.dell.com/en-us/work/shop/american-express",
+          "conditions": "Must enroll for benefit. First $150 credit on any Dell purchases. Additional $1,000 credit unlocked after spending $5,000+ on Dell purchases in same calendar year. Must purchase directly from Dell.",
+          "details": [
+            "Statement credits up to $150 on U.S. purchases directly with Dell Technologies, and an additional $1,000 statement credit after you spend $5,000 or more on those purchases, per calendar year. Enrollment required.‡"
+          ]
+        },
+        {
+          "name": "Adobe Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 250,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": 600,
+          "minSpendCurrency": "USD",
+          "programURL": "https://www.adobe.com/creativecloud/business/teams.html",
+          "conditions": "Must enroll for benefit and spend minimum $600 on Adobe products/services in calendar year to earn the $250 credit. Must purchase directly from Adobe. Covers Creative Cloud, Document Cloud, and other Adobe services.",
+          "details": [
+            "A $250 statement credit per calendar year after you spend $600 or more on U.S. purchases directly with Adobe in a calendar year. Enrollment required.‡"
+          ]
+        },
+        {
+          "name": "Indeed Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 360,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": 90,
+          "minSpendCurrency": "USD",
+          "programURL": "https://employers.indeed.com/",
+          "conditions": "Must enroll for benefit. Up to $90 credit per quarter ($360 annual maximum). Covers Indeed job postings, sponsored jobs, and recruitment services. Must purchase directly from Indeed.",
+          "details": [
+            "Statement credits up to $90 per quarter for U.S. purchases made directly with Indeed. Enrollment required.‡"
+          ]
+        },
+        {
+          "name": "Wireless Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 120,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": 10,
+          "minSpendCurrency": "USD",
+          "programURL": null,
+          "conditions": "Must enroll for benefit. Up to $10 credit per month ($120 annual maximum). Covers monthly wireless service charges from eligible U.S. carriers. Must pay carrier directly with the card.",
+          "details": [
+            "Statement credits up to $10 per month for wireless phone service purchases made directly with a U.S. wireless telephone service provider. Enrollment required.‡",
+            "1Monthly fees include an auto-renewing platform access fee, transaction fees based on One AP usage, and applicable taxes.",
+            "2Statement credits valid from January 1 through December 31 of the calendar year after the calendar year in which you spend $250,000 on eligible purchases on the Business Platinum Card."
+          ]
+        },
+        {
+          "name": "Amex Travel Online Flight Statement Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 1200,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": 250000,
+          "minSpendCurrency": "USD",
+          "programURL": "https://travel.americanexpress.com/",
+          "conditions": "High-spend benefit: Must spend $250,000 on card in calendar year to unlock $1,200 in flight credits for following year. Credits only apply to flights booked through AmexTravel.com. Automatic enrollment.",
+          "details": [
+            "Unlock up to $1,200 in statement credits on flights booked on AmexTravel.com with the Business Platinum Card, for use in the next calendar year1, after spending $250,000 in eligible purchases in this calendar year. Learn more and explore destinations at AmexTravel.com.‡",
+            "1Statement credits valid for flights booked on AmexTravel.com between January 1 and December 31 of the calendar year after the calendar year in which you make $250,000 in eligible purchases with the Business Platinum Card."
+          ]
+        },
+        {
+          "name": "American Express One AP Statement Credit",
+          "partner": null,
+          "benefitKind": "statement-credit",
+          "amount": 2400,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": 250000,
+          "minSpendCurrency": "USD",
+          "programURL": "https://www.americanexpress.com/us/business/accounts-payable/",
+          "conditions": "High-spend benefit: Must spend $250,000 on card in calendar year to unlock $2,400 in One AP credits for following year. Credits apply to One AP platform fees, transaction fees, and taxes. Automatic enrollment.",
+          "details": [
+            "Unlock up to $2,400 in statement credits for use in the next calendar year on American Express One AP® monthly fees1 after you spend $250,000 on eligible purchases on the Business Platinum Card in this calendar year.2 Statement credits will be applied to your monthly bill charged to the Card for our accounts payable solution, One AP.‡",
+            "1Monthly fees include an auto-renewing platform access fee, transaction fees based on One AP usage, and applicable taxes.",
+            "2Statement credits valid from January 1 through December 31 of the calendar year after the calendar year in which you spend $250,000 on eligible purchases on the Business Platinum Card."
+          ]
+        },
+        {
+          "name": "Global Entry or TSA PreCheck Fee Credit",
+          "partner": "U.S. Customs and Border Protection / Transportation Security Administration",
+          "benefitKind": "statement-credit",
+          "amount": 120,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 4,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": "TSA PreCheck up to $85 every 4.5 years; Global Entry includes TSA PreCheck at no additional charge."
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.cbp.gov/travel/trusted-traveler-programs/global-entry",
+          "conditions": "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck® (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check. Credit applies to application fees only.",
+          "details": [
+            "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck® (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check.‡",
+            "Global Entry: $120 statement credit every 4 years",
+            "TSA PreCheck®: Up to $85 statement credit every 4.5 years",
+            "Must pay application fee with Business Platinum Card",
+            "Global Entry includes TSA PreCheck® at no additional charge",
+            "Credit applies to application fees paid to official government enrollment providers"
+          ]
+        }
+      ],
+      "businessOrPersonal": "business",
+      "membershipBenefits": [
+        {
+          "membershipProgram": "Fine Hotels + Resorts",
+          "statusLevel": null,
+          "autoEnrollment": false,
+          "enrollmentInstructions": "No enrollment required. Benefits apply automatically when booking through Amex Travel.",
+          "benefitsList": [
+            "Noon check-in when available",
+            "Room upgrade upon arrival when available",
+            "Daily breakfast for two guests",
+            "Guaranteed 4PM late checkout",
+            "$100 USD equivalent resort/hotel credit",
+            "Complimentary Wi-Fi when available",
+            "Regional and international partner lounges"
+          ],
+          "name": "Fine Hotels + Resorts",
+          "partner": "Fine Hotels + Resorts",
+          "benefitKind": "membership",
+          "amount": null,
+          "currency": null,
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.americanexpress.com/us/travel/fine-hotels-and-resorts/",
+          "conditions": "Book through Amex Travel to receive benefits. Minimum 2-night stay may be required at some properties. Benefits vary by property and availability. Must book with American Express Fine Hotels + Resorts rate to be eligible.",
+          "details": [
+            "Noon check-in when available",
+            "Room upgrade upon arrival when available",
+            "Daily breakfast for two guests",
+            "Guaranteed 4pm late checkout",
+            "$100 USD equivalent resort or hotel credit to be utilized during stay",
+            "Complimentary Wi-Fi, when available",
+            "Lufthansa Lounges: Access when flying Lufthansa same day",
+            "Other select partner lounges: Various regional and international partners"
+          ]
+        },
+        {
+          "membershipProgram": "The Leading Hotels of the World",
+          "statusLevel": "Sterling",
+          "autoEnrollment": false,
+          "enrollmentInstructions": "Enrollment required through American Express benefits platform. Must activate benefit and create Leaders Club account.",
+          "benefitsList": [
+            "Complimentary Wi-Fi at all LHW properties",
+            "Room upgrade upon arrival when available",
+            "VIP guest recognition and personalized service",
+            "Late checkout when available (typically until 2PM)",
+            "Welcome amenity or experience",
+            "Flexible cancellation policies",
+            "Access to exclusive member rates and packages"
+          ],
+          "name": "Leaders Club Sterling Status",
+          "partner": "The Leading Hotels of the World",
+          "benefitKind": "status",
+          "amount": null,
+          "currency": null,
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.lhw.com/leaders-club",
+          "conditions": "Complimentary Leaders Club Sterling Status from The Leading Hotels of the World®. Must enroll through American Express to activate. Status valid while cardmember in good standing. Access to over 400 independent luxury hotels globally.",
+          "details": [
+            "Enjoy bespoke benefits at over 400¹ independent luxury hotels across the globe with complimentary Leaders Club Sterling Status from The Leading Hotels of the World®. Enrollment required.‡",
+            "¹As of 04/25",
+            "Complimentary Wi-Fi at all LHW properties",
+            "Room upgrade upon arrival when available",
+            "VIP guest recognition and personalized service",
+            "Late checkout when available (typically until 2PM)",
+            "Welcome amenity or experience",
+            "Flexible cancellation policies",
+            "Access to exclusive member rates and packages"
+          ]
+        },
+        {
+          "membershipProgram": "Marriott Bonvoy",
+          "statusLevel": "Gold Elite",
+          "autoEnrollment": false,
+          "enrollmentInstructions": "Enrollment required through American Express benefits platform. Must link existing Marriott Bonvoy account or create new account to receive status.",
+          "benefitsList": [
+            "Earn 25% bonus points on eligible stays",
+            "Late checkout until 2PM when available",
+            "Enhanced room upgrades when available",
+            "Welcome gift of 250 points per stay",
+            "Preferred Guest Services phone line",
+            "Mobile check-in and checkout",
+            "Mobile requests for services and amenities"
+          ],
+          "name": "Marriott Bonvoy Gold Elite Status",
+          "partner": "Marriott International",
+          "benefitKind": "status",
+          "amount": null,
+          "currency": null,
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.marriott.com/loyalty.mi",
+          "conditions": "As a Platinum Card Member, you can receive Marriott Bonvoy® Gold Elite Status without meeting any stay requirements. Enrollment required. Terms and limitations apply. Must maintain active cardmembership to retain status.",
+          "details": [
+            "As a Platinum Card Member, you can receive Marriott Bonvoy® Gold Elite Status without meeting any stay requirements. Enrollment required. Terms and limitations apply.‡",
+            "Earn 25% bonus points on eligible stays",
+            "Late checkout until 2PM when available",
+            "Enhanced room upgrades when available",
+            "Welcome gift of 250 points per stay",
+            "Preferred Guest Services phone line",
+            "Mobile check-in and checkout",
+            "Mobile requests for services and amenities",
+            "Access to exclusive member rates and packages"
+          ]
+        },
+        {
+          "membershipProgram": "Hilton Honors",
+          "statusLevel": "Gold",
+          "autoEnrollment": true,
+          "enrollmentInstructions": "Automatically enrolled. Status appears on Hilton Honors account within 8-12 weeks of card approval. No action required from cardmember.",
+          "benefitsList": [
+            "Earn 80% bonus Hilton Honors Bonus Points on eligible stays",
+            "Late checkout until 2PM when available",
+            "Room upgrades when available (excluding suites)",
+            "Complimentary breakfast for up to 2 registered guests at participating hotels",
+            "Executive lounge access when available",
+            "Digital check-in and room selection",
+            "Digital Key when available"
+          ],
+          "name": "Hilton Honors Gold Status",
+          "partner": "Hilton Worldwide",
+          "benefitKind": "status",
+          "amount": null,
+          "currency": null,
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.hilton.com/en/hilton-honors/",
+          "conditions": "With Hilton Honors Gold status, you can enjoy benefits at hotels and resorts within the Hilton Portfolio and earn reward stays faster with Hilton Honors Bonus Points. Status automatically granted to cardmembers in good standing.",
+          "details": [
+            "With Hilton Honors Gold status, you can enjoy benefits at hotels and resorts within the Hilton Portfolio and earn reward stays faster with Hilton Honors Bonus Points.‡",
+            "Earn 80% bonus Hilton Honors Bonus Points on eligible stays",
+            "Late checkout until 2PM when available",
+            "Room upgrades when available (excluding suites)",
+            "Complimentary breakfast for up to 2 registered guests at participating hotels",
+            "Executive lounge access when available",
+            "Digital check-in and room selection",
+            "Digital Key when available"
+          ]
+        },
+        {
+          "membershipProgram": "The Hotel Collection",
+          "statusLevel": null,
+          "autoEnrollment": false,
+          "enrollmentInstructions": "No enrollment required. Benefits apply automatically when booking through AmexTravel.com.",
+          "benefitsList": [
+            "Daily breakfast for two guests",
+            "Complimentary Wi-Fi",
+            "Room upgrade upon arrival when available",
+            "Guaranteed 4PM late checkout",
+            "$100 USD equivalent credit towards eligible charges",
+            "Minimum 2-night stay required",
+            "Digital Key when available"
+          ],
+          "name": "The Hotel Collection",
+          "partner": "American Express Travel",
+          "benefitKind": "membership",
+          "amount": 100,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": 2,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.americanexpress.com/us/travel/hotel-collection/",
+          "conditions": "Receive a $100 credit towards eligible charges when you book two nights or more with The Hotel Collection with AmexTravel.com. The Hotel Collection requires a two-night minimum stay. Eligible charges vary by property.",
+          "details": [
+            "Receive a $100 credit towards eligible charges¹ when you book two nights or more with The Hotel Collection with AmexTravel.com.²‡",
+            "¹Eligible charges vary by property.",
+            "²The Hotel Collection requires a two-night minimum stay.",
+            "Daily breakfast for two guests",
+            "Complimentary Wi-Fi",
+            "Room upgrade upon arrival when available",
+            "Guaranteed 4PM late checkout",
+            "$100 USD equivalent credit towards eligible charges",
+            "Must book through AmexTravel.com",
+            "Minimum 2-night stay required"
+          ]
+        },
+        {
+          "membershipProgram": "U.S. Government Trusted Traveler Programs",
+          "statusLevel": null,
+          "autoEnrollment": false,
+          "enrollmentInstructions": "Apply for Global Entry or TSA PreCheck and pay application fee with your Business Platinum Card to receive statement credit.",
+          "benefitsList": [
+            "Global Entry: Expedited U.S. customs and immigration clearance",
+            "TSA PreCheck: Expedited airport security screening",
+            "Global Entry includes TSA PreCheck at no additional charge",
+            "Valid for 5 years (Global Entry) or 5 years (TSA PreCheck)"
+          ],
+          "name": "Global Entry or TSA PreCheck Fee Credit",
+          "partner": "U.S. Customs and Border Protection / Transportation Security Administration",
+          "benefitKind": "Fee Credit",
+          "amount": null,
+          "currency": null,
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.cbp.gov/travel/trusted-traveler-programs/global-entry",
+          "conditions": "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck® (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check. Credit applies to application fees only.",
+          "details": [
+            "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck® (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check.‡",
+            "Global Entry: $120 statement credit every 4 years",
+            "TSA PreCheck®: Up to $85 statement credit every 4.5 years",
+            "Must pay application fee with Business Platinum Card",
+            "Global Entry includes TSA PreCheck® at no additional charge",
+            "Credit applies to application fees paid to official government enrollment providers"
+          ]
+        },
+        {
+          "membershipProgram": "The Hotel Collection",
+          "statusLevel": null,
+          "autoEnrollment": false,
+          "enrollmentInstructions": "No enrollment required. Benefits apply automatically when booking through AmexTravel.com.",
+          "benefitsList": [
+            "Daily breakfast for two guests",
+            "Complimentary Wi-Fi",
+            "Room upgrade upon arrival when available",
+            "Guaranteed 4PM late checkout",
+            "$100 USD equivalent credit towards eligible charges",
+            "Minimum 2-night stay required"
+          ],
+          "name": "The Hotel Collection",
+          "partner": "American Express Travel",
+          "benefitKind": "Statement Credit",
+          "amount": 100,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": 2,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.americanexpress.com/us/travel/hotel-collection/",
+          "conditions": "Receive a $100 credit towards eligible charges when you book two nights or more with The Hotel Collection with AmexTravel.com. The Hotel Collection requires a two-night minimum stay. Eligible charges vary by property.",
+          "details": [
+            "Receive a $100 credit towards eligible charges¹ when you book two nights or more with The Hotel Collection with AmexTravel.com.²‡",
+            "¹Eligible charges vary by property.",
+            "²The Hotel Collection requires a two-night minimum stay.",
+            "Daily breakfast for two guests",
+            "Complimentary Wi-Fi",
+            "Room upgrade upon arrival when available",
+            "Guaranteed 4PM late checkout",
+            "$100 USD equivalent credit towards eligible charges",
+            "Must book through AmexTravel.com",
+            "Minimum 2-night stay required"
+          ]
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/vintage-luxury"
+        }
+      }
+    }
+  }
+}

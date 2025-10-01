@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "category": "All Other Purchases",
+      "rateMultiplier": 1,
+      "appliesTo": "All other eligible purchases",
+      "capAmount": null,
+      "capCurrency": null,
+      "conditions": "1X Membership Rewards points on all other eligible purchases with no cap.",
+      "title": "1X All Other Purchases"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "EarningRule"
+      }
+    }
+  }
+}

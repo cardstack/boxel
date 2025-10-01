@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "category": "Flights",
+      "rateMultiplier": 5,
+      "appliesTo": "Flights booked directly with airlines or through American Express Travel",
+      "capAmount": 500000,
+      "capCurrency": "USD",
+      "conditions": "5X Membership Rewards points on eligible flight purchases; up to $500,000 per calendar year.",
+      "title": "5X Flights"
+    },
+    "relationships": {
+      "capPeriod": {
+        "links": {
+          "self": "../TimePeriod/yearly"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "EarningRule"
+      }
+    }
+  }
+}

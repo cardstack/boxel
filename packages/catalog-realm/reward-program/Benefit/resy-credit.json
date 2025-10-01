@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Resy Credit",
+      "partner": "Resy",
+      "benefitKind": "statement-credit",
+      "amount": 100,
+      "currency": "USD",
+      "enrollmentRequired": true,
+      "minSpend": null,
+      "minSpendCurrency": null,
+      "programURL": null,
+      "conditions": "Statement credits up to $100 quarterly when you make eligible purchases at U.S. Resy restaurants. Enrollment required.",
+      "details": [],
+      "title": "Resy Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/quarterly"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}

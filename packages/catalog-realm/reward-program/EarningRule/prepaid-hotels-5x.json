@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "category": "Prepaid Hotels",
+      "rateMultiplier": 5,
+      "appliesTo": "Prepaid hotels booked on American Express Travel",
+      "capAmount": null,
+      "capCurrency": null,
+      "conditions": "5X Membership Rewards points on prepaid hotel bookings made through American Express Travel.",
+      "title": "5X Prepaid Hotels"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "EarningRule"
+      }
+    }
+  }
+}
