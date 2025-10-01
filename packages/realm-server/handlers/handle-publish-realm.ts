@@ -20,6 +20,7 @@ import {
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
+  sendResponseForUnprocessableEntity,
   setContextResponse,
 } from '../middleware';
 import { type CreateRoutesArgs } from '../routes';
@@ -117,30 +118,29 @@ export default function handlePublishRealm({
     }
 
     try {
-      // TODO restore in CS-9468
-      // let realmInfoResponse = await virtualNetwork.handle(
-      //   new Request(`${sourceRealmURL}_info`, {
-      //     headers: {
-      //       Accept: SupportedMimeType.RealmInfo,
-      //     },
-      //   }),
-      // );
+      let realmInfoResponse = await virtualNetwork.handle(
+        new Request(`${sourceRealmURL}_info`, {
+          headers: {
+            Accept: SupportedMimeType.RealmInfo,
+          },
+        }),
+      );
 
-      // if (!realmInfoResponse || realmInfoResponse.status !== 200) {
-      //   log.warn(
-      //     `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
-      //   );
-      //   throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
-      // }
+      if (!realmInfoResponse || realmInfoResponse.status !== 200) {
+        log.warn(
+          `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
+        );
+        throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
+      }
 
-      // let realmInfoJson = await realmInfoResponse.json();
+      let realmInfoJson = await realmInfoResponse.json();
 
-      // if (realmInfoJson.data.attributes.publishable !== true) {
-      //   return sendResponseForUnprocessableEntity(
-      //     ctxt,
-      //     `Realm ${sourceRealmURL} is not publishable`,
-      //   );
-      // }
+      if (realmInfoJson.data.attributes.publishable !== true) {
+        return sendResponseForUnprocessableEntity(
+          ctxt,
+          `Realm ${sourceRealmURL} is not publishable`,
+        );
+      }
 
       let existingPublishedRealm = realms.find(
         (r) => r.url === publishedRealmURL,
