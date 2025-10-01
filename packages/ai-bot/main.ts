@@ -134,17 +134,28 @@ class Assistant {
       (prompt.model && !this.toolCallCapableModels.has(prompt.model))
     ) {
       return this.openai.chat.completions.stream({
-        model: prompt.model ?? DEFAULT_LLM,
+        model: this.getModel(prompt),
         messages: prompt.messages as ChatCompletionMessageParam[],
+        reasoning_effort: this.getResoningEffort(prompt),
       });
     } else {
       return this.openai.chat.completions.stream({
-        model: prompt.model ?? DEFAULT_LLM,
+        model: this.getModel(prompt),
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
         tool_choice: prompt.toolChoice,
+        reasoning_effort: this.getResoningEffort(prompt),
       });
     }
+  }
+
+  getModel(prompt: PromptParts) {
+    return prompt.model ?? DEFAULT_LLM;
+  }
+
+  getResoningEffort(prompt: PromptParts) {
+    let model = this.getModel(prompt);
+    return model === 'openai/gpt-5' ? 'minimal' : undefined;
   }
 
   async handleDebugCommands(
