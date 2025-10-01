@@ -377,7 +377,7 @@ module('Integration | card-basics', function (hooks) {
         name: 'Person',
       });
       let readBoolean: boolean = card.boolean;
-      assert.deepEqual(readBoolean, true);
+      assert.true(readBoolean);
     });
 
     test('access @model for primitive and composite fields', async function (assert) {
@@ -3309,16 +3309,8 @@ module('Integration | card-basics', function (hooks) {
       assertRadioInput(assert, 'isHuman', 'true', true);
       assertRadioInput(assert, 'isHuman', 'false', false);
 
-      assert.strictEqual(
-        mango.isCool,
-        true,
-        'the isCool field has the correct value',
-      );
-      assert.strictEqual(
-        mango.isHuman,
-        true,
-        'the isHuman field has the correct value',
-      );
+      assert.true(mango.isCool, 'the isCool field has the correct value');
+      assert.true(mango.isHuman, 'the isHuman field has the correct value');
     });
 
     test('can adopt a card', async function (assert) {
@@ -3776,9 +3768,8 @@ module('Integration | card-basics', function (hooks) {
         1,
         'The queryable value from user supplied data is correct (number)',
       );
-      assert.strictEqual(
+      assert.true(
         getQueryableValue(TestField, { firstName: true, age: 6 }),
-        true,
         'The queryable value from user supplied data is correct (boolean)',
       );
       assert.strictEqual(
@@ -3917,8 +3908,8 @@ module('Integration | card-basics', function (hooks) {
       }
 
       assert.strictEqual(
-        'The place where the person was born',
         getFieldDescription(Person, 'hometown'),
+        'The place where the person was born',
       );
     });
 

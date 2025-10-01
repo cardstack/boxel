@@ -15,6 +15,7 @@ import {
   clearLocalStorage,
   setSkillsRedirect,
   showAllCards,
+  setupPermissions,
 } from '../helpers';
 import {
   synapseStart,
@@ -41,6 +42,7 @@ test.describe('Skills', () => {
     await clearLocalStorage(page, appURL);
     await setupUserSubscribed('@user1:localhost', realmServer);
     await setupUserSubscribed('@user2:localhost', realmServer);
+    await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
