@@ -12,11 +12,43 @@ export interface Utils {
   createJWT(user: string, sessionRoom?: string): Promise<string>;
 }
 
+export interface SessionRoomStore {
+  getSessionRoom(matrixUserId: string): Promise<string | null>;
+  setSessionRoom(matrixUserId: string, roomId: string): Promise<void>;
+}
+
+class MatrixAccountDataSessionRoomStore implements SessionRoomStore {
+  constructor(private matrixClient: MatrixClient) {}
+
+  async getSessionRoom(matrixUserId: string): Promise<string | null> {
+    let dmRooms =
+      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    return dmRooms[matrixUserId] ?? null;
+  }
+
+  async setSessionRoom(matrixUserId: string, roomId: string): Promise<void> {
+    let dmRooms =
+      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    if (dmRooms[matrixUserId] === roomId) {
+      return;
+    }
+    dmRooms[matrixUserId] = roomId;
+    await this.matrixClient.setAccountData('boxel.session-rooms', dmRooms);
+  }
+}
+
 export class MatrixBackendAuthentication {
   constructor(
     private matrixClient: MatrixClient,
     private secretSeed: string,
     private utils: Utils,
+    private sessionRoomStore: SessionRoomStore = new MatrixAccountDataSessionRoomStore(
+      matrixClient,
+    ),
   ) {}
 
   async createSession(request: Request): Promise<Response> {
@@ -70,20 +102,11 @@ export class MatrixBackendAuthentication {
       );
     }
 
-    // Clone the account data instead of using it directly,
-    // since mutating the original object would modify the Matrix client’s store
-    // and prevent updates from being sent back to the server.
-    let dmRooms = {
-      ...((await this.matrixClient.getAccountDataFromServer<
-        Record<string, string>
-      >('boxel.session-rooms')) ?? {}),
-    };
-    let roomId = dmRooms[user];
+    let roomId = await this.sessionRoomStore.getSessionRoom(user);
 
     if (!roomId) {
       roomId = await this.matrixClient.createDM(user);
-      dmRooms[user] = roomId;
-      await this.matrixClient.setAccountData('boxel.session-rooms', dmRooms);
+      await this.sessionRoomStore.setSessionRoom(user, roomId!);
     }
 
     let hash = new Sha256();
@@ -139,11 +162,7 @@ export class MatrixBackendAuthentication {
       }
     }
 
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let roomId = dmRooms[user];
+    let roomId = await this.sessionRoomStore.getSessionRoom(user);
     if (!roomId) {
       return this.utils.badRequest(
         JSON.stringify({
