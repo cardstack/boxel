@@ -51,6 +51,8 @@ interface Signature {
 }
 
 export default class AiAssistantPanel extends Component<Signature> {
+  @tracked private copiedRoomId: string | null = null;
+
   <template>
     <Velcro
       @placement='bottom-end'
@@ -447,8 +449,18 @@ export default class AiAssistantPanel extends Component<Signature> {
       open: this.aiAssistantPanelService.enterRoom,
       rename: this.aiAssistantPanelService.setRoomToRename,
       delete: this.aiAssistantPanelService.setRoomToDelete,
+      copyRoomId: (roomId: string) => this.copyRoomIdTask.perform(roomId),
+      getCopiedRoomId: () => this.copiedRoomId,
     };
   }
+
+  private copyRoomIdTask = restartableTask(async (roomId: string) => {
+    await navigator.clipboard.writeText(roomId);
+    this.copiedRoomId = roomId;
+    setTimeout(() => {
+      this.copiedRoomId = null;
+    }, 2000);
+  });
 
   private loadMonaco = restartableTask(async () => {
     this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
