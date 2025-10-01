@@ -192,6 +192,14 @@ jobs:
             exit 1
           fi
 
+      - name: Upload all host reports
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-all-test-reports
+          path: all-host-reports/
+          retention-days: 30
+
       - name: Merge reports
         run: npx junit-report-merger host.xml "./all-host-reports/*.xml"
 
