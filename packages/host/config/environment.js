@@ -39,11 +39,10 @@ module.exports = function (environment) {
     minSaveTaskDurationMs: 1000,
     renderTimeoutMs: 30_000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
-    defaultPublishedRealmDomain:
-      // FIXME how to use 4205 in Matrix tests only?
-      process.env.DEFAULT_PUBLISHED_REALM_DOMAIN || 'localhost:4205',
 
     // the fields below may be rewritten by the realm server
+    defaultPublishedRealmDomain:
+      process.env.DEFAULT_PUBLISHED_REALM_DOMAIN || 'localhost:4201',
     hostsOwnAssets: true,
     realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:

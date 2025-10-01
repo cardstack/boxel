@@ -294,6 +294,7 @@ export class RealmServer {
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
         config = merge({}, config, {
+          defaultPublishedRealmDomain: this.serverURL.host,
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
