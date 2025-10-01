@@ -1,4 +1,3 @@
-import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
@@ -13,19 +12,13 @@ interface SwitchArgs {
   isEnabled: boolean;
   label: string;
   onChange: () => void;
-  variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
 }
 
 // eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export default class Switch extends Component<SwitchSiganture> {
   <template>
     <label
-      class={{cn
-        'switch'
-        (if @variant (concat 'variant-' @variant) 'variant-default')
-        checked=@isEnabled
-        disabled=@disabled
-      }}
+      class={{cn 'switch' checked=@isEnabled disabled=@disabled}}
       data-test-switch-checked={{if @isEnabled 'on' 'off'}}
       ...attributes
     >
@@ -54,9 +47,8 @@ export default class Switch extends Component<SwitchSiganture> {
           transition: background-color 0.1s ease-in;
           position: relative;
 
-          /* Internal properties */
           --switch-bg-color: var(--boxel-400);
-          --switch-active-color: var(--boxel-dark-green);
+          --switch-active-color: var(--primary, var(--boxel-dark-green));
           --switch-thumb-color: var(--boxel-light);
 
           background-color: var(--switch-bg-color);
@@ -96,40 +88,6 @@ export default class Switch extends Component<SwitchSiganture> {
         .switch.disabled,
         .switch.disabled .switch-input {
           cursor: default;
-        }
-
-        /* Variants */
-        .variant-default {
-          --switch-bg-color: var(--background, var(--boxel-400));
-          --switch-active-color: var(--primary, var(--boxel-dark-green));
-          --switch-thumb-color: var(--foreground, var(--boxel-light));
-        }
-
-        .variant-primary {
-          --switch-bg-color: var(--primary, var(--boxel-400));
-          --switch-active-color: var(--primary, var(--boxel-highlight));
-          --switch-thumb-color: var(--primary-foreground, var(--boxel-light));
-        }
-
-        .variant-secondary {
-          --switch-bg-color: var(--secondary, var(--boxel-400));
-          --switch-active-color: var(--secondary, var(--boxel-highlight));
-          --switch-thumb-color: var(--secondary-foreground, var(--boxel-light));
-        }
-
-        .variant-muted {
-          --switch-bg-color: var(--muted, var(--boxel-400));
-          --switch-active-color: var(--muted, var(--boxel-highlight));
-          --switch-thumb-color: var(--muted-foreground, var(--boxel-light));
-        }
-
-        .variant-destructive {
-          --switch-bg-color: var(--destructive, var(--boxel-400));
-          --switch-active-color: var(--destructive, var(--boxel-danger));
-          --switch-thumb-color: var(
-            --destructive-foreground,
-            var(--boxel-light)
-          );
         }
       }
     </style>

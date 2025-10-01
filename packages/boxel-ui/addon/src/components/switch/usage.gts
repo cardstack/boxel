@@ -1,4 +1,4 @@
-import { array, fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -14,12 +14,6 @@ import Switch from './index.gts';
 export default class SwitchUsage extends Component {
   @tracked isEnabled = false;
   @tracked isDisabled = false;
-  @tracked selectedVariant:
-    | 'primary'
-    | 'secondary'
-    | 'muted'
-    | 'destructive'
-    | 'default' = 'default';
 
   @action
   handleChange() {
@@ -45,7 +39,6 @@ export default class SwitchUsage extends Component {
             @isEnabled={{this.isEnabled}}
             @onChange={{this.handleChange}}
             @disabled={{this.isDisabled}}
-            @variant={{this.selectedVariant}}
           />
         </:example>
         <:api as |Args|>
@@ -60,19 +53,6 @@ export default class SwitchUsage extends Component {
             @defaultValue={{false}}
             @value={{this.isDisabled}}
             @onInput={{fn (mut this.isDisabled)}}
-          />
-          <Args.String
-            @name='variant'
-            @defaultValue='default'
-            @value={{this.selectedVariant}}
-            @onInput={{fn (mut this.selectedVariant)}}
-            @options={{array
-              'default'
-              'primary'
-              'secondary'
-              'muted'
-              'destructive'
-            }}
           />
         </:api>
         <:cssVars as |Css|>
