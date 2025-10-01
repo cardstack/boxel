@@ -453,10 +453,9 @@ export class Worker {
         args.realmUsername,
         this.#matrixURL.href,
       );
-      let permissions = await fetchUserPermissions(
-        this.#dbAdapter,
-        realmUserId,
-      );
+      let permissions = await fetchUserPermissions(this.#dbAdapter, {
+        userId: realmUserId,
+      });
       let { ignoreData, stats } = await this.#fromScratch({
         ...args,
         realmUsername: realmUserId, // we fashion JWT from this which needs to be full matrix userid
@@ -490,10 +489,9 @@ export class Worker {
         args.realmUsername,
         this.#matrixURL.href,
       );
-      let permissions = await fetchUserPermissions(
-        this.#dbAdapter,
-        realmUserId,
-      );
+      let permissions = await fetchUserPermissions(this.#dbAdapter, {
+        userId: realmUserId,
+      });
       let { ignoreData, stats, invalidations } = await this.#incremental({
         ...args,
         realmUsername: realmUserId, // we fashion JWT from this which needs to be full matrix userid

@@ -59,6 +59,7 @@ import SkeletonPlaceholder from './components/skeleton-placeholder/index.gts';
 import SortDropdown, {
   type SortOption,
 } from './components/sort-dropdown/index.gts';
+import Swatch from './components/swatch/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import BoxelTag from './components/tag/index.gts';
@@ -127,6 +128,7 @@ export {
   ResizeHandle,
   SkeletonPlaceholder,
   SortDropdown,
+  Swatch,
   Switch,
   TabbedHeader,
   TagList,

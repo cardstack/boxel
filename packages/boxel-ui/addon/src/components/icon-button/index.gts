@@ -47,7 +47,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
     {{yield}}
   </BoxelButton>
   <style scoped>
-    @layer {
+    @layer boxelComponentL2 {
       .boxel-icon-button {
         --icon-color: var(--boxel-icon-button-icon-color, currentColor);
         width: var(--boxel-icon-button-width, var(--boxel-icon-lg));

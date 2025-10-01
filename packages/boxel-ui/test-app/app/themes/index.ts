@@ -1,7 +1,8 @@
 import {
   extractCssVariables,
-  getStyleConversions,
+  sanitizeHtmlSafe,
 } from '@cardstack/boxel-ui/helpers';
+import { htmlSafe, type SafeString } from '@ember/template';
 
 import { Bubblegum } from './bubblegum.ts';
 import { NeoBrutalism } from './neo-brutalism.ts';
@@ -13,7 +14,7 @@ import { Boxel } from './boxel.ts';
 
 export interface Theme {
   name: string;
-  styles?: string;
+  styles?: SafeString;
 }
 
 export const THEMES = {
@@ -28,11 +29,9 @@ export const THEMES = {
 
 function getThemeStyles(cssString: string) {
   if (!extractCssVariables) {
-    return;
+    return htmlSafe('');
   }
-  return [getStyleConversions(), extractCssVariables(cssString)]
-    .filter(Boolean)
-    .join('');
+  return sanitizeHtmlSafe(extractCssVariables(cssString));
 }
 
 const Themes: Theme[] = Object.entries(THEMES).map(([name, vars]) => ({
