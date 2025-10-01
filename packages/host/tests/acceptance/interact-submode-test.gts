@@ -851,6 +851,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         }
         if (json.data.attributes?.firstName === null) {
           // Because we create an empty card, upon choosing a catalog item, we must skip the scenario where attributes null
+          // eslint-disable-next-line qunit/no-early-return
           return;
         }
         id = url.href;
@@ -2036,6 +2037,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             ev.eventName === 'index' &&
             ev.indexType === 'incremental-index-initiation'
           ) {
+            // eslint-disable-next-line qunit/no-early-return
             return; // ignore the index initiation event
           }
           ev = ev as IncrementalIndexEventContent;

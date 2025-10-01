@@ -409,7 +409,7 @@ module('Integration | Store', function (hooks) {
         },
       },
     });
-    assert.ok(typeof url === 'string', 'received a url for new instance');
+    assert.strictEqual(typeof url, 'string', 'received a url for new instance');
     let instance = storeService.peek(url as string);
     assert.strictEqual((instance as CardDefType).id, url);
     assert.strictEqual((instance as any).name, 'Andrea');
@@ -437,7 +437,11 @@ module('Integration | Store', function (hooks) {
         },
       },
     });
-    assert.ok(typeof error === 'object', 'received a error for new instance');
+    assert.strictEqual(
+      typeof error,
+      'object',
+      'received a error for new instance',
+    );
     assert.ok(
       (error as any).message.includes(
         'intentional error thrown',
