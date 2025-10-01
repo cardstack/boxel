@@ -557,6 +557,19 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
+
+        let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
+          ([_url, realmResource]) => !realmResource.isLoggedIn,
+        );
+
+        if (noRealmsLoggedIn) {
+          // In this case we want to authenticate to all accessible realms in a single request,
+          // for performance reasons (otherwise we would make 2 auth requests for
+          // each realm, which could be a lot of requests).
+
+          await this.realmServer.authenticateToAllAccessibleRealms();
+        }
+
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(

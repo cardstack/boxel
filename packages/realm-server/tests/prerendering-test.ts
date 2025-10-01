@@ -13,6 +13,7 @@ import {
   realmSecretSeed,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { baseCardRef } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
   module('prerender', function (hooks) {
@@ -278,8 +279,32 @@ module(basename(__filename), function () {
         assert.strictEqual(result.serialized?.data.attributes?.name, 'Maple');
       });
 
-      test('displayName', function (assert) {
-        assert.strictEqual(result.displayName, 'Cat');
+      test('displayNames', function (assert) {
+        assert.deepEqual(result.displayNames, ['Cat', 'Card']);
+      });
+
+      test('deps', function (assert) {
+        // spot check a few deps, as the whole list is overwhelming...
+        assert.ok(
+          result.deps?.includes(baseCardRef.module),
+          `${baseCardRef.module} is a dep`,
+        );
+        assert.ok(
+          result.deps?.includes(`${realmURL1}person`),
+          `${realmURL1}person is a dep`,
+        );
+        assert.ok(
+          result.deps?.includes(`${realmURL2}cat`),
+          `${realmURL2}cat is a dep`,
+        );
+        assert.ok(
+          result.deps?.find((d) =>
+            d.match(
+              /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+            ),
+          ),
+          `glimmer scoped css from ${baseCardRef.module} is a dep`,
+        );
       });
 
       test('types', function (assert) {
@@ -321,7 +346,8 @@ module(basename(__filename), function () {
         // these all wont be empty, as this is triggering in the /render route
         // error handler and hence stomping over all the subroutes.
         assert.deepEqual(restOfResult, {
-          displayName: null,
+          displayNames: null,
+          deps: null,
           searchDoc: null,
           serialized: null,
           types: null,
@@ -392,14 +418,16 @@ module(basename(__filename), function () {
           {
             serialized: unusable.response.serialized,
             searchDoc: unusable.response.searchDoc,
-            displayName: unusable.response.displayName,
+            displayNames: unusable.response.displayNames,
             types: unusable.response.types,
+            deps: unusable.response.deps,
           },
           {
             serialized: null,
             searchDoc: null,
-            displayName: null,
+            displayNames: null,
             types: null,
+            deps: null,
           },
           'meta fields are null when short-circuited',
         );

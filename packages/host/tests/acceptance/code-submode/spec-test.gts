@@ -17,6 +17,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   percySnapshot,
   type TestContextWithSave,
@@ -247,7 +248,6 @@ const polymorphicFieldCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | Spec preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -263,11 +263,12 @@ module('Acceptance | Spec preview', function (hooks) {
     mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
