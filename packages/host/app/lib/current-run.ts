@@ -731,7 +731,11 @@ export class CurrentRun {
 
           // always include the modules that we see in the serialized form as deps
           renderError.error.deps = renderError.error.deps ?? [];
-          renderError.error.deps.push(...modulesConsumedInMeta(resource.meta));
+          renderError.error.deps.push(
+            ...modulesConsumedInMeta(resource.meta).map(
+              (m) => new URL(m, instanceURL.href).href,
+            ),
+          );
           renderError.error.deps = [...new Set(renderError.error.deps)];
 
           log.warn(
