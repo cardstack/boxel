@@ -729,7 +729,7 @@ export class CurrentRun {
             return;
           }
 
-          // always include the modules that we see in the serialized form as deps
+          // always include the modules that we see in serialized as deps
           renderError.error.deps = renderError.error.deps ?? [];
           renderError.error.deps.push(
             ...modulesConsumedInMeta(resource.meta).map(
