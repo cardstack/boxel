@@ -976,6 +976,13 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
+    try {
+      await this.#syncSessionRoomsFromAccountData();
+    } catch (error) {
+      this.#log.warn(
+        `Failed to sync session rooms for realm ${this.url}: ${error}`,
+      );
+    }
     let startTime = Date.now();
     if (this.#copiedFromRealm) {
       await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
@@ -1003,6 +1010,53 @@ export class Realm {
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
+  }
+
+  async #syncSessionRoomsFromAccountData() {
+    if (!isNode) {
+      return;
+    }
+
+    try {
+      await this.#matrixClient.login();
+    } catch (error) {
+      this.#log.warn(
+        `Failed to log in to Matrix while syncing session rooms for realm ${this.url}: ${error}`,
+      );
+      return;
+    }
+
+    let accountData =
+      (await this.#matrixClient.getAccountDataFromServer<
+        Record<string, string>
+      >('boxel.session-rooms')) ?? {};
+
+    if (Object.keys(accountData).length === 0) {
+      return;
+    }
+
+    let existing = await getAllSessionRooms(this.#dbAdapter);
+    let imported = 0;
+
+    for (let [matrixUserId, roomId] of Object.entries(accountData)) {
+      if (!matrixUserId || typeof roomId !== 'string' || !roomId) {
+        continue;
+      }
+
+      if (existing[matrixUserId] === roomId) {
+        continue;
+      }
+
+      await persistSessionRoom(this.#dbAdapter, matrixUserId, roomId);
+      existing[matrixUserId] = roomId;
+      imported++;
+    }
+
+    if (imported > 0) {
+      this.#log.info(
+        `Imported ${imported} session room${imported === 1 ? '' : 's'} from Matrix account data for realm ${this.url}`,
+      );
+    }
   }
 
   // TODO get rid of this

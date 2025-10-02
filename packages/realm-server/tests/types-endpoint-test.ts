@@ -3,6 +3,7 @@ import { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { Server } from 'http';
 import { type DirResult } from 'tmp';
+import { type PgAdapter } from '@cardstack/postgres';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
   Realm,
@@ -20,7 +21,6 @@ import {
   closeServer,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { type PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
@@ -31,6 +31,7 @@ module(basename(__filename), function () {
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
     let testRealmHttpServer2: Server;
     let testRealm2: Realm;
     let dbAdapter2: PgAdapter;
@@ -43,11 +44,13 @@ module(basename(__filename), function () {
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dir: DirResult;
+      dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dir = args.dir;
+      dbAdapter = args.dbAdapter;
     }
 
     function getRealmSetup() {
@@ -56,6 +59,7 @@ module(basename(__filename), function () {
         testRealmHttpServer,
         request,
         dir,
+        dbAdapter,
       };
     }
     setupBaseRealmServer(hooks, matrixURL);

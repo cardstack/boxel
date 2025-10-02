@@ -3,6 +3,7 @@ import { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { Server } from 'http';
 import { type DirResult } from 'tmp';
+import { type PgAdapter } from '@cardstack/postgres';
 import { existsSync, readJSONSync } from 'fs-extra';
 import {
   isSingleCardDocument,
@@ -35,17 +36,20 @@ module(basename(__filename), function () {
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
 
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dir: DirResult;
+      dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dir = args.dir;
+      dbAdapter = args.dbAdapter;
     }
 
     function getRealmSetup() {
@@ -54,6 +58,7 @@ module(basename(__filename), function () {
         testRealmHttpServer,
         request,
         dir,
+        dbAdapter,
       };
     }
 

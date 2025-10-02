@@ -17,6 +17,7 @@ import {
   Worker,
   RunnerOptionsManager,
   insertPermissions,
+  setSessionRoom,
   IndexWriter,
   asExpressions,
   query,
@@ -406,6 +407,7 @@ export async function runTestRealmServer({
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
   validPublishedRealmDomains = ['localhost'],
+  beforeStart,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -420,6 +422,12 @@ export async function runTestRealmServer({
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
   validPublishedRealmDomains?: string[];
+  beforeStart?: (args: {
+    dbAdapter: PgAdapter;
+    matrixConfig: MatrixConfig;
+    matrixClient: MatrixClient;
+    testRealm: Realm;
+  }) => Promise<void>;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -438,6 +446,7 @@ export async function runTestRealmServer({
     },
   });
   await worker.run();
+  let realmMatrixConfig = matrixConfig ?? testMatrix;
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
     dir: testRealmDir,
     fileSystem,
@@ -477,6 +486,12 @@ export async function runTestRealmServer({
     validPublishedRealmDomains,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
+  await beforeStart?.({
+    dbAdapter,
+    matrixConfig: realmMatrixConfig,
+    matrixClient,
+    testRealm,
+  });
   await testRealmServer.start();
   return {
     testRealmDir,
@@ -638,6 +653,7 @@ export function setupMatrixRoom(
     testRealmHttpServer: Server;
     request: SuperTest<Test>;
     dir: DirResult;
+    dbAdapter: PgAdapter;
   },
 ) {
   let matrixClient = new MatrixClient({
@@ -679,9 +695,11 @@ export function setupMatrixRoom(
 
     testAuthRoomId = json.room;
 
-    await matrixClient.setAccountData('boxel.session-rooms', {
-      [userId]: json.room,
-    });
+    let { dbAdapter } = getRealmSetup();
+    if (!dbAdapter) {
+      throw new Error('setupMatrixRoom requires a dbAdapter in getRealmSetup');
+    }
+    await setSessionRoom(dbAdapter, userId, json.room);
   });
 
   return {
@@ -735,6 +753,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
     published = false,
+    beforeStart,
   }: {
     permissions: RealmPermissions;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -750,6 +769,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
     published?: boolean;
+    beforeStart?: Parameters<typeof runTestRealmServer>[0]['beforeStart'];
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -813,6 +833,7 @@ export function setupPermissionedRealm(
         matrixURL,
         fileSystem,
         enableFileWatcher: subscribeToRealmEvents,
+        beforeStart,
       });
 
       let request = supertest(testRealmServer.testRealmHttpServer);
