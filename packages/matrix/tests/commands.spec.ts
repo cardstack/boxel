@@ -19,6 +19,7 @@ import {
   setupUserSubscribed,
   getAgentId,
   setSkillsRedirect,
+  setupPermissions,
 } from '../helpers';
 import {
   synapseStart,
@@ -42,6 +43,7 @@ test.describe('Commands', () => {
     realmServer = await startRealmServer();
     userCred = await registerUser(synapse, 'user1', 'pass');
     await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);

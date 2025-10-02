@@ -220,6 +220,33 @@ module('Acceptance | host submode', function (hooks) {
         .hasText(`Card not found: ${testRealmURL}nonexistent`);
     });
 
+    test('ai assistant is not displayed in host submode', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Person/1.json`,
+        stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
+        aiAssistantOpen: true,
+      });
+
+      assert.dom('[data-test-open-ai-assistant]').exists();
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+
+      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-boxel-menu-item-text="Interact"]');
+      assert.dom('[data-test-open-ai-assistant]').exists();
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+
+      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      assert.dom('[data-test-open-ai-assistant]').doesNotExist();
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+
+      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+      assert.dom('[data-test-open-ai-assistant]').exists();
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+    });
+
     module('publish and unpublish realm', function (hooks) {
       let publishDeferred: Deferred<void>;
       let unpublishDeferred: Deferred<void>;
@@ -299,7 +326,7 @@ module('Acceptance | host submode', function (hooks) {
           );
         });
 
-        assert.dom('[data-test-publish-realm-button]').hasText('Publish…');
+        assert.dom('[data-test-publish-realm-button]').hasText('Publish Site');
         assert
           .dom('[data-test-publish-realm-button]')
           .doesNotHaveClass('publishing');

@@ -36,6 +36,7 @@ import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupAuthEndpoints,
   setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -90,6 +91,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     directRooms: [
       getRoomIdForRealmAndUser(testRealmURL, '@testuser:localhost'),
       getRoomIdForRealmAndUser(baseRealm.url, '@testuser:localhost'),
+      'test-auth-realm-server-session-room',
     ],
   });
 
@@ -181,7 +183,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -2871,6 +2874,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-option="Copy File History"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitFor('[data-test-user-message]');
 
     const thirdRoomId = matrixService.currentRoomId;
     assert.ok(thirdRoomId, 'Should have third room ID');

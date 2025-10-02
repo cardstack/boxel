@@ -2,6 +2,7 @@ import {
   delay,
   type CardErrorJSONAPI,
   type PrerenderMeta,
+  type RenderError,
 } from '@cardstack/runtime-common';
 import { type Page } from 'puppeteer';
 
@@ -13,22 +14,6 @@ export interface RenderCapture {
   status: RenderStatus;
   value: string;
   alive?: 'true' | 'false';
-}
-
-export interface RenderError {
-  error: string;
-  id?: string;
-  status: number;
-  title?: string;
-  message: string;
-  realm?: string;
-  meta: {
-    lastKnownGoodHtml: string | null;
-    cardTitle: string | null;
-    scopedCssUrls: string[];
-    stack: string | null;
-  };
-  evict?: boolean;
 }
 
 export async function transitionTo(
@@ -101,13 +86,13 @@ export async function renderAncestors(
   format: 'embedded' | 'fitted',
   types: string[],
 ): Promise<Record<string, string> | RenderError> {
-  let out: Record<string, string> = {};
+  let ancestors: Record<string, string> = {};
   for (let i = 0; i < types.length; i++) {
     let res = await renderHTML(page, format, i);
     if (isRenderError(res)) return res;
-    out[types[i]] = res as string;
+    ancestors[types[i]] = res as string;
   }
-  return out;
+  return ancestors;
 }
 
 export async function captureResult(

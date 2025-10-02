@@ -1,5 +1,5 @@
 import { DBAdapter } from './db';
-import { RealmAction, type RealmPermissions } from './realm';
+import { RealmAction, type RealmPermissions } from './index';
 import { query, asExpressions, param, upsert } from './expression';
 import { getMatrixUsername } from './matrix-client';
 
@@ -125,19 +125,51 @@ export async function fetchRealmPermissions(
 }
 export async function fetchUserPermissions(
   dbAdapter: DBAdapter,
-  userId: string,
+  args: {
+    userId: string;
+    onlyOwnRealms?: boolean;
+  },
 ): Promise<{
   [realm: string]: RealmAction[];
 }> {
-  let permissions = (await query(dbAdapter, [
-    `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
-    param(userId),
-  ])) as {
+  const { userId, onlyOwnRealms = false } = args;
+  let permissions: {
     realm_url: string;
     read: boolean;
     write: boolean;
     realm_owner: boolean;
   }[];
+
+  if (onlyOwnRealms) {
+    // Only get realms where user is owner
+    permissions = (await query(dbAdapter, [
+      `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
+      param(userId),
+      `AND realm_owner = true`,
+    ])) as {
+      realm_url: string;
+      read: boolean;
+      write: boolean;
+      realm_owner: boolean;
+    }[];
+  } else {
+    // Get all user permissions (owned + read access) and public realms in one query
+    // Use UNION to deduplicate, prioritizing user permissions over public permissions
+    permissions = (await query(dbAdapter, [
+      `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
+      param(userId),
+      `UNION
+       SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
+       AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
+      param(userId),
+      `)`,
+    ])) as {
+      realm_url: string;
+      read: boolean;
+      write: boolean;
+      realm_owner: boolean;
+    }[];
+  }
 
   return permissions.reduce(
     (permissionsAcc, { realm_url, read, write, realm_owner }) => {

@@ -53,6 +53,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
 
@@ -100,7 +101,8 @@ module('Acceptance | Commands tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -1337,7 +1339,7 @@ module('Acceptance | Commands tests', function (hooks) {
       let commandResultEvents = await getRoomEvents(roomId).filter(
         (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
-      assert.equal(
+      assert.strictEqual(
         commandResultEvents.length,
         0,
         'No command result event dispatched',
@@ -1347,7 +1349,7 @@ module('Acceptance | Commands tests', function (hooks) {
       commandResultEvents = await getRoomEvents(roomId).filter(
         (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
-      assert.equal(
+      assert.strictEqual(
         commandResultEvents.length,
         1,
         'Command result event was dispatched',

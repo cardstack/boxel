@@ -40,6 +40,7 @@ import {
   visitOperatorMode,
   createJWT,
   testRealmSecretSeed,
+  setupAuthEndpoints,
   setupUserSubscription,
   setupRealmServerEndpoints,
 } from '../helpers';
@@ -82,7 +83,8 @@ module('Acceptance | operator mode tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     setExpiresInSec(60 * 60);
 
@@ -748,9 +750,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     urlParameters = new URLSearchParams(url);
     let operatorModeStateParam = urlParameters.get('operatorModeState');
 
+    assert.ok(operatorModeStateParam);
     assert.true(
-      operatorModeStateParam &&
-        JSON.parse(operatorModeStateParam).workspaceChooserOpened,
+      JSON.parse(operatorModeStateParam ?? '{}').workspaceChooserOpened,
     );
     await percySnapshot(assert);
   });
@@ -1134,17 +1136,17 @@ module('Acceptance | operator mode tests', function (hooks) {
       stripeCheckoutLinkExample =
         'https://checkout.stripe.com/c/pay/2500-credits';
       await click('[data-test-buy-more-credits-button="2500"]');
-      assert.equal(redirectedToUrl, stripeCheckoutLinkExample);
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
 
       stripeCheckoutLinkExample =
         'https://checkout.stripe.com/c/pay/20000-credits';
       await click('[data-test-buy-more-credits-button="20000"]');
-      assert.equal(redirectedToUrl, stripeCheckoutLinkExample);
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
 
       stripeCheckoutLinkExample =
         'https://checkout.stripe.com/c/pay/80000-credits';
       await click('[data-test-buy-more-credits-button="80000"]');
-      assert.equal(redirectedToUrl, stripeCheckoutLinkExample);
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
 
       await click('[data-test-close-modal]');
       await click('[data-test-profile-icon-button]');
@@ -1153,17 +1155,17 @@ module('Acceptance | operator mode tests', function (hooks) {
       stripeCheckoutLinkExample =
         'https://checkout.stripe.com/c/pay/starter-plan';
       await click('[data-test-starter-plan-button]');
-      assert.equal(redirectedToUrl, stripeCheckoutLinkExample);
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
 
       stripeCheckoutLinkExample =
         'https://checkout.stripe.com/c/pay/creator-plan';
       await click('[data-test-creator-plan-button]');
-      assert.equal(redirectedToUrl, stripeCheckoutLinkExample);
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
 
       stripeCheckoutLinkExample =
         'https://checkout.stripe.com/c/pay/power-user-plan';
       await click('[data-test-power-user-plan-button]');
-      assert.equal(redirectedToUrl, stripeCheckoutLinkExample);
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
     });
 
     test(`displays credit info in account popover`, async function (assert) {

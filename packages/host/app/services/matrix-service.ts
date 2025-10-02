@@ -191,6 +191,9 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
+  private initialSyncCompleted = false;
+  private initialSyncCompletedDeferred = new Deferred<void>();
+  private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -373,6 +376,10 @@ export default class MatrixService extends Service {
     return 50; // this is required to set the room name
   }
 
+  async waitForInitialSync() {
+    await this.initialSyncCompletedDeferred.promise;
+  }
+
   get flushAll() {
     return Promise.all([
       this.flushMembership ?? Promise.resolve(),
@@ -550,6 +557,19 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
+
+        let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
+          ([_url, realmResource]) => !realmResource.isLoggedIn,
+        );
+
+        if (noRealmsLoggedIn) {
+          // In this case we want to authenticate to all accessible realms in a single request,
+          // for performance reasons (otherwise we would make 2 auth requests for
+          // each realm, which could be a lot of requests).
+
+          await this.realmServer.authenticateToAllAccessibleRealms();
+        }
+
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(
@@ -608,27 +628,42 @@ export default class MatrixService extends Service {
       this.client as any,
       SLIDING_SYNC_TIMEOUT,
     );
+
     this.slidingSync.on(
       SlidingSyncEvent.Lifecycle,
-      (
-        state: SlidingSyncState | null,
-        resp: MSC3575SlidingSyncResponse | null,
-      ) => {
-        if (
-          state === SlidingSyncState.Complete &&
-          resp &&
-          resp.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME].ops?.[0]?.op === 'SYNC'
-        ) {
-          for (let roomId of resp.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME].ops[0]
-            .room_ids) {
-            this.aiRoomIds.add(roomId);
-          }
-        }
-      },
+      this.onSlidingSyncLifecycle,
     );
 
     return this.slidingSync;
   }
+
+  onSlidingSyncLifecycle = (
+    state: SlidingSyncState,
+    resp: MSC3575SlidingSyncResponse | null,
+  ) => {
+    let list = resp?.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME] as
+      | { ops: { room_ids: string[] }[] }
+      | undefined;
+    let roomIds: string[] = list?.ops?.[0]?.room_ids ?? [];
+    switch (state) {
+      case SlidingSyncState.Complete:
+        if (!this.initialSyncCompleted) {
+          Promise.allSettled([
+            this.drainRoomState(),
+            this.drainMembership(),
+            this.drainTimeline(),
+          ]).then(() => {
+            this.initialSyncCompleted = true;
+            this.initialSyncCompletedDeferred.fulfill();
+          });
+        }
+        roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
+        break;
+      case SlidingSyncState.RequestFinished:
+        roomIds.forEach((id) => this.aiRoomIds.add(id));
+        break;
+    }
+  };
 
   async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
@@ -1134,7 +1169,19 @@ export default class MatrixService extends Service {
   }
 
   async createRoom(opts: MatrixSDK.ICreateRoomOpts) {
-    return this.client.createRoom(opts);
+    let result = await this.client.createRoom(opts);
+    await this.waitForRoomSync(result.room_id);
+    return result;
+  }
+
+  async waitForRoomSync(roomId: string) {
+    let deferred = this.roomsWaitingForSync.get(roomId);
+    if (!deferred) {
+      deferred = new Deferred<void>();
+      this.roomsWaitingForSync.set(roomId, deferred);
+    }
+    await deferred.promise;
+    this.roomsWaitingForSync.delete(roomId);
   }
 
   async createCard<T extends typeof BaseDef>(
@@ -1330,7 +1377,7 @@ export default class MatrixService extends Service {
       filter.setDefinition({
         room: {
           timeline: {
-            limit: 30,
+            limit: 100,
             not_types: [APP_BOXEL_STOP_GENERATING_EVENT_TYPE],
             'org.matrix.msc3874.not_rel_types': ['m.replace'],
           },
@@ -1393,6 +1440,11 @@ export default class MatrixService extends Service {
       throw new Error(
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
+    }
+
+    //We don't need to store auth room events
+    if (!this.aiRoomIds.has(roomId)) {
+      return;
     }
     let roomData = this.ensureRoomData(roomId);
     roomData.addEvent(event, oldEventId);
@@ -1520,6 +1572,11 @@ export default class MatrixService extends Service {
     }
     roomStates = Array.from(roomStateMap.values());
     for (let rs of roomStates) {
+      // The auth rooms are not stored
+      // so we don't need to process the state updates
+      if (!this.aiRoomIds.has(rs.roomId)) {
+        continue;
+      }
       let roomData = this.ensureRoomData(rs.roomId);
       roomData.notifyRoomStateUpdated(rs);
     }
@@ -1599,6 +1656,39 @@ export default class MatrixService extends Service {
       return;
     }
 
+    if (!this.aiRoomIds.has(roomId)) {
+      this.processDecryptedEventFromAuthRoom(event);
+      return;
+    }
+    await this.addRoomEvent(event, oldEventId);
+
+    if (
+      event.type === 'm.room.message' &&
+      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
+      event.content?.isStreamingFinished
+    ) {
+      this.commandService.queueEventForCommandProcessing(event);
+    }
+
+    // Queue code patches for processing
+    if (
+      event.type === 'm.room.message' &&
+      event.content?.body &&
+      event.content?.isStreamingFinished
+    ) {
+      // Check if the message contains code patches by looking for search/replace blocks
+      let body = event.content.body as string;
+      if (
+        body.includes(SEARCH_MARKER) &&
+        body.includes(SEPARATOR_MARKER) &&
+        body.includes(REPLACE_MARKER)
+      ) {
+        this.commandService.queueEventForCodePatchProcessing(event);
+      }
+    }
+  }
+
+  private async processDecryptedEventFromAuthRoom(event: TempEvent) {
     // patch in any missing room events--this will support dealing with local
     // echoes, migrating older histories as well as handle any matrix syncing gaps
     // that might occur
@@ -1645,33 +1735,6 @@ export default class MatrixService extends Service {
           realmResourceForEvent.url,
           event.content as RealmEventContent,
         );
-      }
-      return;
-    }
-    await this.addRoomEvent(event, oldEventId);
-
-    if (
-      event.type === 'm.room.message' &&
-      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
-      event.content?.isStreamingFinished
-    ) {
-      this.commandService.queueEventForCommandProcessing(event);
-    }
-
-    // Queue code patches for processing
-    if (
-      event.type === 'm.room.message' &&
-      event.content?.body &&
-      event.content?.isStreamingFinished
-    ) {
-      // Check if the message contains code patches by looking for search/replace blocks
-      let body = event.content.body as string;
-      if (
-        body.includes(SEARCH_MARKER) &&
-        body.includes(SEPARATOR_MARKER) &&
-        body.includes(REPLACE_MARKER)
-      ) {
-        this.commandService.queueEventForCodePatchProcessing(event);
       }
     }
   }

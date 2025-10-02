@@ -1,11 +1,22 @@
 import type Owner from '@ember/owner';
 import { getOwner, setOwner } from '@ember/owner';
+import RouterService from '@ember/routing/router-service';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { didCancel, enqueueTask } from 'ember-concurrency';
 
-import { type IndexWriter, type JobInfo } from '@cardstack/runtime-common';
+import {
+  type RenderResponse,
+  type IndexWriter,
+  type JobInfo,
+  type Prerenderer,
+  type RealmPermissions,
+  type Format,
+  type PrerenderMeta,
+} from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
   getReader,
@@ -13,7 +24,11 @@ import {
   type Reader,
   type RunnerOpts,
   type StatusArgs,
+  type FromScratchArgsWithPermissions,
+  type IncrementalArgsWithPermissions,
 } from '@cardstack/runtime-common/worker';
+
+import type { BoxComponent } from 'https://cardstack.com/base/field-component';
 
 import { CurrentRun } from '../lib/current-run';
 
@@ -26,9 +41,23 @@ import type RenderService from '../services/render-service';
 // to perform rendering for indexing in Ember test contexts.
 export default class CardPrerender extends Component {
   @service private declare network: NetworkService;
+  @service private declare router: RouterService;
   @service private declare renderService: RenderService;
   @service private declare fastboot: { isFastBoot: boolean };
   @service private declare localIndexer: LocalIndexer;
+  @tracked private renderComponent: BoxComponent | undefined;
+  @tracked private format: Format | undefined;
+
+  <template>
+    {{#unless this.isFastboot}}
+      {{#if this.renderComponent}}
+        {{! TODO add status for 'ready' or 'error' after we clean up error doc shape !}}
+        <div data-prerender>
+          <this.renderComponent @format={{this.format}} />
+        </div>
+      {{/if}}
+    {{/unless}}
+  </template>
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -47,13 +76,142 @@ export default class CardPrerender extends Component {
       this.localIndexer.setup(
         this.fromScratch.bind(this),
         this.incremental.bind(this),
+        this.prerender.bind(this),
       );
     }
   }
 
-  private async fromScratch(realmURL: URL): Promise<IndexResults> {
+  private get isFastboot() {
+    return this.fastboot.isFastBoot;
+  }
+
+  private async prerender({
+    url,
+    realm,
+    userId,
+    permissions,
+  }: {
+    realm: string;
+    url: string;
+    userId: string;
+    permissions: RealmPermissions;
+  }): Promise<RenderResponse> {
     try {
-      let results = await this.doFromScratch.perform(realmURL);
+      let results = await this.prerenderTask.perform({
+        url,
+        realm,
+        userId,
+        permissions,
+      });
+      return results;
+    } catch (e: any) {
+      if (!didCancel(e)) {
+        throw e;
+      }
+    }
+    throw new Error(
+      `card-prerender component is missing or being destroyed before prerender of url ${url} was completed`,
+    );
+  }
+
+  private prerenderTask = enqueueTask(
+    async ({
+      url,
+    }: {
+      realm: string;
+      url: string;
+      userId: string;
+      permissions: RealmPermissions;
+    }) => {
+      let isolatedHTML = await this.renderHTML.perform(url, 'isolated');
+      let meta = await this.renderMeta.perform(url);
+      let atomHTML = await this.renderHTML.perform(url, 'atom');
+      let iconHTML = await this.renderIcon.perform(url);
+      let embeddedHTML: Record<string, string> | null = null;
+      let fittedHTML: Record<string, string> | null = null;
+      if (meta?.types) {
+        embeddedHTML = await this.renderAncestors.perform(
+          url,
+          'embedded',
+          meta.types,
+        );
+        fittedHTML = await this.renderAncestors.perform(
+          url,
+          'fitted',
+          meta.types,
+        );
+      }
+      return {
+        ...meta,
+        isolatedHTML,
+        atomHTML,
+        embeddedHTML,
+        fittedHTML,
+        iconHTML,
+      };
+    },
+  );
+
+  // TODO use try/catch to handle render errors after we clean up error doc shape
+  private renderHTML = enqueueTask(
+    async (
+      url: string,
+      format: Format,
+      ancestorLevel = 0,
+      capture: 'innerHTML' | 'outerHTML' = 'innerHTML',
+    ) => {
+      let routeInfo = await this.router.recognizeAndLoad(
+        `/render/${encodeURIComponent(url)}/html/${format}/${ancestorLevel}`,
+      );
+      this.format = format;
+      this.renderComponent = routeInfo.attributes.Component;
+      await new Promise<void>((r) => scheduleOnce('afterRender', this, r));
+      let el = document.querySelector('[data-prerender]');
+      let captured = el?.children[0]?.[capture]?.trim() ?? null;
+      return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
+    },
+  );
+
+  private renderAncestors = enqueueTask(
+    async (url: string, format: 'embedded' | 'fitted', types: string[]) => {
+      let ancestors: Record<string, string> = {};
+      for (let i = 0; i < types.length; i++) {
+        let res = await this.renderHTML.perform(url, format, i, 'outerHTML');
+        ancestors[types[i]] = res as string;
+      }
+      return ancestors;
+    },
+  );
+
+  private renderMeta = enqueueTask(async (url: string) => {
+    let routeInfo = await this.router.recognizeAndLoad(
+      `/render/${encodeURIComponent(url)}/meta`,
+    );
+    return routeInfo.attributes as PrerenderMeta;
+  });
+
+  private renderIcon = enqueueTask(async (url: string) => {
+    let routeInfo = await this.router.recognizeAndLoad(
+      `/render/${encodeURIComponent(url)}/icon`,
+    );
+    this.renderComponent = routeInfo.attributes.Component;
+    await new Promise<void>((r) => scheduleOnce('afterRender', this, r));
+    let el = document.querySelector('[data-prerender]');
+    let captured = el?.children[0]?.outerHTML?.trim() ?? null;
+    return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
+  });
+
+  private async fromScratch({
+    realmURL,
+    realmUsername: userId,
+    permissions,
+  }: FromScratchArgsWithPermissions): Promise<IndexResults> {
+    try {
+      let results = await this.doFromScratch.perform({
+        realmURL,
+        userId,
+        permissions,
+      });
       return results;
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -65,19 +223,23 @@ export default class CardPrerender extends Component {
     );
   }
 
-  private async incremental(
-    urls: URL[],
-    realmURL: URL,
-    operation: 'delete' | 'update',
-    ignoreData: Record<string, string>,
-  ): Promise<IndexResults> {
+  private async incremental({
+    realmURL,
+    realmUsername: userId,
+    urls,
+    operation,
+    ignoreData,
+    permissions,
+  }: IncrementalArgsWithPermissions): Promise<IndexResults> {
     try {
-      let state = await this.doIncremental.perform(
+      let state = await this.doIncremental.perform({
         urls,
+        userId,
+        permissions,
         realmURL,
         operation,
         ignoreData,
-      );
+      });
       return state;
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -85,9 +247,7 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is missing or being destroyed before incremental index of ${urls
-        .map((u) => u.href)
-        .join()} was completed`,
+      `card-prerender component is missing or being destroyed before incremental index of ${urls.join()} was completed`,
     );
   }
 
@@ -100,36 +260,60 @@ export default class CardPrerender extends Component {
     await register(this.fromScratch.bind(this), this.incremental.bind(this));
   });
 
-  private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, indexWriter, jobInfo, reportStatus } =
-      this.getRunnerParams(realmURL);
-    let currentRun = new CurrentRun({
+  private doFromScratch = enqueueTask(
+    async ({
       realmURL,
-      reader,
-      indexWriter,
-      jobInfo,
-      renderCard: this.renderService.renderCard,
-      render: this.renderService.render,
-      reportStatus,
-    });
-    setOwner(currentRun, getOwner(this)!);
-
-    let current = await CurrentRun.fromScratch(currentRun);
-    this.renderService.indexRunDeferred?.fulfill();
-    return current;
-  });
-
-  private doIncremental = enqueueTask(
-    async (
-      urls: URL[],
-      realmURL: URL,
-      operation: 'delete' | 'update',
-      ignoreData: Record<string, string>,
-    ) => {
-      let { reader, indexWriter, jobInfo, reportStatus } =
+      userId,
+      permissions,
+    }: {
+      userId: string;
+      permissions: RealmPermissions;
+      realmURL: string;
+    }) => {
+      let { reader, indexWriter, jobInfo, reportStatus, prerenderer } =
         this.getRunnerParams(realmURL);
       let currentRun = new CurrentRun({
-        realmURL,
+        realmURL: new URL(realmURL),
+        userId,
+        permissions,
+        reader,
+        indexWriter,
+        jobInfo,
+        renderCard: this.renderService.renderCard,
+        render: this.renderService.render,
+        reportStatus,
+        prerenderer,
+      });
+      setOwner(currentRun, getOwner(this)!);
+
+      let current = await CurrentRun.fromScratch(currentRun);
+      this.renderService.indexRunDeferred?.fulfill();
+      return current;
+    },
+  );
+
+  private doIncremental = enqueueTask(
+    async ({
+      urls,
+      realmURL,
+      userId,
+      permissions,
+      operation,
+      ignoreData,
+    }: {
+      urls: string[];
+      realmURL: string;
+      operation: 'delete' | 'update';
+      ignoreData: Record<string, string>;
+      userId: string;
+      permissions: RealmPermissions;
+    }) => {
+      let { reader, indexWriter, jobInfo, reportStatus, prerenderer } =
+        this.getRunnerParams(realmURL);
+      let currentRun = new CurrentRun({
+        realmURL: new URL(realmURL),
+        userId,
+        permissions,
         reader,
         indexWriter,
         jobInfo,
@@ -137,10 +321,11 @@ export default class CardPrerender extends Component {
         renderCard: this.renderService.renderCard,
         render: this.renderService.render,
         reportStatus,
+        prerenderer,
       });
       setOwner(currentRun, getOwner(this)!);
       let current = await CurrentRun.incremental(currentRun, {
-        urls,
+        urls: urls.map((u) => new URL(u)),
         operation,
       });
       this.renderService.indexRunDeferred?.fulfill();
@@ -148,9 +333,10 @@ export default class CardPrerender extends Component {
     },
   );
 
-  private getRunnerParams(realmURL: URL): {
+  private getRunnerParams(realmURL: string): {
     reader: Reader;
     indexWriter: IndexWriter;
+    prerenderer: Prerenderer;
     jobInfo?: JobInfo;
     reportStatus?: (args: StatusArgs) => void;
   } {
@@ -159,18 +345,20 @@ export default class CardPrerender extends Component {
       if (optsId == null) {
         throw new Error(`Runner Options Identifier was not set`);
       }
-      let { reader, indexWriter, jobInfo, reportStatus } =
+      let { reader, indexWriter, jobInfo, reportStatus, prerenderer } =
         getRunnerOpts(optsId);
       return {
         reader,
         indexWriter,
         jobInfo,
         reportStatus,
+        prerenderer,
       };
     } else {
       return {
         reader: getReader(this.network.authedFetch, realmURL),
         indexWriter: this.localIndexer.indexWriter,
+        prerenderer: this.localIndexer.prerenderer,
       };
     }
   }
@@ -180,4 +368,15 @@ function getRunnerOpts(optsId: number): RunnerOpts {
   return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(
     optsId,
   );
+}
+
+function cleanCapturedHTML(html: string): string {
+  if (!html) {
+    return html;
+  }
+  const emberIdAttr = /\s+id=(?:"ember\d+"|'ember\d+'|ember\d+)(?=[\s>])/g;
+  const emptyDataAttr = /\s+(data-[A-Za-z0-9:_-]+)=(?:""|''|(?=[\s>]))/g;
+  let cleaned = html.replace(emberIdAttr, '');
+  cleaned = cleaned.replace(emptyDataAttr, ' $1');
+  return cleaned;
 }

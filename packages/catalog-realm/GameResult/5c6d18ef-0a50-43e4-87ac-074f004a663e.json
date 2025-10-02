@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "outcome": {
+        "outcome": {
+          "label": "Lose"
+        }
+      },
+      "ref": {
+        "module": "http://localhost:4201/catalog/blackjack/blackjack",
+        "name": "BlackjackGame"
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../blackjack/BlackjackGame/7afce4bc-c331-48ca-bc53-3b9cc2e81333"
+        }
+      },
+      "outcome.player": {
+        "links": {
+          "self": "../player/Player/f94072de-cae9-4653-9b75-a7d41f943ba2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../game-result/game-result",
+        "name": "GameResult"
+      }
+    }
+  }
+}
