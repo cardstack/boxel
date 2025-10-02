@@ -1899,20 +1899,31 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           mitLicenseId,
           'Immediate listing license id matches mitLicenseId',
         );
+        // Lint: avoid logical expression inside assertion
         assert.ok(
-          Array.isArray(immediateListing.tags) &&
-            immediateListing.tags.length > 0,
-          'Immediate listing has linked tag(s) before persistence',
+          Array.isArray(immediateListing.tags),
+          'Immediate listing tags is an array before persistence',
         );
+        if (Array.isArray(immediateListing.tags)) {
+          assert.ok(
+            immediateListing.tags.length > 0,
+            'Immediate listing has linked tag(s) before persistence',
+          );
+        }
         assert.true(
           immediateListing.tags.some((t: any) => t.id === calculatorTagId),
           'Immediate listing includes calculator tag id',
         );
         assert.ok(
-          Array.isArray(immediateListing.categories) &&
-            immediateListing.categories.length > 0,
-          'Immediate listing has linked category(ies) before persistence',
+          Array.isArray(immediateListing.categories),
+          'Immediate listing categories is an array before persistence',
         );
+        if (Array.isArray(immediateListing.categories)) {
+          assert.ok(
+            immediateListing.categories.length > 0,
+            'Immediate listing has linked category(ies) before persistence',
+          );
+        }
         assert.true(
           immediateListing.categories.some(
             (c: any) => c.id === writingCategoryId,
@@ -1920,15 +1931,27 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           'Immediate listing includes writing category id',
         );
         assert.ok(
-          Array.isArray(immediateListing.specs) &&
-            immediateListing.specs.length === 5,
-          'Immediate listing has expected number of specs before persistence',
+          Array.isArray(immediateListing.specs),
+          'Immediate listing specs is an array before persistence',
         );
+        if (Array.isArray(immediateListing.specs)) {
+          assert.strictEqual(
+            immediateListing.specs.length,
+            5,
+            'Immediate listing has expected number of specs before persistence',
+          );
+        }
         assert.ok(
-          Array.isArray(immediateListing.examples) &&
-            immediateListing.examples.length === 1,
-          'Immediate listing has expected examples before persistence',
+          Array.isArray(immediateListing.examples),
+          'Immediate listing examples is an array before persistence',
         );
+        if (Array.isArray(immediateListing.examples)) {
+          assert.strictEqual(
+            immediateListing.examples.length,
+            1,
+            'Immediate listing has expected examples before persistence',
+          );
+        }
         // Header/title: wait for persisted id (listing.id) then assert via stack card selector
         const persistedId = immediateListing.id;
         assert.ok(persistedId, 'Immediate listing has a persisted id');
@@ -2031,19 +2054,29 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             'Persisted listing license id matches mitLicenseId',
           );
           assert.ok(
-            Array.isArray((listing as any).tags) &&
-              (listing as any).tags.length > 0,
-            'autoLinkTag populated listing.tags with at least one tag',
+            Array.isArray((listing as any).tags),
+            'autoLinkTag populated listing.tags array',
           );
+          if (Array.isArray((listing as any).tags)) {
+            assert.ok(
+              (listing as any).tags.length > 0,
+              'autoLinkTag populated listing.tags with at least one tag',
+            );
+          }
           assert.true(
             (listing as any).tags.some((t: any) => t.id === calculatorTagId),
             'Persisted listing includes calculator tag id',
           );
           assert.ok(
-            Array.isArray((listing as any).categories) &&
-              (listing as any).categories.length > 0,
-            'autoLinkCategory populated listing.categories with at least one category',
+            Array.isArray((listing as any).categories),
+            'autoLinkCategory populated listing.categories array',
           );
+          if (Array.isArray((listing as any).categories)) {
+            assert.ok(
+              (listing as any).categories.length > 0,
+              'autoLinkCategory populated listing.categories with at least one category',
+            );
+          }
           assert.true(
             (listing as any).categories.some(
               (c: any) => c.id === writingCategoryId,
