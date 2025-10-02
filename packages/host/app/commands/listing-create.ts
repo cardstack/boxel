@@ -243,14 +243,13 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   private async askAiCardToLink(
     searchTypeCodeRef: ResolvedCodeRef,
-    processLabel?: string,
   ): Promise<any[]> {
     const search = new SearchCardsByTypeAndTitleCommand(this.commandContext);
     const result = await search.execute({ type: searchTypeCodeRef });
     const instances = result.instances ?? [];
     const summariesString = this.instancesToPromptString(instances);
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-    const systemPrompt = `Process: ${processLabel || 'autoLink'}\nYou are an expert catalog curator. Select the most relevant 1 or 2 ids that represent ${searchTypeCodeRef.name} (maximum 2) from the provided list. Output ONLY a JSON array of 1 or 2 id strings. No commentary.`;
+    const systemPrompt = `You are an expert catalog curator. Select the most relevant 1 or 2 ids that represent ${searchTypeCodeRef.name} (maximum 2) from the provided list. Output ONLY a JSON array of 1 or 2 id strings. No commentary.`;
     const userPrompt = `Options (id :: title):\n${summariesString}\n\nRules:\n- Return a JSON array with 1 or 2 ids (max 2).\n- No duplicates.\n- Only use ids from the list.\nOutput examples: ["idA"] or ["idA","idB"].`;
     const r = await oneShot.execute({
       systemPrompt,
@@ -280,7 +279,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async autoPatchName(listing: CardAPI.CardDef) {
     const name = await this.getStringPatch({
       systemPrompt:
-        'Process: autoPatchName\nYou are an expert catalog curator for tech products. Produce ONLY the concise human-friendly title (3 words max) for this listing. Output just the title text—no quotes, no JSON, no punctuation beyond normal word separators, and no extra commentary.',
+        'You are an expert catalog curator for tech products. Produce ONLY the concise human-friendly title (3 words max) for this listing. Output just the title text—no quotes, no JSON, no punctuation beyond normal word separators, and no extra commentary.',
       userPrompt:
         'Provide a short, clear, human-friendly title (3-8 words) for this listing. Avoid quotes, punctuation except hyphens/spaces, and version numbers.',
     });
@@ -292,7 +291,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async autoPatchSummary(listing: CardAPI.CardDef) {
     const summary = await this.getStringPatch({
       systemPrompt:
-        "Process: autoPatchSummary\nYou are an expert catalog curator for tech products. Produce ONLY a one or two sentence concise README-style summary describing the listing's value and primary purpose. Output just the summary text—no quotes, no JSON, no markdown, no extra commentary.",
+        "You are an expert catalog curator for tech products. Produce ONLY a one or two sentence concise README-style summary describing the listing's value and primary purpose. Output just the summary text—no quotes, no JSON, no markdown, no extra commentary.",
       userPrompt:
         'Write a concise README-style summary. Focus on what this listing (software/card/app/skill) does and its primary purpose. Avoid implementation details and marketing fluff.',
     });
@@ -308,23 +307,17 @@ export default class ListingCreateCommand extends HostBaseCommand<
     (listing as any).license = instances[0];
   }
   private async autoLinkTag(listing: CardAPI.CardDef) {
-    const instances = await this.askAiCardToLink(
-      {
-        module: `${this.catalogRealm}catalog-app/listing/tag`,
-        name: 'Tag',
-      } as ResolvedCodeRef,
-      'autoLinkTag',
-    );
+    const instances = await this.askAiCardToLink({
+      module: `${this.catalogRealm}catalog-app/listing/tag`,
+      name: 'Tag',
+    } as ResolvedCodeRef);
     (listing as any).tags = instances;
   }
   private async autoLinkCategory(listing: CardAPI.CardDef) {
-    const instances = await this.askAiCardToLink(
-      {
-        module: `${this.catalogRealm}catalog-app/listing/category`,
-        name: 'Category',
-      } as ResolvedCodeRef,
-      'autoLinkCategory',
-    );
+    const instances = await this.askAiCardToLink({
+      module: `${this.catalogRealm}catalog-app/listing/category`,
+      name: 'Category',
+    } as ResolvedCodeRef);
     (listing as any).categories = instances;
   }
 

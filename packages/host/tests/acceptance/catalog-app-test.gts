@@ -1655,34 +1655,41 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 const user: string =
                   messages.find((m: any) => m.role === 'user')?.content || '';
                 const systemLower = system.toLowerCase();
-
                 let content: any = 'generic response';
-                // Listing type inference (expects single token card|app|skill)
                 if (
                   systemLower.includes(
                     'respond only with one token: card, app, or skill',
                   )
                 ) {
-                  content = 'card';
-                }
-                // Title generation
-                else if (systemLower.includes('concise human-friendly title')) {
+                  // Heuristic moved from production code into test mock:
+                  // If the serialized example or prompts reference an App construct
+                  // (e.g. AppCard base class, module paths with /App/, or a name ending with App)
+                  // then classify as 'app'. If it references Skill, classify as 'skill'.
+                  const userLower = user.toLowerCase();
+                  if (
+                    /(appcard|blogapp|"appcard"|\.appcard|name: 'appcard')/.test(
+                      userLower,
+                    )
+                  ) {
+                    content = 'app';
+                  } else if (/skill/.test(userLower)) {
+                    content = 'skill';
+                  } else {
+                    content = 'card';
+                  }
+                } else if (
+                  systemLower.includes('concise human-friendly title')
+                ) {
                   content = 'Mock Listing Title';
-                }
-                // Summary generation
-                else if (
+                } else if (
                   systemLower.includes(
                     'one or two sentence concise readme-style summary',
                   )
                 ) {
                   content = 'Mock listing summary sentence.';
-                }
-                // Relationship suggestion (expects JSON array of ids)
-                else if (
+                } else if (
                   systemLower.includes('select the most relevant 1 or 2 ids')
                 ) {
-                  // Parse first id from user prompt options list
-                  // Options format: id :: title
                   let firstId: string | undefined;
                   const lines = user.split('\n');
                   for (let line of lines) {
@@ -1695,9 +1702,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                     }
                   }
                   content = JSON.stringify([firstId || 'unknown-id']);
-                }
-                // Fallbacks for any curator style prompts (return minimal token)
-                else if (systemLower.includes('curator')) {
+                } else if (systemLower.includes('curator')) {
                   content = 'curated';
                 }
 
@@ -1820,6 +1825,52 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 spec.ref.module != 'https://cdn.jsdelivr.net/npm/chess.js/+esm',
             ),
             'Listing should does not have unrecognised import',
+          );
+        }
+      });
+
+      test('app listing', async function (assert) {
+        const cardId = mockCatalogURL + 'blog-app/BlogApp/example';
+        const commandService = getService('command-service');
+        const command = new ListingCreateCommand(commandService.commandContext);
+        await command.execute({
+          openCardId: cardId,
+          targetRealm: testDestinationRealmURL,
+        });
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testDestinationRealmURL}index`,
+        });
+        await verifySubmode(assert, 'code');
+        const instanceFolder = 'AppListing/';
+        await openDir(assert, instanceFolder);
+        const listingId = await verifyJSONWithUUIDInFolder(
+          assert,
+          instanceFolder,
+        );
+        if (listingId) {
+          const listing = (await getService('store').get(
+            listingId,
+          )) as CardListing;
+          assert.ok(listing, 'Listing should be created');
+          assert.strictEqual(
+            listing.specs.length,
+            5,
+            'Listing should have five specs',
+          );
+          ['Author', 'AuthorCompany', 'BlogPost', 'BlogApp', 'AppCard'].forEach(
+            (specName) => {
+              assert.true(
+                listing.specs.some((spec) => spec.ref.name === specName),
+                `Listing should have a ${specName} spec`,
+              );
+            },
+          );
+          assert.strictEqual(
+            listing.examples.length,
+            1,
+            'Listing should have one example',
           );
         }
       });
