@@ -6,7 +6,9 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import Globe from '@cardstack/boxel-icons/globe';
 import Refresh from '@cardstack/boxel-icons/refresh';
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { restartableTask } from 'ember-concurrency';
 
@@ -18,6 +20,7 @@ import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import OpenSitePopover from '@cardstack/host/components/operator-mode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -43,6 +46,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
+  @tracked isOpenSitePopoverOpen = false;
 
   get currentCardId() {
     return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
@@ -108,12 +112,35 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     this.isPublishingRealmPopoverOpen = !this.isPublishingRealmPopoverOpen;
   }
 
+  @action
+  toggleOpenSitePopover() {
+    this.isOpenSitePopoverOpen = !this.isOpenSitePopoverOpen;
+  }
+
+  @action
+  closeOpenSitePopover() {
+    this.isOpenSitePopoverOpen = false;
+  }
+
   get realmURL() {
     return this.operatorModeStateService.realmURL.href;
   }
 
   get isPublishing() {
     return this.realm.isPublishing(this.realmURL);
+  }
+
+  get hasPublishedSites() {
+    const realmInfo = this.operatorModeStateService.currentRealmInfo;
+    if (
+      !realmInfo?.lastPublishedAt ||
+      typeof realmInfo.lastPublishedAt !== 'object'
+    ) {
+      return false;
+    }
+
+    // Check if there are any published URLs with timestamps
+    return Object.keys(realmInfo.lastPublishedAt).length > 0;
   }
 
   handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
@@ -128,30 +155,56 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   <template>
     <SubmodeLayout class='host-submode-layout' data-test-host-submode>
       <:topBar>
-        {{#if this.isPublishing}}
-          <BoxelButton
-            @kind='primary'
-            @size='tall'
-            class='publish-realm-button publishing'
-            {{on 'click' this.togglePublishingRealmPopover}}
-            data-test-publish-realm-button
+        <div class='publish-realm-button-container'>
+          {{#if this.isPublishing}}
+            <BoxelButton
+              @kind='primary'
+              @size='tall'
+              class='publish-realm-button publishing'
+              {{on 'click' this.togglePublishingRealmPopover}}
+              data-test-publish-realm-button
+            >
+              <Refresh width='22' height='22' class='publish-icon' />
+              Publishing…
+            </BoxelButton>
+          {{else}}
+            <BoxelButton
+              @kind='primary'
+              @size='tall'
+              class='publish-realm-button'
+              {{on 'click' this.openPublishRealmModal}}
+              data-test-publish-realm-button
+            >
+              <PublishSiteIcon width='22' height='22' class='publish-icon' />
+              Publish Site
+            </BoxelButton>
+          {{/if}}
+          <PublishingRealmPopover
+            @isOpen={{this.isPublishingRealmPopoverOpen}}
+          />
+        </div>
+        {{#if this.hasPublishedSites}}
+          <div
+            class='open-site-button-container'
+            {{onClickOutside
+              this.closeOpenSitePopover
+              exceptSelector='.open-site-button'
+            }}
           >
-            <Refresh width='22' height='22' class='publish-icon' />
-            Publishing…
-          </BoxelButton>
-        {{else}}
-          <BoxelButton
-            @kind='primary'
-            @size='tall'
-            class='publish-realm-button'
-            {{on 'click' this.openPublishRealmModal}}
-            data-test-publish-realm-button
-          >
-            <PublishSiteIcon width='22' height='22' class='publish-icon' />
-            Publish Site
-          </BoxelButton>
+            <BoxelButton
+              @kind='secondary'
+              @size='tall'
+              class='open-site-button'
+              {{on 'click' this.toggleOpenSitePopover}}
+              data-test-open-site-button
+            >
+              <Globe width='22' height='22' class='globe-icon' />
+              Open Site
+            </BoxelButton>
+            <OpenSitePopover @isOpen={{this.isOpenSitePopoverOpen}} />
+          </div>
         {{/if}}
-        <PublishingRealmPopover @isOpen={{this.isPublishingRealmPopoverOpen}} />
+
       </:topBar>
       <:default as |layout|>
         <div class='host-submode' style={{this.backgroundImageStyle}}>
@@ -218,7 +271,13 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       }
 
       .host-submode-layout :deep(.top-bar) {
+        position: relative;
         background-color: var(--boxel-700);
+        width: 100%;
+      }
+
+      .host-submode-layout :deep(.profile-icon-button) {
+        margin-left: 0;
       }
 
       .host-mode-top-bar-content {
@@ -229,6 +288,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
           var(--operator-mode-left-column) + var(--submode-switcher-width) +
             var(--operator-mode-spacing)
         );
+      }
+
+      .publish-realm-button-container {
+        position: relative;
       }
 
       .publish-realm-button {
@@ -247,6 +310,31 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       .publish-icon {
         flex-shrink: 0;
+      }
+
+      .open-site-button-container {
+        position: relative;
+        margin-left: auto;
+      }
+
+      .open-site-button {
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        --boxel-button-color: transparent;
+        --boxel-button-border: 1px solid var(--boxel-700);
+        --boxel-button-text-color: var(--boxel-light);
+        border-radius: var(--submode-bar-item-border-radius);
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+
+      .open-site-button:hover:not(:disabled) {
+        --boxel-button-border: 1px solid var(--boxel-light);
+      }
+
+      .globe-icon {
+        flex-shrink: 0;
+        color: var(--boxel-teal);
       }
 
       .publish-realm-button.publishing {
