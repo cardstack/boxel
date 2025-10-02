@@ -997,7 +997,7 @@ export class Realm {
       return;
     }
 
-    let existing = await getAllSessionRooms(this.#dbAdapter);
+    let existing = await getAllSessionRooms(this.#dbAdapter, this.url);
     let imported = 0;
 
     for (let [matrixUserId, roomId] of Object.entries(accountData)) {
@@ -1009,7 +1009,7 @@ export class Realm {
         continue;
       }
 
-      await persistSessionRoom(this.#dbAdapter, matrixUserId, roomId);
+      await persistSessionRoom(this.#dbAdapter, this.url, matrixUserId, roomId);
       existing[matrixUserId] = roomId;
       imported++;
     }
@@ -1123,9 +1123,9 @@ export class Realm {
       } as Utils,
       {
         getSessionRoom: (matrixUserId: string) =>
-          fetchSessionRoom(this.#dbAdapter, matrixUserId),
+          fetchSessionRoom(this.#dbAdapter, this.url, matrixUserId),
         setSessionRoom: (matrixUserId: string, roomId: string) =>
-          persistSessionRoom(this.#dbAdapter, matrixUserId, roomId),
+          persistSessionRoom(this.#dbAdapter, this.url, matrixUserId, roomId),
       },
     );
 
@@ -2968,7 +2968,7 @@ export class Realm {
   }
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    let sessionRooms = await getAllSessionRooms(this.#dbAdapter);
+    let sessionRooms = await getAllSessionRooms(this.#dbAdapter, this.url);
     await this.#adapter.broadcastRealmEvent(
       event,
       this.#matrixClient,

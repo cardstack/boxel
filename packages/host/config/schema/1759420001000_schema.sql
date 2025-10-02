@@ -88,9 +88,10 @@
 );
 
  CREATE TABLE IF NOT EXISTS session_rooms (
+   realm_url TEXT NOT NULL,
    matrix_user_id TEXT NOT NULL,
    room_id TEXT NOT NULL,
    created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
-   PRIMARY KEY ( matrix_user_id ) 
+   PRIMARY KEY ( realm_url, matrix_user_id ) 
 );

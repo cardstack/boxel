@@ -5,6 +5,7 @@ import {
   SupportedMimeType,
   fetchUserPermissions,
   getSessionRoom,
+  REALM_SERVER_REALM,
 } from '@cardstack/runtime-common';
 import { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
@@ -30,7 +31,11 @@ export default function handleRealmAuth({
       return;
     }
 
-    let sessionRoomId = await getSessionRoom(dbAdapter, user.matrixUserId);
+    let sessionRoomId = await getSessionRoom(
+      dbAdapter,
+      REALM_SERVER_REALM,
+      user.matrixUserId,
+    );
 
     if (!sessionRoomId) {
       await sendResponseForError(
