@@ -1063,7 +1063,75 @@ export class Realm {
       } as Utils,
     );
 
-    return await matrixBackendAuthentication.createSession(request);
+    let response;
+    let clonedRequest = request.clone();
+
+    try {
+      response = await matrixBackendAuthentication.createSession(request);
+      return response;
+    } catch (e) {
+      console.log('Error in _session');
+      console.log(e);
+      console.log(
+        `for ${this.#matrixClient.getUserId()} ${this.#realmSecretSeed}`,
+      );
+
+      console.log('About to try again');
+
+      let secondMatrixBackendAuthentication = new MatrixBackendAuthentication(
+        this.#matrixClient,
+        this.#realmSecretSeed,
+        {
+          badRequest: function (message: string) {
+            return badRequest({ message, requestContext });
+          },
+          createResponse: function (
+            body: BodyInit | null,
+            init: ResponseInit | undefined,
+          ) {
+            return createResponse({
+              body,
+              init,
+              requestContext,
+            });
+          },
+          createJWT: async (user: string, sessionRoom: string) => {
+            let permissions = requestContext.permissions;
+
+            let userPermissions = await new RealmPermissionChecker(
+              permissions,
+              this.#matrixClient,
+            ).for(user);
+            return this.#adapter.createJWT(
+              {
+                user,
+                realm: this.url,
+                sessionRoom,
+                permissions: userPermissions,
+              },
+              '7d',
+              this.#realmSecretSeed,
+            );
+          },
+        } as Utils,
+      );
+
+      try {
+        console.log('pre');
+        response =
+          await secondMatrixBackendAuthentication.createSession(clonedRequest);
+        console.log('post');
+        return response;
+      } catch (e) {
+        console.log('Second error in _session');
+        console.log(e);
+        console.log(
+          `for ${this.#matrixClient.getUserId()} ${this.#realmSecretSeed}`,
+        );
+
+        throw e;
+      }
+    }
   }
 
   private async internalHandle(
