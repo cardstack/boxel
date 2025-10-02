@@ -67,6 +67,7 @@ import {
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -1766,6 +1767,10 @@ export default class MatrixService extends Service {
 
   async setLLMForCodeMode() {
     return this.setLLMModel(DEFAULT_CODING_LLM);
+  }
+
+  async setLLMForInteractMode() {
+    return this.setLLMModel(DEFAULT_LLM);
   }
 
   private async setLLMModel(model: string) {
