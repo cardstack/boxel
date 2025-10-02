@@ -114,10 +114,6 @@ export class RealmServer {
     detectRealmCollision(realms);
     ensureDirSync(realmsRootPath);
 
-    this.serverURL = serverURL;
-    this.virtualNetwork = virtualNetwork;
-    this.matrixClient = matrixClient;
-
     this.log.info('Initializing RealmServer');
     this.log.debug(`Configured realms: ${realms.map((r) => r.url).join(', ')}`);
     this.serverURL = serverURL;
