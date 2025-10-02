@@ -158,12 +158,6 @@ module(basename(__filename), function () {
           );
 
         sourceRealmUrlString = createSourceRealmResponse.body.data.id;
-
-        // Make the published realm public so reading _info doesn’t need a token
-        dbAdapter.execute(`
-          INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
-          VALUES ('${sourceRealmUrlString}', '*', true, true, true)
-        `);
       });
 
       test('POST /_publish-realm can publish realm successfully', async function (assert) {
