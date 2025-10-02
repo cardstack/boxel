@@ -6,12 +6,15 @@ import {
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import UrlField from 'https://cardstack.com/base/url';
+import EmailField from 'https://cardstack.com/base/email';
+import PhoneNumberField from 'https://cardstack.com/base/phone-number';
 
 import {
   BoxelSelect,
   FieldContainer,
   Pill,
 } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type IconComponent from '@cardstack/boxel-icons/captions';
 import Email from '@cardstack/boxel-icons/mail';
@@ -50,28 +53,37 @@ export class ContactLinkField extends FieldDef {
   static displayName = 'Contact Link';
   static values: ContactLink[] = contactValues;
   @field label = contains(StringField);
-  @field value = contains(StringField);
+  @field email = contains(EmailField);
+  @field phone = contains(PhoneNumberField);
+  @field link = contains(UrlField);
   @field url = contains(UrlField, {
     computeVia: function (this: ContactLinkField) {
       switch (this.item?.type) {
         case 'email':
-          return `mailto:${this.value}`;
+          return this.email ? `mailto:${this.email}` : undefined;
         case 'tel':
-          return `tel:${this.value}`;
+          return this.phone
+            ? `tel:${
+                this.phone.countryCode ? '+' + this.phone.countryCode : ''
+              }${this.phone.number}`
+            : undefined;
         default:
-          return this.value;
+          return this.link;
       }
     },
   });
+
   get items() {
     if (this.constructor && 'values' in this.constructor) {
       return this.constructor.values as ContactLink[];
     }
     return ContactLinkField.values;
   }
+
   get item() {
     return this.items?.find((val) => val.label === this.label);
   }
+
   static edit = class Edit extends Component<typeof this> {
     <template>
       <FieldContainer @vertical={{true}} @label='Type' @tag='label'>
@@ -85,15 +97,34 @@ export class ContactLinkField extends FieldDef {
           <div>{{item.label}}</div>
         </BoxelSelect>
       </FieldContainer>
+
       <FieldContainer @vertical={{true}} @label={{this.label}} @tag='label'>
-        <@fields.value />
+        {{#if (eq this.selectedOption.type 'email')}}
+          <@fields.email />
+        {{else if (eq this.selectedOption.type 'tel')}}
+          <@fields.phone />
+        {{else}}
+          <@fields.link />
+        {{/if}}
       </FieldContainer>
+
       <style scoped>
-        label + label {
-          margin-top: var(--boxel-sp-xs);
+        label + * {
+          margin-top: var(--boxel-sp-sm);
         }
       </style>
     </template>
+
+    get label() {
+      switch (this.selectedOption?.type) {
+        case 'email':
+          return 'Email Address';
+        case 'tel':
+          return 'Phone Number';
+        default:
+          return 'Link';
+      }
+    }
 
     options = this.args.model.items;
 
@@ -104,18 +135,8 @@ export class ContactLinkField extends FieldDef {
         (option) => option.label === this.args.model.label,
       );
     }
-
-    get label() {
-      switch (this.selectedOption?.type) {
-        case 'email':
-          return 'Address';
-        case 'tel':
-          return 'Number';
-        default:
-          return 'Link';
-      }
-    }
   };
+
   static atom = class Atom extends Component<typeof this> {
     <template>
       {{#if @model.url}}
@@ -140,6 +161,7 @@ export class ContactLinkField extends FieldDef {
       </style>
     </template>
   };
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{#if @model.url}}
