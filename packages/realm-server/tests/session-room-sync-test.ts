@@ -10,23 +10,26 @@ module(basename(__filename), function (hooks) {
   const importUserId = '@import-sync:localhost';
   const importRoomId = '!import-sync-room:localhost';
   let dbAdapter: PgAdapter;
+  let realmURL: string;
   let matrixConfigUsed: MatrixConfig | undefined;
 
   setupPermissionedRealm(hooks, {
     permissions: {
       '*': ['read'],
     },
-    beforeStart: async ({ dbAdapter: adapter, matrixConfig }) => {
+    beforeStart: async ({ dbAdapter: adapter, matrixConfig, testRealm }) => {
       matrixConfigUsed = matrixConfig;
+      realmURL = testRealm.url;
       await seedAccountData(matrixConfig);
       // sanity check: no DB entry before startup
-      let existing = await getSessionRoom(adapter, importUserId);
+      let existing = await getSessionRoom(adapter, realmURL, importUserId);
       if (existing) {
         throw new Error('expected no pre-existing session room record');
       }
     },
-    onRealmSetup({ dbAdapter: adapter }) {
+    onRealmSetup({ dbAdapter: adapter, testRealm }) {
       dbAdapter = adapter;
+      realmURL = testRealm.url;
     },
   });
 
@@ -37,7 +40,7 @@ module(basename(__filename), function (hooks) {
   });
 
   test('imports legacy session rooms from Matrix account data on startup', async function (assert) {
-    let roomId = await getSessionRoom(dbAdapter, importUserId);
+    let roomId = await getSessionRoom(dbAdapter, realmURL, importUserId);
     assert.strictEqual(
       roomId,
       importRoomId,

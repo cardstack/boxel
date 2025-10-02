@@ -695,11 +695,11 @@ export function setupMatrixRoom(
 
     testAuthRoomId = json.room;
 
-    let { dbAdapter } = getRealmSetup();
+    let { dbAdapter, testRealm } = getRealmSetup();
     if (!dbAdapter) {
       throw new Error('setupMatrixRoom requires a dbAdapter in getRealmSetup');
     }
-    await setSessionRoom(dbAdapter, userId, json.room);
+    await setSessionRoom(dbAdapter, testRealm.url, userId, json.room);
   });
 
   return {

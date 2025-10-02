@@ -1,15 +1,20 @@
 import type { DBAdapter } from './db';
 import { query, param, dbExpression } from './expression';
 
+export const REALM_SERVER_REALM = '__realm-server__';
+
 /**
  * Returns the stored session room id for the given matrix user or null when none exists.
  */
 export async function getSessionRoom(
   dbAdapter: DBAdapter,
+  realmURL: string,
   matrixUserId: string,
 ) {
   let rows = await query(dbAdapter, [
-    'SELECT room_id FROM session_rooms WHERE matrix_user_id =',
+    'SELECT room_id FROM session_rooms WHERE realm_url =',
+    param(realmURL),
+    'AND matrix_user_id =',
     param(matrixUserId),
   ]);
 
@@ -26,12 +31,15 @@ export async function getSessionRoom(
  */
 export async function setSessionRoom(
   dbAdapter: DBAdapter,
+  realmURL: string,
   matrixUserId: string,
   roomId: string,
 ) {
   await query(dbAdapter, [
-    'INSERT INTO session_rooms (matrix_user_id, room_id, created_at, updated_at)',
+    'INSERT INTO session_rooms (realm_url, matrix_user_id, room_id, created_at, updated_at)',
     'VALUES (',
+    param(realmURL),
+    ',',
     param(matrixUserId),
     ',',
     param(roomId),
@@ -40,7 +48,7 @@ export async function setSessionRoom(
     ',',
     dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
     ')',
-    'ON CONFLICT (matrix_user_id) DO UPDATE SET',
+    'ON CONFLICT (realm_url, matrix_user_id) DO UPDATE SET',
     'room_id =',
     param(roomId),
     ',',
@@ -52,9 +60,13 @@ export async function setSessionRoom(
 /**
  * Returns a mapping of matrix user id to session room id for all known sessions.
  */
-export async function getAllSessionRooms(dbAdapter: DBAdapter) {
+export async function getAllSessionRooms(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+) {
   let rows = await query(dbAdapter, [
-    'SELECT matrix_user_id, room_id FROM session_rooms',
+    'SELECT matrix_user_id, room_id FROM session_rooms WHERE realm_url =',
+    param(realmURL),
   ]);
 
   let result: Record<string, string> = {};

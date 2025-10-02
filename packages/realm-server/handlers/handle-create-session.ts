@@ -3,6 +3,7 @@ import {
   SupportedMimeType,
   getSessionRoom as fetchSessionRoom,
   setSessionRoom as persistSessionRoom,
+  REALM_SERVER_REALM,
 } from '@cardstack/runtime-common';
 import {
   MatrixBackendAuthentication,
@@ -27,10 +28,15 @@ export default function handleCreateSessionRequest({
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   let sessionRoomStore: SessionRoomStore = {
     getSessionRoom(matrixUserId) {
-      return fetchSessionRoom(dbAdapter, matrixUserId);
+      return fetchSessionRoom(dbAdapter, REALM_SERVER_REALM, matrixUserId);
     },
     setSessionRoom(matrixUserId, roomId) {
-      return persistSessionRoom(dbAdapter, matrixUserId, roomId);
+      return persistSessionRoom(
+        dbAdapter,
+        REALM_SERVER_REALM,
+        matrixUserId,
+        roomId,
+      );
     },
   };
 
