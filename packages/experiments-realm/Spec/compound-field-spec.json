@@ -1,0 +1,81 @@
+{
+  "data": {
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../pet-person",
+              "name": "PetNameField"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../pet-person",
+              "name": "PetNameField"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../pet-person",
+              "name": "PetNameField"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../pet-person",
+              "name": "PetNameField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PetNameField",
+        "module": "../pet-person"
+      },
+      "title": "PetNameField",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
+      "description": null,
+      "containedExamples": [
+        {
+          "name": "Marco"
+        },
+        {
+          "name": "Finn"
+        },
+        {
+          "name": "Ginger"
+        },
+        {
+          "name": "Tinkerbell"
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
