@@ -688,8 +688,6 @@ export class CurrentRun {
 
           let serialized = renderResult?.serialized;
           if (serialized) {
-            //Realm info may be used by a card to render field values.
-            //Example: spec-card
             merge(serialized, {
               data: {
                 meta: {
