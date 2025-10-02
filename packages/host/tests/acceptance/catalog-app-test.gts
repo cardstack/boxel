@@ -1690,18 +1690,29 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 } else if (
                   systemLower.includes('select the most relevant 1 or 2 ids')
                 ) {
-                  let firstId: string | undefined;
-                  const lines = user.split('\n');
-                  for (let line of lines) {
-                    if (line.includes('::')) {
-                      const maybeId = line.split('::')[0].trim();
-                      if (maybeId) {
-                        firstId = maybeId;
-                        break;
+                  // Determine which search type we're linking based on system prompt content
+                  if (systemLower.includes('represent tag')) {
+                    // Always link the calculator tag deterministically
+                    content = JSON.stringify([calculatorTagId]);
+                  } else if (systemLower.includes('represent category')) {
+                    content = JSON.stringify([writingCategoryId]);
+                  } else if (systemLower.includes('represent license')) {
+                    content = JSON.stringify([mitLicenseId]);
+                  } else {
+                    // Fallback: pick first id from user options list
+                    let firstId: string | undefined;
+                    const lines = user.split('\n');
+                    for (let line of lines) {
+                      if (line.includes('::')) {
+                        const maybeId = line.split('::')[0].trim();
+                        if (maybeId) {
+                          firstId = maybeId;
+                          break;
+                        }
                       }
                     }
+                    content = JSON.stringify([firstId || 'unknown-id']);
                   }
-                  content = JSON.stringify([firstId || 'unknown-id']);
                 } else if (systemLower.includes('curator')) {
                   content = 'curated';
                 }
@@ -1748,9 +1759,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const cardId = mockCatalogURL + 'author/Author/example';
         const commandService = getService('command-service');
         const command = new ListingCreateCommand(commandService.commandContext);
-        await command.execute({
+        const result = await command.execute({
           openCardId: cardId,
         });
+        const interim = result?.listing as any;
+        assert.ok(interim, 'Interim listing exists');
+        assert.strictEqual((interim as any).name, 'Mock Listing Title');
+        assert.strictEqual(
+          (interim as any).summary,
+          'Mock listing summary sentence.',
+        );
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
@@ -1791,6 +1809,28 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert.true(
             listing.specs.some((spec) => spec.ref.name === 'AuthorCompany'),
             'Listing should have an AuthorCompany spec',
+          );
+          // Deterministic autoLink assertions from proxy mock
+          assert.ok((listing as any).license, 'License linked');
+          assert.strictEqual(
+            (listing as any).license.id,
+            mitLicenseId,
+            'License id matches mitLicenseId',
+          );
+          assert.ok(Array.isArray((listing as any).tags), 'Tags array exists');
+          assert.true(
+            (listing as any).tags.some((t: any) => t.id === calculatorTagId),
+            'Contains calculator tag id',
+          );
+          assert.ok(
+            Array.isArray((listing as any).categories),
+            'Categories array exists',
+          );
+          assert.true(
+            (listing as any).categories.some(
+              (c: any) => c.id === writingCategoryId,
+            ),
+            'Contains writing category id',
           );
         }
       });
@@ -1833,10 +1873,105 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const cardId = mockCatalogURL + 'blog-app/BlogApp/example';
         const commandService = getService('command-service');
         const command = new ListingCreateCommand(commandService.commandContext);
-        await command.execute({
+        const createResult = await command.execute({
           openCardId: cardId,
           targetRealm: testDestinationRealmURL,
         });
+        // Assert store-level (in-memory) results BEFORE navigating to code mode
+        let immediateListing = createResult?.listing as any;
+        assert.ok(immediateListing, 'Listing object returned from command');
+        assert.strictEqual(
+          immediateListing.name,
+          'Mock Listing Title',
+          'Immediate listing has patched name before persistence',
+        );
+        assert.strictEqual(
+          immediateListing.summary,
+          'Mock listing summary sentence.',
+          'Immediate listing has patched summary before persistence',
+        );
+        assert.ok(
+          immediateListing.license,
+          'Immediate listing has linked license before persistence',
+        );
+        assert.strictEqual(
+          immediateListing.license?.id,
+          mitLicenseId,
+          'Immediate listing license id matches mitLicenseId',
+        );
+        assert.ok(
+          Array.isArray(immediateListing.tags) &&
+            immediateListing.tags.length > 0,
+          'Immediate listing has linked tag(s) before persistence',
+        );
+        assert.true(
+          immediateListing.tags.some((t: any) => t.id === calculatorTagId),
+          'Immediate listing includes calculator tag id',
+        );
+        assert.ok(
+          Array.isArray(immediateListing.categories) &&
+            immediateListing.categories.length > 0,
+          'Immediate listing has linked category(ies) before persistence',
+        );
+        assert.true(
+          immediateListing.categories.some(
+            (c: any) => c.id === writingCategoryId,
+          ),
+          'Immediate listing includes writing category id',
+        );
+        assert.ok(
+          Array.isArray(immediateListing.specs) &&
+            immediateListing.specs.length === 5,
+          'Immediate listing has expected number of specs before persistence',
+        );
+        assert.ok(
+          Array.isArray(immediateListing.examples) &&
+            immediateListing.examples.length === 1,
+          'Immediate listing has expected examples before persistence',
+        );
+        // Header/title: wait for persisted id (listing.id) then assert via stack card selector
+        const persistedId = immediateListing.id;
+        assert.ok(persistedId, 'Immediate listing has a persisted id');
+        await waitForCardOnStack(persistedId);
+        assert
+          .dom(
+            `[data-test-stack-card="${persistedId}"] [data-test-boxel-card-header-title]`,
+          )
+          .containsText(
+            'Mock Listing Title',
+            'Isolated view shows patched name (persisted id)',
+          );
+        // Summary section
+        assert
+          .dom('[data-test-catalog-listing-embedded-summary-section]')
+          .containsText(
+            'Mock listing summary sentence.',
+            'Isolated view shows patched summary',
+          );
+
+        // License section should not show fallback text
+        assert
+          .dom('[data-test-catalog-listing-embedded-license-section]')
+          .doesNotContainText(
+            'No License Provided',
+            'License section populated (autoLinkLicense)',
+          );
+
+        // Tags section
+        assert
+          .dom('[data-test-catalog-listing-embedded-tags-section]')
+          .doesNotContainText(
+            'No Tags Provided',
+            'Tags section populated (autoLinkTag)',
+          );
+
+        // Categories section
+        assert
+          .dom('[data-test-catalog-listing-embedded-categories-section]')
+          .doesNotContainText(
+            'No Categories Provided',
+            'Categories section populated (autoLinkCategory)',
+          );
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
@@ -1845,13 +1980,13 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await verifySubmode(assert, 'code');
         const instanceFolder = 'AppListing/';
         await openDir(assert, instanceFolder);
-        const listingId = await verifyJSONWithUUIDInFolder(
+        const persistedListingId = await verifyJSONWithUUIDInFolder(
           assert,
           instanceFolder,
         );
-        if (listingId) {
+        if (persistedListingId) {
           const listing = (await getService('store').get(
-            listingId,
+            persistedListingId,
           )) as CardListing;
           assert.ok(listing, 'Listing should be created');
           assert.strictEqual(
@@ -1872,6 +2007,49 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             1,
             'Listing should have one example',
           );
+
+          // Assert autoPatch fields populated (from proxy mock responses)
+          assert.strictEqual(
+            (listing as any).name,
+            'Mock Listing Title',
+            'autoPatchName populated listing.name',
+          );
+          assert.strictEqual(
+            (listing as any).summary,
+            'Mock listing summary sentence.',
+            'autoPatchSummary populated listing.summary',
+          );
+
+          // Basic object-level sanity for autoLink fields (they should exist, may be arrays)
+          assert.ok(
+            (listing as any).license,
+            'autoLinkLicense populated listing.license',
+          );
+          assert.strictEqual(
+            (listing as any).license?.id,
+            mitLicenseId,
+            'Persisted listing license id matches mitLicenseId',
+          );
+          assert.ok(
+            Array.isArray((listing as any).tags) &&
+              (listing as any).tags.length > 0,
+            'autoLinkTag populated listing.tags with at least one tag',
+          );
+          assert.true(
+            (listing as any).tags.some((t: any) => t.id === calculatorTagId),
+            'Persisted listing includes calculator tag id',
+          );
+          assert.ok(
+            Array.isArray((listing as any).categories) &&
+              (listing as any).categories.length > 0,
+            'autoLinkCategory populated listing.categories with at least one category',
+          );
+          assert.true(
+            (listing as any).categories.some(
+              (c: any) => c.id === writingCategoryId,
+            ),
+            'Persisted listing includes writing category id',
+          );
         }
       });
 
@@ -1885,18 +2063,15 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         });
 
         await verifySubmode(assert, 'interact');
-
-        let listing = r?.listing;
-        let listingId = listing?.id;
-
-        if (listingId) {
-          await waitForCardOnStack(listingId);
-          assert
-            .dom(`[data-test-stack-card="${listingId}"]`)
-            .exists(
-              'Created listing card is displayed on stack after command execution',
-            );
-        }
+        const listing = r?.listing as any;
+        const createdId = listing.id;
+        assert.ok(createdId, 'Listing id should be present');
+        await waitForCardOnStack(createdId);
+        assert
+          .dom(`[data-test-stack-card="${createdId}"]`)
+          .exists(
+            'Created listing card (by persisted id) is displayed on stack after command execution',
+          );
       });
     });
     skip('"use"', async function () {
