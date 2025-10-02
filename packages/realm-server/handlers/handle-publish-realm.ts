@@ -147,7 +147,7 @@ export default function handlePublishRealm({
           permissions: permissionsForAllRealms[sourceRealmURL],
           sessionRoom: sessionRoomId,
         },
-        '7d',
+        '1h',
         realmSecretSeed,
       );
 
