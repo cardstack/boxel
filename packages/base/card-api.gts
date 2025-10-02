@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -63,7 +63,9 @@ import {
   SingleCardDocument,
   loadDocument,
   LocalPath,
+  getCardMenuItems,
 } from '@cardstack/runtime-common';
+
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -74,12 +76,13 @@ import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
-import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
+import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+
 import {
   callSerializeHook,
   cardClassFromResource,
@@ -114,9 +117,15 @@ import {
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
+import {
+  type GetCardMenuItemParams,
+  getDefaultCardMenuItems,
+} from './card-menu-items';
+
+export const BULK_GENERATED_ITEM_COUNT = 3;
 
 interface CardOrFieldTypeIconSignature {
-  Element: Element;
+  Element: SVGElement;
 }
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
@@ -139,6 +148,7 @@ export {
   serializeCard,
   type BoxComponent,
   type DeserializeOpts,
+  type GetCardMenuItemParams,
   type JSONAPISingleResourceDocument,
   type ResourceID,
   type SerializeOpts,
@@ -2054,11 +2064,14 @@ export type EditCardFn = (card: CardDef) => void;
 
 export type SaveCardFn = (id: string) => void;
 
+export type DeleteCardFn = (cardOrId: CardDef | URL | string) => Promise<void>;
+
 export interface CardCrudFunctions {
   createCard: CreateCardFn;
   saveCard: SaveCardFn;
   editCard: EditCardFn;
   viewCard: ViewCardFn;
+  deleteCard: DeleteCardFn;
 }
 
 export type BaseDefComponent = ComponentLike<{
@@ -2334,6 +2347,10 @@ export class CardDef extends BaseDef {
     let realmURLString = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
   }
+
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+    return getDefaultCardMenuItems(this, params);
+  }
 }
 
 export class CssImportField extends StringField {
@@ -2344,7 +2361,6 @@ export class CssImportField extends StringField {
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
-  @field title = contains(StringField);
   @field cssVariables = contains(CSSField);
   @field cssImports = containsMany(CssImportField);
 }

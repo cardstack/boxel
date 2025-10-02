@@ -15,12 +15,11 @@ import {
   setupOnSave,
   testHostModeRealmURL,
   setupAcceptanceTestRealm,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-
-let matrixRoomId: string;
 
 let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
   /\/test\/?$/,
@@ -61,11 +60,12 @@ module('Acceptance | host mode tests', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     setExpiresInSec(60 * 60);
 
@@ -170,7 +170,18 @@ module('Acceptance | host mode tests', function (hooks) {
     });
 
     assert.dom(`[data-test-card="${testHostModeRealmURL}Pet/mango"]`).exists();
+    assert.dom('[data-test-host-mode-container]').hasNoClass('is-wide');
     assert.strictEqual(getPageTitle(), 'Mango');
+
+    await percySnapshot(assert);
+  });
+
+  test('visiting a full width card in host mode', async function (assert) {
+    await visit('/test');
+
+    assert.dom(`[data-test-card="${testHostModeRealmURL}index"]`).exists();
+    assert.strictEqual(getPageTitle(), 'Test Workspace B');
+    assert.dom('[data-test-host-mode-container]').hasClass('is-wide');
 
     await percySnapshot(assert);
   });

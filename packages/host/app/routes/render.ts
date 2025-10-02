@@ -16,6 +16,7 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
+import EmberHealthService from '../services/ember-health';
 import LoaderService from '../services/loader-service';
 import NetworkService from '../services/network';
 import RealmService from '../services/realm';
@@ -31,6 +32,7 @@ export default class RenderRoute extends Route<Model> {
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare private network: NetworkService;
+  @service declare emberHealth: EmberHealthService;
 
   errorHandler = (event: Event) => {
     let [_a, _b, encodedId] = (this.router.currentURL ?? '').split('/');
@@ -39,21 +41,45 @@ export default class RenderRoute extends Route<Model> {
       'reason' in event
         ? (event as any).reason
         : (event as CustomEvent).detail?.reason;
-    let element: HTMLElement = document.querySelector('[data-prerender]')!;
-    element.innerHTML = `
-      ${
-        reason
-          ? JSON.stringify(
-              isCardErrorJSONAPI(reason)
-                ? reason
-                : isCardError(reason)
-                  ? reason
-                  : formattedError(id, reason).errors[0],
-            )
-          : '{"message": "indexing failed"}'
+    // Coerce stringified JSON into objects so our type guards work
+    if (typeof reason === 'string') {
+      try {
+        reason = JSON.parse(reason);
+      } catch (_e) {
+        // leave as string
       }
-    `;
-    element.dataset.prerenderStatus = 'error';
+    }
+    let element: HTMLElement = document.querySelector('[data-prerender]')!;
+    let payload: any;
+    if (reason) {
+      if (isCardErrorJSONAPI(reason) || isCardError(reason)) {
+        payload = reason;
+      } else if (
+        typeof reason === 'object' &&
+        reason !== null &&
+        'errors' in (reason as any) &&
+        Array.isArray((reason as any).errors) &&
+        (reason as any).errors.length > 0
+      ) {
+        payload = (reason as any).errors[0];
+      } else {
+        payload = formattedError(id, reason).errors[0];
+      }
+    } else {
+      payload = { message: 'indexing failed' };
+    }
+    element.innerHTML = `${JSON.stringify(payload)}`;
+    // Defer setting prerender status until we know Ember health
+    void this.emberHealth
+      .isResponsive()
+      .then((alive) => {
+        element.dataset.emberAlive = alive ? 'true' : 'false';
+        element.dataset.prerenderStatus = alive ? 'error' : 'unusable';
+      })
+      .catch(() => {
+        element.dataset.emberAlive = 'false';
+        element.dataset.prerenderStatus = 'unusable';
+      });
 
     event.preventDefault?.();
     (globalThis as any)._lazilyLoadLinks = undefined;
@@ -69,6 +95,7 @@ export default class RenderRoute extends Route<Model> {
   deactivate() {
     (globalThis as any)._lazilyLoadLinks = undefined;
     (globalThis as any)._boxelRenderContext = undefined;
+    (globalThis as any).__renderInstance = undefined;
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
     window.removeEventListener('boxel-render-error', this.errorHandler);
@@ -137,6 +164,9 @@ export default class RenderRoute extends Route<Model> {
     await this.store.loaded();
     state.set('ready', true);
 
+    // this is to support in-browser rendering, where we actually don't have the
+    // ability to lookup the parent route using RouterService.recognizeAndLoad()
+    (globalThis as any).__renderInstance = instance;
     return {
       instance,
       get ready(): boolean {

@@ -14,6 +14,7 @@ import {
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
   PUBLISHED_DIRECTORY_NAME,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -155,7 +156,7 @@ export class RealmServer {
             // Actually, we want to use HTTP caching for executable modules which
             // are requested with the "*/*" accept header
             .filter((m) => m !== '*/*')
-            .includes(mimeType as SupportedMimeType)
+            .includes(mimeType as any)
         ) {
           ctx.set('Cache-Control', 'no-store, no-cache, must-revalidate');
         }
@@ -342,7 +343,7 @@ export class RealmServer {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }): Promise<Realm> => {
+  }): Promise<{ realm: Realm; info: Partial<RealmInfo> }> => {
     let realmAtServerRoot = this.realms.find((r) => {
       let realmUrl = new URL(r.url);
 
@@ -400,11 +401,13 @@ export class RealmServer {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    writeJSONSync(join(realmPath, '.realm.json'), {
+    let info = {
       name,
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
-    });
+      publishable: true,
+    };
+    writeJSONSync(join(realmPath, '.realm.json'), info);
     writeJSONSync(join(realmPath, 'index.json'), {
       data: {
         type: 'card',
@@ -417,7 +420,10 @@ export class RealmServer {
       },
     });
 
-    return this.createAndMountRealm(realmPath, url, username);
+    return {
+      realm: this.createAndMountRealm(realmPath, url, username),
+      info,
+    };
   };
 
   private createAndMountRealm = (
@@ -425,8 +431,12 @@ export class RealmServer {
     url: string,
     username: string,
     copiedFromRealm?: URL,
+    enableFileWatcher?: boolean,
   ) => {
-    let adapter = new NodeAdapter(resolve(path), this.enableFileWatcher);
+    let adapter = new NodeAdapter(
+      resolve(path),
+      enableFileWatcher ?? this.enableFileWatcher,
+    );
     let realm = new Realm(
       {
         url,
@@ -658,7 +668,11 @@ export class RealmServer {
     return realms;
   }
 
-  private sendEvent = async (user: string, eventType: string) => {
+  private sendEvent = async (
+    user: string,
+    eventType: string,
+    data?: Record<string, any>,
+  ) => {
     let dmRooms =
       (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
         'boxel.session-rooms',
@@ -671,7 +685,7 @@ export class RealmServer {
     }
 
     await this.matrixClient.sendEvent(roomId, 'm.room.message', {
-      body: JSON.stringify({ eventType }),
+      body: JSON.stringify({ eventType, data }),
       msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
     });
   };

@@ -20,6 +20,8 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
 
+import RealmService from './realm';
+
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
 import type ResetService from './reset';
@@ -57,6 +59,7 @@ type RealmServerEventSubscriber = (data: any) => Promise<void>;
 export default class RealmServerService extends Service {
   @service declare private network: NetworkService;
   @service declare private reset: ResetService;
+  @service declare private realm: RealmService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
@@ -182,6 +185,26 @@ export default class RealmServerService extends Service {
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
+  async fetchTokensForAccessibleRealms() {
+    await this.login();
+    let response = await this.network.fetch(`${this.url.href}_realm-auth`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch tokens for accessible realms: ${response.status} - ${await response.text()}`,
+      );
+    }
+
+    return response.json();
+  }
+
   @cached
   get availableRealmURLs() {
     return this.availableRealms.map((r) => r.url);
@@ -204,6 +227,16 @@ export default class RealmServerService extends Service {
   @cached
   get availableRealmIndexCardIds() {
     return this.availableRealmURLs.map((url) => `${url}index`);
+  }
+
+  async authenticateToAllAccessibleRealms() {
+    let tokens = (await this.fetchTokensForAccessibleRealms()) as {
+      [realmURL: string]: string;
+    };
+
+    for (let [realmURL, token] of Object.entries(tokens)) {
+      this.realm.getOrCreateRealmResource(realmURL, token);
+    }
   }
 
   async setAvailableRealmURLs(userRealmURLs: string[]) {
@@ -349,8 +382,6 @@ export default class RealmServerService extends Service {
 
   private loggingIn: Promise<void> | undefined;
 
-  // login happens lazily as you need to interact with realm server which
-  // currently only constitutes creating realms
   async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
       return;
@@ -425,6 +456,63 @@ export default class RealmServerService extends Service {
     }
 
     return response;
+  }
+
+  async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
+    await this.login();
+
+    const response = await this.network.fetch(
+      `${this.url.href}_publish-realm`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          sourceRealmURL,
+          publishedRealmURL,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Publish realm failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return response.json();
+  }
+
+  async unpublishRealm(publishedRealmURL: string) {
+    await this.login();
+
+    const response = await this.network.fetch(
+      `${this.url.href}_unpublish-realm`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          publishedRealmURL,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Unpublish realm failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return response.json();
   }
 
   private async getToken() {

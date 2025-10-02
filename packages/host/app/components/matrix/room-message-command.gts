@@ -1,5 +1,4 @@
 import { array, hash } from '@ember/helper';
-import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -17,15 +16,16 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 
-import { MenuItem, bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
-import { ArrowLeft } from '@cardstack/boxel-ui/icons';
+import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 
-import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
+import {
+  cardTypeDisplayName,
+  cardTypeIcon,
+  getCardMenuItems,
+} from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
-import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
 import { RoomResource } from '@cardstack/host/resources/room';
@@ -130,32 +130,14 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get moreOptionsMenuItems() {
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy to Workspace', 'action', {
-        action: () => this.copyToWorkspace(),
-        icon: ArrowLeft,
-      }),
-    ];
-    return menuItems;
-  }
-
-  @action async copyToWorkspace() {
-    let { commandContext } = this.commandService;
-    let defaultWritableRealm = this.realm.defaultWritableRealm;
-    if (!defaultWritableRealm) {
-      throw new Error('No writable realm available to copy card to');
-    }
-    const { newCardId } = await new CopyCardToRealmCommand(
-      commandContext,
-    ).execute({
-      sourceCard: this.commandResultCard.card as CardDef,
-      targetRealm: defaultWritableRealm.path,
-    });
-
-    let showCardCommand = new ShowCardCommand(commandContext);
-    await showCardCommand.execute({
-      cardId: newCardId,
-    });
+    let menuItems =
+      this.commandResultCard.card?.[getCardMenuItems]?.({
+        canEdit: false,
+        cardCrudFunctions: {},
+        menuContext: 'ai-assistant',
+        commandContext: this.commandService.commandContext,
+      }) ?? [];
+    return toMenuItems(menuItems);
   }
 
   @cached

@@ -1320,8 +1320,7 @@ module(`Integration | realm indexing`, function (hooks) {
         (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
         {};
       assertInnerHtmlMatches(assert, isolatedHtml!, `<h1> Van Gogh </h1>`);
-      assert.strictEqual(
-        false,
+      assert.false(
         isolatedHtml!.includes('id="ember'),
         `isolated HTML does not include ember ID's`,
       );
@@ -1335,13 +1334,11 @@ module(`Integration | realm indexing`, function (hooks) {
         fittedHtml![`${testRealmURL}person/Person`],
         `<h1> Person Fitted Card: Van Gogh </h1>`,
       );
-      assert.strictEqual(
-        false,
+      assert.false(
         Object.values(embeddedHtml!).join('').includes('id="ember'),
         `embeddedHtml HTML does not include ember ID's`,
       );
-      assert.strictEqual(
-        false,
+      assert.false(
         Object.values(fittedHtml!).join('').includes('id="ember'),
         `fittedHtml HTML does not include ember ID's`,
       );
@@ -1394,8 +1391,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
       'atom html is correct',
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       atomHtml!.includes('id="ember'),
       `atom HTML does not include ember ID's`,
     );
@@ -1452,8 +1448,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let { embeddedHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      false,
+    assert.false(
       Object.values(embeddedHtml!).join('').includes('id="ember'),
       `Embedded HTML does not include ember ID's`,
     );
@@ -1467,7 +1462,7 @@ module(`Integration | realm indexing`, function (hooks) {
         `<div
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
           data-test-boxel-card-container
-          style="--boxel-example: 1px;"
+          style
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="embedded"
           data-test-field-component-card> <h1> Fancy Person Embedded Card: Germaine - hot pink </h1> </div>`,
@@ -1493,14 +1488,13 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-test-boxel-card-container
-        style="--boxel-example: 1px;"
+        style
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card> <h1> Person Embedded Card: Germaine </h1> </div>`),
       `${testRealmURL}person/Person embedded HTML is correct`,
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person embedded HTML does not include ember ID's`,
     );
@@ -1510,7 +1504,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-test-boxel-card-container
-        style="--boxel-example: 1px;"
+        style
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card>
@@ -1533,8 +1527,7 @@ module(`Integration | realm indexing`, function (hooks) {
       `${cardDefRefURL} embedded HTML is correct`,
     );
 
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![cardDefRefURL].includes('id="ember'),
       `${cardDefRefURL} fitted HTML does not include ember ID's`,
     );
@@ -1591,8 +1584,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let { embeddedHtml, fittedHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      false,
+    assert.false(
       Object.values(fittedHtml!).join('').includes('id="ember'),
       `Fitted HTML does not include ember ID's`,
     );
@@ -1606,7 +1598,7 @@ module(`Integration | realm indexing`, function (hooks) {
         `<div
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
           data-test-boxel-card-container
-          style="--boxel-example: 1px;"
+          style
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="fitted"
           data-test-field-component-card> <h1> Fancy Person Fitted Card: Germaine - hot pink </h1> </div>`,
@@ -1632,14 +1624,13 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
       data-test-boxel-card-container
-      style="--boxel-example: 1px;"
+      style
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="fitted"
       data-test-field-component-card> <h1> Person Fitted Card: Germaine </h1> </div>`),
       `${testRealmURL}person/Person fitted HTML is correct`,
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       fittedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person fitted HTML does not include ember ID's`,
     );
@@ -1649,7 +1640,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
       data-test-boxel-card-container
-      style="--boxel-example: 1px;"
+      style
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="embedded"
       data-test-field-component-card>
@@ -1669,8 +1660,7 @@ module(`Integration | realm indexing`, function (hooks) {
       `${cardDefRefURL} embedded HTML is correct`,
     );
 
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![cardDefRefURL].includes('id="ember'),
       `${cardDefRefURL} embedded HTML does not include ember ID's`,
     );
@@ -3828,7 +3818,10 @@ module(`Integration | realm indexing`, function (hooks) {
         'http://localhost:4202/test/person',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-box-left-middle.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-left.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/arrow-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/code.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/eye.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/folder-pen.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/import.js',
@@ -3837,7 +3830,9 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/notepad-text.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
         'https://cardstack.com/base/card-api',
+        'https://cardstack.com/base/card-menu-items',
         'https://cardstack.com/base/card-serialization',
         'https://cardstack.com/base/components/add-button',
         'https://cardstack.com/base/contains-many-component',
@@ -3860,8 +3855,14 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
+        'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
+        'https://packages/@cardstack/boxel-host/commands/listing-create',
+        'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
+        'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
+        'https://packages/@cardstack/boxel-host/commands/show-card',
         'https://packages/@cardstack/boxel-host/commands/switch-submode',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
@@ -3935,10 +3936,12 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-box-left-middle.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/apps.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/arrow-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/book-open-text.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/box-model.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/code.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/eye.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/folder-pen.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/git-branch.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
@@ -3952,8 +3955,10 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/stack.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/toggle-left.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
         'https://cardstack.com/base/boolean',
         'https://cardstack.com/base/card-api',
+        'https://cardstack.com/base/card-menu-items',
         'https://cardstack.com/base/card-serialization',
         'https://cardstack.com/base/code-ref',
         'https://cardstack.com/base/components/add-button',
@@ -3979,9 +3984,15 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
+        'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
         'https://packages/@cardstack/boxel-host/commands/generate-readme-spec',
+        'https://packages/@cardstack/boxel-host/commands/listing-create',
+        'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
+        'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
+        'https://packages/@cardstack/boxel-host/commands/show-card',
         'https://packages/@cardstack/boxel-host/commands/switch-submode',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AvatarCreator",
+        "module": "../avatar-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "avatar": {
+        "eyeType": "Happy",
+        "topType": "WinterHat1",
+        "hairColor": "Auburn",
+        "mouthType": "Serious",
+        "skinColor": "Brown",
+        "clotheType": "Hoodie",
+        "eyebrowType": "RaisedExcitedNatural",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

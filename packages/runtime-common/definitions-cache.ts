@@ -7,9 +7,33 @@ import {
 import stringify from 'safe-stable-stringify';
 import qs from 'qs';
 
+export class FilterRefersToNonexistentTypeError extends Error {
+  codeRef: ResolvedCodeRef;
+
+  constructor(codeRef: ResolvedCodeRef, opts?: { cause?: unknown }) {
+    super(
+      `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}"`,
+    );
+    this.name = 'FilterRefersToNonexistentTypeError';
+    this.codeRef = codeRef;
+    if (opts?.cause !== undefined) {
+      (this as any).cause = opts.cause;
+    }
+    // make sure instances of this Error subclass behave like instances of the subclass should
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export function isFilterRefersToNonexistentTypeError(
+  error: unknown,
+): error is FilterRefersToNonexistentTypeError {
+  return error instanceof FilterRefersToNonexistentTypeError;
+}
+
 export class DefinitionsCache {
   #fetch: typeof globalThis.fetch;
   #cache = new Map<string, Definition>();
+  #missing = new Map<string, FilterRefersToNonexistentTypeError>();
 
   constructor(fetch: typeof globalThis.fetch) {
     this.#fetch = fetch;
@@ -17,6 +41,7 @@ export class DefinitionsCache {
 
   invalidate() {
     this.#cache = new Map();
+    this.#missing = new Map();
   }
 
   // for tests
@@ -26,13 +51,25 @@ export class DefinitionsCache {
 
   async getDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
     let key = internalKeyFor(codeRef, undefined);
+    let missing = this.#missing.get(key);
+    if (missing) {
+      throw missing;
+    }
     let cached = this.#cache.get(key);
     if (cached) {
       return cached;
     }
-    let definition = await this.fetchDefinition(codeRef);
-    this.#cache.set(key, definition);
-    return definition;
+    try {
+      let definition = await this.fetchDefinition(codeRef);
+      this.#cache.set(key, definition);
+      this.#missing.delete(key);
+      return definition;
+    } catch (error) {
+      if (isFilterRefersToNonexistentTypeError(error)) {
+        this.#missing.set(key, error);
+      }
+      throw error;
+    }
   }
 
   private async fetchDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
@@ -42,12 +79,13 @@ export class DefinitionsCache {
         method: 'HEAD',
       });
     } catch (e) {
-      throw new Error(
-        `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}"`,
-      );
+      throw new FilterRefersToNonexistentTypeError(codeRef, { cause: e });
     }
     if (!head.ok) {
       let message = await head.text();
+      if (head.status === 404) {
+        throw new FilterRefersToNonexistentTypeError(codeRef);
+      }
       throw new Error(
         `tried to get definition for ${stringify(codeRef)}, but got ${head.status}: ${message} for HEAD ${codeRef.module}`,
       );
@@ -65,12 +103,13 @@ export class DefinitionsCache {
         headers: { accept: SupportedMimeType.JSONAPI },
       });
     } catch (e) {
-      throw new Error(
-        `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}"`,
-      );
+      throw new FilterRefersToNonexistentTypeError(codeRef, { cause: e });
     }
     if (!response.ok) {
       let message = await response.text();
+      if (response.status === 404) {
+        throw new FilterRefersToNonexistentTypeError(codeRef);
+      }
       throw new Error(
         `tried to get definition for ${stringify(codeRef)}, but got ${response.status}: ${message} for ${url}`,
       );

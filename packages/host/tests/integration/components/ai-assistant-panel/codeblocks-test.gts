@@ -79,7 +79,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     })(),
   });
 
-  let { simulateRemoteMessage } = mockMatrixUtils;
+  let { simulateRemoteMessage, createAndJoinRoom } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -172,6 +172,11 @@ export default class MyComponent extends Component {
         }),
         '.realm.json': `{ "name": "${realmName}" }`,
       },
+    });
+
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
     });
   });
 
@@ -435,7 +440,7 @@ const data = {
     );
 
     await waitUntil(() => document.getElementsByClassName('view-lines')[1]);
-    assert.equal(
+    assert.strictEqual(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
         .innerText,
       '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',

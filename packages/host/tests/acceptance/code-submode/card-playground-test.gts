@@ -17,11 +17,10 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 
-import { BULK_GENERATED_ITEM_COUNT } from '@cardstack/host/components/operator-mode/code-submode/playground/instance-chooser-dropdown';
-
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
+  setupAuthEndpoints,
   setupLocalIndexing,
   setupOnSave,
   setupUserSubscription,
@@ -149,8 +148,6 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
-let matrixRoomId: string;
-
 module('Acceptance | code-submode | card playground', function (_hooks) {
   module('single realm', function (hooks) {
     let realm: Realm;
@@ -174,11 +171,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
       let { CardsGrid } = cardsGrid;
 
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -1293,8 +1291,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can request AI assistant to bulk generate samples', async function (assert) {
-      const prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples of the attached card instance.`;
-      const menuItem = `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`;
+      const prompt = `Generate 3 additional instances of the specified card definition, populated with sample data`;
+      const menuItem = `Generate 3 examples with AI`;
       const commandMessage = {
         from: 'testuser',
         message: prompt,
@@ -1333,11 +1331,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -1495,11 +1494,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     `;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
       setActiveRealms([testRealmURL]);
       setRealmPermissions({
         [testRealmURL]: ['read', 'write'],

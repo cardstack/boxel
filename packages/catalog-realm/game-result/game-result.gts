@@ -5,6 +5,7 @@ import {
   field,
   FieldDef,
   Component,
+  getCardMeta,
 } from 'https://cardstack.com/base/card-api';
 
 import StringField from 'https://cardstack.com/base/string';
@@ -18,17 +19,21 @@ import { htmlSafe } from '@ember/template';
 import { AbsoluteCodeRefField } from 'https://cardstack.com/base/code-ref';
 import GitBranch from '@cardstack/boxel-icons/git-branch';
 
+export type GameResultStatusType = 'Win' | 'Lose' | 'Draw';
+
 export class GameStatusEdit extends Component<typeof GameStatusField> {
-  @tracked label: string | undefined = this.args.model.label;
+  @tracked label: GameResultStatusType | undefined = this.args.model.label as
+    | GameResultStatusType
+    | undefined;
 
   // This ensures you get values from the class the instance is created
   get statuses() {
     return (this.args.model.constructor as any).values as GameStatusField[];
   }
 
-  @action onSelectStatus(status: any): void {
-    this.label = status.label;
-    this.args.model.label = status.label;
+  @action onSelectStatus(status: GameStatusField): void {
+    this.label = status.label as GameResultStatusType;
+    this.args.model.label = status.label as GameResultStatusType;
   }
 
   <template>
@@ -59,6 +64,81 @@ export class GameStatusField extends FieldDef {
   };
 
   static edit = GameStatusEdit;
+}
+
+export class PlayerOutcomeField extends FieldDef {
+  @field player = linksTo(() => CardDef);
+  @field outcome = contains(GameStatusField);
+
+  static embedded = class Embedded extends Component<
+    typeof PlayerOutcomeField
+  > {
+    <template>
+      <div class='player-outcome'>
+        <span class='player-name'>{{@model.player.title}}</span>
+        <span class='outcome-badge'>{{@model.outcome.label}}</span>
+      </div>
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof PlayerOutcomeField> {
+    <template>
+      <div class='player-outcome-edit'>
+        <div class='field-group'>
+          <label>Player</label>
+          <@fields.player />
+        </div>
+        <div class='field-group'>
+          <label>Outcome</label>
+          <@fields.outcome />
+        </div>
+      </div>
+      <style scoped>
+        .player-outcome-edit {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          padding: 1rem;
+          background: var(--boxel-100);
+          border-radius: var(--boxel-border-radius);
+          border: var(--boxel-border);
+        }
+        .field-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .field-group label {
+          font-weight: 600;
+          font-size: 0.875rem;
+          color: var(--boxel-600);
+        }
+        .player-outcome {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.5rem 1rem;
+          background: var(--boxel-100);
+          border-radius: var(--boxel-border-radius);
+          border: var(--boxel-border);
+        }
+        .player-name {
+          font-weight: 600;
+          color: var(--boxel-700);
+        }
+        .outcome-badge {
+          padding: 0.25rem 0.75rem;
+          border-radius: 1rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          background: var(--boxel-200);
+          color: var(--boxel-700);
+        }
+      </style>
+    </template>
+  };
 }
 
 // Shared status color utility function
@@ -120,9 +200,14 @@ export class GameResult extends CardDef {
   static icon = GamepadIcon;
 
   @field game = linksTo(() => CardDef);
-  @field status = contains(GameStatusField);
+  @field outcome = contains(PlayerOutcomeField);
   @field ref = contains(AbsoluteCodeRefField);
-  @field createdAt = contains(DatetimeField);
+  @field createdAt = contains(DatetimeField, {
+    computeVia: function (this: GameResult) {
+      let lastModified = getCardMeta(this, 'lastModified');
+      return lastModified ? new Date(lastModified * 1000) : undefined;
+    },
+  });
   @field title = contains(StringField, {
     computeVia: function (this: GameResult) {
       return this.game.title ?? 'Untitled Game Result';
@@ -131,7 +216,7 @@ export class GameResult extends CardDef {
 
   static isolated = class Isolated extends Component<typeof GameResult> {
     get statusColors() {
-      return getStatusColors(this.args.model.status?.label);
+      return getStatusColors(this.args.model.outcome?.outcome?.label);
     }
 
     get cardStyle() {
@@ -147,9 +232,9 @@ export class GameResult extends CardDef {
           {{! Status Badge }}
           <div class='status-badge'>
             <span class='status-icon'>{{getStatusIcon
-                @model.status.label
+                @model.outcome.outcome.label
               }}</span>
-            <span class='status-text'>{{@model.status.label}}</span>
+            <span class='status-text'>{{@model.outcome.outcome.label}}</span>
           </div>
 
           {{! Game Title Section }}
@@ -158,6 +243,10 @@ export class GameResult extends CardDef {
               <GamepadIcon class='game-icon' />
               <h1 class='game-title'>{{@model.game.title}}</h1>
             </div>
+            <div class='player-info'>
+              <span class='player-label'>Player:</span>
+              <span class='player-name'>{{@model.outcome.player.title}}</span>
+            </div>
           </div>
 
           {{! Details Section }}
@@ -165,6 +254,13 @@ export class GameResult extends CardDef {
             <div class='detail-group'>
               <span class='detail-label'>Game ID</span>
               <div class='detail-value monospace'>{{@model.game.id}}</div>
+            </div>
+
+            <div class='detail-group'>
+              <span class='detail-label'>Player ID</span>
+              <div
+                class='detail-value monospace'
+              >{{@model.outcome.player.id}}</div>
             </div>
 
             <div class='detail-group'>
@@ -288,6 +384,33 @@ export class GameResult extends CardDef {
           letter-spacing: -0.02em;
         }
 
+        .player-info {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin-top: 1rem;
+          padding: 0.75rem 1.25rem;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 1rem;
+          backdrop-filter: blur(10px);
+        }
+
+        .player-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          opacity: 0.85;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .player-name {
+          font-size: 1rem;
+          font-weight: 600;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
         .details-section {
           display: flex;
           flex-direction: column;
@@ -392,41 +515,13 @@ export class GameResult extends CardDef {
             padding: 1rem;
           }
         }
-
-        /* Compact layout for small containers */
-        @container (max-width: 600px) {
-          .card-container {
-            flex-direction: row;
-            align-items: center;
-            justify-content: space-between;
-            text-align: left;
-            gap: 2rem;
-            padding: 1.5rem 2rem;
-          }
-
-          .game-section .game-header {
-            flex-direction: column;
-            gap: 0.5rem;
-          }
-
-          .details-section {
-            flex-direction: row;
-            max-width: none;
-            gap: 1rem;
-          }
-
-          .detail-group {
-            flex: 1;
-            min-width: 0;
-          }
-        }
       </style>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof GameResult> {
     get tileStyle() {
-      const colors = getStatusColors(this.args.model.status?.label);
+      const colors = getStatusColors(this.args.model.outcome?.outcome?.label);
       return htmlSafe(`background: ${colors.bg};`);
     }
 
@@ -436,9 +531,9 @@ export class GameResult extends CardDef {
         <div class='status-section'>
           <div class='status-badge'>
             <span class='status-icon'>{{getStatusIcon
-                @model.status.label
+                @model.outcome.outcome.label
               }}</span>
-            <span class='status-text'>{{@model.status.label}}</span>
+            <span class='status-text'>{{@model.outcome.outcome.label}}</span>
           </div>
         </div>
 
@@ -447,6 +542,10 @@ export class GameResult extends CardDef {
           <div class='game-header'>
             <GamepadIcon class='game-icon' />
             <div class='game-title'>{{@model.game.title}}</div>
+          </div>
+          <div class='player-info'>
+            <span class='player-label'>Player:</span>
+            <span class='player-name'>{{@model.outcome.player.title}}</span>
           </div>
           <div class='game-meta'>
             <span class='game-id-label'>Game ID:</span>
@@ -549,6 +648,32 @@ export class GameResult extends CardDef {
           font-size: 1.125rem;
           font-weight: 600;
           text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .player-info {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-top: 0.5rem;
+          opacity: 0.9;
+        }
+
+        .player-label {
+          font-size: 0.75rem;
+          font-weight: 500;
+          opacity: 0.8;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        .player-name {
+          font-size: 0.8rem;
+          font-weight: 500;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -662,13 +787,13 @@ export class GameResult extends CardDef {
           </div>
         </section>
 
-        <section class='status section'>
-          <header class='row-header' aria-labelledby='status'>
+        <section class='outcome section'>
+          <header class='row-header' aria-labelledby='outcome'>
             <GamepadIcon width='20' height='20' role='presentation' />
-            <h2 id='status'>Status</h2>
+            <h2 id='outcome'>Player Outcome</h2>
           </header>
-          <div data-test-status>
-            <@fields.status />
+          <div data-test-outcome>
+            <@fields.outcome />
           </div>
         </section>
 

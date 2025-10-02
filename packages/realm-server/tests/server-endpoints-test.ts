@@ -195,6 +195,7 @@ module(basename(__filename), function () {
                   endpoint,
                   backgroundURL: 'http://example.com/background.jpg',
                   iconURL: 'http://example.com/icon.jpg',
+                  publishable: true,
                 },
               },
             },
@@ -209,6 +210,7 @@ module(basename(__filename), function () {
               name: 'Test Realm',
               backgroundURL: 'http://example.com/background.jpg',
               iconURL: 'http://example.com/icon.jpg',
+              publishable: true,
             },
             '.realm.json is correct',
           );
@@ -312,8 +314,8 @@ module(basename(__filename), function () {
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let results = response.body as CardCollectionDocument;
-            assert.strictEqual(results.data.length, 1),
-              'correct number of search results';
+            (assert.strictEqual(results.data.length, 1),
+              'correct number of search results');
           }
         });
 

@@ -41,6 +41,8 @@ import {
   type DirectoryMeta,
   type ResolvedCodeRef,
   type FieldDefinition,
+  type RealmPermissions,
+  type RealmAction,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
@@ -101,7 +103,10 @@ import {
   AtomicPayloadValidationError,
   filterAtomicOperations,
 } from './atomic-document';
-import { DefinitionsCache } from './definitions-cache';
+import {
+  DefinitionsCache,
+  isFilterRefersToNonexistentTypeError,
+} from './definitions-cache';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -137,12 +142,6 @@ export interface TokenClaims {
   realm: string;
   sessionRoom: string;
   permissions: RealmPermissions['user'];
-}
-
-export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
-
-export interface RealmPermissions {
-  [username: string]: RealmAction[] | null;
 }
 
 export interface FileWriteResult {
@@ -588,8 +587,11 @@ export class Realm {
           content = JSON.stringify(serialized, null, 2);
         }
       } catch (e: any) {
-        if (e.message.includes('not found')) {
-          throw new Error(e);
+        if (
+          e.message?.includes?.('not found') ||
+          isFilterRefersToNonexistentTypeError(e)
+        ) {
+          throw e;
         }
       }
       let { lastModified, created, isNew } = await this.#adapter.write(
@@ -983,7 +985,7 @@ export class Realm {
     );
 
     let userIds = Object.entries(permissions)
-      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
+      .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
       .map(([userId]) => userId);
     if (userIds.length > 1) {
       // we want to use the realm's human owner for the realm and not the bot
@@ -1360,6 +1362,9 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
+      this.#log.warn(
+        `auth failed for ${request.method} ${request.url} missing auth header`,
+      );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
       );
@@ -1398,21 +1403,33 @@ export class Realm {
         JSON.stringify(token.permissions?.sort()) !==
           JSON.stringify(userPermissions.sort())
       ) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url}, for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+        );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
         );
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url}, for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+        );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
       }
-    } catch (e) {
+    } catch (e: any) {
       if (e instanceof TokenExpiredError) {
+        this.#log.warn(
+          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e instanceof JsonWebTokenError) {
+        this.#log.warn(
+          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
       throw e;

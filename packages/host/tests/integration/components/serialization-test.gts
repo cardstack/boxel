@@ -18,7 +18,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
   p,
@@ -222,18 +222,10 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Person/mango`,
       'instance id is set',
     );
-    assert.strictEqual(
-      isSaved(savedCard),
-      true,
-      'API recognizes card as saved',
-    );
+    assert.true(isSaved(savedCard), 'API recognizes card as saved');
 
     let unsavedCard = new Person();
-    assert.strictEqual(
-      isSaved(unsavedCard),
-      false,
-      'API recognizes card as unsaved',
-    );
+    assert.false(isSaved(unsavedCard), 'API recognizes card as unsaved');
   });
 
   test('can deserialize a card with a local id', async function (assert) {
@@ -382,7 +374,7 @@ module('Integration | serialization', function (hooks) {
       firstName: 'Mango',
     });
 
-    assert.strictEqual(isSaved(card), false, 'card is not saved');
+    assert.false(isSaved(card), 'card is not saved');
 
     let result = await updateFromSerialized(card, {
       data: {
@@ -399,7 +391,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    assert.strictEqual(isSaved(card), true, 'card is saved');
+    assert.true(isSaved(card), 'card is saved');
     assert.strictEqual(result, card, 'returns the same instance provided');
     assert.strictEqual(
       card.id,
@@ -503,8 +495,9 @@ module('Integration | serialization', function (hooks) {
       { data: resource },
       undefined,
     );
-    assert.ok(
-      driver.ref !== ref,
+    assert.notStrictEqual(
+      driver.ref,
+      ref,
       'the card ref value is not strict equals to its serialized counter part',
     );
     assert.deepEqual(
@@ -535,8 +528,9 @@ module('Integration | serialization', function (hooks) {
     let driver = new DriverCard({ ref });
     let serializedRef = serializeCard(driver, { includeUnrenderedFields: true })
       .data.attributes?.ref;
-    assert.ok(
-      serializedRef !== ref,
+    assert.notStrictEqual(
+      serializedRef,
+      ref,
       'the card ref value is not strict equals to its serialized counter part',
     );
     assert.deepEqual(
@@ -967,11 +961,11 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(card.firstName, 'Hassan');
     let { pet } = card;
     if (pet instanceof Pet) {
-      assert.strictEqual(isSaved(pet), true, 'Pet card is saved');
+      assert.true(isSaved(pet), 'Pet card is saved');
       assert.strictEqual(pet.firstName, 'Mango');
       let { favoriteToy } = pet;
       if (favoriteToy instanceof Toy) {
-        assert.strictEqual(isSaved(favoriteToy), true, 'Toy card is saved');
+        assert.true(isSaved(favoriteToy), 'Toy card is saved');
         assert.strictEqual(
           favoriteToy.description,
           'Toilet paper ghost: Poooo!',
@@ -992,11 +986,7 @@ module('Integration | serialization', function (hooks) {
     } else {
       if (relationship?.type === 'loaded') {
         let relatedCard = relationship.card;
-        assert.strictEqual(
-          relatedCard instanceof Pet,
-          true,
-          'related card is a Pet',
-        );
+        assert.true(relatedCard instanceof Pet, 'related card is a Pet');
         assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
       } else {
         assert.ok(false, 'relationship type was not "loaded"');
@@ -1075,8 +1065,8 @@ module('Integration | serialization', function (hooks) {
     } catch (err: any) {
       assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
       assert.strictEqual(
-        'The field Person.pet refers to the card instance http://test-realm/test/Pet/mango which is not loaded',
         err.message,
+        'The field Person.pet refers to the card instance http://test-realm/test/Pet/mango which is not loaded',
         'NotLoaded error describes field not loaded',
       );
     }
@@ -1321,7 +1311,7 @@ module('Integration | serialization', function (hooks) {
 
     let { owner, favoriteToy, toys } = card;
     if (owner instanceof Person) {
-      assert.strictEqual(isSaved(owner), true, 'Person card is saved');
+      assert.true(isSaved(owner), 'Person card is saved');
       assert.strictEqual(owner.firstName, 'Burcu');
     } else {
       assert.ok(false, '"owner" field value is not an instance of Person');
@@ -1347,11 +1337,7 @@ module('Integration | serialization', function (hooks) {
     } else {
       if (relationship?.type === 'loaded') {
         let relatedCard = relationship.card;
-        assert.strictEqual(
-          relatedCard instanceof Person,
-          true,
-          'related card is a Person',
-        );
+        assert.true(relatedCard instanceof Person, 'related card is a Person');
         assert.strictEqual(relatedCard?.id, `${testRealmURL}Person/burcu`);
       } else {
         assert.ok(false, 'relationship type was not "loaded"');
@@ -2863,7 +2849,7 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(card.firstName, 'Burcu');
       let { friendPet } = card;
       if (friendPet instanceof Pet) {
-        assert.strictEqual(isSaved(friendPet), true, 'Pet card is saved');
+        assert.true(isSaved(friendPet), 'Pet card is saved');
         assert.strictEqual(friendPet.name, 'Mango');
       } else {
         assert.ok(false, '"friendPet" field value is not an instance of Pet');
@@ -2878,11 +2864,7 @@ module('Integration | serialization', function (hooks) {
       } else {
         if (relationship?.type === 'loaded') {
           let relatedCard = relationship.card;
-          assert.strictEqual(
-            relatedCard instanceof Pet,
-            true,
-            'related card is a Pet',
-          );
+          assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
           assert.ok(false, 'relationship type was not "loaded"');
@@ -4026,7 +4008,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(card.firstName, 'Hassan');
     let { pet } = card;
     assert.ok(pet instanceof Pet, '"pet" field value is an instance of Pet');
-    assert.strictEqual(isSaved(pet), true, 'Pet card is saved');
+    assert.true(isSaved(pet), 'Pet card is saved');
     assert.strictEqual(pet.firstName, 'Mango');
     let { favorite } = pet;
     assert.ok(
@@ -5061,13 +5043,13 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(pets.length, 2, 'pets has 2 items');
       let [mango, vanGogh] = pets;
       if (mango instanceof Pet) {
-        assert.strictEqual(isSaved(mango), true, 'Pet[0] card is saved');
+        assert.true(isSaved(mango), 'Pet[0] card is saved');
         assert.strictEqual(mango.firstName, 'Mango');
       } else {
         assert.ok(false, '"pets[0]" is not an instance of Pet');
       }
       if (vanGogh instanceof Pet) {
-        assert.strictEqual(isSaved(vanGogh), true, 'Pet[1] card is saved');
+        assert.true(isSaved(vanGogh), 'Pet[1] card is saved');
         assert.strictEqual(vanGogh.firstName, 'Van Gogh');
       } else {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
@@ -5079,22 +5061,14 @@ module('Integration | serialization', function (hooks) {
 
         if (mangoRelationship?.type === 'loaded') {
           let relatedCard = mangoRelationship.card;
-          assert.strictEqual(
-            relatedCard instanceof Pet,
-            true,
-            'related card is a Pet',
-          );
+          assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
           assert.ok(false, 'relationship type was not "loaded" for mango');
         }
         if (vanGoghRelationship?.type === 'loaded') {
           let relatedCard = vanGoghRelationship.card;
-          assert.strictEqual(
-            relatedCard instanceof Pet,
-            true,
-            'related card is a Pet',
-          );
+          assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/vanGogh`);
         } else {
           assert.ok(false, 'relationship type was not "loaded" for vanGogh');
@@ -5960,13 +5934,13 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(friendPets.length, 2, 'pets has 2 items');
       let [mango, vanGogh] = friendPets;
       if (mango instanceof Pet) {
-        assert.strictEqual(isSaved(mango), true, 'Pet[0] card is saved');
+        assert.true(isSaved(mango), 'Pet[0] card is saved');
         assert.strictEqual(mango.name, 'Mango');
       } else {
         assert.ok(false, '"pets[0]" is not an instance of Pet');
       }
       if (vanGogh instanceof Pet) {
-        assert.strictEqual(isSaved(vanGogh), true, 'Pet[1] card is saved');
+        assert.true(isSaved(vanGogh), 'Pet[1] card is saved');
         assert.strictEqual(vanGogh.name, 'Van Gogh');
       } else {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
@@ -6312,12 +6286,12 @@ module('Integration | serialization', function (hooks) {
         });
 
         assert.strictEqual(
-          typeof serialized?.data?.attributes?.someNumber === 'number',
-          true,
+          typeof serialized?.data?.attributes?.someNumber,
+          'number',
         );
-        assert.strictEqual(
-          typeof serialized?.data?.attributes?.someNumber !== 'string',
-          true,
+        assert.notStrictEqual(
+          typeof serialized?.data?.attributes?.someNumber,
+          'string',
         );
         assert.strictEqual(serialized?.data?.attributes?.someNumber, 42);
         assert.strictEqual(serialized?.data?.attributes?.someNull, null);
@@ -6370,10 +6344,10 @@ module('Integration | serialization', function (hooks) {
           undefined,
         );
 
-        assert.strictEqual(isBigInt(sample.someBigInt), true);
-        assert.strictEqual(isBigInt(sample.someNumber), true);
-        assert.strictEqual(isBigInt(sample.someNegativeNumber), true);
-        assert.strictEqual(isBigInt(sample.someZeroString), true);
+        assert.true(isBigInt(sample.someBigInt));
+        assert.true(isBigInt(sample.someNumber));
+        assert.true(isBigInt(sample.someNegativeNumber));
+        assert.true(isBigInt(sample.someZeroString));
 
         // failed to deserialize
         assert.strictEqual(sample.someNull, null);
@@ -6405,12 +6379,12 @@ module('Integration | serialization', function (hooks) {
         });
 
         assert.strictEqual(
-          typeof serialized?.data?.attributes?.someBigInt === 'string',
-          true,
+          typeof serialized?.data?.attributes?.someBigInt,
+          'string',
         );
-        assert.strictEqual(
-          typeof serialized?.data?.attributes?.someBigInt !== 'number',
-          true,
+        assert.notStrictEqual(
+          typeof serialized?.data?.attributes?.someBigInt,
+          'number',
         );
         assert.strictEqual(
           serialized?.data?.attributes?.someBigInt,
@@ -6523,11 +6497,8 @@ module('Integration | serialization', function (hooks) {
           undefined,
         );
 
-        assert.strictEqual(isEthAddress(sample.someAddress), true);
-        assert.strictEqual(
-          isEthAddress(sample.checksummedAddressThatDontLookLikeOne),
-          true,
-        );
+        assert.true(isEthAddress(sample.someAddress));
+        assert.true(isEthAddress(sample.checksummedAddressThatDontLookLikeOne));
 
         // failed to deserialize
         assert.strictEqual(sample.faultyAddress, null);
@@ -6563,12 +6534,12 @@ module('Integration | serialization', function (hooks) {
         });
 
         assert.strictEqual(
-          typeof serialized?.data?.attributes?.someAddress === 'string',
-          true,
+          typeof serialized?.data?.attributes?.someAddress,
+          'string',
         );
-        assert.strictEqual(
-          typeof serialized?.data?.attributes?.someAddress !== 'number',
-          true,
+        assert.notStrictEqual(
+          typeof serialized?.data?.attributes?.someAddress,
+          'number',
         );
         assert.strictEqual(
           serialized?.data?.attributes?.someAddress,

@@ -3,6 +3,7 @@ import {
   type QueuePublisher,
   type Realm,
   type VirtualNetwork,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -29,6 +30,7 @@ import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
+import handleRealmAuth from './handlers/handle-realm-auth';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -47,6 +49,7 @@ export type CreateRoutesArgs = {
     url: string,
     username: string,
     copiedFromRealm?: URL,
+    enableFileWatcher?: boolean,
   ) => Realm;
   createRealm: ({
     ownerUserId,
@@ -60,10 +63,14 @@ export type CreateRoutesArgs = {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }) => Promise<Realm>;
+  }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
-  sendEvent: (user: string, eventType: string) => Promise<void>;
+  sendEvent: (
+    user: string,
+    eventType: string,
+    data?: Record<string, any>,
+  ) => Promise<void>;
   validPublishedRealmDomains?: string[];
   assetsURL: URL;
 };
@@ -137,6 +144,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleFullReindex(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
+  router.post(
+    '/_realm-auth',
+    jwtMiddleware(args.realmSecretSeed),
+    handleRealmAuth(args),
+  );
 
   return router.routes();
 }

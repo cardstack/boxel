@@ -26,11 +26,6 @@
           "self": null
         }
       },
-      "tags.0": {
-        "links": {
-          "self": "../Tag/stub"
-        }
-      },
       "license": {
         "links": {
           "self": null
