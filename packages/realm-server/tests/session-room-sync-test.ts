@@ -1,12 +1,18 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { setupPermissionedRealm, realmSecretSeed } from './helpers';
+import {
+  setupPermissionedRealm,
+  setupBaseRealmServer,
+  matrixURL,
+  realmSecretSeed,
+} from './helpers';
 import { getSessionRoom } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { MatrixConfig } from '@cardstack/runtime-common';
 
 module(basename(__filename), function (hooks) {
+  setupBaseRealmServer(hooks, matrixURL);
   const importUserId = '@import-sync:localhost';
   const importRoomId = '!import-sync-room:localhost';
   let dbAdapter: PgAdapter;
