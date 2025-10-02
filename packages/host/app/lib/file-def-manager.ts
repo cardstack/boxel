@@ -208,7 +208,15 @@ export default class FileDefManagerImpl
     let storedUrl = url;
     if (canonicalKey.startsWith('mxc://')) {
       try {
-        const maybeHttp = this.client.mxcUrlToHttp(canonicalKey);
+        const maybeHttp = this.client.mxcUrlToHttp(
+          canonicalKey,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          true,
+        );
         if (maybeHttp) {
           storedUrl = maybeHttp;
         }
