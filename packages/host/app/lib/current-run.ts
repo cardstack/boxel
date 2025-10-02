@@ -42,6 +42,7 @@ import {
   type StatusArgs,
   type Prerenderer,
   type RealmPermissions,
+  RenderResponse,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -663,16 +664,58 @@ export class CurrentRun {
       }
       deferred = new Deferred<void>();
       this.#indexingInstances.set(fileURL, deferred.promise);
+      let uncaughtError: Error | undefined;
       if ((globalThis as any).__useHeadlessChromePrerender) {
-        let renderResult = await this.#prerenderer({
-          url: fileURL,
-          realm: this.#realmURL.href,
-          userId: this.#userId,
-          permissions: this.#permissions,
-        });
-        if ('error' in renderResult && renderResult.error) {
-          let renderError = renderResult.error;
+        let renderResult: RenderResponse | undefined;
+        try {
+          renderResult = await this.#prerenderer({
+            url: fileURL,
+            realm: this.#realmURL.href,
+            userId: this.#userId,
+            permissions: this.#permissions,
+          });
+
+          // we tack on data that can only be determined via access to underlying filesystem/DB
+          if (!this.#realmInfo) {
+            let realmInfoResponse = await this.network.authedFetch(
+              `${this.realmURL}_info`,
+              { headers: { Accept: SupportedMimeType.RealmInfo } },
+            );
+            this.#realmInfo = (
+              await realmInfoResponse.json()
+            )?.data?.attributes;
+          }
+
+          let serialized = renderResult?.serialized;
+          if (serialized) {
+            merge(serialized, {
+              data: {
+                meta: {
+                  lastModified,
+                  resourceCreatedAt,
+                  realmInfo: { ...this.#realmInfo },
+                  realmURL: this.realmURL.href,
+                },
+              },
+            });
+          }
+        } catch (err: any) {
+          uncaughtError = err;
+        }
+
+        if (!renderResult || ('error' in renderResult && renderResult.error)) {
+          let renderError = renderResult?.error;
+          if (!renderError && uncaughtError) {
+            renderError = {
+              type: 'error',
+              error:
+                uncaughtError instanceof CardError
+                  ? serializableError(uncaughtError)
+                  : { message: `${uncaughtError.message}` },
+            };
+          }
           if (
+            renderError &&
             renderError.error.id &&
             renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
           ) {
@@ -683,6 +726,12 @@ export class CurrentRun {
             let deps = new Set(renderError.error.deps);
             deps.add(renderError.error.id);
             renderError.error.deps = [...deps];
+          }
+          if (!renderError) {
+            log.error(
+              `bug: should never get here - handling render error, but renderError is undefined`,
+            );
+            return;
           }
           log.warn(
             `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
@@ -723,7 +772,6 @@ export class CurrentRun {
       } else {
         let moduleDeps = directModuleDeps(resource, instanceURL);
         let typesMaybeError: TypesWithErrors | undefined;
-        let uncaughtError: Error | undefined;
         let doc: SingleCardDocument | undefined;
         let searchData: Record<string, any> | undefined;
         let cardType: typeof CardDef | undefined;
