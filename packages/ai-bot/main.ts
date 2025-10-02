@@ -136,7 +136,7 @@ class Assistant {
       return this.openai.chat.completions.stream({
         model: this.getModel(prompt),
         messages: prompt.messages as ChatCompletionMessageParam[],
-        reasoning_effort: this.getResoningEffort(prompt),
+        reasoning_effort: this.getReasoningEffort(prompt),
       });
     } else {
       return this.openai.chat.completions.stream({
@@ -144,7 +144,7 @@ class Assistant {
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
         tool_choice: prompt.toolChoice,
-        reasoning_effort: this.getResoningEffort(prompt),
+        reasoning_effort: this.getReasoningEffort(prompt),
       });
     }
   }
@@ -153,7 +153,9 @@ class Assistant {
     return prompt.model ?? DEFAULT_LLM;
   }
 
-  getResoningEffort(prompt: PromptParts) {
+  // TODO: This function is used to avoid a thinking model of gpt-5.
+  // Remove this function after we have LLM environment.
+  getReasoningEffort(prompt: PromptParts) {
     let model = this.getModel(prompt);
     return model === 'openai/gpt-5' ? 'minimal' : undefined;
   }
