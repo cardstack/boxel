@@ -23,6 +23,7 @@ import {
   unixTime,
   jobIdentity,
   getFieldDefinitions,
+  modulesConsumedInMeta,
   type ResolvedCodeRef,
   type Definition,
   type Batch,
@@ -670,7 +671,23 @@ export class CurrentRun {
           permissions: this.#permissions,
         });
         if ('error' in renderResult && renderResult.error) {
-          // TODO need to add error doc in the correct shape
+          let renderError = renderResult.error;
+          if (
+            renderError.error.id &&
+            renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
+          ) {
+            renderError.error.deps = renderError.error.deps ?? [];
+            renderError.error.deps.push(
+              ...modulesConsumedInMeta(resource.meta),
+            );
+            let deps = new Set(renderError.error.deps);
+            deps.add(renderError.error.id);
+            renderError.error.deps = [...deps];
+          }
+          log.warn(
+            `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
+          );
+          await this.updateEntry(instanceURL, renderError);
           return;
         } else {
           let {

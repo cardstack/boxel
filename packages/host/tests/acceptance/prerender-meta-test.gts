@@ -257,27 +257,15 @@ module('Acceptance | prerender | meta', function (hooks) {
               links: {
                 self: '../Pet/mango',
               },
-              data: {
-                type: 'card',
-                id: '../Pet/mango',
-              },
             },
             'pets.1': {
               links: {
                 self: '../Pet/vangogh',
               },
-              data: {
-                type: 'card',
-                id: '../Pet/vangogh',
-              },
             },
             'pets.2': {
               links: {
                 self: '../Pet/paper',
-              },
-              data: {
-                type: 'card',
-                id: '../Pet/paper',
               },
             },
           },
