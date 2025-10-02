@@ -987,9 +987,16 @@ export class Realm {
   }
 
   async #startup() {
+    this.#log.debug(`Realm ${this.url} entering startup routine`);
     await Promise.resolve();
     try {
+      this.#log.debug(
+        `Realm ${this.url} syncing legacy session rooms from account data`,
+      );
       await this.#syncSessionRoomsFromAccountData();
+      this.#log.debug(
+        `Realm ${this.url} finished syncing session rooms from account data`,
+      );
     } catch (error) {
       this.#log.warn(
         `Failed to sync session rooms for realm ${this.url}: ${error}`,
@@ -997,6 +1004,9 @@ export class Realm {
     }
     let startTime = Date.now();
     if (this.#copiedFromRealm) {
+      this.#log.info(
+        `Realm ${this.url} performing copy index from ${this.#copiedFromRealm.href}`,
+      );
       await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
       this.broadcastRealmEvent({
         eventName: 'index',
@@ -1005,11 +1015,19 @@ export class Realm {
       });
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      this.#log.debug(
+        `Realm ${this.url} isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup}`,
+      );
       if (isNewIndex || this.#fullIndexOnStartup) {
+        this.#log.info(`Realm ${this.url} kicking off full index`);
         let promise = this.#realmIndexUpdater.fullIndex();
         if (isNewIndex) {
+          this.#log.debug(
+            `Realm ${this.url} awaiting full index because index is new`,
+          );
           // we only await the full indexing at boot if this is a brand new index
           await promise;
+          this.#log.debug(`Realm ${this.url} full index completed`);
         }
         // not sure how useful this event is--nothing is currently listening for
         // it, and it may happen during or after the full index...
@@ -1019,6 +1037,7 @@ export class Realm {
         });
       }
     }
+    this.#log.debug(`Realm ${this.url} startup routine complete`);
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
@@ -1026,11 +1045,20 @@ export class Realm {
 
   async #syncSessionRoomsFromAccountData() {
     if (!isNode) {
+      this.#log.trace?.(
+        `Realm ${this.url} skipping session room account-data sync (not running in Node)`,
+      );
       return;
     }
 
     try {
+      this.#log.trace?.(
+        `Realm ${this.url} logging in to Matrix for account-data sync`,
+      );
       await this.#matrixClient.login();
+      this.#log.trace?.(
+        `Realm ${this.url} logged in to Matrix for account-data sync`,
+      );
     } catch (error) {
       this.#log.warn(
         `Failed to log in to Matrix while syncing session rooms for realm ${this.url}: ${error}`,
@@ -1043,30 +1071,53 @@ export class Realm {
         Record<string, string>
       >('boxel.session-rooms')) ?? {};
 
+    this.#log.debug(
+      `Realm ${this.url} fetched ${Object.keys(accountData).length} session-room entries from account data`,
+    );
+
     if (Object.keys(accountData).length === 0) {
+      this.#log.trace?.(
+        `Realm ${this.url} found no session-room entries in account data`,
+      );
       return;
     }
 
     let existing = await getAllSessionRooms(this.#dbAdapter, this.url);
+    this.#log.trace?.(
+      `Realm ${this.url} currently has ${Object.keys(existing).length} session rooms in DB`,
+    );
     let imported = 0;
 
     for (let [matrixUserId, roomId] of Object.entries(accountData)) {
       if (!matrixUserId || typeof roomId !== 'string' || !roomId) {
+        this.#log.trace?.(
+          `Realm ${this.url} skipping malformed session room entry user=${matrixUserId} room=${roomId}`,
+        );
         continue;
       }
 
       if (existing[matrixUserId] === roomId) {
+        this.#log.trace?.(
+          `Realm ${this.url} skipping session room for ${matrixUserId}; already up to date`,
+        );
         continue;
       }
 
       await persistSessionRoom(this.#dbAdapter, this.url, matrixUserId, roomId);
       existing[matrixUserId] = roomId;
       imported++;
+      this.#log.debug(
+        `Realm ${this.url} imported session room ${roomId} for user ${matrixUserId}`,
+      );
     }
 
     if (imported > 0) {
       this.#log.info(
         `Imported ${imported} session room${imported === 1 ? '' : 's'} from Matrix account data for realm ${this.url}`,
+      );
+    } else {
+      this.#log.debug(
+        `Realm ${this.url} account-data sync made no changes (all entries already present)`,
       );
     }
   }

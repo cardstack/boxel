@@ -3,6 +3,7 @@ import { uint8ArrayToHex } from './index';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
 import { Deferred } from './deferred';
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { logger } from './log';
 
 export interface MatrixAccess {
   accessToken: string;
@@ -17,6 +18,7 @@ export class MatrixClient {
   private password?: string;
   private seed?: string;
   private loggedInDeferred: Deferred<void> | undefined;
+  private log = logger('matrix-client');
 
   constructor({
     matrixURL,
@@ -71,9 +73,15 @@ export class MatrixClient {
 
   async login() {
     if (this.loggedInDeferred) {
+      this.log.trace?.(
+        `Matrix client ${this.username}@${this.matrixURL.href} awaiting existing login`,
+      );
       return await this.loggedInDeferred.promise;
     }
     this.loggedInDeferred = new Deferred();
+    this.log.debug(
+      `Matrix client ${this.username}@${this.matrixURL.href} starting login`,
+    );
     let password: string | undefined;
     if (this.password) {
       password = this.password;
@@ -85,21 +93,36 @@ export class MatrixClient {
       );
     }
 
-    let response = await this.request(
-      '_matrix/client/v3/login',
-      'POST',
-      {
-        body: JSON.stringify({
-          identifier: {
-            type: 'm.id.user',
-            user: this.username,
-          },
-          password,
-          type: 'm.login.password',
-        }),
-      },
-      false,
-    );
+    let response: Response;
+    try {
+      this.log.trace?.(
+        `Matrix client ${this.username}@${this.matrixURL.href} sending login request`,
+      );
+      response = await this.request(
+        '_matrix/client/v3/login',
+        'POST',
+        {
+          body: JSON.stringify({
+            identifier: {
+              type: 'm.id.user',
+              user: this.username,
+            },
+            password,
+            type: 'm.login.password',
+          }),
+        },
+        false,
+      );
+      this.log.trace?.(
+        `Matrix client ${this.username}@${this.matrixURL.href} received login response status ${response.status}`,
+      );
+    } catch (error) {
+      this.loggedInDeferred.reject(error as Error);
+      this.log.error(
+        `Matrix client ${this.username}@${this.matrixURL.href} failed sending login request: ${error}`,
+      );
+      throw error;
+    }
 
     let json = await response.json();
 
@@ -110,6 +133,7 @@ export class MatrixClient {
         }: status ${response.status} - ${JSON.stringify(json)}`,
       );
       this.loggedInDeferred.reject(error);
+      this.log.error(error.message);
       throw error;
     }
     let {
@@ -119,6 +143,9 @@ export class MatrixClient {
     } = json;
     this.access = { accessToken, deviceId, userId };
     this.loggedInDeferred.fulfill();
+    this.log.info(
+      `Matrix client ${this.username}@${this.matrixURL.href} logged in as ${userId}`,
+    );
   }
 
   async getJoinedRooms() {
