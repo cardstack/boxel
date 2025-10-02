@@ -14,7 +14,6 @@ import { sendResponseForError, setContextResponse } from '../middleware';
 export default function handleRealmAuth({
   dbAdapter,
   realmSecretSeed,
-  matrixClient,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -32,6 +31,16 @@ export default function handleRealmAuth({
     }
 
     let sessionRoomId = await getSessionRoom(dbAdapter, user.matrixUserId);
+
+    if (!sessionRoomId) {
+      await sendResponseForError(
+        ctxt,
+        422,
+        'Unprocessable Entity',
+        'Session room not found for user',
+      );
+      return;
+    }
 
     let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
       userId: matrixUserId,

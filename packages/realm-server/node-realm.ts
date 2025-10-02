@@ -241,10 +241,7 @@ export class NodeAdapter implements RealmAdapter {
       return;
     }
 
-    realmEventsLog.debug(
-      'Sending to dm rooms',
-      Object.values(sessionRooms),
-    );
+    realmEventsLog.debug('Sending to dm rooms', Object.values(sessionRooms));
 
     for (let [userId, roomId] of Object.entries(sessionRooms)) {
       try {

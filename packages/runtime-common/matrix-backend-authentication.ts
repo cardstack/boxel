@@ -17,38 +17,12 @@ export interface SessionRoomStore {
   setSessionRoom(matrixUserId: string, roomId: string): Promise<void>;
 }
 
-class MatrixAccountDataSessionRoomStore implements SessionRoomStore {
-  constructor(private matrixClient: MatrixClient) {}
-
-  async getSessionRoom(matrixUserId: string): Promise<string | null> {
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    return dmRooms[matrixUserId] ?? null;
-  }
-
-  async setSessionRoom(matrixUserId: string, roomId: string): Promise<void> {
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    if (dmRooms[matrixUserId] === roomId) {
-      return;
-    }
-    dmRooms[matrixUserId] = roomId;
-    await this.matrixClient.setAccountData('boxel.session-rooms', dmRooms);
-  }
-}
-
 export class MatrixBackendAuthentication {
   constructor(
     private matrixClient: MatrixClient,
     private secretSeed: string,
     private utils: Utils,
-    private sessionRoomStore: SessionRoomStore = new MatrixAccountDataSessionRoomStore(
-      matrixClient,
-    ),
+    private sessionRoomStore: SessionRoomStore,
   ) {}
 
   async createSession(request: Request): Promise<Response> {
