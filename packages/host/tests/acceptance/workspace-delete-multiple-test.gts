@@ -9,14 +9,13 @@ import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
   testRealmURL,
+  setupAuthEndpoints,
   setupUserSubscription,
   visitOperatorMode,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-
-let matrixRoomId: string;
 
 module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupApplicationTest(hooks);
@@ -32,11 +31,12 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
@@ -159,7 +159,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify cards were deleted
     let remainingCards = findAll('[data-test-cards-grid-item]');
-    assert.equal(remainingCards.length, 1, 'Two cards were deleted');
+    assert.strictEqual(remainingCards.length, 1, 'Two cards were deleted');
 
     // Verify selection mode is cleared
     assert
@@ -205,6 +205,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .dom('.utility-menu-trigger')
       .doesNotExist('Selection summary is cleared after deselect');
 
+    // Verify overlay checkboxes are not checked
     assert.dom('[data-test-overlay-card]').doesNotExist();
   });
 
@@ -314,7 +315,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify no cards were deleted
     let remainingCards = findAll('[data-test-cards-grid-item]');
-    assert.equal(
+    assert.strictEqual(
       remainingCards.length,
       initialCardCount,
       'No cards were deleted after canceling',

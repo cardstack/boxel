@@ -831,22 +831,14 @@ module('Integration | operator-mode', function (hooks) {
           ?.textContent?.trim() === 'Saving…',
     );
     assert.dom('[data-test-auto-save-indicator]').containsText('Saving…');
-    assert.strictEqual(
-      finishedSaving,
-      false,
-      'save in-flight message is correct',
-    );
+    assert.false(finishedSaving, 'save in-flight message is correct');
     await waitUntil(
       () =>
         document
           .querySelector('[data-test-auto-save-indicator]')
           ?.textContent?.trim() == 'Saved less than a minute ago',
     );
-    assert.strictEqual(
-      finishedSaving,
-      true,
-      'finished saving message is correct',
-    );
+    assert.true(finishedSaving, 'finished saving message is correct');
     assert
       .dom('[data-test-auto-save-indicator]')
       .containsText('Saved less than a minute ago');
