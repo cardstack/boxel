@@ -17,7 +17,7 @@ NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
   PGDATABASE=boxel \
-  LOG_LEVELS='*=info' \
+  LOG_LEVELS="*=trace"  \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \

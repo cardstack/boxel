@@ -306,6 +306,7 @@ export class Realm {
     },
     opts?: Options,
   ) {
+    this.#log.info(`Creating Realm instance for ${url}`);
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
@@ -370,6 +371,9 @@ export class Realm {
       fetch: _fetch,
       definitionsCache: this.#definitionsCache,
     });
+    this.#log.debug(
+      `Realm ${this.url} initialized with options ${JSON.stringify(opts ?? {})}`,
+    );
 
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
@@ -480,7 +484,11 @@ export class Realm {
   }
 
   async logInToMatrix() {
+    this.#log.debug(
+      `Realm ${this.url} logging in to matrix as ${this.#matrixClient.username}`,
+    );
     await this.#matrixClient.login();
+    this.#log.debug(`Realm ${this.url} logged in to matrix`);
   }
 
   private async readinessCheck(
@@ -504,13 +512,17 @@ export class Realm {
   }
 
   async start() {
+    this.#log.info(`Realm ${this.url} starting`);
     this.#startedUp.fulfill((() => this.#startup())());
 
     if (this.#adapter.fileWatcherEnabled) {
+      this.#log.debug(`Realm ${this.url} enabling file watcher`);
       await this.startFileWatcher();
+      this.#log.debug(`Realm ${this.url} file watcher started`);
     }
 
     await this.#startedUp.promise;
+    this.#log.info(`Realm ${this.url} started`);
   }
 
   async fullIndex() {
@@ -1171,17 +1183,33 @@ export class Realm {
   }
 
   async ensureSessionRoom(matrixUserId: string): Promise<string> {
-    let existing = await fetchSessionRoom(this.#dbAdapter, this.url, matrixUserId);
+    this.#log.debug(
+      `Ensuring session room for user ${matrixUserId} in realm ${this.url}`,
+    );
+    let existing = await fetchSessionRoom(
+      this.#dbAdapter,
+      this.url,
+      matrixUserId,
+    );
     if (existing) {
+      this.#log.debug(
+        `Session room for user ${matrixUserId} in realm ${this.url} already exists (${existing})`,
+      );
       return existing;
     }
 
     if (!(await this.#matrixClient.isTokenValid())) {
+      this.#log.debug(
+        `Session room missing for user ${matrixUserId} in realm ${this.url}; logging matrix client in`,
+      );
       await this.#matrixClient.login();
     }
 
     let roomId = await this.#matrixClient.createDM(matrixUserId);
     await persistSessionRoom(this.#dbAdapter, this.url, matrixUserId, roomId);
+    this.#log.info(
+      `Created new session room ${roomId} for user ${matrixUserId} in realm ${this.url}`,
+    );
     return roomId;
   }
 
