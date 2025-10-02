@@ -497,6 +497,16 @@ module('Integration | realm', function (hooks) {
         (await adapter.openFile(`CardDef/${id}.json`))?.content,
         'file contents exist',
       );
+      let createdAt = await getFileCreatedAt(realm, `CardDef/${id}.json`);
+      assert.ok(
+        json.data.meta?.resourceCreatedAt,
+        'resourceCreatedAt meta exists on created card',
+      );
+      assert.strictEqual(
+        json.data.meta?.resourceCreatedAt,
+        createdAt,
+        'resourceCreatedAt matches file created time',
+      );
     } else {
       assert.ok(false, 'response body is not a card document');
     }
@@ -598,6 +608,20 @@ module('Integration | realm', function (hooks) {
       assert.ok(
         (await adapter.openFile(`${dirName}/CardDef/${id}.json`))?.content,
         'file contents exist',
+      );
+      // verify resourceCreatedAt meta recorded for new file in directory
+      let createdAt = await getFileCreatedAt(
+        realm,
+        `${dirName}/CardDef/${id}.json`,
+      );
+      assert.ok(
+        json.data.meta?.resourceCreatedAt,
+        'resourceCreatedAt meta exists on created card in directory',
+      );
+      assert.strictEqual(
+        json.data.meta?.resourceCreatedAt,
+        createdAt,
+        'resourceCreatedAt matches file created time (directory)',
       );
     } else {
       assert.ok(false, 'response body is not a card document');
@@ -2563,7 +2587,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve delete card requests', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'cards/1.json': {
@@ -2623,6 +2647,12 @@ module('Integration | realm', function (hooks) {
 
     result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/2`));
     assert.strictEqual(result, undefined, 'card was deleted');
+    let deletedFile = await adapter.openFile('cards/2.json');
+    assert.strictEqual(
+      deletedFile,
+      undefined,
+      'underlying file for deleted card no longer exists',
+    );
 
     result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {

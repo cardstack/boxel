@@ -2727,6 +2727,43 @@ module(basename(__filename), function () {
           let cardFile = join(dir.name, entry);
           assert.false(existsSync(cardFile), 'card json does not exist');
         });
+
+        test('removes file meta when card is deleted', async function (assert) {
+          // confirm meta.resourceCreatedAt exists prior to deletion
+          let initial = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(initial.status, 200, 'precondition GET 200');
+          let initialCreatedAt = initial.body?.data?.meta?.resourceCreatedAt;
+          assert.ok(initialCreatedAt, 'resourceCreatedAt exists before delete');
+
+          // delete the card
+          let delResp = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(delResp.status, 204, 'delete succeeds with 204');
+
+          // subsequent GET should not expose resourceCreatedAt (file meta removed)
+          let after = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          // Depending on implementation could be 404 Not Found; just assert it's not 200
+          assert.notStrictEqual(
+            after.status,
+            200,
+            'GET after delete is not 200',
+          );
+          let afterCreatedAt = after.body?.data?.meta?.resourceCreatedAt;
+          assert.strictEqual(
+            afterCreatedAt,
+            undefined,
+            'resourceCreatedAt is absent after deletion',
+          );
+          assert.false(
+            JSON.stringify(after.body).includes('resourceCreatedAt'),
+            'No resourceCreatedAt key present anywhere in error payload',
+          );
+        });
       });
 
       module('permissioned realm', function (hooks) {
