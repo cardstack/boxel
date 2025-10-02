@@ -7,7 +7,16 @@ exports.up = (pgm) => {
       primaryKey: true,
       default: pgm.func('gen_random_uuid()'),
     },
+    user_id: {
+      type: 'uuid',
+      references: 'users(id)',
+      notNull: true,
+    },
     hostname: {
+      type: 'varchar',
+      notNull: true,
+    },
+    source_realm_url: {
       type: 'varchar',
       notNull: true,
     },
@@ -22,10 +31,14 @@ exports.up = (pgm) => {
 
   pgm.createIndex('claimed_domains_for_sites', ['hostname'], { unique: true });
   pgm.createIndex('claimed_domains_for_sites', ['removed_at']);
+  pgm.createIndex('claimed_domains_for_sites', ['user_id']);
+  pgm.createIndex('claimed_domains_for_sites', ['source_realm_url']);
 };
 
 exports.down = (pgm) => {
   pgm.dropIndex('claimed_domains_for_sites', ['removed_at']);
   pgm.dropIndex('claimed_domains_for_sites', ['hostname']);
+  pgm.dropIndex('claimed_domains_for_sites', ['user_id']);
+  pgm.dropIndex('claimed_domains_for_sites', ['source_realm_url']);
   pgm.dropTable('claimed_domains_for_sites');
 };

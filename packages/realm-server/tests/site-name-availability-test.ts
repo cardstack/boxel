@@ -1,7 +1,13 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { PgAdapter } from '@cardstack/postgres';
-import { query, insert, asExpressions } from '@cardstack/runtime-common';
+import {
+  query,
+  insert,
+  asExpressions,
+  User,
+  insertUser,
+} from '@cardstack/runtime-common';
 import { prepareTestDB } from './helpers';
 import { handleCheckSiteNameAvailabilityRequest } from '../handlers/handle-check-site-name-availability';
 import Koa from 'koa';
@@ -10,11 +16,13 @@ module(basename(__filename), function () {
   module('site name availability endpoint', function (hooks) {
     let dbAdapter: PgAdapter;
     let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
+    let user: User;
 
     hooks.beforeEach(async function () {
       prepareTestDB();
       dbAdapter = new PgAdapter({ autoMigrate: true });
       handler = handleCheckSiteNameAvailabilityRequest({ dbAdapter } as any);
+      user = await insertUser(dbAdapter, 'matrix-user-id', 'test-user');
     });
 
     hooks.afterEach(async function () {
@@ -137,6 +145,8 @@ module(basename(__filename), function () {
 
       let { valueExpressions, nameExpressions: nameExpressions } =
         asExpressions({
+          user_id: user.id,
+          source_realm_url: 'https://boxel.dev.localhost/test-realm',
           hostname: hostname,
           claimed_at: Math.floor(Date.now() / 1000),
         });
@@ -198,6 +208,8 @@ module(basename(__filename), function () {
 
       // Insert a claimed domain that has been removed
       let { valueExpressions, nameExpressions } = asExpressions({
+        user_id: user.id,
+        source_realm_url: 'https://boxel.dev.localhost/test-realm',
         hostname: hostname,
         claimed_at: Math.floor(Date.now() / 1000) - 86400, // claimed yesterday
         removed_at: Math.floor(Date.now() / 1000), // removed now
