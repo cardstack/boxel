@@ -389,6 +389,7 @@ jobs:
             "realm-endpoints/user-test.ts",
             "realm-endpoints/definition-test.ts",
             "realm-endpoints-test.ts",
+            "session-room-sync-test.ts",
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
             "server-endpoints-test.ts",
