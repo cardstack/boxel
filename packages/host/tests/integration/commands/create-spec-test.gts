@@ -317,7 +317,7 @@ export default class TestCommand extends Command {
       targetRealm: testRealmURL,
       autoGenerateReadme: true,
     });
-    assert.ok(result.newSpecs?.length === 1, 'Created a new spec');
+    assert.strictEqual(result.newSpecs?.length, 1, 'Created a new spec');
     const store = getService('store');
     const spec = (await store.get(result.newSpecs[0].id!)) as Spec;
     assert.ok(spec.readMe, 'readMe was generated during creation');
