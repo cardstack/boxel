@@ -819,6 +819,9 @@ importers:
       '@types/fs-extra':
         specifier: 'catalog:'
         version: 11.0.4
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.11.5
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.11.3
@@ -831,6 +834,9 @@ importers:
       fs-extra:
         specifier: 'catalog:'
         version: 11.3.0
+      pg:
+        specifier: 'catalog:'
+        version: 8.11.5
 
   packages/base:
     dependencies:

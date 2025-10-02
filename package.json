@@ -84,7 +84,7 @@
     "pnpm": "^10"
   },
   "volta": {
-    "node": "20.19.1",
+    "node": "22.20.0",
     "pnpm": "10.17.0"
   },
   "dependencies": {
