@@ -18,7 +18,10 @@ const log = logger('realm-server');
 export default function handleRealmAuth({
   dbAdapter,
   realmSecretSeed,
+  realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let realmsByURL = new Map(realms.map((realm) => [realm.url, realm]));
+
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
     let { user: matrixUserId } = token;
@@ -56,7 +59,7 @@ export default function handleRealmAuth({
     });
 
     let sessions: { [realm: string]: string } = {};
-    let missingSessionRooms: string[] = [];
+    let fallbackRealms: string[] = [];
     for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
       let sessionRoomId = await getSessionRoom(
         dbAdapter,
@@ -65,8 +68,34 @@ export default function handleRealmAuth({
       );
 
       if (!sessionRoomId) {
-        missingSessionRooms.push(realm);
-        sessionRoomId = realmServerSessionRoomId;
+        let realmInstance = realmsByURL.get(realm);
+        if (!realmInstance) {
+          log.warn(
+            `Realm ${realm} is not currently loaded; using realm-server DM room for user ${matrixUserId}`,
+          );
+          fallbackRealms.push(realm);
+          sessionRoomId = realmServerSessionRoomId;
+        } else {
+          try {
+            sessionRoomId = await realmInstance.ensureSessionRoom(
+              user.matrixUserId,
+            );
+          } catch (error) {
+            log.error(
+              `Unable to ensure session room for user ${matrixUserId} in realm ${realm}, falling back to realm-server DM room`,
+              error,
+            );
+            fallbackRealms.push(realm);
+            sessionRoomId = realmServerSessionRoomId;
+          }
+        }
+      } else {
+        let realmInstance = realmsByURL.get(realm);
+        if (!realmInstance) {
+          log.warn(
+            `Realm ${realm} is not currently loaded but session room ${sessionRoomId} exists; using existing room for user ${matrixUserId}`,
+          );
+        }
       }
 
       sessions[realm] = createJWT(
@@ -81,9 +110,9 @@ export default function handleRealmAuth({
       );
     }
 
-    if (missingSessionRooms.length > 0) {
+    if (fallbackRealms.length > 0) {
       log.warn(
-        `Session room missing for user ${matrixUserId} in realm(s): ${missingSessionRooms.join(', ')}, falling back to realm-server DM room`,
+        `Used realm-server session room for user ${matrixUserId} in realm(s): ${fallbackRealms.join(', ')}`,
       );
     }
 

@@ -1,6 +1,6 @@
 exports.shorthands = undefined;
 
-exports.up = (pgm) => {
+const createSessionRoomsTable = (pgm, withRealm = true) => {
   pgm.createTable(
     'session_rooms',
     {
@@ -35,6 +35,10 @@ exports.up = (pgm) => {
   );
 };
 
+exports.up = (pgm) => {
+  createSessionRoomsTable(pgm, true);
+};
+
 exports.down = (pgm) => {
-  pgm.dropTable('session_rooms');
+  pgm.dropTable('session_rooms', { ifExists: true });
 };

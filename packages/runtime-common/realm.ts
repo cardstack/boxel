@@ -1170,6 +1170,21 @@ export class Realm {
     return await matrixBackendAuthentication.createSession(request);
   }
 
+  async ensureSessionRoom(matrixUserId: string): Promise<string> {
+    let existing = await fetchSessionRoom(this.#dbAdapter, this.url, matrixUserId);
+    if (existing) {
+      return existing;
+    }
+
+    if (!(await this.#matrixClient.isTokenValid())) {
+      await this.#matrixClient.login();
+    }
+
+    let roomId = await this.#matrixClient.createDM(matrixUserId);
+    await persistSessionRoom(this.#dbAdapter, this.url, matrixUserId, roomId);
+    return roomId;
+  }
+
   private async internalHandle(
     request: Request,
     isLocal: boolean,
