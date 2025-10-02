@@ -99,7 +99,6 @@ module(basename(__filename), function () {
       },
     });
 
-    // TODO restore in CS-9468
     test('POST /_publish-realm cannot publish a realm that is not publishable', async function (assert) {
       let response = await request
         .post('/_publish-realm')
