@@ -720,12 +720,7 @@ export class CurrentRun {
             renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
           ) {
             renderError.error.deps = renderError.error.deps ?? [];
-            renderError.error.deps.push(
-              ...modulesConsumedInMeta(resource.meta),
-            );
-            let deps = new Set(renderError.error.deps);
-            deps.add(renderError.error.id);
-            renderError.error.deps = [...deps];
+            renderError.error.deps.push(renderError.error.id);
           }
           if (!renderError) {
             log.error(
@@ -733,6 +728,12 @@ export class CurrentRun {
             );
             return;
           }
+
+          // always include the modules that we see in the serialized form as deps
+          renderError.error.deps = renderError.error.deps ?? [];
+          renderError.error.deps.push(...modulesConsumedInMeta(resource.meta));
+          renderError.error.deps = [...new Set(renderError.error.deps)];
+
           log.warn(
             `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
           );
