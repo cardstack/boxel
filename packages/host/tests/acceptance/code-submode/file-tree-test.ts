@@ -23,6 +23,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -194,7 +195,6 @@ const realmInfo = {
   publishable: null,
 };
 
-let matrixRoomId: string;
 module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -209,11 +209,12 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     const numStubFiles = 100;
     let stubFiles: Record<string, string> = {};

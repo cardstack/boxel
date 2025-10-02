@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { MenuItem, not } from '@cardstack/boxel-ui/helpers';
+import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -148,6 +148,7 @@ export {
   serializeCard,
   type BoxComponent,
   type DeserializeOpts,
+  type GetCardMenuItemParams,
   type JSONAPISingleResourceDocument,
   type ResourceID,
   type SerializeOpts,
@@ -2347,7 +2348,7 @@ export class CardDef extends BaseDef {
     return realmURLString ? new URL(realmURLString) : undefined;
   }
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItem[] {
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     return getDefaultCardMenuItems(this, params);
   }
 }
@@ -2561,7 +2562,9 @@ function lazilyLoadLink(
         let doc = await store.loadDocument(reference);
         if (isCardError(doc)) {
           let cardError = doc;
-          cardError.deps = [reference];
+          cardError.deps = [
+            !reference.endsWith('.json') ? `${reference}.json` : reference,
+          ];
           throw cardError;
         }
         let fieldValue = (await createFromSerialized(

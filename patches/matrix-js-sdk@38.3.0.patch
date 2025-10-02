@@ -1,0 +1,180 @@
+diff --git a/lib/@types/event.d.ts b/lib/@types/event.d.ts
+index 7dbab5e467d3c23401f9762cc0de5f392633b193..a6fea3c90fe59301652916545915c9845b3e4887 100644
+--- a/lib/@types/event.d.ts
++++ b/lib/@types/event.d.ts
+@@ -235,6 +235,13 @@ export interface TimelineEvents {
+     [M_BEACON.name]: MBeaconEventContent;
+     [M_POLL_START.name]: PollStartEventContent;
+     [M_POLL_END.name]: PollEndEventContent;
++
++    "app.boxel.active_llm": any;
++    "app.boxel.llm_mode": any;
++    "app.boxel.room_skills": any;
++    "app.boxel.realm_event": any;
++
++    [t: string]: any;
+ }
+ /**
+  * Mapped type from event type to content type for all specified room state events.
+@@ -257,6 +264,7 @@ export interface StateEvents {
+     [EventType.RoomTombstone]: RoomTombstoneEventContent;
+     [EventType.SpaceChild]: SpaceChildEventContent;
+     [EventType.SpaceParent]: SpaceParentEventContent;
++
+     [EventType.PolicyRuleUser]: PolicyRuleEventContent | EmptyObject;
+     [EventType.PolicyRuleRoom]: PolicyRuleEventContent | EmptyObject;
+     [EventType.PolicyRuleServer]: PolicyRuleEventContent | EmptyObject;
+@@ -264,6 +272,14 @@ export interface StateEvents {
+     [EventType.GroupCallMemberPrefix]: IGroupCallRoomMemberState | SessionMembershipData | EmptyObject;
+     [UNSTABLE_MSC3089_BRANCH.name]: MSC3089EventContent;
+     [M_BEACON_INFO.name]: MBeaconInfoEventContent;
++
++    // Boxel custom state events
++    "app.boxel.active_llm": any;
++    "app.boxel.llm_mode": any;
++    "app.boxel.room_skills": any;
++    "app.boxel.realm_event": any;
++
++    [t: string]: any;
+ }
+ /**
+  * Mapped type from event type to content type for all specified global account_data events.
+@@ -295,6 +311,13 @@ export interface AccountDataEvents extends SecretStorageAccountDataEvents {
+     [POLICIES_ACCOUNT_EVENT_TYPE.altName]: {
+         [key: string]: any;
+     };
++
++    // Boxel custom account data events
++    "app.boxel.realms": {
++        realms: string[];
++    };
++
++    [t: string]: any;
+ }
+ /**
+  * Mapped type from event type to content type for all specified global events encrypted by secret storage.
+diff --git a/lib/filter.d.ts b/lib/filter.d.ts
+index 7fe744ceb78ef93cbb07e09c49108010e17e1f1d..c131092c9f0c04e52073aa03bc81c70f22c9101b 100644
+--- a/lib/filter.d.ts
++++ b/lib/filter.d.ts
+@@ -18,6 +18,9 @@ export interface IRoomEventFilter extends IFilterComponent {
+     "org.matrix.msc3773.unread_thread_notifications"?: boolean;
+     "io.element.relation_senders"?: Array<RelationType | string>;
+     "io.element.relation_types"?: string[];
++
++    // Boxel custom values
++    "org.matrix.msc3874.not_rel_types"?: string[];
+ }
+ interface IStateFilter extends IRoomEventFilter {
+ }
+diff --git a/lib/sliding-sync.d.ts b/lib/sliding-sync.d.ts
+index 9cda67dd7098a6708fab266da7e3fefec730a582..ca098ae2ba415a61303b9ad1673d1de269adfd1c 100644
+--- a/lib/sliding-sync.d.ts
++++ b/lib/sliding-sync.d.ts
+@@ -78,7 +78,14 @@ export interface MSC3575RoomData {
+ }
+ interface ListResponse {
+     count: number;
++    ops: Operation[];
+ }
++
++interface Operation {
++    op: string;
++    room_ids: string[];
++}
++
+ /**
+  * A complete Sliding Sync response
+  */
+diff --git a/src/@types/event.ts b/src/@types/event.ts
+index 6e4d0ddff19d8798ee537c36ac9cf14d44ed7bad..07727ab2cbf3243ae32b6b2af457d1abcb658af2 100644
+--- a/src/@types/event.ts
++++ b/src/@types/event.ts
+@@ -337,6 +337,15 @@ export interface TimelineEvents {
+     [M_BEACON.name]: MBeaconEventContent;
+     [M_POLL_START.name]: PollStartEventContent;
+     [M_POLL_END.name]: PollEndEventContent;
++
++    // Boxel custom timeline events
++    "app.boxel.message": any;
++    "app.boxel.command": any;
++    "app.boxel.command_result": any;
++    "app.boxel.code_patch_result": any;
++    "app.boxel.stop_generating": any;
++
++    [t: string]: any;
+ }
+ 
+ /**
+@@ -375,6 +384,14 @@ export interface StateEvents {
+ 
+     // MSC3672
+     [M_BEACON_INFO.name]: MBeaconInfoEventContent;
++
++    // Boxel custom state events
++    "app.boxel.active_llm": any;
++    "app.boxel.llm_mode": any;
++    "app.boxel.room_skills": any;
++    "app.boxel.realm_event": any;
++
++    [t: string]: any;
+ }
+ 
+ /**
+@@ -395,6 +412,13 @@ export interface AccountDataEvents extends SecretStorageAccountDataEvents {
+     // Invites-ignorer events
+     [POLICIES_ACCOUNT_EVENT_TYPE.name]: { [key: string]: any };
+     [POLICIES_ACCOUNT_EVENT_TYPE.altName]: { [key: string]: any };
++
++    // Boxel custom account data events
++    "app.boxel.realms": {
++        realms: string[];
++    };
++
++    [t: string]: any;
+ }
+ 
+ /**
+diff --git a/src/filter-component.ts b/src/filter-component.ts
+index c27cc0b2978e75372c4a30484b1b915f719a9967..4357ea98092175cd201cf5461e63a94704291420 100644
+--- a/src/filter-component.ts
++++ b/src/filter-component.ts
+@@ -108,6 +108,7 @@ export class FilterComponent {
+                 senders: this.filterJson.senders,
+                 not_senders: this.filterJson.not_senders,
+                 contains_url: this.filterJson.contains_url,
++                ['org.matrix.msc3874.not_rel_types']: this.filterJson['org.matrix.msc3874.not_rel_types'] || [],
+                 [FILTER_RELATED_BY_SENDERS.name]: this.filterJson[FILTER_RELATED_BY_SENDERS.name],
+                 [FILTER_RELATED_BY_REL_TYPES.name]: this.filterJson[FILTER_RELATED_BY_REL_TYPES.name],
+             }).filter(([_key, value]) => value),
+diff --git a/src/filter.ts b/src/filter.ts
+index 3b12c9c318cff9a5c83ee1544d7980f2d788665b..fe9d112db8dafe73ac5ac25940b8e54766881984 100644
+--- a/src/filter.ts
++++ b/src/filter.ts
+@@ -54,6 +54,9 @@ export interface IRoomEventFilter extends IFilterComponent {
+     // Unstable values
+     "io.element.relation_senders"?: Array<RelationType | string>;
+     "io.element.relation_types"?: string[];
++
++    // Boxel custom values
++    "org.matrix.msc3874.not_rel_types"?: string[];
+ }
+ 
+ interface IStateFilter extends IRoomEventFilter {}
+diff --git a/src/sliding-sync.ts b/src/sliding-sync.ts
+index e2a791cdde8055d835e578c71360e8ee552e9e29..6f1a83e7a2463e62257069aaac8965cd7415560d 100644
+--- a/src/sliding-sync.ts
++++ b/src/sliding-sync.ts
+@@ -114,6 +114,12 @@ export interface MSC3575RoomData {
+ 
+ interface ListResponse {
+     count: number;
++    ops: Operation[];
++}
++
++interface Operation {
++    op: string;
++    room_ids: string[];
+ }
+ 
+ /**

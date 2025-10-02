@@ -1,7 +1,7 @@
 import {
   delay,
-  type CardErrorJSONAPI,
   type PrerenderMeta,
+  type RenderError,
 } from '@cardstack/runtime-common';
 import { type Page } from 'puppeteer';
 
@@ -13,22 +13,6 @@ export interface RenderCapture {
   status: RenderStatus;
   value: string;
   alive?: 'true' | 'false';
-}
-
-export interface RenderError {
-  error: string;
-  id?: string;
-  status: number;
-  title?: string;
-  message: string;
-  realm?: string;
-  meta: {
-    lastKnownGoodHtml: string | null;
-    cardTitle: string | null;
-    scopedCssUrls: string[];
-    stack: string | null;
-  };
-  evict?: boolean;
 }
 
 export async function transitionTo(
@@ -53,13 +37,9 @@ export async function renderHTML(
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
   let result = await captureResult(page, 'innerHTML');
   if (result.status === 'error' || result.status === 'unusable') {
-    let error = JSON.parse(result.value) as CardErrorJSONAPI;
-    const err: RenderError = {
-      ...(error as unknown as RenderError),
-      error: error.message,
-      evict: result.status === 'unusable',
-    };
-    return err;
+    let error = JSON.parse(result.value) as RenderError;
+    error.evict = result.status === 'unusable';
+    return error;
   }
   return result.value;
 }
@@ -68,13 +48,9 @@ export async function renderIcon(page: Page): Promise<string | RenderError> {
   await transitionTo(page, 'render.icon');
   let result = await captureResult(page, 'outerHTML');
   if (result.status === 'error' || result.status === 'unusable') {
-    let error = JSON.parse(result.value) as CardErrorJSONAPI;
-    const err: RenderError = {
-      ...(error as unknown as RenderError),
-      error: error.message,
-      evict: result.status === 'unusable',
-    };
-    return err;
+    let error = JSON.parse(result.value) as RenderError;
+    error.evict = result.status === 'unusable';
+    return error;
   }
   return result.value;
 }
@@ -85,13 +61,9 @@ export async function renderMeta(
   await transitionTo(page, 'render.meta');
   let result = await captureResult(page, 'textContent');
   if (result.status === 'error' || result.status === 'unusable') {
-    let error = JSON.parse(result.value) as CardErrorJSONAPI;
-    const err: RenderError = {
-      ...(error as unknown as RenderError),
-      error: error.message,
-      evict: result.status === 'unusable',
-    };
-    return err;
+    let error = JSON.parse(result.value) as RenderError;
+    error.evict = result.status === 'unusable';
+    return error;
   }
   return JSON.parse(result.value) as PrerenderMeta;
 }
@@ -101,13 +73,13 @@ export async function renderAncestors(
   format: 'embedded' | 'fitted',
   types: string[],
 ): Promise<Record<string, string> | RenderError> {
-  let out: Record<string, string> = {};
+  let ancestors: Record<string, string> = {};
   for (let i = 0; i < types.length; i++) {
     let res = await renderHTML(page, format, i);
     if (isRenderError(res)) return res;
-    out[types[i]] = res as string;
+    ancestors[types[i]] = res as string;
   }
-  return out;
+  return ancestors;
 }
 
 export async function captureResult(
@@ -201,17 +173,11 @@ export async function withTimeout<T>(
     let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
     return {
-      error: message,
-      id,
-      status: 504,
-      title: 'Render timeout',
-      message,
-      realm: undefined,
-      meta: {
-        lastKnownGoodHtml: null,
-        cardTitle: null,
-        scopedCssUrls: [],
-        stack: null,
+      error: {
+        id,
+        status: 504,
+        title: 'Render timeout',
+        message,
       },
       evict: true,
     } as RenderError;

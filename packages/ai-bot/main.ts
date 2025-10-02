@@ -49,13 +49,11 @@ import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
 import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireLock, releaseLock } from './lib/queries';
-import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
+import { DebugLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import { type MatrixClient } from 'matrix-js-sdk';
-
-// Silence FetchHttpApi Matrix SDK logs
-matrixLogger.setLevel('warn');
+import { debug } from 'debug';
 
 let log = logger('ai-bot');
 
@@ -134,17 +132,30 @@ class Assistant {
       (prompt.model && !this.toolCallCapableModels.has(prompt.model))
     ) {
       return this.openai.chat.completions.stream({
-        model: prompt.model ?? DEFAULT_LLM,
+        model: this.getModel(prompt),
         messages: prompt.messages as ChatCompletionMessageParam[],
+        reasoning_effort: this.getReasoningEffort(prompt),
       });
     } else {
       return this.openai.chat.completions.stream({
-        model: prompt.model ?? DEFAULT_LLM,
+        model: this.getModel(prompt),
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
         tool_choice: prompt.toolChoice,
+        reasoning_effort: this.getReasoningEffort(prompt),
       });
     }
+  }
+
+  getModel(prompt: PromptParts) {
+    return prompt.model ?? DEFAULT_LLM;
+  }
+
+  // TODO: This function is used to avoid a thinking model of gpt-5.
+  // Remove this function after we have LLM environment.
+  getReasoningEffort(prompt: PromptParts) {
+    let model = this.getModel(prompt);
+    return model === 'openai/gpt-5' ? 'minimal' : undefined;
   }
 
   async handleDebugCommands(
@@ -176,8 +187,12 @@ let assistant: Assistant;
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
+  let matrixDebugLogger = !process.env.DISABLE_MATRIX_JS_LOGGING
+    ? new DebugLogger(debug(`matrix-js-sdk:${aiBotUsername}`))
+    : undefined;
   let client = createClient({
     baseUrl: matrixUrl,
+    logger: matrixDebugLogger,
   });
   let auth = await client
     .loginWithPassword(

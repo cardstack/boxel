@@ -42,6 +42,8 @@ import {
   type DirectoryMeta,
   type ResolvedCodeRef,
   type FieldDefinition,
+  type RealmPermissions,
+  type RealmAction,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
@@ -1028,7 +1030,7 @@ export class Realm {
     );
 
     let userIds = Object.entries(permissions)
-      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
+      .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
       .map(([userId]) => userId);
     if (userIds.length > 1) {
       // we want to use the realm's human owner for the realm and not the bot

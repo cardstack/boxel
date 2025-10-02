@@ -1,7 +1,6 @@
 import Component from '@glimmer/component';
 
 import { format } from 'date-fns';
-// @ts-expect-error this package's types do not work under moduleResolution nodeNext
 import { filesize } from 'filesize';
 
 import { File } from '@cardstack/boxel-ui/icons';

@@ -41,7 +41,7 @@ class Edit extends Component<typeof DropdownField> {
   get menuItems() {
     return this.args.model.options?.map((v: string) =>
       menuItemFunc([v, () => (this.args.model.selectedValue = v)], {
-        selected: this.args.model.selectedValue === v,
+        checked: this.args.model.selectedValue === v,
       }),
     );
   }
@@ -128,6 +128,7 @@ export class PlantInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

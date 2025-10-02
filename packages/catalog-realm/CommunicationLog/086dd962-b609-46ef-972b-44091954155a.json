@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CommunicationLog",
+        "module": "../news-feed/communication-log"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "author": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

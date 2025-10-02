@@ -1,6 +1,8 @@
 import {
   type PrerenderMeta,
-  type CardErrorJSONAPI,
+  type RealmPermissions,
+  type RenderResponse,
+  type RenderError,
   uuidv4,
   logger,
   Deferred,
@@ -19,26 +21,12 @@ import {
   renderIcon,
   renderMeta,
   RenderCapture,
-  RenderError,
   withTimeout,
   transitionTo,
 } from './utils';
 
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
-
-export type PermissionsMap = {
-  [realm: string]: ('read' | 'write' | 'realm-owner')[];
-};
-
-export interface RenderResponse extends PrerenderMeta {
-  isolatedHTML: string | null;
-  atomHTML: string | null;
-  embeddedHTML: Record<string, string> | null;
-  fittedHTML: Record<string, string> | null;
-  iconHTML: string | null;
-  error?: RenderError;
-}
 
 export class Prerenderer {
   #browser: Browser | null = null;
@@ -75,11 +63,11 @@ export class Prerenderer {
     this.#evictionMetrics.byRealm.set(realm, current);
   }
 
-  #evictionReason(err: RenderError): 'timeout' | 'unusable' | null {
-    if (err.title === 'Render timeout') {
+  #evictionReason(renderError: RenderError): 'timeout' | 'unusable' | null {
+    if (renderError.error.title === 'Render timeout') {
       return 'timeout';
     }
-    if (err.evict) {
+    if (renderError.evict) {
       return 'unusable';
     }
     return null;
@@ -124,10 +112,9 @@ export class Prerenderer {
 
   #captureToError(capture: RenderCapture): RenderError | undefined {
     if (capture.status === 'error' || capture.status === 'unusable') {
-      let parsed = JSON.parse(capture.value) as CardErrorJSONAPI;
+      let parsed = JSON.parse(capture.value) as RenderError;
       return {
         ...(parsed as unknown as RenderError),
-        error: parsed.message,
         evict: capture.status === 'unusable',
       };
     }
@@ -206,7 +193,7 @@ export class Prerenderer {
     realm: string;
     url: string;
     userId: string;
-    permissions: PermissionsMap;
+    permissions: RealmPermissions;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
   }): Promise<{
     response: RenderResponse;
@@ -309,7 +296,8 @@ export class Prerenderer {
         let meta: PrerenderMeta = {
           serialized: null,
           searchDoc: null,
-          displayName: null,
+          displayNames: null,
+          deps: null,
           types: null,
         };
         return {
@@ -361,7 +349,8 @@ export class Prerenderer {
         meta = {
           serialized: null,
           searchDoc: null,
-          displayName: null,
+          displayNames: null,
+          deps: null,
           types: null,
         };
       } else {

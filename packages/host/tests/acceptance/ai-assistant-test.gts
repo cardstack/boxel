@@ -36,6 +36,7 @@ import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupAuthEndpoints,
   setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -90,6 +91,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     directRooms: [
       getRoomIdForRealmAndUser(testRealmURL, '@testuser:localhost'),
       getRoomIdForRealmAndUser(baseRealm.url, '@testuser:localhost'),
+      'test-auth-realm-server-session-room',
     ],
   });
 
@@ -181,7 +183,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -580,6 +583,50 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor("[data-test-enter-room='mock_room_1']");
     await click('[data-test-enter-room="mock_room_1"]');
     assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
+  });
+
+  test('defaults to openai/gpt-5 in interact mode', async function (assert) {
+    let defaultInteractLLMId = DEFAULT_LLM;
+    let defaultInteractLLMName = DEFAULT_LLM_ID_TO_NAME[defaultInteractLLMId];
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    // Interact mode is default, verify the LLM is set correctly
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
+
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test-2',
+    });
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor("[data-test-enter-room='mock_room_1']");
+    await click('[data-test-enter-room="mock_room_1"]');
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
+
+    // Switch to Code mode and back to Interact mode to verify LLM changes
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
   });
 
   test('auto-attached file is not displayed in interact mode', async function (assert) {
@@ -2871,6 +2918,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-option="Copy File History"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitFor('[data-test-user-message]');
 
     const thirdRoomId = matrixService.currentRoomId;
     assert.ok(thirdRoomId, 'Should have third room ID');

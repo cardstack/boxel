@@ -75,6 +75,7 @@ interface Signature {
         updateSubmode: (submode: Submode) => void;
       },
     ];
+    topBar: [];
   };
 }
 
@@ -384,7 +385,7 @@ export default class SubmodeLayout extends Component<Signature> {
         as |ResizablePanel ResizeHandle|
       >
         <ResizablePanel class='main-panel'>
-          <div class='top-left-menu'>
+          <div class='top-bar'>
             <IconButton
               @icon={{BoxelIcon}}
               @width='40px'
@@ -417,7 +418,20 @@ export default class SubmodeLayout extends Component<Signature> {
                   }}
                 />
               {{/if}}
+              {{yield to='topBar'}}
             {{/if}}
+
+            <button
+              class='profile-icon-button'
+              {{on 'click' this.toggleProfileSummary}}
+              data-test-profile-icon-button
+            >
+              <Avatar
+                @isReady={{this.matrixService.profile.loaded}}
+                @userId={{this.matrixService.userId}}
+                @displayName={{this.matrixService.profile.displayName}}
+              />
+            </button>
           </div>
           {{#if this.workspaceChooserOpened}}
             <WorkspaceChooser />
@@ -430,17 +444,6 @@ export default class SubmodeLayout extends Component<Signature> {
               updateSubmode=this.updateSubmode
             )
           }}
-          <button
-            class='profile-icon-button'
-            {{on 'click' this.toggleProfileSummary}}
-            data-test-profile-icon-button
-          >
-            <Avatar
-              @isReady={{this.matrixService.profile.loaded}}
-              @userId={{this.matrixService.userId}}
-              @displayName={{this.matrixService.profile.displayName}}
-            />
-          </button>
           {{#if @onCardSelectFromSearch}}
             <SearchSheet
               @mode={{this.searchSheetMode}}
@@ -462,18 +465,20 @@ export default class SubmodeLayout extends Component<Signature> {
               <AskAiContainer />
             {{/if}}
           {{/if}}
-          <AiAssistantButton
-            class='chat-btn'
-            @isActive={{this.aiAssistantPanelService.isOpen}}
-            {{on
-              'click'
-              (if
-                this.aiAssistantPanelService.isOpen
-                this.aiAssistantPanelService.closePanel
-                this.aiAssistantPanelService.openPanel
-              )
-            }}
-          />
+          {{#if (not this.aiAssistantPanelService.isAiAssistantHidden)}}
+            <AiAssistantButton
+              class='chat-btn'
+              @isActive={{this.aiAssistantPanelService.isOpen}}
+              {{on
+                'click'
+                (if
+                  this.aiAssistantPanelService.isOpen
+                  this.aiAssistantPanelService.closePanel
+                  this.aiAssistantPanelService.openPanel
+                )
+              }}
+            />
+          {{/if}}
           {{#if this.profileSummaryOpened}}
             <ProfileInfoPopover
               {{onClickOutside
@@ -535,6 +540,8 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .main-panel {
+        display: flex;
+        flex-direction: column;
         position: relative;
       }
 
@@ -555,24 +562,14 @@ export default class SubmodeLayout extends Component<Signature> {
         z-index: var(--host-ai-panel-z-index);
       }
 
-      .top-left-menu {
-        width: var(--operator-mode-left-column);
-        position: absolute;
-        top: 0;
-        left: 0;
+      .top-bar {
+        width: 100%;
         padding: var(--operator-mode-spacing);
-        z-index: var(--host-top-left-menu-z-index);
+        z-index: var(--host-top-bar-z-index);
 
         display: flex;
         align-items: center;
-      }
-      .top-left-menu
-        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
-        margin-left: var(--operator-mode-spacing);
-      }
-
-      .code-submode-layout .top-left-menu {
-        background-color: var(--code-mode-top-bar-background-color);
+        gap: var(--operator-mode-spacing);
       }
 
       .boxel-title {
@@ -604,11 +601,12 @@ export default class SubmodeLayout extends Component<Signature> {
       .profile-icon-button {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
-        position: absolute;
-        top: var(--operator-mode-spacing);
-        right: var(--operator-mode-spacing);
-        padding: 0;
+
         background: none;
+
+        padding: 0;
+        margin-left: auto;
+
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
