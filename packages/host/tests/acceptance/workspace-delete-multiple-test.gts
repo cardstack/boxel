@@ -1,7 +1,6 @@
 import { click, findAll, triggerEvent, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { pauseTest } from 'ember-testing/lib/helpers/pause_test';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -208,7 +207,6 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .dom('.utility-menu-trigger')
       .doesNotExist('Selection summary is cleared after deselect');
 
-    pauseTest();
     // Verify overlay checkboxes are not checked
     assert.dom('[data-test-overlay-card]').doesNotExist();
   });
