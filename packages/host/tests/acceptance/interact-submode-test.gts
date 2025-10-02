@@ -971,14 +971,8 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await click('[data-test-boxel-filter-list-button="All Cards"]');
       // Simulate simultaneous clicks for spam-clicking
-      await Promise.all([
-        click(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-        ),
-        click(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-        ),
-      ]);
+      let cardSelector = `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`;
+      await Promise.all([click(cardSelector), click(cardSelector)]);
 
       assert
         .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
@@ -1275,7 +1269,9 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-boxel-menu-item-text="New Card of This Type"]')
         .doesNotExist();
-      await click(`[data-cards-grid-item="${testRealm2URL}Pet/ringo"]`);
+      await click(
+        `[data-cards-grid-item="${testRealm2URL}Pet/ringo"] .field-component-card`,
+      );
       assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
 
       await click('[data-test-more-options-button]');
@@ -1632,7 +1628,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         '[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]',
       );
       await triggerEvent(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"] .field-component-card`,
         'mouseenter',
       );
       assert
