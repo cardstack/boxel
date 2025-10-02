@@ -104,22 +104,7 @@
       },
      "examples.0": {
         "links": {
-          "self": "../avatar-creator/AvatarCreator/pichu"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../avatar-creator/AvatarCreator/zara-nightshade"
-        }
-      },
-      "examples.2": {
-        "links": {
           "self": "../avatar-creator/AvatarCreator/luna-starweaver"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../avatar-creator/AvatarCreator/magnus-stormbeard"
         }
       },
       "categories.0": {
