@@ -477,7 +477,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
           'Inter',
           -apple-system,
           sans-serif;
-        background: #fafbfc;
+        background: var(--background, #fafbfc);
       }
 
       .spreadsheet-header {
@@ -485,8 +485,8 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         justify-content: space-between;
         align-items: center;
         padding: 1rem 1.5rem;
-        background: white;
-        border-bottom: 1px solid #e5e7eb;
+        background: var(--card, #ffffff);
+        border-bottom: 1px solid var(--border, #e5e7eb);
         flex-shrink: 0;
       }
 
@@ -500,7 +500,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         margin: 0;
         font-size: 1.25rem;
         font-weight: 600;
-        color: #111827;
+        color: var(--foreground, #111827);
       }
 
       .save-status {
@@ -511,13 +511,13 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       }
 
       .save-status.success {
-        background: #dcfce7;
-        color: #166534;
+        background: var(--success, #dcfce7);
+        color: var(--success-foreground, #166534);
       }
 
       .save-status.pending {
-        background: #fef3c7;
-        color: #92400e;
+        background: var(--warning, #fef3c7);
+        color: var(--warning-foreground, #92400e);
       }
 
       .data-stats {
@@ -536,8 +536,8 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
 
       .add-button {
         padding: 0.5rem 1rem;
-        background: #3b82f6;
-        color: white;
+        background: var(--primary, #3b82f6);
+        color: var(--primary-foreground, #ffffff);
         border: none;
         border-radius: 0.375rem;
         font-size: 0.875rem;
@@ -547,14 +547,14 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       }
 
       .add-button:hover {
-        background: #2563eb;
+        background: var(--primary-hover, #2563eb);
       }
 
       .delimiter-field {
         display: inline-flex;
         align-items: center;
         gap: 0.375rem;
-        background: #f3f4f6;
+        background: var(--muted, #f3f4f6);
         padding: 0.25rem 0.5rem;
         border-radius: 0.375rem;
         position: relative;
@@ -562,15 +562,15 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
 
       .delimiter-label {
         font-size: 0.75rem;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
       }
 
       .delimiter-input {
         width: 4rem;
         padding: 0.25rem 0.5rem;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--border, #e5e7eb);
         border-radius: 0.375rem;
-        background: white;
+        background: var(--card, #ffffff);
         font-size: 0.8125rem;
       }
 
@@ -579,8 +579,8 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         align-items: center;
         gap: 0.375rem;
         padding: 0.5rem 1rem;
-        background: #10b981;
-        color: white;
+        background: var(--secondary, #10b981);
+        color: var(--secondary-foreground, #ffffff);
         border-radius: 0.375rem;
         font-size: 0.875rem;
         font-weight: 500;
@@ -589,7 +589,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       }
 
       .import-label:hover {
-        background: #059669;
+        background: var(--secondary-hover, #059669);
       }
 
       .help-button {
@@ -599,16 +599,16 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         width: 1.5rem;
         height: 1.5rem;
         border-radius: 0.375rem;
-        border: 1px solid #e5e7eb;
-        background: white;
-        color: #374151;
+        border: 1px solid var(--border, #e5e7eb);
+        background: var(--card, #ffffff);
+        color: var(--foreground, #374151);
         font-weight: 600;
         cursor: pointer;
         position: relative;
       }
 
       .help-button:hover {
-        background: #f3f4f6;
+        background: var(--muted, #f3f4f6);
       }
 
       .delimiter-tooltip {
@@ -616,8 +616,8 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         top: calc(100% + 0.5rem);
         right: 0;
         z-index: 1000;
-        background: white;
-        border: 1px solid #e5e7eb;
+        background: var(--popover, #ffffff);
+        border: 1px solid var(--border, #e5e7eb);
         border-radius: 0.5rem;
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         min-width: 16rem;
@@ -633,7 +633,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         height: 0;
         border-left: 0.5rem solid transparent;
         border-right: 0.5rem solid transparent;
-        border-bottom: 0.5rem solid #e5e7eb;
+        border-bottom: 0.5rem solid var(--border, #e5e7eb);
       }
 
       .delimiter-tooltip::after {
@@ -645,7 +645,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         height: 0;
         border-left: 0.375rem solid transparent;
         border-right: 0.375rem solid transparent;
-        border-bottom: 0.375rem solid white;
+        border-bottom: 0.375rem solid var(--popover, #ffffff);
       }
 
       .tooltip-content {
@@ -661,7 +661,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         height: 1.25rem;
         border: none;
         background: none;
-        color: #9ca3af;
+        color: var(--muted-foreground, #9ca3af);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -672,15 +672,15 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       }
 
       .close-button:hover {
-        background: #f3f4f6;
-        color: #374151;
+        background: var(--muted, #f3f4f6);
+        color: var(--foreground, #374151);
       }
 
       .tooltip-header {
         margin-bottom: 0.75rem;
         padding-right: 1.5rem;
         font-size: 0.875rem;
-        color: #111827;
+        color: var(--popover-foreground, #111827);
       }
 
       .delimiter-options {
@@ -699,30 +699,30 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       }
 
       .delimiter-row code {
-        background: #f3f4f6;
+        background: var(--muted, #f3f4f6);
         padding: 0.125rem 0.25rem;
         border-radius: 0.25rem;
         font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
         font-size: 0.75rem;
-        color: #1f2937;
+        color: var(--foreground, #1f2937);
       }
 
       .delimiter-row .example {
         font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
         font-size: 0.75rem;
-        color: #6b7280;
-        background: #f9fafb;
+        color: var(--muted-foreground, #6b7280);
+        background: var(--background, #f9fafb);
         padding: 0.125rem 0.25rem;
         border-radius: 0.25rem;
       }
 
       .tooltip-tip {
         font-size: 0.75rem;
-        color: #3b82f6;
-        background: #eff6ff;
+        color: var(--primary, #3b82f6);
+        background: var(--primary-background, #eff6ff);
         padding: 0.5rem;
         border-radius: 0.25rem;
-        border-left: 3px solid #3b82f6;
+        border-left: 3px solid var(--primary, #3b82f6);
       }
 
       @keyframes tooltipFadeIn {
@@ -743,10 +743,10 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       .table-wrapper {
         flex: 1;
         overflow: auto;
-        background: white;
+        background: var(--card, #ffffff);
         margin: 0 1.5rem 1.5rem;
         border-radius: 0.5rem;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--border, #e5e7eb);
       }
 
       .spreadsheet-table {
@@ -757,20 +757,20 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       }
 
       .header-row {
-        background: #f9fafb;
+        background: var(--muted, #f9fafb);
         position: sticky;
         top: 0;
         z-index: 10;
       }
 
       .row-number {
-        background: #f3f4f6;
+        background: var(--muted, #f3f4f6);
         width: 50px;
         text-align: center;
         font-weight: 600;
-        color: #6b7280;
-        border-bottom: 1px solid #e5e7eb;
-        border-right: 1px solid #e5e7eb;
+        color: var(--muted-foreground, #6b7280);
+        border-bottom: 1px solid var(--border, #e5e7eb);
+        border-right: 1px solid var(--border, #e5e7eb);
         padding: 0.5rem 0.25rem;
         position: sticky;
         left: 0;
@@ -780,9 +780,9 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       .column-header {
         min-width: 120px;
         padding: 0.5rem;
-        border-bottom: 1px solid #e5e7eb;
-        border-right: 1px solid #e5e7eb;
-        background: #f9fafb;
+        border-bottom: 1px solid var(--border, #e5e7eb);
+        border-right: 1px solid var(--border, #e5e7eb);
+        background: var(--muted, #f9fafb);
       }
 
       .header-input {
@@ -790,13 +790,13 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         border: none;
         background: transparent;
         font-weight: 600;
-        color: #374151;
+        color: var(--foreground, #374151);
         font-size: 0.875rem;
         padding: 0.25rem;
       }
 
       .header-input:focus {
-        outline: 2px solid #3b82f6;
+        outline: 2px solid var(--primary, #3b82f6);
         outline-offset: -2px;
         border-radius: 0.25rem;
       }
@@ -804,7 +804,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       .header-display {
         width: 100%;
         font-weight: 600;
-        color: #374151;
+        color: var(--foreground, #374151);
         font-size: 0.875rem;
         padding: 0.25rem;
         cursor: text;
@@ -814,18 +814,18 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       }
 
       .header-display:hover {
-        background: #f3f4f6;
+        background: var(--accent, #f3f4f6);
         border-radius: 0.25rem;
       }
 
       .data-row:nth-child(even) {
-        background: #f9fafb;
+        background: var(--muted, #f9fafb);
       }
 
       .data-cell {
         min-width: 120px;
-        border-bottom: 1px solid #e5e7eb;
-        border-right: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--border, #e5e7eb);
+        border-right: 1px solid var(--border, #e5e7eb);
         padding: 0;
         vertical-align: top;
       }
@@ -843,7 +843,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       }
 
       .cell-display:hover {
-        background: #f3f4f6;
+        background: var(--accent, #f3f4f6);
       }
 
       .cell-input {
@@ -853,20 +853,20 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         font-size: 0.875rem;
         min-height: 2.25rem;
         resize: none;
-        outline: 2px solid #3b82f6;
+        outline: 2px solid var(--primary, #3b82f6);
         outline-offset: -2px;
       }
 
       .spreadsheet-footer {
         padding: 0.75rem 1.5rem;
-        background: white;
-        border-top: 1px solid #e5e7eb;
+        background: var(--card, #ffffff);
+        border-top: 1px solid var(--border, #e5e7eb);
         flex-shrink: 0;
       }
 
       .file-info {
         font-size: 0.875rem;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
       }
 
       .empty-state {
@@ -876,7 +876,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
         justify-content: center;
         height: 400px;
         text-align: center;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
       }
 
       .empty-icon {
@@ -888,7 +888,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
       .empty-title {
         font-size: 1.125rem;
         font-weight: 600;
-        color: #374151;
+        color: var(--foreground, #374151);
         margin-bottom: 0.5rem;
       }
 
@@ -984,9 +984,9 @@ export class Spreadsheet extends CardDef {
       <style scoped>
         .spreadsheet-preview {
           padding: 1rem;
-          background: white;
+          background: var(--card, #ffffff);
           border-radius: 0.5rem;
-          border: 1px solid #e5e7eb;
+          border: 1px solid var(--border, #e5e7eb);
         }
 
         .preview-header {
@@ -1000,19 +1000,19 @@ export class Spreadsheet extends CardDef {
           margin: 0;
           font-size: 1rem;
           font-weight: 600;
-          color: #111827;
+          color: var(--foreground, #111827);
         }
 
         .filename {
           font-size: 0.75rem;
-          color: #6b7280;
-          background: #f3f4f6;
+          color: var(--muted-foreground, #6b7280);
+          background: var(--muted, #f3f4f6);
           padding: 0.25rem 0.5rem;
           border-radius: 0.25rem;
         }
 
         .preview-content {
-          color: #6b7280;
+          color: var(--muted-foreground, #6b7280);
           font-size: 0.875rem;
         }
 
@@ -1155,21 +1155,21 @@ export class Spreadsheet extends CardDef {
         .primary-text {
           font-size: 1em;
           font-weight: 600;
-          color: #111827;
+          color: var(--foreground, #111827);
           line-height: 1.2;
         }
 
         .secondary-text {
           font-size: 0.875em;
           font-weight: 500;
-          color: #6b7280;
+          color: var(--muted-foreground, #6b7280);
           line-height: 1.3;
         }
 
         .tertiary-text {
           font-size: 0.75em;
           font-weight: 400;
-          color: #9ca3af;
+          color: var(--muted-foreground, #9ca3af);
           line-height: 1.4;
         }
 
@@ -1195,7 +1195,7 @@ export class Spreadsheet extends CardDef {
         .card-footer {
           margin-top: auto;
           padding-top: 0.5rem;
-          border-top: 1px solid #f3f4f6;
+          border-top: 1px solid var(--border, #f3f4f6);
         }
       </style>
     </template>
