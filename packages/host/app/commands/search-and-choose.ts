@@ -1,12 +1,14 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { logger } from '@cardstack/runtime-common';
+import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import { SearchCardsByTypeAndTitleCommand } from './search-cards';
+
 import OneShotLlmRequestCommand from './one-shot-llm-request';
+import { SearchCardsByTypeAndTitleCommand } from './search-cards';
 
 import type StoreService from '../services/store';
 
