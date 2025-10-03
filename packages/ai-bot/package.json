@@ -6,9 +6,10 @@
     "@cardstack/runtime-common": "workspace:*",
     "@sentry/node": "catalog:",
     "@types/lodash": "catalog:",
-    "@types/node": "^18.18.5",
+    "@types/node": "catalog:",
     "@types/stream-chain": "catalog:",
     "@types/stream-json": "catalog:",
+    "debug": "^4.4.3",
     "lodash": "catalog:",
     "matrix-js-sdk": "catalog:",
     "openai": "catalog:",
@@ -16,16 +17,19 @@
     "stream-chain": "catalog:",
     "stream-json": "catalog:",
     "ts-node": "^10.9.2",
-    "typescript": "~5.8.3"
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@sinonjs/fake-timers": "catalog:",
+    "@types/debug": "^4.1.12",
     "@types/fs-extra": "catalog:",
+    "@types/pg": "catalog:",
     "@types/qunit": "catalog:",
     "@types/sinonjs__fake-timers": "catalog:",
     "concurrently": "catalog:",
     "fs-extra": "catalog:",
+    "pg": "catalog:",
     "qunit": "^2.24.1"
   },
   "scripts": {

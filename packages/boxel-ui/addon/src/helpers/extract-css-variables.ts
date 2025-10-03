@@ -1,5 +1,3 @@
-import { isTesting } from '@embroider/macros';
-
 function normalizeSelector(selectorName: string): string {
   const selector = selectorName.trim();
   if (selector === ':root' || selector === 'root') {
@@ -88,33 +86,4 @@ export function extractCssVariables(cssString?: string | null) {
     console.error('Error extracting CSS variables:', e);
     return;
   }
-}
-
-export function getStyleConversions() {
-  if (isTesting()) {
-    return '--boxel-example: 1px;'; // stable, concise output for matching in tests
-  }
-  return `/* spacing */
---boxel-spacing: calc(var(--spacing, var(--_boxel-sp-unit)) * 4);
---boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio));
---boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio));
---boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio));
---boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio));
---boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));
---boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio));
---boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio));
---boxel-sp: var(--boxel-spacing);
---boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio));
---boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio));
---boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));
---boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio));
-/* border-radius */
---boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
---boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
---boxel-border-radius-sm: calc(var(--boxel-border-radius) - 3px);
---boxel-border-radius: var(--radius, var(--_boxel-radius));
---boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
---boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
---boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
---boxel-form-control-border-radius: var(--radius, var(--_boxel-radius));`;
 }

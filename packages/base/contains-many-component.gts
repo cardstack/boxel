@@ -29,7 +29,6 @@ import {
   isCardInstance,
 } from '@cardstack/runtime-common';
 import { IconTrash, FourLines } from '@cardstack/boxel-ui/icons';
-import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { task } from 'ember-concurrency';
 import { action } from '@ember/object';
 import {
@@ -299,7 +298,7 @@ export function getContainsManyComponent({
     }
     return (format ?? defaultFormat) === 'edit';
   }
-  let containsManyComponent: TemplateOnlyComponent<BoxComponentSignature> =
+  let containsManyComponent = class ContainsManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
         {{setOverrides model.value}}
@@ -351,7 +350,8 @@ export function getContainsManyComponent({
           }
         }
       </style>
-    </template>;
+    </template>
+  };
   return new Proxy(containsManyComponent, {
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a

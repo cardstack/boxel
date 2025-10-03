@@ -11,7 +11,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
 import type {
   GetAllRealmMetasResult,
@@ -34,6 +34,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import AppListingHeader from '../components/app-listing-header';
 import ChooseRealmAction from '../components/choose-realm-action';
 import { ListingFittedTemplate } from '../components/listing-fitted';
+import ListOfPills from '../components/list-of-pills';
 import { listingActions, isReady } from '../resources/listing-actions';
 
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
@@ -91,7 +92,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get specBreakdown() {
     if (!this.args.model.specs) {
-      return {} as Record<SpecType, Spec[]>;
+      return {} as Record<string, Spec[]>;
     }
     return specBreakdown(this.args.model.specs);
   }
@@ -115,6 +116,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get hasCategories() {
     return Boolean(this.args.model.categories?.length);
+  }
+
+  get hasTags() {
+    return Boolean(this.args.model.tags?.length);
   }
 
   get hasImages() {
@@ -284,25 +289,29 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       <hr class='divider' />
 
-      <section
-        class='app-listing-categories'
-        data-test-catalog-listing-embedded-categories-section
-      >
-        <h2>Categories</h2>
-        {{#if this.hasCategories}}
-          <ul
-            class='categories-list'
-            data-test-catalog-listing-embedded-categories
-          >
-            {{#each @model.categories as |category|}}
-              <li class='categories-item'>
-                <Pill>{{category.name}}</Pill>
-              </li>
-            {{/each}}
-          </ul>
-        {{else}}
-          <p class='no-data-text'>No Categories Provided</p>
-        {{/if}}
+      <section class='two-col'>
+        <section
+          class='app-listing-categories'
+          data-test-catalog-listing-embedded-categories-section
+        >
+          <h2>Categories</h2>
+          {{#if this.hasCategories}}
+            <ListOfPills @items={{@model.categories}} />
+          {{else}}
+            <p class='no-data-text'>No Categories Provided</p>
+          {{/if}}
+        </section>
+        <section
+          class='app-listing-tags'
+          data-test-catalog-listing-embedded-tags-section
+        >
+          <h2>Tags</h2>
+          {{#if this.hasTags}}
+            <ListOfPills @items={{@model.tags}} />
+          {{else}}
+            <p class='no-data-text'>No Tags Provided</p>
+          {{/if}}
+        </section>
       </section>
 
       <hr class='divider' />
@@ -428,13 +437,17 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         border: 0.5px solid var(--boxel-200);
       }
 
+      /* horizontally scrollable images list */
       .images-list {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        display: flex;
+        flex-wrap: nowrap;
         gap: var(--boxel-sp);
         list-style: none;
-        margin-block: 0;
-        padding-inline-start: 0;
+        margin: 0;
+        padding: 0 0 var(--boxel-sp-xs) 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
       }
       .images-item {
         background-color: var(--boxel-200);
@@ -444,7 +457,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         padding: var(--boxel-sp-sm);
         display: flex;
         align-items: center;
-        min-height: 160px;
+        justify-content: center;
+        flex: 0 0 30%;
+        min-width: 200px;
       }
       .images-item img {
         width: 100%;
@@ -474,15 +489,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         min-height: 180px;
       }
 
-      .categories-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-sm);
-        list-style: none;
-        margin-block: 0;
-        padding-inline-start: 0;
-      }
-
       .skills-list {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -490,6 +496,18 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         list-style: none;
         margin-block: 0;
         padding-inline-start: 0;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--boxel-sp-xxl);
+        margin-top: var(--boxel-sp);
+        align-items: start;
+      }
+      .two-col .app-listing-categories,
+      .two-col .app-listing-tags {
+        min-width: 0;
       }
 
       .app-listing-spec-breakdown :deep(.accordion) {
@@ -502,16 +520,12 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         }
         .license-statistic,
         .stats-container,
-        .pricing-plans,
-        .images-list {
+        .pricing-plans {
           grid-template-columns: repeat(2, 1fr);
         }
       }
 
       @container app-listing-embedded (inline-size <= 360px) {
-        .images-list {
-          grid-template-columns: repeat(1, 1fr);
-        }
         .examples-list {
           grid-template-columns: 1fr;
         }
@@ -562,19 +576,19 @@ export class SkillListing extends Listing {
   static displayName = 'SkillListing';
 }
 
-function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {
+function specBreakdown(specs: Spec[]): Record<string, Spec[]> {
   return specs.reduce(
     (groupedSpecs, spec) => {
       if (!spec) {
         return groupedSpecs;
       }
-      const specType = spec.specType as SpecType;
-      if (!groupedSpecs[specType]) {
-        groupedSpecs[specType] = [];
+      let key = spec.specType ?? 'unknown';
+      if (!groupedSpecs[key]) {
+        groupedSpecs[key] = [];
       }
-      groupedSpecs[specType].push(spec);
+      groupedSpecs[key].push(spec);
       return groupedSpecs;
     },
-    {} as Record<SpecType, Spec[]>,
+    {} as Record<string, Spec[]>,
   );
 }

@@ -31,11 +31,14 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import type MonacoService from '@cardstack/host/services/monaco-service';
+
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupAuthEndpoints,
   setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -90,6 +93,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     directRooms: [
       getRoomIdForRealmAndUser(testRealmURL, '@testuser:localhost'),
       getRoomIdForRealmAndUser(baseRealm.url, '@testuser:localhost'),
+      'test-auth-realm-server-session-room',
     ],
   });
 
@@ -181,7 +185,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -413,8 +418,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     //Test the scenario where there is an update to the card
     await click(
-      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"] .field-component-card`,
     );
+    await waitFor(`[data-test-stack-card="${testCard}"]`);
 
     await click(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`);
     await fillIn(
@@ -582,6 +588,50 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
   });
 
+  test('defaults to openai/gpt-5 in interact mode', async function (assert) {
+    let defaultInteractLLMId = DEFAULT_LLM;
+    let defaultInteractLLMName = DEFAULT_LLM_ID_TO_NAME[defaultInteractLLMId];
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    // Interact mode is default, verify the LLM is set correctly
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
+
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test-2',
+    });
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor("[data-test-enter-room='mock_room_1']");
+    await click('[data-test-enter-room="mock_room_1"]');
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
+
+    // Switch to Code mode and back to Interact mode to verify LLM changes
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
+  });
+
   test('auto-attached file is not displayed in interact mode', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
@@ -598,7 +648,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
-      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"] .field-component-card',
     );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
@@ -632,10 +682,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
-      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"] .field-component-card',
     );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-autoattached-card]') ||
+        document.querySelector('[data-test-autoattached-file]'),
+    );
     assert.dom('[data-test-autoattached-file]').doesNotExist();
     assert.dom('[data-test-autoattached-card]').exists();
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
@@ -706,10 +761,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
-      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"] .field-component-card',
     );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-autoattached-card]') ||
+        document.querySelector('[data-test-autoattached-file]'),
+    );
 
     await fillIn('[data-test-message-field]', `Message with updated card`);
     await click('[data-test-send-message-btn]');
@@ -755,6 +815,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
+    await (getService('monaco-service') as MonacoService).getMonacoContext();
 
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -957,7 +1018,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
     await click('[data-test-boxel-filter-list-button="All Cards"]');
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-autoattached-file]').doesNotExist();
@@ -1073,7 +1136,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
     await click('[data-test-boxel-filter-list-button="All Cards"]');
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
@@ -1122,7 +1187,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
     await click('[data-test-boxel-filter-list-button="All Cards"]');
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
@@ -1183,7 +1250,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
     await click('[data-test-boxel-filter-list-button="All Cards"]');
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
@@ -1257,7 +1326,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
     await click('[data-test-boxel-filter-list-button="All Cards"]');
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
@@ -2871,6 +2942,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-option="Copy File History"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitFor('[data-test-user-message]');
 
     const thirdRoomId = matrixService.currentRoomId;
     assert.ok(thirdRoomId, 'Should have third room ID');
