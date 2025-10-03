@@ -7,24 +7,13 @@ import {
 } from '../middleware';
 import { CreateRoutesArgs } from '../routes';
 import { validateSubdomain } from '../lib/user-subdomain-validation';
+import { getEnvironmentDomain } from '../lib/environment-domain';
 
 type CheckSiteNameAvailabilityResponse = {
   available: boolean;
   hostname: string;
   error?: string;
 };
-
-function getEnvironmentDomain(): string {
-  const nodeEnv = process.env.NODE_ENV;
-
-  if (nodeEnv === 'production') {
-    return 'boxel.site';
-  } else if (nodeEnv === 'staging') {
-    return 'staging.boxel.build';
-  } else {
-    return 'boxel.dev.localhost';
-  }
-}
 
 export function handleCheckSiteNameAvailabilityRequest({
   dbAdapter,

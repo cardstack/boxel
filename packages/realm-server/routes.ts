@@ -32,6 +32,7 @@ import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
 import { handleCheckSiteNameAvailabilityRequest } from './handlers/handle-check-site-name-availability';
 import handleRealmAuth from './handlers/handle-realm-auth';
+import handleClaimBoxelSiteHostnameRequest from './handlers/handle-claim-boxel-site-hostname';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -149,6 +150,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_check-site-name-availability',
     jwtMiddleware(args.realmSecretSeed),
     handleCheckSiteNameAvailabilityRequest(args),
+  );
+  router.post(
+    '/_claim-boxel-site-hostname',
+    jwtMiddleware(args.realmSecretSeed),
+    handleClaimBoxelSiteHostnameRequest(args),
   );
   router.post(
     '/_realm-auth',
