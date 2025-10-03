@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "DataExplorer",
+        "module": "../app/data-explorer"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "codeRef": {
+        "name": "Listing",
+        "module": "../catalog-app/listing/listing"
+      },
+      "cardInfo": {
+        "notes": "",
+        "title": "",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "showClean": false,
+      "showComputedFields": true,
+      "showPrimitivesOnly": false
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
