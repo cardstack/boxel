@@ -276,7 +276,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         width: 100%;
       }
 
-      .host-submode-layout :deep(.profile-icon-button) {
+      .host-submode-layout
+        .open-site-button-container
+        + :deep(.profile-icon-button) {
         margin-left: 0;
       }
 
