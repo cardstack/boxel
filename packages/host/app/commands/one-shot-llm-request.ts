@@ -1,6 +1,9 @@
 import { service } from '@ember/service';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, logger } from '@cardstack/runtime-common';
+
+// Conventional module-scoped logger (pattern used elsewhere like store & realm events)
+const oneShotLogger = logger('llm:oneshot');
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import { Skill } from 'https://cardstack.com/base/skill';
@@ -84,10 +87,6 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         attachedFilesContent = attachedFileResults.join('');
       }
 
-      if (!fileContent && !attachedFilesContent) {
-        throw new Error('No file content available for LLM request');
-      }
-
       // Load skill cards from IDs if provided
       let loadedSkillCards: Skill[] = [];
       if (input.skillCardIds && input.skillCardIds.length > 0) {
@@ -127,6 +126,18 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
 ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? attachedFilesContent : ''}${!fileContent && !attachedFilesContent ? 'No file content available.' : ''}`,
         },
       ];
+      oneShotLogger.debug('prepared messages', {
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: input.userPrompt.length,
+        fileContentIncluded: !!fileContent,
+        attachedFilesCount: input.attachedFileURLs?.length || 0,
+        skillCards: loadedSkillCards.map((c) => c.id),
+      });
+
+      // Always log full prompt content
+      oneShotLogger.debug('llm prompt full', {
+        messages: generationMessages,
+      });
 
       const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
         this.commandService.commandContext,
@@ -148,13 +159,21 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? a
       }
 
       const responseData = await result.response.json();
+      oneShotLogger.debug('raw llm response meta', {
+        status: result.response.status,
+        model: input.llmModel || 'anthropic/claude-3-haiku',
+        usage: responseData.usage || null,
+      });
       const output = responseData.choices?.[0]?.message?.content || null;
+      oneShotLogger.debug('llm request complete', {
+        outputPreview: output ? String(output).slice(0, 120) : null,
+      });
 
       return new OneShotLLMRequestResult({
         output: output,
       });
     } catch (error) {
-      console.error('LLM request error:', error);
+      oneShotLogger.error('LLM request error', { error });
       throw error;
     }
   }
