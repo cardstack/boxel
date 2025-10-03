@@ -342,13 +342,13 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-open-site-button]').exists();
         assert.dom('[data-test-open-site-button]').containsText('Open Site');
 
-        window.open = (url: string, type: string) => {
+        window.open = (url?: URL | string, target?: string) => {
           assert.strictEqual(
             url,
             'http://testuser.localhost:4201/test/',
             'Open published site URL',
           );
-          assert.strictEqual(type, '_blank', 'Open in a new tab');
+          assert.strictEqual(target, '_blank', 'Open in a new tab');
 
           return null;
         };
@@ -477,25 +477,25 @@ module('Acceptance | host submode', function (hooks) {
           .exists();
 
         let originalWindowOpen = window.open;
-        window.open = (url: string, type: string) => {
+        window.open = (url?: URL | string, target?: string) => {
           assert.strictEqual(
             url,
             'http://testuser.localhost:4201/test/Person/1',
             'Open published realm URL',
           );
-          assert.strictEqual(type, '_blank', 'Open in a new tab');
+          assert.strictEqual(target, '_blank', 'Open in a new tab');
           return null;
         };
         await click(
           '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
         );
-        window.open = (url: string, type: string) => {
+        window.open = (url?: URL | string, target?: string) => {
           assert.strictEqual(
             url,
             'https://another-domain.com/realm/Person/1',
             'Open published realm URL',
           );
-          assert.strictEqual(type, '_blank', 'Open in a new tab');
+          assert.strictEqual(target, '_blank', 'Open in a new tab');
           return null;
         };
         await click(
