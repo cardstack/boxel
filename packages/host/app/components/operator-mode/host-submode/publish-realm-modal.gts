@@ -24,8 +24,8 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type { SiteNameAvailabilityResult } from '@cardstack/host/services/realm-server';
 
-import ModalContainer from '../../modal-container.gts';
-import WithLoadedRealm from '../../with-loaded-realm.gts';
+import ModalContainer from '@cardstack/host/components/modal-container';
+import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 type CustomSiteSelection = {
   url: string;

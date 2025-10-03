@@ -18,6 +18,7 @@ import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import PublishRealmModal from '@cardstack/host/components/operator-mode/host-submode/publish-realm-modal';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -28,7 +29,6 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import PublishRealmModal from './publish-realm-modal';
 import SubmodeLayout from './submode-layout';
 
 interface HostSubmodeSignature {
