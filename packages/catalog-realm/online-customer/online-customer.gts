@@ -923,7 +923,6 @@ class FittedTemplate extends Component<typeof OnlineCustomer> {
             {{#if @model.email}}
               <div class='card-contact'>
                 <@fields.email @format='atom' />
-                <span class='contact-value'>{{@model.email.value}}</span>
               </div>
             {{/if}}
           </div>
