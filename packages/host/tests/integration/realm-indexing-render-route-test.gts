@@ -24,6 +24,7 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   cardInfo,
+  getFileCreatedAt,
 } from '../helpers';
 import {
   CardDef,
@@ -129,9 +130,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}empty.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}empty.json`,
-          ),
+          resourceCreatedAt: await getFileCreatedAt(realm, 'empty.json'),
           realmInfo: testRealmInfo,
         },
         links: {
@@ -237,8 +236,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Pet/mango.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Pet/mango.json',
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -338,9 +338,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}vangogh.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}vangogh.json`,
-          ),
+          resourceCreatedAt: await getFileCreatedAt(realm, 'vangogh.json'),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
