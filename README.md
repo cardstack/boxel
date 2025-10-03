@@ -329,8 +329,8 @@ INSERT INTO proxy_endpoints (
   auth_method, auth_parameter_name, created_at, updated_at
 ) VALUES (
   gen_random_uuid(),
-  'https://openrouter.ai/api/v1/chat/completions',
-  '<your-example-api-key>',
+  'https://openrouter.ai/api/v1/chat/completions', 
+  '<your-openrouter-api-key>',
   'openrouter',
   true,
   'header',
@@ -338,6 +338,9 @@ INSERT INTO proxy_endpoints (
   NOW(), NOW()
 );
 ```
+
+Typically, it is needed for our openrouter setup which is used widely throughout our codebase. But, additionally you can add in your own proxy.
+
 #### Configuration Options
 
 - **url**: The base URL of the external API endpoint
