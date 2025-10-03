@@ -36,6 +36,7 @@ import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assista
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
+import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
@@ -150,6 +151,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/search-cards',
     SearchCardsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/search-and-choose',
+    SearchAndChooseCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-ai-assistant-room',
@@ -268,6 +273,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SaveCardCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,
   SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
+  SearchAndChooseCommandModule.default,
   SearchGoogleImagesCommandModule.default,
   SendAiAssistantMessageModule.default,
   SetActiveLlmModule.default,

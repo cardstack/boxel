@@ -1655,7 +1655,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 const user: string =
                   messages.find((m: any) => m.role === 'user')?.content || '';
                 const systemLower = system.toLowerCase();
-                let content: any = 'generic response';
+                let content: string | undefined;
                 if (
                   systemLower.includes(
                     'respond only with one token: card, app, or skill',
@@ -1687,34 +1687,15 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   )
                 ) {
                   content = 'Mock listing summary sentence.';
-                } else if (
-                  systemLower.includes('select the most relevant 1 or 2 ids')
-                ) {
-                  // Determine which search type we're linking based on system prompt content
-                  if (systemLower.includes('represent tag')) {
-                    // Always link the calculator tag deterministically
-                    content = JSON.stringify([calculatorTagId]);
-                  } else if (systemLower.includes('represent category')) {
-                    content = JSON.stringify([writingCategoryId]);
-                  } else if (systemLower.includes('represent license')) {
-                    content = JSON.stringify([mitLicenseId]);
-                  } else {
-                    // Fallback: pick first id from user options list
-                    let firstId: string | undefined;
-                    const lines = user.split('\n');
-                    for (let line of lines) {
-                      if (line.includes('::')) {
-                        const maybeId = line.split('::')[0].trim();
-                        if (maybeId) {
-                          firstId = maybeId;
-                          break;
-                        }
-                      }
-                    }
-                    content = JSON.stringify([firstId || 'unknown-id']);
-                  }
-                } else if (systemLower.includes('curator')) {
-                  content = 'curated';
+                } else if (systemLower.includes('representing tag')) {
+                  // Deterministic tag selection
+                  content = JSON.stringify([calculatorTagId]);
+                } else if (systemLower.includes('representing category')) {
+                  // Deterministic category selection
+                  content = JSON.stringify([writingCategoryId]);
+                } else if (systemLower.includes('representing license')) {
+                  // Deterministic license selection
+                  content = JSON.stringify([mitLicenseId]);
                 }
 
                 return new Response(
