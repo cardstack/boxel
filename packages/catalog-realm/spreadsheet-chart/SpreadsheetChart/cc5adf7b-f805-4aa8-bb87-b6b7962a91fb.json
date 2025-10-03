@@ -8,10 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "name": null,
-      "topN": null,
+      "topN": 10,
       "xHeader": "",
-      "yHeader": "Survived",
+      "yHeader": "",
       "cardInfo": {
         "notes": null,
         "title": null,
@@ -19,8 +18,7 @@
         "thumbnailURL": null
       },
       "chartType": "stackedBar",
-      "percentMode": false,
-      "binaryHeader": null,
+      "binaryHeader": "Pclass",
       "categoryHeader": "Survived"
     },
     "relationships": {
