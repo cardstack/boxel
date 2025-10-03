@@ -86,10 +86,19 @@ export class NodeAdapter implements RealmAdapter {
       realmEventsLog.debug(`Starting file watcher at ${this.realmDir}`);
 
       let watcherPath = join(this.realmDir, '/');
+      realmEventsLog.trace?.(
+        `Creating sane watcher for realm ${this.realmDir} (${watcherPath})`,
+      );
 
       this.watcher = sane(watcherPath);
+      realmEventsLog.trace?.(
+        `Watcher instance created for realm ${this.realmDir}`,
+      );
 
       this.watcher.on('change', (path, _root, stat) => {
+        realmEventsLog.trace?.(
+          `Watcher change event for realm ${this.realmDir}: ${path}`,
+        );
         if (stat.isFile()) {
           cb({
             eventName: 'update',
@@ -98,6 +107,9 @@ export class NodeAdapter implements RealmAdapter {
         }
       });
       this.watcher.on('add', (path, _root, stat) => {
+        realmEventsLog.trace?.(
+          `Watcher add event for realm ${this.realmDir}: ${path}`,
+        );
         if (stat.isFile()) {
           cb({
             eventName: 'update',
@@ -105,20 +117,30 @@ export class NodeAdapter implements RealmAdapter {
           });
         }
       });
-      this.watcher.on('delete', (path) =>
+      this.watcher.on('delete', (path) => {
+        realmEventsLog.trace?.(
+          `Watcher delete event for realm ${this.realmDir}: ${path}`,
+        );
         cb({
           eventName: 'update',
           removed: path,
-        }),
-      );
+        });
+      });
       this.watcher.on('error', (err) => {
+        realmEventsLog.error(
+          `Watcher error for realm ${this.realmDir}: ${err}`,
+        );
         throw new Error(`watcher error: ${err}`);
       });
       await new Promise<void>((resolve) => {
         this.watcher!.on('ready', () => {
+          realmEventsLog.debug(`File watcher ready for realm ${this.realmDir}`);
           resolve();
         });
       });
+      realmEventsLog.debug(
+        `File watcher subscription completed for ${this.realmDir}`,
+      );
     } else {
       realmEventsLog.debug(`Not starting file watcher at ${this.realmDir}`);
       return Promise.resolve();
@@ -226,6 +248,7 @@ export class NodeAdapter implements RealmAdapter {
   async broadcastRealmEvent(
     event: RealmEventContent,
     matrixClient: MatrixClient,
+    sessionRooms: Record<string, string>,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
 
@@ -236,22 +259,9 @@ export class NodeAdapter implements RealmAdapter {
       return;
     }
 
-    let dmRooms;
+    realmEventsLog.debug('Sending to dm rooms', Object.values(sessionRooms));
 
-    try {
-      dmRooms =
-        (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-          'boxel.session-rooms',
-        )) ?? {};
-    } catch (e) {
-      realmEventsLog.error('Error getting account data', e);
-      return;
-    }
-
-    realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
-
-    for (let userId of Object.keys(dmRooms)) {
-      let roomId = dmRooms[userId];
+    for (let [userId, roomId] of Object.entries(sessionRooms)) {
       try {
         await matrixClient.sendEvent(roomId, APP_BOXEL_REALM_EVENT_TYPE, event);
       } catch (e) {

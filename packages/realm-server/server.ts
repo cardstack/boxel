@@ -44,6 +44,7 @@ import {
   passwordFromSeed,
   getMatrixUsername,
 } from '@cardstack/runtime-common/matrix-client';
+import { getSessionRoom, REALM_SERVER_REALM } from '@cardstack/runtime-common';
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -113,27 +114,41 @@ export class RealmServer {
     detectRealmCollision(realms);
     ensureDirSync(realmsRootPath);
 
+    this.log.info('Initializing RealmServer');
+    this.log.debug(`Configured realms: ${realms.map((r) => r.url).join(', ')}`);
     this.serverURL = serverURL;
+    this.log.debug(`Server URL set to ${this.serverURL.href}`);
     this.virtualNetwork = virtualNetwork;
+    this.log.debug('Virtual network configured');
     this.matrixClient = matrixClient;
+    this.log.debug(
+      `Realm server matrix client username: ${this.matrixClient.username}`,
+    );
 
     this.realmSecretSeed = realmSecretSeed;
     this.realmServerSecretSeed = realmServerSecretSeed;
     this.grafanaSecret = grafanaSecret;
     this.realmsRootPath = realmsRootPath;
+    this.log.debug(`Realms root path: ${this.realmsRootPath}`);
     this.dbAdapter = dbAdapter;
     this.queue = queue;
     this.assetsURL = assetsURL;
+    this.log.debug(`Assets URL: ${this.assetsURL.href}`);
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
+    this.log.debug(
+      `File watcher enabled: ${this.enableFileWatcher ? 'yes' : 'no'}`,
+    );
     this.validPublishedRealmDomains = validPublishedRealmDomains;
     this.realms = [...realms];
+    this.log.info('RealmServer initialization complete');
   }
 
   @Memoize()
   get app() {
+    this.log.debug('Configuring Koa app middleware');
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
       .use(ecsMetadata)
@@ -190,6 +205,7 @@ export class RealmServer {
       )
       .use(this.serveIndex)
       .use(this.serveFromRealm);
+    this.log.debug('Koa middleware stack configured');
 
     app.on('error', (err, ctx) => {
       console.error(`Unhandled server error`, err);
@@ -199,25 +215,45 @@ export class RealmServer {
       });
     });
 
+    app.use(async (ctx, next) => {
+      this.log.trace?.(`Incoming ${ctx.method} ${ctx.url}`);
+      let start = Date.now();
+      try {
+        await next();
+      } finally {
+        this.log.trace?.(
+          `Handled ${ctx.method} ${ctx.url} with status ${ctx.status} in ${Date.now() - start}ms`,
+        );
+      }
+    });
+
+    this.log.debug('Koa app ready');
+
     return app;
   }
 
   listen(port: number) {
+    this.log.info(`Starting realm server HTTP listener on port ${port}`);
     let instance = this.app.listen(port);
     this.log.info(`Realm server listening on port %s\n`, port);
     return instance;
   }
 
   async start() {
+    this.log.info('RealmServer starting up');
     let loadedRealms = await this.loadRealms();
     this.realms.push(...loadedRealms);
+    this.log.debug(`Loaded ${loadedRealms.length} realms from disk`);
 
     // ideally we'd like to use a Promise.all to start these and the ordering
     // will just fall out naturally from cross realm invalidation. Until we have
     // that we should start the realms in order.
     for (let realm of this.realms) {
+      this.log.info(`Starting realm ${realm.url}`);
       await realm.start();
+      this.log.info(`Realm ${realm.url} started`);
     }
+    this.log.info('RealmServer startup complete');
   }
 
   get testingOnlyRealms() {
@@ -673,15 +709,12 @@ export class RealmServer {
     eventType: string,
     data?: Record<string, any>,
   ) => {
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let roomId = dmRooms[user];
+    let roomId = await getSessionRoom(this.dbAdapter, REALM_SERVER_REALM, user);
     if (!roomId) {
       console.error(
         `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
       );
+      return;
     }
 
     await this.matrixClient.sendEvent(roomId, 'm.room.message', {

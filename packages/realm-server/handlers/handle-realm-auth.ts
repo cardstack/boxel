@@ -4,17 +4,24 @@ import { type CreateRoutesArgs } from '../routes';
 import {
   SupportedMimeType,
   fetchUserPermissions,
+  getSessionRoom,
+  REALM_SERVER_REALM,
+  logger,
 } from '@cardstack/runtime-common';
 import { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { createJWT } from '../jwt';
 import { sendResponseForError, setContextResponse } from '../middleware';
 
+const log = logger('realm-server');
+
 export default function handleRealmAuth({
   dbAdapter,
   realmSecretSeed,
-  matrixClient,
+  realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let realmsByURL = new Map(realms.map((realm) => [realm.url, realm]));
+
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
     let { user: matrixUserId } = token;
@@ -30,12 +37,21 @@ export default function handleRealmAuth({
       return;
     }
 
-    let dmRooms =
-      (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
+    let realmServerSessionRoomId = await getSessionRoom(
+      dbAdapter,
+      REALM_SERVER_REALM,
+      user.matrixUserId,
+    );
 
-    let sessionRoomId = dmRooms[user.matrixUserId];
+    if (!realmServerSessionRoomId) {
+      await sendResponseForError(
+        ctxt,
+        422,
+        'Unprocessable Entity',
+        'Session room not found for user',
+      );
+      return;
+    }
 
     let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
       userId: matrixUserId,
@@ -43,7 +59,45 @@ export default function handleRealmAuth({
     });
 
     let sessions: { [realm: string]: string } = {};
+    let fallbackRealms: string[] = [];
     for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
+      let sessionRoomId = await getSessionRoom(
+        dbAdapter,
+        realm,
+        user.matrixUserId,
+      );
+
+      if (!sessionRoomId) {
+        let realmInstance = realmsByURL.get(realm);
+        if (!realmInstance) {
+          log.warn(
+            `Realm ${realm} is not currently loaded; using realm-server DM room for user ${matrixUserId}`,
+          );
+          fallbackRealms.push(realm);
+          sessionRoomId = realmServerSessionRoomId;
+        } else {
+          try {
+            sessionRoomId = await realmInstance.ensureSessionRoom(
+              user.matrixUserId,
+            );
+          } catch (error) {
+            log.error(
+              `Unable to ensure session room for user ${matrixUserId} in realm ${realm}, falling back to realm-server DM room`,
+              error,
+            );
+            fallbackRealms.push(realm);
+            sessionRoomId = realmServerSessionRoomId;
+          }
+        }
+      } else {
+        let realmInstance = realmsByURL.get(realm);
+        if (!realmInstance) {
+          log.warn(
+            `Realm ${realm} is not currently loaded but session room ${sessionRoomId} exists; using existing room for user ${matrixUserId}`,
+          );
+        }
+      }
+
       sessions[realm] = createJWT(
         {
           user: matrixUserId,
@@ -53,6 +107,12 @@ export default function handleRealmAuth({
         },
         '7d',
         realmSecretSeed,
+      );
+    }
+
+    if (fallbackRealms.length > 0) {
+      log.warn(
+        `Used realm-server session room for user ${matrixUserId} in realm(s): ${fallbackRealms.join(', ')}`,
       );
     }
 
