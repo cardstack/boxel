@@ -94,17 +94,15 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
   });
 
   async function selectCard(cardPath: string) {
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}${cardPath}"]`,
-      'mouseenter',
+    let cardSelector = `[data-test-cards-grid-item="${testRealmURL}${cardPath}"] .field-component-card`;
+    await triggerEvent(cardSelector, 'mouseenter');
+    await waitFor(
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
     );
     await click(
       `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
     );
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}${cardPath}"]`,
-      'mouseleave',
-    );
+    await triggerEvent(cardSelector, 'mouseleave');
   }
 
   test('can select multiple cards and delete them via bulk delete', async function (assert) {
