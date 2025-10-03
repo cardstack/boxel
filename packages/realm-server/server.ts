@@ -293,6 +293,13 @@ export class RealmServer {
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
+
+        if (config.defaultPublishedRealmDomain === 'localhost:4201') {
+          // if this is the default, this needs to be the realm server’s host
+          // to work in Matrix tests
+          config.defaultPublishedRealmDomain = this.serverURL.host;
+        }
+
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
