@@ -317,8 +317,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         module: `${this.catalogRealm}catalog-app/listing/tag`,
         name: 'Tag',
       } as ResolvedCodeRef,
-      // Additional hard rule: never select ids that contain 'stub'
-      'RULE: Never select or any id that contains the substring "stub" (case-insensitive). 
+      'RULE: Never select or return any id that contains the substring "stub" (case-insensitive).',
     );
     (listing as any).tags = instances;
   }
