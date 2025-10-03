@@ -129,13 +129,15 @@ class IsolatedTemplate extends Component<typeof OnlineCustomer> {
           {{#if @model.email}}
             <div class='contact-info'>
               <@fields.email @format='atom' />
-              <span class='contact-value'>{{@model.email.value}}</span>
+              <span class='contact-value'>{{@model.email.email}}</span>
             </div>
           {{/if}}
           {{#if @model.phone}}
             <div class='contact-info'>
               <@fields.phone @format='atom' />
-              <span class='contact-value'>{{@model.phone.value}}</span>
+              <span class='contact-value'>
+                +{{@model.phone.phone.countryCode}}{{@model.phone.phone.number}}
+              </span>
             </div>
           {{/if}}
         </div>
@@ -433,22 +435,25 @@ class EmbeddedTemplate extends Component<typeof OnlineCustomer> {
         </div>
 
         <div class='customer-info'>
-          <div class='customer-name'>{{if
+          <h1 class='customer-name'>{{if
               @model.customerName
               @model.customerName
               'Unknown Customer'
-            }}</div>
-          <div class='customer-tier'>{{this.customerTier}} Customer</div>
+            }}</h1>
+
+          <div class='customer-tier'>{{this.customerTier}} Status Customer</div>
           {{#if @model.email}}
             <div class='contact-info'>
               <@fields.email @format='atom' />
-              <span class='contact-value'>{{@model.email.value}}</span>
+              <span class='contact-value'>{{@model.email.email}}</span>
             </div>
           {{/if}}
           {{#if @model.phone}}
             <div class='contact-info'>
               <@fields.phone @format='atom' />
-              <span class='contact-value'>{{@model.phone.value}}</span>
+              <span class='contact-value'>
+                +{{@model.phone.phone.countryCode}}{{@model.phone.phone.number}}
+              </span>
             </div>
           {{/if}}
         </div>
@@ -580,11 +585,15 @@ class EmbeddedTemplate extends Component<typeof OnlineCustomer> {
       }
 
       .customer-tier {
-        font-size: 0.9375rem;
+        font-size: 1rem;
         color: #6366f1;
         font-weight: 600;
-        margin-top: 0.25rem;
-        margin-bottom: 0.25rem;
+        background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        display: inline-block;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        margin-bottom: 0.5rem;
       }
 
       .contact-info {

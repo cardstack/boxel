@@ -86,19 +86,19 @@ export class ContactLinkField extends FieldDef {
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <FieldContainer @vertical={{true}} @label='Type' @tag='label'>
-        <BoxelSelect
-          @options={{this.options}}
-          @selected={{this.selectedOption}}
-          @onChange={{this.onSelect}}
-          @placeholder='Please Select'
-          as |item|
-        >
-          <div>{{item.label}}</div>
-        </BoxelSelect>
-      </FieldContainer>
+      <div class='contact-link-container'>
+        <FieldContainer @vertical={{true}} @label='Type' @tag='label'>
+          <BoxelSelect
+            @options={{this.options}}
+            @selected={{this.selectedOption}}
+            @onChange={{this.onSelect}}
+            @placeholder='Please Select'
+            as |item|
+          >
+            <div>{{item.label}}</div>
+          </BoxelSelect>
+        </FieldContainer>
 
-      <FieldContainer @vertical={{true}} @label={{this.label}} @tag='label'>
         {{#if (eq this.selectedOption.type 'email')}}
           <@fields.email />
         {{else if (eq this.selectedOption.type 'tel')}}
@@ -106,25 +106,16 @@ export class ContactLinkField extends FieldDef {
         {{else}}
           <@fields.link />
         {{/if}}
-      </FieldContainer>
+      </div>
 
       <style scoped>
-        label + * {
-          margin-top: var(--boxel-sp-sm);
+        .contact-link-container {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
         }
       </style>
     </template>
-
-    get label() {
-      switch (this.selectedOption?.type) {
-        case 'email':
-          return 'Email Address';
-        case 'tel':
-          return 'Phone Number';
-        default:
-          return 'Link';
-      }
-    }
 
     options = this.args.model.items;
 

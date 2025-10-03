@@ -9,22 +9,35 @@
     "type": "card",
     "attributes": {
       "email": {
+        "link": null,
+        "email": "elena@gmail.com",
         "label": "Email",
-        "value": "elena.vasquez@artgallery.org"
+        "phone": {
+          "number": null,
+          "countryCode": null
+        }
       },
       "phone": {
+        "link": null,
+        "email": null,
         "label": "Phone",
-        "value": "+1-212-555-3847"
+        "phone": {
+          "number": "12052012312",
+          "countryCode": "60"
+        }
       },
-      "cardInfo": {},
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
       "totalSpent": 12389.5,
-      "description": null,
       "loyaltyTier": {
         "name": "Silver"
       },
       "totalOrders": 45,
       "customerName": "Elena Vasquez",
-      "thumbnailURL": null,
       "customerSince": "2023-09-12T16:20:00.000Z"
     },
     "relationships": {

@@ -9,22 +9,35 @@
     "type": "card",
     "attributes": {
       "email": {
+        "link": null,
+        "email": "ahmed@cardstack.com",
         "label": "Email",
-        "value": "zara.ahmed@healthtechstartup.com"
+        "phone": {
+          "number": null,
+          "countryCode": null
+        }
       },
       "phone": {
+        "link": null,
+        "email": null,
         "label": "Phone",
-        "value": "+1-647-555-1286"
+        "phone": {
+          "number": "93409012332",
+          "countryCode": "93"
+        }
       },
-      "cardInfo": {},
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
       "totalSpent": 2847.33,
-      "description": null,
       "loyaltyTier": {
         "name": "Bronze"
       },
       "totalOrders": 12,
       "customerName": "Zara Ahmed",
-      "thumbnailURL": null,
       "customerSince": "2024-02-28T13:10:00.000Z"
     },
     "relationships": {

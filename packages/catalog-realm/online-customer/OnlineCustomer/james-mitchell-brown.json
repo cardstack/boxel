@@ -9,22 +9,35 @@
     "type": "card",
     "attributes": {
       "email": {
+        "link": null,
+        "email": "james@org.com",
         "label": "Email",
-        "value": "j.brown@quantumdev.io"
+        "phone": {
+          "number": null,
+          "countryCode": null
+        }
       },
       "phone": {
+        "link": null,
+        "email": null,
         "label": "Phone",
-        "value": "+1-206-555-9204"
+        "phone": {
+          "number": "109003499",
+          "countryCode": "60"
+        }
       },
-      "cardInfo": {},
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
       "totalSpent": 67823.94,
-      "description": null,
       "loyaltyTier": {
         "name": "Platinum"
       },
       "totalOrders": 238,
       "customerName": "James Mitchell-Brown",
-      "thumbnailURL": null,
       "customerSince": "2021-11-03T08:45:00.000Z"
     },
     "relationships": {
