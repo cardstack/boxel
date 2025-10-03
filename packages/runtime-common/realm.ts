@@ -144,13 +144,6 @@ export interface TokenClaims {
   permissions: RealmPermissions['user'];
 }
 
-export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
-
-export interface RealmPermissions {
-  [username: string]: RealmAction[] | null;
-}
-
-// Result shape returned by RealmAdapter.write (does not include created)
 export interface AdapterWriteResult {
   path: string;
   lastModified: number;

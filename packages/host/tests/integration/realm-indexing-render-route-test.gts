@@ -236,10 +236,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
-            resourceCreatedAt: await getFileCreatedAt(
-              realm,
-              'Pet/mango.json',
-            ),
+            resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
