@@ -647,7 +647,13 @@ export default class PublishRealmModal extends Component<Signature> {
         padding: var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-md);
+        gap: var(--boxel-sp);
+      }
+
+      .domain-option:not(:last-child)::after {
+        content: '';
+        border-bottom: 1px solid var(--boxel-200);
+        padding-bottom: var(--boxel-sp-lg);
       }
 
       .domain-option-header {
