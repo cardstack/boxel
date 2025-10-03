@@ -4,8 +4,8 @@ exports.up = (pgm) => {
     file_path: { type: 'varchar', notNull: true },
     // store as epoch seconds (integer) to align with existing conventions
     created_at: {
-  type: 'integer',
-  notNull: true,
+      type: 'integer',
+      notNull: true,
     },
   });
 
