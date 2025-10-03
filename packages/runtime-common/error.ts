@@ -166,6 +166,7 @@ export class CardError extends Error implements SerializedError {
       title: this.title,
       message: this.message,
       code: this.status,
+      status: this.status,
       source: this.source,
       stack: this.stack,
     };

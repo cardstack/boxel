@@ -972,12 +972,12 @@ export async function assertMessages(
   }
 }
 
-export const cardInfo = {
+export const cardInfo = Object.freeze({
   title: null,
   description: null,
   thumbnailURL: null,
   notes: null,
-};
+});
 
 // UI interaction helpers for acceptance tests
 

@@ -1,14 +1,13 @@
 import type Owner from '@ember/owner';
 import { getOwner, setOwner } from '@ember/owner';
 import RouterService from '@ember/routing/router-service';
-import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { didCancel, enqueueTask } from 'ember-concurrency';
 
 import {
+  CardError,
   type RenderResponse,
   type RenderError,
   type IndexWriter,
@@ -29,8 +28,6 @@ import {
   type IncrementalArgsWithPermissions,
 } from '@cardstack/runtime-common/worker';
 
-import type { BoxComponent } from 'https://cardstack.com/base/field-component';
-
 import { CurrentRun } from '../lib/current-run';
 
 import type LocalIndexer from '../services/local-indexer';
@@ -48,23 +45,6 @@ export default class CardPrerender extends Component {
   @service private declare renderService: RenderService;
   @service private declare fastboot: { isFastBoot: boolean };
   @service private declare localIndexer: LocalIndexer;
-  @tracked private renderComponent: BoxComponent | undefined;
-  @tracked private format: Format | undefined;
-
-  <template>
-    {{#unless this.isFastboot}}
-      <div
-        data-prerender
-        data-prerender-status={{this.localIndexer.prerenderStatus}}
-      >
-        {{#if this.localIndexer.renderError}}
-          {{this.localIndexer.renderError}}
-        {{else if this.renderComponent}}
-          <this.renderComponent @format={{this.format}} />
-        {{/if}}
-      </div>
-    {{/unless}}
-  </template>
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -86,10 +66,6 @@ export default class CardPrerender extends Component {
         this.prerender.bind(this),
       );
     }
-  }
-
-  private get isFastboot() {
-    return this.fastboot.isFastBoot;
   }
 
   private async prerender({
@@ -131,7 +107,6 @@ export default class CardPrerender extends Component {
       userId: string;
       permissions: RealmPermissions;
     }): Promise<RenderResponse> => {
-      this.renderComponent = undefined;
       this.localIndexer.renderError = undefined;
       this.localIndexer.prerenderStatus = 'loading';
       let error: RenderError | undefined;
@@ -166,9 +141,18 @@ export default class CardPrerender extends Component {
         }
       } catch (e: any) {
         try {
-          error = JSON.parse(e.message);
+          error = { ...JSON.parse(e.message), type: 'error' };
         } catch (err) {
-          throw new Error(`unexpected error during indexing: ${e.message}`);
+          let cardErr = new CardError(e.message);
+          cardErr.stack = e.stack;
+          error = {
+            error: {
+              ...cardErr.toJSON(),
+              deps: [url.replace(/\.json$/, '')],
+              additionalErrors: null,
+            },
+            type: 'error',
+          };
         }
       }
       if (this.localIndexer.prerenderStatus === 'loading') {
@@ -187,23 +171,20 @@ export default class CardPrerender extends Component {
   );
 
   private renderHTML = enqueueTask(
-    async (
-      url: string,
-      format: Format,
-      ancestorLevel = 0,
-      capture: 'innerHTML' | 'outerHTML' = 'innerHTML',
-    ) => {
+    async (url: string, format: Format, ancestorLevel = 0) => {
       let routeInfo = await this.router.recognizeAndLoad(
         `/render/${encodeURIComponent(url)}/html/${format}/${ancestorLevel}`,
       );
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
       }
-      this.format = format;
-      this.renderComponent = routeInfo.attributes.Component;
-      await new Promise<void>((r) => scheduleOnce('afterRender', this, r));
-      let el = document.querySelector('[data-prerender]');
-      let captured = el?.children[0]?.[capture]?.trim() ?? null;
+      let component = routeInfo.attributes.Component;
+      let captured = this.renderService.renderCardComponent(
+        component,
+        // I think this is right, may need to revisit this as we incorporate more tests
+        ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
+        format,
+      );
       return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
     },
   );
@@ -212,7 +193,7 @@ export default class CardPrerender extends Component {
     async (url: string, format: 'embedded' | 'fitted', types: string[]) => {
       let ancestors: Record<string, string> = {};
       for (let i = 0; i < types.length; i++) {
-        let res = await this.renderHTML.perform(url, format, i, 'outerHTML');
+        let res = await this.renderHTML.perform(url, format, i);
         ancestors[types[i]] = res as string;
       }
       return ancestors;
@@ -236,10 +217,8 @@ export default class CardPrerender extends Component {
     if (this.localIndexer.renderError) {
       throw new Error(this.localIndexer.renderError);
     }
-    this.renderComponent = routeInfo.attributes.Component;
-    await new Promise<void>((r) => scheduleOnce('afterRender', this, r));
-    let el = document.querySelector('[data-prerender]');
-    let captured = el?.children[0]?.outerHTML?.trim() ?? null;
+    let component = routeInfo.attributes.Component;
+    let captured = this.renderService.renderCardComponent(component);
     return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
   });
 
