@@ -36,4 +36,5 @@ declare const config: {
     SHOW_ASK_AI?: boolean;
   };
   defaultPublishedRealmDomain: string;
+  publishedSubdomainRealmDomain: string;
 };

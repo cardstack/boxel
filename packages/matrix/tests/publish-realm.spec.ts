@@ -70,4 +70,47 @@ test.describe('Publish realm', () => {
       'http://user1.localhost:4205/new-workspace/',
     );
   });
+
+  test('it validates and can claim a custom site name', async ({ page }) => {
+    let serverIndexUrl = new URL(appURL).origin;
+    await clearLocalStorage(page, serverIndexUrl);
+
+    await setupUserSubscribed('@user1:localhost', realmServer);
+
+    await login(page, 'user1', 'pass', {
+      url: serverIndexUrl,
+    });
+
+    await createRealm(page, 'custom-site-workspace', 'Custom Site Workspace');
+    await page.locator('[data-test-workspace="Custom Site Workspace"]').click();
+
+    await page.locator('[data-test-submode-switcher] button').click();
+    await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
+
+    await page.locator('[data-test-publish-realm-button]').click();
+
+    await page.locator('[data-test-custom-site-name-setup-button]').click();
+    await page.locator('[data-test-custom-site-name-input]').fill('Bad Name');
+    await page.locator('[data-test-claim-site-name-button]').click();
+
+    await expect(page.locator('[data-test-custom-site-name-error]')).toHaveText(
+      'Subdomain can only contain lowercase letters, numbers, and hyphens',
+    );
+    await expect(page.locator('[data-test-publish-button]')).toBeDisabled();
+
+    await page.locator('[data-test-custom-site-name-input]').fill('my-custom');
+    await page.locator('[data-test-claim-site-name-button]').click();
+
+    await expect(
+      page.locator('[data-test-custom-site-name-availability]'),
+    ).toHaveText('This name is available');
+    await expect(
+      page.locator('[data-test-custom-site-name-error]'),
+    ).toHaveCount(0);
+
+    await expect(
+      page.locator('[data-test-custom-domain-checkbox]'),
+    ).toBeChecked();
+    await expect(page.locator('[data-test-publish-button]')).not.toBeDisabled();
+  });
 });
