@@ -24,7 +24,7 @@
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"]
     },
-    "types": ["@cardstack/local-types"]
+    "types": ["@cardstack/local-types","@cardstack/local-types/matrix-js-sdk"]
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]

@@ -205,8 +205,15 @@ export default class AiAssistantPanelService extends Service {
   @action
   enterRoom(roomId: string, hidePastSessionsList = true) {
     this.matrixService.currentRoomId = roomId;
-    if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      this.matrixService.setLLMForCodeMode();
+    switch (this.operatorModeStateService.state.submode) {
+      case Submodes.Code:
+        this.matrixService.setLLMForCodeMode();
+        break;
+      case Submodes.Interact:
+        this.matrixService.setLLMForInteractMode();
+        break;
+      default:
+        break;
     }
 
     this.localPersistenceService.setCurrentRoomId(roomId);

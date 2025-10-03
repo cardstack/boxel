@@ -190,6 +190,20 @@ export class CardError extends Error implements SerializedError {
     return result;
   }
 
+  static fromCardErrorJsonAPI(
+    errorJSONAPI: CardErrorJSONAPI,
+    url?: string,
+    httpStatus?: number,
+  ) {
+    let error = CardError.fromSerializableError(errorJSONAPI);
+    if (url && httpStatus != null && [404, 406].includes(httpStatus)) {
+      error.deps = [url];
+    }
+    error.stack = errorJSONAPI.meta.stack;
+
+    return error;
+  }
+
   static async fromFetchResponse(
     url: string,
     response: Response,
