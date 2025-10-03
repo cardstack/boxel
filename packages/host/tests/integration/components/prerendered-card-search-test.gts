@@ -2,7 +2,11 @@ import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
 
 import { waitUntil } from '@ember/test-helpers';
 
+import GlimmerComponent from '@glimmer/component';
+
 import { getService } from '@universal-ember/test-support';
+import Modifier from 'ember-modifier';
+import { provide } from 'ember-provide-consume-context';
 import { module, test } from 'qunit';
 
 import {
@@ -10,6 +14,7 @@ import {
   baseRealm,
   type Realm,
   type LooseSingleCardDocument,
+  CardContextName,
 } from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -32,6 +37,34 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+interface CardContextWithModifierSignature {
+  Blocks: { default: [] };
+}
+
+class TestTrackingModifier extends Modifier<{
+  Args: { Named: { cardId?: string } };
+}> {
+  modify(element: HTMLElement, _pos: unknown[], named: { cardId?: string }) {
+    if (named.cardId) {
+      element.setAttribute('data-test-tracked-card-id', named.cardId);
+    }
+  }
+}
+
+class CardContextWithModifier extends GlimmerComponent<CardContextWithModifierSignature> {
+  @provide(CardContextName)
+  get context() {
+    return {
+      cardComponentModifier: TestTrackingModifier,
+    };
+  }
+
+  <template>
+    {{! template-lint-disable no-yield-only }}
+    {{yield}}
+  </template>
+}
 
 module(`Integration | prerendered-card-search`, function (hooks) {
   let testRealm: Realm;
@@ -357,6 +390,79 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('[data-test-meta-page-total="2"]')
       .exists('meta.page.total is correct');
+  });
+
+  test('applies cardComponentModifier from card context to prerendered results', async function (this: RenderingTestContext, assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.firstName': 'Cardy',
+        },
+      },
+      sort: [
+        {
+          by: 'author.lastName',
+          on: { module: `${testRealmURL}book`, name: 'Book' },
+        },
+      ],
+    };
+    let realms = [testRealmURL];
+
+    await render(<template>
+      <CardContextWithModifier>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+        </PrerenderedCardSearch>
+      </CardContextWithModifier>
+    </template>);
+
+    await waitUntil(
+      () =>
+        this.element.querySelectorAll('[data-test-tracked-card-id]').length ===
+        2,
+    );
+
+    let trackedElements = Array.from(
+      this.element.querySelectorAll('[data-test-tracked-card-id]'),
+    ) as HTMLElement[];
+
+    assert.strictEqual(
+      trackedElements.length,
+      2,
+      'tracks both prerendered cards via the modifier',
+    );
+
+    let trackedIds = trackedElements.map((el) =>
+      el.getAttribute('data-test-tracked-card-id'),
+    );
+
+    trackedIds.forEach((cardId) => {
+      assert.ok(
+        cardId?.startsWith(testRealmURL),
+        'tracked card id comes from the prerendered result',
+      );
+    });
+
+    assert.strictEqual(
+      new Set(trackedIds).size,
+      trackedIds.length,
+      'tracked card ids remain unique',
+    );
   });
 
   test(`can include last known good state for instances in error state`, async function (assert) {

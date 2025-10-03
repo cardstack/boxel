@@ -14,8 +14,11 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import { renderErrorHandler } from '@cardstack/host/lib/render-error-handler';
+
 import {
   testRealmURL,
+  testRealmInfo,
   cleanWhiteSpace,
   setupCardLogs,
   setupLocalIndexing,
@@ -34,6 +37,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
+let onError: (event: Event) => void;
 
 // TODO Eventually this will replace the ./realm-indexing-test.gts
 // but first we need to align the API's between the index writer and the renderer.
@@ -46,10 +50,24 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     (globalThis as any).__useHeadlessChromePrerender = true;
+    onError = function (event: Event) {
+      let localIndexer = getService('local-indexer');
+      renderErrorHandler({
+        event,
+        setPrerenderStatus(status) {
+          localIndexer.prerenderStatus = status;
+        },
+        setError(error) {
+          localIndexer.renderError = error;
+        },
+      });
+    };
+    window.addEventListener('boxel-render-error', onError);
   });
 
   hooks.afterEach(function (this: RenderingTestContext) {
     delete (globalThis as any).__useHeadlessChromePrerender;
+    window.removeEventListener('boxel-render-error', onError);
   });
 
   setupLocalIndexing(hooks);
@@ -72,7 +90,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
   }
 
   test('full indexing discovers card instances', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'empty.json': {
@@ -108,12 +126,131 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             name: 'CardDef',
           },
           realmURL: 'http://test-realm/test/',
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}empty.json`,
+          ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}empty.json`,
+          ),
+          realmInfo: testRealmInfo,
         },
         links: {
           self: `${testRealmURL}empty`,
         },
       },
     ]);
+  });
+
+  test('can recover from indexing a card with a broken link', async function (assert) {
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `${testRealmURL}Person/owner`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+      },
+    });
+    let queryEngine = realm.realmIndexQueryEngine;
+    {
+      let mango = await queryEngine.cardDocument(
+        new URL(`${testRealmURL}Pet/mango`),
+      );
+      if (mango?.type === 'error') {
+        assert.deepEqual(
+          mango.error.errorDetail.message,
+          `Person/owner.json not found`,
+        );
+        assert.deepEqual(mango.error.errorDetail.deps, [
+          `${testRealmURL}Person/owner.json`,
+          'http://localhost:4202/test/pet',
+        ]);
+      } else {
+        assert.ok(false, `expected search entry to be an error doc`);
+      }
+    }
+    await realm.write(
+      'Person/owner.json',
+      JSON.stringify({
+        data: {
+          id: `${testRealmURL}Person/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+    {
+      let mango = await queryEngine.cardDocument(
+        new URL(`${testRealmURL}Pet/mango`),
+      );
+      if (mango?.type === 'doc') {
+        assert.deepEqual(mango.doc.data, {
+          id: `${testRealmURL}Pet/mango`,
+          type: 'card',
+          links: {
+            self: `${testRealmURL}Pet/mango`,
+          },
+          attributes: {
+            description: null,
+            firstName: 'Mango',
+            title: 'Mango',
+            thumbnailURL: null,
+            cardInfo,
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `../Person/owner`,
+              },
+            },
+            'cardInfo.theme': { links: { self: null } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/pet',
+              name: 'Pet',
+            },
+            lastModified: adapter.lastModifiedMap.get(
+              `${testRealmURL}Pet/mango.json`,
+            ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}Pet/mango.json`,
+            ),
+            realmInfo: testRealmInfo,
+            realmURL: 'http://test-realm/test/',
+          },
+        });
+      } else {
+        assert.ok(
+          false,
+          `search entry was an error: ${mango?.error.errorDetail.message}`,
+        );
+      }
+    }
   });
 
   test('can incrementally index a card', async function (assert) {
@@ -130,7 +267,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         </template>
       };
     }
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -198,6 +335,13 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             module: './person',
             name: 'Person',
           },
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}vangogh.json`,
+          ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}vangogh.json`,
+          ),
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
       },

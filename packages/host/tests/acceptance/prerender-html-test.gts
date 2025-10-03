@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { type RenderError, baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -616,8 +616,8 @@ module('Acceptance | prerender | html', function (hooks) {
     let url = `${testRealmURL}Cat/molly.json`;
     await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
     let { value } = await capturePrerenderResult('innerHTML', 'error');
-    let error = JSON.parse(value);
-    assert.strictEqual(error.code, 404, 'error code is correct');
+    let { error }: RenderError = JSON.parse(value);
+    assert.strictEqual(error.status, 404, 'error code is correct');
     assert.strictEqual(error.title, 'Not Found', 'error title is correct');
     assert.strictEqual(
       error.message,
@@ -636,8 +636,8 @@ module('Acceptance | prerender | html', function (hooks) {
     let url = `${testRealmURL}Person/jade.json`;
     await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
     let { value } = await capturePrerenderResult('innerHTML', 'error');
-    let error = JSON.parse(value);
-    assert.strictEqual(error.code, 404, 'error code is correct');
+    let { error }: RenderError = JSON.parse(value);
+    assert.strictEqual(error.status, 404, 'error code is correct');
     assert.strictEqual(error.title, 'Not Found', 'error title is correct');
     assert.strictEqual(
       error.message,
@@ -758,7 +758,7 @@ module('Acceptance | prerender | html', function (hooks) {
     let url = `${testRealmURL}does-not-exist.json`;
     await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
     let { value } = await capturePrerenderResult('textContent', 'error');
-    let error = JSON.parse(value);
+    let { error }: RenderError = JSON.parse(value);
     assert.ok(error.stack, 'stack exists in error');
     delete error.stack;
     assert.deepEqual(

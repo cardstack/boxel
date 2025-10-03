@@ -7,6 +7,7 @@ import {
 } from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -222,7 +223,7 @@ export async function capturePrerenderResult(
   let status = element.dataset.prerenderStatus as 'ready' | 'error';
   if (status === 'error') {
     // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
-    return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
+    return { status, value: element.innerHTML!.replace(/}[^}]*$/, '}') };
   } else {
     return { status, value: element.children[0][capture]! };
   }
@@ -240,6 +241,13 @@ async function makeRenderer() {
 }
 
 class MockLocalIndexer extends Service {
+  @tracked renderError: string | undefined;
+  @tracked prerenderStatus:
+    | 'ready'
+    | 'loading'
+    | 'error'
+    | 'unusable'
+    | undefined;
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
   #indexWriter: IndexWriter | undefined;
@@ -297,6 +305,12 @@ class MockLocalIndexer extends Service {
       throw new Error(`prerenderer not registered with MockLocalIndexer`);
     }
     return this.#prerenderer;
+  }
+  setPrerenderStatus(status: 'ready' | 'loading' | 'error' | 'unusable') {
+    this.prerenderStatus = status;
+  }
+  setRenderError(error: string) {
+    this.renderError = error;
   }
 }
 
