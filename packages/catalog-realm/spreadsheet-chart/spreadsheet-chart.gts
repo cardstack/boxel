@@ -312,14 +312,14 @@ export class SpreadsheetChartIsolated extends Component<
     const chartType = this.effectiveChartType;
 
     const colorPalette = [
-      '#3b82f6',
-      '#8b5cf6',
-      '#10b981',
-      '#f59e0b',
-      '#ef4444',
-      '#06b6d4',
-      '#f97316',
-      '#6b7280',
+      'var(--chart-1, #3b82f6)',
+      'var(--chart-2, #8b5cf6)',
+      'var(--chart-3, #10b981)',
+      'var(--chart-4, #f59e0b)',
+      'var(--chart-5, #ef4444)',
+      'var(--chart-6, #06b6d4)',
+      'var(--chart-7, #f97316)',
+      'var(--chart-8, #6b7280)',
     ];
     const safeValue = (n: number) => (Number.isFinite(n) && n > 0 ? n : 1);
 
@@ -600,7 +600,7 @@ export class SpreadsheetChartIsolated extends Component<
         padding: 1.5rem;
         height: 100%;
         box-sizing: border-box;
-        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+        background: var(--card, #ffffff);
         font-family:
           'Inter',
           -apple-system,
@@ -614,7 +614,7 @@ export class SpreadsheetChartIsolated extends Component<
         justify-content: space-between;
         gap: 1rem;
         padding-bottom: 1rem;
-        border-bottom: 2px solid #e5e7eb;
+        border-bottom: 2px solid var(--border, #e5e7eb);
       }
 
       .head-left {
@@ -631,14 +631,14 @@ export class SpreadsheetChartIsolated extends Component<
         margin: 0;
         font-size: 1.5rem;
         font-weight: 700;
-        color: #111827;
+        color: var(--foreground, #111827);
         line-height: 1.2;
       }
 
       .title-icon {
         width: 1.75rem;
         height: 1.75rem;
-        color: #3b82f6;
+        color: var(--chart-1, #3b82f6);
         flex-shrink: 0;
       }
 
@@ -655,19 +655,19 @@ export class SpreadsheetChartIsolated extends Component<
         padding: 0.625rem 1rem;
         font-size: 0.875rem;
         font-weight: 600;
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        color: white;
+        background: var(--primary, #10b981);
+        color: var(--primary-foreground, #ffffff);
         border: none;
         border-radius: 0.5rem;
         cursor: pointer;
         transition: all 0.2s ease;
-        box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
 
       .open-source-btn:hover {
-        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        background: var(--primary-hover, #059669);
         transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
       }
 
       .btn-icon {
@@ -679,8 +679,8 @@ export class SpreadsheetChartIsolated extends Component<
       .chart-wrapper {
         flex: 1;
         min-height: 400px;
-        background: white;
-        border: 1px solid #e5e7eb;
+        background: var(--background, #ffffff);
+        border: 1px solid var(--border, #e5e7eb);
         border-radius: 0.75rem;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
         overflow: hidden;
@@ -728,7 +728,7 @@ export class SpreadsheetChartIsolated extends Component<
         gap: 1rem;
         margin-top: auto;
         padding-top: 1rem;
-        border-top: 1px solid #e5e7eb;
+        border-top: 1px solid var(--border, #e5e7eb);
         font-size: 0.8125rem;
       }
 
@@ -1266,8 +1266,8 @@ export class SpreadsheetChart extends CardDef {
       <style scoped>
         .chart-embedded {
           padding: 1rem;
-          background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
-          border: 1px solid #e5e7eb;
+          background: var(--card, #ffffff);
+          border: 1px solid var(--border, #e5e7eb);
           border-radius: 0.75rem;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
@@ -1282,14 +1282,14 @@ export class SpreadsheetChart extends CardDef {
         .chart-icon {
           width: 1.5rem;
           height: 1.5rem;
-          color: #3b82f6;
+          color: var(--chart-1, #3b82f6);
           flex-shrink: 0;
         }
 
         .title {
           font-size: 1rem;
           font-weight: 600;
-          color: #111827;
+          color: var(--foreground, #111827);
           line-height: 1.2;
         }
 
@@ -1439,7 +1439,7 @@ export class SpreadsheetChart extends CardDef {
           width: 100%;
           height: 100%;
           container-type: size;
-          background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+          background: var(--card, #ffffff);
           border-radius: 0.5rem;
           overflow: hidden;
         }
@@ -1467,7 +1467,7 @@ export class SpreadsheetChart extends CardDef {
         .mini-icon {
           width: 1rem;
           height: 1rem;
-          color: #3b82f6;
+          color: var(--chart-1, #3b82f6);
         }
 
         .badge-text {
@@ -1487,7 +1487,7 @@ export class SpreadsheetChart extends CardDef {
         .strip-icon {
           width: 1.25rem;
           height: 1.25rem;
-          color: #3b82f6;
+          color: var(--chart-1, #3b82f6);
           flex-shrink: 0;
         }
 
@@ -1513,7 +1513,7 @@ export class SpreadsheetChart extends CardDef {
         .tile-icon {
           width: 1.5rem;
           height: 1.5rem;
-          color: #3b82f6;
+          color: var(--chart-1, #3b82f6);
           flex-shrink: 0;
         }
 
@@ -1538,7 +1538,11 @@ export class SpreadsheetChart extends CardDef {
           justify-content: center;
           width: 3rem;
           height: 3rem;
-          background: rgba(59, 130, 246, 0.1);
+          background: color-mix(
+            in srgb,
+            var(--chart-1, #3b82f6) 10%,
+            transparent
+          );
           border-radius: 0.5rem;
           flex-shrink: 0;
         }
@@ -1546,7 +1550,7 @@ export class SpreadsheetChart extends CardDef {
         .card-icon {
           width: 1.75rem;
           height: 1.75rem;
-          color: #3b82f6;
+          color: var(--chart-1, #3b82f6);
         }
 
         .card-info {
@@ -1557,14 +1561,14 @@ export class SpreadsheetChart extends CardDef {
         .card-footer {
           margin-top: auto;
           padding-top: 0.5rem;
-          border-top: 1px solid #e5e7eb;
+          border-top: 1px solid var(--border, #e5e7eb);
         }
 
         /* Typography hierarchy */
         .primary-text {
           font-size: 0.875rem;
           font-weight: 600;
-          color: #1f2937;
+          color: var(--foreground, #1f2937);
           line-height: 1.2;
           overflow: hidden;
           text-overflow: ellipsis;

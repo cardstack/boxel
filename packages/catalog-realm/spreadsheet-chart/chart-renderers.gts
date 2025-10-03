@@ -33,16 +33,16 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
       const size = segment === 'B' ? item.sizeB || 0 : item.sizeA || 0;
       const color =
         segment === 'B'
-          ? item.colorB || item.color || '#ef4444'
-          : item.colorA || item.color || '#3b82f6';
+          ? item.colorB || item.color || 'var(--chart-5, #ef4444)'
+          : item.colorA || item.color || 'var(--chart-1, #3b82f6)';
       props['--size'] = String(size);
       props['--color'] = color;
     } else if (chartType === 'pie' || chartType === 'donut') {
       props['--size'] = String(item.size || item.normalizedSize || 0);
-      props['--color'] = item.color || '#3b82f6';
+      props['--color'] = item.color || 'var(--chart-1, #3b82f6)';
     } else {
       props['--size'] = String(item.size || item.normalizedSize || 0);
-      props['--color'] = item.color || '#3b82f6';
+      props['--color'] = item.color || 'var(--chart-1, #3b82f6)';
     }
 
     return htmlSafe(
@@ -59,13 +59,13 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
 
     if (chartType === 'stackedBar' && labels.length >= 2) {
       return [
-        { label: labels[0], color: '#3b82f6' },
-        { label: labels[1], color: '#ef4444' },
+        { label: labels[0], color: 'var(--chart-1, #3b82f6)' },
+        { label: labels[1], color: 'var(--chart-5, #ef4444)' },
       ];
     } else if (chartType === 'pie') {
       return data.map((item: any) => ({
         label: item.category,
-        color: item.color || '#3b82f6',
+        color: item.color || 'var(--chart-1, #3b82f6)',
       }));
     }
 
@@ -193,7 +193,7 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        background: var(--card, #ffffff);
       }
 
       .charts-css {
@@ -207,14 +207,14 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
           BlinkMacSystemFont,
           sans-serif;
 
-        --color-1: #3b82f6;
-        --color-2: #8b5cf6;
-        --color-3: #10b981;
-        --color-4: #f59e0b;
-        --color-5: #ef4444;
-        --color-6: #06b6d4;
-        --color-7: #f97316;
-        --color-8: #6b7280;
+        --color-1: var(--chart-1, #3b82f6);
+        --color-2: var(--chart-2, #8b5cf6);
+        --color-3: var(--chart-3, #10b981);
+        --color-4: var(--chart-4, #f59e0b);
+        --color-5: var(--chart-5, #ef4444);
+        --color-6: var(--chart-6, #06b6d4);
+        --color-7: var(--chart-7, #f97316);
+        --color-8: var(--chart-8, #6b7280);
 
         --labels-size: 0.75rem;
         --data-size: 0.6875rem;
@@ -248,7 +248,7 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
       .charts-css tbody th {
         font-size: 0.75rem;
         font-weight: 500;
-        color: #374151;
+        color: var(--foreground, #374151);
       }
 
       .charts-css tbody td {
@@ -258,14 +258,14 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
       .charts-css .data {
         font-size: 0.6875rem;
         font-weight: 600;
-        color: #1f2937;
+        color: var(--foreground, #1f2937);
         text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
       }
 
       caption {
         font-size: 1rem;
         font-weight: 600;
-        color: #1f2937;
+        color: var(--foreground, #1f2937);
         margin-bottom: 1rem;
         text-align: left;
         caption-side: top;
@@ -278,8 +278,8 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
         gap: 1.5rem;
         margin-top: 1rem;
         padding: 0.875rem 1rem;
-        background: rgba(248, 250, 252, 0.5);
-        border: 1px solid #e5e7eb;
+        background: var(--background, rgba(248, 250, 252, 0.5));
+        border: 1px solid var(--border, #e5e7eb);
         border-radius: 0.5rem;
         font-size: 0.8125rem;
         min-height: 2.5rem;
@@ -304,7 +304,7 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
       }
 
       .legend-label {
-        color: #374151;
+        color: var(--foreground, #374151);
         font-weight: 500;
         line-height: 1.3;
         flex: 1;
@@ -331,9 +331,9 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
         align-items: center;
         justify-content: center;
         height: 200px;
-        border: 2px dashed #d1d5db;
+        border: 2px dashed var(--border, #d1d5db);
         border-radius: 0.5rem;
-        background: #f9fafb;
+        background: var(--background, #f9fafb);
       }
 
       .empty-chart p {
