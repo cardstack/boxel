@@ -244,16 +244,20 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   private async askAiCardToLink(
     searchTypeCodeRef: ResolvedCodeRef,
+    additionalSystemPrompt?: string,
   ): Promise<any[]> {
     const search = new SearchCardsByTypeAndTitleCommand(this.commandContext);
     const result = await search.execute({ type: searchTypeCodeRef });
     const instances = result.instances ?? [];
     const summariesString = this.instancesToPromptString(instances);
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-    const systemPrompt = `You are an expert catalog curator. Select the most relevant 1 or 2 ids that represent ${searchTypeCodeRef.name} (maximum 2) from the provided list. Output ONLY a JSON array of 1 or 2 id strings. No commentary.`;
+    let baseSystemPrompt = `You are an expert catalog curator. Select the most relevant 1 or 2 ids that represent ${searchTypeCodeRef.name} (maximum 2) from the provided list. Output ONLY a JSON array of 1 or 2 id strings. No commentary.`;
+    if (additionalSystemPrompt && additionalSystemPrompt.trim()) {
+      baseSystemPrompt += `\n\n${additionalSystemPrompt.trim()}`;
+    }
     const userPrompt = `Options (id :: title):\n${summariesString}\n\nRules:\n- Return a JSON array with 1 or 2 ids (max 2).\n- No duplicates.\n- Only use ids from the list.\nOutput examples: ["idA"] or ["idA","idB"].`;
     const r = await oneShot.execute({
-      systemPrompt,
+      systemPrompt: baseSystemPrompt,
       userPrompt,
       llmModel: 'openai/gpt-5-nano',
       ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
@@ -308,10 +312,14 @@ export default class ListingCreateCommand extends HostBaseCommand<
     (listing as any).license = instances[0];
   }
   private async autoLinkTag(listing: CardAPI.CardDef) {
-    const instances = await this.askAiCardToLink({
-      module: `${this.catalogRealm}catalog-app/listing/tag`,
-      name: 'Tag',
-    } as ResolvedCodeRef);
+    const instances = await this.askAiCardToLink(
+      {
+        module: `${this.catalogRealm}catalog-app/listing/tag`,
+        name: 'Tag',
+      } as ResolvedCodeRef,
+      // Additional hard rule: never select ids that contain 'stub'
+      'RULE: Never select or any id that contains the substring "stub" (case-insensitive). 
+    );
     (listing as any).tags = instances;
   }
   private async autoLinkCategory(listing: CardAPI.CardDef) {
