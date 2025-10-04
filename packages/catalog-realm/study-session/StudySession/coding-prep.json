@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sessionTitle": "Coding Interview Prep",
+      "subject": "Programming",
+      "startTime": "2025-01-13T19:00:00.000Z",
+      "endTime": "2025-01-13T21:00:00.000Z",
+      "plannedDuration": 120,
+      "actualDuration": 105,
+      "sessionType": "practice",
+      "focusScore": 7,
+      "notes": "Practiced tree traversal problems. Struggled with iterative implementations but made good progress.",
+      "isCompleted": true,
+      "tags": "coding,trees,interview-prep"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../study-session",
+        "name": "StudySession"
+      }
+    }
+  }
+}

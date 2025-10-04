@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Calculus Study Group",
+      "description": "Weekly calculus study session covering derivatives and integration techniques. Bring your homework questions and practice problems.",
+      "startTime": "2025-09-02T14:00:00.000Z",
+      "endTime": "2025-09-02T16:00:00.000Z",
+      "location": "Study Room A - 2nd Floor",
+      "isAllDay": "false",
+      "eventType": "study_group",
+      "eventColor": "#3b82f6"
+    },
+    "relationships": {
+      "calendar": {
+        "links": {
+          "self": "../CalendarCard/2c3c78cd-fa4f-4988-b098-c8d099557fba"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../calendar",
+        "name": "CalendarEvent"
+      }
+    }
+  }
+}

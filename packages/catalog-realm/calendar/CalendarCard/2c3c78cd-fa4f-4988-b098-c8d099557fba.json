@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CalendarCard",
+        "module": "../calendar"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "year": 2025,
+      "month": 9,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "viewMode": "month",
+      "calendarName": "Study Hub Calendar",
+      "selectedDate": "2025-09-10"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

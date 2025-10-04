@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StudyResource",
+        "module": "../study-resource"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "url": "https://example.com/dsa-textbook",
+      "tags": [
+        "Algorithms",
+        "Data structures",
+        "Coding"
+      ],
+      "notes": "Currently on Chapter 5: Trees and Graphs. Need to practice more implementation problems.",
+      "subject": "Computer Science",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "difficulty": "intermediate",
+      "lastAccessed": "2025-09-24T03:20:37.777Z",
+      "resourceType": "textbook",
+      "estimatedTime": 240,
+      "resourceTitle": "Data Structures & Algorithms Textbook",
+      "completionStatus": "in_progress",
+      "progressPercentage": 35
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "resourceTitle": "Introduction to Linear Algebra",
+      "resourceType": "lecture",
+      "url": "https://example.com/linear-algebra",
+      "subject": "Mathematics",
+      "difficulty": "beginner",
+      "estimatedTime": 60,
+      "completionStatus": "completed",
+      "tags": ["Mathematics","Linear algebra","Foundations"],
+      "notes": "Excellent foundation course. Need to review eigenvectors before ML course.",
+      "lastAccessed": "2025-01-12T09:15:00.000Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../study-resource",
+        "name": "StudyResource"
+      }
+    }
+  }
+}
