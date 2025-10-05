@@ -133,7 +133,8 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private getDefaultPublishedRealmDomain(): string {
-    return config.defaultPublishedRealmDomain;
+    // TODO: adjust this after we add the feature for publishing with a custom boxel site name
+    return config.publishedRealmBoxelSpaceDomain;
   }
 
   private getRealmName(): string {
