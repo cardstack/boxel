@@ -32,6 +32,7 @@ class PracticeQuizIsolated extends Component<typeof PracticeQuizCard> {
   @tracked isQuizActive = false;
   @tracked timeRemaining = 0;
   @tracked selectedAnswers: string[] = [];
+  private timerInterval?: any;
 
   get scoreColor() {
     const score = this.args?.model?.percentage || 0;
@@ -81,6 +82,7 @@ class PracticeQuizIsolated extends Component<typeof PracticeQuizCard> {
 
   @action
   startQuiz() {
+    this.clearTimer();
     this.isQuizActive = true;
     this.currentQuestion = 0;
     this.selectedAnswers = [];
@@ -171,20 +173,28 @@ class PracticeQuizIsolated extends Component<typeof PracticeQuizCard> {
 
   @action
   restartQuiz() {
+    this.clearTimer();
     this.currentQuestion = 0;
     this.selectedAnswers = [];
     this.startQuiz();
   }
 
   startTimer() {
-    const interval = setInterval(() => {
+    this.timerInterval = setInterval(() => {
       if (this.timeRemaining > 0) {
         this.timeRemaining--;
       } else {
-        clearInterval(interval);
+        this.clearTimer();
         this.finishQuiz();
       }
     }, 1000);
+  }
+
+  clearTimer() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = undefined;
+    }
   }
 
   get formattedTime() {
