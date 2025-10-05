@@ -257,27 +257,15 @@ module('Acceptance | prerender | meta', function (hooks) {
               links: {
                 self: '../Pet/mango',
               },
-              data: {
-                type: 'card',
-                id: '../Pet/mango',
-              },
             },
             'pets.1': {
               links: {
                 self: '../Pet/vangogh',
               },
-              data: {
-                type: 'card',
-                id: '../Pet/vangogh',
-              },
             },
             'pets.2': {
               links: {
                 self: '../Pet/paper',
-              },
-              data: {
-                type: 'card',
-                id: '../Pet/paper',
               },
             },
           },
@@ -299,7 +287,24 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(`/render/${encodeURIComponent(url)}/meta`);
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.strictEqual(meta.displayName, 'Cat', 'display name is correct');
+    assert.deepEqual(
+      meta.displayNames,
+      ['Cat', 'Pet', 'Card'],
+      'display names are correct',
+    );
+  });
+
+  test('can generate deps', async function (assert) {
+    let url = `${testRealmURL}Pet/paper.json`;
+    await visit(`/render/${encodeURIComponent(url)}/meta`);
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+    // note that we cannot derive deps for shimmed modules (better tests for this are on the server)
+    assert.deepEqual(
+      [...meta.deps!],
+      ['http://test-realm/test/cat'],
+      'deps are correct',
+    );
   });
 
   test('can generate type hierarchy', async function (assert) {

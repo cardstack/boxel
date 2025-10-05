@@ -29,16 +29,6 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
-        }
-      },
-      "tags.1": {
-        "links": {
-          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
-        }
-      },
-      "tags.2": {
-        "links": {
           "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
         }
       },
@@ -109,37 +99,22 @@
       },
       "publisher": {
         "links": {
-          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+          "self": "../Publisher/5f27bc69-6e15-4027-bff5-5c893a2642d9"
         }
       },
-      "examples.0": {
-        "links": {
-          "self": "../avatar-creator/AvatarCreator/pichu"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../avatar-creator/AvatarCreator/zara-nightshade"
-        }
-      },
-      "examples.2": {
+     "examples.0": {
         "links": {
           "self": "../avatar-creator/AvatarCreator/luna-starweaver"
         }
       },
-      "examples.3": {
-        "links": {
-          "self": "../avatar-creator/AvatarCreator/magnus-stormbeard"
-        }
-      },
       "categories.0": {
         "links": {
-          "self": "../Category/video-games-interactive"
+          "self": "../Category/design-creative"
         }
       },
       "categories.1": {
         "links": {
-          "self": "../Category/design-creative"
+          "self": "../Category/ui-components-design"
         }
       },
       "cardInfo.theme": {
