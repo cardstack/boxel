@@ -27,6 +27,7 @@ import {
   setupIntegrationTestRealm,
   testModuleRealm,
   cardInfo,
+  getFileCreatedAt,
 } from '../helpers';
 import {
   setupBaseRealm,
@@ -95,6 +96,7 @@ module('Integration | realm', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'dir/empty.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -116,9 +118,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/empty.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}dir/empty.json`,
-          ),
+          resourceCreatedAt: resourceCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -193,6 +193,8 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
+    let ownerCreatedAt = await getFileCreatedAt(realm, 'dir/owner.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -224,9 +226,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/mango.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}dir/mango.json`,
-          ),
+          resourceCreatedAt: mangoCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -260,9 +260,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/owner.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}dir/owner.json`,
-            ),
+            resourceCreatedAt: ownerCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
@@ -317,6 +315,7 @@ module('Integration | realm', function (hooks) {
     let { included = [] } = json;
     delete included[0]?.meta.lastModified;
     delete included[0]?.meta.resourceCreatedAt;
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -348,11 +347,9 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/mango.json`,
           ),
+          resourceCreatedAt: resourceCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}dir/mango.json`,
-          ),
         },
         links: {
           self: `${testRealmURL}dir/mango`,
@@ -500,6 +497,16 @@ module('Integration | realm', function (hooks) {
         (await adapter.openFile(`CardDef/${id}.json`))?.content,
         'file contents exist',
       );
+      let createdAt = await getFileCreatedAt(realm, `CardDef/${id}.json`);
+      assert.ok(
+        json.data.meta?.resourceCreatedAt,
+        'resourceCreatedAt meta exists on created card',
+      );
+      assert.strictEqual(
+        json.data.meta?.resourceCreatedAt,
+        createdAt,
+        'resourceCreatedAt matches file created time',
+      );
     } else {
       assert.ok(false, 'response body is not a card document');
     }
@@ -602,6 +609,20 @@ module('Integration | realm', function (hooks) {
         (await adapter.openFile(`${dirName}/CardDef/${id}.json`))?.content,
         'file contents exist',
       );
+      // verify resourceCreatedAt meta recorded for new file in directory
+      let createdAt = await getFileCreatedAt(
+        realm,
+        `${dirName}/CardDef/${id}.json`,
+      );
+      assert.ok(
+        json.data.meta?.resourceCreatedAt,
+        'resourceCreatedAt meta exists on created card in directory',
+      );
+      assert.strictEqual(
+        json.data.meta?.resourceCreatedAt,
+        createdAt,
+        'resourceCreatedAt matches file created time (directory)',
+      );
     } else {
       assert.ok(false, 'response body is not a card document');
     }
@@ -679,6 +700,8 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 201, 'successful http status');
     let json = await response.json();
     let id = json.data.id.split('/').pop()!;
+    let ownerCreatedAt = await getFileCreatedAt(realm, 'dir/owner.json');
+    let petCreatedAt = await getFileCreatedAt(realm, `Pet/${id}.json`);
     assert.ok(uuidValidate(id), 'card ID is a UUID');
     assert.deepEqual(json, {
       data: {
@@ -711,9 +734,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/${id}.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}Pet/${id}.json`,
-          ),
+          resourceCreatedAt: petCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -747,9 +768,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/owner.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}dir/owner.json`,
-            ),
+            resourceCreatedAt: ownerCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
@@ -1025,6 +1044,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'ski-trip.json');
     let response = await handle(
       realm,
       new Request(`${testRealmURL}ski-trip`, {
@@ -1100,9 +1120,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}ski-trip.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}ski-trip.json`,
-          ),
+          resourceCreatedAt: resourceCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -1209,6 +1227,9 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'jackie.json');
+    let friendCreatedAt = await getFileCreatedAt(realm, 'dir/friend.json');
+    let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/van-gogh.json');
     let response = await handle(
       realm,
       new Request(`${testRealmURL}jackie`, {
@@ -1279,9 +1300,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}jackie.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}jackie.json`,
-          ),
+          resourceCreatedAt: resourceCreatedAt!,
         },
       },
       included: [
@@ -1311,9 +1330,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/friend.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}dir/friend.json`,
-            ),
+            resourceCreatedAt: friendCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
@@ -1341,11 +1358,9 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/van-gogh.json`,
             ),
+            resourceCreatedAt: vanGoghCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}dir/van-gogh.json`,
-            ),
           },
         },
       ],
@@ -1439,6 +1454,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'jackie.json');
 
     let response = await handle(
       realm,
@@ -1512,9 +1528,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
-        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-          `${testRealmURL}jackie.json`,
-        ),
+        resourceCreatedAt: resourceCreatedAt!,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1568,6 +1582,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'jackie.json');
 
     let response = await handle(
       realm,
@@ -1629,9 +1644,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
-        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-          `${testRealmURL}jackie.json`,
-        ),
+        resourceCreatedAt: resourceCreatedAt!,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1712,6 +1725,8 @@ module('Integration | realm', function (hooks) {
         ),
       }),
     );
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'jackie.json');
+
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
@@ -1737,9 +1752,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
-        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-          `${testRealmURL}jackie.json`,
-        ),
+        resourceCreatedAt: resourceCreatedAt!,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1808,6 +1821,7 @@ module('Integration | realm', function (hooks) {
       },
     });
 
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'jackie.json');
     // changing linksTo field only
     let response = await handle(
       realm,
@@ -1870,9 +1884,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
-        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-          `${testRealmURL}jackie.json`,
-        ),
+        resourceCreatedAt: resourceCreatedAt!,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1954,6 +1966,7 @@ module('Integration | realm', function (hooks) {
       },
     });
 
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'jackie.json');
     let response = await handle(
       realm,
       new Request(`${testRealmURL}jackie`, {
@@ -2017,9 +2030,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
-        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-          `${testRealmURL}jackie.json`,
-        ),
+        resourceCreatedAt: resourceCreatedAt!,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -2119,6 +2130,8 @@ module('Integration | realm', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
+    let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -2150,11 +2163,9 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/mango.json`,
           ),
+          resourceCreatedAt: mangoCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}dir/mango.json`,
-          ),
         },
         links: {
           self: `${testRealmURL}dir/mango`,
@@ -2186,11 +2197,9 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/mariko.json`,
             ),
+            resourceCreatedAt: marikoCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}dir/mariko.json`,
-            ),
           },
           links: {
             self: `${testRealmURL}dir/mariko`,
@@ -2275,6 +2284,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'dir/driver.json');
     let response = await handle(
       realm,
       new Request(`${testRealmURL}dir/driver`, {
@@ -2352,11 +2362,9 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/driver.json`,
           ),
+          resourceCreatedAt: resourceCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}dir/driver.json`,
-          ),
         },
         links: {
           self: `${testRealmURL}dir/driver`,
@@ -2579,7 +2587,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve delete card requests', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'cards/1.json': {
@@ -2639,6 +2647,12 @@ module('Integration | realm', function (hooks) {
 
     result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/2`));
     assert.strictEqual(result, undefined, 'card was deleted');
+    let deletedFile = await adapter.openFile('cards/2.json');
+    assert.strictEqual(
+      deletedFile,
+      undefined,
+      'underlying file for deleted card no longer exists',
+    );
 
     result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {
@@ -3002,6 +3016,9 @@ module('Integration | realm', function (hooks) {
     let json = await response.json();
     delete json.included?.[0].meta.lastModified;
     delete json.included?.[0].meta.resourceCreatedAt;
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
+    let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
+    let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/vanGogh.json');
     assert.deepEqual(json, {
       data: [
         {
@@ -3034,11 +3051,9 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/mango.json`,
             ),
+            resourceCreatedAt: mangoCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}dir/mango.json`,
-            ),
           },
           links: {
             self: `${testRealmURL}dir/mango`,
@@ -3069,11 +3084,9 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/mariko.json`,
             ),
+            resourceCreatedAt: marikoCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}dir/mariko.json`,
-            ),
           },
           links: {
             self: `${testRealmURL}dir/mariko`,
@@ -3109,11 +3122,9 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/vanGogh.json`,
             ),
+            resourceCreatedAt: vanGoghCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}dir/vanGogh.json`,
-            ),
           },
           links: {
             self: `${testRealmURL}dir/vanGogh`,
@@ -3197,6 +3208,7 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let json = await response.json();
+    let resourceCreatedAt = await getFileCreatedAt(realm, 'dir/empty.json');
     assert.deepEqual(
       json,
       {
@@ -3221,6 +3233,7 @@ module('Integration | realm', function (hooks) {
                 lastModified: adapter.lastModifiedMap.get(
                   `${testRealmURL}dir/empty.json`,
                 ),
+                resourceCreatedAt: resourceCreatedAt!,
               },
             },
           },

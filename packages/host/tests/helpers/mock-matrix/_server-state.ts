@@ -14,6 +14,7 @@ export class ServerState {
     }
   > = new Map();
   #listeners: ((event: IEvent) => void)[] = [];
+  #slidingSyncListeners: ((roomId: string, roomName?: string) => void)[] = [];
   #displayName: string;
   #contents: Map<string, ArrayBuffer> = new Map();
   #now: () => number;
@@ -37,6 +38,10 @@ export class ServerState {
 
   addListener(callback: (event: IEvent) => void) {
     this.#listeners.push(callback);
+  }
+
+  onSlidingSyncEvent(callback: (roomId: string, roomName?: string) => void) {
+    this.#slidingSyncListeners.push(callback);
   }
 
   createRoom(
@@ -99,7 +104,10 @@ export class ServerState {
       { origin_server_ts: timestamp, state_key: sender },
     );
 
-    if (!roomId.includes('test-session-room-realm')) {
+    if (
+      !roomId.includes('test-session-room-realm') &&
+      roomId !== 'test-auth-realm-server-session-room'
+    ) {
       this.addRoomEvent(
         sender,
         {
@@ -134,6 +142,11 @@ export class ServerState {
         },
       );
     }
+
+    // Emit sliding sync event for the new room
+    setTimeout(() => {
+      this.#slidingSyncListeners.forEach((listener) => listener(roomId, name));
+    }, 0);
 
     return roomId;
   }

@@ -14,13 +14,17 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import { renderErrorHandler } from '@cardstack/host/lib/render-error-handler';
+
 import {
   testRealmURL,
+  testRealmInfo,
   cleanWhiteSpace,
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
   cardInfo,
+  getFileCreatedAt,
 } from '../helpers';
 import {
   CardDef,
@@ -34,6 +38,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
+let onError: (event: Event) => void;
 
 // TODO Eventually this will replace the ./realm-indexing-test.gts
 // but first we need to align the API's between the index writer and the renderer.
@@ -46,10 +51,24 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     (globalThis as any).__useHeadlessChromePrerender = true;
+    onError = function (event: Event) {
+      let localIndexer = getService('local-indexer');
+      renderErrorHandler({
+        event,
+        setPrerenderStatus(status) {
+          localIndexer.prerenderStatus = status;
+        },
+        setError(error) {
+          localIndexer.renderError = error;
+        },
+      });
+    };
+    window.addEventListener('boxel-render-error', onError);
   });
 
   hooks.afterEach(function (this: RenderingTestContext) {
     delete (globalThis as any).__useHeadlessChromePrerender;
+    window.removeEventListener('boxel-render-error', onError);
   });
 
   setupLocalIndexing(hooks);
@@ -72,7 +91,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
   }
 
   test('full indexing discovers card instances', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'empty.json': {
@@ -108,12 +127,129 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             name: 'CardDef',
           },
           realmURL: 'http://test-realm/test/',
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}empty.json`,
+          ),
+          resourceCreatedAt:
+            (await getFileCreatedAt(realm, 'empty.json')) ?? undefined,
+          realmInfo: testRealmInfo,
         },
         links: {
           self: `${testRealmURL}empty`,
         },
       },
     ]);
+  });
+
+  test('can recover from indexing a card with a broken link', async function (assert) {
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: {
+              firstName: 'Mango',
+            },
+            relationships: {
+              owner: {
+                links: {
+                  self: `${testRealmURL}Person/owner`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+      },
+    });
+    let queryEngine = realm.realmIndexQueryEngine;
+    {
+      let mango = await queryEngine.cardDocument(
+        new URL(`${testRealmURL}Pet/mango`),
+      );
+      if (mango?.type === 'error') {
+        assert.deepEqual(
+          mango.error.errorDetail.message,
+          `Person/owner.json not found`,
+        );
+        assert.deepEqual(mango.error.errorDetail.deps, [
+          `${testRealmURL}Person/owner.json`,
+          'http://localhost:4202/test/pet',
+        ]);
+      } else {
+        assert.ok(false, `expected search entry to be an error doc`);
+      }
+    }
+    await realm.write(
+      'Person/owner.json',
+      JSON.stringify({
+        data: {
+          id: `${testRealmURL}Person/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+    {
+      let mango = await queryEngine.cardDocument(
+        new URL(`${testRealmURL}Pet/mango`),
+      );
+      if (mango?.type === 'doc') {
+        assert.deepEqual(mango.doc.data, {
+          id: `${testRealmURL}Pet/mango`,
+          type: 'card',
+          links: {
+            self: `${testRealmURL}Pet/mango`,
+          },
+          attributes: {
+            description: null,
+            firstName: 'Mango',
+            title: 'Mango',
+            thumbnailURL: null,
+            cardInfo,
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `../Person/owner`,
+              },
+            },
+            'cardInfo.theme': { links: { self: null } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/pet',
+              name: 'Pet',
+            },
+            lastModified: adapter.lastModifiedMap.get(
+              `${testRealmURL}Pet/mango.json`,
+            ),
+            resourceCreatedAt:
+              (await getFileCreatedAt(realm, 'Pet/mango.json')) ?? undefined,
+            realmInfo: testRealmInfo,
+            realmURL: 'http://test-realm/test/',
+          },
+        });
+      } else {
+        assert.ok(
+          false,
+          `search entry was an error: ${mango?.error.errorDetail.message}`,
+        );
+      }
+    }
   });
 
   test('can incrementally index a card', async function (assert) {
@@ -130,7 +266,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         </template>
       };
     }
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -198,6 +334,12 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             module: './person',
             name: 'Person',
           },
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}vangogh.json`,
+          ),
+          resourceCreatedAt:
+            (await getFileCreatedAt(realm, 'vangogh.json')) ?? undefined,
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
       },
@@ -296,8 +438,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
       'atom html is correct',
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       atomHtml!.includes('id="ember'),
       `atom HTML does not include ember ID's`,
     );
@@ -354,8 +495,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
 
     let { embeddedHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      false,
+    assert.false(
       Object.values(embeddedHtml!).join('').includes('id="ember'),
       `Embedded HTML does not include ember ID's`,
     );
@@ -369,7 +509,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         `<div
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
           data-test-boxel-card-container
-          style="--boxel-example: 1px;"
+          style=""
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="embedded"
           data-test-field-component-card> <h1> Fancy Person Embedded Card: Germaine - hot pink </h1> </div>`,
@@ -395,14 +535,13 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       cleanWhiteSpace(`<div
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-test-boxel-card-container
-        style="--boxel-example: 1px;"
+        style=""
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card> <h1> Person Embedded Card: Germaine </h1> </div>`),
       `${testRealmURL}person/Person embedded HTML is correct`,
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person embedded HTML does not include ember ID's`,
     );
@@ -412,7 +551,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       cleanWhiteSpace(`<div
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-test-boxel-card-container
-        style="--boxel-example: 1px;"
+        style=""
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card>
@@ -435,8 +574,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       `${cardDefRefURL} embedded HTML is correct`,
     );
 
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![cardDefRefURL].includes('id="ember'),
       `${cardDefRefURL} fitted HTML does not include ember ID's`,
     );
@@ -493,8 +631,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
 
     let { embeddedHtml, fittedHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      false,
+    assert.false(
       Object.values(fittedHtml!).join('').includes('id="ember'),
       `Fitted HTML does not include ember ID's`,
     );
@@ -508,7 +645,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         `<div
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
           data-test-boxel-card-container
-          style="--boxel-example: 1px;"
+          style=""
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="fitted"
           data-test-field-component-card> <h1> Fancy Person Fitted Card: Germaine - hot pink </h1> </div>`,
@@ -534,14 +671,13 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       cleanWhiteSpace(`<div
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
       data-test-boxel-card-container
-      style="--boxel-example: 1px;"
+      style=""
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="fitted"
       data-test-field-component-card> <h1> Person Fitted Card: Germaine </h1> </div>`),
       `${testRealmURL}person/Person fitted HTML is correct`,
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       fittedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person fitted HTML does not include ember ID's`,
     );
@@ -551,7 +687,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       cleanWhiteSpace(`<div
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
       data-test-boxel-card-container
-      style="--boxel-example: 1px;"
+      style=""
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="embedded"
       data-test-field-component-card>
@@ -571,8 +707,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       `${cardDefRefURL} embedded HTML is correct`,
     );
 
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![cardDefRefURL].includes('id="ember'),
       `${cardDefRefURL} embedded HTML does not include ember ID's`,
     );

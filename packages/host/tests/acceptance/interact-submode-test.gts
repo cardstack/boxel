@@ -44,6 +44,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
   assertMessages,
@@ -54,7 +55,6 @@ import { setupApplicationTest } from '../helpers/setup';
 const testRealm2URL = `http://test-realm/test2/`;
 const testRealm3URL = `http://test-realm/test3/`;
 
-let matrixRoomId: string;
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
 
@@ -71,11 +71,12 @@ module('Acceptance | interact submode tests', function (hooks) {
     mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -851,6 +852,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         }
         if (json.data.attributes?.firstName === null) {
           // Because we create an empty card, upon choosing a catalog item, we must skip the scenario where attributes null
+          // eslint-disable-next-line qunit/no-early-return
           return;
         }
         id = url.href;
@@ -969,14 +971,8 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await click('[data-test-boxel-filter-list-button="All Cards"]');
       // Simulate simultaneous clicks for spam-clicking
-      await Promise.all([
-        click(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-        ),
-        click(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-        ),
-      ]);
+      let cardSelector = `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`;
+      await Promise.all([click(cardSelector), click(cardSelector)]);
 
       assert
         .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
@@ -1273,7 +1269,9 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-boxel-menu-item-text="New Card of This Type"]')
         .doesNotExist();
-      await click(`[data-cards-grid-item="${testRealm2URL}Pet/ringo"]`);
+      await click(
+        `[data-cards-grid-item="${testRealm2URL}Pet/ringo"] .field-component-card`,
+      );
       assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
 
       await click('[data-test-more-options-button]');
@@ -1630,7 +1628,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         '[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]',
       );
       await triggerEvent(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"] .field-component-card`,
         'mouseenter',
       );
       assert
@@ -2036,6 +2034,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             ev.eventName === 'index' &&
             ev.indexType === 'incremental-index-initiation'
           ) {
+            // eslint-disable-next-line qunit/no-early-return
             return; // ignore the index initiation event
           }
           ev = ev as IncrementalIndexEventContent;
