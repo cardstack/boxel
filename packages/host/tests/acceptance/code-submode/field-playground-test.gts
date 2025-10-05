@@ -10,6 +10,7 @@ import {
   assertMessages,
   percySnapshot,
   setupAcceptanceTestRealm,
+  setupAuthEndpoints,
   setupLocalIndexing,
   setupUserSubscription,
   testRealmURL,
@@ -204,8 +205,6 @@ const petCard = `import { contains, containsMany, field, CardDef, Component, Fie
   }
 `;
 
-let matrixRoomId: string;
-
 module('Acceptance | code-submode | field playground', function (_hooks) {
   module('single realm', function (hooks) {
     let realm: Realm;
@@ -221,11 +220,12 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -271,6 +271,40 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
               },
             },
           },
+          'Spec/comment-2.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                ref: {
+                  name: 'Comment',
+                  module: '../blog-post',
+                },
+                specType: 'field',
+                containedExamples: [
+                  {
+                    title: 'Spec 2 Example 1',
+                  },
+                ],
+                title: 'Comment spec II',
+              },
+              meta: {
+                fields: {
+                  containedExamples: [
+                    {
+                      adoptsFrom: {
+                        module: '../blog-post',
+                        name: 'Comment',
+                      },
+                    },
+                  ],
+                },
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/spec',
+                  name: 'Spec',
+                },
+              },
+            },
+          },
           'Spec/comment-1.json': {
             data: {
               type: 'card',
@@ -303,40 +337,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                         name: 'Comment',
                       },
                     },
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'Comment',
-                      },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'Spec/comment-2.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'Comment',
-                  module: '../blog-post',
-                },
-                specType: 'field',
-                containedExamples: [
-                  {
-                    title: 'Spec 2 Example 1',
-                  },
-                ],
-                title: 'Comment spec II',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
                     {
                       adoptsFrom: {
                         module: '../blog-post',
@@ -1071,11 +1071,12 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       await setupAcceptanceTestRealm({
         mockMatrixUtils,

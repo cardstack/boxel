@@ -20,6 +20,10 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
 
+import config from '@cardstack/host/config/environment';
+
+import RealmService from './realm';
+
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
 import type ResetService from './reset';
@@ -57,6 +61,7 @@ type RealmServerEventSubscriber = (data: any) => Promise<void>;
 export default class RealmServerService extends Service {
   @service declare private network: NetworkService;
   @service declare private reset: ResetService;
+  @service declare private realm: RealmService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
@@ -182,6 +187,37 @@ export default class RealmServerService extends Service {
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
+  async fetchTokensForAccessibleRealms() {
+    await this.login();
+    let response = await this.network.fetch(`${this.url.href}_realm-auth`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+
+      // Temporary development instruction to help with user setup
+      let isDevelopment = config.environment === 'development';
+      if (isDevelopment && responseText.includes('User in JWT not found')) {
+        console.error(
+          '\x1b[1m\x1b[31m%s\x1b[0m',
+          'Failed to login to realms due to missing entry in the users table. It is likely the user setup is incomplete - run pnpm register-all in matrix package',
+        );
+      }
+
+      throw new Error(
+        `Failed to fetch tokens for accessible realms: ${response.status} - ${responseText}`,
+      );
+    }
+
+    return response.json();
+  }
+
   @cached
   get availableRealmURLs() {
     return this.availableRealms.map((r) => r.url);
@@ -204,6 +240,16 @@ export default class RealmServerService extends Service {
   @cached
   get availableRealmIndexCardIds() {
     return this.availableRealmURLs.map((url) => `${url}index`);
+  }
+
+  async authenticateToAllAccessibleRealms() {
+    let tokens = (await this.fetchTokensForAccessibleRealms()) as {
+      [realmURL: string]: string;
+    };
+
+    for (let [realmURL, token] of Object.entries(tokens)) {
+      this.realm.getOrCreateRealmResource(realmURL, token);
+    }
   }
 
   async setAvailableRealmURLs(userRealmURLs: string[]) {
@@ -349,8 +395,6 @@ export default class RealmServerService extends Service {
 
   private loggingIn: Promise<void> | undefined;
 
-  // login happens lazily as you need to interact with realm server which
-  // currently only constitutes creating realms
   async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
       return;

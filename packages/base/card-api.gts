@@ -2562,7 +2562,9 @@ function lazilyLoadLink(
         let doc = await store.loadDocument(reference);
         if (isCardError(doc)) {
           let cardError = doc;
-          cardError.deps = [reference];
+          cardError.deps = [
+            !reference.endsWith('.json') ? `${reference}.json` : reference,
+          ];
           throw cardError;
         }
         let fieldValue = (await createFromSerialized(

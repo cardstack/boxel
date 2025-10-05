@@ -26,6 +26,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   getMonacoContent,
 } from '../helpers';
@@ -35,7 +36,6 @@ import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-let matrixRoomId = '';
 let mockedFileContent = 'Hello, world!';
 
 const testCardContent = `
@@ -44,10 +44,10 @@ import StringField from 'https://cardstack.com/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
-  
+
   @field name = contains(StringField);
   @field description = contains(StringField);
-  
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div data-test-test-card>
@@ -83,11 +83,12 @@ module('Acceptance | Code patches tests', function (hooks) {
       return new Response(mockedFileContent);
     };
 
-    matrixRoomId = await createAndJoinRoom({
+    await createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
@@ -208,7 +209,7 @@ ${REPLACE_MARKER}\n\`\`\``;
         event.content['m.relates_to']?.event_id === eventId &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       codePatchResultEvents.length,
       1,
       'code patch result event is dispatched',
@@ -448,7 +449,7 @@ ${REPLACE_MARKER}
           APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       codePatchResultEvents.length,
       3,
       'code patch result events are dispatched',
@@ -493,7 +494,7 @@ ${REPLACE_MARKER}\n\`\`\``;
         event.content['m.relates_to']?.event_id === eventId &&
         event.content['m.relates_to']?.key === 'failed',
     );
-    assert.equal(
+    assert.strictEqual(
       codePatchResultEvents.length,
       1,
       'code patch result event is dispatched',
@@ -725,7 +726,7 @@ ${REPLACE_MARKER}
     let successfulCodePatchResultEvents = codePatchResultEvents.filter(
       (event) => event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       successfulCodePatchResultEvents.length,
       2,
       'successful code patch result events are dispatched',
@@ -733,7 +734,7 @@ ${REPLACE_MARKER}
     let failedCodePatchResultEvents = codePatchResultEvents.filter(
       (event) => event.content['m.relates_to']?.key === 'failed',
     );
-    assert.equal(
+    assert.strictEqual(
       failedCodePatchResultEvents.length,
       1,
       'failed code patch result events are dispatched',
@@ -1637,7 +1638,7 @@ ${REPLACE_MARKER}\n\`\`\``;
         event.content['m.relates_to']?.event_id === eventId &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       codePatchResultEvents.length,
       1,
       'code patch result event is dispatched',
@@ -1749,7 +1750,7 @@ ${REPLACE_MARKER}\n\`\`\``;
         event.content['m.relates_to']?.event_id === eventId &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       codePatchResultEvents.length,
       1,
       'code patch result event is dispatched',

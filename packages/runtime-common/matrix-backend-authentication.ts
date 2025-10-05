@@ -70,10 +70,14 @@ export class MatrixBackendAuthentication {
       );
     }
 
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
+    // Clone the account data instead of using it directly,
+    // since mutating the original object would modify the Matrix client’s store
+    // and prevent updates from being sent back to the server.
+    let dmRooms = {
+      ...((await this.matrixClient.getAccountDataFromServer<
+        Record<string, string>
+      >('boxel.session-rooms')) ?? {}),
+    };
     let roomId = dmRooms[user];
 
     if (!roomId) {
