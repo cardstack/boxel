@@ -8,7 +8,14 @@ import {
   GridContainer,
 } from '@cardstack/boxel-ui/components';
 
-import { field, contains, Component, CSSField, Theme } from './card-api';
+import {
+  field,
+  contains,
+  Component,
+  CSSField,
+  Theme,
+  type BaseDefComponent,
+} from './card-api';
 import ThemeVarField from './structured-theme-variables';
 
 // helpers for generating CSS from fields
@@ -335,7 +342,7 @@ class StructuredTheme extends Theme {
     },
   });
 
-  static isolated = Isolated;
+  static isolated: BaseDefComponent = Isolated;
 }
 
 export { StructuredTheme };
