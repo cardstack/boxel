@@ -162,7 +162,15 @@ export default class FileDefManagerImpl
     let response = await this.client.uploadContent(content, {
       type: contentType,
     });
-    let url = this.client.mxcUrlToHttp(response.content_uri);
+    let url = this.client.mxcUrlToHttp(
+      response.content_uri,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
     if (!url) {
       throw new Error('Failed to convert mxcUrl to http');
     }
@@ -200,7 +208,15 @@ export default class FileDefManagerImpl
     let storedUrl = url;
     if (canonicalKey.startsWith('mxc://')) {
       try {
-        const maybeHttp = this.client.mxcUrlToHttp(canonicalKey);
+        const maybeHttp = this.client.mxcUrlToHttp(
+          canonicalKey,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          true,
+        );
         if (maybeHttp) {
           storedUrl = maybeHttp;
         }

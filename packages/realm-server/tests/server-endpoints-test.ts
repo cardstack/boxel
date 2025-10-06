@@ -314,7 +314,8 @@ module(basename(__filename), function () {
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let results = response.body as CardCollectionDocument;
-            assert.strictEqual(results.data.length, 1);
+            (assert.strictEqual(results.data.length, 1),
+              'correct number of search results');
           }
         });
 

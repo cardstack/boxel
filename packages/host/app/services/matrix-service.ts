@@ -67,6 +67,7 @@ import {
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -469,12 +470,18 @@ export default class MatrixService extends Service {
       backgroundURL,
     });
     let { realms = [] } =
-      (await this.client.getAccountDataFromServer<{ realms: string[] }>(
+      ((await this.client.getAccountDataFromServer(
         APP_BOXEL_REALMS_EVENT_TYPE,
-      )) ?? {};
-    realms.push(personalRealmURL.href);
-    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, { realms });
-    await this.realmServer.setAvailableRealmURLs(realms);
+      )) as { realms: string[] }) ?? {};
+
+    // Clone the account data instead of using it directly,
+    // since mutating the original object would modify the Matrix client’s store
+    // and prevent updates from being sent back to the server.
+    let newRealms = [...realms, personalRealmURL.href];
+    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+      realms: newRealms,
+    });
+    await this.realmServer.setAvailableRealmURLs(newRealms);
   }
 
   async setDisplayName(displayName: string) {
@@ -554,9 +561,9 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        let accountDataContent = await this._client.getAccountDataFromServer<{
-          realms: string[];
-        }>(APP_BOXEL_REALMS_EVENT_TYPE);
+        let accountDataContent = (await this._client.getAccountDataFromServer(
+          APP_BOXEL_REALMS_EVENT_TYPE,
+        )) as { realms: string[] } | null;
 
         let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
           ([_url, realmResource]) => !realmResource.isLoggedIn,
@@ -1760,6 +1767,10 @@ export default class MatrixService extends Service {
 
   async setLLMForCodeMode() {
     return this.setLLMModel(DEFAULT_CODING_LLM);
+  }
+
+  async setLLMForInteractMode() {
+    return this.setLLMModel(DEFAULT_LLM);
   }
 
   private async setLLMModel(model: string) {

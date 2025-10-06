@@ -20,6 +20,8 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
 
+import config from '@cardstack/host/config/environment';
+
 import RealmService from './realm';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
@@ -197,8 +199,19 @@ export default class RealmServerService extends Service {
     });
 
     if (!response.ok) {
+      let responseText = await response.text();
+
+      // Temporary development instruction to help with user setup
+      let isDevelopment = config.environment === 'development';
+      if (isDevelopment && responseText.includes('User in JWT not found')) {
+        console.error(
+          '\x1b[1m\x1b[31m%s\x1b[0m',
+          'Failed to login to realms due to missing entry in the users table. It is likely the user setup is incomplete - run pnpm register-all in matrix package',
+        );
+      }
+
       throw new Error(
-        `Failed to fetch tokens for accessible realms: ${response.status} - ${await response.text()}`,
+        `Failed to fetch tokens for accessible realms: ${response.status} - ${responseText}`,
       );
     }
 

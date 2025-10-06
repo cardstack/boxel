@@ -2,6 +2,7 @@ import { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { ErrorEntry } from './index-writer';
 
 // a card resource but with optional "id" and "type" props
 export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
@@ -27,7 +28,8 @@ export type PatchData = {
 export interface PrerenderMeta {
   serialized: SingleCardDocument | null;
   searchDoc: Record<string, any> | null;
-  displayName: string | null;
+  displayNames: string[] | null;
+  deps: string[] | null;
   types: string[] | null;
 }
 
@@ -40,19 +42,7 @@ export interface RenderResponse extends PrerenderMeta {
   error?: RenderError;
 }
 
-export interface RenderError {
-  error: string;
-  id?: string;
-  status: number;
-  title?: string;
-  message: string;
-  realm?: string;
-  meta: {
-    lastKnownGoodHtml: string | null;
-    cardTitle: string | null;
-    scopedCssUrls: string[];
-    stack: string | null;
-  };
+export interface RenderError extends ErrorEntry {
   evict?: boolean;
 }
 
@@ -100,6 +90,7 @@ export interface DirectoryEntryRelationship {
 export interface FileMeta {
   kind: 'file';
   lastModified: number | null;
+  resourceCreatedAt?: number;
 }
 
 export interface DirectoryMeta {
@@ -146,6 +137,7 @@ export * from './fetcher';
 export * from './scoped-css';
 export * from './utils';
 export * from './authorization-middleware';
+export * from './resource-types';
 export * from './query';
 export * from './formats';
 export * from './db-types';

@@ -36,15 +36,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
               <li class='{{@selectedView}}-view-container'>
-                <card.component
-                  {{@context.cardComponentModifier
-                    cardId=card.url
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                  class='card'
-                />
+                <card.component class='card' />
               </li>
             {{/each}}
           </:response>
