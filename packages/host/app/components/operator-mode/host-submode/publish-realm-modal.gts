@@ -641,7 +641,7 @@ export default class PublishRealmModal extends Component<Signature> {
       .domain-options {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp);
       }
 
       .domain-option {
@@ -652,15 +652,13 @@ export default class PublishRealmModal extends Component<Signature> {
 
         grid-template-columns: auto var(--boxel-sp-sm) 1fr auto;
 
-        border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-50);
         padding: var(--boxel-sp-lg);
+        padding-bottom: var(--boxel-sp-xl);
       }
 
-      .domain-option:not(:last-child)::after {
-        content: '';
+      .domain-option:not(:last-child) {
         border-bottom: 1px solid var(--boxel-200);
-        padding-bottom: var(--boxel-sp-lg);
       }
 
       .domain-option-headxer {
