@@ -68,6 +68,7 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
         {{unless this.hasCards "host-mode-breadcrumbs--empty"}}'
       aria-label='Card stack navigation'
       hidden={{not this.hasCards}}
+      data-test-host-mode-breadcrumbs
       ...attributes
     >
       {{#if this.hasCards}}

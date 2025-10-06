@@ -89,6 +89,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         {{if this.isActionable "breadcrumb-item--actionable"}}'
       disabled={{this.isDisabled}}
       title={{this.label}}
+      data-test-host-mode-breadcrumb={{@cardId}}
       {{on 'click' this.handleClick}}
     >
       {{#if this.card}}

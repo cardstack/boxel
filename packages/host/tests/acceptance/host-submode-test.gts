@@ -56,7 +56,21 @@ module('Acceptance | host submode', function (hooks) {
 
   hooks.beforeEach(function () {
     realmContents = {
-      'index.json': new CardsGrid(),
+      'index.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Index Card',
+            prefersWideFormat: true,
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../cards-grid',
+              name: 'CardsGrid',
+            },
+          },
+        },
+      },
       '.realm.json': {
         name: 'Test Workspace B',
         backgroundURL:
@@ -71,6 +85,36 @@ module('Acceptance | host submode', function (hooks) {
           attributes: {
             firstName: 'A',
             lastName: 'B',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'Person/2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'B',
+            lastName: 'C',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'Person/3.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'C',
+            lastName: 'D',
           },
           meta: {
             adoptsFrom: {
@@ -203,6 +247,45 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('.container').hasClass('container');
       // The width is applied via CSS class, not inline style
       assert.dom('.host-mode-content:not(.is-wide)').exists();
+    });
+
+    test('breadcrumbs can close stacked cards', async function (assert) {
+      let card1Id = `${testRealmURL}Person/1`;
+      let card2Id = `${testRealmURL}index`;
+      let card3Id = `${testRealmURL}Person/2`;
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${card1Id}.json`, `${card2Id}.json`, `${card3Id}.json`],
+      });
+
+      await waitFor(`[data-test-host-mode-card="${card1Id}"]`);
+
+      assert.dom('[data-test-host-mode-breadcrumb]').exists({ count: 3 });
+      assert.dom(`[data-test-host-mode-stack-item="${card2Id}"]`).exists();
+      assert.dom(`[data-test-host-mode-stack-item="${card3Id}"]`).exists();
+
+      await click(`[data-test-host-mode-breadcrumb="${card2Id}"]`);
+
+      await waitUntil(() => {
+        return !document.querySelector(
+          `[data-test-host-mode-stack-item="${card3Id}"]`,
+        );
+      });
+
+      assert.dom('[data-test-host-mode-breadcrumb]').exists({ count: 2 });
+      assert.dom(`[data-test-host-mode-card="${card1Id}"]`).exists();
+      assert.dom(`[data-test-host-mode-stack-item="${card2Id}"]`).exists();
+
+      await click(`[data-test-host-mode-breadcrumb="${card1Id}"]`);
+
+      await waitUntil(() => {
+        return !document.querySelector('[data-test-host-mode-stack-item]');
+      });
+
+      assert.dom(`[data-test-host-mode-card="${card1Id}"]`).exists();
+      assert.dom('[data-test-host-mode-breadcrumb]').doesNotExist();
+      assert.dom('[data-test-host-mode-breadcrumbs]').doesNotExist();
     });
 
     test('shows error state when card is not found', async function (assert) {
