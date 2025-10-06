@@ -84,6 +84,12 @@ module(basename(__filename), function () {
         'test-',
         'MyApp',
         'TEST',
+        // Punycode/homoglyph attack protection
+        'xn--test',
+        'xn--example-123',
+        'tëst', // non-ASCII character
+        'test™', // trademark symbol
+        'tеst', // Cyrillic 'e' (homoglyph)
       ];
 
       for (const subdomain of invalidSubdomains) {
