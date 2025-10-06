@@ -41,9 +41,9 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
     const sendRequestCommand = new SendRequestViaProxyCommand(commandContext);
 
     const result = await createRealImage({
-      avatar: this.avatarModel, // This is the avatar field
-      avatarUrl: this.args.model.thumbnailURL, // This is thumbnailURL field computed from avatar field
-      cardInfo: this.args.model.cardInfo,
+      avatar: this.avatarModel, // This is the avatar options model from avatar field
+      avatarUrl: this.args.model.avatar?.thumbnailURL, // This is thumbnailURL field computed from avatar field
+      cardInfo: this.args.model.avatar?.cardInfo, // This is cardInfo from avatar field
       sendRequestCommand,
     });
 
