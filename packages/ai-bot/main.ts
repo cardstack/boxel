@@ -422,6 +422,7 @@ Common issues are:
 
           let chunkHandlingError: string | undefined;
           let generationId: string | undefined;
+          log.info('Starting generation with model %s', promptParts.model);
           const runner = assistant
             .getResponse(promptParts)
             .on('chunk', async (chunk, snapshot) => {
@@ -463,8 +464,12 @@ Common issues are:
 
           try {
             await runner.finalChatCompletion();
+            log.info('Generation complete');
             await responder.finalize();
+            log.info('Response finalized');
           } catch (error) {
+            log.error('Error during generation or finalization');
+            log.error(error);
             if (chunkHandlingError) {
               await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
             } else {
