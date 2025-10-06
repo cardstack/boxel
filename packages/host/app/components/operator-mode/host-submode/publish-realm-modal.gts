@@ -733,14 +733,13 @@ export default class PublishRealmModal extends Component<Signature> {
         font: normal var(--boxel-font-xs);
         color: #00ac00;
         position: relative;
-        padding-left: calc(var(--boxel-sp-xxxs) + 6px);
+        padding-left: calc(var(--boxel-sp-xxxs) + 3px);
       }
 
       .last-published-at::before {
         content: '•';
         position: absolute;
         left: 0;
-        margin-right: var(--boxel-sp-xxxs);
       }
 
       .unpublish-button {
