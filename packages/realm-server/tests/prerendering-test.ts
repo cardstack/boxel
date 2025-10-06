@@ -337,10 +337,13 @@ module(basename(__filename), function () {
         });
         let { error, ...restOfResult } = response;
 
-        assert.strictEqual(error?.id, testCardURL);
-        assert.strictEqual(error?.message, 'intentional failure during render');
-        assert.strictEqual(error?.status, 500);
-        assert.ok(error?.meta.stack, 'stack trace exists in error');
+        assert.strictEqual(error?.error.id, testCardURL);
+        assert.strictEqual(
+          error?.error.message,
+          'intentional failure during render',
+        );
+        assert.strictEqual(error?.error.status, 500);
+        assert.ok(error?.error.stack, 'stack trace exists in error');
 
         // TODO Perhaps if we add error handlers for the /render/html subroute
         // these all wont be empty, as this is triggering in the /render route
@@ -371,9 +374,12 @@ module(basename(__filename), function () {
         let {
           response: { error },
         } = result;
-        assert.strictEqual(error?.id, testCardURL);
-        assert.strictEqual(error?.message, 'Render timed-out after 4000 ms');
-        assert.strictEqual(error?.status, 504);
+        assert.strictEqual(error?.error.id, testCardURL);
+        assert.strictEqual(
+          error?.error.message,
+          'Render timed-out after 4000 ms',
+        );
+        assert.strictEqual(error?.error.status, 504);
       });
 
       test('unusable triggers eviction and short-circuit', async function (assert) {
@@ -388,12 +394,12 @@ module(basename(__filename), function () {
 
         // We should see an error with evict semantics and short-circuited payloads
         assert.ok(unusable.response.error, 'error present for unusable');
-        assert.strictEqual(unusable.response.error?.id, unusableURL);
+        assert.strictEqual(unusable.response.error?.error.id, unusableURL);
         assert.strictEqual(
-          unusable.response.error?.message,
+          unusable.response.error?.error.message,
           'forced unusable for test',
         );
-        assert.strictEqual(unusable.response.error?.status, 500);
+        assert.strictEqual(unusable.response.error?.error.status, 500);
         assert.strictEqual(
           unusable.response.isolatedHTML,
           null,
@@ -466,7 +472,7 @@ module(basename(__filename), function () {
           opts: { timeoutMs: 1, simulateTimeoutMs: 5 },
         });
         assert.strictEqual(
-          timeoutRun.response.error?.title,
+          timeoutRun.response.error?.error.title,
           'Render timeout',
           'got timeout error',
         );
