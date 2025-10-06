@@ -5,6 +5,8 @@ import {
   contains,
   Component,
   FieldDef,
+  getFields,
+  type BoxComponent,
   type FieldsTypeFor,
 } from './card-api';
 import ColorField from './color';
@@ -19,30 +21,27 @@ function dasherize(str: string): string {
 
 type FieldNameType = keyof FieldsTypeFor<ThemeVarField> & string;
 
+interface CssVariableField {
+  fieldName: FieldNameType;
+  cssVariableName: string;
+  component?: BoxComponent;
+  value: string | undefined | null;
+}
+
 class Embedded extends Component<typeof ThemeVarField> {
-  private get fields() {
-    if (!this.args.fields) {
-      return;
-    }
-    let fieldNames = Object.keys(this.args.fields ?? {}) as FieldNameType[];
-    if (!fieldNames?.length) {
-      return;
-    }
-    let fields = [];
-    for (let fieldName of fieldNames) {
-      fields.push({
-        fieldName,
-        cssVariableName: `--${dasherize(fieldName)}`,
-        component: this.args.fields[fieldName],
-        value: this.args.model?.[fieldName] as string | undefined,
-      });
-    }
-    return fields;
+  private get cssFields() {
+    let fields = this.args.fields;
+    let cssFields = this.args.model.cssVariableFields;
+    cssFields = cssFields?.map((f) => ({
+      component: fields?.[f.fieldName],
+      ...f,
+    }));
+    return cssFields;
   }
 
   <template>
     <div class='field-list'>
-      {{#each this.fields as |field|}}
+      {{#each this.cssFields as |field|}}
         <div class='code-preview'>
           <span class='css-label'>{{field.cssVariableName}}</span>
           <CopyButton
@@ -187,6 +186,26 @@ export default class ThemeVarField extends FieldDef {
   @field shadowLg = contains(CSSValueField);
   @field shadowXl = contains(CSSValueField);
   @field shadow2xl = contains(CSSValueField);
+
+  get cssVariableFields(): CssVariableField[] | undefined {
+    let fields = getFields(this);
+    if (!fields) {
+      return;
+    }
+    let fieldNames = Object.keys(fields) as FieldNameType[];
+    if (!fieldNames?.length) {
+      return;
+    }
+    let cssVariableFields: CssVariableField[] = [];
+    for (let fieldName of fieldNames) {
+      cssVariableFields.push({
+        fieldName,
+        cssVariableName: `--${dasherize(fieldName)}`,
+        value: this?.[fieldName] as string | undefined | null,
+      });
+    }
+    return cssVariableFields;
+  }
 
   static embedded = Embedded;
 }

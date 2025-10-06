@@ -7,6 +7,7 @@ import {
   BoxelContainer,
   GridContainer,
 } from '@cardstack/boxel-ui/components';
+import { generateCssVariables } from '@cardstack/boxel-ui/helpers';
 
 import {
   field,
@@ -18,120 +19,13 @@ import {
 } from './card-api';
 import ThemeVarField from './structured-theme-variables';
 
-// helpers for generating CSS from fields
-function addCSSVar(
-  vars: string[],
-  property: string,
-  value: string | undefined | null,
-): void {
-  let val = value?.replace(';', '')?.trim();
-  if (val?.length) {
-    vars.push(`  ${property}: ${val};`);
-  }
-}
-
-function generateCSSBlockString(blockName: string, vars: string[]): string {
-  if (vars?.length === 0) {
-    return '';
-  }
-  return `${blockName} {\n${vars.join('\n')}\n}`;
-}
-
-function generateBlockVariables(vars: ThemeVarField | null | undefined) {
-  const cssVars: string[] = [];
-
-  if (!vars) {
-    return cssVars;
-  }
-
-  // Color variables
-  addCSSVar(cssVars, '--background', vars.background);
-  addCSSVar(cssVars, '--foreground', vars.foreground);
-  addCSSVar(cssVars, '--card', vars.card);
-  addCSSVar(cssVars, '--card-foreground', vars.cardForeground);
-  addCSSVar(cssVars, '--popover', vars.popover);
-  addCSSVar(cssVars, '--popover-foreground', vars.popoverForeground);
-  addCSSVar(cssVars, '--primary', vars.primary);
-  addCSSVar(cssVars, '--primary-foreground', vars.primaryForeground);
-  addCSSVar(cssVars, '--secondary', vars.secondary);
-  addCSSVar(cssVars, '--secondary-foreground', vars.secondaryForeground);
-  addCSSVar(cssVars, '--muted', vars.muted);
-  addCSSVar(cssVars, '--muted-foreground', vars.mutedForeground);
-  addCSSVar(cssVars, '--accent', vars.accent);
-  addCSSVar(cssVars, '--accent-foreground', vars.accentForeground);
-  addCSSVar(cssVars, '--destructive', vars.destructive);
-  addCSSVar(cssVars, '--destructive-foreground', vars.destructiveForeground);
-  addCSSVar(cssVars, '--border', vars.border);
-  addCSSVar(cssVars, '--input', vars.input);
-  addCSSVar(cssVars, '--ring', vars.ring);
-
-  // Chart variables
-  addCSSVar(cssVars, '--chart-1', vars.chart1);
-  addCSSVar(cssVars, '--chart-2', vars.chart2);
-  addCSSVar(cssVars, '--chart-3', vars.chart3);
-  addCSSVar(cssVars, '--chart-4', vars.chart4);
-  addCSSVar(cssVars, '--chart-5', vars.chart5);
-
-  // Sidebar color variables
-  addCSSVar(cssVars, '--sidebar', vars.sidebar);
-  addCSSVar(cssVars, '--sidebar-foreground', vars.sidebarForeground);
-  addCSSVar(cssVars, '--sidebar-primary', vars.sidebarPrimary);
-  addCSSVar(
-    cssVars,
-    '--sidebar-primary-foreground',
-    vars.sidebarPrimaryForeground,
-  );
-  addCSSVar(cssVars, '--sidebar-accent', vars.sidebarAccent);
-  addCSSVar(
-    cssVars,
-    '--sidebar-accent-foreground',
-    vars.sidebarAccentForeground,
-  );
-  addCSSVar(cssVars, '--sidebar-border', vars.sidebarBorder);
-  addCSSVar(cssVars, '--sidebar-ring', vars.sidebarRing);
-
-  // Font variables
-  addCSSVar(cssVars, '--font-sans', vars.fontSans);
-  addCSSVar(cssVars, '--font-serif', vars.fontSerif);
-  addCSSVar(cssVars, '--font-mono', vars.fontMono);
-
-  // Geometry variables
-  addCSSVar(cssVars, '--radius', vars.radius);
-  addCSSVar(cssVars, '--spacing', vars.spacing);
-  addCSSVar(cssVars, '--tracking-normal', vars.trackingNormal);
-
-  // Shadow variables
-  addCSSVar(cssVars, '--shadow-2xs', vars.shadow2xs);
-  addCSSVar(cssVars, '--shadow-xs', vars.shadowXs);
-  addCSSVar(cssVars, '--shadow-sm', vars.shadowSm);
-  addCSSVar(cssVars, '--shadow', vars.shadow);
-  addCSSVar(cssVars, '--shadow-md', vars.shadowMd);
-  addCSSVar(cssVars, '--shadow-lg', vars.shadowLg);
-  addCSSVar(cssVars, '--shadow-xl', vars.shadowXl);
-  addCSSVar(cssVars, '--shadow-2xl', vars.shadow2xl);
-
-  return cssVars;
-}
-
-type CSSVariableBlockInput = {
-  blockname: string;
-  vars: ThemeVarField | null | undefined;
+const formatCssFields = (vars: ThemeVarField) => {
+  const items = vars?.cssVariableFields?.map((f) => ({
+    property: f.cssVariableName,
+    value: f.value,
+  }));
+  return items;
 };
-
-function generateBlocks(blockInputs: CSSVariableBlockInput[]): string {
-  const blocks: string[] = [];
-  for (let { blockname, vars } of blockInputs) {
-    const varList = generateBlockVariables(vars);
-    const blockString = generateCSSBlockString(blockname, varList);
-    if (blockString) {
-      blocks.push(blockString);
-    }
-  }
-  if (blocks.length === 0) {
-    return '';
-  }
-  return blocks.join('\n\n');
-}
 
 class Isolated extends Component<typeof StructuredTheme> {
   @tracked isGeneratedCSSVisible = true;
@@ -320,7 +214,7 @@ class Isolated extends Component<typeof StructuredTheme> {
   </template>
 }
 
-class StructuredTheme extends Theme {
+export default class StructuredTheme extends Theme {
   static displayName = 'Structured Theme';
 
   @field rootVariables = contains(ThemeVarField, {
@@ -335,15 +229,15 @@ class StructuredTheme extends Theme {
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
     computeVia: function (this: StructuredTheme) {
-      return generateBlocks([
-        { blockname: ':root', vars: this.rootVariables },
-        { blockname: '.dark', vars: this.darkModeVariables },
+      if (!generateCssVariables) {
+        return;
+      }
+      return generateCssVariables([
+        { blockname: ':root', vars: formatCssFields(this.rootVariables) },
+        { blockname: '.dark', vars: formatCssFields(this.darkModeVariables) },
       ]);
     },
   });
 
   static isolated: BaseDefComponent = Isolated;
 }
-
-export { StructuredTheme };
-export default StructuredTheme;
