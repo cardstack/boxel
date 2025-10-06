@@ -259,8 +259,8 @@ let autoMigrate = migrateDB || undefined;
   }
 
   let domainsForPublishedRealms = {
-    boxelSpace: process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN,
-    boxelSite: process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN,
+    boxelSpace: process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost',
+    boxelSite: process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost',
   };
 
   let server = new RealmServer({

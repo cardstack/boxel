@@ -40,13 +40,11 @@ module.exports = function (environment) {
     renderTimeoutMs: 30_000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
     publishedRealmBoxelSpaceDomain:
-      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost',
     publishedRealmBoxelSiteDomain:
-      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost',
 
     // the fields below may be rewritten by the realm server
-    defaultPublishedRealmDomain:
-      process.env.DEFAULT_PUBLISHED_REALM_DOMAIN || 'localhost:4201',
     hostsOwnAssets: true,
     realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:
