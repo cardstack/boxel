@@ -20,9 +20,9 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
+import HostModeContent from '../host-mode/host-mode-content';
 import PublishRealmModal from './publish-realm-modal';
 import SubmodeLayout from './submode-layout';
-import HostModeContent from '../host-mode/host-mode-content';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;

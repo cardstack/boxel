@@ -1,16 +1,17 @@
-import { htmlSafe, SafeString } from '@ember/template';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { htmlSafe, SafeString } from '@ember/template';
 
 import { isTesting } from '@embroider/macros';
 
+import Component from '@glimmer/component';
+import { cached, tracked } from '@glimmer/tracking';
+
+import X from '@cardstack/boxel-icons/x';
+import { IconButton } from '@cardstack/boxel-ui/components';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import HostModeCard from './host-mode-card';
-import { IconButton } from '@cardstack/boxel-ui/components';
-import X from '@cardstack/boxel-icons/x';
 
 interface Signature {
   Element: HTMLElement;

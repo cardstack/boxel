@@ -1,11 +1,14 @@
-import Component from '@glimmer/component';
-import { getCard } from '@cardstack/host/resources/card-resource';
-import { htmlSafe } from '@ember/template';
-import { CardDef } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
+import { htmlSafe } from '@ember/template';
 
-import { not, gt } from '@cardstack/boxel-ui/helpers';
+import Component from '@glimmer/component';
 
+import { gt, not } from '@cardstack/boxel-ui/helpers';
+import { getCard } from '@cardstack/host/resources/card-resource';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import HostModeBreadcrumbs from './host-mode-breadcrumbs';
 import HostModeCard from './host-mode-card';
 import HostModeStack from './host-mode-stack';
 
@@ -40,6 +43,10 @@ export default class HostModeContent extends Component<Signature> {
 
   get currentCardId() {
     return this.args.cardIds[0];
+  }
+
+  get displayBreadcrumbs() {
+    return this.args.cardIds && this.args.cardIds.length > 1;
   }
 
   get backgroundImageStyle() {
@@ -86,13 +93,18 @@ export default class HostModeContent extends Component<Signature> {
       class={{this.hostModeContentContainer}}
       style={{this.backgroundImageStyle}}
     >
+      {{#if this.displayBreadcrumbs}}
+        <div class='breadcrumb-container'>
+          <HostModeBreadcrumbs @cardIds={{@cardIds}} @close={{this.close}} />
+        </div>
+      {{/if}}
       <HostModeCard
         @cardId={{this.currentCardId}}
         @displayBoundaries={{not this.isWideCard}}
         class='current-card'
       />
       {{#if (gt @cardIds.length 1)}}
-        <HostModeStack @cardIds={{this.args.cardIds}} @close={{this.close}} />
+        <HostModeStack @cardIds={{@cardIds}} @close={{this.close}} />
       {{/if}}
     </div>
 
@@ -108,11 +120,23 @@ export default class HostModeContent extends Component<Signature> {
         position: relative;
       }
 
+      .breadcrumb-container {
+        position: absolute;
+        top: var(--boxel-sp);
+        left: var(--boxel-sp);
+        z-index: 2;
+      }
+
       .host-mode-content.is-wide {
         padding: 0;
         --host-mode-card-width: 100%;
         --host-mode-card-padding: 0;
         --host-mode-card-border-radius: 0;
+      }
+
+      .host-mode-content.is-wide .breadcrumb-container {
+        top: var(--boxel-sp-lg);
+        left: var(--boxel-sp-lg);
       }
     </style>
   </template>

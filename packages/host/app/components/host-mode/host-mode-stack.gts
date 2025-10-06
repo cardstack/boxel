@@ -31,15 +31,16 @@ export default class HostModeStack extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
-        --host-mode-stack-padding-top: var(--boxel-sp-lg);
-        --host-mode-stack-padding-bottom: var(--boxel-sp-lg);
-        --host-mode-stack-padding-inline: var(--boxel-sp-lg);
+        --host-mode-stack-padding-top: var(--boxel-sp-xxl);
+        --host-mode-stack-padding-bottom: var(--boxel-sp-xxl);
+        --host-mode-stack-padding-inline: var(--boxel-sp-xxl);
       }
 
       .host-mode-stack {
         z-index: 0;
         height: 100%;
         width: 100%;
+        background-color: rgba(0, 0, 0, 0.35);
         background-position: center;
         background-size: cover;
         padding-top: var(--host-mode-stack-padding-top);
