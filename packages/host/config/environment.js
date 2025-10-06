@@ -45,6 +45,8 @@ module.exports = function (environment) {
       process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
 
     // the fields below may be rewritten by the realm server
+    defaultPublishedRealmDomain:
+      process.env.DEFAULT_PUBLISHED_REALM_DOMAIN || 'localhost:4201',
     hostsOwnAssets: true,
     realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:

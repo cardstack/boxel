@@ -1,5 +1,6 @@
 import Koa from 'koa';
 import {
+  fetchUserPermissions,
   query,
   SupportedMimeType,
   logger,
@@ -20,8 +21,10 @@ import {
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
+  sendResponseForUnprocessableEntity,
   setContextResponse,
 } from '../middleware';
+import { createJWT } from '../jwt';
 import { type CreateRoutesArgs } from '../routes';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
@@ -105,7 +108,7 @@ export default function handlePublishRealm({
       return;
     }
 
-    let { user: ownerUserId } = token;
+    let { user: ownerUserId, sessionRoom: tokenSessionRoom } = token;
     let permissions = await fetchRealmPermissions(
       dbAdapter,
       new URL(sourceRealmURL),
@@ -119,30 +122,45 @@ export default function handlePublishRealm({
     }
 
     try {
-      // TODO restore in CS-9468
-      // let realmInfoResponse = await virtualNetwork.handle(
-      //   new Request(`${sourceRealmURL}_info`, {
-      //     headers: {
-      //       Accept: SupportedMimeType.RealmInfo,
-      //     },
-      //   }),
-      // );
+      let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
+        userId: ownerUserId,
+      });
 
-      // if (!realmInfoResponse || realmInfoResponse.status !== 200) {
-      //   log.warn(
-      //     `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
-      //   );
-      //   throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
-      // }
+      let sourceRealmSession = createJWT(
+        {
+          user: ownerUserId,
+          realm: sourceRealmURL,
+          permissions: permissionsForAllRealms[sourceRealmURL],
+          sessionRoom: tokenSessionRoom,
+        },
+        '1h',
+        realmSecretSeed,
+      );
 
-      // let realmInfoJson = await realmInfoResponse.json();
+      let realmInfoResponse = await virtualNetwork.handle(
+        new Request(`${sourceRealmURL}_info`, {
+          headers: {
+            Accept: SupportedMimeType.RealmInfo,
+            Authorization: sourceRealmSession,
+          },
+        }),
+      );
 
-      // if (realmInfoJson.data.attributes.publishable !== true) {
-      //   return sendResponseForUnprocessableEntity(
-      //     ctxt,
-      //     `Realm ${sourceRealmURL} is not publishable`,
-      //   );
-      // }
+      if (!realmInfoResponse || realmInfoResponse.status !== 200) {
+        log.warn(
+          `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
+        );
+        throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
+      }
+
+      let realmInfoJson = await realmInfoResponse.json();
+
+      if (realmInfoJson.data.attributes.publishable !== true) {
+        return sendResponseForUnprocessableEntity(
+          ctxt,
+          `Realm ${sourceRealmURL} is not publishable`,
+        );
+      }
 
       let existingPublishedRealm = realms.find(
         (r) => r.url === publishedRealmURL,
