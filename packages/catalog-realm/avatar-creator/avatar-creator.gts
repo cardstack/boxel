@@ -14,6 +14,21 @@ import { restartableTask } from 'ember-concurrency';
 import { CreateRealImage } from '../commands/create-real-image';
 
 class IsolatedTemplate extends Component<typeof AvatarCreator> {
+  // Convert avatar field to the format expected by the component
+  get avatarModel() {
+    return {
+      topType: this.args.model.avatar?.topType,
+      accessoriesType: this.args.model.avatar?.accessoriesType,
+      hairColor: this.args.model.avatar?.hairColor,
+      facialHairType: this.args.model.avatar?.facialHairType,
+      clotheType: this.args.model.avatar?.clotheType,
+      eyeType: this.args.model.avatar?.eyeType,
+      eyebrowType: this.args.model.avatar?.eyebrowType,
+      mouthType: this.args.model.avatar?.mouthType,
+      skinColor: this.args.model.avatar?.skinColor,
+    };
+  }
+
   updateAvatar = (model: AvataaarsModel) => {
     this.args.model.avatar = new Avatar(model);
   };
@@ -31,7 +46,7 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
     const createRealImageCommand = new CreateRealImage(commandContext);
 
     await createRealImageCommand.execute({
-      avatar: this.args.model.avatar, // The avatar field is used in prompts as a reference image
+      avatar: this.args.model.avatar, // Pass the Avatar field (not the plain model)
       avatarUrl: this.args.model?.thumbnailURL, // The thumbnailURL field is used in prompts as a reference image
       notes: this.args.model.cardInfo?.notes, // The cardInfo notes field is used in prompts as context
     });
@@ -55,7 +70,7 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
 
   <template>
     <AvatarCreatorComponent
-      @model={{@model.avatar}}
+      @model={{this.avatarModel}}
       @context={{@context}}
       @onUpdate={{this.updateAvatar}}
       @isImageGenerating={{this.isImageGenerating}}
