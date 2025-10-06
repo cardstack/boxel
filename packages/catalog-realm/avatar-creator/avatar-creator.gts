@@ -9,26 +9,11 @@ import StringField from 'https://cardstack.com/base/string';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Avatar from '../fields/avatar';
 import AvatarCreatorComponent from './components/avatar-creator';
-import { AvataaarsModel, createRealImage } from '../external/avataar-utils';
+import { AvataaarsModel } from '../external/avataar-utils';
 import { restartableTask } from 'ember-concurrency';
-import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';
+import { CreateRealImage } from '../commands/create-real-image';
 
 class IsolatedTemplate extends Component<typeof AvatarCreator> {
-  // Convert avatar field to the format expected by the component
-  get avatarModel() {
-    return {
-      topType: this.args.model.avatar?.topType,
-      accessoriesType: this.args.model.avatar?.accessoriesType,
-      hairColor: this.args.model.avatar?.hairColor,
-      facialHairType: this.args.model.avatar?.facialHairType,
-      clotheType: this.args.model.avatar?.clotheType,
-      eyeType: this.args.model.avatar?.eyeType,
-      eyebrowType: this.args.model.avatar?.eyebrowType,
-      mouthType: this.args.model.avatar?.mouthType,
-      skinColor: this.args.model.avatar?.skinColor,
-    };
-  }
-
   updateAvatar = (model: AvataaarsModel) => {
     this.args.model.avatar = new Avatar(model);
   };
@@ -37,21 +22,21 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
     this.createRealImageTask.perform();
   };
 
-  createRealImageTask = restartableTask(async () => {
+  private createRealImageTask = restartableTask(async () => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
       throw new Error('No command context found');
     }
-    const sendRequestCommand = new SendRequestViaProxyCommand(commandContext);
 
-    const result = await createRealImage({
-      avatar: this.avatarModel, // This is the avatar options model from avatar field
-      avatarUrl: this.args.model?.thumbnailURL,
-      cardInfo: this.args.model?.cardInfo, // This is cardInfo from avatar field
-      sendRequestCommand,
+    const createRealImageCommand = new CreateRealImage(commandContext);
+
+    await createRealImageCommand.execute({
+      avatar: this.args.model.avatar, // The avatar field is used in prompts as a reference image
+      avatarUrl: this.args.model?.thumbnailURL, // The thumbnailURL field is used in prompts as a reference image
+      notes: this.args.model.cardInfo?.notes, // The cardInfo notes field is used in prompts as context
     });
 
-    return result;
+    return createRealImageCommand.result;
   });
 
   get isImageGenerating() {
@@ -70,7 +55,7 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
 
   <template>
     <AvatarCreatorComponent
-      @model={{this.avatarModel}}
+      @model={{@model.avatar}}
       @context={{@context}}
       @onUpdate={{this.updateAvatar}}
       @isImageGenerating={{this.isImageGenerating}}
