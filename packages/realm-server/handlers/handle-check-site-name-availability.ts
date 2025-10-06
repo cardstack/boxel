@@ -19,11 +19,13 @@ export function handleCheckSiteNameAvailabilityRequest({
   domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   let boxelSiteDomain = domainsForPublishedRealms?.boxelSite;
-  if (!boxelSiteDomain) {
-    throw new Error('domainsForPublishedRealms.boxelSite is required');
-  }
+
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
+      if (!boxelSiteDomain) {
+        throw new Error('domainsForPublishedRealms.boxelSite is required');
+      }
+
       const subdomain = ctxt.query.subdomain as string;
 
       if (subdomain === undefined) {
