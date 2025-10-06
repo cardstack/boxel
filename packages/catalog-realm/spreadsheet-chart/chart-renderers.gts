@@ -1,4 +1,5 @@
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { concat } from '@ember/helper';
 import GlimmerComponent from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
 
@@ -37,8 +38,9 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
           : item.colorA || item.color || 'var(--chart-1, #3b82f6)';
       props['--size'] = String(size);
       props['--color'] = color;
-    } else if (chartType === 'pie' || chartType === 'donut') {
-      props['--size'] = String(item.size || item.normalizedSize || 0);
+    } else if (chartType === 'pie' || chartType === 'line') {
+      props['--start'] = String(item.start || 0);
+      props['--end'] = String(item.end || 0);
       props['--color'] = item.color || 'var(--chart-1, #3b82f6)';
     } else {
       props['--size'] = String(item.size || item.normalizedSize || 0);
@@ -145,6 +147,51 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
               {{/each}}
             </tbody>
 
+          {{else if (eq @chartData.chartType 'pie')}}
+            <tbody>
+              {{#each @chartData.data as |item|}}
+                <tr>
+                  <th scope='row'>{{item.category}}</th>
+                  <td style={{this.getCSSProps item @chartData.chartType}}>
+                    <span class='data'>{{item.value}}</span>
+                  </td>
+                </tr>
+              {{/each}}
+            </tbody>
+
+          {{else if (eq @chartData.chartType 'line')}}
+            <div
+              class='line-chart-wrapper'
+              id='line-chart-{{@chartData.chartType}}'
+            >
+              <table class={{this.getChartClasses @chartData.chartType}}>
+                <caption>{{@chartData.title}}</caption>
+                <tbody>
+                  <tr>
+                    {{#each @chartData.data as |item|}}
+                      <td
+                        style={{this.getCSSProps item @chartData.chartType}}
+                        title='{{item.fullLabel}}: {{item.value}}'
+                      >
+                        <span class='data'>{{item.value}}</span>
+                        {{#if item.displayLabel}}
+                          <span class='x-label'>{{item.displayLabel}}</span>
+                        {{/if}}
+                      </td>
+                    {{/each}}
+                  </tr>
+                </tbody>
+              </table>
+
+              {{#if @chartData.xAxisLabel}}
+                <div class='primary-axis'>{{@chartData.xAxisLabel}}</div>
+              {{/if}}
+
+              {{#if @chartData.yAxisLabel}}
+                <div class='data-axis-1'>{{@chartData.yAxisLabel}}</div>
+              {{/if}}
+            </div>
+
           {{else}}
             <thead>
               <tr>
@@ -171,7 +218,7 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
               <div class='legend-item'>
                 <div
                   class='legend-color'
-                  style='background-color: {{item.color}};'
+                  style={{concat 'background-color: ' item.color}}
                 ></div>
                 <span class='legend-label'>{{item.label}}</span>
               </div>
@@ -241,8 +288,98 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
         max-height: 400px;
       }
 
-      .charts-css.line {
+      .line-chart-wrapper {
+        display: grid;
+        align-items: center;
+        justify-items: center;
+        grid-template-columns: 50px 1fr;
+        grid-template-rows: 1fr 50px;
+        grid-template-areas:
+          'data-axis-1 chart'
+          '. primary-axis';
+        width: 100%;
+        height: 100%;
+        gap: 0.5rem;
+      }
+
+      .line-chart-wrapper .charts-css.line {
+        grid-area: chart;
         --datasets-spacing: 0;
+        overflow-x: auto;
+        display: block;
+        white-space: nowrap;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      .line-chart-wrapper .primary-axis {
+        grid-area: primary-axis;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--foreground, #374151);
+        text-align: center;
+        padding: 0.5rem;
+      }
+
+      .line-chart-wrapper .data-axis-1 {
+        grid-area: data-axis-1;
+        writing-mode: tb-rl;
+        transform: rotateZ(180deg);
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--foreground, #374151);
+        text-align: center;
+        padding: 0.5rem;
+      }
+
+      .charts-css.line tbody tr {
+        display: inline-flex;
+        width: max-content;
+      }
+
+      .charts-css.line td {
+        width: 30px;
+        position: relative;
+      }
+
+      .x-label {
+        display: block;
+        margin-top: 0.25rem;
+        font-size: 0.75rem;
+        text-align: center;
+        color: var(--foreground, #374151);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Rotate labels when screen is narrow */
+      @media (max-width: 900px) {
+        .x-label {
+          transform: rotate(-45deg);
+          transform-origin: top left;
+          text-align: left;
+        }
+      }
+
+      .charts-css.line .data {
+        display: block !important;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        border: 1px solid var(--chart-1, #3b82f6);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        font-size: 0.75rem; /* Larger font */
+        font-weight: 700; /* Bolder weight */
+        color: var(--chart-1, #3b82f6); /* Colored text */
+        position: absolute;
+        top: -2rem; /* Higher position */
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+        white-space: nowrap; /* Prevent wrapping */
+        min-width: fit-content;
       }
 
       .charts-css tbody th {
@@ -368,6 +505,27 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
 
         caption {
           font-size: 0.875rem;
+        }
+
+        /* Mobile: Switch to vertical layout for line charts */
+        .line-chart-wrapper {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr auto;
+          grid-template-areas:
+            'data-axis-1'
+            'chart'
+            'primary-axis';
+          gap: 0.5rem;
+        }
+
+        .line-chart-wrapper .data-axis-1 {
+          writing-mode: horizontal-tb;
+          transform: none;
+          font-size: 0.75rem;
+        }
+
+        .line-chart-wrapper .primary-axis {
+          font-size: 0.75rem;
         }
       }
 

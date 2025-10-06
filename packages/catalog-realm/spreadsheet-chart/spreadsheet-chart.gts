@@ -329,20 +329,59 @@ export class SpreadsheetChartIsolated extends Component<
 
     switch (chartType) {
       case 'line':
-        data = this.generateLineChartData(headers, colorPalette[0]);
-        maxValue =
-          data.length > 0 ? Math.max(...data.map((d) => d.value), 1) : 1;
-        break;
+        const lineResult = this.generateLineChartData(headers);
+
+        // Validate line chart data
+        if (!lineResult.data || lineResult.data.length === 0) {
+          console.warn('LineChart: No data generated, check X/Y headers');
+          return {
+            chartType,
+            labels: [],
+            data: [],
+            maxValue: 1,
+            xAxisLabel: lineResult.xAxisLabel || 'X-Axis',
+            yAxisLabel: lineResult.yAxisLabel || 'Y-Axis',
+          };
+        }
+
+        data = lineResult.data;
+        const xAxisLabel = lineResult.xAxisLabel;
+        const yAxisLabel = lineResult.yAxisLabel;
+
+        // Calculate max value safely
+        const values = data
+          .map((d) => d.value)
+          .filter((v) => Number.isFinite(v));
+        maxValue = values.length > 0 ? Math.max(...values, 1) : 1;
+
+        return {
+          chartType,
+          labels,
+          data,
+          maxValue,
+          xAxisLabel,
+          yAxisLabel,
+        };
       case 'pie':
         if (items.length > 0) {
           const total = items.reduce((sum, item) => sum + item.total, 0);
           maxValue = safeValue(total);
-          data = items.map((item, i) => ({
-            category: item.category,
-            value: item.total,
-            size: item.total / maxValue,
-            color: colorPalette[i % colorPalette.length],
-          }));
+          let cumulativeStart = 0;
+
+          data = items.map((item, i) => {
+            const size = total > 0 ? item.total / total : 0;
+            const start = cumulativeStart;
+            const end = cumulativeStart + size;
+            cumulativeStart = end;
+
+            return {
+              category: item.category,
+              value: item.total,
+              start: start,
+              end: end,
+              color: colorPalette[i % colorPalette.length],
+            };
+          });
         }
         break;
 
@@ -374,58 +413,69 @@ export class SpreadsheetChartIsolated extends Component<
     return { chartType, labels, data, maxValue };
   }
 
-  private generateLineChartData(headers: string[], color: string) {
+  private generateLineChartData(headers: string[]) {
     const { rows } = this.csvData;
-    const xName = this.args.model?.xHeader || headers[0];
-    const yName = this.args.model?.yHeader || headers[1];
-    const xIndex = headers.indexOf(xName ?? '');
-    const yIndex = headers.indexOf(yName ?? '');
 
-    if (xIndex < 0 || yIndex < 0) return [];
+    const xName = this.args.model?.xHeader || headers[0] || 'X-Axis';
+    const yName = this.args.model?.yHeader || headers[1] || 'Y-Axis';
 
-    const aggregatedData = new Map<string, number>();
+    const xIndex = headers.indexOf(xName);
+    const yIndex = headers.indexOf(yName);
+    if (xIndex < 0 || yIndex < 0 || !rows.length)
+      return { data: [], xAxisLabel: xName, yAxisLabel: yName };
 
+    const parseNumber = (s: string): number | null => {
+      const cleaned = s.replace(/[^0-9+\-Ee.]/g, '');
+      const n = parseFloat(cleaned);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const points: Array<{ x: string; y: number }> = [];
     for (const row of rows) {
-      const xValue = (row[xIndex] ?? '').trim();
-      const yValue = parseFloat((row[yIndex] ?? '').trim());
-      if (!xValue || !Number.isFinite(yValue)) continue;
-
-      aggregatedData.set(xValue, (aggregatedData.get(xValue) ?? 0) + yValue);
+      const x = (row[xIndex] ?? '').trim();
+      const y = parseNumber((row[yIndex] ?? '').trim());
+      if (x && y != null) points.push({ x, y });
     }
 
-    let points = Array.from(aggregatedData.entries()).map(([label, value]) => ({
-      label,
-      value,
+    if (!points.length)
+      return { data: [], xAxisLabel: xName, yAxisLabel: yName };
+
+    points.sort((a, b) => {
+      const aNum = parseFloat(a.x);
+      const bNum = parseFloat(b.x);
+      if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
+      return a.x.localeCompare(b.x, undefined, { numeric: true });
+    });
+
+    const topN = Math.max(
+      1,
+      Math.min(100, Number(this.args.model?.topN) || points.length),
+    );
+    const limited = points.slice(0, topN);
+
+    const yVals = limited.map((p) => p.y);
+    const yMin = Math.min(...yVals);
+    const yMax = Math.max(...yVals);
+    const range = yMax - yMin || 1;
+
+    const labelStep = Math.ceil(limited.length / 10);
+
+    const data = limited.map((p, i) => ({
+      category: p.x,
+      value: p.y,
+      start: i === 0 ? (p.y - yMin) / range : (limited[i - 1].y - yMin) / range,
+      end: (p.y - yMin) / range,
+      color: 'var(--chart-1, #3b82f6)',
+      displayLabel: i % labelStep === 0 ? p.x : '',
+      fullLabel: p.x,
     }));
 
-    if (points.length === 0) return [];
-
-    // Sort points intelligently
-    const allNumeric = points.every((p) => !isNaN(Number(p.label)));
-    if (allNumeric) {
-      points.sort((a, b) => Number(a.label) - Number(b.label));
-    } else {
-      const allDates = points.every((p) => !isNaN(Date.parse(p.label)));
-      if (allDates) {
-        points.sort((a, b) => Date.parse(a.label) - Date.parse(b.label));
-      } else {
-        points.sort((a, b) => a.label.localeCompare(b.label));
-      }
-    }
-
-    const maxValue = Math.max(...points.map((p) => p.value));
-    return points.map((point) => ({
-      category: point.label,
-      value: point.value,
-      size: point.value / (maxValue || 1),
-      color,
-    }));
+    return { data, xAxisLabel: xName, yAxisLabel: yName };
   }
 
   private generateBarChartData(items: any[], colorPalette: string[]) {
     if (items.length === 0) return [];
 
-    // Ensure we have valid numeric values
     const validItems = items.filter((item) => {
       const value = item.total || item.value || item.a || 0;
       return typeof value === 'number' && Number.isFinite(value);
@@ -813,7 +863,6 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
     this.topNField = Number.isFinite(v) && v > 0 ? String(v) : '10';
   }
 
-  // Chart type options
   get chartTypeOptions() {
     return [
       {
@@ -1112,7 +1161,9 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
       {{/if}}
 
       <FieldContainer @label='Maximum Items'>
+        <label class='sr-only' for='topN'>Maximum Items to Display</label>
         <input
+          id='topN'
           type='number'
           min='1'
           max='50'
@@ -1132,7 +1183,6 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
         padding: var(--boxel-sp-xl);
       }
 
-      /* BoxelSelect custom option styling */
       .select-option {
         padding: 0.25rem 0;
       }
@@ -1159,7 +1209,17 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
         margin-top: 0.5rem;
       }
 
-      /* Custom input styling within FieldContainer */
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+
       input[type='number'] {
         padding: var(--boxel-sp-xs);
         border: 1px solid var(--boxel-300);
@@ -1175,7 +1235,6 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
       }
 
-      /* Responsive adjustments */
       @media (max-width: 640px) {
         .edit-panel {
           padding: var(--boxel-sp-lg);

@@ -3,12 +3,12 @@
     "meta": {
       "adoptsFrom": {
         "name": "SpreadsheetChart",
-        "module": "../spreadsheet-chart"
+        "module": "../spreadsheet-chart/spreadsheet-chart"
       }
     },
     "type": "card",
     "attributes": {
-      "topN": 10,
+      "topN": 20,
       "xHeader": "",
       "yHeader": "",
       "cardInfo": {
@@ -17,19 +17,19 @@
         "description": null,
         "thumbnailURL": null
       },
-      "chartType": "pie",
-      "binaryHeader": "Pclass",
-      "categoryHeader": "Survived"
+      "chartType": "line",
+      "binaryHeader": null,
+      "categoryHeader": ""
     },
     "relationships": {
       "source": {
         "links": {
-          "self": "../../spreadsheet/df7bf805-6aa8-4b87-b6b7-962a91fbae44"
+          "self": "../spreadsheet/40802f42-4a91-4de0-b331-c03fc34d2f9f"
         }
       },
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/experiments/default/playful-illustration"
+          "self": null
         }
       }
     }
