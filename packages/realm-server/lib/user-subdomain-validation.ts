@@ -119,10 +119,10 @@ export function validateSubdomain(
   }
 
   // Check for non-ASCII characters (homoglyph attack protection)
-  if (!/^[\x00-\x7F]*$/.test(subdomain)) {
+  if (!/^[\x20-\x7E]*$/.test(subdomain)) {
     return {
       valid: false,
-      error: 'Subdomain can only contain ASCII characters',
+      error: 'Subdomain can only contain printable ASCII characters',
     };
   }
 
