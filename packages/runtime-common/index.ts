@@ -90,6 +90,7 @@ export interface DirectoryEntryRelationship {
 export interface FileMeta {
   kind: 'file';
   lastModified: number | null;
+  resourceCreatedAt?: number;
 }
 
 export interface DirectoryMeta {
