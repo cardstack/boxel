@@ -653,7 +653,7 @@ export default class PublishRealmModal extends Component<Signature> {
         grid-template-columns: auto var(--boxel-sp-sm) 1fr auto;
 
         background-color: var(--boxel-50);
-        padding: var(--boxel-sp-lg);
+        padding-top: var(--boxel-sp-lg);
         padding-bottom: var(--boxel-sp-xl);
       }
 
