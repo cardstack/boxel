@@ -122,6 +122,7 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
   <template>
     <div class='charts-container'>
       {{#if @chartData.data.length}}
+        {{! template-lint-disable table-groups }}
         <table class={{this.getChartClasses @chartData.chartType}}>
           <caption>{{@chartData.title}}</caption>
 
@@ -218,7 +219,7 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
               <div class='legend-item'>
                 <div
                   class='legend-color'
-                  style={{concat 'background-color: ' item.color}}
+                  style={{htmlSafe (concat 'background-color: ' item.color)}}
                 ></div>
                 <span class='legend-label'>{{item.label}}</span>
               </div>
