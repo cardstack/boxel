@@ -562,7 +562,10 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: var(--color-secondary, var(--secondary));
+        background: var(
+          --color-secondary,
+          var(--secondary, var(--boxel-highlight))
+        );
         color: var(--color-secondary-foreground, var(--secondary-foreground));
         border: none;
         border-radius: var(--boxel-border-radius-xs);
@@ -571,14 +574,20 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       }
 
       .copy-btn:hover {
-        background: var(--color-secondary-hover, var(--secondary));
+        background: var(
+          --color-secondary-hover,
+          var(--secondary, var(--boxel-highlight-hover))
+        );
         opacity: 0.8;
         transform: translateY(-1px);
       }
 
       .copy-btn.copied {
         background: var(--color-accent, var(--accent, var(--boxel-200)));
-        color: var(--color-accent-foreground, var(--accent-foreground));
+        color: var(
+          --color-accent-foreground,
+          var(--accent-foreground, var(--boxel-dark))
+        );
       }
 
       .avatar-content {
@@ -707,18 +716,11 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         position: relative;
       }
 
-      .option-btn.preset-avatar {
-        aspect-ratio: auto;
-        height: auto;
-        min-height: 100px;
-        padding: var(--boxel-sp-xs);
-      }
-
       .option-btn:hover {
-        border: 2px solid var(--color-primary, var(--primary));
-        background: var(--color-accent, var(--accent));
+        border: 2px solid var(--color-primary, var(--boxel-highlight));
+        background: var(--color-accent, var(--boxel-light));
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px var(--color-shadow, rgba(0, 0, 0, 0.15));
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       }
       /* Keep selected state consistent on hover */
       .option-btn.selected:hover {
@@ -748,7 +750,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         content: '';
         position: absolute;
         inset: -3px;
-        border-radius: calc(var(--boxel-border-radius) + 3px);
+        border-radius: calc(var(--radius-lg, 8px) + 3px);
         background: linear-gradient(
           135deg,
           color-mix(in oklab, var(--color-primary, #00bcd4) 20%, transparent) 0%,
@@ -759,18 +761,6 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
           color-mix(in oklab, var(--color-primary, #00bcd4) 30%, transparent);
         pointer-events: none;
         z-index: -1;
-      }
-
-      .option-btn.preset-avatar.selected {
-        border: 2px solid var(--color-primary, var(--boxel-highlight));
-        background: var(--color-accent, var(--boxel-light));
-        transform: translateY(-2px);
-        box-shadow: var(--boxel-box-shadow-md);
-      }
-
-      .option-btn.preset-avatar.selected .avatar-name {
-        color: var(--color-primary, var(--boxel-highlight));
-        font-weight: 600;
       }
 
       .option-btn:hover .option-image {
@@ -806,10 +796,6 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
         color: var(--color-card-foreground, var(--card-foreground));
         line-height: 1.2;
         transition: all 0.3s ease;
-      }
-
-      .option-btn:hover .avatar-name {
-        color: var(--color-primary, var(--boxel-highlight));
       }
 
       .empty-state,

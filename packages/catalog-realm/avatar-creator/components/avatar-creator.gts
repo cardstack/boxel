@@ -721,8 +721,11 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: var(--secondary, var(--boxel-highlight));
-        color: white;
+        background: var(
+          --color-secondary,
+          var(--secondary, var(--boxel-highlight))
+        );
+        color: var(--color-secondary-foreground, var(--secondary-foreground));
         border: none;
         border-radius: var(--boxel-border-radius-xs);
         cursor: pointer;
@@ -730,12 +733,20 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
       }
 
       .copy-btn:hover {
-        background: var(--secondary-hover, var(--boxel-highlight-hover));
+        background: var(
+          --color-secondary-hover,
+          var(--secondary, var(--boxel-highlight-hover))
+        );
+        opacity: 0.8;
         transform: translateY(-1px);
       }
 
       .copy-btn.copied {
-        background: var(--boxel-dark, var(--boxel-success));
+        background: var(--color-accent, var(--accent, var(--boxel-200)));
+        color: var(
+          --color-accent-foreground,
+          var(--accent-foreground, var(--boxel-dark))
+        );
       }
 
       .copy-feedback {

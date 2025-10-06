@@ -33,6 +33,10 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
     this.args.model.avatar = new Avatar(model);
   };
 
+  _createRealImageTask = () => {
+    this.createRealImageTask.perform();
+  };
+
   createRealImageTask = restartableTask(async () => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
@@ -42,8 +46,8 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
 
     const result = await createRealImage({
       avatar: this.avatarModel, // This is the avatar options model from avatar field
-      avatarUrl: this.args.model.avatar?.thumbnailURL, // This is thumbnailURL field computed from avatar field
-      cardInfo: this.args.model.avatar?.cardInfo, // This is cardInfo from avatar field
+      avatarUrl: this.args.model?.thumbnailURL,
+      cardInfo: this.args.model?.cardInfo, // This is cardInfo from avatar field
       sendRequestCommand,
     });
 
@@ -72,7 +76,7 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
       @isImageGenerating={{this.isImageGenerating}}
       @generatedImage={{this.generatedImage}}
       @errorImageGenerating={{this.errorImageGenerating}}
-      @onCreateRealImage={{this.createRealImageTask.perform}}
+      @onCreateRealImage={{this._createRealImageTask}}
     />
   </template>
 }
