@@ -694,8 +694,8 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       .option-btn {
         aspect-ratio: 1;
         padding: var(--boxel-sp-xxs);
-        background: var(--color-card, var(--card));
-        border: 2px solid var(--color-border, var(--border));
+        background: var(--color-card, var(--boxel-300));
+        border: 2px solid var(--color-border, var(--boxel-300));
         border-radius: var(--boxel-border-radius);
         cursor: pointer;
         transition: all 0.2s ease;
@@ -716,47 +716,60 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
 
       .option-btn:hover {
         border: 2px solid var(--color-primary, var(--primary));
-        background: var(--color-muted, var(--muted));
+        background: var(--color-accent, var(--accent));
         transform: translateY(-1px);
-        box-shadow: var(--boxel-box-shadow-sm);
+        box-shadow: 0 4px 12px var(--color-shadow, rgba(0, 0, 0, 0.15));
+      }
+      /* Keep selected state consistent on hover */
+      .option-btn.selected:hover {
+        background: var(--color-card, var(--boxel-light));
+        border-color: var(--color-primary, var(--boxel-highlight));
+        transform: scale(1.02); /* keep steady; outline handled by ::after */
+        box-shadow: none;
       }
 
       .option-btn.selected {
-        border: 2px solid var(--color-primary, var(--primary));
-        background: var(--color-accent, var(--accent));
-        box-shadow: var(--boxel-box-shadow);
-        transform: translateY(-1px);
-      }
-
-      .option-btn.selected::after {
-        content: '⭐';
-        position: absolute;
-        top: -8px;
-        right: -8px;
-        background: linear-gradient(
-          45deg,
-          var(--color-primary, var(--primary)),
-          var(--color-secondary, var(--secondary))
+        /* Reliable selected state with fallback colors */
+        background: color-mix(
+          in oklab,
+          var(--color-primary, #00bcd4) 8%,
+          var(--color-card, #ffffff)
         );
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 10px;
-        box-shadow: 0 0 10px var(--color-primary, var(--primary));
+        border: 2px solid var(--color-primary, #00bcd4);
+        position: relative;
+        transform: scale(1.05);
+        box-shadow:
+          0 0 0 1px var(--color-primary, #00bcd4),
+          0 4px 12px
+            color-mix(in oklab, var(--color-primary, #00bcd4) 25%, transparent);
+      }
+      /* Clean focus ring that enhances rather than competes */
+      .option-btn.selected::after {
+        content: '';
+        position: absolute;
+        inset: -3px;
+        border-radius: calc(var(--boxel-border-radius) + 3px);
+        background: linear-gradient(
+          135deg,
+          color-mix(in oklab, var(--color-primary, #00bcd4) 20%, transparent) 0%,
+          color-mix(in oklab, var(--color-primary, #00bcd4) 5%, transparent)
+            100%
+        );
+        border: 1px solid
+          color-mix(in oklab, var(--color-primary, #00bcd4) 30%, transparent);
+        pointer-events: none;
+        z-index: -1;
       }
 
       .option-btn.preset-avatar.selected {
-        border: 2px solid var(--color-primary, var(--primary));
-        background: var(--color-accent, var(--accent));
+        border: 2px solid var(--color-primary, var(--boxel-highlight));
+        background: var(--color-accent, var(--boxel-light));
         transform: translateY(-2px);
         box-shadow: var(--boxel-box-shadow-md);
       }
 
       .option-btn.preset-avatar.selected .avatar-name {
-        color: var(--color-primary, var(--primary));
+        color: var(--color-primary, var(--boxel-highlight));
         font-weight: 600;
       }
 
@@ -796,7 +809,7 @@ export default class AvatarComponent extends Component<AvatarCreatorArgs> {
       }
 
       .option-btn:hover .avatar-name {
-        color: var(--color-primary, var(--primary));
+        color: var(--color-primary, var(--boxel-highlight));
       }
 
       .empty-state,
