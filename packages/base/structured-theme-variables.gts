@@ -76,7 +76,7 @@ class Embedded extends Component<typeof ThemeVarField> {
           grid-template-columns: 1fr 1.5fr;
           align-items: center;
           column-gap: var(--boxel-sp-xs);
-          row-gap: var(--boxel-sp);
+          row-gap: var(--boxel-sp-sm);
         }
         .code-preview {
           min-height: 2.5em;
@@ -104,6 +104,7 @@ class Embedded extends Component<typeof ThemeVarField> {
           font-style: italic;
         }
         .copy-button {
+          color: var(--primary);
           opacity: 0;
         }
         .code-preview:focus-within .copy-button,

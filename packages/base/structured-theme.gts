@@ -2,6 +2,12 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
+import {
+  BoxelButton,
+  BoxelContainer,
+  GridContainer,
+} from '@cardstack/boxel-ui/components';
+
 import { field, contains, Component, CSSField, Theme } from './card-api';
 import ThemeVarField from './structured-theme-variables';
 
@@ -138,74 +144,77 @@ class Isolated extends Component<typeof StructuredTheme> {
   }
 
   <template>
-    <article class='structured-theme-card'>
-      <header class='theme-header'>
+    <GridContainer @tag='article' class='structured-theme-card'>
+      <BoxelContainer @tag='header' @display='flex' class='theme-header'>
         <h1><@fields.title /></h1>
         <p class='theme-description'>
           <@fields.description />
         </p>
-      </header>
+      </BoxelContainer>
 
-      <section class='root-section'>
-        <header class='section-header'>
+      <GridContainer @tag='section' class='content-section'>
+        <GridContainer @tag='header' class='section-header'>
           <h2>Root Variables (:root)</h2>
-          <button
-            type='button'
+          <BoxelButton
+            @kind='text-only'
+            @size='extra-small'
             class='section-toggle'
             aria-expanded={{this.isRootVariablesVisible}}
             aria-controls='root-variables-content'
             {{on 'click' this.toggleRootVariablesVisibility}}
           >
             {{if this.isRootVariablesVisible 'Hide' 'Show'}}
-          </button>
-        </header>
+          </BoxelButton>
+        </GridContainer>
         {{#if this.isRootVariablesVisible}}
           <div id='root-variables-content' class='section-body'>
             <@fields.rootVariables />
           </div>
         {{/if}}
-      </section>
+      </GridContainer>
 
-      <section class='dark-section'>
-        <header class='section-header'>
+      <GridContainer @tag='section' class='content-section'>
+        <GridContainer @tag='header' class='section-header'>
           <h2>Dark Mode Variables (.dark)</h2>
-          <button
-            type='button'
+          <BoxelButton
+            @kind='text-only'
+            @size='extra-small'
             class='section-toggle'
             aria-expanded={{this.isDarkVariablesVisible}}
             aria-controls='dark-variables-content'
             {{on 'click' this.toggleDarkVariablesVisibility}}
           >
             {{if this.isDarkVariablesVisible 'Hide' 'Show'}}
-          </button>
-        </header>
+          </BoxelButton>
+        </GridContainer>
         {{#if this.isDarkVariablesVisible}}
           <div id='dark-variables-content' class='section-body'>
             <@fields.darkModeVariables />
           </div>
         {{/if}}
-      </section>
+      </GridContainer>
 
-      <section class='generated-css-section'>
-        <header class='section-header'>
-          <h2>Calculated CSS Variables</h2>
-          <button
-            type='button'
+      <GridContainer @tag='section' class='content-section'>
+        <GridContainer @tag='header' class='section-header'>
+          <h2>All CSS Variables</h2>
+          <BoxelButton
+            @kind='text-only'
+            @size='extra-small'
             class='section-toggle'
             aria-expanded={{this.isGeneratedCSSVisible}}
             aria-controls='generated-css-content'
             {{on 'click' this.toggleGeneratedCSSVisibility}}
           >
             {{if this.isGeneratedCSSVisible 'Hide' 'Show'}}
-          </button>
-        </header>
+          </BoxelButton>
+        </GridContainer>
         {{#if this.isGeneratedCSSVisible}}
           <div id='generated-css-content' class='section-body'>
             <@fields.cssVariables />
           </div>
         {{/if}}
-      </section>
-    </article>
+      </GridContainer>
+    </GridContainer>
 
     <style scoped>
       p {
@@ -221,7 +230,6 @@ class Isolated extends Component<typeof StructuredTheme> {
       h1 {
         font-size: var(--boxel-font-size-xl);
         line-height: var(--boxel-line-height-xl);
-        margin-bottom: var(--boxel-sp-xl);
       }
 
       h2 {
@@ -230,59 +238,53 @@ class Isolated extends Component<typeof StructuredTheme> {
       }
 
       .structured-theme-card {
-        max-width: 56rem;
-        padding: 2rem;
-        font-size: 0.875rem;
-        line-height: 1.3;
+        min-height: 100%;
+        align-content: start;
+        gap: 0;
+        container-name: structured-theme-card;
+        container-type: size;
       }
 
       .theme-header {
-        margin-bottom: 2rem;
+        min-height: 20vh;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        justify-content: center;
+        padding: var(--boxel-sp-xxl);
+        gap: var(--boxel-sp-xs);
+        text-align: center;
+        background-color: var(--card);
+        color: var(--card-foreground);
       }
 
       .theme-description {
         color: var(--muted-foreground);
-        font-size: 0.875rem;
       }
 
-      .root-section,
-      .dark-section,
-      .generated-css-section {
-        margin-bottom: 2rem;
+      .content-section {
+        padding: var(--boxel-sp) var(--boxel-sp-xxl);
       }
 
       .section-header {
-        display: flex;
+        grid-template-columns: 1fr auto;
         align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-        margin-bottom: 1rem;
-      }
-
-      .section-body {
-        animation: fade-in 120ms ease-out;
       }
 
       .section-toggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: var(--boxel-sp-4xs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-3xs);
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--primary, var(--boxel-color-link, inherit));
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
+        color: var(--primary);
         background: transparent;
         border: none;
-        border-radius: var(--boxel-border-radius-xs);
-        cursor: pointer;
+        text-transform: uppercase;
       }
 
       .section-toggle:hover,
       .section-toggle:focus-visible {
         text-decoration: underline;
+      }
+
+      .section-body {
+        animation: fade-in 120ms ease-out;
       }
 
       @keyframes fade-in {
@@ -295,11 +297,23 @@ class Isolated extends Component<typeof StructuredTheme> {
           transform: translateY(0);
         }
       }
+
+      @container structured-theme-card (width < 31.25rem) {
+        .content-section {
+          padding: var(--boxel-sp-xs);
+        }
+        .field-list {
+          grid-template-columns: 1fr 1fr;
+        }
+        h2 {
+          font-size: var(--boxel-font-size-med);
+        }
+      }
     </style>
   </template>
 }
 
-export default class StructuredTheme extends Theme {
+class StructuredTheme extends Theme {
   static displayName = 'Structured Theme';
 
   @field rootVariables = contains(ThemeVarField, {
@@ -323,3 +337,6 @@ export default class StructuredTheme extends Theme {
 
   static isolated = Isolated;
 }
+
+export { StructuredTheme };
+export default StructuredTheme;
