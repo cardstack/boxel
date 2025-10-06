@@ -6,8 +6,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
-
 import Undo2 from '@cardstack/boxel-icons/undo-2';
+
 import { formatDistanceToNow } from 'date-fns';
 
 import {
@@ -15,6 +15,7 @@ import {
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import config from '@cardstack/host/config/environment';
 
@@ -497,14 +498,15 @@ export default class PublishRealmModal extends Component<Signature> {
             <label class='option-title' for='custom-subdomain-checkbox'>Custom
               Site Name</label>
             {{#if this.isCustomSiteNameSetupVisible}}
-              <button
-                type='button'
+              <BoxelButton
+                @kind='text-only'
                 class='custom-subdomain-cancel cancel'
                 {{on 'click' this.cancelCustomSiteNameSetup}}
                 data-test-custom-subdomain-name-cancel
               >
                 Cancel
-              </button>
+                <IconX width='12' height='12' class='cancel-icon' />
+              </BoxelButton>
             {{else}}
             {{/if}}
             <div class='domain-details'>
@@ -651,6 +653,8 @@ export default class PublishRealmModal extends Component<Signature> {
           '.        . details action';
 
         grid-template-columns: auto var(--boxel-sp-sm) 1fr auto;
+
+        align-items: center;
 
         background-color: var(--boxel-50);
         padding-top: var(--boxel-sp-lg);
@@ -845,15 +849,8 @@ export default class PublishRealmModal extends Component<Signature> {
       }
 
       .custom-subdomain-cancel {
-        background: none;
-        border: none;
-        color: var(--boxel-450);
-        font-size: var(--boxel-font-size-xs);
-        cursor: pointer;
-      }
-
-      .custom-subdomain-cancel:hover {
-        color: var(--boxel-dark);
+        gap: var(--boxel-sp-xxxs);
+        margin-left: auto;
       }
     </style>
   </template>
