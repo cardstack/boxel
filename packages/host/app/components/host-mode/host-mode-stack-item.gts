@@ -8,7 +8,9 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import X from '@cardstack/boxel-icons/x';
+
 import { IconButton } from '@cardstack/boxel-ui/components';
+
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import HostModeCard from './host-mode-card';

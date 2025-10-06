@@ -2,8 +2,9 @@ import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
 
-import HostModeBreadcrumbItem from './host-mode-breadcrumb-item';
 import { not } from '@cardstack/boxel-ui/helpers';
+
+import HostModeBreadcrumbItem from './host-mode-breadcrumb-item';
 
 interface Signature {
   Element: HTMLElement;
@@ -70,19 +71,16 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
       ...attributes
     >
       {{#if this.hasCards}}
-        <ol class='host-mode-breadcrumbs__list'>
+        <ol class='list'>
           {{#each this.cardIds as |cardId index|}}
-            <li class='host-mode-breadcrumbs__item'>
+            <li class='item'>
               <HostModeBreadcrumbItem
                 @cardId={{cardId}}
                 @disabled={{not (this.canNavigate cardId)}}
                 @onClick={{this.handleBreadcrumbClick}}
               />
               {{#unless (this.isLast index)}}
-                <span
-                  class='host-mode-breadcrumbs__separator'
-                  aria-hidden='true'
-                >
+                <span class='separator' aria-hidden='true'>
                   ›
                 </span>
               {{/unless}}
@@ -107,7 +105,7 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
         display: none;
       }
 
-      .host-mode-breadcrumbs__list {
+      .list {
         display: inline-flex;
         list-style: none;
         gap: var(--boxel-sp-xs);
@@ -116,13 +114,13 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
         align-items: center;
       }
 
-      .host-mode-breadcrumbs__item {
+      .item {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
       }
 
-      .host-mode-breadcrumbs__separator {
+      .separator {
         color: rgba(255, 255, 255, 0.7);
         font-size: 0.875rem;
         line-height: 1;

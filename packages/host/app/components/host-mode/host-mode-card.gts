@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
+
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import { getCard } from '@cardstack/host/resources/card-resource';
 

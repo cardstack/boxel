@@ -4,6 +4,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { gt, not } from '@cardstack/boxel-ui/helpers';
+
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';

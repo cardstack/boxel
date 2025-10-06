@@ -5,6 +5,7 @@ import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { cardTypeIcon } from '@cardstack/runtime-common';
+
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { ComponentLike } from '@glint/template';
@@ -93,18 +94,18 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
       {{#if this.card}}
         {{#if this.iconComponent}}
           {{#let this.iconComponent as |Icon|}}
-            <span class='breadcrumb-item__icon' aria-hidden='true'>
+            <span class='icon' aria-hidden='true'>
               <Icon />
             </span>
           {{/let}}
         {{/if}}
-        <span class='breadcrumb-item__label'>{{this.label}}</span>
+        <span class='label'>{{this.label}}</span>
       {{else if this.isLoading}}
-        <span class='breadcrumb-item__label breadcrumb-item__label--muted'>
+        <span class='label label--muted'>
           Loading…
         </span>
       {{else}}
-        <span class='breadcrumb-item__label'>{{this.label}}</span>
+        <span class='label'>{{this.label}}</span>
       {{/if}}
     </button>
 
@@ -133,7 +134,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         border-radius: var(--boxel-border-radius-lg);
       }
 
-      .breadcrumb-item__icon {
+      .icon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -142,14 +143,14 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         color: var(--boxel-teal);
       }
 
-      .breadcrumb-item__label {
+      .label {
         font: 500 var(--boxel-font-sm);
         color: var(--boxel-light);
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
-      .breadcrumb-item__label--muted {
+      .label--muted {
         opacity: 0.7;
         font-weight: 500;
       }
