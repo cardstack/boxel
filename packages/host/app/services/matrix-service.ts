@@ -37,6 +37,7 @@ import {
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
+  isCardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
@@ -67,7 +68,11 @@ import {
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+<<<<<<< Updated upstream
   DEFAULT_LLM,
+=======
+  APP_BOXEL_LLM_ENVIRONMENT_EVENT_TYPE,
+>>>>>>> Stashed changes
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -104,6 +109,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
+import type { LLMEnvironment } from 'https://cardstack.com/base/llm-environment';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { addPatchTools } from '../commands/utils';
@@ -192,9 +198,13 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
+<<<<<<< Updated upstream
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
+=======
+  @tracked private _llmEnvironment: LLMEnvironment | undefined;
+>>>>>>> Stashed changes
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -298,13 +308,23 @@ export default class MatrixService extends Service {
       [
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
+          // what if we're not logged in yet? Should we delay?
+          if (e.event.type === APP_BOXEL_LLM_ENVIRONMENT_EVENT_TYPE) {
+            await this.setLLMEnvironment(e.event.content.id);
+          } else {
+            await this.setLLMEnvironment(
+              'http://localhost:4201/admin/llm-envs/CardDef/78eeabe0-9a82-45a8-98b0-839f7273d579',
+            );
+          }
+          /*
           if (e.event.type == APP_BOXEL_REALMS_EVENT_TYPE) {
             await this.realmServer.setAvailableRealmURLs(
               e.event.content.realms,
             );
             await this.loginToRealms();
             await this.loadMoreAuthRooms(e.event.content.realms);
-          }
+            
+          }*/
         },
       ],
     ];
@@ -1834,6 +1854,33 @@ export default class MatrixService extends Service {
 
   get isLoadingMoreAIRooms() {
     return this._isLoadingMoreAIRooms;
+  }
+
+  get llmEnvironment() {
+    return this._llmEnvironment;
+  }
+
+  async setLLMEnvironment(environmentCardId: string) {
+    if (environmentCardId === this._llmEnvironment?.id) {
+      // it's OK to call this multiple times with the same environment card id
+      // we shouldn't do anything.
+      return;
+    }
+    console.log(
+      'MatrixService setLLMEnvironment called with:',
+      environmentCardId,
+    );
+
+    let environment = await this.store.get<LLMEnvironment>(environmentCardId);
+    if (isCardErrorJSONAPI(environment)) {
+      console.error('Error loading LLM environment:', environment);
+      return;
+    }
+
+    this.store.dropReference(this._llmEnvironment?.id);
+    this.store.addReference(environmentCardId);
+    this._llmEnvironment = environment;
+    console.log('MatrixService _llmEnvironment set to:', this._llmEnvironment);
   }
 
   async loadMoreAuthRooms(realms: string[]) {

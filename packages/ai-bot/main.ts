@@ -412,13 +412,6 @@ Common issues are:
           senderMatrixUserId,
         );
 
-        if (!creditValidation.hasEnoughCredits) {
-          // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
-          return responder.onError(
-            `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
-          );
-        }
-
         let chunkHandlingError: string | undefined;
         let generationId: string | undefined;
         const runner = assistant

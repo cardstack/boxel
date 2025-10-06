@@ -26,7 +26,6 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
-  DEFAULT_LLM,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -46,6 +45,7 @@ import type {
   CodePatchResultEvent,
   ActiveLLMEvent,
 } from 'https://cardstack.com/base/matrix-event';
+import type { Model } from 'https://cardstack.com/base/model';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
 
@@ -345,14 +345,45 @@ export class RoomResource extends Resource<Args> {
   }
 
   get activeLLM(): string {
-    return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+    let result =
+      this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? this.defaultLLM;
+    console.log(
+      'Room resource activeLLM:',
+      result,
+      'is it just being activated?',
+      this.llmBeingActivated,
+    );
+    return result;
+  }
+
+  private get defaultLLM(): string {
+    // Use the first model from the LLM environment if available
+    let llmEnvironment = this.matrixService.llmEnvironment;
+    console.log('Room resource llmEnvironment:', llmEnvironment);
+    console.log('modelConfigurations:', llmEnvironment?.modelConfigurations);
+    console.log('first model:', llmEnvironment?.modelConfigurations?.[0]);
+    console.log(
+      'first modelId:',
+      llmEnvironment?.modelConfigurations?.[0]?.modelId,
+    );
+    if (llmEnvironment?.modelConfigurations?.[0]?.modelId) {
+      let defaultModel = llmEnvironment.modelConfigurations[0].modelId;
+      console.log('Using default LLM from environment:', defaultModel);
+      return defaultModel;
+    }
+    // Fallback to hardcoded default
+    console.log('Using hardcoded default LLM:', DEFAULT_LLM);
+    return DEFAULT_LLM;
   }
 
   @cached
   get usedLLMs(): string[] {
     let usedLLMs = new Set<string>();
+    console.log('Getting used llms?', this.events);
+    console.log('events from room state:', this.matrixRoom?.events);
     for (let event of this.events) {
       if (event.type === APP_BOXEL_ACTIVE_LLM) {
+        console.log('Found active LLM event:', event);
         let activeLLMEvent = event as ActiveLLMEvent;
         if (activeLLMEvent.content.model) {
           usedLLMs.add(activeLLMEvent.content.model);

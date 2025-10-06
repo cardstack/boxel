@@ -98,10 +98,22 @@ export default class Room {
   }
 
   get activeLLM() {
+    console.log('Room activeLLM', this._roomState);
+    // copy the room state events to a new object
+    let roomStateEvents = new Map(this._roomState?.events);
+    console.log(
+      'events from room state vs just events',
+      roomStateEvents,
+      this.events,
+      roomStateEvents.get(APP_BOXEL_ACTIVE_LLM),
+      roomStateEvents.get(APP_BOXEL_ACTIVE_LLM)?.get(''),
+      roomStateEvents.get(APP_BOXEL_ACTIVE_LLM)?.get('')?.event,
+    );
+    console.log('=========================');
     let event = this._roomState?.events
       .get(APP_BOXEL_ACTIVE_LLM)
       ?.get('')?.event;
-    return (event as ActiveLLMEvent)?.content.model ?? DEFAULT_LLM;
+    return (event as ActiveLLMEvent)?.content.model ?? 'none';
   }
 
   get activeLLMMode(): LLMMode {

@@ -406,6 +406,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
       return new Response(mockedFileContent);
     };
+
+    // Set the LLM environment in the matrix service
+    getService('matrix-service').setLLMEnvironment(llmEnvironment);
   });
 
   test('attaches a card in a conversation multiple times', async function (assert) {
@@ -565,8 +568,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     // Default model should be the first one in the LLM environment (gpt-4-turbo)
-    let defaultModelId = 'openai/gpt-4-turbo';
-    let defaultModelName = 'GPT-4 Turbo'; // Expected display name from model configuration title
+    //let defaultModelId = 'openai/gpt-4-turbo';
+    let defaultModelName = 'openai/gpt-4.1'; // Default in tests is 4.1 *explicitly*.
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');

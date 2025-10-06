@@ -64,6 +64,10 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Skill } from 'https://cardstack.com/base/skill';
+import type {
+  LLMEnvironment,
+  ModelConfiguration,
+} from 'https://cardstack.com/base/llm-environment';
 
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
@@ -786,6 +790,25 @@ export default class Room extends Component<Signature> {
   }
 
   private get llmsForSelectMenu() {
+    // Read from the LLM environment card if available
+    let llmEnvironment = this.matrixService.llmEnvironment;
+    if (llmEnvironment?.modelConfigurations) {
+      let options: Record<string, string> = {};
+      for (let modelConfig of llmEnvironment.modelConfigurations) {
+        if (modelConfig.modelId && modelConfig.title) {
+          options[modelConfig.modelId] = modelConfig.title;
+        }
+      }
+      // Add any used LLMs that aren't already in the options
+      for (let usedLLM of this.args.roomResource.usedLLMs) {
+        if (usedLLM && !options[usedLLM]) {
+          options[usedLLM] = usedLLM; // Use model ID as display name
+        }
+      }
+      return options;
+    }
+
+    // Fallback to hardcoded list for backwards compatibility
     let ids = [
       ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
     ]
