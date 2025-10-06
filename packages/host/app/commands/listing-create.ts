@@ -341,7 +341,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
 // - Truncates to maxLength
 function parseResponseToString(
   response?: string,
-  maxLength: number = 200,
+  maxLength: number = 1000,
 ): string | undefined {
   if (!response) return undefined;
   let text = response.trim();
