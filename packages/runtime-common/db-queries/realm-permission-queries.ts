@@ -1,7 +1,7 @@
-import { DBAdapter } from './db';
-import { RealmAction, type RealmPermissions } from './index';
-import { query, asExpressions, param, upsert } from './expression';
-import { getMatrixUsername } from './matrix-client';
+import { DBAdapter } from '../db';
+import { RealmAction, type RealmPermissions } from '../index';
+import { query, asExpressions, param, upsert } from '../expression';
+import { getMatrixUsername } from '../matrix-client';
 
 async function insertPermission(
   dbAdapter: DBAdapter,
