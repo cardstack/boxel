@@ -155,7 +155,7 @@ export const CATEGORY_MAP: Record<string, keyof AvataaarsOptions> = {
 export const DEFAULT_AVATAR_VALUES: Required<AvataaarsModel> = {
   topType: 'ShortHairShortFlat',
   accessoriesType: 'Blank',
-  hairColor: 'BrownDark',
+  hairColor: 'Platinum',
   facialHairType: 'Blank',
   clotheType: 'BlazerShirt',
   eyeType: 'Default',
@@ -504,7 +504,195 @@ export function playClickSound(): void {
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.1);
   } catch (error) {
-    console.log('Audio not supported or failed:', error);
-    // Silently fail if audio is not supported
+    console.error('Audio not supported or failed:', error);
+  }
+}
+
+/**
+ * Interface for createRealImage function parameters
+ */
+export interface CreateRealParams {
+  avatar: AvataaarsModel;
+  avatarUrl?: string;
+  cardInfo?: {
+    notes?: string;
+  };
+  sendRequestCommand: {
+    execute: (input: {
+      url: string;
+      method: string;
+      requestBody: string;
+      headers?: Record<string, string>;
+    }) => Promise<{
+      response: Response;
+    }>;
+  };
+}
+
+/**
+ * Interface for createRealImage result
+ */
+export interface CreateRealResult {
+  success: boolean;
+  imageUrl?: string;
+  error?: string;
+}
+
+/**
+ * Builds AI interpretation cues based on avatar configuration
+ */
+export function buildAICues(avatarModel: AvataaarsModel): string {
+  const cuesList = [];
+
+  // Check mouth type
+  if (avatarModel.mouthType === 'Grimace') {
+    cuesList.push('- Grimace should show teeth with a stretched mouth');
+  }
+  if (avatarModel.mouthType === 'Vomit') {
+    cuesList.push(
+      '- Vomit should be pretending to vomit, as if seeing something revolting',
+    );
+  }
+
+  // Check hair/top type
+  if (avatarModel.topType === 'WinterHat1') {
+    cuesList.push('- Winter Hat 1 has sides that covers ears and cheeks');
+  }
+  if (avatarModel.topType === 'WinterHat2') {
+    cuesList.push('- Winter Hat 2 is knit');
+  }
+  if (avatarModel.topType === 'WinterHat3') {
+    cuesList.push('- Winter Hat 3 is a beanie');
+  }
+  if (avatarModel.topType === 'WinterHat4') {
+    cuesList.push('- Winter Hat 4 is a Christmas hat');
+  }
+  if (avatarModel.topType === 'NoHair') {
+    cuesList.push('- nohair is bald');
+  }
+  if (avatarModel.topType === 'ShortHairSides') {
+    cuesList.push(
+      '- ShortHairSides person should be 90% bald with male pattern baldness',
+    );
+  }
+
+  // Check eye type
+  if (avatarModel.eyeType === 'Hearts') {
+    cuesList.push(
+      "- hearts eye: don't draw hearts, just make their eyes big and doe-y with affection and attraction",
+    );
+  }
+  if (avatarModel.eyeType === 'Dizzy') {
+    cuesList.push('- dizzy eye should be an overall emotion');
+  }
+
+  return cuesList.length > 0
+    ? '\n\nAI Interpretation Cues:\n' + cuesList.join('\n')
+    : '';
+}
+
+/**
+ * Generates a realistic image from an avatar using AI
+ * This function should be used with Ember Concurrency for proper state management
+ */
+export async function createRealImage(
+  params: CreateRealParams,
+): Promise<CreateRealResult> {
+  try {
+    const { avatar, avatarUrl, cardInfo, sendRequestCommand } = params;
+
+    if (!avatarUrl) {
+      throw new Error('No avatar URL available');
+    }
+
+    // Get configuration schema from notes to ensure valid choices
+    const configSchema = cardInfo?.notes || '';
+
+    // Convert avatar field to the format expected by buildAICues
+    const avatarModel: AvataaarsModel = {
+      topType: avatar?.topType,
+      accessoriesType: avatar?.accessoriesType,
+      hairColor: avatar?.hairColor,
+      facialHairType: avatar?.facialHairType,
+      clotheType: avatar?.clotheType,
+      eyeType: avatar?.eyeType,
+      eyebrowType: avatar?.eyebrowType,
+      mouthType: avatar?.mouthType,
+      skinColor: avatar?.skinColor,
+    };
+
+    // Build AI cues based on current avatar configuration
+    const aiCues = buildAICues(avatarModel);
+
+    const prompt = `Imagine this avatar as a beloved main character in a modern, live-action, TV-14 series that appeals to both kids and adults. Render a realistic, high-quality headshot portrait (1:1 aspect ratio, facing forward) as if photographed with a Sony A74 and professionally retouched for a poster.
+
+      - Guess and visually express: age, sex, location, time of year, religion, race/ethnicity, mood (be authentic—even unusual emotions are welcome), and current situation, based on the avatar's features. Ensure broad and inclusive representation.
+      - Exaggerate emotions as a talented actor would.
+      - Highlight subtle details as a skilled makeup artist would: e.g., eyes open or closed, tongue, hair color, etc.
+      - Any special effects (SFX) should be photorealistic and seamlessly composited.
+      - Use a natural, unobtrusive background. No borders or text.
+
+      ${aiCues}
+
+      IMPORTANT: Only use valid avatar configuration values. Reference this schema for accurate interpretations:
+
+      ${configSchema}
+
+      ${avatarUrl}
+          `;
+
+    const result = await sendRequestCommand.execute({
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      method: 'POST',
+      requestBody: JSON.stringify({
+        model: 'google/gemini-2.5-flash-image-preview',
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+      }),
+    });
+
+    if (!result.response.ok) {
+      throw new Error(`Failed to make request: ${result.response.statusText}`);
+    }
+
+    const responseData = await result.response.json();
+
+    // Handle API-level errors
+    if (responseData.error) {
+      const errorMsg = responseData.error.message || responseData.error;
+      throw new Error(`API Error: ${errorMsg}`);
+    }
+
+    // Safely extract the message content and images array
+    const messageContent = responseData.choices?.[0]?.message;
+    const images = messageContent?.images;
+
+    if (!Array.isArray(images) || images.length === 0) {
+      throw new Error('No images found in response');
+    }
+
+    // Find the first valid image (data URL)
+    const firstValidImage = images.find(
+      (img: any) =>
+        img?.image_url?.url && img.image_url.url.startsWith('data:image/'),
+    );
+
+    if (firstValidImage?.image_url?.url) {
+      return {
+        success: true,
+        imageUrl: firstValidImage.image_url.url,
+      };
+    }
+
+    throw new Error('No valid images generated in response');
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
   }
 }
