@@ -420,7 +420,9 @@ export class CurrentRun {
       error.deps = [url.href];
       throw error;
     }
-    let { content, lastModified, created } = fileRef;
+    let { content, lastModified } = fileRef;
+    // ensure created_at exists for this file and use it for resourceCreatedAt
+    let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url, fileRef);
     } else {
@@ -454,7 +456,7 @@ export class CurrentRun {
             path: localPath,
             source: content,
             lastModified,
-            resourceCreatedAt: created,
+            resourceCreatedAt,
             resource,
             store,
           });
@@ -523,23 +525,27 @@ export class CurrentRun {
       await this.loaderService.loader.getConsumedModules(url.href)
     ).filter((u) => u !== url.href);
     let deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+    // DB created_at for modules
+    let moduleLocalPath = this.#realmPaths.local(url);
+    let moduleCreatedAt = await this.batch.ensureFileCreatedAt(moduleLocalPath);
     await this.batch.updateEntry(url, {
       type: 'module',
       source: ref.content,
       lastModified: ref.lastModified,
-      resourceCreatedAt: ref.created,
+      resourceCreatedAt: moduleCreatedAt,
       deps: new Set(deps),
     });
     this.stats.modulesIndexed++;
 
     for (let [name, maybeBaseDef] of Object.entries(module)) {
       if (isBaseDef(maybeBaseDef)) {
+        // DB created_at for definitions (use module's local path)
         await this.indexDefinition({
           name,
           url: trimExecutableExtension(url),
           cardOrFieldDef: maybeBaseDef,
           lastModified: ref.lastModified,
-          resourceCreatedAt: ref.created,
+          resourceCreatedAt: moduleCreatedAt,
           deps: [...deps, trimExecutableExtension(url).href],
         });
       }

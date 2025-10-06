@@ -55,6 +55,14 @@
    PRIMARY KEY ( url, realm_url ) 
 );
 
+ CREATE TABLE IF NOT EXISTS claimed_domains_for_sites (
+   id DEFAULT (hex(randomblob(16))) NOT NULL,
+   hostname TEXT NOT NULL,
+   claimed_at INTEGER NOT NULL,
+   removed_at INTEGER,
+   PRIMARY KEY ( id ) 
+);
+
  CREATE TABLE IF NOT EXISTS published_realms (
    id DEFAULT (hex(randomblob(16))) NOT NULL,
    owner_username TEXT NOT NULL,
@@ -62,6 +70,13 @@
    published_realm_url TEXT NOT NULL,
    last_published_at,
    PRIMARY KEY ( id ) 
+);
+
+ CREATE TABLE IF NOT EXISTS realm_file_meta (
+   realm_url TEXT NOT NULL,
+   file_path TEXT NOT NULL,
+   created_at INTEGER NOT NULL,
+   PRIMARY KEY ( realm_url, file_path ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_meta (
