@@ -56,21 +56,7 @@ module('Acceptance | host submode', function (hooks) {
 
   hooks.beforeEach(function () {
     realmContents = {
-      'index.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Index Card',
-            prefersWideFormat: true,
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
+      'index.json': new CardsGrid(),
       '.realm.json': {
         name: 'Test Workspace B',
         backgroundURL:
