@@ -107,33 +107,50 @@ function createColumns(
         case 'constraint_primary_key':
           column.push('PRIMARY KEY');
           break;
-        case 'constraint_default':
+        case 'constraint_default': {
           if ('value' in constraint.expr) {
             column.push('DEFAULT', String(constraint.expr.value));
             break;
-          } else if (
+          }
+
+          if (
             constraint.expr.type === 'cast_operator_expr' &&
             'expr' in constraint.expr &&
             'text' in constraint.expr.expr
           ) {
             column.push('DEFAULT', String(constraint.expr.expr.text));
             break;
-          } else if (
+          }
+
+          if (
             constraint.expr.type === 'func_call' &&
             constraint.expr.name.type === 'identifier' &&
             constraint.expr.name.name === 'gen_random_uuid'
           ) {
             column.push('DEFAULT', '(hex(randomblob(16)))');
             break;
-          } else {
-            throw new Error(
-              `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
-            );
           }
-        default:
+
+          if (
+            constraint.expr.type === 'func_call' &&
+            constraint.expr.name.type === 'identifier'
+          ) {
+            let funcName = constraint.expr.name.name.toLowerCase();
+            if (funcName === 'current_timestamp' || funcName === 'now') {
+              column.push('DEFAULT', 'CURRENT_TIMESTAMP');
+              break;
+            }
+          }
+
+          throw new Error(
+            `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
+          );
+        }
+        default: {
           throw new Error(
             `Don't know how to serialize constraint ${constraint.type} for column '${item.name.name}'`,
           );
+        }
       }
     }
 
