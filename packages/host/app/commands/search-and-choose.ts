@@ -1,15 +1,16 @@
 import { service } from '@ember/service';
 
+import { logger } from '@cardstack/runtime-common';
 import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import prettifyPrompts from '../utils/prettify-prompts';
+
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import { SearchCardsByTypeAndTitleCommand } from './search-cards';
-import { logger } from '@cardstack/runtime-common';
-import prettifyPrompts from '../utils/prettify-prompts';
 
 // Command-level logger (general lifecycle + decisions)
 const log = logger('commands:search-and-choose');
