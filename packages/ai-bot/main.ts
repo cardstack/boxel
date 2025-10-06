@@ -429,6 +429,7 @@ Common issues are:
           const runner = assistant
             .getResponse(promptParts)
             .on('chunk', async (chunk, snapshot) => {
+              log.info(`[${eventId}] Received chunk %s`, chunk.id);
               generationId = chunk.id;
               let activeGeneration = activeGenerations.get(room.roomId);
               if (activeGeneration) {
