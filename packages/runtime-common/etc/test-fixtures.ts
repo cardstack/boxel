@@ -1,4 +1,4 @@
-/* eslint-disable no-useless-escape */
+ 
 // TIP: this file should be saved with "Save without formatting" in VSCode
 // to avoid messing with the whitespace in the compiled card source
 export const cardSrc = `
