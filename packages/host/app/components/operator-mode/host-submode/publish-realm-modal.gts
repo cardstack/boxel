@@ -415,19 +415,17 @@ export default class PublishRealmModal extends Component<Signature> {
 
         <div class='domain-options'>
           <div class='domain-option'>
-            <div class='domain-option-header'>
-              <label class='domain-header'>
-                <input
-                  type='checkbox'
-                  checked={{this.isDefaultPublishedRealmURLSelected}}
-                  {{on 'change' this.toggleDefaultDomain}}
-                  class='domain-checkbox'
-                  data-test-default-domain-checkbox
-                  disabled={{this.isUnpublishingAnyRealms}}
-                />
-                <span class='domain-name'>Your Boxel Space</span>
-              </label>
-            </div>
+            <input
+              type='checkbox'
+              id='default-domain-checkbox'
+              checked={{this.isDefaultPublishedRealmURLSelected}}
+              {{on 'change' this.toggleDefaultDomain}}
+              class='domain-checkbox'
+              data-test-default-domain-checkbox
+              disabled={{this.isUnpublishingAnyRealms}}
+            />
+            <label class='option-title' for='default-domain-checkbox'>Your Boxel
+              Space</label>
 
             <div class='domain-details'>
               <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
@@ -472,7 +470,7 @@ export default class PublishRealmModal extends Component<Signature> {
                   @size='small'
                   @disabled={{this.isUnpublishingAnyRealms}}
                   {{on 'click' this.handleOpenSite}}
-                  class='open-site-button'
+                  class='open-site-button action'
                   data-test-open-site-button
                 >
                   <ExternalLink
@@ -487,98 +485,103 @@ export default class PublishRealmModal extends Component<Signature> {
           </div>
 
           <div class='domain-option'>
-            <div class='domain-option-header'>
-              <label class='domain-header'>
-                <input
-                  type='checkbox'
-                  checked={{this.isCustomDomainSelected}}
-                  {{on 'change' this.toggleCustomDomain}}
-                  class='domain-checkbox'
-                  data-test-custom-domain-checkbox
-                  disabled={{this.isCustomDomainCheckboxDisabled}}
-                />
-                <span class='domain-name'>Custom Site Name</span>
-              </label>
+            <input
+              type='checkbox'
+              id='custom-subdomain-checkbox'
+              checked={{this.isCustomDomainSelected}}
+              {{on 'change' this.toggleCustomDomain}}
+              class='domain-checkbox'
+              data-test-custom-domain-checkbox
+              disabled={{this.isCustomDomainCheckboxDisabled}}
+            />
+            <label class='option-title' for='custom-subdomain-checkbox'>Custom
+              Site Name</label>
+            {{#if this.isCustomSiteNameSetupVisible}}
+              <button
+                type='button'
+                class='custom-subdomain-cancel cancel'
+                {{on 'click' this.cancelCustomSiteNameSetup}}
+                data-test-custom-subdomain-name-cancel
+              >
+                Cancel
+              </button>
+            {{else}}
+            {{/if}}
+            <div class='domain-details'>
               {{#if this.isCustomSiteNameSetupVisible}}
-                <button
-                  type='button'
-                  class='custom-site-cancel'
-                  {{on 'click' this.cancelCustomSiteNameSetup}}
-                  data-test-custom-site-name-cancel
-                >
-                  Cancel
-                </button>
+                <div class='custom-subdomain-setup'>
+                  <label
+                    class='custom-subdomain-input-label'
+                    for='custom-subdomain-name-input'
+                  >
+                    Choose a site name
+                  </label>
+                  <div class='custom-subdomain-input-row'>
+                    <input
+                      id='custom-subdomain-name-input'
+                      type='text'
+                      value={{this.customSiteName}}
+                      {{on 'input' this.handleCustomSiteNameInput}}
+                      class='custom-subdomain-input'
+                      placeholder='custom-name'
+                      spellcheck='false'
+                      data-test-custom-subdomain-name-input
+                    />
+                    <span
+                      class='custom-domain-suffix'
+                    >.{{this.customDomainBase}}</span>
+                  </div>
+                  {{#if this.customSiteNameSuccessMessage}}
+                    <div
+                      class='custom-subdomain-feedback custom-subdomain-feedback--success'
+                      data-test-custom-subdomain-name-availability
+                    >
+                      {{this.customSiteNameSuccessMessage}}
+                    </div>
+                  {{else if this.customSiteNameErrorMessage}}
+                    <div
+                      class='custom-subdomain-feedback custom-subdomain-feedback--error'
+                      data-test-custom-subdomain-name-error
+                    >
+                      {{this.customSiteNameErrorMessage}}
+                    </div>
+                  {{/if}}
+                </div>
               {{else}}
-                <BoxelButton
-                  @kind='secondary-light'
-                  @size='small'
-                  class='custom-site-setup-button'
-                  {{on 'click' this.openCustomSiteNameSetup}}
-                  data-test-custom-site-name-setup-button
-                >
-                  Set Up
-                </BoxelButton>
+                <div class='custom-subdomain-placeholder'>
+                  {{this.customSiteNameDisplay}}.{{this.customDomainBase}}
+                </div>
               {{/if}}
             </div>
 
+            {{! here}}
             {{#if this.isCustomSiteNameSetupVisible}}
-              <div class='custom-site-setup'>
-                <label
-                  class='custom-site-input-label'
-                  for='custom-site-name-input'
-                >
-                  Choose a site name
-                </label>
-                <div class='custom-site-input-row'>
-                  <input
-                    id='custom-site-name-input'
-                    type='text'
-                    value={{this.customSiteName}}
-                    {{on 'input' this.handleCustomSiteNameInput}}
-                    class='custom-site-input'
-                    placeholder='custom-name'
-                    spellcheck='false'
-                    data-test-custom-site-name-input
-                  />
-                  <span
-                    class='custom-domain-suffix'
-                  >.{{this.customDomainBase}}</span>
-                  <BoxelButton
-                    @kind='primary'
-                    @size='small'
-                    class='claim-site-name-button'
-                    @disabled={{this.isClaimSiteNameDisabled}}
-                    {{on 'click' this.handleClaimSiteName}}
-                    data-test-claim-site-name-button
-                  >
-                    {{#if this.isCheckingCustomSiteName}}
-                      <LoadingIndicator />
-                      Checking…
-                    {{else}}
-                      Claim Site Name
-                    {{/if}}
-                  </BoxelButton>
-                </div>
-                {{#if this.customSiteNameSuccessMessage}}
-                  <div
-                    class='custom-site-feedback custom-site-feedback--success'
-                    data-test-custom-site-name-availability
-                  >
-                    {{this.customSiteNameSuccessMessage}}
-                  </div>
-                {{else if this.customSiteNameErrorMessage}}
-                  <div
-                    class='custom-site-feedback custom-site-feedback--error'
-                    data-test-custom-site-name-error
-                  >
-                    {{this.customSiteNameErrorMessage}}
-                  </div>
+              <BoxelButton
+                @kind='primary'
+                @size='small'
+                class='claim-site-name-button action'
+                @disabled={{this.isClaimSiteNameDisabled}}
+                {{on 'click' this.handleClaimSiteName}}
+                data-test-claim-site-name-button
+              >
+                {{#if this.isCheckingCustomSiteName}}
+                  <LoadingIndicator />
+                  Checking…
+                {{else}}
+                  Claim Site Name
                 {{/if}}
-              </div>
+              </BoxelButton>
+
             {{else}}
-              <div class='custom-site-placeholder'>
-                {{this.customSiteNameDisplay}}.{{this.customDomainBase}}
-              </div>
+              <BoxelButton
+                @kind='secondary-light'
+                @size='small'
+                class='custom-subdomain-setup-button action'
+                {{on 'click' this.openCustomSiteNameSetup}}
+                data-test-custom-subdomain-name-setup-button
+              >
+                Set Up
+              </BoxelButton>
             {{/if}}
           </div>
         </div>
@@ -642,12 +645,16 @@ export default class PublishRealmModal extends Component<Signature> {
       }
 
       .domain-option {
+        display: grid;
+        grid-template-areas:
+          'checkbox . title   cancel'
+          '.        . details action';
+
+        grid-template-columns: auto var(--boxel-sp-sm) 1fr auto;
+
         border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-50);
         padding: var(--boxel-sp-lg);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
       }
 
       .domain-option:not(:last-child)::after {
@@ -656,7 +663,7 @@ export default class PublishRealmModal extends Component<Signature> {
         padding-bottom: var(--boxel-sp-lg);
       }
 
-      .domain-option-header {
+      .domain-option-headxer {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -665,24 +672,32 @@ export default class PublishRealmModal extends Component<Signature> {
       .domain-header {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-sm);
         margin-bottom: var(--boxel-sp-md);
       }
 
+      .cancel {
+        grid-area: cancel;
+      }
+
       .domain-checkbox {
+        grid-area: checkbox;
+
         flex-shrink: 0;
       }
 
-      .domain-name {
+      .option-title {
+        grid-area: title;
+
         font: 600 var(--boxel-font);
         color: var(--boxel-dark);
       }
 
       .domain-details {
+        grid-area: details;
+
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        padding-left: calc(var(--boxel-sp-xs) + var(--boxel-sp-sm));
         margin-top: var(--boxel-sp-xxs);
       }
 
@@ -752,6 +767,12 @@ export default class PublishRealmModal extends Component<Signature> {
         gap: var(--boxel-sp-xxxs);
       }
 
+      .action {
+        grid-area: action;
+
+        margin: auto 0;
+      }
+
       .open-site-button {
         flex-shrink: 0;
         margin-left: auto;
@@ -771,31 +792,30 @@ export default class PublishRealmModal extends Component<Signature> {
         gap: var(--horizontal-gap);
       }
 
-      .custom-site-placeholder {
+      .custom-subdomain-placeholder {
         color: var(--boxel-450);
         font-size: var(--boxel-font-size-sm);
-        padding-left: calc(var(--boxel-sp-xs) + var(--boxel-sp-sm));
       }
 
-      .custom-site-setup {
+      .custom-subdomain-setup {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
 
-      .custom-site-input-label {
+      .custom-subdomain-input-label {
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--boxel-dark);
       }
 
-      .custom-site-input-row {
+      .custom-subdomain-input-row {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
 
-      .custom-site-input {
+      .custom-subdomain-input {
         flex: 1;
         padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);
@@ -803,7 +823,7 @@ export default class PublishRealmModal extends Component<Signature> {
         font: normal var(--boxel-font);
       }
 
-      .custom-site-input:focus {
+      .custom-subdomain-input:focus {
         outline: none;
         border-color: var(--boxel-600);
       }
@@ -814,20 +834,20 @@ export default class PublishRealmModal extends Component<Signature> {
         white-space: nowrap;
       }
 
-      .custom-site-feedback {
+      .custom-subdomain-feedback {
         font-size: var(--boxel-font-size-xs);
         padding-left: calc(var(--boxel-sp-xs) + var(--boxel-sp-sm));
       }
 
-      .custom-site-feedback--success {
+      .custom-subdomain-feedback--success {
         color: #00ac00;
       }
 
-      .custom-site-feedback--error {
+      .custom-subdomain-feedback--error {
         color: var(--boxel-danger);
       }
 
-      .custom-site-cancel {
+      .custom-subdomain-cancel {
         background: none;
         border: none;
         color: var(--boxel-450);
@@ -835,7 +855,7 @@ export default class PublishRealmModal extends Component<Signature> {
         cursor: pointer;
       }
 
-      .custom-site-cancel:hover {
+      .custom-subdomain-cancel:hover {
         color: var(--boxel-dark);
       }
     </style>
