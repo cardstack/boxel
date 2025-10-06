@@ -1,6 +1,5 @@
 import { service } from '@ember/service';
 
-import { logger } from '@cardstack/runtime-common';
 import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -9,10 +8,13 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import { SearchCardsByTypeAndTitleCommand } from './search-cards';
+import { logger } from '@cardstack/runtime-common';
+import prettifyPrompts from '../utils/prettify-prompts';
+
+// Command-level logger (general lifecycle + decisions)
+const log = logger('commands:search-and-choose');
 
 import type StoreService from '../services/store';
-
-const log = logger('command:search-and-choose');
 
 export default class SearchAndChooseCommand extends HostBaseCommand<
   typeof BaseCommandModule.SearchAndChooseInput,
@@ -52,7 +54,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     const instances = searchResult.instances ?? [];
 
     if (instances.length === 0) {
-      log.debug('No instances found for type', { type: codeRef });
+      log.debug('No instances found for type', { type: codeRef.name });
       const { SearchAndChooseResult } = await this.loadCommandModule();
       return new SearchAndChooseResult({ selectedIds: [], selectedCards: [] });
     }
@@ -61,12 +63,21 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     const summaries = this.instancesToPromptString(instances);
     let systemPrompt = `You are an expert catalog curator. Select the most relevant 1 to ${max} ids representing ${codeRef.name}. Output ONLY a JSON array of unique id strings. No commentary.`;
     if (additionalSystemPrompt && additionalSystemPrompt.trim()) {
-      systemPrompt += `\n\n${additionalSystemPrompt.trim()}`;
+      systemPrompt += ` ${additionalSystemPrompt.trim()}`;
     }
     const userPrompt = `Options (id :: title):\n${summaries}\n\nRules:\n- Return a JSON array with 1 to ${max} ids.\n- No duplicates.\n- Only use ids from the list.\n- If nothing is relevant return [].`;
 
     // 3. LLM selection
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
+
+    // Unified prompt logging via reusable utility
+    log.debug(
+      prettifyPrompts({
+        scope: `SearchAndChoose:${codeRef.name}`,
+        systemPrompt,
+        userPrompt,
+      }),
+    );
     const r = await oneShot.execute({
       systemPrompt,
       userPrompt,
@@ -76,7 +87,9 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
 
     const selectedIds = this.parseIdsFromOutput(r.output || '[]').slice(0, max);
     const selectedCards = instances.filter((inst: any) =>
-      selectedIds.includes(inst.id),
+      selectedIds.some(
+        (id) => typeof inst.id === 'string' && inst.id.includes(id),
+      ),
     );
     const { SearchAndChooseResult } = await this.loadCommandModule();
     return new SearchAndChooseResult({

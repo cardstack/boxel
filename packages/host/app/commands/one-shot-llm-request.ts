@@ -12,6 +12,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import ReadTextFileCommand from './read-text-file';
 import SendRequestViaProxyCommand from './send-request-via-proxy';
+import prettifyPrompts from '../utils/prettify-prompts';
 
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
@@ -48,6 +49,14 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
     if (!input.userPrompt) {
       throw new Error('userPrompt is required');
     }
+
+    oneShotLogger.debug(
+      prettifyPrompts({
+        scope: 'OneShotLLMRequest',
+        systemPrompt: input.systemPrompt,
+        userPrompt: input.userPrompt,
+      }),
+    );
 
     try {
       // Read the file contents using the codeRef
@@ -132,11 +141,6 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? a
         fileContentIncluded: !!fileContent,
         attachedFilesCount: input.attachedFileURLs?.length || 0,
         skillCards: loadedSkillCards.map((c) => c.id),
-      });
-
-      // Always log full prompt content
-      oneShotLogger.debug('llm prompt full', {
-        messages: generationMessages,
       });
 
       const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
