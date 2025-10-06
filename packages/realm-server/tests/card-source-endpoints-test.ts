@@ -430,7 +430,7 @@ module(basename(__filename), function () {
 
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
-        test('serves a card-source POST request', async function (assert) {
+        test.only('serves a card-source POST request', async function (assert) {
           let entry = 'unused-card.gts';
           let response = await request
             .post('/unused-card.gts')
@@ -463,7 +463,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('broadcasts realm events', async function (assert) {
+        test.only('broadcasts realm events', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
           await request

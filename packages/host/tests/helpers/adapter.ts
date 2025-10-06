@@ -109,7 +109,8 @@ export class TestRealmAdapter implements RealmAdapter {
   async broadcastRealmEvent(
     event: RealmEventContent,
     matrixClient: MatrixClient,
-  ) {
+    _sessionRooms?: Record<string, string>,
+  ): Promise<void> {
     if (!this.owner) {
       return;
     }

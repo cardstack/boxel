@@ -274,10 +274,14 @@ export class MatrixClient {
     return json.event_id;
   }
 
-  // This defaults to the last 10 messages in reverse chronological order
-  async roomMessages(roomId: string) {
+  // By default, fetch a generous slice of recent messages in reverse chronological order
+  async roomMessages(
+    roomId: string,
+    options: { dir?: 'b' | 'f'; limit?: number } = {},
+  ) {
+    let { dir = 'b', limit = 100 } = options;
     let response = await this.request(
-      `_matrix/client/v3/rooms/${roomId}/messages?dir=b`,
+      `_matrix/client/v3/rooms/${roomId}/messages?dir=${dir}&limit=${limit}`,
     );
     let json = (await response.json()) as {
       chunk: MatrixEvent[];

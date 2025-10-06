@@ -108,6 +108,12 @@ import {
   DefinitionsCache,
   isFilterRefersToNonexistentTypeError,
 } from './definitions-cache';
+import {
+  fetchSessionRoom,
+  upsertSessionRoom,
+  getAllSessionRooms,
+  REALM_SERVER_REALM,
+} from './db-queries/session-room-queries';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -207,6 +213,7 @@ export interface RealmAdapter {
   broadcastRealmEvent(
     event: RealmEventContent,
     matrixClient: MatrixClient,
+    sessionRooms?: Record<string, string>,
   ): Promise<void>;
 
   // optional, set this to override _lint endpoint behavior in tests
@@ -1098,6 +1105,17 @@ export class Realm {
             this.#realmSecretSeed,
           );
         },
+        getSessionRoom: async (userId: string) => fetchSessionRoom(
+          this.#dbAdapter,
+          this.url,
+          userId,
+        ),
+        setSessionRoom: async (matrixUserId: string, roomId: string) => upsertSessionRoom(
+          this.#dbAdapter,
+          this.url,
+          matrixUserId,
+          roomId,
+        ),
       } as Utils,
     );
 
@@ -2978,7 +2996,23 @@ export class Realm {
   }
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
+    if (!this.#matrixClient.isLoggedIn()) {
+      this.#log.debug('Matrix client not logged in, skipping realm event');
+      return;
+    }
+
+    let sessionRooms: Record<string, string> = {};
+    try {
+      sessionRooms = await getAllSessionRooms(this.#dbAdapter, this.url);
+    } catch (error) {
+      this.#log.error('Unable to load session rooms for realm event', error);
+    }
+
+    await this.#adapter.broadcastRealmEvent(
+      event,
+      this.#matrixClient,
+      sessionRooms,
+    );
   }
 
   private async createRequestContext(): Promise<RequestContext> {

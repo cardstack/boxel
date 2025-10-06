@@ -154,7 +154,7 @@ export class WelcomeToBoxel extends CardDef {
         class='welcome-container'
         style={{if
           @model.backgroundUrl
-          (concat 'background-image: url(' @model.backgroundUrl ')')
+          (htmlSafe (concat 'background-image: url(' @model.backgroundUrl ')'))
           ''
         }}
       >
