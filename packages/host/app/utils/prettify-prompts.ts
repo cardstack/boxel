@@ -19,5 +19,3 @@ export function prettifyPrompts(opts: PrettifyPromptOptions): string {
   parts.push(`=== END ${header} ===`);
   return parts.join('\n\n');
 }
-
-export default prettifyPrompts;
