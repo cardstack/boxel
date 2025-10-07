@@ -72,6 +72,13 @@
    PRIMARY KEY ( id ) 
 );
 
+ CREATE TABLE IF NOT EXISTS realm_file_meta (
+   realm_url TEXT NOT NULL,
+   file_path TEXT NOT NULL,
+   created_at INTEGER NOT NULL,
+   PRIMARY KEY ( realm_url, file_path ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_meta (
    realm_url TEXT NOT NULL,
    realm_version INTEGER NOT NULL,

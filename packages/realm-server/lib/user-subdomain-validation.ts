@@ -110,6 +110,30 @@ export function validateSubdomain(
     return { valid: false, error: 'Subdomain is required' };
   }
 
+  // Check for punycode domains (homoglyph attack protection)
+  if (subdomain.startsWith('xn--')) {
+    return {
+      valid: false,
+      error: 'Punycode domains are not allowed for security reasons',
+    };
+  }
+
+  // Check for non-ASCII characters (homoglyph attack protection)
+  if (!/^[\x20-\x7E]*$/.test(subdomain)) {
+    return {
+      valid: false,
+      error: 'Subdomain can only contain printable ASCII characters',
+    };
+  }
+
+  // Check for mixed case that could be confusing
+  if (subdomain !== subdomain.toLowerCase()) {
+    return {
+      valid: false,
+      error: 'Subdomain must be lowercase',
+    };
+  }
+
   const validSubdomainRegex = /^[a-z0-9-]+$/;
   if (!validSubdomainRegex.test(subdomain)) {
     return {

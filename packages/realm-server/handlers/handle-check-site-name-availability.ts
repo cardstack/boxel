@@ -1,7 +1,7 @@
 import Koa from 'koa';
 import { query, param } from '@cardstack/runtime-common';
 import {
-  sendResponseForBadRequest,
+  sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
@@ -17,13 +17,20 @@ type CheckSiteNameAvailabilityResponse = {
 
 export function handleCheckSiteNameAvailabilityRequest({
   dbAdapter,
+  domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let boxelSiteDomain = domainsForPublishedRealms?.boxelSite;
+
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
+      if (!boxelSiteDomain) {
+        throw new Error('domainsForPublishedRealms.boxelSite is required');
+      }
+
       const subdomain = ctxt.query.subdomain as string;
 
       if (subdomain === undefined) {
-        await sendResponseForBadRequest(
+        await sendResponseForUnprocessableEntity(
           ctxt,
           'subdomain query parameter is required',
         );
@@ -31,8 +38,7 @@ export function handleCheckSiteNameAvailabilityRequest({
       }
 
       const validation = validateSubdomain(subdomain);
-      const environmentDomain = getEnvironmentDomain();
-      const hostname = `${subdomain}.${environmentDomain}`;
+      const hostname = `${subdomain}.${boxelSiteDomain}`;
 
       let available = false;
       let error: string | undefined;
