@@ -118,22 +118,6 @@ export function validateSubdomain(
     };
   }
 
-  // Check for non-ASCII characters (homoglyph attack protection)
-  if (!/^[\x20-\x7E]*$/.test(subdomain)) {
-    return {
-      valid: false,
-      error: 'Subdomain can only contain printable ASCII characters',
-    };
-  }
-
-  // Check for mixed case that could be confusing
-  if (subdomain !== subdomain.toLowerCase()) {
-    return {
-      valid: false,
-      error: 'Subdomain must be lowercase',
-    };
-  }
-
   const validSubdomainRegex = /^[a-z0-9-]+$/;
   if (!validSubdomainRegex.test(subdomain)) {
     return {
@@ -148,10 +132,6 @@ export function validateSubdomain(
       valid: false,
       error: 'Subdomain cannot start or end with a hyphen',
     };
-  }
-
-  if (subdomain.includes('.')) {
-    return { valid: false, error: 'Subdomain cannot contain dots' };
   }
 
   if (subdomain.length < 2) {
