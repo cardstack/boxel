@@ -10,6 +10,7 @@ export interface Utils {
     responseInit: ResponseInit | undefined,
   ): Response;
   createJWT(user: string, sessionRoom?: string): Promise<string>;
+  getSessionRoom(user: string): Promise<string | null>;
   setSessionRoom(user: string, roomId: string): Promise<void>;
 }
 
@@ -80,12 +81,20 @@ export class MatrixBackendAuthentication {
       >('boxel.session-rooms')) ?? {}),
     };
     let roomId = dmRooms[user];
+    let roomIdFromDB = await this.utils.getSessionRoom(user);
 
     if (!roomId) {
       roomId = await this.matrixClient.createDM(user);
+      roomIdFromDB = roomId;
       dmRooms[user] = roomId;
       await this.matrixClient.setAccountData('boxel.session-rooms', dmRooms);
       await this.utils.setSessionRoom(user, roomId);
+    }
+
+    if (roomIdFromDB !== roomId) {
+      console.warn(
+        `Discrepancy between session_rooms table and account data for user ${user}: ${roomId} vs ${roomIdFromDB}`,
+      );
     }
 
     let hash = new Sha256();
@@ -146,6 +155,13 @@ export class MatrixBackendAuthentication {
         'boxel.session-rooms',
       )) ?? {};
     let roomId = dmRooms[user];
+    let roomIdFromDB = await this.utils.getSessionRoom(user);
+
+    if (roomIdFromDB !== roomId) {
+      console.warn(
+        `Discrepancy between session_rooms table and account data for user ${user}: ${roomId} vs ${roomIdFromDB}`,
+      );
+    }
     if (!roomId) {
       return this.utils.badRequest(
         JSON.stringify({
