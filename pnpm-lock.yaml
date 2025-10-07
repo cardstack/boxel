@@ -108,6 +108,9 @@ catalogs:
     '@simple-dom/interface':
       specifier: ^1.4.0
       version: 1.4.0
+    '@simple-dom/parser':
+      specifier: ^1.4.0
+      version: 1.4.0
     '@simple-dom/serializer':
       specifier: ^1.4.0
       version: 1.4.0
@@ -546,6 +549,9 @@ catalogs:
     sane:
       specifier: ^5.0.1
       version: 5.0.1
+    simple-html-tokenizer:
+      specifier: ^0.5.11
+      version: 0.5.11
     sinon:
       specifier: ^19.0.2
       version: 19.0.2
@@ -2115,6 +2121,9 @@ importers:
       '@simple-dom/interface':
         specifier: 'catalog:'
         version: 1.4.0
+      '@simple-dom/parser':
+        specifier: 'catalog:'
+        version: 1.4.0
       '@simple-dom/serializer':
         specifier: 'catalog:'
         version: 1.4.0
@@ -2451,6 +2460,9 @@ importers:
       safe-stable-stringify:
         specifier: 'catalog:'
         version: 2.4.3
+      simple-html-tokenizer:
+        specifier: 'catalog:'
+        version: 0.5.11
       start-server-and-test:
         specifier: 'catalog:'
         version: 1.14.0
@@ -8765,6 +8777,7 @@ packages:
   eslint-plugin-markdown@5.1.0:
     resolution: {integrity: sha512-SJeyKko1K6GwI0AN6xeCDToXDkfKZfXcexA6B+O2Wr2btUS9GrC+YgwSyVli5DJnctUHjFXcQ2cqTaAmVoLi2A==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: Please use @eslint/markdown instead
     peerDependencies:
       eslint: '>=8'
 
@@ -11774,7 +11787,7 @@ packages:
   puppeteer@24.8.2:
     resolution: {integrity: sha512-Sn6SBPwJ6ASFvQ7knQkR+yG7pcmr4LfXzmoVp3NR0xXyBbPhJa8a8ybtb6fnw1g/DD/2t34//yirubVczko37w==}
     engines: {node: '>=18'}
-    deprecated: < 24.9.0 is no longer supported
+    deprecated: < 24.15.0 is no longer supported
     hasBin: true
 
   qs@6.11.0:
@@ -12680,7 +12693,7 @@ packages:
   superagent@8.1.2:
     resolution: {integrity: sha512-6WTxW1EB6yCxV5VFOIPQruWGHqc3yI7hEmZK6h+pyk69Lk/Ut7rLUY6W/ONF2MjBuGjvmMiIpsrVJ2vjrHlslA==}
     engines: {node: '>=6.4.0 <13 || >=14'}
-    deprecated: Please upgrade to v9.0.0+ as we have fixed a public vulnerability with formidable dependency. Note that v9.0.0+ requires Node.js v14.18.0+. See https://github.com/ladjs/superagent/pull/1800 for insight. This project is supported and maintained by the team at Forward Email @ https://forwardemail.net
+    deprecated: Please upgrade to superagent v10.2.2+, see release notes at https://github.com/forwardemail/superagent/releases/tag/v10.2.2 - maintenance is supported by Forward Email @ https://forwardemail.net
 
   supertest@6.2.4:
     resolution: {integrity: sha512-M8xVnCNv+q2T2WXVzxDECvL2695Uv2uUj2O0utxsld/HRyJvOU8W9f1gvsYxSNU4wmIe0/L/ItnpU4iKq0emDA==}

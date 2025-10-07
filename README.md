@@ -319,33 +319,27 @@ STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
 You should be able to subscribe successfully after you perform the steps above.
 
 ## External API Proxy Setup
+The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, you need to configure your api key inside the `proxy_endpoints` db. 
 
-The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. You need to configure the `ALLOWED_PROXY_DESTINATIONS` environment variable to specify which external endpoints are allowed.
+#### Setup api key in DB locally
 
-### ALLOWED_PROXY_DESTINATIONS Configuration
-
-The `ALLOWED_PROXY_DESTINATIONS` environment variable configures which external API endpoints are allowed to be accessed through the realm server's proxy functionality.
-
-#### Format
-
-The value should be a JSON string containing an array of destination configurations:
-
-```json
-[
-  {
-    "url": "https://openrouter.ai/api/v1/chat/completions",
-    "apiKey": "your-openrouter-api-key",
-    "creditStrategy": "openrouter",
-    "supportsStreaming": true
-  },
-  {
-    "url": "https://api.example.com",
-    "apiKey": "your-example-api-key",
-    "creditStrategy": "no-credit",
-    "supportsStreaming": false
-  }
-]
+```sql
+INSERT INTO proxy_endpoints (
+  id, url, api_key, credit_strategy, supports_streaming,
+  auth_method, auth_parameter_name, created_at, updated_at
+) VALUES (
+  gen_random_uuid(),
+  'https://openrouter.ai/api/v1/chat/completions', 
+  '<your-openrouter-api-key>',
+  'openrouter',
+  true,
+  'header',
+  'Authorization',
+  NOW(), NOW()
+);
 ```
+
+Typically, it is needed for our openrouter setup which is used widely throughout our codebase. But, additionally you can add in your own proxy.
 
 #### Configuration Options
 
@@ -378,34 +372,6 @@ The value should be a JSON string containing an array of destination configurati
   "creditStrategy": "no-credit",
   "supportsStreaming": false
 }
-```
-
-#### Running with ALLOWED_PROXY_DESTINATIONS
-
-When starting the realm server, include the `ALLOWED_PROXY_DESTINATIONS` environment variable:
-
-```bash
-ALLOWED_PROXY_DESTINATIONS='[{"url":"https://openrouter.ai/api/v1/chat/completions","apiKey":"your-openrouter-api-key","creditStrategy":"openrouter","supportsStreaming":true},{"url":"https://api.example.com","apiKey":"your-example-api-key","creditStrategy":"no-credit","supportsStreaming":false}]' STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
-```
-
-For development, you can create a `.env` file in the `packages/realm-server` directory:
-
-```bash
-# packages/realm-server/.env
-ALLOWED_PROXY_DESTINATIONS='[
-  {
-    "url": "https://openrouter.ai/api/v1/chat/completions",
-    "apiKey": "your-openrouter-api-key",
-    "creditStrategy": "openrouter",
-    "supportsStreaming": true
-  },
-  {
-    "url": "https://api.example.com",
-    "apiKey": "your-example-api-key",
-    "creditStrategy": "no-credit",
-    "supportsStreaming": false
-  }
-]'
 ```
 
 #### Security Notes
