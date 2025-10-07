@@ -153,8 +153,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}empty.json`,
           ),
-          resourceCreatedAt:
-            (await getFileCreatedAt(realm, 'empty.json')) ?? undefined,
+          resourceCreatedAt: await getFileCreatedAt(realm, 'empty.json'),
           realmInfo: testRealmInfo,
         },
         links: {
@@ -367,8 +366,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
-            resourceCreatedAt:
-              (await getFileCreatedAt(realm, 'Pet/mango.json')) ?? undefined,
+            resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -587,9 +585,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/mango.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}Pet/mango.json`,
-          ),
+          resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -675,9 +671,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/mango.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}Pet/mango.json`,
-          ),
+          resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -759,9 +753,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}person-spec.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}person-spec.json`,
-          ),
+          resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -878,9 +870,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}person-spec.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}person-spec.json`,
-          ),
+          resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -941,9 +931,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}people-skill.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}people-skill.json`,
-          ),
+          resourceCreatedAt: await getFileCreatedAt(realm, 'people-skill.json'),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -1460,8 +1448,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}vangogh.json`,
           ),
-          resourceCreatedAt:
-            (await getFileCreatedAt(realm, 'vangogh.json')) ?? undefined,
+          resourceCreatedAt: await getFileCreatedAt(realm, 'vangogh.json'),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -2071,8 +2058,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Vendor/vendor1.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Vendor/vendor1.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Vendor/vendor1.json',
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -2104,9 +2092,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Chain/1.json`,
               ),
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${testRealmURL}Chain/1.json`,
-              ),
+              resourceCreatedAt: await getFileCreatedAt(realm, 'Chain/1.json'),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
             },
@@ -2136,9 +2122,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Chain/2.json`,
               ),
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${testRealmURL}Chain/2.json`,
-              ),
+              resourceCreatedAt: await getFileCreatedAt(realm, 'Chain/2.json'),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
             },
@@ -2574,8 +2558,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}PetPerson/hassan.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}PetPerson/hassan.json`,
+          resourceCreatedAt: await getFileCreatedAt(
+            realm,
+            'PetPerson/hassan.json',
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
@@ -2602,9 +2587,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Pet/mango.json`,
-            ),
+            resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2629,8 +2612,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/vanGogh.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Pet/vanGogh.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Pet/vanGogh.json',
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -2738,8 +2722,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}PetPerson/burcu.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}PetPerson/burcu.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'PetPerson/burcu.json',
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -2867,8 +2852,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}pet-person-spec.json`,
+          resourceCreatedAt: await getFileCreatedAt(
+            realm,
+            'pet-person-spec.json',
           ),
         },
       });
@@ -3015,8 +3001,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}Friend/hassan.json`,
+          resourceCreatedAt: await getFileCreatedAt(
+            realm,
+            'Friend/hassan.json',
           ),
         },
       });
@@ -3150,8 +3137,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Friend/hassan.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friend/hassan.json',
             ),
           },
         },
@@ -3189,8 +3177,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${testRealmURL}Friend/mango.json`,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friend/mango.json',
               ),
             },
           },
@@ -3274,8 +3263,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Friend/mango.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friend/mango.json',
             ),
           },
         },
@@ -3313,8 +3303,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${testRealmURL}Friend/hassan.json`,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friend/hassan.json',
               ),
             },
           },
@@ -3428,8 +3419,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Friend/hassan.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friend/hassan.json',
             ),
           },
         },
@@ -3551,8 +3543,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${hassanID}.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friends/hassan.json',
             ),
           },
         },
@@ -3585,8 +3578,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${mangoID}.json`,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/mango.json',
               ),
             },
           },
@@ -3613,8 +3607,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${vanGoghID}.json`,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/vanGogh.json',
               ),
             },
           },
@@ -3690,8 +3685,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${mangoID}.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friends/mango.json',
             ),
           },
         },
@@ -3727,8 +3723,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${hassanID}.json`,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/hassan.json',
               ),
             },
           },
@@ -3755,8 +3752,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${vanGoghID}.json`,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/vanGogh.json',
               ),
             },
           },
@@ -3838,8 +3836,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${vanGoghID}.json`,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friends/vanGogh.json',
             ),
           },
         },
@@ -3875,8 +3874,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${hassanID}.json`,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/hassan.json',
               ),
             },
           },
@@ -3903,8 +3903,9 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${mangoID}.json`,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/mango.json',
               ),
             },
           },

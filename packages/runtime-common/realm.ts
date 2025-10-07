@@ -1998,8 +1998,7 @@ export class Realm {
 
       // Prefer created_at from DB for instance JSON
       let pathForDb = this.paths.local(url) + '.json';
-      let createdAt: number | null = null;
-      createdAt = await this.getCreatedTime(pathForDb);
+      let createdAt = await this.getCreatedTime(pathForDb);
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
@@ -2039,8 +2038,8 @@ export class Realm {
   }
 
   // Look up created_at for a given file path from realm_file_meta
-  private async getCreatedTime(path: LocalPath): Promise<number | null> {
-    if (!this.#dbAdapter) return null;
+  private async getCreatedTime(path: LocalPath): Promise<number | undefined> {
+    if (!this.#dbAdapter) return undefined;
     return getCreatedTime(this.#dbAdapter, this.url, path);
   }
 

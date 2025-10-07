@@ -2,7 +2,7 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "AppListing",
+        "name": "CardListing",
         "module": "../catalog-app/listing/listing"
       }
     },

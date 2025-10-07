@@ -684,7 +684,7 @@ export function delay(delayAmountMs: number): Promise<void> {
 export async function getFileCreatedAt(
   realm: Realm,
   localPath: string,
-): Promise<number | null> {
+): Promise<number | undefined> {
   let db = await getDbAdapter();
   return getCreatedTime(db, realm.url, localPath);
 }
