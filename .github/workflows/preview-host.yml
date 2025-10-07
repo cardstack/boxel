@@ -65,7 +65,8 @@ jobs:
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
-          DEFAULT_PUBLISHED_REALM_DOMAIN: staging.boxel.build
+          PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: staging.boxel.dev
+          PUBLISHED_REALM_BOXEL_SITE_DOMAIN: staging.boxel.dev
         with:
           package: boxel-host
           environment: staging
@@ -97,7 +98,8 @@ jobs:
           AWS_S3_BUCKET: boxel-host-preview.boxel.ai
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
-          DEFAULT_PUBLISHED_REALM_DOMAIN: boxel.site
+          PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: boxel.space
+          PUBLISHED_REALM_BOXEL_SITE_DOMAIN: boxel.site
         with:
           package: boxel-host
           environment: production

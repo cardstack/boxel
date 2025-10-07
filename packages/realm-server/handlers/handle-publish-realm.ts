@@ -41,7 +41,7 @@ export default function handlePublishRealm({
   realmsRootPath,
   getMatrixRegistrationSecret,
   createAndMountRealm,
-  validPublishedRealmDomains,
+  domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -83,7 +83,9 @@ export default function handlePublishRealm({
       ? json.publishedRealmURL
       : `${json.publishedRealmURL}/`;
 
-    // Validate publishedRealmURL domain
+    let validPublishedRealmDomains = Object.values(
+      domainsForPublishedRealms || {},
+    );
     try {
       let publishedURL = new URL(publishedRealmURL);
       if (validPublishedRealmDomains && validPublishedRealmDomains.length > 0) {

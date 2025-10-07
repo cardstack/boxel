@@ -7,7 +7,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import prettifyPrompts from '../utils/prettify-prompts';
+import { prettifyPrompts } from '../utils/prettify-prompts';
 
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import { SearchCardsByTypeAndTitleCommand } from './search-cards';
