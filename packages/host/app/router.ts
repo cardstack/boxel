@@ -10,7 +10,7 @@ Router.map(function () {
   this.route('host-freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
   this.route('render-error', { path: '/render-error/:reason' });
-  this.route('render', { path: '/render/:id' }, function () {
+  this.route('render', { path: '/render/:id/:nonce' }, function () {
     this.route('html', { path: '/html/:format/:ancestor_level' });
     this.route('icon');
     this.route('meta');

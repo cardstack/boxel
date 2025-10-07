@@ -45,6 +45,7 @@ export default class CardPrerender extends Component {
   @service private declare renderService: RenderService;
   @service private declare fastboot: { isFastBoot: boolean };
   @service private declare localIndexer: LocalIndexer;
+  #nonce = 0;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -107,6 +108,7 @@ export default class CardPrerender extends Component {
       userId: string;
       permissions: RealmPermissions;
     }): Promise<RenderResponse> => {
+      this.#nonce++;
       this.localIndexer.renderError = undefined;
       this.localIndexer.prerenderStatus = 'loading';
       let error: RenderError | undefined;
@@ -173,7 +175,9 @@ export default class CardPrerender extends Component {
   private renderHTML = enqueueTask(
     async (url: string, format: Format, ancestorLevel = 0) => {
       let routeInfo = await this.router.recognizeAndLoad(
-        `/render/${encodeURIComponent(url)}/html/${format}/${ancestorLevel}`,
+        `/render/${encodeURIComponent(url)}/${
+          this.#nonce
+        }/html/${format}/${ancestorLevel}`,
       );
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
@@ -202,7 +206,7 @@ export default class CardPrerender extends Component {
 
   private renderMeta = enqueueTask(async (url: string) => {
     let routeInfo = await this.router.recognizeAndLoad(
-      `/render/${encodeURIComponent(url)}/meta`,
+      `/render/${encodeURIComponent(url)}/${this.#nonce}/meta`,
     );
     if (this.localIndexer.renderError) {
       throw new Error(this.localIndexer.renderError);
@@ -212,7 +216,7 @@ export default class CardPrerender extends Component {
 
   private renderIcon = enqueueTask(async (url: string) => {
     let routeInfo = await this.router.recognizeAndLoad(
-      `/render/${encodeURIComponent(url)}/icon`,
+      `/render/${encodeURIComponent(url)}/${this.#nonce}/icon`,
     );
     if (this.localIndexer.renderError) {
       throw new Error(this.localIndexer.renderError);

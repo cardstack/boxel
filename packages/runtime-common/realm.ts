@@ -1506,49 +1506,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
-    if (!request.headers.get('X-Boxel-Building-Index')) {
-      let indexedSource = await this.getSourceFromIndex(new URL(request.url));
-      if (indexedSource) {
-        let { canonicalURL, lastModified, source } = indexedSource;
-        if (request.url !== canonicalURL.href) {
-          return createResponse({
-            body: null,
-            init: {
-              status: 302,
-              headers: {
-                Location: `${new URL(this.url).pathname}${this.paths.local(
-                  canonicalURL,
-                )}`,
-              },
-            },
-            requestContext,
-          });
-        }
-        // Build headers, adding x-created from DB when possible
-        let dbPath = this.paths.local(canonicalURL);
-        let createdAt: number | null = await this.getCreatedTime(dbPath);
-        let createdHeader: Record<string, string> =
-          createdAt != null
-            ? { 'x-created': formatRFC7231(createdAt * 1000) }
-            : {};
-
-        return createResponse({
-          body: source,
-          init: {
-            headers: {
-              ...(lastModified != null
-                ? { 'last-modified': formatRFC7231(lastModified * 1000) }
-                : {}),
-              ...createdHeader,
-            },
-          },
-          requestContext,
-        });
-      }
-    }
-
-    // fallback to file system if there is an error document or this is the
-    // first time index
+    // we always use the file system directly for source requests
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -1581,55 +1539,6 @@ export class Realm {
     } finally {
       this.#logRequestPerformance(request, start);
     }
-  }
-
-  private async getSourceFromIndex(url: URL): Promise<
-    | {
-        source: string;
-        lastModified: number | null;
-        canonicalURL: URL;
-      }
-    | undefined
-  > {
-    let [module, instance] = await Promise.all([
-      this.#realmIndexQueryEngine.module(url),
-      this.#realmIndexQueryEngine.instance(url),
-    ]);
-    if (module?.type === 'module' || instance?.type === 'instance') {
-      let canonicalURL =
-        module?.type === 'module'
-          ? module.canonicalURL
-          : instance?.type === 'instance'
-            ? instance.canonicalURL
-            : undefined;
-      let source =
-        module?.type === 'module'
-          ? module.source
-          : instance?.type === 'instance'
-            ? instance.source
-            : undefined;
-      let lastModified =
-        module?.type === 'module'
-          ? module.lastModified
-          : instance?.type === 'instance'
-            ? instance.lastModified
-            : null;
-      if (canonicalURL == null || source == null) {
-        throw new Error(
-          `missing 'canonicalURL' and/or 'source' from index entry ${
-            url.href
-          }, where type is ${
-            module?.type === 'module' ? 'module' : 'instance'
-          }`,
-        );
-      }
-      return {
-        canonicalURL: new URL(canonicalURL),
-        lastModified,
-        source,
-      };
-    }
-    return undefined;
   }
 
   private async removeCardSource(

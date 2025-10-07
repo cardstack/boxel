@@ -15,6 +15,7 @@ import { shimExternals } from '../lib/externals';
 
 import type LoaderService from './loader-service';
 import type RealmService from './realm';
+import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
@@ -39,6 +40,7 @@ export default class NetworkService extends Service {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare reset: ResetService;
+  @service declare realmServer: RealmServerService;
 
   virtualNetwork = this.makeVirtualNetwork();
 
@@ -61,7 +63,15 @@ export default class NetworkService extends Service {
     }
     return fetcher(this.fetch, [
       async (req, next) => {
-        if (this.loaderService.isIndexing) {
+        if (
+          this.loaderService.isIndexing &&
+          // we are selective about adding this header because external sites,
+          // like esm.run will reject our custom header because of CORS. This
+          // hack is not sustainable, once we have more than 1 realm server or
+          // custom realm CNAMEs this won't work anymore...
+          (req.url.startsWith(this.realmServer.url.href) ||
+            req.url.startsWith(baseRealm.url))
+        ) {
           req.headers.set('X-Boxel-Building-Index', 'true');
         }
         return next(req);

@@ -15,6 +15,7 @@ NODE_ENV=development \
   --port=4213 \
   --matrixURL='http://localhost:8008' \
   --distURL="${HOST_URL:-http://localhost:4200}" \
+  --prerendererUrl="http://localhost:4221" \
   \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/'

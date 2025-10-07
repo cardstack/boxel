@@ -15,6 +15,7 @@ NODE_ENV=test \
   --port=4211 \
   --matrixURL='http://localhost:8008' \
   --distURL="${HOST_URL:-http://localhost:4200}" \
+  --prerendererUrl="http://localhost:4221" \
   \
   --fromUrl='http://localhost:4202/node-test/' \
   --toUrl='http://localhost:4202/node-test/' \

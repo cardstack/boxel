@@ -1,6 +1,8 @@
 #! /bin/sh
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# TODO set the log levels to warn to keep the log noise down in the prerenderer log
+
 # Environment for development prerender server
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \

@@ -10,6 +10,7 @@ import {
 import puppeteer, {
   type Browser,
   type BrowserContext,
+  type ConsoleMessage,
   type Page,
 } from 'puppeteer';
 import { createJWT } from '../jwt';
@@ -40,6 +41,7 @@ export class Prerenderer {
       lastUsedAt: number;
     }
   >();
+  #nonce = 0;
   #lru = new Set<string>();
   #pendingByRealm = new Map<string, Promise<void>>();
   #maxPages: number;
@@ -121,6 +123,90 @@ export class Prerenderer {
     return undefined;
   }
 
+  #attachPageConsole(page: Page, realm: string, pageId: string): void {
+    page.on('console', async (message: ConsoleMessage) => {
+      try {
+        let logFn = this.#logMethodForConsole(message.type());
+        let formatted = await this.#formatConsoleMessage(message);
+        let location = message.location();
+        let locationInfo = '';
+        if (location?.url) {
+          let segments: number[] = [];
+          if (typeof location.lineNumber === 'number') {
+            segments.push(location.lineNumber + 1);
+          }
+          if (typeof location.columnNumber === 'number') {
+            segments.push(location.columnNumber + 1);
+          }
+          let suffix = segments.length ? `:${segments.join(':')}` : '';
+          locationInfo = ` (${location.url}${suffix})`;
+        }
+        logFn(
+          'Console[%s] realm=%s pageId=%s%s %s',
+          message.type(),
+          realm,
+          pageId,
+          locationInfo,
+          formatted,
+        );
+      } catch (e) {
+        log.debug(
+          'Failed to process console output for realm %s page %s:',
+          realm,
+          pageId,
+          e,
+        );
+      }
+    });
+  }
+
+  #logMethodForConsole(
+    type: ReturnType<ConsoleMessage['type']>,
+  ): (...args: any[]) => void {
+    switch (type) {
+      case 'assert':
+      case 'error':
+        return log.error.bind(log);
+      case 'warn':
+        return log.warn.bind(log);
+      case 'info':
+        return log.info.bind(log);
+      case 'debug':
+        return log.debug.bind(log);
+      default:
+        return log.info.bind(log);
+    }
+  }
+
+  async #formatConsoleMessage(message: ConsoleMessage): Promise<string> {
+    try {
+      let args = message.args();
+      if (!args.length) {
+        return message.text();
+      }
+      let parts = await Promise.all(
+        args.map(async (arg) => {
+          try {
+            let value = await arg.jsonValue();
+            if (typeof value === 'string') {
+              return value;
+            }
+            if (typeof value === 'undefined') {
+              return arg.toString();
+            }
+            return JSON.stringify(value);
+          } catch (_e) {
+            return arg.toString();
+          }
+        }),
+      );
+      let joined = parts.filter((part) => part.length > 0).join(' ');
+      return joined.length ? joined : message.text();
+    } catch (_e) {
+      return message.text();
+    }
+  }
+
   async #step<T>(
     realm: string,
     step: string,
@@ -200,6 +286,10 @@ export class Prerenderer {
     timings: { launchMs: number; renderMs: number };
     pool: { pageId: string; realm: string; reused: boolean };
   }> {
+    this.#nonce++;
+    log.info(
+      `prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId} permissions=${JSON.stringify(permissions)}`,
+    );
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
@@ -255,10 +345,17 @@ export class Prerenderer {
         page,
         async () => {
           if (reused) {
-            await transitionTo(page, 'render.html', url, 'isolated', '0');
+            await transitionTo(
+              page,
+              'render.html',
+              url,
+              String(this.#nonce),
+              'isolated',
+              '0',
+            );
           } else {
             await page.goto(
-              `${boxelHostURL}/render/${encodeURIComponent(url)}/html/isolated/0`,
+              `${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/html/isolated/0`,
             );
           }
           return await captureResult(page, 'innerHTML', opts);
@@ -463,11 +560,13 @@ export class Prerenderer {
       let browser = await this.#getBrowser();
       const context = await browser.createBrowserContext();
       const page = await context.newPage();
+      const pageId = uuidv4();
+      this.#attachPageConsole(page, realm, pageId);
       entry = {
         realm,
         context,
         page,
-        pageId: uuidv4(),
+        pageId,
         lastUsedAt: Date.now(),
       };
       this.#pool.set(realm, entry);
