@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "Spreadsheet",
-        "module": "../spreadsheet/spreadsheet"
+        "module": "../spreadsheet"
       }
     },
     "type": "card",
