@@ -1,11 +1,11 @@
 import { query, param, type DBAdapter, type Expression } from './index';
 
-// Returns created_at (epoch seconds) or null if not found
+// Returns created_at (epoch seconds) or undefined if not found
 export async function getCreatedTime(
   db: DBAdapter,
   realmURL: string,
   localPath: string,
-): Promise<number | null> {
+): Promise<number | undefined> {
   let rows = await query(db, [
     'SELECT created_at FROM realm_file_meta WHERE realm_url =',
     param(realmURL),
@@ -13,9 +13,9 @@ export async function getCreatedTime(
     param(localPath),
     'LIMIT 1',
   ]);
-  if (!rows || rows.length === 0) return null;
+  if (!rows || rows.length === 0) return undefined;
   let created = rows[0]['created_at'];
-  if (created == null) return null;
+  if (created == null) return undefined;
   return typeof created === 'string' ? parseInt(created) : Number(created);
 }
 
@@ -27,7 +27,7 @@ export async function ensureFileCreatedAt(
 ): Promise<number> {
   // Try existing first
   let existing = await getCreatedTime(db, realmURL, localPath);
-  if (existing != null) return existing;
+  if (existing !== undefined) return existing;
 
   // Insert and re-read
   let now = Math.floor(Date.now() / 1000);
