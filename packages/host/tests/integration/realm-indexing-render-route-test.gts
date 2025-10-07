@@ -3007,8 +3007,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
           resourceCreatedAt:
-            (await getFileCreatedAt(realm, 'Friend/hassan.json')) ??
-            undefined,
+            (await getFileCreatedAt(realm, 'Friend/hassan.json')) ?? undefined,
         },
       });
     } else {
@@ -3266,8 +3265,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
             resourceCreatedAt:
-              (await getFileCreatedAt(realm, 'Friend/mango.json')) ??
-              undefined,
+              (await getFileCreatedAt(realm, 'Friend/mango.json')) ?? undefined,
           },
         },
         included: [
