@@ -8,7 +8,7 @@ NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL=https://realms-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='staging.boxel.dev' \
-  PUBLISHED_REALM_BOXEL_SITE_DOMAIN='staging.boxel.dev' \
+  PUBLISHED_REALM_BOXEL_SITE_DOMAIN='staging.boxel.build' \
   ts-node \
   --transpileOnly main \
   --port=3000 \
