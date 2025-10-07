@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -20,7 +21,7 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import HostModeContent from '../host-mode/host-mode-content';
+import HostModeContent from '../host-mode/content';
 
 import PublishRealmModal from './publish-realm-modal';
 import SubmodeLayout from './submode-layout';
@@ -113,10 +114,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         {{/if}}
         <PublishingRealmPopover @isOpen={{this.isPublishingRealmPopoverOpen}} />
       </:topBar>
-      <:default>
+      <:default as |layout|>
         <HostModeContent
           @cardIds={{this.cardIds}}
-          @close={{this.removeCardFromTrail}}
+          @removeCard={{this.removeCardFromTrail}}
+          @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
         />
       </:default>
     </SubmodeLayout>

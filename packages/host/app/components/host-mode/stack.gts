@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 
-import HostModeStackItem from './host-mode-stack-item';
+import HostModeStackItem from './stack-item';
 
 interface Signature {
   Element: HTMLElement;

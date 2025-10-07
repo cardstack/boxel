@@ -157,7 +157,7 @@ module('Acceptance | host submode', function (hooks) {
 
     test('host submode is available', async function (assert) {
       await visitOperatorMode({
-        submode: 'code',
+        submode: 'interact',
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
 
@@ -182,8 +182,8 @@ module('Acceptance | host submode', function (hooks) {
 
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Host"]');
-      assert.dom('[data-test-host-submode-card]').exists();
-      assert.dom('[data-test-host-submode-card]').hasText('Title: A B');
+      assert.dom('[data-test-host-mode-card]').exists();
+      assert.dom('[data-test-host-mode-card]').hasText('Title: A B');
     });
 
     test('entering from code mode shows the index card', async function (assert) {
@@ -194,7 +194,7 @@ module('Acceptance | host submode', function (hooks) {
 
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Host"]');
-      assert.dom('[data-test-host-submode-card]').exists();
+      assert.dom('[data-test-host-mode-card]').exists();
       // CardsGrid should be rendered (index card)
       assert.dom('.boxel-card-container').exists();
     });
@@ -207,8 +207,8 @@ module('Acceptance | host submode', function (hooks) {
 
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Host"]');
-      assert.dom('[data-test-host-submode-card]').exists();
-      assert.dom('[data-test-host-submode-card]').hasText('Title: A B');
+      assert.dom('[data-test-host-mode-card]').exists();
+      assert.dom('[data-test-host-mode-card]').hasText('Title: A B');
     });
 
     test('wide format cards use full width', async function (assert) {
@@ -218,7 +218,6 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       assert.dom('.host-mode-content').hasClass('is-wide');
-      assert.dom('.container').hasClass('container');
       // The width is applied via CSS class, not inline style
       assert.dom('.host-mode-content.is-wide').exists();
     });
@@ -230,7 +229,6 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       assert.dom('.host-mode-content').doesNotHaveClass('is-wide');
-      assert.dom('.container').hasClass('container');
       // The width is applied via CSS class, not inline style
       assert.dom('.host-mode-content:not(.is-wide)').exists();
     });
@@ -283,10 +281,10 @@ module('Acceptance | host submode', function (hooks) {
       // Wait for loading to complete and error to show
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      assert.dom('[data-test-host-submode-error]').exists();
+      assert.dom('[data-test-host-mode-error]').exists();
       assert
-        .dom('[data-test-host-submode-error]')
-        .hasText(`Card not found: ${testRealmURL}nonexistent`);
+        .dom('[data-test-host-mode-error]')
+        .hasText(`Could not find ${testRealmURL}nonexistent`);
     });
 
     test('ai assistant is not displayed in host submode', async function (assert) {

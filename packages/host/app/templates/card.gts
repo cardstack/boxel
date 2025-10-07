@@ -24,7 +24,7 @@ import {
 } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
-import HostModeContent from '@cardstack/host/components/host-mode/host-mode-content';
+import HostModeContent from '@cardstack/host/components/host-mode/content';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import config from '@cardstack/host/config/environment';
@@ -222,7 +222,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         >
           <HostModeContent
             @cardIds={{this.cardIds}}
-            @close={{this.closeCard}}
+            @removeCard={{this.closeCard}}
           />
         </section>
       </div>

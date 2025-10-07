@@ -1,7 +1,8 @@
+import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
+import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -11,6 +12,7 @@ interface Signature {
   Args: {
     cardId: string;
     displayBoundaries?: boolean;
+    openInteractSubmode?: () => void;
   };
 }
 
@@ -77,6 +79,14 @@ export default class HostModeCard extends Component<Signature> {
         <div class='message'>
           <p>{{this.loadingMessage}}</p>
         </div>
+      {{else if @openInteractSubmode}}
+        <div class='non-publishable-message'>
+          <p>This file is not in a publishable realm.</p>
+          <BoxelButton
+            {{on 'click' @openInteractSubmode}}
+            data-test-switch-to-interact
+          >View in Interact mode</BoxelButton>
+        </div>
       {{else if this.shouldShowEmptyMessage}}
         <div class='message'>
           <p>{{this.emptyMessage}}</p>
@@ -104,6 +114,16 @@ export default class HostModeCard extends Component<Signature> {
 
       .message--error {
         color: var(--boxel-error-100);
+      }
+
+      .non-publishable-message {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 16rem;
+        text-align: center;
+        gap: var(--boxel-sp);
       }
     </style>
   </template>

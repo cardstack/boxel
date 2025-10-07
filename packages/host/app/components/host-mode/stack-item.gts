@@ -13,7 +13,7 @@ import { IconButton } from '@cardstack/boxel-ui/components';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import HostModeCard from './host-mode-card';
+import HostModeCard from './card';
 
 interface Signature {
   Element: HTMLElement;

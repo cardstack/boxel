@@ -9,6 +9,12 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
+export type ErrorModel = {
+  message: string;
+  loadType: 'index' | 'card' | 'stack';
+  operatorModeState: string;
+};
+
 export default class Card extends Route<ReturnType<StoreService['get']>> {
   queryParams = {
     hostModeStack: {

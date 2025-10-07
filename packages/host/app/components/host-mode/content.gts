@@ -9,15 +9,16 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import HostModeBreadcrumbs from './host-mode-breadcrumbs';
-import HostModeCard from './host-mode-card';
-import HostModeStack from './host-mode-stack';
+import HostModeBreadcrumbs from './breadcrumbs';
+import HostModeCard from './card';
+import HostModeStack from './stack';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     cardIds: string[];
-    close?: (cardId: string) => void;
+    removeCard?: (cardId: string) => void;
+    openInteractSubmode?: () => void;
   };
 }
 
@@ -83,9 +84,9 @@ export default class HostModeContent extends Component<Signature> {
   }
 
   @action
-  close(cardId: string) {
-    if (this.args.close) {
-      this.args.close(cardId);
+  removeCard(cardId: string) {
+    if (this.args.removeCard) {
+      this.args.removeCard(cardId);
     }
   }
 
@@ -93,19 +94,24 @@ export default class HostModeContent extends Component<Signature> {
     <div
       class={{this.hostModeContentContainer}}
       style={{this.backgroundImageStyle}}
+      data-test-host-mode-content
     >
       {{#if this.displayBreadcrumbs}}
         <div class='breadcrumb-container'>
-          <HostModeBreadcrumbs @cardIds={{@cardIds}} @close={{this.close}} />
+          <HostModeBreadcrumbs
+            @cardIds={{@cardIds}}
+            @close={{this.removeCard}}
+          />
         </div>
       {{/if}}
       <HostModeCard
         @cardId={{this.currentCardId}}
         @displayBoundaries={{not this.isWideCard}}
+        @openInteractSubmode={{@openInteractSubmode}}
         class='current-card'
       />
       {{#if (gt @cardIds.length 1)}}
-        <HostModeStack @cardIds={{@cardIds}} @close={{this.close}} />
+        <HostModeStack @cardIds={{@cardIds}} @close={{this.removeCard}} />
       {{/if}}
     </div>
 

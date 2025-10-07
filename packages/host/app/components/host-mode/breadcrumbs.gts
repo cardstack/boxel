@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
-import HostModeBreadcrumbItem from './host-mode-breadcrumb-item';
+import HostModeBreadcrumbItem from './breadcrumb-item';
 
 interface Signature {
   Element: HTMLElement;
