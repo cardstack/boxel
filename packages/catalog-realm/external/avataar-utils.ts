@@ -155,7 +155,7 @@ export const CATEGORY_MAP: Record<string, keyof AvataaarsOptions> = {
 export const DEFAULT_AVATAR_VALUES: Required<AvataaarsModel> = {
   topType: 'ShortHairShortFlat',
   accessoriesType: 'Blank',
-  hairColor: 'BrownDark',
+  hairColor: 'Platinum',
   facialHairType: 'Blank',
   clotheType: 'BlazerShirt',
   eyeType: 'Default',
@@ -504,7 +504,89 @@ export function playClickSound(): void {
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.1);
   } catch (error) {
-    console.log('Audio not supported or failed:', error);
-    // Silently fail if audio is not supported
+    console.error('Audio not supported or failed:', error);
   }
+}
+
+/**
+ * Interface for createRealImage function parameters
+ */
+export interface CreateRealParams {
+  avatar: AvataaarsModel;
+  avatarUrl?: string;
+  cardInfo?: {
+    notes?: string;
+  };
+  sendRequestCommand: {
+    execute: (input: {
+      url: string;
+      method: string;
+      requestBody: string;
+      headers?: Record<string, string>;
+    }) => Promise<{
+      response: Response;
+    }>;
+  };
+}
+
+/**
+ * Interface for createRealImage result
+ */
+export interface CreateRealResult {
+  success: boolean;
+  imageUrl?: string;
+  error?: string;
+}
+
+/**
+ * Builds AI interpretation cues based on avatar configuration
+ */
+export function buildAICues(avatarModel: AvataaarsModel): string {
+  const cuesList = [];
+
+  // Check mouth type
+  if (avatarModel.mouthType === 'Grimace') {
+    cuesList.push('- Grimace should show teeth with a stretched mouth');
+  }
+  if (avatarModel.mouthType === 'Vomit') {
+    cuesList.push(
+      '- Vomit should be pretending to vomit, as if seeing something revolting',
+    );
+  }
+
+  // Check hair/top type
+  if (avatarModel.topType === 'WinterHat1') {
+    cuesList.push('- Winter Hat 1 has sides that covers ears and cheeks');
+  }
+  if (avatarModel.topType === 'WinterHat2') {
+    cuesList.push('- Winter Hat 2 is knit');
+  }
+  if (avatarModel.topType === 'WinterHat3') {
+    cuesList.push('- Winter Hat 3 is a beanie');
+  }
+  if (avatarModel.topType === 'WinterHat4') {
+    cuesList.push('- Winter Hat 4 is a Christmas hat');
+  }
+  if (avatarModel.topType === 'NoHair') {
+    cuesList.push('- nohair is bald');
+  }
+  if (avatarModel.topType === 'ShortHairSides') {
+    cuesList.push(
+      '- ShortHairSides person should be 90% bald with male pattern baldness',
+    );
+  }
+
+  // Check eye type
+  if (avatarModel.eyeType === 'Hearts') {
+    cuesList.push(
+      "- hearts eye: don't draw hearts, just make their eyes big and doe-y with affection and attraction",
+    );
+  }
+  if (avatarModel.eyeType === 'Dizzy') {
+    cuesList.push('- dizzy eye should be an overall emotion');
+  }
+
+  return cuesList.length > 0
+    ? '\n\nAI Interpretation Cues:\n' + cuesList.join('\n')
+    : '';
 }

@@ -1,0 +1,87 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PracticeQuizCard",
+        "module": "../practice-quiz"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "subject": "Computer Science",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "quizTitle": "Data Structures Quick Check",
+      "timeLimit": 10,
+      "difficulty": "Intermediate",
+      "studyTopic": "Data Structures Fundamentals",
+      "completedAt": "2025-09-12T13:28:37.116Z",
+      "isCompleted": true,
+      "quizQuestions": [
+        {
+          "question": "What is the time complexity of binary search?",
+          "choices": [
+            "O(log n)",
+            "O(n)",
+            "O(n log n)",
+            "O(n²)"
+          ],
+          "correctAnswer": "A"
+        },
+        {
+          "question": "How does a hash table handle collisions?",
+          "choices": [
+            "Chaining with linked lists",
+            "Open addressing only",
+            "Rehashing the entire table",
+            "All collisions cause errors"
+          ],
+          "correctAnswer": "A"
+        },
+        {
+          "question": "What's the difference between a stack and a queue?",
+          "choices": [
+            "Stack is LIFO, Queue is FIFO",
+            "Stack is FIFO, Queue is LIFO",
+            "They are the same data structure",
+            "Stack allows random access, Queue doesn't"
+          ],
+          "correctAnswer": "A"
+        },
+        {
+          "question": "What is the best case time complexity for quicksort?",
+          "choices": [
+            "O(n log n)",
+            "O(n²)",
+            "O(log n)",
+            "O(n)"
+          ],
+          "correctAnswer": "A"
+        },
+        {
+          "question": "Which data structure uses LIFO principle?",
+          "choices": [
+            "Stack",
+            "Queue",
+            "Array",
+            "Tree"
+          ],
+          "correctAnswer": "A"
+        }
+      ],
+      "correctAnswers": 1,
+      "totalQuestions": 5
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

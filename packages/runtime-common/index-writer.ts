@@ -140,7 +140,7 @@ export class Batch {
   }
 
   // Look up created_at for a given file path from realm_file_meta
-  async getCreatedTime(localPath: string): Promise<number | null> {
+  async getCreatedTime(localPath: string): Promise<number | undefined> {
     // delegate to shared helper
     return getCreatedTime(this.#dbAdapter, this.realmURL.href, localPath);
   }
