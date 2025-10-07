@@ -72,7 +72,10 @@ export type CreateRoutesArgs = {
     eventType: string,
     data?: Record<string, any>,
   ) => Promise<void>;
-  validPublishedRealmDomains?: string[];
+  domainsForPublishedRealms?: {
+    boxelSpace?: string;
+    boxelSite?: string;
+  };
   assetsURL: URL;
 };
 

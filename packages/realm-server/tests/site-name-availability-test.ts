@@ -18,10 +18,15 @@ module(basename(__filename), function () {
     let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
     let user: User;
 
+    let boxelSiteDomain = 'boxel.dev.localhost';
+
     hooks.beforeEach(async function () {
       prepareTestDB();
       dbAdapter = new PgAdapter({ autoMigrate: true });
-      handler = handleCheckSiteNameAvailabilityRequest({ dbAdapter } as any);
+      handler = handleCheckSiteNameAvailabilityRequest({
+        dbAdapter,
+        domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
+      } as any);
       user = await insertUser(dbAdapter, 'matrix-user-id', 'test-user');
     });
 
@@ -45,13 +50,13 @@ module(basename(__filename), function () {
       return ctx;
     }
 
-    test('should return 400 when subdomain is missing', async function (assert) {
+    test('should return 422 when subdomain is missing', async function (assert) {
       const ctx = await callHandler();
 
       assert.strictEqual(
         ctx.status,
-        400,
-        'Should return 400 for missing subdomain',
+        422,
+        'Should return 422 for missing subdomain',
       );
       assert.ok(
         ctx.body.includes('subdomain query parameter is required'),
@@ -79,6 +84,12 @@ module(basename(__filename), function () {
         'test-',
         'MyApp',
         'TEST',
+        // Punycode/homoglyph attack protection
+        'xn--test',
+        'xn--example-123',
+        'tëst', // non-ASCII character
+        'test™', // trademark symbol
+        'tеst', // Cyrillic 'e' (homoglyph)
       ];
 
       for (const subdomain of invalidSubdomains) {
@@ -141,12 +152,12 @@ module(basename(__filename), function () {
 
     test('should return 200 with available=false for claimed subdomains', async function (assert) {
       const subdomain = 'claimed-site';
-      const hostname = `${subdomain}.boxel.dev.localhost`;
+      const hostname = `${subdomain}.${boxelSiteDomain}`;
 
       let { valueExpressions, nameExpressions: nameExpressions } =
         asExpressions({
           user_id: user.id,
-          source_realm_url: 'https://boxel.dev.localhost/test-realm',
+          source_realm_url: `https://${boxelSiteDomain}/test-realm`,
           hostname: hostname,
           claimed_at: Math.floor(Date.now() / 1000),
         });
@@ -181,35 +192,14 @@ module(basename(__filename), function () {
       );
     });
 
-    test('should handle different environment domains', async function (assert) {
-      const subdomain = 'test-env';
-
-      const originalNodeEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
-
-      try {
-        const ctx = await callHandler(subdomain);
-
-        assert.strictEqual(ctx.status, 200, 'Should return 200');
-
-        const responseBody = JSON.parse(ctx.body);
-        assert.ok(
-          responseBody.hostname.includes('boxel.site'),
-          'Should use production domain',
-        );
-      } finally {
-        process.env.NODE_ENV = originalNodeEnv;
-      }
-    });
-
     test('should return available=true for removed/unclaimed subdomains', async function (assert) {
       const subdomain = 'removed-site';
-      const hostname = `${subdomain}.boxel.dev.localhost`;
+      const hostname = `${subdomain}.${boxelSiteDomain}`;
 
       // Insert a claimed domain that has been removed
       let { valueExpressions, nameExpressions } = asExpressions({
         user_id: user.id,
-        source_realm_url: 'https://boxel.dev.localhost/test-realm',
+        source_realm_url: `https://${boxelSiteDomain}/test-realm`,
         hostname: hostname,
         claimed_at: Math.floor(Date.now() / 1000) - 86400, // claimed yesterday
         removed_at: Math.floor(Date.now() / 1000), // removed now

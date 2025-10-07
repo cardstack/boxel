@@ -5,18 +5,6 @@ const path = require('path');
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
-function getDefaultSubdomainRealmDomain() {
-  const nodeEnv = process.env.NODE_ENV;
-
-  if (nodeEnv === 'production') {
-    return 'boxel.site';
-  } else if (nodeEnv === 'staging') {
-    return 'staging.boxel.build';
-  } else {
-    return 'boxel.dev.localhost';
-  }
-}
-
 module.exports = function (environment) {
   const ENV = {
     modulePrefix: '@cardstack/host',
@@ -51,13 +39,12 @@ module.exports = function (environment) {
     minSaveTaskDurationMs: 1000,
     renderTimeoutMs: 30_000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
+    publishedRealmBoxelSpaceDomain:
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+    publishedRealmBoxelSiteDomain:
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
 
     // the fields below may be rewritten by the realm server
-    defaultPublishedRealmDomain:
-      process.env.DEFAULT_PUBLISHED_REALM_DOMAIN || 'localhost:4201',
-    publishedSubdomainRealmDomain:
-      process.env.PUBLISHED_SUBDOMAIN_REALM_DOMAIN ||
-      getDefaultSubdomainRealmDomain(),
     hostsOwnAssets: true,
     realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:

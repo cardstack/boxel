@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Literature Discussion Group",
+      "description": "Weekly discussion of contemporary literature. This week: analyzing themes in modern poetry and short fiction.",
+      "startTime": "2025-09-09T13:00:00.000Z",
+      "endTime": "2025-09-09T14:30:00.000Z",
+      "location": "Library Conference Room B",
+      "isAllDay": "false",
+      "eventType": "discussion",
+      "eventColor": "#8b5cf6"
+    },
+    "relationships": {
+      "calendar": {
+        "links": {
+          "self": "../CalendarCard/2c3c78cd-fa4f-4988-b098-c8d099557fba"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../calendar",
+        "name": "CalendarEvent"
+      }
+    }
+  }
+}

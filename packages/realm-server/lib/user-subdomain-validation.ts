@@ -110,6 +110,14 @@ export function validateSubdomain(
     return { valid: false, error: 'Subdomain is required' };
   }
 
+  // Check for punycode domains (homoglyph attack protection)
+  if (subdomain.startsWith('xn--')) {
+    return {
+      valid: false,
+      error: 'Punycode domains are not allowed for security reasons',
+    };
+  }
+
   const validSubdomainRegex = /^[a-z0-9-]+$/;
   if (!validSubdomainRegex.test(subdomain)) {
     return {
@@ -124,10 +132,6 @@ export function validateSubdomain(
       valid: false,
       error: 'Subdomain cannot start or end with a hyphen',
     };
-  }
-
-  if (subdomain.includes('.')) {
-    return { valid: false, error: 'Subdomain cannot contain dots' };
   }
 
   if (subdomain.length < 2) {
