@@ -405,7 +405,10 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
-  validPublishedRealmDomains = ['localhost'],
+  domainsForPublishedRealms = {
+    boxelSpace: 'localhost',
+    boxelSite: 'localhost',
+  },
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -419,7 +422,10 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
-  validPublishedRealmDomains?: string[];
+  domainsForPublishedRealms?: {
+    boxelSpace?: string;
+    boxelSite?: string;
+  };
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -474,7 +480,7 @@ export async function runTestRealmServer({
     grafanaSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
-    validPublishedRealmDomains,
+    domainsForPublishedRealms,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();
