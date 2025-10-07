@@ -12,6 +12,7 @@ import { formatDistanceToNow } from 'date-fns';
 
 import {
   BoxelButton,
+  BoxelInputGroup,
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
@@ -135,6 +136,14 @@ export default class PublishRealmModal extends Component<Signature> {
   get customSiteNameSuccessMessage() {
     return this.customSiteNameAvailability?.available
       ? 'This name is available'
+      : null;
+  }
+
+  get customSubdomainState() {
+    return this.customSiteNameAvailability?.available
+      ? 'valid'
+      : this.customSiteNameError
+      ? 'invalid'
       : null;
   }
 
@@ -519,35 +528,25 @@ export default class PublishRealmModal extends Component<Signature> {
                     Choose a site name
                   </label>
                   <div class='custom-subdomain-input-row'>
-                    <input
+                    <BoxelInputGroup
                       id='custom-subdomain-name-input'
-                      type='text'
-                      value={{this.customSiteName}}
+                      @placeholder='custom-name'
+                      @value={{this.customSiteName}}
+                      @state={{this.customSubdomainState}}
+                      @errorMessage={{this.customSiteNameErrorMessage}}
+                      @validMessage={{this.customSiteNameSuccessMessage}}
                       {{on 'input' this.handleCustomSiteNameInput}}
                       class='custom-subdomain-input'
-                      placeholder='custom-name'
                       spellcheck='false'
                       data-test-custom-subdomain-name-input
-                    />
-                    <span
-                      class='custom-domain-suffix'
-                    >.{{this.customDomainBase}}</span>
+                    >
+                      <:after as |Accessories|>
+                        <Accessories.Text
+                          class='custom-domain-suffix'
+                        >.{{this.customDomainBase}}</Accessories.Text>
+                      </:after>
+                    </BoxelInputGroup>
                   </div>
-                  {{#if this.customSiteNameSuccessMessage}}
-                    <div
-                      class='custom-subdomain-feedback custom-subdomain-feedback--success'
-                      data-test-custom-subdomain-name-availability
-                    >
-                      {{this.customSiteNameSuccessMessage}}
-                    </div>
-                  {{else if this.customSiteNameErrorMessage}}
-                    <div
-                      class='custom-subdomain-feedback custom-subdomain-feedback--error'
-                      data-test-custom-subdomain-name-error
-                    >
-                      {{this.customSiteNameErrorMessage}}
-                    </div>
-                  {{/if}}
                 </div>
               {{else}}
                 <div class='custom-subdomain-placeholder'>
