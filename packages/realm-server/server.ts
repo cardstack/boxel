@@ -17,6 +17,7 @@ import {
   RealmInfo,
   fetchSessionRoom,
   REALM_SERVER_REALM,
+  syncDbSessionRoomsFromAccountData,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -48,6 +49,7 @@ import {
 } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import { sync } from 'glob';
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -219,6 +221,11 @@ export class RealmServer {
   }
 
   async start() {
+    await syncDbSessionRoomsFromAccountData(
+      this.matrixClient,
+      this.dbAdapter,
+      REALM_SERVER_REALM,
+    );
     let loadedRealms = await this.loadRealms();
     this.realms.push(...loadedRealms);
 
