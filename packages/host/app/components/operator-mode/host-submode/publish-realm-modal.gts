@@ -110,7 +110,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get customDomainBase() {
-    return config.publishedSubdomainRealmDomain;
+    return config.publishedRealmBoxelSiteDomain;
   }
 
   get customSiteNameDisplay() {
