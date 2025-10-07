@@ -246,7 +246,7 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
 
       .charts-css {
         width: 100%;
-        height: 100%;
+        height: auto;
         min-height: 300px;
         margin: 0;
         font-family:
@@ -289,49 +289,59 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
         max-height: 400px;
       }
 
+      .charts-css.pie tbody {
+        width: auto;
+        margin: 0 auto;
+        height: 100%;
+      }
+
       .line-chart-wrapper {
         display: grid;
         align-items: center;
         justify-items: center;
-        grid-template-columns: 50px 1fr;
-        grid-template-rows: 1fr 50px;
+        grid-template-columns: 36px 1fr;
+        grid-template-rows: auto 32px;
         grid-template-areas:
           'data-axis-1 chart'
           '. primary-axis';
         width: 100%;
         height: 100%;
-        gap: 0.5rem;
+        gap: 0.25rem;
       }
 
       .line-chart-wrapper .charts-css.line {
         grid-area: chart;
         --datasets-spacing: 0;
+        padding-left: 4px;
         overflow-x: auto;
         display: block;
         white-space: nowrap;
         width: 100%;
-        height: 100%;
+        height: auto;
+        min-height: 0;
         margin: 0;
       }
 
       .line-chart-wrapper .primary-axis {
         grid-area: primary-axis;
-        font-size: 0.875rem;
+        font-size: 0.8125rem;
         font-weight: 600;
         color: var(--foreground, #374151);
         text-align: center;
-        padding: 0.5rem;
+        padding: 0.25rem 0;
+        line-height: 1.1;
       }
 
       .line-chart-wrapper .data-axis-1 {
         grid-area: data-axis-1;
         writing-mode: tb-rl;
         transform: rotateZ(180deg);
-        font-size: 0.875rem;
+        font-size: 0.8125rem;
         font-weight: 600;
         color: var(--foreground, #374151);
         text-align: center;
-        padding: 0.5rem;
+        padding: 0.25rem 0;
+        line-height: 1.1;
       }
 
       .charts-css.line tbody tr {
@@ -340,14 +350,14 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
       }
 
       .charts-css.line td {
-        width: 30px;
+        width: 28px;
         position: relative;
       }
 
       .x-label {
         display: block;
-        margin-top: 0.25rem;
-        font-size: 0.75rem;
+        margin-top: 0.125rem;
+        font-size: 0.6875rem;
         text-align: center;
         color: var(--foreground, #374151);
         white-space: nowrap;
@@ -516,17 +526,23 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
             'data-axis-1'
             'chart'
             'primary-axis';
-          gap: 0.5rem;
+          gap: 0.25rem;
         }
 
         .line-chart-wrapper .data-axis-1 {
           writing-mode: horizontal-tb;
           transform: none;
           font-size: 0.75rem;
+          padding: 0.125rem 0;
         }
 
         .line-chart-wrapper .primary-axis {
           font-size: 0.75rem;
+          padding: 0.125rem 0;
+        }
+
+        .charts-css.line td {
+          width: 26px;
         }
       }
 
