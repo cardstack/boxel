@@ -60,7 +60,7 @@ export async function upsertSessionRoom(
 /**
  * Returns a mapping of matrix user id to session room id for all known sessions.
  */
-export async function getAllSessionRooms(
+export async function fetchAllSessionRooms(
   dbAdapter: DBAdapter,
   realmURL: string,
 ) {
@@ -76,4 +76,8 @@ export async function getAllSessionRooms(
     }
   }
   return result;
+}
+
+export async function clearSessionRooms(dbAdapter: DBAdapter) {
+  await query(dbAdapter, ['DELETE FROM session_rooms']);
 }

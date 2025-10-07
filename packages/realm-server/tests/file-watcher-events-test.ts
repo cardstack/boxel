@@ -14,6 +14,7 @@ import {
   waitForRealmEvent,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { PgAdapter } from '@cardstack/postgres';
 
 module(basename(__filename), function () {
   module('file watcher realm events', function (hooks) {
@@ -21,6 +22,7 @@ module(basename(__filename), function () {
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
     let realmEventTimestampStart: number;
 
     function onRealmSetup(args: {
@@ -28,11 +30,13 @@ module(basename(__filename), function () {
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dir: DirResult;
+      dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dir = args.dir;
+      dbAdapter = args.dbAdapter;
     }
 
     function getRealmSetup() {
@@ -41,6 +45,7 @@ module(basename(__filename), function () {
         testRealmHttpServer,
         request,
         dir,
+        dbAdapter,
       };
     }
     setupBaseRealmServer(hooks, matrixURL);

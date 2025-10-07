@@ -10,6 +10,7 @@ export interface Utils {
     responseInit: ResponseInit | undefined,
   ): Response;
   createJWT(user: string, sessionRoom?: string): Promise<string>;
+  setSessionRoom(user: string, roomId: string): Promise<void>;
 }
 
 export class MatrixBackendAuthentication {
@@ -84,6 +85,7 @@ export class MatrixBackendAuthentication {
       roomId = await this.matrixClient.createDM(user);
       dmRooms[user] = roomId;
       await this.matrixClient.setAccountData('boxel.session-rooms', dmRooms);
+      await this.utils.setSessionRoom(user, roomId);
     }
 
     let hash = new Sha256();

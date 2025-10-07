@@ -7,6 +7,8 @@ import {
   unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
+  fetchAllSessionRooms,
+  DBAdapter,
 } from '@cardstack/runtime-common';
 import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { LocalPath } from '@cardstack/runtime-common/paths';
@@ -225,13 +227,21 @@ export class NodeAdapter implements RealmAdapter {
 
   async broadcastRealmEvent(
     event: RealmEventContent,
+    realmUrl: string,
     matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
 
     if (!matrixClient.isLoggedIn()) {
       realmEventsLog.debug(
         `Not logged in (${matrixClient.username}, skipping server event`,
+      );
+      return;
+    }
+    if (dbAdapter.isClosed) {
+      realmEventsLog.warn(
+        `Database adapter is closed, skipping sending realm event`,
       );
       return;
     }
@@ -246,6 +256,24 @@ export class NodeAdapter implements RealmAdapter {
     } catch (e) {
       realmEventsLog.error('Error getting account data', e);
       return;
+    }
+    let roomsFromDB = await fetchAllSessionRooms(dbAdapter, realmUrl);
+
+    // verify that roomFromDB and dmRooms are the same - TODO: remove when we cutover to DB version only
+    for (let userId of Object.keys(roomsFromDB)) {
+      let roomId = roomsFromDB[userId];
+      if (Object.keys(dmRooms).length !== Object.keys(roomsFromDB).length) {
+        console.log({ dmRooms, roomsFromDB });
+        throw new Error(
+          `Mismatch between session_rooms table and account data.`,
+        );
+      }
+      if (dmRooms[userId] && dmRooms[userId] !== roomId) {
+        console.log({ dmRooms, roomsFromDB });
+        throw new Error(
+          `Mismatch between session_rooms table and account data for user ${userId}: ${roomId} vs ${dmRooms[userId]}`,
+        );
+      }
     }
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));

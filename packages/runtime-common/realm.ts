@@ -108,6 +108,7 @@ import {
   DefinitionsCache,
   isFilterRefersToNonexistentTypeError,
 } from './definitions-cache';
+import { upsertSessionRoom } from './db-queries/session-room-queries';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -206,7 +207,9 @@ export interface RealmAdapter {
 
   broadcastRealmEvent(
     event: RealmEventContent,
+    realmUrl: string,
     matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
   ): Promise<void>;
 
   // optional, set this to override _lint endpoint behavior in tests
@@ -1098,6 +1101,8 @@ export class Realm {
             this.#realmSecretSeed,
           );
         },
+        setSessionRoom: (userId: string, roomId: string) =>
+          upsertSessionRoom(this.#dbAdapter, this.url, userId, roomId),
       } as Utils,
     );
 
@@ -2984,7 +2989,12 @@ export class Realm {
   }
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
+    this.#adapter.broadcastRealmEvent(
+      event,
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+    );
   }
 
   private async createRequestContext(): Promise<RequestContext> {
