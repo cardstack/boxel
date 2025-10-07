@@ -258,6 +258,9 @@ let autoMigrate = migrateDB || undefined;
     }
   }
 
+  // Domains to use for when users publish their realms.
+  // PUBLISHED_REALM_BOXEL_SPACE_DOMAIN is used to form urls like "mike.boxel.space/game-mechanics"
+  // PUBLISHED_REALM_BOXEL_SITE_DOMAIN is used to form urls like "mike.boxel.site"
   let domainsForPublishedRealms = {
     boxelSpace: process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost',
     boxelSite: process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost',

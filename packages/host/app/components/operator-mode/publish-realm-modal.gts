@@ -133,7 +133,11 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private getDefaultPublishedRealmDomain(): string {
-    // TODO: adjust this after we add the feature for publishing with a custom boxel site name
+    // publishedRealmBoxelSpaceDomain is the domain that is used to form urls like "mike.boxel.space/game-mechanics"
+    // which are used to create Boxel Spaces (we will also have Boxel Sites, which is a different published realm)
+
+    // TODO: since we currently only have Boxel Spaces, we can default to that domain. When we add Boxel Sites,
+    // adjust this component to know which published realm domain to use.
     return config.publishedRealmBoxelSpaceDomain;
   }
 

@@ -304,7 +304,8 @@ export class RealmServer {
 
         if (config.publishedRealmBoxelSpaceDomain === 'localhost:4201') {
           // if this is the default, this needs to be the realm server’s host
-          // to work in Matrix tests
+          // to work in Matrix tests, since publishedRealmBoxelSpaceDomain is currently
+          // the default domain for publishing a realm
           config.publishedRealmBoxelSpaceDomain = this.serverURL.host;
         }
 
