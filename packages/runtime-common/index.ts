@@ -157,6 +157,7 @@ export { createResponse } from './create-response';
 
 export * from './db-queries/db-types';
 export * from './db-queries/realm-permission-queries';
+export * from './db-queries/session-room-queries';
 export * from './db-queries/user-queries';
 
 // From https://github.com/iliakan/detect-node
