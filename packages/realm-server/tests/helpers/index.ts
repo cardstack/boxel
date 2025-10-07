@@ -695,7 +695,7 @@ export function setupMatrixRoom(
     await matrixClient.setAccountData('boxel.session-rooms', {
       [userId]: json.room,
     });
-    upsertSessionRoom(
+    await upsertSessionRoom(
       realmSetup.dbAdapter,
       realmSetup.testRealm.url,
       userId,

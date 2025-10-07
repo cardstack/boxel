@@ -1,4 +1,5 @@
 import {
+  fetchSessionRoom,
   logger,
   REALM_SERVER_REALM,
   SupportedMimeType,
@@ -43,6 +44,8 @@ export default function handleCreateSessionRequest({
       },
       createJWT: async (user: string, sessionRoom: string) =>
         createJWT({ user, sessionRoom }, realmSecretSeed),
+      getSessionRoom: async (userId: string) =>
+        fetchSessionRoom(dbAdapter, REALM_SERVER_REALM, userId),
       setSessionRoom: (userId: string, roomId: string) =>
         upsertSessionRoom(dbAdapter, REALM_SERVER_REALM, userId, roomId),
     } as Utils,

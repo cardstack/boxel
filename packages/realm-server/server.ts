@@ -15,6 +15,8 @@ import {
   DEFAULT_PERMISSIONS,
   PUBLISHED_DIRECTORY_NAME,
   RealmInfo,
+  fetchSessionRoom,
+  REALM_SERVER_REALM,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -693,14 +695,24 @@ export class RealmServer {
       (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
         'boxel.session-rooms',
       )) ?? {};
-    let roomId = dmRooms[user];
+    let legacyRoomId = dmRooms[user];
+    let roomId = await fetchSessionRoom(
+      this.dbAdapter,
+      REALM_SERVER_REALM,
+      user,
+    );
     if (!roomId) {
       console.error(
         `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
       );
     }
+    if (legacyRoomId !== roomId) {
+      console.warn(
+        `Discrepancy between session_rooms table and account data for user ${user}: ${roomId} vs ${legacyRoomId}`,
+      );
+    }
 
-    await this.matrixClient.sendEvent(roomId, 'm.room.message', {
+    await this.matrixClient.sendEvent(roomId!, 'm.room.message', {
       body: JSON.stringify({ eventType, data }),
       msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
     });

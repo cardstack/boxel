@@ -108,7 +108,10 @@ import {
   DefinitionsCache,
   isFilterRefersToNonexistentTypeError,
 } from './definitions-cache';
-import { upsertSessionRoom } from './db-queries/session-room-queries';
+import {
+  fetchSessionRoom,
+  upsertSessionRoom,
+} from './db-queries/session-room-queries';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -1101,6 +1104,8 @@ export class Realm {
             this.#realmSecretSeed,
           );
         },
+        getSessionRoom: async (userId: string) =>
+          fetchSessionRoom(this.#dbAdapter, this.url, userId),
         setSessionRoom: (userId: string, roomId: string) =>
           upsertSessionRoom(this.#dbAdapter, this.url, userId, roomId),
       } as Utils,
