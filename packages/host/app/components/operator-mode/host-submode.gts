@@ -11,8 +11,8 @@ import Refresh from '@cardstack/boxel-icons/refresh';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { restartableTask } from 'ember-concurrency';
-
 import perform from 'ember-concurrency/helpers/perform';
+import window from 'ember-window-mock';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
@@ -25,7 +25,6 @@ import PublishingRealmPopover from '@cardstack/host/components/operator-mode/pub
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -113,11 +112,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   @action
-  toggleOpenSitePopover() {
-    this.isOpenSitePopoverOpen = !this.isOpenSitePopoverOpen;
-  }
-
-  @action
   closeOpenSitePopover() {
     this.isOpenSitePopoverOpen = false;
   }
@@ -131,16 +125,36 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   get hasPublishedSites() {
+    return this.publishedRealmURLs.length > 0;
+  }
+
+  get publishedRealmEntries() {
     const realmInfo = this.operatorModeStateService.currentRealmInfo;
     if (
       !realmInfo?.lastPublishedAt ||
       typeof realmInfo.lastPublishedAt !== 'object'
     ) {
-      return false;
+      return [];
     }
 
-    // Check if there are any published URLs with timestamps
-    return Object.keys(realmInfo.lastPublishedAt).length > 0;
+    return Object.entries(realmInfo.lastPublishedAt).sort(
+      ([, a], [, b]) => this.parsePublishedAt(b) - this.parsePublishedAt(a),
+    );
+  }
+
+  get publishedRealmURLs() {
+    return this.publishedRealmEntries.map(([url]) => url);
+  }
+
+  get defaultPublishedRealmURL(): string | undefined {
+    return this.publishedRealmURLs[0];
+  }
+
+  getFullURL(baseURL: string) {
+    if (this.currentCardId) {
+      return baseURL + this.currentCardId.replace(this.realmURL, '');
+    }
+    return baseURL;
   }
 
   handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
@@ -151,6 +165,30 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     await this.realm.unpublish(this.realmURL, publishedRealmURL);
   });
+
+  @action
+  handleOpenSiteButtonClick(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.shiftKey) {
+      this.isOpenSitePopoverOpen = !this.isOpenSitePopoverOpen;
+      return;
+    }
+
+    this.isOpenSitePopoverOpen = false;
+    let defaultURL = this.defaultPublishedRealmURL;
+    if (defaultURL) {
+      window.open(this.getFullURL(defaultURL), '_blank');
+    } else {
+      this.isOpenSitePopoverOpen = true;
+    }
+  }
+
+  private parsePublishedAt(value: unknown) {
+    let publishedAt = Number(value ?? 0);
+    return Number.isFinite(publishedAt) ? publishedAt : 0;
+  }
 
   <template>
     <SubmodeLayout class='host-submode-layout' data-test-host-submode>
@@ -195,7 +233,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               @kind='secondary'
               @size='tall'
               class='open-site-button'
-              {{on 'click' this.toggleOpenSitePopover}}
+              {{on 'click' this.handleOpenSiteButtonClick}}
               data-test-open-site-button
             >
               <Globe width='22' height='22' class='globe-icon' />

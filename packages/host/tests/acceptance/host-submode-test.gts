@@ -427,6 +427,8 @@ module('Acceptance | host submode', function (hooks) {
             return null;
           }
 
+          let now = Date.now();
+
           return new Response(
             JSON.stringify({
               data: {
@@ -435,9 +437,8 @@ module('Acceptance | host submode', function (hooks) {
                 attributes: {
                   ...testRealmInfo,
                   lastPublishedAt: {
-                    'http://testuser.localhost:4201/test/':
-                      new Date().getTime(),
-                    'https://another-domain.com/realm/': new Date().getTime(),
+                    'http://testuser.localhost:4201/test/': now,
+                    'https://another-domain.com/realm/': now - 1000,
                   },
                 },
               },
@@ -456,7 +457,22 @@ module('Acceptance | host submode', function (hooks) {
           trail: [`${testRealmURL}Person/1.json`],
         });
 
+        let originalWindowOpen = window.open;
+        window.open = (url?: URL | string, target?: string) => {
+          assert.strictEqual(
+            url,
+            'http://testuser.localhost:4201/test/Person/1',
+            'Open most recently published realm URL',
+          );
+          assert.strictEqual(target, '_blank', 'Open in a new tab');
+          return null;
+        };
         await click('[data-test-open-site-button]');
+        window.open = originalWindowOpen;
+
+        assert.dom('[data-test-open-site-popover]').doesNotExist();
+
+        await click('[data-test-open-site-button]', { shiftKey: true });
 
         assert.dom('[data-test-open-site-popover]').exists();
         assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
@@ -476,7 +492,6 @@ module('Acceptance | host submode', function (hooks) {
           )
           .exists();
 
-        let originalWindowOpen = window.open;
         window.open = (url?: URL | string, target?: string) => {
           assert.strictEqual(
             url,
