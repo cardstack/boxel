@@ -98,31 +98,31 @@ export function cleanWhiteSpace(text: string) {
   return text.replace('<!---->', '').replace(/[\s]+/g, ' ').trim();
 }
 
-export function getMonacoContent(
-  editor: 'main' | 'firstAvailable' = 'main',
-): string {
+export function getMonacoContent(editor: 'main' | 'firstAvailable' = 'main') {
+  let monacoService = getService('monaco-service');
+
   if (editor === 'main') {
-    let monacoService = getService('monaco-service');
     return monacoService.getMonacoContent()!;
   } else {
-    return (window as any).monaco.editor.getModels()[0].getValue();
+    let firstAvailable = monacoService.registeredEditors[0];
+    return firstAvailable?.getModel()?.getValue();
   }
 }
 
-export function setMonacoContent(content: string): string {
-  return (window as any).monaco.editor.getModels()[0].setValue(content);
+export function setMonacoContent(content: string) {
+  return getService('monaco-service').editor?.getModel()?.setValue(content);
 }
 
 export function cleanupMonacoEditorModels() {
-  let diffEditors = (window as any).monaco.editor.getDiffEditors();
-  for (let editor of diffEditors) {
-    editor.dispose();
-  }
-
-  let models = (window as any).monaco.editor.getModels();
-  for (let model of models) {
-    model.dispose();
-  }
+  // FIXME is this still needed?
+  //   let diffEditors = (window as any).monaco.editor.getDiffEditors();
+  //   for (let editor of diffEditors) {
+  //     editor.dispose();
+  //   }
+  //   let models = (window as any).monaco.editor.getModels();
+  //   for (let model of models) {
+  //     model.dispose();
+  //   }
 }
 
 export async function getDbAdapter() {

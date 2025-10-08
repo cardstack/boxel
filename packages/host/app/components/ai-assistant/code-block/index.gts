@@ -1,5 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -13,6 +14,7 @@ import MonacoEditor, {
   commonEditorOptions,
 } from '@cardstack/host/modifiers/monaco-editor';
 
+import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import CodeBlockActionsComponent, {
@@ -133,6 +135,8 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
 </template>;
 
 class CodeBlockEditor extends Component<Signature> {
+  @service private declare monacoService: MonacoService;
+
   editorDisplayOptions: MonacoEditorOptions = {
     ...commonEditorOptions,
     wordWrap: 'on',
@@ -156,6 +160,7 @@ class CodeBlockEditor extends Component<Signature> {
         monacoSDK=@monacoSDK
         codeData=@codeData
         editorDisplayOptions=this.editorDisplayOptions
+        registerEditor=this.monacoService.registerEditor
       }}
       class='code-block-editor'
       data-test-editor

@@ -30,6 +30,9 @@ export interface MonacoEditorSignature {
       codeData?: Partial<CodeData>;
       monacoSDK: MonacoSDK;
       editorDisplayOptions: MonacoEditorOptions;
+      registerEditor?: (
+        editor: _MonacoSDK.editor.IStandaloneCodeEditor,
+      ) => void;
     };
   };
 }
@@ -46,6 +49,7 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
       codeData,
       monacoSDK,
       editorDisplayOptions,
+      registerEditor,
     }: MonacoEditorSignature['Args']['Named'],
   ) {
     if (!codeData) {
@@ -123,6 +127,8 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
         monacoContainer,
         editorDisplayOptions,
       );
+
+      registerEditor?.(editor);
 
       // Track editor initialization for test waiters
       if (this.waiterManager) {

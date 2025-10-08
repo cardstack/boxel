@@ -1,3 +1,4 @@
+import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -36,11 +37,17 @@ export default class MonacoService extends Service {
   // this is in the service so that we can manipulate it in our tests
   serverEchoDebounceMs = serverEchoDebounceMs;
 
+  registeredEditors: _MonacoSDK.editor.IStandaloneCodeEditor[] = [];
+
   private waiterManager = createMonacoWaiterManager();
 
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadMonacoSDK.perform();
+  }
+
+  @action registerEditor(editor: _MonacoSDK.editor.IStandaloneCodeEditor) {
+    this.registeredEditors.push(editor);
   }
 
   private loadMonacoSDK = task(async () => {
