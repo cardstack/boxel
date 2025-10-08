@@ -1679,6 +1679,66 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
         });
+
+        test('POST /_claim-boxel-site-hostname without JWT returns 401', async function (assert) {
+          let response = await request2
+            .post('/_claim-boxel-site-hostname')
+            .set('Accept', 'application/json')
+            .send({
+              data: {
+                type: 'claimed-domain',
+                attributes: {
+                  source_realm_url: 'https://test-realm.com',
+                  hostname: 'test-site.boxel.site',
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('POST /_claim-boxel-site-hostname with invalid JWT returns 401', async function (assert) {
+          let response = await request2
+            .post('/_claim-boxel-site-hostname')
+            .set('Accept', 'application/json')
+            .set('Authorization', 'Bearer invalid-jwt')
+            .send({
+              data: {
+                type: 'claimed-domain',
+                attributes: {
+                  source_realm_url: 'https://test-realm.com',
+                  hostname: 'test-site.boxel.site',
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('POST /_claim-boxel-site-hostname with valid JWT returns 201', async function (assert) {
+          let ownerUserId = '@mango:localhost';
+          let response = await request2
+            .post('/_claim-boxel-site-hostname')
+            .set('Accept', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send({
+              data: {
+                type: 'claimed-domain',
+                attributes: {
+                  source_realm_url: 'https://test-realm.com',
+                  hostname: 'valid-site.boxel.site',
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        });
       });
 
       module('stripe webhook handler', function (hooks) {
