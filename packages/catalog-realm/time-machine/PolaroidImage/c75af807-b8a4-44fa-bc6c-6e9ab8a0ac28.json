@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "caption": "2010s",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "image": {
+        "links": {
+          "self": "../../ImageCard/6993f8df-e27f-4b96-875a-f807b8a474fa"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../polaroid-image",
+        "name": "PolaroidImage"
+      }
+    }
+  }
+}

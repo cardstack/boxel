@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "caption": "2000s",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "image": {
+        "links": {
+          "self": "../../ImageCard/50effdb3-6993-48df-a27f-3b96c75af807"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../polaroid-image",
+        "name": "PolaroidImage"
+      }
+    }
+  }
+}

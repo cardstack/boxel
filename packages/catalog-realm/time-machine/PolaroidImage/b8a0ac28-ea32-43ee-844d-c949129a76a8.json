@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "caption": "1990s",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "image": {
+        "links": {
+          "self": "../../ImageCard/b8a474fa-bc6c-4e9a-b8a0-ac28ea3283ee"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../polaroid-image",
+        "name": "PolaroidImage"
+      }
+    }
+  }
+}

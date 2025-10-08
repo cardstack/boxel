@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "caption": "1970s",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "image": {
+        "links": {
+          "self": "../../ImageCard/3560b4e7-865b-40ef-bdb3-6993f8dfe27f"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../polaroid-image",
+        "name": "PolaroidImage"
+      }
+    }
+  }
+}

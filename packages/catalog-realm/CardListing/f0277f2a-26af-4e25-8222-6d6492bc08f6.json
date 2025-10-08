@@ -1,0 +1,204 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Time Machine Image Maker",
+      "images": [],
+      "summary": "This listing defines a module for generating historical-style photographs based on user-input images, time periods, and creative notes, enabling users to create, view, and export collections of era-specific images through an interactive UI.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/93fa9879-2f48-4563-beea-c1b5500c21d9"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/fa98792f-48a5-43be-aac1-b5500c21d9ea"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/48a563be-eac1-4550-8c21-d9ea0f16ee22"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/98792f48-a563-4eea-81b5-500c21d9ea0f"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/792f48a5-63be-4ac1-b550-0c21d9ea0f16"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/2f48a563-beea-41b5-900c-21d9ea0f16ee"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/eac1b550-0c21-49ea-8f16-ee2282509a18"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/63beeac1-b550-4c21-99ea-0f16ee228250"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/a563beea-c1b5-400c-a1d9-ea0f16ee2282"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/b5500c21-d9ea-4f16-ae22-82509a1803d2"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/c1b5500c-21d9-4a0f-96ee-2282509a1803"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/7d723a51-e840-4e5f-823c-77c69a222840"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/723a51e8-40ae-4f02-bc77-c69a22284063"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/500c21d9-ea0f-46ee-a282-509a1803d2d2"
+        }
+      },
+      "specs.14": {
+        "links": {
+          "self": "../Spec/beeac1b5-500c-41d9-aa0f-16ee2282509a"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../time-machine/TimeMachineImageGenerator/1ba331d0-a3d0-4f0c-9b21-23b076419732"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../time-machine/PolaroidImage/6e9ab8a0-ac28-4a32-83ee-c44dc949129a"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../time-machine/PolaroidImage/ac28ea32-83ee-444d-8949-129a76a821e7"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../time-machine/PolaroidImage/b4e7865b-50ef-4db3-a993-f8dfe27f3b96"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../time-machine/PolaroidImage/b8a0ac28-ea32-43ee-844d-c949129a76a8"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../time-machine/PolaroidImage/c75af807-b8a4-44fa-bc6c-6e9ab8a0ac28"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../time-machine/PolaroidImage/f8dfe27f-3b96-475a-b807-b8a474fabc6c"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../ImageCard/3560b4e7-865b-40ef-bdb3-6993f8dfe27f"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../ImageCard/3b96c75a-f807-48a4-b4fa-bc6c6e9ab8a0"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../ImageCard/b8a474fa-bc6c-4e9a-b8a0-ac28ea3283ee"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../ImageCard/50effdb3-6993-48df-a27f-3b96c75af807"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../ImageCard/6993f8df-e27f-4b96-875a-f807b8a474fa"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../ImageCard/bc6c6e9a-b8a0-4c28-aa32-83eec44dc949"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/ai-automation"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/design-creative"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
