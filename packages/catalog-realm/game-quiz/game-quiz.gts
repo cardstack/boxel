@@ -105,6 +105,11 @@ class GameQuizIsolated extends Component<typeof GameQuizCard> {
     return Math.round(((this.currentQuestion + 1) / total) * 100);
   }
 
+  get pointsPerQuestion() {
+    const total = this.totalQuestions || 0;
+    return total > 0 ? Math.round((100 / total) * 100) / 100 : 0;
+  }
+
   @action
   startQuiz() {
     this.playSound('click');
@@ -167,9 +172,7 @@ class GameQuizIsolated extends Component<typeof GameQuizCard> {
       this.playSound('correct');
 
       // Simple scoring: each question worth equal portion of 100 points
-      const totalQuestions = this.args?.model?.totalQuestions || 1;
-      const pointsPerQuestion = 100 / totalQuestions;
-      const pointsEarned = Math.round(pointsPerQuestion * 100) / 100; // Round to 2 decimal places
+      const pointsEarned = this.pointsPerQuestion;
 
       this.score += pointsEarned;
       this.streak++;
@@ -450,7 +453,7 @@ class GameQuizIsolated extends Component<typeof GameQuizCard> {
 
             <div class='game-tips'>
               <div class='tip'>🎯 Each question is worth
-                {{divide 100 this.totalQuestions}}
+                {{this.pointsPerQuestion}}
                 points</div>
               <div class='tip'>💯 Perfect score is always 100 points</div>
               <div class='tip'>💖 You have {{this.lives}} lives</div>
@@ -636,10 +639,7 @@ class GameQuizIsolated extends Component<typeof GameQuizCard> {
                 <div class='score-breakdown'>
                   <div class='breakdown-item'>
                     <span class='breakdown-desc'>Points per Question</span>
-                    <span class='breakdown-points'>{{divide
-                        100
-                        this.totalQuestions
-                      }}
+                    <span class='breakdown-points'>{{this.pointsPerQuestion}}
                       pts</span>
                   </div>
                   <div class='breakdown-item'>
@@ -1409,8 +1409,6 @@ class GameQuizIsolated extends Component<typeof GameQuizCard> {
         position: relative;
         background: var(--surface-raw);
         border: 2px solid #000000;
-
-        border-bottom: none;
         padding: 1.5rem;
         color: #000000;
         font-family: 'JetBrains Mono', monospace;
@@ -1911,8 +1909,6 @@ class GameQuizIsolated extends Component<typeof GameQuizCard> {
       .result-block {
         background: var(--surface-raw);
         border: 2px solid #000000;
-
-        border-bottom: none;
         padding: 1.5rem 1rem;
         text-align: center;
         position: relative;
@@ -2086,8 +2082,6 @@ class GameQuizIsolated extends Component<typeof GameQuizCard> {
       .game-over-breakdown .result-block {
         background: var(--surface-raw);
         border: 2px solid #000000;
-
-        border-bottom: none;
         padding: 1.5rem 1rem;
         text-align: center;
         position: relative;

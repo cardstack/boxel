@@ -1,7 +1,7 @@
 import Modifier, { NamedArgs } from 'ember-modifier';
 
 type KeyboardShortcutModifierSignature = {
-  // ⁽¹³⁰⁾ Keyboard shortcut modifier signature
+  // Keyboard shortcut modifier signature
   Args: {
     Positional: [];
     Named: {
@@ -15,7 +15,7 @@ type KeyboardShortcutModifierSignature = {
   Element: HTMLElement;
 };
 
-// ¹²⁹ Proper Glimmer modifier for keyboard shortcuts
+// Proper Glimmer modifier for keyboard shortcuts
 export class KeyboardShortcutModifier extends Modifier<KeyboardShortcutModifierSignature> {
   modify(
     element: HTMLElement,

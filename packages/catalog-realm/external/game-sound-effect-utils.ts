@@ -86,7 +86,7 @@ export class GameSoundEffectUtils {
     }
   }
 
-  // ⁽⁹³⁾ Click sound - subtle mechanical feedback
+  // Click sound - subtle mechanical feedback
   private static playClickSound(audioContext: AudioContext): void {
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
@@ -111,7 +111,7 @@ export class GameSoundEffectUtils {
     oscillator.stop(audioContext.currentTime + 0.1);
   }
 
-  // ⁽⁹⁴⁾ Success sound - ascending triumph
+  //  Success sound - ascending triumph
   private static playSuccessSound(audioContext: AudioContext): void {
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
@@ -134,7 +134,7 @@ export class GameSoundEffectUtils {
     oscillator.stop(audioContext.currentTime + 0.4);
   }
 
-  // ⁽⁹⁵⁾ Failure sound - descending warning
+  // Failure sound - descending warning
   private static playFailureSound(audioContext: AudioContext): void {
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
@@ -159,7 +159,7 @@ export class GameSoundEffectUtils {
     oscillator.stop(audioContext.currentTime + 0.3);
   }
 
-  // ⁽⁹⁶⁾ Completion sound - triumphant chord progression with extended fanfare
+  // Completion sound - triumphant chord progression with extended fanfare
   private static playCompletionSound(audioContext: AudioContext): void {
     // Extended victory fanfare - don't cut off the sound
     const frequencies = [523, 659, 784, 1047, 523, 1047]; // C5, E5, G5, C6, C5, C6
@@ -185,7 +185,7 @@ export class GameSoundEffectUtils {
     });
   }
 
-  // ⁽⁹⁷⁾ Game over sound - dramatic descending sequence with extended drama
+  // Game over sound - dramatic descending sequence with extended drama
   private static playGameOverSound(audioContext: AudioContext): void {
     // More dramatic descending doom sequence
     const frequencies = [440, 370, 311, 262, 220, 185]; // Extended sequence down to low notes
