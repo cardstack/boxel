@@ -7,6 +7,7 @@ import {
 } from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -32,9 +33,9 @@ import {
   type IncrementalArgsWithPermissions,
   insertPermissions,
   unixTime,
+  RealmAction,
 } from '@cardstack/runtime-common';
-
-import { RealmAction } from '@cardstack/runtime-common';
+import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 import {
   testHostModeRealmURL,
   testRealmInfo,
@@ -222,7 +223,7 @@ export async function capturePrerenderResult(
   let status = element.dataset.prerenderStatus as 'ready' | 'error';
   if (status === 'error') {
     // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
-    return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
+    return { status, value: element.innerHTML!.replace(/}[^}]*$/, '}') };
   } else {
     return { status, value: element.children[0][capture]! };
   }
@@ -240,6 +241,13 @@ async function makeRenderer() {
 }
 
 class MockLocalIndexer extends Service {
+  @tracked renderError: string | undefined;
+  @tracked prerenderStatus:
+    | 'ready'
+    | 'loading'
+    | 'error'
+    | 'unusable'
+    | undefined;
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
   #indexWriter: IndexWriter | undefined;
@@ -297,6 +305,12 @@ class MockLocalIndexer extends Service {
       throw new Error(`prerenderer not registered with MockLocalIndexer`);
     }
     return this.#prerenderer;
+  }
+  setPrerenderStatus(status: 'ready' | 'loading' | 'error' | 'unusable') {
+    this.prerenderStatus = status;
+  }
+  setRenderError(error: string) {
+    this.renderError = error;
   }
 }
 
@@ -665,6 +679,16 @@ export function delay(delayAmountMs: number): Promise<void> {
   });
 }
 
+// --- Created-at test utilities ---
+// Returns created_at (epoch seconds) from realm_file_meta for a given local file path like 'Pet/mango.json'.
+export async function getFileCreatedAt(
+  realm: Realm,
+  localPath: string,
+): Promise<number | undefined> {
+  let db = await getDbAdapter();
+  return getCreatedTime(db, realm.url, localPath);
+}
+
 function changedEntry(
   listings: { path: string; lastModified?: number }[],
   entry: { path: string; lastModified?: number },
@@ -948,12 +972,12 @@ export async function assertMessages(
   }
 }
 
-export const cardInfo = {
+export const cardInfo = Object.freeze({
   title: null,
   description: null,
   thumbnailURL: null,
   notes: null,
-};
+});
 
 // UI interaction helpers for acceptance tests
 

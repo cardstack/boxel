@@ -103,6 +103,24 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.ai-bot == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
     concurrency:
       group: ai-bot-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -372,6 +390,7 @@ jobs:
             "realm-endpoints/definition-test.ts",
             "realm-endpoints-test.ts",
             "search-prerendered-test.ts",
+            "site-name-availability-test.ts",
             "types-endpoint-test.ts",
             "server-endpoints-test.ts",
             "virtual-network-test.ts",

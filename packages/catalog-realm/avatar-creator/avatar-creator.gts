@@ -10,6 +10,8 @@ import UserIcon from '@cardstack/boxel-icons/user';
 import Avatar from '../fields/avatar';
 import AvatarCreatorComponent from './components/avatar-creator';
 import { AvataaarsModel } from '../external/avataar-utils';
+import { restartableTask } from 'ember-concurrency';
+import { CreateRealImage } from '../commands/create-real-image';
 
 class IsolatedTemplate extends Component<typeof AvatarCreator> {
   // Convert avatar field to the format expected by the component
@@ -31,11 +33,50 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
     this.args.model.avatar = new Avatar(model);
   };
 
+  _createRealImageTask = () => {
+    this.createRealImageTask.perform();
+  };
+
+  private createRealImageTask = restartableTask(async () => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('No command context found');
+    }
+
+    const createRealImageCommand = new CreateRealImage(commandContext);
+
+    await createRealImageCommand.execute({
+      avatar: this.args.model.avatar, // Pass the Avatar field (not the plain model)
+      avatarUrl: this.args.model?.thumbnailURL, // The thumbnailURL field is used in prompts as a reference image
+      notes: this.args.model.cardInfo?.notes, // The cardInfo notes field is used in prompts as context
+    });
+
+    return createRealImageCommand.result;
+  });
+
+  get isImageGenerating() {
+    return this.createRealImageTask.isRunning;
+  }
+
+  get generatedImage() {
+    const result = this.createRealImageTask.lastSuccessful?.value;
+    return result?.success && result?.imageUrl ? result.imageUrl : '';
+  }
+
+  get errorImageGenerating() {
+    const result = this.createRealImageTask.last?.value;
+    return result?.success ? '' : result?.error || '';
+  }
+
   <template>
     <AvatarCreatorComponent
       @model={{this.avatarModel}}
       @context={{@context}}
       @onUpdate={{this.updateAvatar}}
+      @isImageGenerating={{this.isImageGenerating}}
+      @generatedImage={{this.generatedImage}}
+      @errorImageGenerating={{this.errorImageGenerating}}
+      @onCreateRealImage={{this._createRealImageTask}}
     />
   </template>
 }

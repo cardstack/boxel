@@ -23,6 +23,7 @@ import {
   unixTime,
   jobIdentity,
   getFieldDefinitions,
+  modulesConsumedInMeta,
   type ResolvedCodeRef,
   type Definition,
   type Batch,
@@ -41,6 +42,7 @@ import {
   type StatusArgs,
   type Prerenderer,
   type RealmPermissions,
+  RenderResponse,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -418,7 +420,9 @@ export class CurrentRun {
       error.deps = [url.href];
       throw error;
     }
-    let { content, lastModified, created } = fileRef;
+    let { content, lastModified } = fileRef;
+    // ensure created_at exists for this file and use it for resourceCreatedAt
+    let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url, fileRef);
     } else {
@@ -452,7 +456,7 @@ export class CurrentRun {
             path: localPath,
             source: content,
             lastModified,
-            resourceCreatedAt: created,
+            resourceCreatedAt,
             resource,
             store,
           });
@@ -521,23 +525,27 @@ export class CurrentRun {
       await this.loaderService.loader.getConsumedModules(url.href)
     ).filter((u) => u !== url.href);
     let deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+    // DB created_at for modules
+    let moduleLocalPath = this.#realmPaths.local(url);
+    let moduleCreatedAt = await this.batch.ensureFileCreatedAt(moduleLocalPath);
     await this.batch.updateEntry(url, {
       type: 'module',
       source: ref.content,
       lastModified: ref.lastModified,
-      resourceCreatedAt: ref.created,
+      resourceCreatedAt: moduleCreatedAt,
       deps: new Set(deps),
     });
     this.stats.modulesIndexed++;
 
     for (let [name, maybeBaseDef] of Object.entries(module)) {
       if (isBaseDef(maybeBaseDef)) {
+        // DB created_at for definitions (use module's local path)
         await this.indexDefinition({
           name,
           url: trimExecutableExtension(url),
           cardOrFieldDef: maybeBaseDef,
           lastModified: ref.lastModified,
-          resourceCreatedAt: ref.created,
+          resourceCreatedAt: moduleCreatedAt,
           deps: [...deps, trimExecutableExtension(url).href],
         });
       }
@@ -662,15 +670,84 @@ export class CurrentRun {
       }
       deferred = new Deferred<void>();
       this.#indexingInstances.set(fileURL, deferred.promise);
+      let uncaughtError: Error | undefined;
       if ((globalThis as any).__useHeadlessChromePrerender) {
-        let renderResult = await this.#prerenderer({
-          url: fileURL,
-          realm: this.#realmURL.href,
-          userId: this.#userId,
-          permissions: this.#permissions,
-        });
-        if ('error' in renderResult && renderResult.error) {
-          // TODO need to add error doc in the correct shape
+        let renderResult: RenderResponse | undefined;
+        try {
+          renderResult = await this.#prerenderer({
+            url: fileURL,
+            realm: this.#realmURL.href,
+            userId: this.#userId,
+            permissions: this.#permissions,
+          });
+
+          // we tack on data that can only be determined via access to underlying filesystem/DB
+          if (!this.#realmInfo) {
+            let realmInfoResponse = await this.network.authedFetch(
+              `${this.realmURL}_info`,
+              { headers: { Accept: SupportedMimeType.RealmInfo } },
+            );
+            this.#realmInfo = (
+              await realmInfoResponse.json()
+            )?.data?.attributes;
+          }
+
+          let serialized = renderResult?.serialized;
+          if (serialized) {
+            merge(serialized, {
+              data: {
+                meta: {
+                  lastModified,
+                  resourceCreatedAt,
+                  realmInfo: { ...this.#realmInfo },
+                  realmURL: this.realmURL.href,
+                },
+              },
+            });
+          }
+        } catch (err: any) {
+          uncaughtError = err;
+        }
+
+        if (!renderResult || ('error' in renderResult && renderResult.error)) {
+          let renderError = renderResult?.error;
+          if (!renderError && uncaughtError) {
+            renderError = {
+              type: 'error',
+              error:
+                uncaughtError instanceof CardError
+                  ? serializableError(uncaughtError)
+                  : { message: `${uncaughtError.message}` },
+            };
+          }
+          if (
+            renderError &&
+            renderError.error.id &&
+            renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
+          ) {
+            renderError.error.deps = renderError.error.deps ?? [];
+            renderError.error.deps.push(renderError.error.id);
+          }
+          if (!renderError) {
+            log.error(
+              `bug: should never get here - handling render error, but renderError is undefined`,
+            );
+            return;
+          }
+
+          // always include the modules that we see in serialized as deps
+          renderError.error.deps = renderError.error.deps ?? [];
+          renderError.error.deps.push(
+            ...modulesConsumedInMeta(resource.meta).map(
+              (m) => new URL(m, instanceURL.href).href,
+            ),
+          );
+          renderError.error.deps = [...new Set(renderError.error.deps)];
+
+          log.warn(
+            `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
+          );
+          await this.updateEntry(instanceURL, renderError);
           return;
         } else {
           let {
@@ -706,7 +783,6 @@ export class CurrentRun {
       } else {
         let moduleDeps = directModuleDeps(resource, instanceURL);
         let typesMaybeError: TypesWithErrors | undefined;
-        let uncaughtError: Error | undefined;
         let doc: SingleCardDocument | undefined;
         let searchData: Record<string, any> | undefined;
         let cardType: typeof CardDef | undefined;
