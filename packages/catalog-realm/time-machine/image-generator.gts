@@ -507,7 +507,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
 }
 
 export class TimeMachineImageGenerator extends CardDef {
-  static displayName = 'Through The Ages';
+  static displayName = 'Time Machine Image Generator';
   static prefersWideFormat = true;
 
   @field sourceImageUrl = contains(UrlField);
