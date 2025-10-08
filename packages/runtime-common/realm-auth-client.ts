@@ -48,7 +48,7 @@ export class RealmAuthClient {
       let sessionStr = globalThis.localStorage.getItem('boxel-session') ?? '{}';
       let session: { [realmURL: string]: string } = JSON.parse(sessionStr);
       let jwt = session[this.realmURL.href];
-      if (jwt) {
+      if (!jwt) {
         throw new Error(
           `Error: Prerenderer did not set a JWT for realm ${this.realmURL.href}`,
         );
