@@ -1,7 +1,10 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+
 import { Button } from '@cardstack/boxel-ui/components';
+import NotificationBubble from '../components/notification-bubble.gts';
 
 export interface ImageUploadSectionSignature {
   Args: {
@@ -35,7 +38,9 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
     if (this.args.generateLabel) {
       return this.args.generateLabel;
     }
-    return this.args.isGenerating ? 'Generating Images...' : 'Generate Through the Ages';
+    return this.args.isGenerating
+      ? 'Generating Images...'
+      : 'Generate Through the Ages';
   }
 
   @action
@@ -71,8 +76,16 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
 
   @action
   handleGenerate() {
+    if (!this.uploadedImageData && !this.imageUrl) {
+      this.showNotification = true;
+      return;
+    } else {
+      this.showNotification = false;
+    }
     this.args.onGenerate?.();
   }
+
+  @tracked showNotification = false;
 
   <template>
     <section class='input-section'>
@@ -147,6 +160,15 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
         </div>
       </div>
 
+      {{#if this.showNotification}}
+        <div class='notification-bubble-wrapper'>
+          <NotificationBubble
+            @type='warning'
+            @message='Please upload an image or provide an image URL before generating.'
+          />
+        </div>
+      {{/if}}
+
       <Button
         @kind='primary'
         class='generate-button'
@@ -160,6 +182,11 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
     </section>
 
     <style scoped>
+      .notification-bubble-wrapper {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 0.5rem;
+      }
       .input-section {
         background: var(--card, rgba(255, 255, 255, 0.8));
         padding: 1rem;
