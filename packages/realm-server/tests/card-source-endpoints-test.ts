@@ -142,7 +142,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             response.headers['content-type'],
-            'text/plain; charset=UTF-8',
+            'text/plain;charset=UTF-8',
             'content type is correct',
           );
           assert.strictEqual(
