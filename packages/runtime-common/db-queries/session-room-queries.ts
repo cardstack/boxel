@@ -81,27 +81,3 @@ export async function fetchAllSessionRooms(
 export async function clearSessionRooms(dbAdapter: DBAdapter) {
   await query(dbAdapter, ['DELETE FROM session_rooms']);
 }
-
-// TODO: delete this and its invocations once we have deployed once to prod
-export async function syncDbSessionRoomsFromAccountData(
-  matrixClient: {
-    getAccountDataFromServer<T>(type: string): Promise<T | null>;
-  },
-  dbAdapter: DBAdapter,
-  realmURL: string,
-) {
-  let dmRooms =
-    (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-      'boxel.session-rooms',
-    )) ?? {};
-  let roomsFromDB = await fetchAllSessionRooms(dbAdapter, realmURL);
-  for (let userId of Object.keys(dmRooms)) {
-    let roomId = dmRooms[userId];
-    if (!Object.keys(roomsFromDB).includes(userId)) {
-      console.log(
-        `Inserting session room for realm ${realmURL} user ${userId} into database: ${roomId}`,
-      );
-      await upsertSessionRoom(dbAdapter, realmURL, userId, roomId);
-    }
-  }
-}

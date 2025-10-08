@@ -177,7 +177,6 @@ export function setupDB(
     await publisher?.destroy();
     await runner?.destroy();
     if (dbAdapter) {
-      console.log('clearing session_rooms table');
       await clearSessionRooms(dbAdapter);
     }
     await dbAdapter?.close();
@@ -693,12 +692,7 @@ export function setupMatrixRoom(
 
     testAuthRoomId = json.room;
 
-    let sessionRoomsByUserId =
-      (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
     await matrixClient.setAccountData('boxel.session-rooms', {
-      ...sessionRoomsByUserId,
       [userId]: json.room,
     });
     await upsertSessionRoom(
@@ -710,7 +704,6 @@ export function setupMatrixRoom(
   });
 
   hooks.afterEach(async function () {
-    console.log('clearing boxel.session-rooms accountData');
     await matrixClient.setAccountData('boxel.session-rooms', {});
   });
 
@@ -860,13 +853,12 @@ export function setupPermissionedRealm(
   });
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
-    testRealmServer?.testRealm?.unsubscribe();
-    console.log('clearing boxel.session-rooms accountData');
-    await testRealmServer?.matrixClient?.setAccountData(
+    testRealmServer.testRealm.unsubscribe();
+    await testRealmServer.matrixClient.setAccountData(
       'boxel.session-rooms',
       {},
     );
-    await closeServer(testRealmServer?.testRealmHttpServer);
+    await closeServer(testRealmServer.testRealmHttpServer);
     resetCatalogRealms();
   });
 }
