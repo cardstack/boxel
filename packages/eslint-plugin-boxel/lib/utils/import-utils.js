@@ -132,6 +132,20 @@ function fixMissingImport(
  * @returns {boolean}
  */
 function isBound(node, scope) {
+  if (!scope) {
+    return false;
+  }
+
+  const identifierName = node.name;
+
+  let currentScope = scope;
+  while (currentScope) {
+    if (currentScope.set && currentScope.set.has(identifierName)) {
+      return true;
+    }
+    currentScope = currentScope.upper;
+  }
+
   const ref = scope.references.find((v) => v.identifier === node);
   if (!ref) {
     return false;
