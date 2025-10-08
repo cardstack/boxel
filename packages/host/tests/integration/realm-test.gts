@@ -1753,6 +1753,22 @@ module('Integration | realm', function (hooks) {
       },
       'cardInfo.theme': { links: { self: null } },
     });
+    assert.deepEqual(
+      JSON.parse((adapter.files.contents['1.json'] as any).content).data
+        .relationships,
+      {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+        'inners.0.other': {
+          links: {
+            self: './2',
+          },
+        },
+      },
+    );
   });
 
   test('realm can remove all items to in a linksToMany relationship via PATCH request', async function (assert) {
