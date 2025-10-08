@@ -111,7 +111,6 @@ import {
 import {
   fetchSessionRoom,
   upsertSessionRoom,
-  syncDbSessionRoomsFromAccountData,
 } from './db-queries/session-room-queries';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
@@ -510,12 +509,6 @@ export class Realm {
     if (this.#adapter.fileWatcherEnabled) {
       await this.startFileWatcher();
     }
-
-    await syncDbSessionRoomsFromAccountData(
-      this.#matrixClient,
-      this.#dbAdapter,
-      this.url,
-    );
 
     await this.#startedUp.promise;
   }
