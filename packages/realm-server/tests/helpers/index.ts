@@ -144,7 +144,7 @@ export function prepareTestDB(): void {
 }
 
 export async function closeServer(server: Server) {
-  await new Promise<void>((r) => server.close(() => r()));
+  await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
 }
 
 type BeforeAfterCallback = (
@@ -860,13 +860,13 @@ export function setupPermissionedRealm(
   });
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
-    testRealmServer.testRealm.unsubscribe();
+    testRealmServer?.testRealm?.unsubscribe();
     console.log('clearing boxel.session-rooms accountData');
-    await testRealmServer.matrixClient.setAccountData(
+    await testRealmServer?.matrixClient?.setAccountData(
       'boxel.session-rooms',
       {},
     );
-    await closeServer(testRealmServer.testRealmHttpServer);
+    await closeServer(testRealmServer?.testRealmHttpServer);
     resetCatalogRealms();
   });
 }

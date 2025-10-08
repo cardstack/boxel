@@ -227,7 +227,16 @@ export class RealmServer {
       REALM_SERVER_REALM,
     );
     let loadedRealms = await this.loadRealms();
-    this.realms.push(...loadedRealms);
+    for (let loadedRealm of loadedRealms) {
+      const existingIndex = this.realms.findIndex(
+        (r) => r.url === loadedRealm.url,
+      );
+      if (existingIndex === -1) {
+        this.realms.push(loadedRealm);
+      } else {
+        this.realms[existingIndex] = loadedRealm;
+      }
+    }
 
     // ideally we'd like to use a Promise.all to start these and the ordering
     // will just fall out naturally from cross realm invalidation. Until we have
