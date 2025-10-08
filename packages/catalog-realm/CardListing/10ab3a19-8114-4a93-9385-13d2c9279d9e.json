@@ -1,0 +1,132 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "3D Product Rotator",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/3d-product-rotator-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/3d-product-rotator-listing/screenshot_02.png"
+      ],
+      "summary": "A customizable 3D product rotator app that allows users to upload images, describe products, and generate interactive 360° views with drag-and-rotate functionality, enhancing product presentation and visualization.",
+      "cardInfo": {
+        "notes": null,
+        "title": "3D Product Rotator",
+        "description": "A customizable 3D product rotator app that allows users to upload images, describe products, and generate interactive 360° views with drag-and-rotate functionality, enhancing product presentation and visualization.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/3d-product-rotator-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+        }
+      },
+      "tags.2": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/941baaa9-28ff-41d3-89f6-24fbd39e736c"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/41941baa-a928-4fb1-93c9-f624fbd39e73"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/aaa928ff-b1d3-49f6-a4fb-d39e736c0d7f"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/1baaa928-ffb1-43c9-b624-fbd39e736c0d"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/28ffb1d3-c9f6-44fb-939e-736c0d7f5a01"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/a928ffb1-d3c9-4624-bbd3-9e736c0d7f5a"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/ffb1d3c9-f624-4bd3-9e73-6c0d7f5a016d"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/b1d3c9f6-24fb-439e-b36c-0d7f5a016d2f"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/c9f624fb-d39e-436c-8d7f-5a016d2f6ded"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/fbd39e73-6c0d-4f5a-816d-2f6ded81e104"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/d3c9f624-fbd3-4e73-ac0d-7f5a016d2f6d"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/content-creation"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/design-creative"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../ProductRotator/f3c7898a-850f-4620-abf8-3f8840a0a386"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
