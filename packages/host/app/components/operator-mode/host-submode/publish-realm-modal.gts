@@ -516,7 +516,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 @kind='text-only'
                 class='custom-subdomain-cancel cancel'
                 {{on 'click' this.cancelCustomSiteNameSetup}}
-                data-test-custom-subdomain-name-cancel
+                data-test-custom-subdomain-cancel
               >
                 Cancel
                 <IconX width='12' height='12' class='cancel-icon' />
@@ -527,23 +527,22 @@ export default class PublishRealmModal extends Component<Signature> {
               {{#if this.isCustomSiteNameSetupVisible}}
                 <div class='custom-subdomain-setup'>
                   <label
-                    class='custom-subdomain-input-label'
-                    for='custom-subdomain-name-input'
+                    class='custom-subdomain-label'
+                    for='custom-subdomain-input'
                   >
                     Choose a site name
                   </label>
-                  <div class='custom-subdomain-input-row'>
+                  <div class='custom-subdomain-row'>
                     <BoxelInputGroup
-                      id='custom-subdomain-name-input'
+                      id='custom-subdomain-input'
                       @placeholder='custom-name'
                       @value={{this.customSiteName}}
                       @state={{this.customSubdomainState}}
                       @errorMessage={{this.customSiteNameErrorMessage}}
-                      @validMessage={{this.customSiteNameSuccessMessage}}
                       {{on 'input' this.handleCustomSiteNameInput}}
                       class='custom-subdomain-input'
                       spellcheck='false'
-                      data-test-custom-subdomain-name-input
+                      data-test-custom-subdomain-input
                     >
                       <:after as |Accessories|>
                         <Accessories.Text
@@ -584,7 +583,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 @size='small'
                 class='custom-subdomain-setup-button action'
                 {{on 'click' this.openCustomSiteNameSetup}}
-                data-test-custom-subdomain-name-setup-button
+                data-test-custom-subdomain-setup-button
               >
                 Set Up
               </BoxelButton>
@@ -808,13 +807,13 @@ export default class PublishRealmModal extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
 
-      .custom-subdomain-input-label {
+      .custom-subdomain-label {
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--boxel-dark);
       }
 
-      .custom-subdomain-input-row {
+      .custom-subdomain-row {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
