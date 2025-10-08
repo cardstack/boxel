@@ -286,7 +286,9 @@ export default class CreateSpecCommand extends HostBaseCommand<
             specCodeRef,
             targetRealm,
             SpecKlass,
-            autoGenerateReadme ?? false,
+            false,
+            false,
+            // intentionally not generating readme for multiple spec creation
           );
         } catch (e) {
           console.warn(
