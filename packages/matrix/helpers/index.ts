@@ -116,9 +116,14 @@ export async function clearLocalStorage(page: Page, appURL = testHost) {
 }
 
 export async function getMonacoContent(page: Page): Promise<string> {
-  return await page.evaluate(() =>
-    (window as any).monaco?.editor?.getModels()?.[0]?.getValue(),
-  );
+  return await page.evaluate(() => {
+    const hostApplication = (window as unknown as Record<string, any>)[
+      '@cardstack/host'
+    ];
+    return hostApplication
+      .lookup('service:monaco-service')
+      .getMonacoContent() as string;
+  });
 }
 
 export async function validateEmail(
