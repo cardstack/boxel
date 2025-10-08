@@ -7,7 +7,8 @@ NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix.boxel.ai \
   BOXEL_HOST_URL=https://app.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  VALID_PUBLISHED_REALM_DOMAINS='boxel.site,boxel.space' \
+  PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='boxel.space' \
+  PUBLISHED_REALM_BOXEL_SITE_DOMAIN='boxel.site' \
   ts-node \
   --transpileOnly main \
   --port=3000 \
