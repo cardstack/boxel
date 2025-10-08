@@ -534,7 +534,7 @@ export default class PublishRealmModal extends Component<Signature> {
                   </label>
                   <div class='custom-subdomain-row'>
                     <BoxelInputGroup
-                      id='custom-subdomain-input'
+                      @id='custom-subdomain-input'
                       @placeholder='custom-name'
                       @value={{this.customSiteName}}
                       @state={{this.customSubdomainState}}
