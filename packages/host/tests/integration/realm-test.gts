@@ -33,6 +33,9 @@ import {
   setupBaseRealm,
   FieldDef,
   contains,
+  containsMany,
+  linksTo,
+  Component,
   CardDef,
   StringField,
   field,
@@ -1648,6 +1651,107 @@ module('Integration | realm', function (hooks) {
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
+    });
+  });
+
+  test('realm PATCH request can set a linksTo nested within a containsMany', async function (assert) {
+    class Other extends CardDef {
+      static displayName = 'Other';
+      @field name = contains(StringField);
+    }
+
+    class Inner extends FieldDef {
+      @field message = contains(StringField);
+      @field other = linksTo(Other);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          x: {{@model.other.name}}
+        </template>
+      };
+    }
+
+    class Outer extends CardDef {
+      static displayName = 'Outer2';
+      @field inners = containsMany(Inner);
+    }
+
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'outer.gts': {
+          Outer,
+          Inner,
+          Other,
+        },
+        '1.json': {
+          data: {
+            id: `${testRealmURL}1`,
+            attributes: {
+              inners: [
+                {
+                  message: 'hello',
+                },
+              ],
+            },
+            relationships: { owner: { links: { self: null } } },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}outer`,
+                name: 'Outer',
+              },
+            },
+          },
+        },
+        '2.json': {
+          data: {
+            id: `${testRealmURL}2`,
+            attributes: { name: 'Jackie' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}outer`,
+                name: 'Other',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}1`, {
+        method: 'PATCH',
+        headers: { Accept: 'application/vnd.card+json' },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              relationships: {
+                'inners.0.other': { links: { self: `${testRealmURL}2` } },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}outer`,
+                  name: 'Outer',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+
+    let json = await response.json();
+
+    assert.deepEqual(json.data.relationships, {
+      'inners.0.other': {
+        links: { self: `./2` },
+        data: { id: `${testRealmURL}2`, type: 'card' },
+      },
+      'cardInfo.theme': { links: { self: null } },
     });
   });
 

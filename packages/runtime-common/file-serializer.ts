@@ -207,7 +207,7 @@ function processRelationships({
   const result: NonNullable<CardResource['relationships']> = {};
 
   for (const [relationshipKey, value] of Object.entries(relationships)) {
-    const { baseFieldPath } = parseRelationshipKey(relationshipKey);
+    const baseFieldPath = parseRelationshipKey(relationshipKey);
     const fieldDefinition = getFieldDefinition(
       baseFieldPath,
       definition,
@@ -283,22 +283,8 @@ function getFieldDefinition(
   return customFieldDefinitions?.[fieldPath] ?? definition.fields[fieldPath];
 }
 
-function parseRelationshipKey(key: string): {
-  baseFieldPath: string;
-  arrayIndex: number | null;
-} {
-  const indexMatch = key.match(/^(.+)\.(\d+)$/);
-  if (indexMatch) {
-    return {
-      baseFieldPath: indexMatch[1],
-      arrayIndex: parseInt(indexMatch[2]),
-    };
-  }
-
-  return {
-    baseFieldPath: key,
-    arrayIndex: null,
-  };
+function parseRelationshipKey(key: string): string {
+  return key.replace(/\.\d+/g, '');
 }
 
 function processMetaFields({
