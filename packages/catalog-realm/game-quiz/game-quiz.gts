@@ -385,6 +385,11 @@ class GameQuizIsolated extends Component<typeof GameQuizCard> {
     }
   }
 
+  willDestroy() {
+    super.willDestroy();
+    this.clearTimer();
+  }
+
   get formattedTime() {
     const minutes = Math.floor(this.timeRemaining / 60);
     const seconds = this.timeRemaining % 60;
