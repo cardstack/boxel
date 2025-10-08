@@ -38,7 +38,7 @@ jobs:
             echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=stack.cards" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
-            echo "PUBLISHED_REALM_BOXEL_SPACE_DOMAIN=staging.boxel.build" >> $GITHUB_ENV
+            echo "PUBLISHED_REALM_BOXEL_SPACE_DOMAIN=staging.boxel.dev" >> $GITHUB_ENV
             echo "PUBLISHED_REALM_BOXEL_SITE_DOMAIN=staging.boxel.build" >> $GITHUB_ENV
           else
             echo "unrecognized environment"

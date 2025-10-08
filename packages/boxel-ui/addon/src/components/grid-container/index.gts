@@ -1,6 +1,11 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import { element } from '../../helpers.ts';
+
 interface Signature {
+  Args: {
+    tag?: keyof HTMLElementTagNameMap;
+  };
   Blocks: {
     default: [];
   };
@@ -8,9 +13,12 @@ interface Signature {
 }
 
 const GridContainer: TemplateOnlyComponent<Signature> = <template>
-  <div class='grid-container' ...attributes>
-    {{yield}}
-  </div>
+  {{#let (element @tag) as |TagName|}}
+    <TagName class='grid-container' ...attributes>
+      {{yield}}
+    </TagName>
+  {{/let}}
+
   <style scoped>
     .grid-container {
       display: grid;

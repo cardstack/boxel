@@ -11,6 +11,7 @@ import Tooltip from '../tooltip/index.gts';
 
 interface Signature {
   Args: {
+    ariaLabel?: string;
     height?: string;
     textToCopy: string;
     width?: string;
@@ -35,19 +36,27 @@ export default class CopyButton extends Component<Signature> {
   }
 
   <template>
-    <Tooltip @placement='top' class='editability-icon'>
+    <Tooltip @placement='top' class='copy-button-tooltip'>
       <:trigger>
         <IconButton
           @icon={{Copy}}
           width={{unless @width '18px'}}
           height={{unless @height '18px'}}
           {{on 'click' this.copyToClipboard}}
-          aria-label='Copy'
+          aria-label='{{if
+            this.recentlyCopied
+            "Copied!"
+            (if @ariaLabel @ariaLabel "Copy to clipboard")
+          }}'
+          aria-labelledby='copy-button-content'
           data-test-boxel-copy-button
+          ...attributes
         />
       </:trigger>
       <:content>
-        {{if this.recentlyCopied 'Copied!' 'Copy to clipboard'}}
+        <span id='copy-button-content'>
+          {{if this.recentlyCopied 'Copied!' 'Copy to clipboard'}}
+        </span>
       </:content>
     </Tooltip>
   </template>
