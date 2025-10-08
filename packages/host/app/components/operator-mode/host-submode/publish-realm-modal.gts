@@ -512,6 +512,7 @@ export default class PublishRealmModal extends Component<Signature> {
               Site Name</label>
             {{#if this.isCustomSiteNameSetupVisible}}
               <BoxelButton
+                @size='extra-small'
                 @kind='text-only'
                 class='custom-subdomain-cancel cancel'
                 {{on 'click' this.cancelCustomSiteNameSetup}}
