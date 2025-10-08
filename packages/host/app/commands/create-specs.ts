@@ -286,6 +286,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
             specCodeRef,
             targetRealm,
             SpecKlass,
+            autoGenerateReadme ?? false,
           );
         } catch (e) {
           console.warn(
