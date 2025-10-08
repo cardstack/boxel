@@ -40,14 +40,14 @@
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
       "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
       "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
-      "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch",
       "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch",
       "ember-source@5.4.1": "patches/ember-source@5.4.1.patch",
       "monaco-editor@0.52.2": "patches/monaco-editor@0.52.2.patch",
       "monaco-editor-webpack-plugin@7.1.0": "patches/monaco-editor-webpack-plugin@7.1.0.patch",
       "@embroider/compat": "patches/@embroider__compat.patch",
       "ember-eslint-parser": "patches/ember-eslint-parser.patch",
-      "openai": "patches/openai.patch"
+      "openai": "patches/openai.patch",
+      "matrix-js-sdk@38.3.0": "patches/matrix-js-sdk@38.3.0.patch"
     },
     "onlyBuiltDependencies": [
       "esbuild",
@@ -84,7 +84,10 @@
     "pnpm": "^10"
   },
   "volta": {
-    "node": "20.19.1",
+    "node": "22.20.0",
     "pnpm": "10.17.0"
+  },
+  "dependencies": {
+    "matrix-js-sdk": "38.3.0"
   }
 }

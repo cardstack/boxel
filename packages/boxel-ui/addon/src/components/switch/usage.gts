@@ -8,7 +8,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
-import cssVar from '../..//helpers/css-var.ts';
+import cssVar from '../../helpers/css-var.ts';
 import Switch from './index.gts';
 
 export default class SwitchUsage extends Component {
@@ -66,5 +66,14 @@ export default class SwitchUsage extends Component {
         </:cssVars>
       </FreestyleUsage>
     </div>
+    <style scoped>
+      :deep(.FreestyleUsage-preview) {
+        background-color: var(--boxel-light);
+      }
+
+      :deep(.FreestyleUsage-preview input) {
+        border: none;
+      }
+    </style>
   </template>
 }

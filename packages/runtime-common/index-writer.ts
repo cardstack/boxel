@@ -15,6 +15,7 @@ import {
   isUrlLike,
 } from './index';
 import { transpileJS } from './transpile';
+import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
   type Expression,
   param,
@@ -136,6 +137,17 @@ export class Batch {
     // the card def id's are notional, they are not file resources that can be
     // visited, so we don't expose them to the outside world
     return [...this.#invalidations].filter((i) => !isDefinitionId(i));
+  }
+
+  // Look up created_at for a given file path from realm_file_meta
+  async getCreatedTime(localPath: string): Promise<number | undefined> {
+    // delegate to shared helper
+    return getCreatedTime(this.#dbAdapter, this.realmURL.href, localPath);
+  }
+
+  // Ensure a created_at row exists for this file in realm_file_meta and return it
+  async ensureFileCreatedAt(localPath: string): Promise<number> {
+    return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
   @Memoize()

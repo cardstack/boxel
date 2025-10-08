@@ -39,8 +39,10 @@ module.exports = function (environment) {
     minSaveTaskDurationMs: 1000,
     renderTimeoutMs: 30_000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
-    defaultPublishedRealmDomain:
-      process.env.DEFAULT_PUBLISHED_REALM_DOMAIN || 'localhost:4201',
+    publishedRealmBoxelSpaceDomain:
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+    publishedRealmBoxelSiteDomain:
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
