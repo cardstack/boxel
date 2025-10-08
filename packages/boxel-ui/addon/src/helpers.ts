@@ -19,6 +19,7 @@ import formatNumber from './helpers/format-number.ts';
 import formatOrdinal from './helpers/format-ordinal.ts';
 import formatPeriod from './helpers/format-period.ts';
 import formatRelativeTime from './helpers/format-relative-time.ts';
+import { generateCssVariables } from './helpers/generate-css-variables.ts';
 import { add, divide, multiply, subtract } from './helpers/math-helpers.ts';
 import menuDivider, { MenuDivider } from './helpers/menu-divider.ts';
 import menuItem, {
@@ -70,6 +71,7 @@ export {
   formatOrdinal,
   formatPeriod,
   formatRelativeTime,
+  generateCssVariables,
   getContrastColor,
   gt,
   gte,

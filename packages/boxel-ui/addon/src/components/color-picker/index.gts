@@ -77,7 +77,7 @@ export default class ColorPicker extends Component<Signature> {
           align-items: center;
           justify-content: center;
           width: var(--color-picker-width);
-          height: var(--color-picker-height);
+          height: 100%;
           z-index: 1;
         }
         .color-input-container > :deep(.input-container) {
@@ -101,7 +101,7 @@ export default class ColorPicker extends Component<Signature> {
           align-items: center;
           justify-content: center;
           width: var(--color-picker-width);
-          height: var(--color-picker-height);
+          height: 100%;
           z-index: 1;
           opacity: 0.5;
         }
