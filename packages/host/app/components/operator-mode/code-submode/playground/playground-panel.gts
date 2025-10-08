@@ -879,6 +879,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         border: 1px solid var(--boxel-450);
         margin: 0 auto;
         width: 380px;
+        max-width: 100%;
         justify-content: space-between;
 
         /* It’s meant to have two rounded borders, this removes a gap */
