@@ -14,8 +14,8 @@
         "description": null,
         "thumbnailURL": null
       },
-      "imageCount": 3,
-      "productDescription": "a pikachu fly"
+      "imageCount": 4,
+      "productDescription": "A blue bottle"
     },
     "relationships": {
       "cardInfo.theme": {
@@ -25,17 +25,22 @@
       },
       "generatedImages.0": {
         "links": {
-          "self": "../ProductRotationImage/08ada6ec-9d46-423b-905a-9e22b36c317f"
+          "self": "../ProductRotationImage/b07b357c-82d6-4173-a9a5-b7814c128b90"
         }
       },
       "generatedImages.1": {
         "links": {
-          "self": "../ProductRotationImage/090dc99d-08ad-46ec-9d46-d23b505a9e22"
+          "self": "../ProductRotationImage/357c82d6-9173-49a5-b781-4c128b904f20"
         }
       },
       "generatedImages.2": {
         "links": {
-          "self": "../ProductRotationImage/c99d08ad-a6ec-4d46-923b-505a9e22b36c"
+          "self": "../ProductRotationImage/82d69173-29a5-4781-8c12-8b904f209820"
+        }
+      },
+      "generatedImages.3": {
+        "links": {
+          "self": "../ProductRotationImage/60b8b07b-357c-42d6-9173-29a5b7814c12"
         }
       }
     }
