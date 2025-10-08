@@ -284,6 +284,9 @@ function getFieldDefinition(
 }
 
 function parseRelationshipKey(key: string): string {
+  // chains like "inners.0.other" need to become "inners.other" here. This is a
+  // lossy transformation, it would be better to refactor this so it's
+  // schema-driven and known plural fields strip off their own numeric segments.
   return key.replace(/\.\d+/g, '');
 }
 
