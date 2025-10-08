@@ -3,7 +3,7 @@ import Modifier from 'ember-modifier';
 interface DragRotateModifierSignature {
   Element: HTMLElement;
   Args: {
-    Positional: [(deltaX: number) => void];
+    Positional: [(deltaX: number) => void, (() => void)?];
     Named: Record<string, never>;
   };
 }
@@ -11,7 +11,7 @@ interface DragRotateModifierSignature {
 export default class DragRotateModifier extends Modifier<DragRotateModifierSignature> {
   modify(
     element: HTMLElement,
-    [onRotate]: DragRotateModifierSignature['Args']['Positional'],
+    [onRotate, onDragStart]: DragRotateModifierSignature['Args']['Positional'],
   ) {
     if (typeof onRotate !== 'function') {
       console.warn('DragRotateModifier: onRotate callback missing');
@@ -20,10 +20,15 @@ export default class DragRotateModifier extends Modifier<DragRotateModifierSigna
 
     let isDragging = false;
     let startX = 0;
+    let cumulativeDeltaX = 0;
 
     const handleMouseDown = (event: MouseEvent) => {
       isDragging = true;
       startX = event.clientX;
+      cumulativeDeltaX = 0;
+      if (typeof onDragStart === 'function') {
+        onDragStart();
+      }
       event.preventDefault();
     };
 
@@ -33,8 +38,9 @@ export default class DragRotateModifier extends Modifier<DragRotateModifierSigna
       }
 
       const deltaX = event.clientX - startX;
+      cumulativeDeltaX += deltaX;
       startX = event.clientX;
-      onRotate(deltaX);
+      onRotate(cumulativeDeltaX);
     };
 
     const handleMouseUp = () => {
@@ -47,6 +53,10 @@ export default class DragRotateModifier extends Modifier<DragRotateModifierSigna
       }
       isDragging = true;
       startX = event.touches[0].clientX;
+      cumulativeDeltaX = 0;
+      if (typeof onDragStart === 'function') {
+        onDragStart();
+      }
       event.preventDefault();
     };
 
@@ -56,8 +66,9 @@ export default class DragRotateModifier extends Modifier<DragRotateModifierSigna
       }
 
       const deltaX = event.touches[0].clientX - startX;
+      cumulativeDeltaX += deltaX;
       startX = event.touches[0].clientX;
-      onRotate(deltaX);
+      onRotate(cumulativeDeltaX);
     };
 
     const handleTouchEnd = () => {

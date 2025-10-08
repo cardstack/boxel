@@ -1,0 +1,43 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ProductRotator",
+        "module": "../3d-product-rotater/3d-product-rotater"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "imageCount": 3,
+      "productDescription": "a pikachu fly"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "generatedImages.0": {
+        "links": {
+          "self": "../ProductRotationImage/08ada6ec-9d46-423b-905a-9e22b36c317f"
+        }
+      },
+      "generatedImages.1": {
+        "links": {
+          "self": "../ProductRotationImage/090dc99d-08ad-46ec-9d46-d23b505a9e22"
+        }
+      },
+      "generatedImages.2": {
+        "links": {
+          "self": "../ProductRotationImage/c99d08ad-a6ec-4d46-923b-505a9e22b36c"
+        }
+      }
+    }
+  }
+}
