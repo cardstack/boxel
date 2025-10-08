@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sourceImageUrl": "https://tse1.mm.bing.net/th/id/OIP.5SpRMEFCwIvko1tVM3gTcwHaFB?cb=12&w=474&h=474&c=7&p=0",
+      "creativeNote": "How did the telephone evolve over time",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../time-machine/image-generator",
+        "name": "TimeMachineImageGenerator"
+      }
+    }
+  }
+}
