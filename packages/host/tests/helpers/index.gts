@@ -105,7 +105,7 @@ export function getMonacoContent(editor: 'main' | 'firstAvailable' = 'main') {
     return monacoService.getMonacoContent()!;
   } else {
     let firstAvailable = monacoService.registeredEditors[0];
-    return firstAvailable?.getModel()?.getValue();
+    return firstAvailable?.getModel()?.getValue() ?? '';
   }
 }
 
