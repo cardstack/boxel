@@ -7,7 +7,7 @@ import {
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { ImageCard } from '../image-card';
-import Polaroid from '../components/polaroid.gts';
+import Polaroid from '../components/polaroid';
 
 class PolaroidImageEmbedded extends Component<typeof PolaroidImage> {
   get caption() {

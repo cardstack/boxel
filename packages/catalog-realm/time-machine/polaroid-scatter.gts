@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { PolaroidImage } from './polaroid-image';
-import Polaroid from '../components/polaroid.gts';
+import Polaroid from '../components/polaroid';
 
 function normalizePeriod(value?: string) {
   return value?.trim().toLowerCase() ?? '';

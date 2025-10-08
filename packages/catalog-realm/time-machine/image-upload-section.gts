@@ -13,11 +13,14 @@ export interface ImageUploadSectionSignature {
     onCreativeNoteChange?: (note: string) => void;
     onGenerate?: () => void;
     onClear?: () => void;
+    onExportAlbum?: () => void;
     uploadedImageData?: string;
     imageUrl?: string;
     creativeNote?: string;
     isGenerating?: boolean;
+    isExporting?: boolean;
     generateLabel?: string;
+    canExportAlbum?: boolean;
   };
 }
 
@@ -38,9 +41,7 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
     if (this.args.generateLabel) {
       return this.args.generateLabel;
     }
-    return this.args.isGenerating
-      ? 'Generating Images...'
-      : 'Generate Through the Ages';
+    return this.args.isGenerating ? 'Generating Images...' : 'Generate';
   }
 
   @action
@@ -83,6 +84,11 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
       this.showNotification = false;
     }
     this.args.onGenerate?.();
+  }
+
+  @action
+  handleExportAlbum() {
+    this.args.onExportAlbum?.();
   }
 
   @tracked showNotification = false;
@@ -169,14 +175,31 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
         </div>
       {{/if}}
 
-      <Button
-        @kind='primary'
-        class='generate-button'
-        {{on 'click' this.handleGenerate}}
-        disabled={{this.args.isGenerating}}
-      >
-        {{this.generateLabel}}
-      </Button>
+      <div class='action-buttons'>
+        <Button
+          @kind='primary'
+          class='generate-button'
+          {{on 'click' this.handleGenerate}}
+          disabled={{this.args.isGenerating}}
+        >
+          {{this.generateLabel}}
+        </Button>
+
+        {{#if this.args.canExportAlbum}}
+          <Button
+            @kind='secondary'
+            @loading={{this.args.isExporting}}
+            disabled={{this.args.isExporting}}
+            {{on 'click' this.handleExportAlbum}}
+          >
+            {{#if this.args.isExporting}}
+              Exporting...
+            {{else}}
+              Export Album
+            {{/if}}
+          </Button>
+        {{/if}}
+      </div>
 
       {{! TODO(feature-plan): surface validation + error messaging from host context. }}
     </section>
@@ -406,13 +429,15 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
         color: rgba(44, 44, 44, 0.8);
       }
 
+      .action-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        align-items: center;
+      }
+
       .generate-button {
-        align-self: center;
-        padding: 1rem 1.5rem;
-        font-size: 0.95rem;
-        font-weight: 600;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
+        min-width: 200px;
       }
     </style>
   </template>

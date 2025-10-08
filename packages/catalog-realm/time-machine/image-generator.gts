@@ -1,4 +1,3 @@
-import { on } from '@ember/modifier';
 import {
   CardDef,
   field,
@@ -24,6 +23,9 @@ import {
   LightboxCarousel,
   type LightboxItem,
 } from '../components/lightbox-carousel';
+
+import { ExportAlbumCommand } from '../commands/export-album-command';
+import { YearRangeField } from './year-range-field';
 
 type CommandContextForGenerateImage = ConstructorParameters<
   typeof GenerateImageCommand
@@ -148,20 +150,29 @@ export class TimeMachineImageGeneratorIsolated extends Component<
 > {
   @tracked uploadedImageData = '';
   @tracked isGenerating = false;
+  @tracked isExporting = false;
   @tracked loadingPeriods: string[] = [];
   @tracked isLightboxOpen = false;
   @tracked lightboxIndex = 0;
 
-  timePeriods = [
-    '1950s',
-    '1960s',
-    '1970s',
-    '1980s',
-    '1990s',
-    '2000s',
-    '2010s',
-    '2020s',
-  ];
+  get startYear() {
+    return (this.args.model?.yearRange as any)?.startValue ?? 1950;
+  }
+
+  get endYear() {
+    return (this.args.model?.yearRange as any)?.endValue ?? 2000;
+  }
+
+  get timePeriods() {
+    // Generate decade labels from startYear to endYear, e.g. '1950s', '1960s', ...
+    let periods = [];
+    let start = Math.floor(this.startYear / 10) * 10;
+    let end = Math.floor(this.endYear / 10) * 10;
+    for (let year = start; year <= end; year += 10) {
+      periods.push(`${year}s`);
+    }
+    return periods;
+  }
 
   get sourceImageUrl() {
     return this.args.model?.sourceImageUrl ?? '';
@@ -281,8 +292,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
       );
     }
 
-    let realmHref =
-      this.args.context?.realmURL?.href ?? model[realmURLSymbol]?.href;
+    let realmHref = model[realmURLSymbol]?.href;
 
     if (!realmHref) {
       throw new Error('Cannot determine realm to persist generated images.');
@@ -338,7 +348,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
       model.generatedImages = updatedPolaroids;
 
       await new SaveCardCommand(commandContext).execute({
-        card: model,
+        card: model as any,
         realm: realmHref,
       });
     } finally {
@@ -385,6 +395,42 @@ export class TimeMachineImageGeneratorIsolated extends Component<
     }
   }
 
+  get canExportAlbum() {
+    // Only allow export if there are actual generated images
+    return (
+      Array.isArray(this.args.model?.generatedImages) &&
+      this.args.model.generatedImages.length > 0 &&
+      this.args.model.generatedImages.some((img) => img?.image?.data?.base64)
+    );
+  }
+
+  @action
+  async handleExportAlbum() {
+    if (this.isExporting) {
+      return;
+    }
+
+    let model = this.args.model;
+    let commandContext = this.args.context?.commandContext;
+    let realmHref = model?.[realmURLSymbol]?.href;
+    if (!model || !commandContext || !realmHref) {
+      throw new Error(
+        'Missing model, command context, or realm URL for export.',
+      );
+    }
+    let polaroids = (model.generatedImages ?? []).filter(
+      (img) => img?.image?.data?.base64,
+    );
+
+    this.isExporting = true;
+    try {
+      let exportCommand = new ExportAlbumCommand(commandContext);
+      await exportCommand.execute({ polaroids, realmHref });
+    } finally {
+      this.isExporting = false;
+    }
+  }
+
   <template>
     <div class='time-machine-image-generator'>
       <aside class='sidebar'>
@@ -393,17 +439,19 @@ export class TimeMachineImageGeneratorIsolated extends Component<
           @imageUrl={{this.sourceImageUrl}}
           @creativeNote={{this.creativeNote}}
           @isGenerating={{this.isGenerating}}
+          @isExporting={{this.isExporting}}
+          @canExportAlbum={{this.canExportAlbum}}
           @onFileSelected={{this.handleFileSelected}}
           @onUrlChange={{this.handleUrlChange}}
           @onCreativeNoteChange={{this.handleCreativeNoteChange}}
           @onGenerate={{this.handleGenerate}}
           @onClear={{this.handleClearSource}}
+          @onExportAlbum={{this.handleExportAlbum}}
         />
       </aside>
 
       <main class='gallery'>
         <PolaroidScatter
-          @fieldsGeneratedImages={{@fields.generatedImages}}
           @images={{this.polaroidImages}}
           @loadingPeriods={{this.loadingPeriods}}
           @onSelect={{this.handlePolaroidSelect}}
@@ -465,6 +513,7 @@ export class TimeMachineImageGenerator extends CardDef {
   @field sourceImageUrl = contains(UrlField);
   @field generatedImages = linksToMany(() => PolaroidImage);
   @field creativeNote = contains(StringField);
+  @field yearRange = contains(YearRangeField);
 
   static isolated = TimeMachineImageGeneratorIsolated;
 }
