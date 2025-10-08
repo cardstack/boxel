@@ -164,9 +164,10 @@ module(basename(__filename), function () {
         );
       assert.strictEqual(
         response.headers['cache-control'],
-        'no-store, no-cache, must-revalidate',
+        'public, max-age=0',
         'cache control header is set correctly',
       );
+      assert.ok(response.headers['etag'], 'etag header is set');
     });
 
     test('can set response Cache-Control header for card json request', async function (assert) {

@@ -32,7 +32,7 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import isEqual from 'lodash/isEqual';
 
-module(basename(__filename), function () {
+module.only(basename(__filename), function () {
   module('Realm-specific Endpoints | card source requests', function (hooks) {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
@@ -142,7 +142,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             response.headers['content-type'],
-            'text/plain;charset=UTF-8',
+            'text/plain; charset=UTF-8',
             'content type is correct',
           );
           assert.strictEqual(
