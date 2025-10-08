@@ -422,7 +422,7 @@ export default class RealmServerService extends Service {
       this.token = token;
     } catch (e: any) {
       console.error(
-        `RealmServerservice - failed to login to realm: ${e.message}`,
+        `RealmServerService - failed to login to realm: ${e.message}`,
         e,
       );
       this.token = undefined;

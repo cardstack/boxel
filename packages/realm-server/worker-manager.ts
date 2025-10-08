@@ -99,7 +99,7 @@ let {
       type: 'string',
     },
     prerendererUrl: {
-      // make this required when feature flag is removed
+      // TODO make this required when feature flag is removed
       description: 'URL of the prerender server to invoke',
       type: 'string',
     },

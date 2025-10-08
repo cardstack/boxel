@@ -76,7 +76,6 @@ export default class RenderRoute extends Route<Model> {
   beforeModel() {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
-    // this.store.resetState();
     (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
   }
