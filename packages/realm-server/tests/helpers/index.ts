@@ -854,6 +854,9 @@ export function setupPermissionedRealm(
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
     testRealmServer.testRealm.unsubscribe();
+    if (!testRealmServer.matrixClient.isLoggedIn()) {
+      await testRealmServer.matrixClient.login();
+    }
     await testRealmServer.matrixClient.setAccountData(
       'boxel.session-rooms',
       {},
