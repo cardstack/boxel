@@ -514,19 +514,18 @@ export default class RealmServerService extends Service {
   ): Promise<SubdomainAvailabilityResult> {
     await this.login();
 
-    const url = new URL(`${this.url.href}_check-site-name-availability`);
+    let url = new URL(`${this.url.href}_check-site-name-availability`);
     url.searchParams.set('subdomain', subdomain);
 
-    const response = await this.network.fetch(url.href, {
+    let response = await this.network.authedFetch(url.href, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        Authorization: `Bearer ${this.token}`,
       },
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      let errorText = await response.text();
       throw new Error(
         `Check site name availability failed: ${response.status} - ${errorText}`,
       );
