@@ -312,7 +312,8 @@ export default class PublishRealmModal extends Component<Signature> {
     window.open(this.generatedUrl, '_blank');
   }
 
-  @action handleCancel() {
+  @action
+  handleCancel() {
     this.args.onClose();
   }
 
