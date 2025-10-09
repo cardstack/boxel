@@ -1,6 +1,7 @@
-import { click, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, triggerEvent, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
@@ -340,6 +341,20 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-unpublish-button]').containsText('Unpublish');
         assert.dom('[data-test-open-site-button]').exists();
         assert.dom('[data-test-open-site-button]').containsText('Open Site');
+
+        window.open = (url?: URL | string, target?: string) => {
+          assert.strictEqual(
+            url,
+            'http://testuser.localhost:4201/test/',
+            'Open published site URL',
+          );
+          assert.strictEqual(target, '_blank', 'Open in a new tab');
+
+          return null;
+        };
+        await click(
+          '[data-test-publish-realm-modal] [data-test-open-site-button]',
+        );
       });
 
       test('can unpublish realm', async function (assert) {
@@ -393,6 +408,125 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-last-published-at]').doesNotExist();
         assert.dom('[data-test-unpublish-button]').doesNotExist();
         assert.dom('[data-test-open-site-button]').doesNotExist();
+        getService('network').resetState();
+      });
+
+      test('open site button only appears when realm is published', async function (assert) {
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        assert.dom('[data-test-open-site-button]').doesNotExist();
+      });
+
+      test('open site popover shows published realms and opens them correctly', async function (assert) {
+        // Mock realm info with published state
+        let mockRealmInfoResponse = async (request: Request) => {
+          if (!request.url.includes('test') || !request.url.includes('_info')) {
+            return null;
+          }
+
+          let now = Date.now();
+
+          return new Response(
+            JSON.stringify({
+              data: {
+                type: 'realm-info',
+                id: testRealmURL,
+                attributes: {
+                  ...testRealmInfo,
+                  lastPublishedAt: {
+                    'http://testuser.localhost:4201/test/': now,
+                    'https://another-domain.com/realm/': now - 1000,
+                  },
+                },
+              },
+            }),
+            {
+              headers: {
+                'Content-Type': 'application/vnd.api+json',
+              },
+            },
+          );
+        };
+        getService('network').mount(mockRealmInfoResponse, { prepend: true });
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        let originalWindowOpen = window.open;
+        window.open = (url?: URL | string, target?: string) => {
+          assert.strictEqual(
+            url,
+            'http://testuser.localhost:4201/test/Person/1',
+            'Open most recently published realm URL',
+          );
+          assert.strictEqual(target, '_blank', 'Open in a new tab');
+          return null;
+        };
+
+        await triggerEvent('[data-test-open-site-button]', 'mouseenter');
+        await waitFor('[data-test-tooltip-content]');
+        assert
+          .dom('[data-test-tooltip-content]')
+          .hasText(
+            'Open Site in a New Tab (Shift+Click for options)',
+            'Tooltip shows correct text when menu is closed',
+          );
+        await click('[data-test-open-site-button]');
+        window.open = originalWindowOpen;
+
+        assert.dom('[data-test-open-site-popover]').doesNotExist();
+
+        await click('[data-test-open-site-button]', { shiftKey: true });
+
+        assert.dom('[data-test-open-site-popover]').exists();
+        assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
+
+        assert
+          .dom('[data-test-published-realm-item] [data-test-open-site-button]')
+          .exists({ count: 2 });
+
+        assert
+          .dom(
+            '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"]',
+          )
+          .exists();
+        assert
+          .dom(
+            '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"]',
+          )
+          .exists();
+
+        window.open = (url?: URL | string, target?: string) => {
+          assert.strictEqual(
+            url,
+            'http://testuser.localhost:4201/test/Person/1',
+            'Open published realm URL',
+          );
+          assert.strictEqual(target, '_blank', 'Open in a new tab');
+          return null;
+        };
+        await click(
+          '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
+        );
+        window.open = (url?: URL | string, target?: string) => {
+          assert.strictEqual(
+            url,
+            'https://another-domain.com/realm/Person/1',
+            'Open published realm URL',
+          );
+          assert.strictEqual(target, '_blank', 'Open in a new tab');
+          return null;
+        };
+        await click(
+          '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"] [data-test-open-site-button]',
+        );
+        window.open = originalWindowOpen;
+
         getService('network').resetState();
       });
     });
