@@ -10,6 +10,8 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 import { formatDistanceToNow } from 'date-fns';
 
+import window from 'ember-window-mock';
+
 import {
   BoxelButton,
   RealmIcon,
