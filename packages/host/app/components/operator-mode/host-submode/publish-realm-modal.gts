@@ -551,7 +551,9 @@ export default class PublishRealmModal extends Component<Signature> {
                 </div>
               {{else}}
                 <div class='custom-subdomain-placeholder'>
-                  {{this.customSiteNameDisplay}}.{{this.customDomainBase}}
+                  {{this.customSiteNameDisplay}}<span
+                    class='placeholder-top-level'
+                  >.{{this.customDomainBase}}</span>
                 </div>
               {{/if}}
             </div>
@@ -794,6 +796,10 @@ export default class PublishRealmModal extends Component<Signature> {
       .custom-subdomain-placeholder {
         color: var(--boxel-450);
         font-size: var(--boxel-font-size-sm);
+      }
+
+      .placeholder-top-level {
+        font-weight: var(--boxel-font-weight-semibold);
       }
 
       .custom-subdomain-setup {
