@@ -110,7 +110,11 @@ class Isolated extends Component<typeof StructuredTheme> {
           </BoxelButton>
         </GridContainer>
         {{#if this.isGeneratedCSSVisible}}
-          <div id='generated-css-content' class='section-body'>
+          <div
+            id='generated-css-content'
+            class='section-body'
+            data-test-css-vars
+          >
             <@fields.cssVariables />
           </div>
         {{/if}}
