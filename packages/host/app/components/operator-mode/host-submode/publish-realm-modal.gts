@@ -150,7 +150,7 @@ export default class PublishRealmModal extends Component<Signature> {
       : null;
   }
 
-  get isClaimSiteNameDisabled() {
+  get isClaimCustomSubdomainDisabled() {
     return !this.customSubdomain || this.isCheckingCustomSubdomain;
   }
 
@@ -334,7 +334,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
-  async handleClaimSiteName(event: Event) {
+  async handleClaimCustomSubdomain(event: Event) {
     event.preventDefault();
 
     const subdomain = this.customSubdomain.trim();
@@ -569,8 +569,8 @@ export default class PublishRealmModal extends Component<Signature> {
                 @kind='primary'
                 @size='small'
                 class='claim-custom-subdomain-button action'
-                @disabled={{this.isClaimSiteNameDisabled}}
-                {{on 'click' this.handleClaimSiteName}}
+                @disabled={{this.isClaimCustomSubdomainDisabled}}
+                {{on 'click' this.handleClaimCustomSubdomain}}
                 data-test-claim-custom-subdomain-button
               >
                 {{#if this.isCheckingCustomSubdomain}}
