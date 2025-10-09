@@ -46,10 +46,10 @@ export class StepRangeScroller extends Component<StepRangeScrollerArgs> {
     return `left: ${left}%; width: ${right - left}%;`;
   }
 
-  get leftThumbZIndex() {
-    return `z-index: ${
-      this.normalizedStartValue === this.normalizedEndValue ? 5 : 3
-    }`;
+  get leftThumbClass() {
+    return this.normalizedStartValue === this.normalizedEndValue
+      ? 'slider thumb thumb--left thumb--active'
+      : 'slider thumb thumb--left';
   }
 
   @action
@@ -98,17 +98,20 @@ export class StepRangeScroller extends Component<StepRangeScrollerArgs> {
     <div class='step-range-slider'>
       <div class='slider-track'>
         <div class='slider-background'></div>
+        <label for='start-range' class='sr-only'>Start range</label>
         <input
+          id='start-range'
           type='range'
           min='0'
           max={{this.maxIndex}}
           step='1'
           value={{this.startIndex}}
           {{on 'input' this.setStartValue}}
-          class='slider thumb thumb--left'
-          style={{this.leftThumbZIndex}}
+          class={{this.leftThumbClass}}
         />
+        <label for='end-range' class='sr-only'>End range</label>
         <input
+          id='end-range'
           type='range'
           min='0'
           max={{this.maxIndex}}
@@ -116,7 +119,6 @@ export class StepRangeScroller extends Component<StepRangeScrollerArgs> {
           value={{this.endIndex}}
           {{on 'input' this.setEndValue}}
           class='slider thumb thumb--right'
-          style='z-index: 4;'
         />
         <div class='slider-range' style={{this.rangeStyle}}></div>
       </div>
@@ -233,6 +235,20 @@ export class StepRangeScroller extends Component<StepRangeScrollerArgs> {
       }
       .thumb--right {
         z-index: 4;
+      }
+      .thumb--active {
+        z-index: 5;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
     </style>
   </template>

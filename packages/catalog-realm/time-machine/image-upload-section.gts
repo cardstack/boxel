@@ -133,7 +133,7 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
           <label>Uploaded Image Preview:</label>
           <img
             src={{this.uploadedImageData}}
-            alt='Uploaded image preview'
+            alt='Preview of uploaded file for time machine generation'
             class='preview-image'
           />
         </div>
@@ -142,7 +142,7 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
           <label>URL Image Preview:</label>
           <img
             src={{this.imageUrl}}
-            alt='Source image preview'
+            alt='Preview of source URL for time machine generation'
             class='preview-image'
           />
         </div>
@@ -154,7 +154,10 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
             <span class='post-it-title'>Creative Notes</span>
             <span class='post-it-pin'>📌</span>
           </div>
+          <label for='creative-notes' class='sr-only'>Creative notes for photo
+            generation</label>
           <textarea
+            id='creative-notes'
             class='post-it-textarea'
             placeholder='Add creative suggestions for the photos... \ne.g., "Make them look like a professional photographer", "Add vintage lighting", "Include period-appropriate props"...'
             value={{this.creativeNote}}
@@ -180,19 +183,19 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
           @kind='primary'
           class='generate-button'
           {{on 'click' this.handleGenerate}}
-          disabled={{this.args.isGenerating}}
+          disabled={{@isGenerating}}
         >
           {{this.generateLabel}}
         </Button>
 
-        {{#if this.args.canExportAlbum}}
+        {{#if @canExportAlbum}}
           <Button
             @kind='secondary'
-            @loading={{this.args.isExporting}}
-            disabled={{this.args.isExporting}}
+            @loading={{@isExporting}}
+            disabled={{@isExporting}}
             {{on 'click' this.handleExportAlbum}}
           >
-            {{#if this.args.isExporting}}
+            {{#if @isExporting}}
               Exporting...
             {{else}}
               Export Album
@@ -438,6 +441,17 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
 
       .generate-button {
         min-width: 200px;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
     </style>
   </template>

@@ -24,7 +24,7 @@ const focusAndListen = modifier(
 
 export interface LightboxItem {
   component: BoxComponent;
-  card: CardDef;
+  card: CardDef & { caption?: string };
 }
 
 interface LightboxCarouselSignature {
@@ -189,8 +189,8 @@ export class LightboxCarousel extends GlimmerComponent<LightboxCarouselSignature
   }
 
   get closeLabel() {
-    return this.currentItem?.caption
-      ? `Close lightbox for ${this.currentItem.caption}`
+    return this.currentItem?.card?.caption
+      ? `Close lightbox for ${this.currentItem.card.caption}`
       : 'Close lightbox';
   }
 
@@ -200,12 +200,14 @@ export class LightboxCarousel extends GlimmerComponent<LightboxCarouselSignature
         class='lightbox-overlay'
         {{this.keyboardNavigation this.handleKeyDown}}
         {{on 'click' this.close}}
+        tabindex='0'
       >
         <div
           class='lightbox-content'
           {{on 'click' this.stopOverlayClick}}
           role='dialog'
           aria-modal='true'
+          tabindex='-1'
         >
           <button
             class='lightbox-close'

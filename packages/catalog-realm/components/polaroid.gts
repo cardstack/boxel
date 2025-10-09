@@ -5,6 +5,10 @@ export interface PolaroidSignature {
     base64?: string;
     caption?: string;
   };
+  Blocks: {
+    content: [];
+    loading: [];
+  };
 }
 
 export default class Polaroid extends GlimmerComponent<PolaroidSignature> {

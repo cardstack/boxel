@@ -56,6 +56,7 @@ export class PolaroidScatter extends Component<PolaroidScatterSignature> {
               {{if (this.hasBase64 image) "polaroid-clickable"}}
               {{if (this.isLoading image) "is-loading"}}'
             {{on 'click' (fn this.handleClick image)}}
+            tabindex='0'
           >
             <Polaroid
               @base64={{this.base64For image}}
