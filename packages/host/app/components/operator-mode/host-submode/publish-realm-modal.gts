@@ -820,7 +820,7 @@ export default class PublishRealmModal extends Component<Signature> {
       .custom-subdomain-setup {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
       }
 
       .custom-subdomain-label {
@@ -833,12 +833,6 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
-      }
-
-      .custom-subdomain-input {
-        flex: 1;
-        border: 1px solid var(--boxel-200);
-        font: normal var(--boxel-font);
       }
 
       .custom-subdomain-input:focus {
