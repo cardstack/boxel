@@ -5,6 +5,10 @@ import { on } from '@ember/modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import NotificationBubble from '../components/notification-bubble';
+import {
+  ImageUploadPreview,
+  type ImagePreviewFrame,
+} from '../components/image-upload-preview';
 
 export interface ImageUploadSectionSignature {
   Args: {
@@ -29,6 +33,19 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
     return this.args.uploadedImageData ?? '';
   }
 
+  get previews(): ImagePreviewFrame[] {
+    if (!this.uploadedImageData) {
+      return [];
+    }
+
+    return [
+      {
+        url: this.uploadedImageData,
+        label: 'Uploaded image preview',
+      },
+    ];
+  }
+
   get imageUrl() {
     return this.args.imageUrl ?? '';
   }
@@ -45,13 +62,14 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
   }
 
   @action
-  handleFileChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const file = target.files?.[0];
-
-    if (file && this.args.onFileSelected) {
-      this.args.onFileSelected(file);
+  handleFilesSelected(files: File[]) {
+    const [file] = files;
+    if (!file) {
+      return;
     }
+
+    this.showNotification = false;
+    this.args.onFileSelected?.(file);
   }
 
   @action
@@ -91,29 +109,22 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
     this.args.onExportAlbum?.();
   }
 
+  @action
+  handlePreviewRemove(_index: number) {
+    this.handleClear();
+  }
+
   @tracked showNotification = false;
 
   <template>
     <section class='input-section'>
-      <div class='upload-section'>
-        <label for='image-upload'>Upload Image (PNG/JPG):</label>
-        <input
-          id='image-upload'
-          type='file'
-          accept='image/*'
-          class='file-input'
-          {{on 'change' this.handleFileChange}}
-        />
-        {{#if this.uploadedImageData}}
-          <Button
-            @kind='secondary'
-            class='clear-upload-button'
-            {{on 'click' this.handleClear}}
-          >
-            Clear Uploaded Image
-          </Button>
-        {{/if}}
-      </div>
+      <ImageUploadPreview
+        @label='Upload Image'
+        @previews={{this.previews}}
+        @multiple={{false}}
+        @onFilesSelected={{this.handleFilesSelected}}
+        @onRemove={{this.handlePreviewRemove}}
+      />
 
       <div class='url-input-section'>
         <label for='image-url'>Or use Image URL:</label>
@@ -128,16 +139,7 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
         />
       </div>
 
-      {{#if this.uploadedImageData}}
-        <div class='image-preview'>
-          <label>Uploaded Image Preview:</label>
-          <img
-            src={{this.uploadedImageData}}
-            alt='Preview of uploaded file for time machine generation'
-            class='preview-image'
-          />
-        </div>
-      {{else if this.imageUrl}}
+      {{#if this.imageUrl}}
         <div class='image-preview'>
           <label>URL Image Preview:</label>
           <img
@@ -237,65 +239,6 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
         .input-section {
           padding: 0.875rem;
         }
-      }
-
-      .upload-section {
-        margin-bottom: 1.5rem;
-        padding-bottom: 1.5rem;
-        border-bottom: 2px solid rgba(208, 122, 78, 0.15);
-      }
-
-      .upload-section label {
-        display: block;
-        margin-bottom: 0.75rem;
-        font-family: var(--font-sans, 'Inter', sans-serif);
-        font-weight: 600;
-        color: var(--foreground, #2c2c2c);
-        font-size: 0.9rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-
-      .file-input {
-        width: 100%;
-        padding: 1rem;
-        border: 2px dashed var(--border, rgba(208, 122, 78, 0.3));
-        border-radius: var(--radius, 12px);
-        font-family: var(--font-sans, 'Inter', sans-serif);
-        font-size: 0.95rem;
-        background: var(--muted, rgba(250, 247, 242, 0.5));
-        cursor: pointer;
-        transition: all 0.3s ease;
-        margin-bottom: 0.75rem;
-        color: var(--foreground, #2c2c2c);
-      }
-
-      .file-input:hover {
-        border-color: rgba(208, 122, 78, 0.6);
-        background: rgba(208, 122, 78, 0.05);
-        transform: translateY(-1px);
-      }
-
-      .clear-upload-button {
-        padding: 0.75rem 1.25rem;
-        font-family: 'Inter', sans-serif;
-        font-size: 0.85rem;
-        font-weight: 500;
-        border-radius: 8px;
-        border: 2px solid rgba(220, 53, 69, 0.3);
-        background: rgba(255, 255, 255, 0.9);
-        color: #dc3545;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-
-      .clear-upload-button:hover {
-        background: #dc3545;
-        color: white;
-        border-color: #dc3545;
-        transform: translateY(-1px);
       }
 
       .url-input-section {
