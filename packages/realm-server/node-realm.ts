@@ -249,31 +249,10 @@ export class NodeAdapter implements RealmAdapter {
     let dmRooms;
 
     try {
-      dmRooms =
-        (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-          'boxel.session-rooms',
-        )) ?? {};
+      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);
     } catch (e) {
       realmEventsLog.error('Error getting account data', e);
       return;
-    }
-    let roomsFromDB = await fetchAllSessionRooms(dbAdapter, realmUrl);
-
-    // verify that roomFromDB and dmRooms are the same - TODO: remove when we cutover to DB version only
-    for (let userId of Object.keys(roomsFromDB)) {
-      let roomId = roomsFromDB[userId];
-      if (Object.keys(dmRooms).length !== Object.keys(roomsFromDB).length) {
-        console.log({ dmRooms, roomsFromDB });
-        throw new Error(
-          `Mismatch between session_rooms table and account data.`,
-        );
-      }
-      if (dmRooms[userId] && dmRooms[userId] !== roomId) {
-        console.log({ dmRooms, roomsFromDB });
-        throw new Error(
-          `Mismatch between session_rooms table and account data for user ${userId}: ${roomId} vs ${dmRooms[userId]}`,
-        );
-      }
     }
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));

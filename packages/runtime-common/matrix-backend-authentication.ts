@@ -72,29 +72,11 @@ export class MatrixBackendAuthentication {
       );
     }
 
-    // Clone the account data instead of using it directly,
-    // since mutating the original object would modify the Matrix client’s store
-    // and prevent updates from being sent back to the server.
-    let dmRooms = {
-      ...((await this.matrixClient.getAccountDataFromServer<
-        Record<string, string>
-      >('boxel.session-rooms')) ?? {}),
-    };
-    let roomId = dmRooms[user];
-    let roomIdFromDB = await this.utils.getSessionRoom(user);
+    let roomId = await this.utils.getSessionRoom(user);
 
     if (!roomId) {
       roomId = await this.matrixClient.createDM(user);
-      roomIdFromDB = roomId;
-      dmRooms[user] = roomId;
-      await this.matrixClient.setAccountData('boxel.session-rooms', dmRooms);
-      await this.utils.setSessionRoom(user, roomId);
-    }
-
-    if (roomIdFromDB !== roomId) {
-      console.warn(
-        `Discrepancy between session_rooms table and account data for user ${user}: ${roomId} vs ${roomIdFromDB}`,
-      );
+      await this.utils.setSessionRoom(user, roomId!);
     }
 
     let hash = new Sha256();
@@ -150,18 +132,8 @@ export class MatrixBackendAuthentication {
       }
     }
 
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let roomId = dmRooms[user];
-    let roomIdFromDB = await this.utils.getSessionRoom(user);
+    let roomId = await this.utils.getSessionRoom(user);
 
-    if (roomIdFromDB !== roomId) {
-      console.warn(
-        `Discrepancy between session_rooms table and account data for user ${user}: ${roomId} vs ${roomIdFromDB}`,
-      );
-    }
     if (!roomId) {
       return this.utils.badRequest(
         JSON.stringify({
