@@ -110,7 +110,7 @@ test.describe('Publish realm', () => {
       page.locator('[data-test-boxel-input-group-error-message]'),
     ).toHaveText('Punycode domains are not allowed for security reasons');
 
-    await customSubdomainField.fill('acceptable-space');
+    await customSubdomainField.fill('acceptable-subdomain');
     await claimButton.click();
 
     await expect(
