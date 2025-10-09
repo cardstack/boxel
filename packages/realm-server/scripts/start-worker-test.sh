@@ -1,8 +1,11 @@
 #! /bin/sh
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
+. "$SCRIPTS_DIR/wait-for-prerender.sh"
 
 wait_for_postgres
+PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
+wait_for_prerender "$PRERENDER_URL"
 
 NODE_ENV=test \
   PGPORT=5435 \
@@ -15,6 +18,7 @@ NODE_ENV=test \
   --port=4211 \
   --matrixURL='http://localhost:8008' \
   --distURL="${HOST_URL:-http://localhost:4200}" \
+  --prerendererUrl="${PRERENDER_URL}" \
   \
   --fromUrl='http://localhost:4202/node-test/' \
   --toUrl='http://localhost:4202/node-test/' \

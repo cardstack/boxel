@@ -1,0 +1,100 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GameQuizCard",
+        "module": "../game-quiz/game-quiz"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "subject": "Environmental Science & Sustainability",
+      "cardInfo": {
+        "notes": "An introductory quiz suitable for students beginning to explore environmental science and clean energy technologies.",
+        "title": "Green Energy Quiz",
+        "description": "Learn and test your understanding of renewable energy sources, their benefits, and their role in sustainable development.",
+        "thumbnailURL": null
+      },
+      "gameScore": 0,
+      "quizTitle": "Renewable Energy Fundamentals",
+      "timeLimit": 15,
+      "difficulty": {
+        "index": 0,
+        "label": "Beginner"
+      },
+      "completedAt": "2025-10-05T09:15:30.456Z",
+      "isCompleted": false,
+      "quizQuestions": [
+        {
+          "question": "Which renewable energy source currently generates the most electricity globally?",
+          "choices": [
+            "Solar power",
+            "Wind power",
+            "Hydroelectric power",
+            "Geothermal power"
+          ],
+          "correctAnswer": "Hydroelectric power"
+        },
+        {
+          "question": "What does 'photovoltaic' mean in solar panel technology?",
+          "choices": [
+            "Light-to-heat conversion",
+            "Light-to-electricity conversion",
+            "Heat-to-electricity conversion",
+            "Wind-to-electricity conversion"
+          ],
+          "correctAnswer": "Light-to-electricity conversion"
+        },
+        {
+          "question": "Which factor most affects the efficiency of wind turbines?",
+          "choices": [
+            "Temperature",
+            "Humidity",
+            "Wind speed",
+            "Atmospheric pressure"
+          ],
+          "correctAnswer": "Wind speed"
+        },
+        {
+          "question": "What is the primary environmental benefit of using renewable energy?",
+          "choices": [
+            "Lower electricity costs",
+            "Reduced greenhouse gas emissions",
+            "Increased energy independence",
+            "Job creation"
+          ],
+          "correctAnswer": "Reduced greenhouse gas emissions"
+        },
+        {
+          "question": "Which renewable energy source is considered most reliable for baseline power generation?",
+          "choices": [
+            "Solar",
+            "Wind",
+            "Hydroelectric",
+            "Tidal"
+          ],
+          "correctAnswer": "Hydroelectric"
+        },
+        {
+          "question": "What is biomass energy primarily derived from?",
+          "choices": [
+            "Fossil fuels",
+            "Organic plant and animal materials",
+            "Nuclear reactions",
+            "Geological heat"
+          ],
+          "correctAnswer": "Organic plant and animal materials"
+        }
+      ],
+      "correctAnswers": 1,
+      "highestGameScore": "100"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

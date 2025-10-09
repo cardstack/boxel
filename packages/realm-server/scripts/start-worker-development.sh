@@ -1,8 +1,11 @@
 #! /bin/sh
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
+. "$SCRIPTS_DIR/wait-for-prerender.sh"
 
 wait_for_postgres
+PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
+wait_for_prerender "$PRERENDER_URL"
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -18,6 +21,7 @@ NODE_ENV=development \
   --port=4210 \
   --matrixURL='http://localhost:8008' \
   --distURL="${HOST_URL:-http://localhost:4200}" \
+  --prerendererUrl="${PRERENDER_URL}" \
   \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/' \
@@ -30,4 +34,3 @@ NODE_ENV=development \
   \
   --fromUrl='http://localhost:4201/skills/' \
   --toUrl='http://localhost:4201/skills/'
-

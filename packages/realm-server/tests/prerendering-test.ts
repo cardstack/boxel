@@ -2,6 +2,8 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
   type RealmPermissions,
+  type Realm,
+  type RealmAdapter,
   type RenderResponse,
 } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/index';
@@ -16,7 +18,135 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { baseCardRef } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
-  module('prerender', function (hooks) {
+  module('prerender - dynamic tests', function (hooks) {
+    let realmURL = 'http://127.0.0.1:4450/';
+    let testUserId = '@user1:localhost';
+    let permissions: RealmPermissions = {};
+    let prerenderer: Prerenderer;
+    let realmAdapter: RealmAdapter;
+    let realm: Realm;
+
+    hooks.before(async () => {
+      prerenderer = new Prerenderer({
+        secretSeed: realmSecretSeed,
+        maxPages: 2,
+      });
+    });
+
+    hooks.after(async () => {
+      await prerenderer.stop();
+    });
+
+    hooks.afterEach(async () => {
+      await prerenderer.disposeRealm(realmURL);
+    });
+
+    setupBaseRealmServer(hooks, matrixURL);
+
+    setupPermissionedRealms(hooks, {
+      realms: [
+        {
+          realmURL,
+          permissions: {
+            [testUserId]: ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'person.gts': `
+              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              export class Person extends CardDef {
+                static displayName = "Person";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            '1.json': {
+              data: {
+                attributes: {
+                  name: 'Maple',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms: setupRealms }) {
+        ({ realm, realmAdapter } = setupRealms[0]);
+        permissions = {
+          [realmURL]: ['read', 'write', 'realm-owner'],
+        };
+      },
+    });
+
+    test('reuses pooled page and picks up updated instance', async function (assert) {
+      const cardURL = `${realmURL}1`;
+
+      let first = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.false(first.pool.reused, 'first call not reused');
+      assert.strictEqual(
+        first.response.serialized?.data.attributes?.name,
+        'Maple',
+        'first render sees original value',
+      );
+
+      await realmAdapter.write(
+        '1.json',
+        JSON.stringify(
+          {
+            data: {
+              attributes: {
+                name: 'Juniper',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      await realm.realmIndexUpdater.fullIndex();
+
+      let second = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.true(second.pool.reused, 'second call reused pooled page');
+      assert.strictEqual(
+        second.pool.pageId,
+        first.pool.pageId,
+        'same page reused',
+      );
+      assert.strictEqual(
+        second.response.serialized?.data.attributes?.name,
+        'Juniper',
+        'second render picks up updated value',
+      );
+    });
+  });
+
+  module('prerender - static tests', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
     let realmURL3 = 'http://127.0.0.1:4449/';
