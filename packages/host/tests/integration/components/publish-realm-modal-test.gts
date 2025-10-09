@@ -125,7 +125,7 @@ module(
 
       await click('[data-test-custom-site-name-setup-button]');
       await fillIn('[data-test-custom-site-name-input]', 'Bad Name');
-      await click('[data-test-claim-site-name-button]');
+      await click('[data-test-claim-custom-subdomain-button]');
 
       assert
         .dom('[data-test-custom-site-name-error]')
@@ -140,7 +140,7 @@ module(
 
       await fillIn('[data-test-custom-site-name-input]', 'my-site');
       assert.dom('[data-test-custom-site-name-error]').doesNotExist();
-      await click('[data-test-claim-site-name-button]');
+      await click('[data-test-claim-custom-subdomain-button]');
 
       assert.strictEqual(this.lastCheckedSubdomain, 'my-site');
 
@@ -186,7 +186,7 @@ module(
 
       await click('[data-test-custom-site-name-setup-button]');
       await fillIn('[data-test-custom-site-name-input]', 'taken');
-      await click('[data-test-claim-site-name-button]');
+      await click('[data-test-claim-custom-subdomain-button]');
 
       assert
         .dom('[data-test-custom-site-name-error]')

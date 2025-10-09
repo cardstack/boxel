@@ -568,10 +568,10 @@ export default class PublishRealmModal extends Component<Signature> {
               <BoxelButton
                 @kind='primary'
                 @size='small'
-                class='claim-site-name-button action'
+                class='claim-custom-subdomain-button action'
                 @disabled={{this.isClaimSiteNameDisabled}}
                 {{on 'click' this.handleClaimSiteName}}
-                data-test-claim-site-name-button
+                data-test-claim-custom-subdomain-button
               >
                 {{#if this.isCheckingCustomSubdomain}}
                   <LoadingIndicator />
