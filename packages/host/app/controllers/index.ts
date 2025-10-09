@@ -5,6 +5,7 @@ export default class IndexController extends Controller {
   queryParams = [
     'authRedirect',
     'hostModeOrigin',
+    'hostModeStack',
     'operatorModeState',
     // `sid` and `clientSecret` come from email verification process to reset password
     'sid',
@@ -15,6 +16,7 @@ export default class IndexController extends Controller {
 
   @tracked authRedirect: string | null = null;
   @tracked hostModeOrigin: string | null = null;
+  @tracked hostModeStack: string | null = null;
   @tracked operatorModeState: string | null = null;
   @tracked sid: string | null = null;
   @tracked clientSecret: string | null = null;
