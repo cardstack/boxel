@@ -18,7 +18,6 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 import { GenerateImagesRotation } from '../commands/generate-images-rotation';
 import { ExportProductCatalogCommand } from '../commands/export-product-catalog';
-import { ProductImageCard } from './components/product-image-card';
 import { ProductRotatorForm } from './components/product-rotator-form';
 import {
   RotationPreview,
@@ -26,7 +25,7 @@ import {
 } from './components/rotation-preview';
 import { ProductRotationImage } from './components/product-rotation-image';
 
-const DEFAULT_IMAGE_COUNT = 8;
+const DEFAULT_IMAGE_COUNT = 4;
 
 type CommandContextForGenerate = ConstructorParameters<
   typeof GenerateImagesRotation
@@ -98,7 +97,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
       !this.isExporting &&
       Array.isArray(this.args.model?.generatedImages) &&
       this.args.model.generatedImages.some((image) =>
-        Boolean(image?.image?.data?.base64),
+        Boolean(image?.data?.base64),
       )
     );
   }
@@ -109,9 +108,20 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
 
   get exportTitle() {
     if (this.productDescription.trim().length > 0) {
-      return `Rotation Catalog – ${this.productDescription.trim()}`;
+      const titleCaseDescription = this.toTitleCase(
+        this.productDescription.trim(),
+      );
+      return `Product Catalog – ${titleCaseDescription}`;
     }
     return 'Generated Product Catalog';
+  }
+
+  private toTitleCase(str: string): string {
+    return str
+      .toLowerCase()
+      .split(' ')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   }
 
   get generateButtonLabel() {
@@ -389,11 +399,11 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
       return;
     }
 
-    let rotations = (model.generatedImages ?? []).filter((image) =>
-      Boolean(image?.image?.data?.base64),
+    let rotationCards = (model.generatedImages ?? []).filter((image) =>
+      Boolean(image?.data?.base64),
     );
 
-    if (rotations.length === 0) {
+    if (rotationCards.length === 0) {
       return;
     }
 
@@ -401,7 +411,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     try {
       let exportCommand = new ExportProductCatalogCommand(commandContext);
       await exportCommand.execute({
-        rotations,
+        rotationImages: rotationCards,
         realmHref,
         catalogTitle: this.exportTitle,
         catalogDescription: this.exportDescription,
@@ -467,6 +477,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
 
     <style scoped>
       .rotator-app {
+        container-type: inline-size;
         display: flex;
         flex-direction: column;
         gap: 2rem;
@@ -497,18 +508,26 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
 
       .rotator-app__layout {
         display: grid;
-        grid-template-columns: minmax(280px, 360px) 1fr;
+        grid-template-columns: 2fr 3fr;
         gap: 2rem;
         align-items: start;
+        width: 100%;
+        overflow: hidden;
       }
 
       .rotator-app__sidebar {
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
+        min-width: 0;
       }
 
-      @media (max-width: 900px) {
+      .rotator-app__preview {
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      @container (width <= 600px) {
         .rotator-app__layout {
           grid-template-columns: 1fr;
         }
@@ -590,18 +609,8 @@ async function persistRotationImage({
     height: 1024,
   });
 
-  let imageCard = existing?.image ?? new ProductImageCard({ data: imageField });
-  imageCard.data = imageField;
-
-  imageCard = await persistAndHydrate(
-    imageCard,
-    commandContext,
-    realmHref,
-    context,
-  );
-
   if (existing) {
-    existing.image = imageCard;
+    existing.data = imageField;
     existing.angleLabel = label;
     existing.angleDegrees = safeAngle;
     return persistAndHydrate(existing, commandContext, realmHref, context);
@@ -610,7 +619,7 @@ async function persistRotationImage({
   let rotationCard = new ProductRotationImage({
     angleLabel: label,
     angleDegrees: safeAngle,
-    image: imageCard,
+    data: imageField,
   });
 
   return persistAndHydrate(rotationCard, commandContext, realmHref, context);
@@ -636,7 +645,7 @@ function rotationFramesFromCards(
 ): RotationFrame[] {
   return cards
     .map((card) => {
-      let base64 = card?.image?.data?.base64;
+      let base64 = card?.data?.base64;
       if (!base64) {
         return undefined;
       }

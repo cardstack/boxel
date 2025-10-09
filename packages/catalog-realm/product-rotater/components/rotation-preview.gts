@@ -122,6 +122,9 @@ export class RotationPreview extends Component<RotationPreviewSignature> {
         border: 1px solid rgba(148, 163, 184, 0.35);
         border-radius: 16px;
         padding: 1.5rem;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
 
       .preview__header h3 {
@@ -140,6 +143,8 @@ export class RotationPreview extends Component<RotationPreviewSignature> {
         display: flex;
         flex-direction: column;
         gap: 1rem;
+        width: 100%;
+        max-width: 100%;
       }
 
       .preview__surface {
@@ -153,6 +158,9 @@ export class RotationPreview extends Component<RotationPreviewSignature> {
         justify-content: center;
         cursor: grab;
         overflow: hidden;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
 
       .preview__surface:active {
@@ -181,6 +189,7 @@ export class RotationPreview extends Component<RotationPreviewSignature> {
         display: flex;
         gap: 0.65rem;
         overflow-x: auto;
+        padding-top: 0.5rem;
         padding-bottom: 0.5rem;
       }
 

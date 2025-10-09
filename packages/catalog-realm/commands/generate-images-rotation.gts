@@ -48,7 +48,7 @@ export class GenerateImagesRotation extends Command<
   typeof GenerateImagesRotationInput,
   typeof GenerateImagesRotationResult
 > {
-  static actionVerb = 'Generate';
+  static actionVerb = 'Generate Images Rotation';
 
   async getInputType() {
     return GenerateImagesRotationInput;
@@ -81,79 +81,82 @@ export class GenerateImagesRotation extends Command<
       );
     }
 
-    const sendRequestCommand = new SendRequestViaProxyCommand(
-      this.commandContext,
+    const generatedImages = await Promise.all(
+      promptList.map((prompt) =>
+        this.generateRotationImage(prompt, referenceImages),
+      ),
     );
-
-    const generatedImages: string[] = [];
-
-    for (let index = 0; index < promptList.length; index++) {
-      const prompt = promptList[index];
-
-      const content = [
-        {
-          type: 'text',
-          text: prompt,
-        },
-        ...referenceImages.map((imageUrl) => ({
-          type: 'image_url',
-          image_url: {
-            url: imageUrl,
-          },
-        })),
-      ];
-
-      const result = await sendRequestCommand.execute({
-        url: 'https://openrouter.ai/api/v1/chat/completions',
-        method: 'POST',
-        requestBody: JSON.stringify({
-          model: DEFAULT_IMAGE_MODEL,
-          messages: [
-            {
-              role: 'user',
-              content,
-            },
-          ],
-        }),
-      });
-
-      if (!result.response.ok) {
-        const errorText = await result.response.text();
-        throw new Error(
-          `Failed to generate rotation image: ${result.response.statusText} - ${errorText}`,
-        );
-      }
-
-      const responseData = await result.response.json();
-
-      if (responseData.error) {
-        const errorMsg = responseData.error.message || responseData.error;
-        throw new Error(
-          `API Error while generating rotation image: ${errorMsg}`,
-        );
-      }
-
-      const messageContent = responseData.choices?.[0]?.message;
-      const images = messageContent?.images;
-
-      if (!Array.isArray(images) || images.length === 0) {
-        throw new Error('No images found in the response for a rotation view.');
-      }
-
-      const firstValidImage = images.find(
-        (img: any) =>
-          img?.image_url?.url && img.image_url.url.startsWith('data:image/'),
-      );
-
-      if (!firstValidImage?.image_url?.url) {
-        throw new Error('No valid base64 image returned for a rotation view.');
-      }
-
-      generatedImages.push(firstValidImage.image_url.url);
-    }
 
     return new GenerateImagesRotationResult({
       generatedImages,
     });
+  }
+
+  private async generateRotationImage(
+    prompt: string,
+    referenceImages: string[],
+  ): Promise<string> {
+    const sendRequestCommand = new SendRequestViaProxyCommand(
+      this.commandContext,
+    );
+
+    const content = [
+      {
+        type: 'text',
+        text: prompt,
+      },
+      ...referenceImages.map((imageUrl) => ({
+        type: 'image_url',
+        image_url: {
+          url: imageUrl,
+        },
+      })),
+    ];
+
+    const result = await sendRequestCommand.execute({
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      method: 'POST',
+      requestBody: JSON.stringify({
+        model: DEFAULT_IMAGE_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content,
+          },
+        ],
+      }),
+    });
+
+    if (!result.response.ok) {
+      const errorText = await result.response.text();
+      throw new Error(
+        `Failed to generate rotation image: ${result.response.statusText} - ${errorText}`,
+      );
+    }
+
+    const responseData = await result.response.json();
+
+    if (responseData.error) {
+      const errorMsg = responseData.error.message || responseData.error;
+      throw new Error(`API Error while generating rotation image: ${errorMsg}`);
+    }
+
+    const messageContent = responseData.choices?.[0]?.message;
+    const images = messageContent?.images;
+
+    if (!Array.isArray(images) || images.length === 0) {
+      throw new Error('No images found in the response for a rotation view.');
+    }
+
+    const firstValidImage = images.find(
+      (img: any) =>
+        img?.image_url?.url && img.image_url.url.startsWith('data:image/'),
+    );
+
+    if (!firstValidImage?.image_url?.url) {
+      throw new Error('No valid base64 image returned for a rotation view.');
+    }
+
+    return firstValidImage.image_url.url;
   }
 }

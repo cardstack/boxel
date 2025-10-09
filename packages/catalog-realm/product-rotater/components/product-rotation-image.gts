@@ -1,14 +1,12 @@
 import {
-  CardDef,
   field,
   contains,
-  linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 
-import { ProductImageCard } from './product-image-card';
+import { ImageCard } from '../../image-card';
 
 class ProductRotationImageEmbedded extends Component<
   typeof ProductRotationImage
@@ -17,14 +15,10 @@ class ProductRotationImageEmbedded extends Component<
     return this.args.model?.angleLabel ?? '';
   }
 
-  get imageCard() {
-    return this.args.model.image;
-  }
-
   <template>
     <img
       class='rotation-image__img'
-      src='data:image/*;base64={{@model.image.data.base64}}'
+      src='data:image/*;base64={{@model.data.base64}}'
       alt={{this.angleLabel}}
     />
 
@@ -39,14 +33,20 @@ class ProductRotationImageEmbedded extends Component<
   </template>
 }
 
-export class ProductRotationImage extends CardDef {
+// @ts-ignore - Component type compatibility issue with extended fields
+export class ProductRotationImage extends ImageCard {
   static displayName = 'Product Rotation Image';
 
   @field angleLabel = contains(StringField);
   @field angleDegrees = contains(NumberField);
-  @field image = linksTo(() => ProductImageCard);
+  @field title = contains(StringField, {
+    computeVia: function (this: ProductRotationImage) {
+      return this.angleLabel
+        ? 'Product Rotation Image ' + this.angleLabel
+        : 'Product Rotation Image';
+    },
+  });
 
   static isolated = ProductRotationImageEmbedded;
   static embedded = ProductRotationImageEmbedded;
-  static fitted = ProductRotationImageEmbedded;
 }

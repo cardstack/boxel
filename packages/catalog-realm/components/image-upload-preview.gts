@@ -4,17 +4,14 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 
-import {
-  Button,
-  FieldContainer,
-} from '@cardstack/boxel-ui/components';
+import { BoxelButton, FieldContainer } from '@cardstack/boxel-ui/components';
 
 export interface ImagePreviewFrame {
   url: string;
   label: string;
 }
 
-export interface ProductImageUploadSectionSignature {
+export interface ImageUploadPreviewSignature {
   Args: {
     label?: string;
     previews?: ImagePreviewFrame[];
@@ -23,21 +20,23 @@ export interface ProductImageUploadSectionSignature {
   };
 }
 
-export class ProductImageUploadSection extends Component<ProductImageUploadSectionSignature> {
-  @tracked inputId = `product-upload-${Math.random().toString(36).slice(2)}`;
+export class ImageUploadPreview extends Component<ImageUploadPreviewSignature> {
+  @tracked inputId = `image-upload-${Math.random().toString(36).slice(2)}`;
 
   get previews(): ImagePreviewFrame[] {
     return this.args.previews ?? [];
   }
 
   get label() {
-    return this.args.label ?? '1. Select Product Images';
+    return this.args.label ?? '1. Select Images';
   }
 
   @action
   openPicker(event: Event) {
     event.preventDefault();
-    let input = document.getElementById(this.inputId) as HTMLInputElement | null;
+    let input = document.getElementById(
+      this.inputId,
+    ) as HTMLInputElement | null;
     input?.click();
   }
 
@@ -74,9 +73,9 @@ export class ProductImageUploadSection extends Component<ProductImageUploadSecti
       class='product-upload'
     >
       <label for={{this.inputId}} class='product-upload__trigger'>
-        <Button @kind='secondary' {{on 'click' this.openPicker}}>
+        <BoxelButton @kind='secondary' {{on 'click' this.openPicker}}>
           Add Images
-        </Button>
+        </BoxelButton>
       </label>
 
       <input
@@ -91,7 +90,9 @@ export class ProductImageUploadSection extends Component<ProductImageUploadSecti
       {{#if this.previews.length}}
         <div class='product-upload__previews'>
           <p class='product-upload__count'>
-            Selected {{this.previews.length}} image(s)
+            Selected
+            {{this.previews.length}}
+            image(s)
           </p>
 
           <div class='product-upload__grid'>

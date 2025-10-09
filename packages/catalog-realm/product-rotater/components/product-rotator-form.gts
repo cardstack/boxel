@@ -3,15 +3,15 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 
 import {
-  Button,
+  BoxelButton,
   BoxelInput,
   FieldContainer,
 } from '@cardstack/boxel-ui/components';
 
 import {
-  ProductImageUploadSection,
+  ImageUploadPreview,
   type ImagePreviewFrame,
-} from './product-image-upload-section';
+} from '../../components/image-upload-preview';
 
 export interface ProductRotatorFormSignature {
   Args: {
@@ -43,7 +43,7 @@ export class ProductRotatorForm extends Component<ProductRotatorFormSignature> {
   }
 
   get imageCount() {
-    return this.args.imageCount ?? 8;
+    return this.args.imageCount ?? 4;
   }
 
   get generateLabel() {
@@ -76,7 +76,7 @@ export class ProductRotatorForm extends Component<ProductRotatorFormSignature> {
 
   <template>
     <form class='rotator-form'>
-      <ProductImageUploadSection
+      <ImageUploadPreview
         @previews={{this.previews}}
         @onFilesSelected={{@onFilesSelected}}
         @onRemove={{@onRemove}}
@@ -103,35 +103,35 @@ export class ProductRotatorForm extends Component<ProductRotatorFormSignature> {
         <BoxelInput
           @type='number'
           @min='2'
-          @max='16'
+          @max='12'
           @value={{this.imageCount}}
           @onInput={{@onImageCountChange}}
-          @placeholder='8'
+          @placeholder='4'
         />
         <p class='rotator-form__help'>
           More images create smoother rotations but increase generation time
-          (2-16 images).
+          (2-12 images).
         </p>
       </FieldContainer>
 
       <div class='rotator-form__actions'>
-        <Button
+        <BoxelButton
           @kind='primary'
           {{on 'click' this.handleGenerate}}
           disabled={{this.generateDisabled}}
           @loading={{@isGenerating}}
         >
           {{this.generateLabel}}
-        </Button>
+        </BoxelButton>
 
-        <Button
+        <BoxelButton
           @kind='secondary'
           {{on 'click' this.handleExport}}
           disabled={{this.exportDisabled}}
           @loading={{@isExporting}}
         >
           Export Product Catalog
-        </Button>
+        </BoxelButton>
       </div>
 
       {{#if this.hasError}}

@@ -9,11 +9,11 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
-import { ProductCatalog } from '../3d-product-rotater/components/product-catalog';
-import { ProductRotationImage } from '../3d-product-rotater/components/product-rotation-image';
+import { ProductCatalog } from '../product-rotater/components/product-catalog';
+import { ProductRotationImage } from '../product-rotater/components/product-rotation-image';
 
 class ExportProductCatalogInput extends CardDef {
-  @field rotations = linksToMany(ProductRotationImage);
+  @field rotationImages = linksToMany(ProductRotationImage);
   @field realmHref = contains(StringField);
   @field catalogTitle = contains(StringField);
   @field catalogDescription = contains(StringField);
@@ -30,13 +30,13 @@ export class ExportProductCatalogCommand extends Command<
   }
 
   protected async run(input: ExportProductCatalogInput): Promise<undefined> {
-    let { rotations, realmHref, catalogTitle, catalogDescription } = input;
+    let { rotationImages, realmHref, catalogTitle, catalogDescription } = input;
 
     if (!realmHref) {
       throw new Error('realmHref is required to export a product catalog');
     }
 
-    if (!Array.isArray(rotations) || rotations.length === 0) {
+    if (!Array.isArray(rotationImages) || rotationImages.length === 0) {
       throw new Error(
         'At least one generated rotation image is required to export a catalog',
       );
@@ -52,7 +52,7 @@ export class ExportProductCatalogCommand extends Command<
     let catalog = new ProductCatalog({
       title: safeTitle,
       description: safeDescription || undefined,
-      rotations,
+      rotationImages,
     });
 
     await new SaveCardCommand(this.commandContext).execute({
