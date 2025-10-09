@@ -499,7 +499,8 @@ export default class PublishRealmModal extends Component<Signature> {
 
           <div
             class='domain-option
-              {{if this.isCustomSubdomainSetupVisible "claiming"}}'
+              {{if this.isCustomSubdomainSetupVisible "claiming"}}
+              {{if this.customSubdomainError "has-error"}}'
           >
             <input
               type='checkbox'
@@ -790,6 +791,10 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .domain-option.claiming .action {
         margin-top: auto;
+        margin-bottom: var(--boxel-sp-xxxs);
+      }
+
+      .domain-option.claiming.has-error .action {
         margin-bottom: var(--boxel-sp-xl);
       }
 
