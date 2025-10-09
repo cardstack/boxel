@@ -10,7 +10,7 @@ import { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import prettifyPrompts from '../utils/prettify-prompts';
+import { prettifyPrompts } from '../utils/prettify-prompts';
 
 import ReadTextFileCommand from './read-text-file';
 import SendRequestViaProxyCommand from './send-request-via-proxy';

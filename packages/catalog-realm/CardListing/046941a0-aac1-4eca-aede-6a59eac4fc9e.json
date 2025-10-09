@@ -1,0 +1,72 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Annotation",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/annotation-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/annotation-listing/screenshot_02.png"
+      ],
+      "summary": "A comprehensive annotation system for pdf documents and textbooks with support for highlights, notes, and position tracking",
+      "cardInfo": {
+        "notes": "Features include:  page number references, annotation positioning, color-coded highlights, and timestamped creation tracking",
+        "title": "Annotation",
+        "description": "An interactive annotation card that allows users to highlight text, add notes, and track position information in pdf documents. Perfect for students, researchers, and professionals who need to annotate textbooks, and other documents.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/annotation-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/30980469-41a0-4ac1-beca-2ede6a59eac4"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../annotation/AnnotationCard/dsa-textbook-annotations"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/knowledge-management"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

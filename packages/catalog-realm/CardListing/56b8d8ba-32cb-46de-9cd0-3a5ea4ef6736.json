@@ -1,0 +1,72 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Flashcard",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/flashcard-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/flashcard-listing/screenshot_02.png"
+      ],
+      "summary": "Interactive flashcard application for studying and memorizing information across various subjects",
+      "cardInfo": {
+        "notes": "Perfect for students, professionals, and anyone looking to improve their memory and learning efficiency",
+        "title": "Flashcard",
+        "description": "A comprehensive flashcard application that helps users create, organize, and study flashcards with features for tracking difficulty levels, subjects, and tags for better learning organization.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/flashcard-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/dd1b56b8-d8ba-42cb-96de-dcd03a5ea4ef"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../flashcard/FlashcardCard/binary-search-complexity"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/knowledge-management"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/skills-training"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

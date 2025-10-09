@@ -13,6 +13,7 @@ import {
   realmURL,
   type SingleCardDocument,
   type PrerenderMeta,
+  type RenderError,
 } from '@cardstack/runtime-common';
 
 import {
@@ -26,7 +27,7 @@ import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 
 import type { Model as ParentModel } from '../render';
 
-export type Model = PrerenderMeta;
+export type Model = PrerenderMeta | RenderError;
 
 export default class RenderRoute extends Route<Model> {
   @service declare cardService: CardService;
@@ -42,6 +43,20 @@ export default class RenderRoute extends Route<Model> {
       instance = (globalThis as any).__renderInstance;
     } else {
       instance = parentModel.instance;
+    }
+
+    if (!instance) {
+      let { id } = this.paramsFor('render') as { id?: string };
+      return {
+        type: 'error',
+        error: {
+          message: 'Card instance is undefined',
+          title: 'Card instance unavailable',
+          status: 500,
+          id: id ?? null,
+          additionalErrors: null,
+        },
+      } as RenderError;
     }
 
     let serialized = api.serializeCard(instance, {
