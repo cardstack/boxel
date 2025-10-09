@@ -150,10 +150,6 @@ export default class PublishRealmModal extends Component<Signature> {
       : null;
   }
 
-  get customSubdomainErrorMessage() {
-    return this.customSubdomainError;
-  }
-
   get isClaimSiteNameDisabled() {
     return !this.CustomSubdomain || this.isCheckingCustomSubdomain;
   }
@@ -544,7 +540,7 @@ export default class PublishRealmModal extends Component<Signature> {
                       @placeholder='custom-name'
                       @value={{this.CustomSubdomain}}
                       @state={{this.customSubdomainState}}
-                      @errorMessage={{this.customSubdomainErrorMessage}}
+                      @errorMessage={{this.customSubdomainError}}
                       {{on 'input' this.handleCustomSubdomainInput}}
                       class='custom-subdomain-input'
                       spellcheck='false'
