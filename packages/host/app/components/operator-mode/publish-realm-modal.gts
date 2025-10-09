@@ -190,8 +190,8 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private buildPublishedRealmUrl(hostname: string): string {
-    const protocol = this.getProtocol();
-    const realmName = this.getRealmName();
+    let protocol = this.getProtocol();
+    let realmName = this.getRealmName();
     return `${protocol}://${hostname}/${realmName}/`;
   }
 
