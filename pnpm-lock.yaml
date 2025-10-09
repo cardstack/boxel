@@ -85,8 +85,8 @@ catalogs:
       specifier: ^4.0.0
       version: 4.0.0
     '@koa/router':
-      specifier: ^12.0.0
-      version: 12.0.0
+      specifier: ^14.0.0
+      version: 14.0.0
     '@lukeed/uuid':
       specifier: ^2.0.1
       version: 2.0.1
@@ -2629,7 +2629,7 @@ importers:
         version: 4.0.0
       '@koa/router':
         specifier: 'catalog:'
-        version: 12.0.0
+        version: 14.0.0
       '@sentry/node':
         specifier: 'catalog:'
         version: 8.31.0
@@ -4891,10 +4891,9 @@ packages:
     resolution: {integrity: sha512-Y4RrbvGTlAaa04DBoPBWJqDR5gPj32OOz827ULXfgB1F7piD1MB/zwn8JR2LAnvdILhxUbXbkXGWuNVsFuVFCQ==}
     engines: {node: '>= 14.0.0'}
 
-  '@koa/router@12.0.0':
-    resolution: {integrity: sha512-cnnxeKHXlt7XARJptflGURdJaO+ITpNkOHmQu7NHmCoRinPbyvFzce/EG/E8Zy81yQ1W9MoSdtklc3nyaDReUw==}
-    engines: {node: '>= 12'}
-    deprecated: '**IMPORTANT 10x+ PERFORMANCE UPGRADE**: Please upgrade to v12.0.1+ as we have fixed an issue with debuglog causing 10x slower router benchmark performance, see https://github.com/koajs/router/pull/173'
+  '@koa/router@14.0.0':
+    resolution: {integrity: sha512-LBSu5K0qAaaQcXX/0WIB9PGDevyCxxpnc1uq13vV/CgObaVxuis5hKl3Eboq/8gcb6ebnkAStW9NB/Em2eYyFA==}
+    engines: {node: '>= 20'}
 
   '@kwsites/file-exists@1.1.1':
     resolution: {integrity: sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw==}
@@ -15825,12 +15824,14 @@ snapshots:
     dependencies:
       vary: 1.1.2
 
-  '@koa/router@12.0.0':
+  '@koa/router@14.0.0':
     dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
       http-errors: 2.0.0
       koa-compose: 4.1.0
-      methods: 1.1.2
-      path-to-regexp: 6.3.0
+      path-to-regexp: 8.2.0
+    transitivePeerDependencies:
+      - supports-color
 
   '@kwsites/file-exists@1.1.1':
     dependencies:
