@@ -235,12 +235,14 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
     <style scoped>
       .host-submode-layout {
+        --host-submode-background: var(--boxel-700);
         --submode-bar-item-border-radius: var(--boxel-border-radius);
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
         --submode-bar-item-outline: var(--boxel-border-flexible);
         --operator-mode-left-column: calc(
           21.5rem - var(--submode-new-file-button-width)
         );
+        background-color: var(--host-submode-background);
       }
 
       .host-submode {
@@ -250,12 +252,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         width: 100%;
         background-position: center;
         background-size: cover;
-      }
-
-      .host-submode-layout :deep(.submode-layout-top-bar) {
-        position: relative;
-        background-color: var(--boxel-700);
-        width: 100%;
       }
 
       .host-submode-layout

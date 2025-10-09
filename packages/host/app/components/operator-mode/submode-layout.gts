@@ -563,7 +563,9 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .submode-layout-top-bar {
+        position: relative;
         width: 100%;
+        max-width: 100%;
         padding: var(--operator-mode-spacing);
         z-index: var(--host-top-bar-z-index);
 

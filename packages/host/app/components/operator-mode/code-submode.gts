@@ -835,6 +835,7 @@ export default class CodeSubmode extends Component<Signature> {
       .code-submode-layout {
         --submode-bar-item-outline: 2px solid transparent;
         --submode-bar-item-box-shadow: none;
+        background-color: var(--code-submode-background);
       }
 
       .code-mode {
@@ -875,10 +876,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp);
         font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
-      }
-
-      .code-submode-layout :deep(.submode-layout-top-bar) {
-        background-color: var(--code-submode-background);
       }
 
       .code-submode-layout
