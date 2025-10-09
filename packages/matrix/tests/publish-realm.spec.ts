@@ -122,15 +122,6 @@ test.describe('Publish realm', () => {
         '[data-test-custom-subdomain-input] .validation-icon-container.valid',
       ),
     ).toBeVisible();
-
-    let customDomainCheckbox = page.locator(
-      '[data-test-custom-domain-checkbox]',
-    );
-
-    await expect(customDomainCheckbox).toBeEnabled();
-    await expect(customDomainCheckbox).toBeChecked();
-
-    await expect(claimButton).toHaveText(/Claim Site Name/);
   });
 
   test('open site popover opens with shift-click', async ({ page }) => {

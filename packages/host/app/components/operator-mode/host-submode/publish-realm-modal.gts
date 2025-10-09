@@ -479,10 +479,9 @@ export default class PublishRealmModal extends Component<Signature> {
             <input
               type='checkbox'
               id='custom-subdomain-checkbox'
-              checked={{this.isCustomDomainSelected}}
               {{on 'change' this.toggleCustomDomain}}
               class='domain-checkbox'
-              data-test-custom-domain-checkbox
+              data-test-custom-subdomain-checkbox
               disabled={{this.isCustomDomainCheckboxDisabled}}
             />
             <label class='option-title' for='custom-subdomain-checkbox'>Custom
