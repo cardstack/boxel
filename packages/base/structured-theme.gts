@@ -143,7 +143,7 @@ class Isolated extends Component<typeof StructuredTheme> {
         align-content: start;
         gap: 0;
         container-name: structured-theme-card;
-        container-type: size;
+        container-type: inline-size;
       }
 
       .theme-header {
