@@ -2,11 +2,24 @@ import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
 
+import { provide } from 'ember-provide-consume-context';
+
 import { gt, not } from '@cardstack/boxel-ui/helpers';
+
+import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type {
+  CreateCardFn,
+  DeleteCardFn,
+  EditCardFn,
+  SaveCardFn,
+  ViewCardFn,
+  CardCrudFunctions,
+} from 'https://cardstack.com/base/card-api';
 
 import HostModeBreadcrumbs from './breadcrumbs';
 import HostModeCard from './card';
@@ -16,8 +29,9 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     cardIds: string[];
-    removeCard?: (cardId: string) => void;
+    removeCard: (cardId: string) => void;
     openInteractSubmode?: () => void;
+    viewCard: ViewCardFn;
   };
 }
 
@@ -60,9 +74,24 @@ export default class HostModeContent extends Component<Signature> {
 
   @action
   removeCard(cardId: string) {
-    if (this.args.removeCard) {
-      this.args.removeCard(cardId);
-    }
+    this.args.removeCard(cardId);
+  }
+
+  private noopCreateCard: CreateCardFn = async () => undefined;
+  private noopSaveCard: SaveCardFn = () => {};
+  private noopEditCard: EditCardFn = () => {};
+  private noopDeleteCard: DeleteCardFn = async () => {};
+
+  @provide(CardCrudFunctionsContextName)
+  // @ts-ignore "cardCrudFunctions" is declared but not used
+  private get cardCrudFunctions(): CardCrudFunctions {
+    return {
+      createCard: this.noopCreateCard,
+      saveCard: this.noopSaveCard,
+      editCard: this.noopEditCard,
+      viewCard: this.args.viewCard,
+      deleteCard: this.noopDeleteCard,
+    };
   }
 
   <template>

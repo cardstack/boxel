@@ -1,5 +1,5 @@
 import { getOwner } from '@ember/owner';
-import { click, currentURL, visit } from '@ember/test-helpers';
+import { click, currentURL, visit, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
@@ -18,6 +18,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
+import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -124,6 +125,7 @@ module('Acceptance | host mode tests', function (hooks) {
       },
       contents: {
         'pet.gts': { Pet },
+        'view-card-demo.gts': viewCardDemoCardSource,
         'Pet/mango.json': {
           data: {
             attributes: {
@@ -133,6 +135,21 @@ module('Acceptance | host mode tests', function (hooks) {
               adoptsFrom: {
                 module: `${testHostModeRealmURL}pet`,
                 name: 'Pet',
+              },
+            },
+          },
+        },
+        'ViewCardDemo/index.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'View Mango',
+              targetCardURL: `${testHostModeRealmURL}Pet/mango.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}view-card-demo`,
+                name: 'ViewCardDemo',
               },
             },
           },
@@ -200,6 +217,21 @@ module('Acceptance | host mode tests', function (hooks) {
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
     );
+  });
+
+  test('invoking viewCard from a card stacks the linked card', async function (assert) {
+    let targetStackId = `${testHostModeRealmURL}Pet/mango`;
+
+    await visit('/test/ViewCardDemo/index.json');
+
+    assert
+      .dom(`[data-test-host-mode-stack-item="${targetStackId}"]`)
+      .doesNotExist();
+
+    await click('[data-test-view-card-demo-button]');
+    await waitFor(`[data-test-host-mode-stack-item="${targetStackId}"]`);
+
+    assert.dom(`[data-test-host-mode-stack-item="${targetStackId}"]`).exists();
   });
 
   test('stack state persists in query parameter', async function (assert) {
