@@ -68,7 +68,7 @@ module(basename(__filename), function () {
             host: 'localhost:4200',
             'content-length': bodyText.length.toString(),
           },
-          url: '/_claim-boxel-site-hostname',
+          url: '/_boxel-site-hostname',
           method: 'POST',
         }),
         request: {
@@ -100,7 +100,7 @@ module(basename(__filename), function () {
             host: 'localhost:4200',
             'content-length': invalidJSON.length.toString(),
           },
-          url: '/_claim-boxel-site-hostname',
+          url: '/_boxel-site-hostname',
           method: 'POST',
         }),
         request: {

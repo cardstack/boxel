@@ -160,7 +160,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleRealmAuth(args),
   );
   router.post(
-    '/_claim-boxel-site-hostname',
+    '/_boxel-site-hostname',
     jwtMiddleware(args.realmSecretSeed),
     handleClaimBoxelSiteHostnameRequest(args),
   );
