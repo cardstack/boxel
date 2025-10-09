@@ -76,7 +76,11 @@ import type { Readable } from 'stream';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import { MatrixClient, getMatrixUsername } from './matrix-client';
+import {
+  MatrixClient,
+  ensureFullMatrixUserId,
+  getMatrixUsername,
+} from './matrix-client';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
@@ -2778,8 +2782,10 @@ export class Realm {
       iconURL: null,
       showAsCatalog: null,
       visibility: await this.visibility(),
-      realmUserId:
+      realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
+        this.#matrixClient.matrixURL.href,
+      ),
       publishable: null,
       lastPublishedAt: await this.getLastPublishedAt(),
     };
@@ -2796,9 +2802,11 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
-        realmInfo.realmUserId =
+        realmInfo.realmUserId = ensureFullMatrixUserId(
           realmConfigJson.realmUserId ??
-          (this.#matrixClient.getUserId()! || this.#matrixClient.username);
+            (this.#matrixClient.getUserId()! || this.#matrixClient.username),
+          this.#matrixClient.matrixURL.href,
+        );
         realmInfo.publishable =
           realmConfigJson.publishable ?? realmInfo.publishable;
       } catch (e) {

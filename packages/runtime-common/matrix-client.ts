@@ -381,3 +381,11 @@ export function userIdFromUsername(username: string, matrixURL: string) {
   let host = new URL(matrixURL).hostname.split('.').slice(-2).join('.');
   return `@${username}:${host}`;
 }
+
+export function ensureFullMatrixUserId(userId: string, matrixURL: string) {
+  if (userId.startsWith('@') && userId.includes(':')) {
+    return userId;
+  }
+  userId = userId.replace(/^@/, '').replace(/:.*$/, '');
+  return userIdFromUsername(userId, matrixURL);
+}
