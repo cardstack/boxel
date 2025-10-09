@@ -192,24 +192,6 @@ export default class PublishRealmModal extends Component<Signature> {
     return config.publishedRealmBoxelSpaceDomain;
   }
 
-  private addPublishedRealmUrl(url: string) {
-    if (this.selectedPublishedRealmURLs.includes(url)) {
-      return;
-    }
-
-    this.selectedPublishedRealmURLs = [...this.selectedPublishedRealmURLs, url];
-  }
-
-  private removePublishedRealmUrl(url: string) {
-    if (!this.selectedPublishedRealmURLs.includes(url)) {
-      return;
-    }
-
-    this.selectedPublishedRealmURLs = this.selectedPublishedRealmURLs.filter(
-      (existingUrl) => existingUrl !== url,
-    );
-  }
-
   private buildPublishedRealmUrl(hostname: string): string {
     const protocol = this.getProtocol();
     const realmName = this.getRealmName();
@@ -224,17 +206,7 @@ export default class PublishRealmModal extends Component<Signature> {
   private setCustomSubdomainSelection(
     selection: CustomSubdomainSelection | null,
   ) {
-    const previousUrl = this.customSubdomainSelection?.url;
-    if (previousUrl) {
-      this.removePublishedRealmUrl(previousUrl);
-    }
-
     this.customSubdomainSelection = selection;
-
-    if (selection) {
-      this.addPublishedRealmUrl(selection.url);
-      this.customSubdomain = selection.subdomain;
-    }
   }
 
   private getRealmName(): string {
@@ -263,13 +235,13 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
-  toggleDefaultDomain(event: Event) {
-    const checkbox = event.target as HTMLInputElement;
+  toggleDefaultDomain() {
     const defaultUrl = this.generatedUrl;
-    if (checkbox.checked) {
-      this.addPublishedRealmUrl(defaultUrl);
-    } else {
-      this.removePublishedRealmUrl(defaultUrl);
+    if (!this.isDefaultPublishedRealmURLSelected) {
+      this.selectedPublishedRealmURLs = [
+        ...this.selectedPublishedRealmURLs,
+        defaultUrl,
+      ];
     }
   }
 
