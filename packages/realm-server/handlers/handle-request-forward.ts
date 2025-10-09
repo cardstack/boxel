@@ -276,6 +276,12 @@ export default function handleRequestForward({
         const url = new URL(json.url);
         url.searchParams.set(paramName, destinationConfig.apiKey);
         finalUrl = url.toString();
+      } else if (
+        destinationConfig.authMethod === 'header' &&
+        destinationConfig.authParameterName
+      ) {
+        headers[destinationConfig.authParameterName] =
+          `Bearer ${destinationConfig.apiKey}`;
       } else {
         // Default to header authentication
         headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
