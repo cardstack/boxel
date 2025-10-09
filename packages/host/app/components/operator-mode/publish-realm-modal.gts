@@ -145,19 +145,19 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get generatedUrl() {
-    let protocol = this.getProtocol();
-    let matrixUsername = this.getMatrixUsername();
-    let domain = this.getDefaultPublishedRealmDomain();
-    let realmName = this.getRealmName();
+    const protocol = this.getProtocol();
+    const matrixUsername = this.getMatrixUsername();
+    const domain = this.getDefaultPublishedRealmDomain();
+    const realmName = this.getRealmName();
 
     return `${protocol}://${matrixUsername}.${domain}/${realmName}/`;
   }
 
   get urlParts() {
-    let protocol = this.getProtocol();
-    let matrixUsername = this.getMatrixUsername();
-    let domain = this.getDefaultPublishedRealmDomain();
-    let realmName = this.getRealmName();
+    const protocol = this.getProtocol();
+    const matrixUsername = this.getMatrixUsername();
+    const domain = this.getDefaultPublishedRealmDomain();
+    const realmName = this.getRealmName();
 
     return {
       baseUrl: `${protocol}://${matrixUsername}.${domain}/`,
@@ -166,7 +166,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private getProtocol(): string {
-    let environment = config.environment;
+    const environment = config.environment;
     return environment === 'development' || environment === 'test'
       ? 'http'
       : 'https';
