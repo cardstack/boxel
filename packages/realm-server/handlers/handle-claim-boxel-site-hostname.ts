@@ -21,7 +21,7 @@ import { validateSubdomain } from '../lib/user-subdomain-validation';
 
 interface ClaimBoxelSiteHostnameJSON {
   data: {
-    type: 'claimed-domain';
+    type: 'claimed-site-hostname';
     attributes: {
       source_realm_url: string;
       hostname: string;
@@ -165,7 +165,7 @@ export default function handleClaimBoxelSiteHostnameRequest({
           JSON.stringify(
             {
               data: {
-                type: 'claimed-domain',
+                type: 'claimed-site-hostname',
                 id: claimId,
                 attributes: {
                   hostname: normalizedHostname,
@@ -202,8 +202,8 @@ function assertIsClaimBoxelSiteHostnameJSON(
     throw new Error(`json is missing "data" object`);
   }
   let { data } = json;
-  if (!('type' in data) || data.type !== 'claimed-domain') {
-    throw new Error('json.data.type must be "claimed-domain"');
+  if (!('type' in data) || data.type !== 'claimed-site-hostname') {
+    throw new Error('json.data.type must be "claimed-site-hostname"');
   }
   if (!('attributes' in data) || typeof data.attributes !== 'object') {
     throw new Error(`json.data is missing "attributes" object`);

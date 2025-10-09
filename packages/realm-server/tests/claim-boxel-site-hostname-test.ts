@@ -51,7 +51,7 @@ module(basename(__filename), function () {
       const jsonApiBody = attributes
         ? {
             data: {
-              type: 'claimed-domain',
+              type: 'claimed-site-hostname',
               attributes,
             },
           }
@@ -303,7 +303,7 @@ module(basename(__filename), function () {
       assert.ok(responseBody.data, 'Should have data object');
       assert.strictEqual(
         responseBody.data.type,
-        'claimed-domain',
+        'claimed-site-hostname',
         'Should have correct type',
       );
       assert.ok(responseBody.data.id, 'Should have an ID');

@@ -1686,7 +1686,7 @@ module(basename(__filename), function () {
             .set('Accept', 'application/json')
             .send({
               data: {
-                type: 'claimed-domain',
+                type: 'claimed-site-hostname',
                 attributes: {
                   source_realm_url: 'https://test-realm.com',
                   hostname: 'test-site.localhost',
@@ -1704,7 +1704,7 @@ module(basename(__filename), function () {
             .set('Authorization', 'Bearer invalid-jwt')
             .send({
               data: {
-                type: 'claimed-domain',
+                type: 'claimed-site-hostname',
                 attributes: {
                   source_realm_url: 'https://test-realm.com',
                   hostname: 'test-site.localhost',
@@ -1733,7 +1733,7 @@ module(basename(__filename), function () {
             )
             .send({
               data: {
-                type: 'claimed-domain',
+                type: 'claimed-site-hostname',
                 attributes: {
                   source_realm_url: 'https://test-realm.com',
                   hostname: 'valid-site.localhost',
