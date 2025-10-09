@@ -145,19 +145,19 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get generatedUrl() {
-    const protocol = this.getProtocol();
-    const matrixUsername = this.getMatrixUsername();
-    const domain = this.getDefaultPublishedRealmDomain();
-    const realmName = this.getRealmName();
+    let protocol = this.getProtocol();
+    let matrixUsername = this.getMatrixUsername();
+    let domain = this.getDefaultPublishedRealmDomain();
+    let realmName = this.getRealmName();
 
     return `${protocol}://${matrixUsername}.${domain}/${realmName}/`;
   }
 
   get urlParts() {
-    const protocol = this.getProtocol();
-    const matrixUsername = this.getMatrixUsername();
-    const domain = this.getDefaultPublishedRealmDomain();
-    const realmName = this.getRealmName();
+    let protocol = this.getProtocol();
+    let matrixUsername = this.getMatrixUsername();
+    let domain = this.getDefaultPublishedRealmDomain();
+    let realmName = this.getRealmName();
 
     return {
       baseUrl: `${protocol}://${matrixUsername}.${domain}/`,
@@ -166,7 +166,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private getProtocol(): string {
-    const environment = config.environment;
+    let environment = config.environment;
     return environment === 'development' || environment === 'test'
       ? 'http'
       : 'https';
@@ -277,18 +277,17 @@ export default class PublishRealmModal extends Component<Signature> {
   async handleClaimCustomSubdomain(event: Event) {
     event.preventDefault();
 
-    const subdomain = this.customSubdomain;
+    let subdomain = this.customSubdomain;
 
     this.isCheckingCustomSubdomain = true;
     this.clearCustomSubdomainFeedback();
 
     try {
-      const result =
-        await this.realmServer.checkSiteNameAvailability(subdomain);
+      let result = await this.realmServer.checkSiteNameAvailability(subdomain);
       this.customSubdomainAvailability = result;
 
       if (result.available) {
-        const publishedUrl = this.buildPublishedRealmUrl(result.domain);
+        let publishedUrl = this.buildPublishedRealmUrl(result.domain);
         this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
       } else {
         this.customSubdomainError =
@@ -310,7 +309,7 @@ export default class PublishRealmModal extends Component<Signature> {
 
   @action
   toggleCustomSubdomain(event: Event) {
-    const checkbox = event.target as HTMLInputElement;
+    let checkbox = event.target as HTMLInputElement;
 
     if (!this.customSubdomainSelection) {
       checkbox.checked = false;
