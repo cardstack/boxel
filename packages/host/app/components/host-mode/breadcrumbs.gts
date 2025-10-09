@@ -64,8 +64,7 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
 
   <template>
     <nav
-      class='host-mode-breadcrumbs
-        {{unless this.hasCards "host-mode-breadcrumbs--empty"}}'
+      class='host-mode-breadcrumbs {{unless this.hasCards "empty"}}'
       aria-label='Card stack navigation'
       hidden={{not this.hasCards}}
       data-test-host-mode-breadcrumbs
@@ -96,13 +95,13 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
         display: inline-flex;
         align-items: center;
         background-color: var(--boxel-700);
-        box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.35);
+        box-shadow: var(--boxel-deep-box-shadow);
         border: solid 1px rgba(255, 255, 255, 0.35);
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         border-radius: 7px;
       }
 
-      .host-mode-breadcrumbs--empty {
+      .empty {
         display: none;
       }
 
@@ -123,7 +122,7 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
 
       .separator {
         color: rgba(255, 255, 255, 0.7);
-        font-size: 0.875rem;
+        font-size: var(--boxel-font-size);
         line-height: 1;
       }
     </style>

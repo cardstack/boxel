@@ -66,7 +66,7 @@ export default class HostModeCard extends Component<Signature> {
     >
       {{#if this.card}}
         <CardRenderer
-          class='host-mode-card'
+          class='card'
           @card={{this.card}}
           @format='isolated'
           data-test-host-mode-card={{@cardId}}
@@ -95,7 +95,8 @@ export default class HostModeCard extends Component<Signature> {
     </CardContainer>
 
     <style scoped>
-      .host-mode-card {
+      .host-mode-card,
+      .card {
         width: var(--host-mode-card-width, 50rem);
         padding: var(--host-mode-card-padding);
         border-radius: var(--host-mode-card-border-radius, 20px);

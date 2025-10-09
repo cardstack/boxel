@@ -17,19 +17,43 @@ type SerializedStack = string[];
 export default class HostModeStateService extends Service {
   @service declare router: RouterService;
 
+  // The primary card comes from the main path segment of the URL.
+  // The stack cards come from the `hostModeStack` query param.
+  // Example:
+  // URL: https://user.example.com/cards/123.json?hostModeStack=https%3A%2F%2Fuser.example.com%2Fcards%2F456.json,https%3A%2F%2Fuser.example.com%2Fcards%2F789.json
+  // Primary card ID: https://user.example.com/cards/123
+  // Stack card IDs: [https://user.example.com/cards/456, https://user.example.com/cards/789]
   @tracked private primaryCardId: string | null = null;
   @tracked private stackCardIds: string[] = [];
   private currentRoutePath: string | null = null;
-  private persistenceEnabled = false;
+  private isStateInitialized = false;
 
   initialize({ primaryCardId, stack, routePath }: InitializeOptions) {
-    this.persistenceEnabled = false;
+    this.isStateInitialized = false;
     this.primaryCardId = primaryCardId
       ? primaryCardId.replace(/\.json$/, '')
       : null;
     this.stackCardIds = this.normalizeIds(stack);
     this.currentRoutePath = routePath;
-    this.persistenceEnabled = true;
+    this.isStateInitialized = true;
+  }
+
+  restore({
+    primaryCardId,
+    serializedStack,
+    routePath,
+  }: {
+    primaryCardId: string | null;
+    serializedStack?: string | null;
+    routePath?: string | null;
+  }) {
+    let stack = this.deserialize(serializedStack);
+
+    this.initialize({
+      primaryCardId,
+      stack,
+      routePath: routePath ?? '',
+    });
   }
 
   updateRoutePath(routePath: string) {
@@ -115,7 +139,7 @@ export default class HostModeStateService extends Service {
   }
 
   private schedulePersist() {
-    if (!this.persistenceEnabled) {
+    if (!this.isStateInitialized) {
       return;
     }
 
@@ -123,7 +147,7 @@ export default class HostModeStateService extends Service {
   }
 
   private persist() {
-    if (!this.persistenceEnabled || !this.currentRoutePath) {
+    if (!this.isStateInitialized || !this.currentRoutePath) {
       return;
     }
 

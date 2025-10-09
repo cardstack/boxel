@@ -107,7 +107,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     if (backgroundImageUrl) {
       return htmlSafe(`background-image: url(${backgroundImageUrl});`);
     }
-    return false;
+    return htmlSafe('');
   }
 
   get hostModeContainerClass() {
@@ -223,6 +223,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
           <HostModeContent
             @cardIds={{this.cardIds}}
             @removeCard={{this.closeCard}}
+            class='full-host-mode-content'
           />
         </section>
       </div>
@@ -248,7 +249,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         padding: 0;
       }
 
-      :deep(.host-mode-content) {
+      .full-host-mode-content {
         min-height: 100vh;
       }
     </style>

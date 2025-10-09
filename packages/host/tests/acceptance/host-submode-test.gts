@@ -272,6 +272,47 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-host-mode-breadcrumbs]').doesNotExist();
     });
 
+    test('breadcrumb item shows loading state before card is available', async function (assert) {
+      let card1Id = `${testRealmURL}Person/1`;
+      let card2Id = `${testRealmURL}index`;
+      let card3Id = `${testRealmURL}Person/2`;
+      let network = getService('network');
+
+      let handler = async (request: Request) => {
+        if (request.url.includes(card3Id)) {
+          await waitFor(`[data-test-host-mode-breadcrumb="${card3Id}"]`);
+          assert
+            .dom(`[data-test-host-mode-breadcrumb="${card3Id}"] .label`)
+            .hasText('Loading…');
+          return null;
+        }
+        return null;
+      };
+      network.mount(handler, { prepend: true });
+
+      try {
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${card1Id}.json`, `${card2Id}.json`, `${card3Id}.json`],
+        });
+
+        await waitUntil(() => {
+          let label = document
+            .querySelector(
+              `[data-test-host-mode-breadcrumb="${card3Id}"] .label`,
+            )
+            ?.textContent?.trim();
+          return label === 'B C';
+        });
+
+        assert
+          .dom(`[data-test-host-mode-breadcrumb="${card3Id}"] .label`)
+          .hasText('B C');
+      } finally {
+        network.resetState();
+      }
+    });
+
     test('shows error state when card is not found', async function (assert) {
       await visitOperatorMode({
         submode: 'host',

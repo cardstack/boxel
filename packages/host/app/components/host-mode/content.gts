@@ -1,5 +1,4 @@
 import { action } from '@ember/object';
-import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
 
@@ -51,30 +50,6 @@ export default class HostModeContent extends Component<Signature> {
     return this.args.cardIds && this.args.cardIds.length > 1;
   }
 
-  get backgroundImageStyle() {
-    // We only show background images when there's a single card being shown
-    if (this.args.cardIds.length !== 1) {
-      return false;
-    }
-
-    return htmlSafe(
-      `background-image: url(https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1470&q=80);`,
-    );
-  }
-
-  get hostModeContentContainer() {
-    if (!this.currentCard) {
-      return 'host-mode-content';
-    }
-
-    // Check if the card prefers wide format
-    if (this.isWideCard) {
-      return 'host-mode-content is-wide';
-    }
-
-    return 'host-mode-content';
-  }
-
   get isWideCard() {
     if (!this.currentCard) {
       return false;
@@ -92,9 +67,9 @@ export default class HostModeContent extends Component<Signature> {
 
   <template>
     <div
-      class={{this.hostModeContentContainer}}
-      style={{this.backgroundImageStyle}}
+      class='host-mode-content {{if this.isWideCard "is-wide"}}'
       data-test-host-mode-content
+      ...attributes
     >
       {{#if this.displayBreadcrumbs}}
         <div class='breadcrumb-container'>
@@ -125,6 +100,7 @@ export default class HostModeContent extends Component<Signature> {
         overflow: hidden;
         padding: var(--boxel-sp);
         position: relative;
+        background-color: #686283;
       }
 
       .breadcrumb-container {

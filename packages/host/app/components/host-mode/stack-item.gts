@@ -165,16 +165,12 @@ export default class HostModeStackItem extends Component<Signature> {
         <HostModeCard
           @cardId={{@cardId}}
           @displayBoundaries={{if this.isItemFullWidth false true}}
+          class='host-mode-stack-item-card'
         />
       </div>
     </div>
 
     <style scoped>
-      :global(:root) {
-        --host-mode-stack-offset: 1.5rem;
-        --host-mode-stack-scale-step: 0.04;
-      }
-
       @keyframes scaleIn {
         from {
           transform: scale(0.1);
@@ -278,7 +274,7 @@ export default class HostModeStackItem extends Component<Signature> {
         width: 18px;
       }
 
-      :deep(.host-mode-card) {
+      .host-mode-stack-item-card {
         border-radius: 0;
         box-shadow: none;
         overflow: auto;

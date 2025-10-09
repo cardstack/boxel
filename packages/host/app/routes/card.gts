@@ -57,19 +57,18 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
       return;
     }
 
-    let stackParam = transition.to?.queryParams?.hostModeStack;
-    let stackCardIds = this.hostModeStateService.deserialize(
-      stackParam as string | undefined,
-    );
+    let stackParam = transition.to?.queryParams?.hostModeStack as
+      | string
+      | undefined;
     let primaryCardId = (model && 'id' in model ? model.id : null) as
       | string
       | null;
     let routePath = (transition.to?.params?.path as string) ?? '';
 
-    this.hostModeStateService.initialize({
+    this.hostModeStateService.restore({
       primaryCardId,
-      stack: stackCardIds,
       routePath,
+      serializedStack: stackParam,
     });
   }
 }

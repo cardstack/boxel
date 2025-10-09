@@ -1,5 +1,5 @@
 import { getOwner } from '@ember/owner';
-import { click, currentURL, visit, waitUntil } from '@ember/test-helpers';
+import { click, currentURL, visit } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
@@ -209,13 +209,12 @@ module('Acceptance | host mode tests', function (hooks) {
 
     await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
 
-    let stackedCardSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`;
-
-    assert.dom(stackedCardSelector).exists();
-
-    await click(`${stackedCardSelector} .close-button`);
-
-    await waitUntil(() => !document.querySelector(stackedCardSelector));
+    assert
+      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
+      .exists();
+    await click(
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"] .close-button`,
+    );
 
     assert.strictEqual(currentURL(), '/test/Pet/mango.json');
     assert.strictEqual(

@@ -15,7 +15,6 @@ interface Signature {
   Args: {
     cardId: string;
     disabled?: boolean;
-    isActionable?: boolean;
     onClick?: (cardId: string) => void;
   };
 }
@@ -63,14 +62,6 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
     return Boolean(this.args.disabled);
   }
 
-  private get isActionable() {
-    if (typeof this.args.isActionable === 'boolean') {
-      return this.args.isActionable;
-    }
-
-    return !this.isDisabled;
-  }
-
   @action
   private handleClick() {
     if (this.isDisabled) {
@@ -85,8 +76,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
   <template>
     <button
       type='button'
-      class='breadcrumb-item
-        {{if this.isActionable "breadcrumb-item--actionable"}}'
+      class='breadcrumb-item'
       disabled={{this.isDisabled}}
       title={{this.label}}
       data-test-host-mode-breadcrumb={{@cardId}}
@@ -102,7 +92,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         {{/if}}
         <span class='label'>{{this.label}}</span>
       {{else if this.isLoading}}
-        <span class='label label--muted'>
+        <span class='label muted'>
           Loading…
         </span>
       {{else}}
@@ -126,10 +116,6 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         overflow: hidden;
       }
 
-      .breadcrumb-item--actionable {
-        cursor: pointer;
-      }
-
       .breadcrumb-item:focus-visible {
         outline: 1px solid rgba(255, 255, 255, 0.6);
         border-radius: var(--boxel-border-radius-lg);
@@ -151,7 +137,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         text-overflow: ellipsis;
       }
 
-      .label--muted {
+      .muted {
         opacity: 0.7;
         font-weight: 500;
       }
