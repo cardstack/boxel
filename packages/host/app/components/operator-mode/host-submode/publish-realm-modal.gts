@@ -59,7 +59,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked
   private CustomSubdomainAvailability: SubdomainAvailabilityResult | null =
     null;
-  @tracked private CustomSubdomainError: string | null = null;
+  @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
 
   get isRealmPublished() {
@@ -145,13 +145,13 @@ export default class PublishRealmModal extends Component<Signature> {
   get customSubdomainState() {
     return this.CustomSubdomainAvailability?.available
       ? 'valid'
-      : this.CustomSubdomainError
+      : this.customSubdomainError
       ? 'invalid'
       : null;
   }
 
-  get CustomSubdomainErrorMessage() {
-    return this.CustomSubdomainError;
+  get customSubdomainErrorMessage() {
+    return this.customSubdomainError;
   }
 
   get isClaimSiteNameDisabled() {
@@ -232,7 +232,7 @@ export default class PublishRealmModal extends Component<Signature> {
 
   private clearCustomSubdomainFeedback() {
     this.CustomSubdomainAvailability = null;
-    this.CustomSubdomainError = null;
+    this.customSubdomainError = null;
   }
 
   private validateCustomSubdomain(subdomain: string): string | null {
@@ -344,7 +344,7 @@ export default class PublishRealmModal extends Component<Signature> {
     const subdomain = this.CustomSubdomain.trim();
     const validationError = this.validateCustomSubdomain(subdomain);
     if (validationError) {
-      this.CustomSubdomainError = validationError;
+      this.customSubdomainError = validationError;
       this.CustomSubdomainAvailability = null;
       this.setCustomSubdomainSelection(null);
       return;
@@ -362,13 +362,13 @@ export default class PublishRealmModal extends Component<Signature> {
         const publishedUrl = this.buildPublishedRealmUrl(result.hostname);
         this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
       } else {
-        this.CustomSubdomainError =
+        this.customSubdomainError =
           result.error ?? 'This name is already taken';
         this.setCustomSubdomainSelection(null);
       }
     } catch (error) {
       console.error('Failed to check site name availability', error);
-      this.CustomSubdomainError =
+      this.customSubdomainError =
         error instanceof Error
           ? error.message
           : 'Failed to check site name availability';
@@ -544,7 +544,7 @@ export default class PublishRealmModal extends Component<Signature> {
                       @placeholder='custom-name'
                       @value={{this.CustomSubdomain}}
                       @state={{this.customSubdomainState}}
-                      @errorMessage={{this.CustomSubdomainErrorMessage}}
+                      @errorMessage={{this.customSubdomainErrorMessage}}
                       {{on 'input' this.handleCustomSubdomainInput}}
                       class='custom-subdomain-input'
                       spellcheck='false'
