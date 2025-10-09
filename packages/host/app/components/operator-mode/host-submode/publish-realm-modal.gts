@@ -54,7 +54,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked selectedPublishedRealmURLs: string[] = [];
   @tracked private customSubdomainSelection: CustomSubdomainSelection | null =
     null;
-  @tracked private isCustomSubdomainSetupVisible = true;
+  @tracked private isCustomSubdomainSetupVisible = false;
   @tracked private CustomSubdomain = '';
   @tracked
   private CustomSubdomainAvailability: SubdomainAvailabilityResult | null =
