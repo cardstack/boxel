@@ -814,9 +814,6 @@ export default class PublishRealmModal extends Component<Signature> {
         color: var(--boxel-dark);
       }
 
-      .custom-subdomain-row :deep(.container) {
-      }
-
       .custom-subdomain-row {
         display: flex;
         align-items: center;
