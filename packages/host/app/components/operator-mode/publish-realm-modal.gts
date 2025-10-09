@@ -128,10 +128,6 @@ export default class PublishRealmModal extends Component<Signature> {
     return 'custom-name';
   }
 
-  get isCustomSubdomainSelected() {
-    return !!this.customSubdomainSelection;
-  }
-
   get customSubdomainState() {
     return this.customSubdomainAvailability?.available
       ? 'valid'
