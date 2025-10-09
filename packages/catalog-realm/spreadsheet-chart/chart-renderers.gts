@@ -168,19 +168,19 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
               <table class={{this.getChartClasses @chartData.chartType}}>
                 <caption>{{@chartData.title}}</caption>
                 <tbody>
-                  <tr>
-                    {{#each @chartData.data as |item|}}
+
+                  {{#each @chartData.data as |item|}}
+                    <tr>
+                      <th scope='row'>{{item.fullLabel}}</th>
                       <td
                         style={{this.getCSSProps item @chartData.chartType}}
                         title='{{item.fullLabel}}: {{item.value}}'
                       >
                         <span class='data'>{{item.value}}</span>
-                        {{#if item.displayLabel}}
-                          <span class='x-label'>{{item.displayLabel}}</span>
-                        {{/if}}
                       </td>
-                    {{/each}}
-                  </tr>
+                    </tr>
+                  {{/each}}
+
                 </tbody>
               </table>
 
@@ -350,47 +350,8 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
       }
 
       .charts-css.line td {
-        width: 28px;
+        width: 80px;
         position: relative;
-      }
-
-      .x-label {
-        display: block;
-        margin-top: 0.125rem;
-        font-size: 0.6875rem;
-        text-align: center;
-        color: var(--foreground, #374151);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      /* Rotate labels when screen is narrow */
-      @media (max-width: 900px) {
-        .x-label {
-          transform: rotate(-45deg);
-          transform-origin: top left;
-          text-align: left;
-        }
-      }
-
-      .charts-css.line .data {
-        display: block !important;
-        background: rgba(255, 255, 255, 0.95);
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.375rem;
-        border: 1px solid var(--chart-1, #3b82f6);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-        font-size: 0.75rem; /* Larger font */
-        font-weight: 700; /* Bolder weight */
-        color: var(--chart-1, #3b82f6); /* Colored text */
-        position: absolute;
-        top: -2rem; /* Higher position */
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 10;
-        white-space: nowrap; /* Prevent wrapping */
-        min-width: fit-content;
       }
 
       .charts-css tbody th {
@@ -518,7 +479,6 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
           font-size: 0.875rem;
         }
 
-        /* Mobile: Switch to vertical layout for line charts */
         .line-chart-wrapper {
           grid-template-columns: 1fr;
           grid-template-rows: auto 1fr auto;
@@ -539,10 +499,6 @@ export class ChartsRenderer extends GlimmerComponent<Signature> {
         .line-chart-wrapper .primary-axis {
           font-size: 0.75rem;
           padding: 0.125rem 0;
-        }
-
-        .charts-css.line td {
-          width: 26px;
         }
       }
 

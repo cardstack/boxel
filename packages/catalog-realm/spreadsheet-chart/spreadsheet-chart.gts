@@ -454,11 +454,9 @@ export class SpreadsheetChartIsolated extends Component<
     const limited = points.slice(0, topN);
 
     const yVals = limited.map((p) => p.y);
-    const yMin = Math.min(...yVals);
+    const yMin = Math.min(...yVals, 0);
     const yMax = Math.max(...yVals);
     const range = yMax - yMin || 1;
-
-    const labelStep = Math.ceil(limited.length / 10);
 
     const data = limited.map((p, i) => ({
       category: p.x,
@@ -466,7 +464,6 @@ export class SpreadsheetChartIsolated extends Component<
       start: i === 0 ? (p.y - yMin) / range : (limited[i - 1].y - yMin) / range,
       end: (p.y - yMin) / range,
       color: 'var(--chart-1, #3b82f6)',
-      displayLabel: i % labelStep === 0 ? p.x : '',
       fullLabel: p.x,
     }));
 
