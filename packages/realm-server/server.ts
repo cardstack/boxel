@@ -525,6 +525,11 @@ export class RealmServer {
             )}/${owner}/${realmName}/`,
             this.serverURL,
           ).href;
+          let existingRealm = this.realms.find((realm) => realm.url === url);
+          if (existingRealm) {
+            realms.push(existingRealm);
+            continue;
+          }
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = `realm/${owner}_${realmName}`;
           let realm = new Realm({
@@ -644,6 +649,14 @@ export class RealmServer {
             continue;
           }
 
+          let existingRealm = this.realms.find(
+            (realm) => realm.url === publishedRealmUrl,
+          );
+          if (existingRealm) {
+            realms.push(existingRealm);
+            continue;
+          }
+
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = publishedRealmRow.owner_username;
 
@@ -700,11 +713,6 @@ export class RealmServer {
     eventType: string,
     data?: Record<string, any>,
   ) => {
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let legacyRoomId = dmRooms[user];
     let roomId = await fetchSessionRoom(
       this.dbAdapter,
       REALM_SERVER_REALM,
@@ -713,11 +721,6 @@ export class RealmServer {
     if (!roomId) {
       console.error(
         `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
-      );
-    }
-    if (legacyRoomId !== roomId) {
-      console.warn(
-        `Discrepancy between session_rooms table and account data for user ${user}: ${roomId} vs ${legacyRoomId}`,
       );
     }
 

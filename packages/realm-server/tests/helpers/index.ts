@@ -692,19 +692,12 @@ export function setupMatrixRoom(
 
     testAuthRoomId = json.room;
 
-    await matrixClient.setAccountData('boxel.session-rooms', {
-      [userId]: json.room,
-    });
     await upsertSessionRoom(
       realmSetup.dbAdapter,
       realmSetup.testRealm.url,
       userId,
       json.room,
     );
-  });
-
-  hooks.afterEach(async function () {
-    await matrixClient.setAccountData('boxel.session-rooms', {});
   });
 
   return {
@@ -857,10 +850,6 @@ export function setupPermissionedRealm(
     if (!testRealmServer.matrixClient.isLoggedIn()) {
       await testRealmServer.matrixClient.login();
     }
-    await testRealmServer.matrixClient.setAccountData(
-      'boxel.session-rooms',
-      {},
-    );
     await closeServer(testRealmServer.testRealmHttpServer);
     resetCatalogRealms();
   });
