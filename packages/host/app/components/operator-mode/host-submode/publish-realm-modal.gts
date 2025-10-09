@@ -489,7 +489,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 @disabled={{this.isUnpublishingAnyRealms}}
                 {{on 'click' this.handleOpenSite}}
                 class='action'
-                data-test-boxel-space-button
+                data-test-open-boxel-space-button
               >
                 <ExternalLink width='16' height='16' class='button-icon' />
                 Open Site

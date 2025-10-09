@@ -49,7 +49,7 @@ test.describe('Publish realm', () => {
     await page.waitForSelector('[data-test-unpublish-button]');
     await expect(
       page.locator(
-        '[data-test-publish-realm-modal] [data-test-open-site-button]',
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
       ),
     ).toBeVisible();
   }
@@ -77,7 +77,9 @@ test.describe('Publish realm', () => {
     let newTabPromise = page.waitForEvent('popup');
 
     await page
-      .locator('[data-test-publish-realm-modal] [data-test-boxel-space-button]')
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
+      )
       .click();
 
     let newTab = await newTabPromise;
