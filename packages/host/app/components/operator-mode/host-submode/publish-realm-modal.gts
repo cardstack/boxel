@@ -112,7 +112,7 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.selectedPublishedRealmURLs.length > 0;
   }
 
-  get customDomainBase() {
+  get customSubdomainBase() {
     return config.publishedRealmBoxelSiteDomain;
   }
 
@@ -128,18 +128,8 @@ export default class PublishRealmModal extends Component<Signature> {
     return 'custom-name';
   }
 
-  get isCustomDomainSelected() {
+  get isCustomSubdomainSelected() {
     return !!this.customSubdomainSelection;
-  }
-
-  get isCustomDomainCheckboxDisabled() {
-    return !this.customSubdomainSelection?.url || this.isUnpublishingAnyRealms;
-  }
-
-  get CustomSubdomainSuccessMessage() {
-    return this.customSubdomainAvailability?.available
-      ? 'This name is available'
-      : null;
   }
 
   get customSubdomainState() {
@@ -350,7 +340,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
-  toggleCustomDomain(event: Event) {
+  toggleCustomSubdomain(event: Event) {
     const checkbox = event.target as HTMLInputElement;
 
     if (!this.customSubdomainSelection) {
@@ -479,10 +469,10 @@ export default class PublishRealmModal extends Component<Signature> {
             <input
               type='checkbox'
               id='custom-subdomain-checkbox'
-              {{on 'change' this.toggleCustomDomain}}
+              {{on 'change' this.toggleCustomSubdomain}}
               class='domain-checkbox'
               data-test-custom-subdomain-checkbox
-              disabled={{this.isCustomDomainCheckboxDisabled}}
+              disabled={{true}}
             />
             <label class='option-title' for='custom-subdomain-checkbox'>Custom
               Site Name</label>
@@ -523,7 +513,7 @@ export default class PublishRealmModal extends Component<Signature> {
                       <:after as |Accessories|>
                         <Accessories.Text
                           class='custom-domain-suffix'
-                        >.{{this.customDomainBase}}</Accessories.Text>
+                        >.{{this.customSubdomainBase}}</Accessories.Text>
                       </:after>
                     </BoxelInputGroup>
                   </div>
@@ -532,7 +522,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 <div class='custom-subdomain-placeholder'>
                   {{this.customSubdomainDisplay}}<span
                     class='placeholder-top-level'
-                  >.{{this.customDomainBase}}</span>
+                  >.{{this.customSubdomainBase}}</span>
                 </div>
               {{/if}}
             </div>
