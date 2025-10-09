@@ -1,8 +1,9 @@
 import { contains, containsMany, field, Component } from './card-api';
 import StringField from './string';
 import TextAreaField from './text-area';
-import Theme from './theme';
+import StructuredTheme from './structured-theme';
 import UrlField from './url';
+import { type BaseDefComponent } from './card-api';
 
 import { BoxelTag } from '@cardstack/boxel-ui/components';
 
@@ -10,8 +11,8 @@ class Isolated extends Component<typeof StyleReference> {
   <template>
     <article class='style-reference'>
       <header class='style-header'>
-        <h1><@fields.styleName /></h1>
-        <p class='visual-dna'><@fields.visualDNA /></p>
+        <h1><@fields.title /></h1>
+        <p class='visual-dna'><@fields.description /></p>
       </header>
       <section class='inspirations'>
         <h2>Inspirations</h2>
@@ -129,7 +130,7 @@ class Isolated extends Component<typeof StyleReference> {
   </template>
 }
 
-export default class StyleReference extends Theme {
+export default class StyleReference extends StructuredTheme {
   static displayName = 'Style Reference';
 
   @field styleName = contains(StringField);
@@ -139,27 +140,27 @@ export default class StyleReference extends Theme {
 
   @field themeName = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.styleName || 'Untitled Style';
+      return this.title;
     },
   });
 
   @field title = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.styleName || this.themeName || 'Untitled Style';
+      return this.cardInfo?.title ?? this.styleName ?? 'Untitled Style';
     },
   });
 
   @field description = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.visualDNA;
+      return this.cardInfo?.description ?? this.visualDNA;
     },
   });
 
   @field thumbnailURL = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.wallpaperImages?.[0];
+      return this.cardInfo?.thumbnailURL ?? this.wallpaperImages?.[0];
     },
   });
 
-  static isolated = Isolated;
+  static isolated: BaseDefComponent = Isolated;
 }
