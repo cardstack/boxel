@@ -517,10 +517,11 @@ export default class RealmServerService extends Service {
     let url = new URL(`${this.url.href}_check-site-name-availability`);
     url.searchParams.set('subdomain', subdomain);
 
-    let response = await this.network.authedFetch(url.href, {
+    let response = await this.network.fetch(url.href, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
+        Authorization: `Bearer ${this.token}`,
       },
     });
 
