@@ -551,6 +551,8 @@ export default class PublishRealmModal extends Component<Signature> {
       </:footer>
     </ModalContainer>
 
+    {{! this is spuriously triggered because of multi-line grid-template-areas below }}
+    {{! template-lint-disable no-whitespace-for-layout }}
     <style scoped>
       .publish-realm-modal {
         --horizontal-gap: var(--boxel-sp-xs);
