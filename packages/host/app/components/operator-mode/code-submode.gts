@@ -821,6 +821,7 @@ export default class CodeSubmode extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
+        --code-submode-background: #74707d;
         --code-mode-panel-background-color: #ebeaed;
         --code-mode-container-border-radius: 10px;
         --code-mode-realm-icon-size: 1.125rem;
@@ -839,7 +840,7 @@ export default class CodeSubmode extends Component<Signature> {
       .code-mode {
         overflow: auto;
         flex: 1;
-        background-color: #74707d;
+        background-color: var(--code-submode-background);
       }
 
       .columns {
@@ -876,12 +877,14 @@ export default class CodeSubmode extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .code-submode-layout :deep(.top-bar) {
-        background-color: #74707d;
+      .code-submode-layout :deep(.submode-layout-top-bar) {
+        background-color: var(--code-submode-background);
       }
 
       .code-submode-layout
-        :deep(.top-bar .ember-basic-dropdown-content-wormhole-origin) {
+        :deep(
+          .submode-layout-top-bar .ember-basic-dropdown-content-wormhole-origin
+        ) {
         position: absolute;
       }
 
