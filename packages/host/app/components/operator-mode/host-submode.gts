@@ -24,8 +24,8 @@ import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/host-submode/publish-realm-modal';
-import OpenSitePopover from '@cardstack/host/components/operator-mode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
