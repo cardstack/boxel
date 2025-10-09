@@ -830,6 +830,7 @@ export class BoxelSelectOptions extends PowerSelectOptions {
 
       .boxel-select-option-text {
         padding: 1px; /* spacing for 1px card box-shadow border */
+        overflow: hidden;
       }
 
       .boxel-select-option-checkmark-container {
