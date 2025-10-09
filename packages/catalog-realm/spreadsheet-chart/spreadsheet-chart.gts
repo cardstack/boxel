@@ -841,6 +841,8 @@ export class SpreadsheetChartIsolated extends Component<
 }
 
 class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
+  @tracked showAllLinePoints = true;
+
   get headers(): string[] {
     try {
       const csvText = this.args.model?.source?.csvData ?? '';
@@ -857,7 +859,17 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     const v = Number(this.args.model?.topN);
-    this.topNField = Number.isFinite(v) && v > 0 ? String(v) : '10';
+    // If no topN defined → show all for line chart by default
+    this.showAllLinePoints =
+      this.args.model?.chartType === 'line'
+        ? !(Number.isFinite(v) && v > 0)
+        : false; // non-line charts keep explicit limit input
+    this.topNField =
+      Number.isFinite(v) && v > 0
+        ? String(v)
+        : this.showAllLinePoints
+        ? ''
+        : '10';
   }
 
   get chartTypeOptions() {
@@ -1004,14 +1016,21 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
   commitTopN = () => {
     if (!this.args.model) return;
 
+    // If user explicitly wants all points for line charts
+    if (this.args.model.chartType === 'line' && this.showAllLinePoints) {
+      this.args.model.topN = null as any;
+      this.topNField = '';
+      return;
+    }
+
     const n = Number(this.topNField);
     if (!Number.isFinite(n) || this.topNField === '') {
-      this.args.model.topN = 10 as any;
+      this.args.model.topN = 10;
       this.topNField = '10';
       return;
     }
     const clamped = Math.max(1, Math.min(50, Math.floor(n)));
-    this.args.model.topN = clamped as any;
+    this.args.model.topN = clamped;
     this.topNField = String(clamped);
   };
 
@@ -1043,6 +1062,23 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
   updateYHeader = (option: any) => {
     if (this.args.model) {
       this.args.model.yHeader = option?.key || '';
+    }
+  };
+
+  toggleShowAllLinePoints = (e: Event) => {
+    if (!this.args.model) return;
+    this.showAllLinePoints = (e.target as HTMLInputElement)?.checked ?? false;
+
+    if (this.args.model.chartType === 'line') {
+      if (this.showAllLinePoints) {
+        this.args.model.topN = null as any;
+        this.topNField = '';
+      } else {
+        const v = Number(this.args.model.topN);
+        const fallback = Number.isFinite(v) && v > 0 ? String(v) : '10';
+        this.topNField = fallback;
+        this.commitTopN();
+      }
     }
   };
 
@@ -1139,6 +1175,36 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
             </div>
           </BoxelSelect>
         </FieldContainer>
+        <FieldContainer @label='Show all data points (Line)'>
+          <label class='toggle-row'>
+            <input
+              type='checkbox'
+              checked={{this.showAllLinePoints}}
+              {{on 'change' this.toggleShowAllLinePoints}}
+            />
+            <span>Show all data points</span>
+          </label>
+          <div class='field-help'>When enabled, all rows are plotted. Disable to
+            limit the number of points.</div>
+        </FieldContainer>
+        <FieldContainer @label='Maximum Items'>
+          <label class='sr-only' for='topN'>Maximum Items to Display</label>
+          {{#if this.showAllLinePoints}}
+            <div class='field-help'>Showing all points. Uncheck the toggle above
+              to limit.</div>
+          {{else}}
+            <input
+              id='topN'
+              type='number'
+              min='1'
+              max='50'
+              value={{this.topNField}}
+              placeholder='10'
+              {{on 'input' this.updateTopN}}
+              {{on 'blur' this.commitTopN}}
+            />
+          {{/if}}
+        </FieldContainer>
       {{else}}
         <FieldContainer @label='Value Column (Optional)'>
           <BoxelSelect
@@ -1156,20 +1222,6 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
           </BoxelSelect>
         </FieldContainer>
       {{/if}}
-
-      <FieldContainer @label='Maximum Items'>
-        <label class='sr-only' for='topN'>Maximum Items to Display</label>
-        <input
-          id='topN'
-          type='number'
-          min='1'
-          max='50'
-          value={{this.topNField}}
-          placeholder='10'
-          {{on 'input' this.updateTopN}}
-          {{on 'blur' this.commitTopN}}
-        />
-      </FieldContainer>
     </div>
 
     <style scoped>
@@ -1204,6 +1256,13 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
         line-height: 1.4;
         font-style: italic;
         margin-top: 0.5rem;
+      }
+
+      .toggle-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        user-select: none;
       }
 
       .sr-only {
