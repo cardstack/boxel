@@ -42,6 +42,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @tracked isPublishingRealmPopoverOpen = false;
   @tracked isOpenSitePopoverOpen = false;
 
+  get currentCardId() {
+    return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
+  }
+
   get cardIds() {
     return this.operatorModeStateService.state.trail.map((card) =>
       card.replace('.json', ''),
