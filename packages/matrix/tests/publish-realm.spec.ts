@@ -67,7 +67,7 @@ test.describe('Publish realm', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can publish a realm', async ({ page }) => {
+  test('it can publish a realm to a subdirectory', async ({ page }) => {
     await publishDefaultRealm(page);
 
     let newTabPromise = page.waitForEvent('popup');
