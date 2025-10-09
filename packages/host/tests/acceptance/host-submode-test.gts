@@ -1,4 +1,4 @@
-import { click, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, triggerEvent, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
@@ -467,6 +467,15 @@ module('Acceptance | host submode', function (hooks) {
           assert.strictEqual(target, '_blank', 'Open in a new tab');
           return null;
         };
+
+        await triggerEvent('[data-test-open-site-button]', 'mouseenter');
+        await waitFor('[data-test-tooltip-content]');
+        assert
+          .dom('[data-test-tooltip-content]')
+          .hasText(
+            'Open Site in a New Tab (Shift+Click for options)',
+            'Tooltip shows correct text when menu is closed',
+          );
         await click('[data-test-open-site-button]');
         window.open = originalWindowOpen;
 

@@ -14,7 +14,11 @@ import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 
-import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  CardContainer,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import { meta } from '@cardstack/runtime-common/constants';
@@ -222,6 +226,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
           />
         </div>
         {{#if this.hasPublishedSites}}
+
           <div
             class='open-site-button-container'
             {{onClickOutside
@@ -229,16 +234,23 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               exceptSelector='.open-site-button'
             }}
           >
-            <BoxelButton
-              @kind='secondary'
-              @size='tall'
-              class='open-site-button'
-              {{on 'click' this.handleOpenSiteButtonClick}}
-              data-test-open-site-button
-            >
-              <Globe width='22' height='22' class='globe-icon' />
-              Open Site
-            </BoxelButton>
+            <Tooltip class='open-site-tooltip'>
+              <:trigger>
+                <BoxelButton
+                  @kind='secondary'
+                  @size='tall'
+                  class='open-site-button'
+                  {{on 'click' this.handleOpenSiteButtonClick}}
+                  data-test-open-site-button
+                >
+                  <Globe width='22' height='22' class='globe-icon' />
+                  Open Site
+                </BoxelButton>
+              </:trigger>
+              <:content>
+                Open Site in a New Tab (Shift+Click for options)
+              </:content>
+            </Tooltip>
             <OpenSitePopover @isOpen={{this.isOpenSitePopoverOpen}} />
           </div>
         {{/if}}

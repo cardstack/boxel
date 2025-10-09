@@ -42,6 +42,7 @@ test.describe('Publish realm', () => {
     await page.locator('[data-test-default-domain-checkbox]').click();
     await page.locator('[data-test-publish-button]').click();
 
+    await page.waitForSelector('[data-test-unpublish-button]');
     await expect(
       page.locator(
         '[data-test-publish-realm-modal] [data-test-open-site-button]',
@@ -90,13 +91,14 @@ test.describe('Publish realm', () => {
 
     let newTabPromise = page.waitForEvent('popup');
 
+    await page.locator('[data-test-close-modal]').click();
     await page.locator('[data-test-open-site-button]').click();
 
     let newTab = await newTabPromise;
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/',
+      'http://user1.localhost:4205/new-workspace/index',
     );
     await newTab.close();
     await page.bringToFront();
@@ -126,7 +128,7 @@ test.describe('Publish realm', () => {
     await newTab1.waitForLoadState();
 
     await expect(newTab1).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/',
+      'http://user1.localhost:4205/new-workspace/index',
     );
     await newTab1.close();
     await page.bringToFront();
