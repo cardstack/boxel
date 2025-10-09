@@ -83,9 +83,9 @@ export class PolaroidScatter extends Component<PolaroidScatterSignature> {
     <style scoped>
       .polaroids-container {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 2rem;
-        padding: 0.5rem;
+        padding: 1rem;
       }
 
       .polaroid {
