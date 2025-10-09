@@ -592,18 +592,6 @@ export default class PublishRealmModal extends Component<Signature> {
         border-bottom: 1px solid var(--boxel-200);
       }
 
-      .domain-option-headxer {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .domain-header {
-        display: flex;
-        align-items: center;
-        margin-bottom: var(--boxel-sp-md);
-      }
-
       .cancel {
         grid-area: cancel;
       }
@@ -752,11 +740,6 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .custom-subdomain-row :deep(.container) {
         width: 100%;
-      }
-
-      .custom-subdomain-input:focus {
-        outline: none;
-        border-color: var(--boxel-600);
       }
 
       .custom-domain-suffix {
