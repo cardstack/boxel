@@ -19,6 +19,9 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
+import ModalContainer from '@cardstack/host/components/modal-container';
+import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
+
 import config from '@cardstack/host/config/environment';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -26,9 +29,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type { SubdomainAvailabilityResult } from '@cardstack/host/services/realm-server';
-
-import ModalContainer from '@cardstack/host/components/modal-container';
-import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 type CustomSubdomainSelection = {
   url: string;
