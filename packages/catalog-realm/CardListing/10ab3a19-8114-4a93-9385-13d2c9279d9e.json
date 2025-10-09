@@ -8,17 +8,17 @@
     },
     "type": "card",
     "attributes": {
-      "name": "3D Product Rotator",
+      "name": "Product Rotator",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/3d-product-rotator-listing/screenshot_01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/3d-product-rotator-listing/screenshot_02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/product-rotator-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/product-rotator-listing/screenshot_02.png"
       ],
-      "summary": "A customizable 3D product rotator app that allows users to upload images, describe products, and generate interactive 360° views with drag-and-rotate functionality, enhancing product presentation and visualization.",
+      "summary": "A customizable product rotator app that allows users to upload images, describe products, and generate interactive 360° views with drag-and-rotate functionality, enhancing product presentation and visualization.",
       "cardInfo": {
         "notes": null,
-        "title": "3D Product Rotator",
-        "description": "A customizable 3D product rotator app that allows users to upload images, describe products, and generate interactive 360° views with drag-and-rotate functionality, enhancing product presentation and visualization.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/3d-product-rotator-listing/thumbnail.png"
+        "title": "Product Rotator",
+        "description": "A customizable product rotator app that allows users to upload images, describe products, and generate interactive 360° views with drag-and-rotate functionality, enhancing product presentation and visualization.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/product-rotator-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -42,19 +42,14 @@
           "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
         }
       },
-      "license": {
-        "links": {
-          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
-        }
-      },
       "specs.0": {
         "links": {
-          "self": "../Spec/941baaa9-28ff-41d3-89f6-24fbd39e736c"
+          "self": "../Spec/5c962014-06cc-4cce-bf21-09e6e4387626"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/41941baa-a928-4fb1-93c9-f624fbd39e73"
+          "self": "../Spec/96201406-cc5c-4eff-a109-e6e4387626f7"
         }
       },
       "specs.2": {
@@ -69,37 +64,42 @@
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/28ffb1d3-c9f6-44fb-939e-736c0d7f5a01"
+          "self": "../Spec/0fa0bb69-4d39-4bea-b46f-2b184fecfd3c"
         }
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/a928ffb1-d3c9-4624-bbd3-9e736c0d7f5a"
+          "self": "../Spec/06cc5cce-ff21-49e6-a438-7626f71e5b3c"
         }
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/ffb1d3c9-f624-4bd3-9e73-6c0d7f5a016d"
+          "self": "../Spec/48a563be-eac1-4550-8c21-d9ea0f16ee22"
         }
       },
       "specs.7": {
         "links": {
-          "self": "../Spec/b1d3c9f6-24fb-439e-b36c-0d7f5a016d2f"
+          "self": "../Spec/ceff2109-e6e4-4876-a6f7-1e5b3cbdb165"
         }
       },
       "specs.8": {
         "links": {
-          "self": "../Spec/c9f624fb-d39e-436c-8d7f-5a016d2f6ded"
+          "self": "../Spec/e80009b7-c737-4933-87c1-3ab3347782b9"
         }
       },
       "specs.9": {
         "links": {
-          "self": "../Spec/fbd39e73-6c0d-4f5a-816d-2f6ded81e104"
+          "self": "../Spec/2109e6e4-3876-46f7-9e5b-3cbdb1653e87"
         }
       },
       "specs.10": {
         "links": {
-          "self": "../Spec/d3c9f624-fbd3-4e73-ac0d-7f5a016d2f6d"
+          "self": "../Spec/09e6e438-7626-471e-9b3c-bdb1653e8778"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
         }
       },
       "publisher": {

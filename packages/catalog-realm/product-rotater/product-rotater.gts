@@ -435,7 +435,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
   <template>
     <main class='rotator-app'>
       <header class='rotator-app__header'>
-        <h1>🔄 3D Product Rotator</h1>
+        <h1>🔄 Product Rotator</h1>
         <p>
           Upload product reference shots and describe the item to generate a
           full 360° rotation sequence.
@@ -537,12 +537,12 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
 }
 
 export class ProductRotator extends CardDef {
-  static displayName = '3D Product Rotator';
+  static displayName = 'Product Rotator';
   static icon = PackageIcon;
 
   @field title = contains(StringField, {
     computeVia: function (this: ProductRotator) {
-      return '3D Product Rotator';
+      return 'Product Rotator';
     },
   });
 

@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../3d-product-rotater/modifiers/drag-rotate",
-        "name": "default"
+        "module": "../product-rotater/components/product-rotation-image",
+        "name": "ProductRotationImage"
       },
-      "specType": null,
+      "specType": "card",
       "containedExamples": [],
-      "title": "default",
+      "title": "ProductRotationImage",
       "description": null,
       "cardInfo": {
         "title": null,

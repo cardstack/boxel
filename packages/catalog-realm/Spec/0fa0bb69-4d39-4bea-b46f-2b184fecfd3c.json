@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../3d-product-rotater/3d-product-rotater",
-        "name": "ProductRotatorIsolated"
+        "module": "../product-rotater/components/product-catalog",
+        "name": "ProductCatalog"
       },
-      "specType": "component",
+      "specType": "card",
       "containedExamples": [],
-      "title": "ProductRotatorIsolated",
+      "title": "ProductCatalog",
       "description": null,
       "cardInfo": {
         "title": null,
