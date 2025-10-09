@@ -77,7 +77,7 @@ test.describe('Publish realm', () => {
     let newTabPromise = page.waitForEvent('popup');
 
     await page
-      .locator('[data-test-publish-realm-modal] [data-test-open-site-button]')
+      .locator('[data-test-publish-realm-modal] [data-test-boxel-space-button]')
       .click();
 
     let newTab = await newTabPromise;
