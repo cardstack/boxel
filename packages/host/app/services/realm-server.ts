@@ -35,7 +35,7 @@ export interface RealmServerTokenClaims {
   sessionRoom: string;
 }
 
-export interface SiteNameAvailabilityResult {
+export interface SubdomainAvailabilityResult {
   available: boolean;
   hostname: string;
   error?: string;
@@ -511,7 +511,7 @@ export default class RealmServerService extends Service {
 
   async checkSiteNameAvailability(
     subdomain: string,
-  ): Promise<SiteNameAvailabilityResult> {
+  ): Promise<SubdomainAvailabilityResult> {
     await this.login();
 
     const url = new URL(`${this.url.href}_check-site-name-availability`);
@@ -532,7 +532,7 @@ export default class RealmServerService extends Service {
       );
     }
 
-    return (await response.json()) as SiteNameAvailabilityResult;
+    return (await response.json()) as SubdomainAvailabilityResult;
   }
 
   async unpublishRealm(publishedRealmURL: string) {

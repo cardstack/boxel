@@ -12,12 +12,12 @@ import Component from '@glimmer/component';
 import { module, test } from 'qunit';
 
 import PublishRealmModal from '@cardstack/host/components/operator-mode/host-submode/publish-realm-modal';
-import type { SiteNameAvailabilityResult } from '@cardstack/host/services/realm-server';
+import type { SubdomainAvailabilityResult } from '@cardstack/host/services/realm-server';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
 type TestContext = RenderingTestContext & {
-  siteNameResult?: SiteNameAvailabilityResult;
+  siteNameResult?: SubdomainAvailabilityResult;
   lastCheckedSubdomain?: string;
   publishedUrls?: string[];
 };
@@ -63,7 +63,7 @@ module(
           return {
             available: true,
             hostname: `${subdomain}.boxel.dev.localhost`,
-          } satisfies SiteNameAvailabilityResult;
+          } satisfies SubdomainAvailabilityResult;
         }
       }
 
