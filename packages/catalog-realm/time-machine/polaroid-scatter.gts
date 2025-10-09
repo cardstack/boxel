@@ -22,11 +22,11 @@ export class PolaroidScatter extends Component<PolaroidScatterSignature> {
   }
 
   hasBase64(image?: PolaroidImage) {
-    return Boolean(image?.image?.data?.base64);
+    return Boolean(image?.data?.base64);
   }
 
   base64For(image: PolaroidImage) {
-    return image.image?.data?.base64 ?? '';
+    return image.data?.base64 ?? '';
   }
 
   get loadingSet() {
@@ -82,20 +82,9 @@ export class PolaroidScatter extends Component<PolaroidScatterSignature> {
     <style scoped>
       .polaroids-container {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 2rem;
-      }
-      @media (max-width: 900px) {
-        .polaroids-container {
-          grid-template-columns: repeat(2, 1fr);
-          gap: 1.2rem;
-        }
-      }
-      @media (max-width: 600px) {
-        .polaroids-container {
-          grid-template-columns: 1fr;
-          gap: 0.7rem;
-        }
+        padding: 0.5rem;
       }
 
       .polaroid {
@@ -111,11 +100,6 @@ export class PolaroidScatter extends Component<PolaroidScatterSignature> {
         transform: rotate(calc(var(--rotation, 0deg)));
         transition: transform 0.3s ease;
         cursor: default;
-        width: 100%;
-        min-width: unset;
-        max-width: unset;
-        min-height: 260px;
-        max-height: 480px;
       }
 
       .polaroid:nth-child(even) {

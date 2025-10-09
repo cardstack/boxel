@@ -14,7 +14,6 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import Base64ImageField from 'https://cardstack.com/base/base64-image';
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
-import { ImageCard } from '../image-card';
 import { PolaroidImage } from './polaroid-image';
 import { GenerateImageCommand } from '../commands/generate-image-command';
 import { ImageUploadSection } from './image-upload-section';
@@ -113,25 +112,16 @@ async function generateImage({
     return polaroid;
   }
 
-  let imageCard = new ImageCard({
-    data: new Base64ImageField({
-      base64: result.imageBase64,
-      altText: `Generated portrait for the ${normalizedPeriod}`,
-      size: 'contain',
-      height: 512,
-      width: 512,
-    }),
+  let imageData = new Base64ImageField({
+    base64: result.imageBase64,
+    altText: `Generated portrait for the ${normalizedPeriod}`,
+    size: 'contain',
+    height: 512,
+    width: 512,
   });
 
-  imageCard = await persistAndHydrate(
-    imageCard,
-    commandContext,
-    realmHref,
-    context,
-  );
-
   if (polaroid) {
-    polaroid.image = imageCard;
+    polaroid.data = imageData;
     polaroid.caption = normalizedPeriod;
 
     return persistAndHydrate(polaroid, commandContext, realmHref, context);
@@ -139,7 +129,7 @@ async function generateImage({
 
   let newPolaroid = new PolaroidImage({
     caption: normalizedPeriod,
-    image: imageCard,
+    data: imageData,
   });
 
   return persistAndHydrate(newPolaroid, commandContext, realmHref, context);
@@ -212,7 +202,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
 
   get lightboxItems(): LightboxItem[] {
     return this.polaroidImages
-      .filter((image) => Boolean(image?.image?.data?.base64))
+      .filter((image) => Boolean(image?.data?.base64))
       .map((image) => ({
         card: image,
         component: image.constructor.getComponent(image),
@@ -359,7 +349,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
 
   @action
   handlePolaroidSelect(image: PolaroidImage) {
-    if (!image?.image?.data?.base64) {
+    if (!image?.data?.base64) {
       return;
     }
     let items = this.lightboxItems;
@@ -400,7 +390,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
     return (
       Array.isArray(this.args.model?.generatedImages) &&
       this.args.model.generatedImages.length > 0 &&
-      this.args.model.generatedImages.some((img) => img?.image?.data?.base64)
+      this.args.model.generatedImages.some((img) => img?.data?.base64)
     );
   }
 
@@ -419,7 +409,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
       );
     }
     let polaroids = (model.generatedImages ?? []).filter(
-      (img) => img?.image?.data?.base64,
+      (img) => img?.data?.base64,
     );
 
     this.isExporting = true;
