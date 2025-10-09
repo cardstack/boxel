@@ -773,21 +773,6 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .custom-domain-suffix {
         color: var(--boxel-450);
-        font-size: var(--boxel-font-size-sm);
-        white-space: nowrap;
-      }
-
-      .custom-subdomain-feedback {
-        font-size: var(--boxel-font-size-xs);
-        padding-left: calc(var(--boxel-sp-xs) + var(--boxel-sp-sm));
-      }
-
-      .custom-subdomain-feedback--success {
-        color: #00ac00;
-      }
-
-      .custom-subdomain-feedback--error {
-        color: var(--boxel-danger);
       }
 
       .custom-subdomain-cancel {
