@@ -37,7 +37,7 @@ export interface RealmServerTokenClaims {
 
 export interface SubdomainAvailabilityResult {
   available: boolean;
-  hostname: string;
+  domain: string;
   error?: string;
 }
 

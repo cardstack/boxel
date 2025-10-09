@@ -288,7 +288,7 @@ export default class PublishRealmModal extends Component<Signature> {
       this.customSubdomainAvailability = result;
 
       if (result.available) {
-        const publishedUrl = this.buildPublishedRealmUrl(result.hostname);
+        const publishedUrl = this.buildPublishedRealmUrl(result.domain);
         this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
       } else {
         this.customSubdomainError =
