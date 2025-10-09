@@ -308,20 +308,6 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
-  toggleCustomSubdomain(event: Event) {
-    let checkbox = event.target as HTMLInputElement;
-
-    if (!this.customSubdomainSelection) {
-      checkbox.checked = false;
-      return;
-    }
-
-    if (!checkbox.checked) {
-      this.setCustomSubdomainSelection(null);
-    }
-  }
-
-  @action
   handleOpenSite() {
     window.open(this.generatedUrl, '_blank');
   }
@@ -437,7 +423,6 @@ export default class PublishRealmModal extends Component<Signature> {
             <input
               type='checkbox'
               id='custom-subdomain-checkbox'
-              {{on 'change' this.toggleCustomSubdomain}}
               class='domain-checkbox'
               data-test-custom-subdomain-checkbox
               disabled={{true}}
