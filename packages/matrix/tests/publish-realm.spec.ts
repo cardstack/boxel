@@ -118,19 +118,19 @@ test.describe('Publish realm', () => {
 
     await expect(page.locator('[data-test-open-site-popover]')).toBeVisible();
 
-    let newTabPromise1 = page.waitForEvent('popup');
+    newTabPromise = page.waitForEvent('popup');
 
     await page
       .locator('[data-test-open-site-popover] [data-test-open-site-button]')
       .click();
 
-    let newTab1 = await newTabPromise1;
-    await newTab1.waitForLoadState();
+    newTab = await newTabPromise;
+    await newTab.waitForLoadState();
 
-    await expect(newTab1).toHaveURL(
+    await expect(newTab).toHaveURL(
       'http://user1.localhost:4205/new-workspace/index',
     );
-    await newTab1.close();
+    await newTab.close();
     await page.bringToFront();
   });
 });
