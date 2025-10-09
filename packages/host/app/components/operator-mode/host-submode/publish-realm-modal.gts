@@ -231,25 +231,6 @@ export default class PublishRealmModal extends Component<Signature> {
     this.customSubdomainError = null;
   }
 
-  private validateCustomSubdomain(subdomain: string): string | null {
-    if (!subdomain) {
-      return 'Subdomain is required';
-    }
-    if (!/^[a-z0-9-]+$/.test(subdomain)) {
-      return 'Subdomain can only contain lowercase letters, numbers, and hyphens';
-    }
-    if (subdomain.startsWith('-') || subdomain.endsWith('-')) {
-      return 'Subdomain cannot start or end with a hyphen';
-    }
-    if (subdomain.length < 2) {
-      return 'Subdomain must be at least 2 characters long';
-    }
-    if (subdomain.length > 63) {
-      return 'Subdomain cannot be longer than 63 characters';
-    }
-    return null;
-  }
-
   private setCustomSubdomainSelection(
     selection: CustomSubdomainSelection | null,
   ) {
@@ -337,14 +318,7 @@ export default class PublishRealmModal extends Component<Signature> {
   async handleClaimCustomSubdomain(event: Event) {
     event.preventDefault();
 
-    const subdomain = this.customSubdomain.trim();
-    const validationError = this.validateCustomSubdomain(subdomain);
-    if (validationError) {
-      this.customSubdomainError = validationError;
-      this.customSubdomainAvailability = null;
-      this.setCustomSubdomainSelection(null);
-      return;
-    }
+    const subdomain = this.customSubdomain;
 
     this.isCheckingCustomSubdomain = true;
     this.clearCustomSubdomainFeedback();
