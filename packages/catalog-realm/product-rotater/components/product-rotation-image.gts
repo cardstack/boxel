@@ -28,6 +28,7 @@ class ProductRotationImageEmbedded extends Component<
         height: 100%;
         aspect-ratio: 1 / 1;
         display: block;
+        object-fit: contain;
       }
     </style>
   </template>
@@ -47,6 +48,13 @@ export class ProductRotationImage extends ImageCard {
     },
   });
 
+  @field thumbnailURL = contains(StringField, {
+    computeVia: function (this: ProductRotationImage) {
+      return this.data?.base64 ?? '';
+    },
+  });
+
   static isolated = ProductRotationImageEmbedded;
   static embedded = ProductRotationImageEmbedded;
+  static fitted = ProductRotationImageEmbedded;
 }
