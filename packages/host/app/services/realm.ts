@@ -206,8 +206,8 @@ class RealmResource {
         new URL(this.realmURL),
       );
       this.token = token;
-    } catch (e) {
-      console.error('Failed to login to realm', e);
+    } catch (e: any) {
+      console.error(`RealmService - Failed to login to realm: ${e.message}`, e);
       this.token = undefined;
     } finally {
       this.loggingIn = undefined;
@@ -348,7 +348,7 @@ class RealmResource {
   );
 
   private tokenRefresher = restartableTask(async () => {
-    if (!this.claims) {
+    if ((globalThis as any).__boxelRenderContext || !this.claims) {
       return;
     }
 

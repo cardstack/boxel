@@ -9,6 +9,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import {
   formattedError,
   CardError,
+  SupportedMimeType,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
@@ -79,7 +80,7 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderContext = true;
   }
 
-  async model({ id }: { id: string }) {
+  async model({ id, nonce: _nonce }: { id: string; nonce: string }) {
     // Make it easy for Puppeteer to do regular Ember transitions
     (globalThis as any).boxelTransitionTo = (
       ...args: Parameters<RouterService['transitionTo']>
@@ -95,7 +96,7 @@ export default class RenderRoute extends Route<Model> {
     let response = await this.network.authedFetch(id, {
       method: 'GET',
       headers: {
-        Accept: 'application/vnd.card+source',
+        Accept: SupportedMimeType.CardSource,
       },
     });
 

@@ -420,8 +420,11 @@ export default class RealmServerService extends Service {
       );
       let token = await realmAuthClient.getJWT();
       this.token = token;
-    } catch (e) {
-      console.error('Failed to login to realm', e);
+    } catch (e: any) {
+      console.error(
+        `RealmServerService - failed to login to realm: ${e.message}`,
+        e,
+      );
       this.token = undefined;
     } finally {
       this.loggingIn = undefined;
