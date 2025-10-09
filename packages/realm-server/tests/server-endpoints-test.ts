@@ -1689,7 +1689,7 @@ module(basename(__filename), function () {
                 type: 'claimed-domain',
                 attributes: {
                   source_realm_url: 'https://test-realm.com',
-                  hostname: 'test-site.boxel.site',
+                  hostname: 'test-site.localhost',
                 },
               },
             });
@@ -1707,7 +1707,7 @@ module(basename(__filename), function () {
                 type: 'claimed-domain',
                 attributes: {
                   source_realm_url: 'https://test-realm.com',
-                  hostname: 'test-site.boxel.site',
+                  hostname: 'test-site.localhost',
                 },
               },
             });
@@ -1717,6 +1717,10 @@ module(basename(__filename), function () {
 
         test('POST /_claim-boxel-site-hostname with valid JWT returns 201', async function (assert) {
           let ownerUserId = '@mango:localhost';
+
+          // Create user in database
+          await insertUser(dbAdapter, ownerUserId, '', '');
+
           let response = await request2
             .post('/_claim-boxel-site-hostname')
             .set('Accept', 'application/json')
@@ -1732,7 +1736,7 @@ module(basename(__filename), function () {
                 type: 'claimed-domain',
                 attributes: {
                   source_realm_url: 'https://test-realm.com',
-                  hostname: 'valid-site.boxel.site',
+                  hostname: 'valid-site.localhost',
                 },
               },
             });
