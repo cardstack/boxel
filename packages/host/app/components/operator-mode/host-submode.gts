@@ -17,7 +17,7 @@ import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
-import PublishRealmModal from '@cardstack/host/components/operator-mode/host-submode/publish-realm-modal';
+import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
