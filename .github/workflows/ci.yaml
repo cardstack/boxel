@@ -397,6 +397,7 @@ jobs:
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",
             "publish-unpublish-realm-test.ts",
+            "get-boxel-site-hostname-test.ts",
           ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
