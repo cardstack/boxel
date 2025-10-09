@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
+import Settings from '@cardstack/boxel-icons/settings';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import { formatDistanceToNow } from 'date-fns';
@@ -478,24 +479,20 @@ export default class PublishRealmModal extends Component<Signature> {
                   </div>
                 {{/if}}
               </div>
-              {{#if this.isRealmPublished}}
-                <BoxelButton
-                  @kind='secondary-light'
-                  @size='small'
-                  @disabled={{this.isUnpublishingAnyRealms}}
-                  {{on 'click' this.handleOpenSite}}
-                  class='open-site-button action'
-                  data-test-open-site-button
-                >
-                  <ExternalLink
-                    width='16'
-                    height='16'
-                    class='external-link-icon'
-                  />
-                  Open Site
-                </BoxelButton>
-              {{/if}}
             </div>
+            {{#if this.isRealmPublished}}
+              <BoxelButton
+                @kind='secondary-light'
+                @size='small'
+                @disabled={{this.isUnpublishingAnyRealms}}
+                {{on 'click' this.handleOpenSite}}
+                class='action'
+                data-test-open-site-button
+              >
+                <ExternalLink width='16' height='16' class='button-icon' />
+                Open Site
+              </BoxelButton>
+            {{/if}}
           </div>
 
           <div class='domain-option'>
@@ -581,10 +578,11 @@ export default class PublishRealmModal extends Component<Signature> {
               <BoxelButton
                 @kind='secondary-light'
                 @size='small'
-                class='custom-subdomain-setup-button action'
+                class='action'
                 {{on 'click' this.openCustomSiteNameSetup}}
                 data-test-custom-subdomain-setup-button
               >
+                <Settings width='16' height='16' class='button-icon' />
                 Set Up
               </BoxelButton>
             {{/if}}
@@ -775,9 +773,6 @@ export default class PublishRealmModal extends Component<Signature> {
         grid-area: action;
 
         margin: auto 0;
-      }
-
-      .open-site-button {
         flex-shrink: 0;
         margin-left: auto;
         display: flex;
@@ -786,7 +781,7 @@ export default class PublishRealmModal extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
       }
 
-      .external-link-icon {
+      .button-icon {
         flex-shrink: 0;
       }
 
@@ -813,6 +808,9 @@ export default class PublishRealmModal extends Component<Signature> {
         color: var(--boxel-dark);
       }
 
+      .custom-subdomain-row :deep(.container) {
+      }
+
       .custom-subdomain-row {
         display: flex;
         align-items: center;
@@ -821,8 +819,6 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .custom-subdomain-input {
         flex: 1;
-        padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
         border: 1px solid var(--boxel-200);
         font: normal var(--boxel-font);
       }
