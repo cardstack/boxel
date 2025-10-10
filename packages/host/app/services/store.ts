@@ -61,6 +61,7 @@ import { type CardSaveSubscriber } from './card-service';
 import EnvironmentService from './environment-service';
 
 import type CardService from './card-service';
+import type HostModeService from './host-mode-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -81,6 +82,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
+  @service declare private hostModeService: HostModeService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
@@ -1161,6 +1163,10 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private subscribeToRealm(url: URL) {
+    if (this.hostModeService.isActive) {
+      return;
+    }
+
     let realmURL = this.realm.realmOfURL(url);
     if (!realmURL) {
       console.warn(
