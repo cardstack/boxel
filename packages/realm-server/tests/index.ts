@@ -33,3 +33,4 @@ import './types-endpoint-test';
 import './virtual-network-test';
 import './request-forward-test';
 import './publish-unpublish-realm-test';
+import './claim-boxel-site-hostname-test';

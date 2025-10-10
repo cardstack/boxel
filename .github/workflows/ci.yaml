@@ -392,6 +392,7 @@ jobs:
             "realm-endpoints-test.ts",
             "search-prerendered-test.ts",
             "site-name-availability-test.ts",
+            "claim-boxel-site-hostname-test.ts",
             "types-endpoint-test.ts",
             "server-endpoints-test.ts",
             "virtual-network-test.ts",

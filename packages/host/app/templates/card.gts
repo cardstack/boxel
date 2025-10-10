@@ -1,3 +1,4 @@
+import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
@@ -12,8 +13,6 @@ import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 import window from 'ember-window-mock';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
-
 import {
   type CardErrorJSONAPI,
   GetCardContextName,
@@ -25,7 +24,7 @@ import {
 } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
-import CardRenderer from '@cardstack/host/components/card-renderer';
+import HostModeContent from '@cardstack/host/components/host-mode/content';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import config from '@cardstack/host/config/environment';
@@ -37,6 +36,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
+import HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -44,12 +44,13 @@ import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 export interface HostModeComponentSignature {
   Args: {
-    model: CardDef | CardErrorJSONAPI;
+    model: CardDef | CardErrorJSONAPI | undefined;
   };
 }
 
 export class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare commandService: CommandService;
+  @service private declare hostModeStateService: HostModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare router: RouterService;
   @service private declare store: StoreService;
@@ -81,28 +82,32 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   get isError() {
-    return isCardErrorJSONAPI(this.args.model);
+    return this.args.model ? isCardErrorJSONAPI(this.args.model) : false;
   }
 
   get card() {
+    if (this.isError) {
+      return undefined;
+    }
+
     return this.args.model as CardDef;
   }
 
   get title() {
     if (this.isError) {
-      return `Card not found: ${this.args.model.id}`;
+      return `Card not found: ${this.args.model?.id}`;
     }
 
-    return this.args.model.title;
+    return this.card?.title ?? '';
   }
 
   get backgroundImageStyle() {
-    let backgroundImageUrl = this.card[meta]?.realmInfo?.backgroundURL;
+    let backgroundImageUrl = this.card?.[meta]?.realmInfo?.backgroundURL;
 
     if (backgroundImageUrl) {
       return htmlSafe(`background-image: url(${backgroundImageUrl});`);
     }
-    return false;
+    return htmlSafe('');
   }
 
   get hostModeContainerClass() {
@@ -111,11 +116,29 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     }
 
     // Check if the card prefers wide format
-    if ((this.card.constructor as typeof CardDef).prefersWideFormat) {
+    if (
+      this.card &&
+      (this.card.constructor as typeof CardDef).prefersWideFormat
+    ) {
       return 'host-mode-container is-wide';
     }
 
     return 'host-mode-container';
+  }
+
+  get cardIds() {
+    let ids = this.hostModeStateService.hostModeCardIds;
+
+    if (ids.length === 0 && this.card?.id) {
+      return [this.card.id];
+    }
+
+    return ids;
+  }
+
+  @action
+  closeCard(cardId: string) {
+    this.hostModeStateService.closeCard(cardId);
   }
 
   @provide(CardContextName)
@@ -197,14 +220,11 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
           style={{this.backgroundImageStyle}}
           data-test-host-mode-container
         >
-          <CardContainer class='card'>
-            <CardRenderer
-              class='stack-item-preview'
-              @card={{this.card}}
-              @format='isolated'
-            />
-
-          </CardContainer>
+          <HostModeContent
+            @cardIds={{this.cardIds}}
+            @removeCard={{this.closeCard}}
+            class='full-host-mode-content'
+          />
         </section>
       </div>
     {{/if}}
@@ -229,37 +249,8 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         padding: 0;
       }
 
-      .card {
-        width: 50rem;
-      }
-
-      .host-mode-container.is-wide .card {
-        width: 100%;
-        max-width: 100%;
-        height: 100vh;
-      }
-
-      .host-mode-container.is-wide :deep(.boxel-card-container) {
-        border-radius: 0;
-      }
-
-      .connect {
-        position: absolute;
-        top: var(--boxel-sp);
-        right: var(--boxel-sp);
-        width: 10rem;
-        height: 4rem;
-        border: none;
-        background: transparent;
-        opacity: 1;
-        transition: opacity 0.2s ease-in-out;
-        z-index: 1000;
-        pointer-events: auto;
-      }
-
-      .connect.not-loaded {
-        width: 0;
-        opacity: 0;
+      .full-host-mode-content {
+        min-height: 100vh;
       }
     </style>
   </template>
