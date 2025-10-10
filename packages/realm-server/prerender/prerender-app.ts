@@ -107,6 +107,7 @@ export function buildPrerenderApp(
           pool,
         },
       };
+      // TODO remove this
       if (response.error) {
         console.log(
           `=====> error doc for ${url}\n${JSON.stringify(response.error, null, 2)}`,
