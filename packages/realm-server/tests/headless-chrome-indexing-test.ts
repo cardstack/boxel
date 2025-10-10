@@ -439,7 +439,7 @@ async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
   resetCatalogRealms();
 }
 
-module(basename(__filename), function () {
+module.only(basename(__filename), function () {
   module('indexing - headless chrome (read only)', function (hooks) {
     let realm: Realm;
     let testRealmServer: TestRealmServerResult | undefined;
@@ -1685,7 +1685,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('can incrementally index deleted instance', async function (assert) {
+    test('can incrementally index deleted instance', async function (assert) {
       await realm.delete('mango.json');
 
       let { data: result } = await realm.realmIndexQueryEngine.search({
@@ -1984,7 +1984,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function (assert) {
+    test('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function (assert) {
       await realm.write(
         'task.gts',
         `
@@ -2075,7 +2075,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('sets resource_created_at for modules and instances', async function (assert) {
+    test('sets resource_created_at for modules and instances', async function (assert) {
       let entry = (await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}fancy-person.gts`),
       )) as { resourceCreatedAt: number };
@@ -2161,7 +2161,7 @@ module(basename(__filename), function () {
       });
     });
 
-    skip('will not invalidate non-json/non-executable files', async function (assert) {
+    test('will not invalidate non-json/non-executable files', async function (assert) {
       let deletedEntries = (await testDbAdapter.execute(
         `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
       )) as { url: string }[];
@@ -2173,7 +2173,7 @@ module(basename(__filename), function () {
       });
     });
 
-    skip('should be able to handle dependencies between modules', async function (assert) {
+    test('should be able to handle dependencies between modules', async function (assert) {
       // Create author.gts that depends on blog-app
       await realm.write(
         'author.gts',
@@ -2269,7 +2269,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('should be able to handle dependencies between modules - with thunk', async function (assert) {
+    test('should be able to handle dependencies between modules - with thunk', async function (assert) {
       // Create author.gts that depends on blog-app
       await realm.write(
         'author.gts',
@@ -2364,7 +2364,7 @@ module(basename(__filename), function () {
         'BlogApp module is in resolved module successfully',
       );
     });
-    skip('can write several modules at once', async function (assert) {
+    test('can write several modules at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
         'place.gts',
@@ -2416,7 +2416,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('can write instances and modules at once', async function (assert) {
+    test('can write instances and modules at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
         'place.gts',
@@ -2478,7 +2478,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('can tombstone deleted files when running fromScratch indexing', async function (assert) {
+    test('can tombstone deleted files when running fromScratch indexing', async function (assert) {
       await realm.write(
         'test-file.json',
         JSON.stringify({
@@ -2633,7 +2633,7 @@ module(basename(__filename), function () {
         },
       });
 
-      skip('has a module error when trying to index a module from another realm when it has no permission to read', async function (assert) {
+      test('has a module error when trying to index a module from another realm when it has no permission to read', async function (assert) {
         // Error during indexing will be: "Authorization error: Insufficient
         // permissions to perform this action"
         assert.deepEqual(
