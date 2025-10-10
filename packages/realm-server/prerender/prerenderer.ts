@@ -22,6 +22,7 @@ import {
   renderIcon,
   renderMeta,
   RenderCapture,
+  type CaptureOptions,
   withTimeout,
   transitionTo,
 } from './utils';
@@ -50,10 +51,16 @@ export class Prerenderer {
   #evictionMetrics = {
     byRealm: new Map<string, { unusable: number; timeout: number }>(),
   };
+  #silent: boolean;
 
-  constructor(options: { secretSeed: string; maxPages?: number }) {
+  constructor(options: {
+    secretSeed: string;
+    maxPages?: number;
+    silent?: boolean;
+  }) {
     this.#secretSeed = options.secretSeed;
     this.#maxPages = options.maxPages ?? 4;
+    this.#silent = options.silent ?? false;
   }
 
   #incEvictionMetric(realm: string, reason: 'unusable' | 'timeout') {
@@ -275,20 +282,25 @@ export class Prerenderer {
     userId,
     permissions,
     opts,
+    includesCodeChange = false,
   }: {
     realm: string;
     url: string;
     userId: string;
     permissions: RealmPermissions;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    includesCodeChange?: boolean;
   }): Promise<{
     response: RenderResponse;
     timings: { launchMs: number; renderMs: number };
-    pool: { pageId: string; realm: string; reused: boolean };
+    pool: { pageId: string; realm: string; reused: boolean; evicted: boolean };
   }> {
     this.#nonce++;
     log.info(
-      `prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId} permissions=${JSON.stringify(permissions)}`,
+      `prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId}`,
+    );
+    log.debug(
+      `prerendering url ${url} with permissions=${JSON.stringify(permissions)}`,
     );
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
@@ -306,6 +318,12 @@ export class Prerenderer {
         log.debug('Previous prerender in chain failed (continuing):', e);
       }); // ensure chain continues even after errors
       const { page, reused, launchMs } = await this.#getPage(realm);
+      const poolInfo = {
+        pageId: this.#pool.get(realm)?.pageId ?? 'unknown',
+        realm,
+        reused,
+        evicted: false,
+      };
 
       let sessions: { [realm: string]: string } = {};
       for (let [realmURL, realmPermissions] of Object.entries(
@@ -339,6 +357,12 @@ export class Prerenderer {
       let renderStart = Date.now();
       let error: RenderError | undefined;
       let shortCircuit = false;
+      let includesCodeChangeSegment = includesCodeChange ? 'true' : 'false';
+      const captureOptions: CaptureOptions = {
+        expectedId: url.replace(/\.json$/i, ''),
+        expectedNonce: String(this.#nonce),
+        simulateTimeoutMs: opts?.simulateTimeoutMs,
+      };
 
       // We need to render the isolated HTML view first, as the template will pull linked fields.
       let result = await withTimeout(
@@ -350,28 +374,29 @@ export class Prerenderer {
               'render.html',
               url,
               String(this.#nonce),
+              includesCodeChangeSegment,
               'isolated',
               '0',
             );
           } else {
             await page.goto(
-              `${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/html/isolated/0`,
+              `${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${includesCodeChangeSegment}/html/isolated/0`,
             );
           }
-          return await captureResult(page, 'innerHTML', opts);
+          return await captureResult(page, 'innerHTML', captureOptions);
         },
         opts?.timeoutMs,
       );
       let isolatedHTML: string | null = null;
       if (isRenderError(result)) {
         error = result;
-        if (
-          await this.#maybeEvict(
-            realm,
-            'isolated render',
-            result as RenderError,
-          )
-        ) {
+        let evicted = await this.#maybeEvict(
+          realm,
+          'isolated render',
+          result as RenderError,
+        );
+        if (evicted) {
+          poolInfo.evicted = true;
           shortCircuit = true;
         }
       } else {
@@ -383,7 +408,13 @@ export class Prerenderer {
           if (!error && capErr) {
             error = capErr;
           }
-          if (await this.#maybeEvict(realm, 'isolated render', capErr)) {
+          let evicted = await this.#maybeEvict(
+            realm,
+            'isolated render',
+            capErr,
+          );
+          if (evicted) {
+            poolInfo.evicted = true;
             shortCircuit = true;
           }
         }
@@ -408,11 +439,7 @@ export class Prerenderer {
             fittedHTML: null,
           },
           timings: { launchMs, renderMs: Date.now() - renderStart },
-          pool: {
-            pageId: this.#pool.get(realm)?.pageId ?? 'unknown',
-            realm,
-            reused,
-          },
+          pool: poolInfo,
         };
       }
 
@@ -422,7 +449,7 @@ export class Prerenderer {
       // now we only consider linked fields used in the isolated template.
       let metaMaybeError = await withTimeout(
         page,
-        () => renderMeta(page),
+        () => renderMeta(page, captureOptions),
         opts?.timeoutMs,
       );
       // TODO also consider introducing a mechanism in the API to track and reset
@@ -440,6 +467,7 @@ export class Prerenderer {
             metaMaybeError as RenderError,
           )
         ) {
+          poolInfo.evicted = true;
           shortCircuit = true;
         }
         error = error ?? (metaMaybeError as RenderError);
@@ -466,28 +494,30 @@ export class Prerenderer {
         }> = [
           {
             name: 'fitted render',
-            cb: () => renderAncestors(page, 'fitted', meta.types!),
+            cb: () =>
+              renderAncestors(page, 'fitted', meta.types!, captureOptions),
             assign: (v: string | Record<string, string>) => {
               fittedHTML = v as Record<string, string>;
             },
           },
           {
             name: 'embedded render',
-            cb: () => renderAncestors(page, 'embedded', meta.types!),
+            cb: () =>
+              renderAncestors(page, 'embedded', meta.types!, captureOptions),
             assign: (v: string | Record<string, string>) => {
               embeddedHTML = v as Record<string, string>;
             },
           },
           {
             name: 'atom render',
-            cb: () => renderHTML(page, 'atom', 0),
+            cb: () => renderHTML(page, 'atom', 0, captureOptions),
             assign: (v: string | Record<string, string>) => {
               atomHTML = v as string;
             },
           },
           {
             name: 'icon render',
-            cb: () => renderIcon(page),
+            cb: () => renderIcon(page, captureOptions),
             assign: (v: string | Record<string, string>) => {
               iconHTML = v as string;
             },
@@ -504,6 +534,7 @@ export class Prerenderer {
           } else {
             error = error ?? res.error;
             if (res.evicted) {
+              poolInfo.evicted = true;
               shortCircuit = true;
               break;
             }
@@ -523,7 +554,7 @@ export class Prerenderer {
       return {
         response,
         timings: { launchMs, renderMs: Date.now() - renderStart },
-        pool: { pageId: this.#pool.get(realm)!.pageId, realm, reused },
+        pool: poolInfo,
       };
     } finally {
       deferred.fulfill();
@@ -561,7 +592,9 @@ export class Prerenderer {
       const context = await browser.createBrowserContext();
       const page = await context.newPage();
       const pageId = uuidv4();
-      this.#attachPageConsole(page, realm, pageId);
+      if (!this.#silent) {
+        this.#attachPageConsole(page, realm, pageId);
+      }
       entry = {
         realm,
         context,

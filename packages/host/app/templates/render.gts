@@ -7,6 +7,8 @@ import { Model } from '../routes/render';
 const Render = <template>
   <div
     data-prerender
+    data-prerender-id={{@model.instance.id}}
+    data-prerender-nonce={{@model.nonce}}
     data-prerender-status={{if @model.ready 'ready' 'loading'}}
   >
     {{outlet}}

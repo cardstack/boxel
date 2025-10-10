@@ -96,6 +96,7 @@ module(basename(__filename), function () {
       });
 
       assert.false(first.pool.reused, 'first call not reused');
+      assert.false(first.pool.evicted, 'first call not evicted');
       assert.strictEqual(
         first.response.serialized?.data.attributes?.name,
         'Maple',
@@ -133,6 +134,7 @@ module(basename(__filename), function () {
       });
 
       assert.true(second.pool.reused, 'second call reused pooled page');
+      assert.false(second.pool.evicted, 'second call not evicted');
       assert.strictEqual(
         second.pool.pageId,
         first.pool.pageId,
@@ -567,6 +569,12 @@ module(basename(__filename), function () {
           },
           'meta fields are null when short-circuited',
         );
+        assert.true(unusable.pool.evicted, 'pool notes eviction for unusable');
+        assert.notStrictEqual(
+          unusable.pool.pageId,
+          'unknown',
+          'evicted unusable run retains page identifier',
+        );
 
         // After unusable, the realm should be evicted; a subsequent render should not reuse
         const healthyURL = `${realmURL2}1`;
@@ -577,6 +585,7 @@ module(basename(__filename), function () {
           permissions,
         });
         assert.false(next.pool.reused, 'did not reuse after unusable eviction');
+        assert.false(next.pool.evicted, 'subsequent render not evicted');
       });
     });
 
@@ -606,6 +615,12 @@ module(basename(__filename), function () {
           'Render timeout',
           'got timeout error',
         );
+        assert.true(timeoutRun.pool.evicted, 'timeout eviction reflected');
+        assert.notStrictEqual(
+          timeoutRun.pool.pageId,
+          'unknown',
+          'timeout eviction retains page identifier',
+        );
 
         // A subsequent render should not reuse the previously pooled page
         let afterTimeout = await prerenderer.prerenderCard({
@@ -618,6 +633,7 @@ module(basename(__filename), function () {
           afterTimeout.pool.reused,
           'did not reuse after timeout eviction',
         );
+        assert.false(afterTimeout.pool.evicted, 'no eviction on new render');
       });
 
       test('reuses the same page within a realm', async function (assert) {

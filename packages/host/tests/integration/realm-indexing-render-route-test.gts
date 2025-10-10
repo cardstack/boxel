@@ -18,7 +18,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import { unwrap } from '@cardstack/host/lib/current-run';
 
-import { renderErrorHandler } from '@cardstack/host/lib/render-error-handler';
+import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
 
 import {
   testRealmURL,
@@ -73,13 +73,14 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    (globalThis as any).__useHeadlessChromePrerender = true;
+    // in browser context this is a function
+    (globalThis as any).__useHeadlessChromePrerender = () => true;
     onError = function (event: Event) {
       let localIndexer = getService('local-indexer');
-      renderErrorHandler({
+      windowErrorHandler({
         event,
-        setPrerenderStatus(status) {
-          localIndexer.prerenderStatus = status;
+        setStatusToUnusable() {
+          localIndexer.prerenderStatus = 'unusable';
         },
         setError(error) {
           localIndexer.renderError = error;

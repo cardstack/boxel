@@ -51,6 +51,7 @@ export type Prerenderer = (args: {
   url: string;
   userId: string;
   permissions: RealmPermissions;
+  includesCodeChange?: boolean;
 }) => Promise<RenderResponse>;
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';

@@ -13,6 +13,14 @@ export interface RenderCapture {
   status: RenderStatus;
   value: string;
   alive?: 'true' | 'false';
+  id?: string;
+  nonce?: string;
+}
+
+export interface CaptureOptions {
+  expectedId?: string;
+  expectedNonce?: string;
+  simulateTimeoutMs?: number;
 }
 
 export async function transitionTo(
@@ -33,11 +41,13 @@ export async function renderHTML(
   page: Page,
   format: string,
   ancestorLevel: number,
+  opts?: CaptureOptions,
 ): Promise<string | RenderError> {
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
   let result = await captureResult(
     page,
     ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
+    opts,
   );
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.html');
@@ -45,9 +55,12 @@ export async function renderHTML(
   return result.value;
 }
 
-export async function renderIcon(page: Page): Promise<string | RenderError> {
+export async function renderIcon(
+  page: Page,
+  opts?: CaptureOptions,
+): Promise<string | RenderError> {
   await transitionTo(page, 'render.icon');
-  let result = await captureResult(page, 'outerHTML');
+  let result = await captureResult(page, 'outerHTML', opts);
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.icon');
   }
@@ -56,15 +69,40 @@ export async function renderIcon(page: Page): Promise<string | RenderError> {
 
 export async function renderMeta(
   page: Page,
+  opts?: CaptureOptions,
 ): Promise<PrerenderMeta | RenderError> {
   await transitionTo(page, 'render.meta');
-  let result = await captureResult(page, 'textContent');
+  let result = await captureResult(page, 'textContent', opts);
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.meta');
+  }
+  if (opts?.expectedId && result.id && result.id !== opts.expectedId) {
+    return buildInvalidRenderResponseError(
+      page,
+      `render.meta captured stale prerender output for ${result.id} (expected ${opts.expectedId})`,
+      { title: 'Stale render response', evict: true },
+    );
+  }
+  if (
+    opts?.expectedNonce &&
+    result.nonce &&
+    result.nonce !== opts.expectedNonce
+  ) {
+    return buildInvalidRenderResponseError(
+      page,
+      `render.meta captured stale prerender output for nonce ${result.nonce} (expected ${opts.expectedNonce})`,
+      { title: 'Stale render response', evict: true },
+    );
   }
   try {
     return JSON.parse(result.value) as PrerenderMeta;
   } catch {
+    await page.evaluate(() => {
+      let el = document.querySelector('[data-prerender]') as HTMLElement;
+      console.log(
+        `capturing HTML for unknown meta result\n${el.outerHTML.trim()}`,
+      );
+    });
     return buildInvalidRenderResponseError(
       page,
       `render.meta returned a non-JSON response: ${result.value}`,
@@ -128,10 +166,11 @@ export async function renderAncestors(
   page: Page,
   format: 'embedded' | 'fitted',
   types: string[],
+  opts?: CaptureOptions,
 ): Promise<Record<string, string> | RenderError> {
   let ancestors: Record<string, string> = {};
   for (let i = 0; i < types.length; i++) {
-    let res = await renderHTML(page, format, i);
+    let res = await renderHTML(page, format, i, opts);
     if (isRenderError(res)) return res;
     ancestors[types[i]] = res as string;
   }
@@ -141,35 +180,131 @@ export async function renderAncestors(
 export async function captureResult(
   page: Page,
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
-  opts?: { simulateTimeoutMs?: number },
+  opts?: CaptureOptions,
 ): Promise<RenderCapture> {
-  await page.waitForSelector(
-    '[data-prerender-status="ready"], [data-prerender-status="error"], [data-prerender-status="unusable"]',
+  const statuses: RenderStatus[] = ['ready', 'error', 'unusable'];
+  await page.waitForFunction(
+    (
+      statuses: string[],
+      expectedId: string | null,
+      expectedNonce: string | null,
+    ) => {
+      let elements = Array.from(
+        document.querySelectorAll('[data-prerender]'),
+      ) as HTMLElement[];
+      if (!elements.length) {
+        return false;
+      }
+      let path = window.location.pathname;
+      let expectingRender = path.includes('/render/');
+      let targetId = expectedId;
+      let targetNonce = expectedNonce;
+      if (!expectingRender) {
+        targetId = null;
+        targetNonce = null;
+      } else if (!targetId || !targetNonce) {
+        try {
+          let segments = path.split('/').filter(Boolean);
+          let renderIdx = segments.indexOf('render');
+          if (renderIdx !== -1) {
+            if (!targetId && segments[renderIdx + 1]) {
+              let decoded = decodeURIComponent(segments[renderIdx + 1]);
+              if (decoded.endsWith('.json')) {
+                decoded = decoded.slice(0, -5);
+              }
+              targetId = decoded;
+            }
+            if (!targetNonce && segments[renderIdx + 2]) {
+              targetNonce = segments[renderIdx + 2];
+            }
+          }
+        } catch {
+          // ignore malformed URLs
+        }
+      }
+      for (let element of elements) {
+        let status = element.dataset.prerenderStatus ?? '';
+        if (!statuses.includes(status)) {
+          continue;
+        }
+        if (targetId && element.dataset.prerenderId !== targetId) {
+          continue;
+        }
+        if (targetNonce && element.dataset.prerenderNonce !== targetNonce) {
+          continue;
+        }
+        return true;
+      }
+      if (!expectingRender) {
+        return elements.some((element) =>
+          statuses.includes(element.dataset.prerenderStatus ?? ''),
+        );
+      }
+      return false;
+    },
+    {},
+    statuses,
+    opts?.expectedId ?? null,
+    opts?.expectedNonce ?? null,
   );
-  // Read initial status
-  let status: RenderStatus = await page.evaluate(() => {
-    let el = document.querySelector('[data-prerender]') as HTMLElement;
-    return el.dataset.prerenderStatus as any as RenderStatus;
-  });
-  // If we see 'error', wait briefly to see if the route marks it 'unusable'.
-  // Note that it takes the render route a minimum of 300ms to determine if
-  // Ember is still healthy.
-  if (status === 'error') {
-    try {
-      await page.waitForSelector('[data-prerender-status="unusable"]', {
-        timeout: 500,
-      });
-      status = 'unusable';
-    } catch {
-      // keep 'error'
-    }
-  }
   let result = await page.evaluate(
     (
       capture: 'textContent' | 'innerHTML' | 'outerHTML',
-      finalStatus: RenderStatus,
+      statuses: string[],
+      expectedId: string | null,
+      expectedNonce: string | null,
     ) => {
-      let element = document.querySelector('[data-prerender]') as HTMLElement;
+      let elements = Array.from(
+        document.querySelectorAll('[data-prerender]'),
+      ) as HTMLElement[];
+      let path = window.location.pathname;
+      let expectingRender = path.includes('/render/');
+      let targetId = expectedId;
+      let targetNonce = expectedNonce;
+      if (!expectingRender) {
+        targetId = null;
+        targetNonce = null;
+      } else if (!targetId || !targetNonce) {
+        try {
+          let segments = path.split('/').filter(Boolean);
+          let renderIdx = segments.indexOf('render');
+          if (renderIdx !== -1) {
+            if (!targetId && segments[renderIdx + 1]) {
+              let decoded = decodeURIComponent(segments[renderIdx + 1]);
+              if (decoded.endsWith('.json')) {
+                decoded = decoded.slice(0, -5);
+              }
+              targetId = decoded;
+            }
+            if (!targetNonce && segments[renderIdx + 2]) {
+              targetNonce = segments[renderIdx + 2];
+            }
+          }
+        } catch {
+          // ignore malformed URLs
+        }
+      }
+      let element =
+        elements.find((candidate) => {
+          let status = candidate.dataset.prerenderStatus ?? '';
+          if (!statuses.includes(status)) {
+            return false;
+          }
+          if (targetId && candidate.dataset.prerenderId !== targetId) {
+            return false;
+          }
+          if (targetNonce && candidate.dataset.prerenderNonce !== targetNonce) {
+            return false;
+          }
+          return true;
+        }) ??
+        elements.find((candidate) =>
+          statuses.includes(candidate.dataset.prerenderStatus ?? ''),
+        );
+      if (!element) {
+        throw new Error('Unable to locate prerender result element');
+      }
+      let finalStatus = element.dataset.prerenderStatus as RenderStatus;
       let alive =
         (element.dataset.emberAlive as 'true' | 'false' | undefined) ??
         undefined;
@@ -182,7 +317,13 @@ export async function captureResult(
           start !== -1 && end !== -1 && end > start
             ? html.slice(start, end + 1)
             : html;
-        return { status: finalStatus, value: json, alive } as RenderCapture;
+        return {
+          status: finalStatus,
+          value: json,
+          alive,
+          id: element.dataset.prerenderId ?? undefined,
+          nonce: element.dataset.prerenderNonce ?? undefined,
+        } as RenderCapture;
       } else {
         const firstChild = element.children[0] as HTMLElement & {
           textContent: string;
@@ -193,14 +334,18 @@ export async function captureResult(
           status: finalStatus,
           value: (firstChild as any)[capture]!,
           alive,
+          id: element.dataset.prerenderId ?? undefined,
+          nonce: element.dataset.prerenderNonce ?? undefined,
         } as RenderCapture;
       }
     },
     capture,
-    status,
+    statuses,
+    opts?.expectedId ?? null,
+    opts?.expectedNonce ?? null,
   );
   if (opts?.simulateTimeoutMs) {
-    await delay(opts?.simulateTimeoutMs);
+    await delay(opts.simulateTimeoutMs);
   }
   return result;
 }
