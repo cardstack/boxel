@@ -439,7 +439,7 @@ async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
   resetCatalogRealms();
 }
 
-module.only(basename(__filename), function () {
+module(basename(__filename), function () {
   module('indexing - headless chrome (read only)', function (hooks) {
     let realm: Realm;
     let testRealmServer: TestRealmServerResult | undefined;
