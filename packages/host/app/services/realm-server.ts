@@ -443,11 +443,13 @@ export default class RealmServerService extends Service {
     return response;
   }
 
+  // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
   async requestForward(args: {
     url: string;
     method: string;
     requestBody: string;
     headers?: Record<string, string>;
+    multipart?: boolean;
   }) {
     await this.login();
 

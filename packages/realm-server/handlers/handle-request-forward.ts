@@ -16,14 +16,12 @@ import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
 
-type ProxyRequestBody = string | Uint8Array;
-
 async function handleStreamingRequest(
   ctxt: Koa.Context,
   url: string,
   method: string,
   headers: Record<string, string>,
-  requestBody: ProxyRequestBody | undefined,
+  requestBody: BodyInit | undefined,
   endpointConfig: any,
   dbAdapter: DBAdapter,
   matrixUserId: string,
@@ -186,7 +184,7 @@ function isMultipartFileField(value: unknown): value is MultipartFileField {
 }
 
 function jsonToMultipartFormData(jsonData: Record<string, unknown>): {
-  body: Uint8Array;
+  body: BodyInit;
   boundary: string;
 } {
   const boundary = `----WebKitFormBoundary${Math.random()
@@ -385,7 +383,7 @@ export default function handleRequestForward({
         headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
       }
 
-      let finalBody: RequestInit['body'] | undefined;
+      let finalBody: BodyInit | undefined;
       if (json.multipart) {
         const multipartPayload = (parsedRequestBody ?? {}) as Record<
           string,
@@ -405,7 +403,6 @@ export default function handleRequestForward({
 
         try {
           const { body, boundary } = jsonToMultipartFormData(multipartPayload);
-          // TODO convert this with proper typing
           finalBody = body;
           setContentTypeHeader(
             headers,
