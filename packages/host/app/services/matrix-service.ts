@@ -303,19 +303,17 @@ export default class MatrixService extends Service {
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
           // what if we're not logged in yet? Should we delay?
-          if (e.event.type === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
-            await this.setSystemCard(e.event.content.id);
-          } else {
-            await this.setSystemCard(
-              'http://localhost:4201/admin/system-cards/CardDef/78eeabe0-9a82-45a8-98b0-839f7273d579',
-            );
-          }
-          if (e.event.type == APP_BOXEL_REALMS_EVENT_TYPE) {
-            await this.realmServer.setAvailableRealmURLs(
-              e.event.content.realms,
-            );
-            await this.loginToRealms();
-            await this.loadMoreAuthRooms(e.event.content.realms);
+          switch (e.eventType) {
+            case APP_BOXEL_REALMS_EVENT_TYPE:
+              await this.realmServer.setAvailableRealmURLs(
+                e.event.content.realms,
+              );
+              await this.loginToRealms();
+              await this.loadMoreAuthRooms(e.event.content.realms);
+              break;
+            case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
+              await this.setSystemCard(e.event.content.id);
+              break;
           }
         },
       ],
@@ -595,6 +593,17 @@ export default class MatrixService extends Service {
             accountDataContent?.realms ?? [],
           ),
         ]);
+
+        let systemCardAccountData =
+          (await this._client.getAccountDataFromServer(
+            APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
+          )) as { id?: string } | null;
+
+        if (systemCardAccountData?.id) {
+          await this.setSystemCard(systemCardAccountData.id);
+        } else if (!this.systemCard && ENV.defaultSystemCardId) {
+          await this.setSystemCard(ENV.defaultSystemCardId);
+        }
 
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
@@ -1860,20 +1869,17 @@ export default class MatrixService extends Service {
       // we shouldn't do anything.
       return;
     }
-    console.log(
-      'MatrixService setSystemCard called with:',
-      systemCardId,
-    );
+    console.log('MatrixService setSystemCard called with:', systemCardId);
 
-    let environment = await this.store.get<SystemCard>(systemCardId);
-    if (isCardErrorJSONAPI(environment)) {
-      console.error('Error loading system card:', environment);
+    let systemCard = await this.store.get<SystemCard>(systemCardId);
+    if (isCardErrorJSONAPI(systemCard)) {
+      console.error('Error loading system card:', systemCard);
       return;
     }
 
     this.store.dropReference(this._systemCard?.id);
     this.store.addReference(systemCardId);
-    this._systemCard = environment;
+    this._systemCard = systemCard;
     console.log('MatrixService _systemCard set to:', this._systemCard);
   }
 

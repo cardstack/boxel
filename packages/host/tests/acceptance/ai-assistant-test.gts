@@ -409,9 +409,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
       return new Response(mockedFileContent);
     };
-
-    // Set the system card in the matrix service
-    getService('matrix-service').setSystemCard(systemCard.id);
   });
 
   test('attaches a card in a conversation multiple times', async function (assert) {

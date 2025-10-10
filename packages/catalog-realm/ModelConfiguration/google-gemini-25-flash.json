@@ -1,0 +1,29 @@
+{
+    "data": {
+        "type": "card",
+        "attributes": {
+            "cardInfo": {
+                "title": "Google Gemini 2.5 Flash",
+                "description": "Fast Gemini Flash model for lightweight content and tooling.",
+                "thumbnailURL": null,
+                "notes": null
+            },
+            "modelId": "google/gemini-2.5-flash",
+            "temperature": 0.4,
+            "toolsSupported": true
+        },
+        "relationships": {
+            "cardInfo.theme": {
+                "links": {
+                    "self": null
+                }
+            }
+        },
+        "meta": {
+            "adoptsFrom": {
+                "module": "https://cardstack.com/base/system-card",
+                "name": "ModelConfiguration"
+            }
+        }
+    }
+}

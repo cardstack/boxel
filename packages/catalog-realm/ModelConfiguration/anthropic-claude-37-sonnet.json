@@ -1,0 +1,29 @@
+{
+    "data": {
+        "type": "card",
+        "attributes": {
+            "cardInfo": {
+                "title": "Anthropic Claude 3.7 Sonnet",
+                "description": "Creative Claude Sonnet model with strong reasoning capabilities.",
+                "thumbnailURL": null,
+                "notes": null
+            },
+            "modelId": "anthropic/claude-3.7-sonnet",
+            "temperature": 0.5,
+            "toolsSupported": true
+        },
+        "relationships": {
+            "cardInfo.theme": {
+                "links": {
+                    "self": null
+                }
+            }
+        },
+        "meta": {
+            "adoptsFrom": {
+                "module": "https://cardstack.com/base/system-card",
+                "name": "ModelConfiguration"
+            }
+        }
+    }
+}

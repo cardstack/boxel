@@ -64,10 +64,6 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Skill } from 'https://cardstack.com/base/skill';
-import type {
-  LLMEnvironment,
-  ModelConfiguration,
-} from 'https://cardstack.com/base/llm-environment';
 
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
@@ -791,10 +787,10 @@ export default class Room extends Component<Signature> {
 
   private get llmsForSelectMenu() {
     // Read from the LLM environment card if available
-    let llmEnvironment = this.matrixService.llmEnvironment;
-    if (llmEnvironment?.modelConfigurations) {
+    let systemCard = this.matrixService.systemCard;
+    if (systemCard?.modelConfigurations) {
       let options: Record<string, string> = {};
-      for (let modelConfig of llmEnvironment.modelConfigurations) {
+      for (let modelConfig of systemCard.modelConfigurations) {
         if (modelConfig.modelId && modelConfig.title) {
           options[modelConfig.modelId] = modelConfig.title;
         }

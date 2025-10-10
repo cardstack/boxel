@@ -1,0 +1,29 @@
+{
+    "data": {
+        "type": "card",
+        "attributes": {
+            "cardInfo": {
+                "title": "OpenAI GPT-4o Mini",
+                "description": "Balanced default model suitable for chat and general tasks.",
+                "thumbnailURL": null,
+                "notes": null
+            },
+            "modelId": "openai/gpt-4o-mini",
+            "temperature": 0.6,
+            "toolsSupported": true
+        },
+        "relationships": {
+            "cardInfo.theme": {
+                "links": {
+                    "self": null
+                }
+            }
+        },
+        "meta": {
+            "adoptsFrom": {
+                "module": "https://cardstack.com/base/system-card",
+                "name": "ModelConfiguration"
+            }
+        }
+    }
+}
