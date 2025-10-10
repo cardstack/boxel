@@ -385,9 +385,6 @@ export default function handleRequestForward({
         headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
       }
 
-      // FIXME a hack to make the proxy always be multipart
-      json.multipart = true;
-
       let finalBody: RequestInit['body'] | undefined;
       if (json.multipart) {
         const multipartPayload = (parsedRequestBody ?? {}) as Record<
