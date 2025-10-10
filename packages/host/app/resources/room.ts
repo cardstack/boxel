@@ -26,6 +26,7 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
+  DEFAULT_LLM,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 

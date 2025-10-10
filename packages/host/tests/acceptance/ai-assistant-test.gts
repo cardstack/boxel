@@ -52,6 +52,7 @@ import {
 
 import {
   CardDef,
+  CardInfoField,
   Component,
   CardsGrid,
   contains,
@@ -268,21 +269,21 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Create model configurations for testing
     let model1 = new ModelConfiguration({
-      title: 'GPT-4 Turbo',
+      cardInfo: new CardInfoField({ title: 'GPT-4 Turbo' }),
       modelId: 'openai/gpt-4-turbo',
       temperature: 0.7,
       toolsSupported: true,
     });
 
     let model2 = new ModelConfiguration({
-      title: 'Claude 3.5 Haiku',
+      cardInfo: new CardInfoField({ title: 'Claude 3.5 Haiku' }),
       modelId: 'anthropic/claude-3.5-haiku',
       temperature: 0.5,
       toolsSupported: true,
     });
 
     let model3 = new ModelConfiguration({
-      title: 'Claude 3.7 Sonnet',
+      cardInfo: new CardInfoField({ title: 'Claude 3.7 Sonnet' }),
       modelId: 'anthropic/claude-3.7-sonnet',
       temperature: 0.8,
       toolsSupported: true,
@@ -410,7 +411,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     };
 
     // Set the LLM environment in the matrix service
-    getService('matrix-service').setLLMEnvironment(llmEnvironment);
+    getService('matrix-service').setLLMEnvironment(llmEnvironment.id);
   });
 
   test('attaches a card in a conversation multiple times', async function (assert) {
@@ -570,9 +571,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
-    // Default model should be the first one in the LLM environment (gpt-4-turbo)
-    //let defaultModelId = 'openai/gpt-4-turbo';
-    let defaultModelName = 'openai/gpt-4.1'; // Default in tests is 4.1 *explicitly*.
+    // Default model should be the first one in the LLM environment
+    let defaultModelName = 'GPT-4 Turbo';
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');

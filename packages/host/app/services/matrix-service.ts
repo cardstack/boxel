@@ -58,6 +58,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   DEFAULT_CODING_LLM,
+  DEFAULT_LLM,
   DEFAULT_LLM_LIST,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
@@ -68,11 +69,7 @@ import {
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
-<<<<<<< Updated upstream
-  DEFAULT_LLM,
-=======
   APP_BOXEL_LLM_ENVIRONMENT_EVENT_TYPE,
->>>>>>> Stashed changes
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -198,13 +195,10 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
-<<<<<<< Updated upstream
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
-=======
   @tracked private _llmEnvironment: LLMEnvironment | undefined;
->>>>>>> Stashed changes
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -316,15 +310,13 @@ export default class MatrixService extends Service {
               'http://localhost:4201/admin/llm-envs/CardDef/78eeabe0-9a82-45a8-98b0-839f7273d579',
             );
           }
-          /*
           if (e.event.type == APP_BOXEL_REALMS_EVENT_TYPE) {
             await this.realmServer.setAvailableRealmURLs(
               e.event.content.realms,
             );
             await this.loginToRealms();
             await this.loadMoreAuthRooms(e.event.content.realms);
-            
-          }*/
+          }
         },
       ],
     ];
@@ -1790,13 +1782,15 @@ export default class MatrixService extends Service {
   }
 
   async setLLMForInteractMode() {
-    return this.setLLMModel(DEFAULT_LLM);
+    if (this.llmEnvironment?.modelConfigurations?.length) {
+      let preferredModel = this.llmEnvironment.modelConfigurations[0].modelId;
+      return this.setLLMModel(preferredModel);
+    } else {
+      return this.setLLMModel(DEFAULT_LLM);
+    }
   }
 
   private async setLLMModel(model: string) {
-    if (!DEFAULT_LLM_LIST.includes(model)) {
-      throw new Error(`Cannot find LLM model: ${model}`);
-    }
     if (!this.currentRoomId) {
       return;
     }
