@@ -107,6 +107,11 @@ export function buildPrerenderApp(
           pool,
         },
       };
+      if (response.error) {
+        console.log(
+          `=====> error doc for ${url}\n${JSON.stringify(response.error, null, 2)}`,
+        );
+      }
     } catch (err: any) {
       Sentry.captureException(err);
       log.error(`Unhandled error in /prerender:`, err);
