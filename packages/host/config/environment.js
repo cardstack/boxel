@@ -26,7 +26,9 @@ module.exports = function (environment) {
     'ember-cli-mirage': {
       enabled: false,
     },
-    logLevels: process.env.LOG_LEVELS || '*=info,current-run=error,matrix=info',
+    logLevels:
+      process.env.LOG_LEVELS ||
+      '*=info,current-run=error,matrix=info,realm:events=debug',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
@@ -37,9 +39,14 @@ module.exports = function (environment) {
     minSaveTaskDurationMs: 1000,
     renderTimeoutMs: 30_000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
+    publishedRealmBoxelSpaceDomain:
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+    publishedRealmBoxelSiteDomain:
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
+    realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
     resolvedSkillsRealmURL:
@@ -70,6 +77,7 @@ module.exports = function (environment) {
     ENV.autoSaveDelayMs = 0;
     ENV.monacoDebounceMs = 0;
     ENV.monacoCursorDebounceMs = 0;
+    ENV.realmServerURL = 'http://test-realm';
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;

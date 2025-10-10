@@ -2,6 +2,7 @@ import { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { ErrorEntry } from './index-writer';
 
 // a card resource but with optional "id" and "type" props
 export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
@@ -25,10 +26,37 @@ export type PatchData = {
 // Shared type produced by the host app when visiting the render.meta route and
 // consumed by the server.
 export interface PrerenderMeta {
-  serialized: LooseSingleCardDocument;
-  searchDoc: Record<string, any>;
-  displayName: string;
-  types: string[];
+  serialized: SingleCardDocument | null;
+  searchDoc: Record<string, any> | null;
+  displayNames: string[] | null;
+  deps: string[] | null;
+  types: string[] | null;
+}
+
+export interface RenderResponse extends PrerenderMeta {
+  isolatedHTML: string | null;
+  atomHTML: string | null;
+  embeddedHTML: Record<string, string> | null;
+  fittedHTML: Record<string, string> | null;
+  iconHTML: string | null;
+  error?: RenderError;
+}
+
+export interface RenderError extends ErrorEntry {
+  evict?: boolean;
+}
+
+export type Prerenderer = (args: {
+  realm: string;
+  url: string;
+  userId: string;
+  permissions: RealmPermissions;
+}) => Promise<RenderResponse>;
+
+export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
+
+export interface RealmPermissions {
+  [username: string]: RealmAction[];
 }
 
 export { Deferred } from './deferred';
@@ -62,6 +90,7 @@ export interface DirectoryEntryRelationship {
 export interface FileMeta {
   kind: 'file';
   lastModified: number | null;
+  resourceCreatedAt?: number;
 }
 
 export interface DirectoryMeta {
@@ -87,9 +116,11 @@ import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
+export * from './definitions';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
+export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
@@ -106,6 +137,7 @@ export * from './fetcher';
 export * from './scoped-css';
 export * from './utils';
 export * from './authorization-middleware';
+export * from './resource-types';
 export * from './query';
 export * from './formats';
 export * from './db-types';
@@ -118,6 +150,7 @@ export {
   cardTypeIcon,
   getFieldIcon,
 } from './helpers/card-type-display-name';
+export * from './helpers/ensure-extension';
 export * from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
@@ -145,7 +178,6 @@ export type {
   FileRef,
   RealmInfo,
   TokenClaims,
-  RealmPermissions,
   RealmSession,
 } from './realm';
 
@@ -188,13 +220,10 @@ import type {
   CardDef,
   FieldDef,
   BaseDef,
-  Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmInfo } from './realm';
-import { PrerenderedCard } from './index-query-engine';
-
-export const maxLinkDepth = 5;
+import { PrerenderedCard, QueryResultsMeta } from './index-query-engine';
 
 export interface MatrixCardError {
   id?: string;
@@ -281,6 +310,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
 }
 
 import { type CardErrorJSONAPI } from './error';
+import { SingleCardDocument } from './document-types';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
@@ -322,6 +352,7 @@ export type getCards<T extends CardDef = CardDef> = (
   instances: T[];
   instancesByRealm: { realm: string; cards: T[] }[];
   isLoading: boolean;
+  meta: QueryResultsMeta;
 };
 
 export interface CreateOptions {
@@ -381,25 +412,6 @@ export interface CardCreator {
   ): Promise<string>;
 }
 
-export async function createNewCard(
-  ref: CodeRef,
-  relativeTo: URL | undefined,
-  opts?: {
-    realmURL?: URL;
-    doc?: LooseSingleCardDocument;
-  },
-): Promise<string> {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CREATE_NEW_CARD) {
-    throw new Error(
-      `no cardstack card creator is available in this environment`,
-    );
-  }
-  let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
-
-  return await cardCreator.create(ref, relativeTo, opts);
-}
-
 export interface RealmSubscribe {
   subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void;
 }
@@ -426,51 +438,10 @@ export interface SearchQuery {
   isLoading: boolean;
 }
 
-export interface CardActions {
-  createCard: (
-    ref: CodeRef,
-    relativeTo: URL | undefined,
-    opts?: {
-      closeAfterCreating?: boolean;
-      realmURL?: URL; // the realm to create the card in
-      localDir?: LocalPath; // the local directory path within the realm to create the card file
-      doc?: LooseSingleCardDocument; // initial data for the card
-      cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
-    },
-  ) => Promise<string | undefined>;
-  viewCard: (
-    cardOrURL: CardDef | URL,
-    format?: Format,
-    opts?: {
-      openCardInRightMostStack?: boolean;
-      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
-      fieldName?: string;
-    },
-  ) => void;
-  copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
-  editCard: (card: CardDef) => void;
-  saveCard: (id: string) => void;
-  delete: (item: CardDef | URL | string) => void;
-  doWithStableScroll: (
-    card: CardDef,
-    changeSizeCallback: () => Promise<void>,
-  ) => Promise<void>;
-  changeSubmode: (
-    url: URL,
-    submode: 'code' | 'interact',
-  ) => Promise<void> | void;
-}
-
 export interface CopyCardsWithCodeRef {
   sourceCard: CardDef;
   codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
 }
-
-export interface CatalogActions {
-  allRealmsInfo: () => Record<string, { canWrite: boolean; info: RealmInfo }>;
-}
-
-export type Actions = CardActions & CatalogActions;
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {

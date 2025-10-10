@@ -5,22 +5,22 @@ import Component from '@glimmer/component';
 
 import { ComponentLike } from '@glint/template';
 
-import { CardContainer, Label } from '@cardstack/boxel-ui/components';
+import { Label } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import CardRenderer from '../card-renderer';
 
 import { removeFileExtension } from './utils';
 
 interface SearchResultSignature {
-  Element: HTMLElement;
+  Element: Element;
   Args: {
-    component?: ComponentLike<{}>;
+    component?: ComponentLike<{ Element: Element }>;
     card?: CardDef;
     cardId: string | undefined;
     isCompact: boolean;
@@ -45,14 +45,11 @@ class SearchResult extends Component<SearchResultSignature> {
   <template>
     <div class={{cn 'container' is-compact=@isCompact}}>
       {{#if @component}}
-        <CardContainer
-          @displayBoundaries={{true}}
-          data-test-search-result={{removeFileExtension @cardId}}
+        <@component
           class='search-result'
+          data-test-search-result={{removeFileExtension @cardId}}
           ...attributes
-        >
-          <@component />
-        </CardContainer>
+        />
 
       {{else if @card}}
         <CardRenderer

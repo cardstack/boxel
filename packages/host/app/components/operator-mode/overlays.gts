@@ -8,14 +8,15 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
 import { isEqual, omit } from 'lodash';
-import { type TrackedArray } from 'tracked-built-ins';
-
-import { type Actions } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  Format,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 
 import { CardDefOrId } from './stack-item';
 
@@ -25,10 +26,11 @@ import type { MiddlewareState } from '@floating-ui/dom';
 interface OverlaySignature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
-    publicAPI?: Actions;
+    viewCard?: ViewCardFn;
+    requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     onSelectCard?: (cardDefOrId: CardDefOrId) => void;
     toggleSelect?: (cardDefOrId: CardDefOrId) => void;
-    selectedCards?: TrackedArray<CardDefOrId>;
+    selectedCards?: Set<CardDefOrId>;
     overlayClassName?: string;
   };
   Element: HTMLElement;
@@ -177,7 +179,7 @@ export default class Overlays extends Component<OverlaySignature> {
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
   ) {
-    if (this.args.toggleSelect && this.args.selectedCards?.length) {
+    if (this.args.toggleSelect && this.args.selectedCards?.size) {
       this.args.toggleSelect(cardDefOrId);
     } else if (this.args.onSelectCard) {
       this.args.onSelectCard(cardDefOrId);
@@ -187,11 +189,12 @@ export default class Overlays extends Component<OverlaySignature> {
   }
 
   @action protected isSelected(cardDefOrId: CardDefOrId) {
-    return (
-      this.args.selectedCards?.some(
-        (card: CardDefOrId) => card === cardDefOrId,
-      ) ?? false
-    );
+    if (!this.args.selectedCards) return false;
+    if (this.args.selectedCards.has(cardDefOrId)) return true;
+    if (typeof cardDefOrId !== 'string' && cardDefOrId.id) {
+      return this.args.selectedCards.has(cardDefOrId.id);
+    }
+    return false;
   }
 
   @action protected isHovered(renderedCard: RenderedCardForOverlayActions) {
@@ -220,8 +223,8 @@ export default class Overlays extends Component<OverlaySignature> {
         typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
       let canWrite = this.realm.canWrite(cardId);
       format = canWrite ? format : 'isolated';
-      if (this.args.publicAPI) {
-        await this.args.publicAPI.viewCard(new URL(cardId), format, {
+      if (this.args.viewCard) {
+        await this.args.viewCard(new URL(cardId), format, {
           fieldType,
           fieldName,
         });

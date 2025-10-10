@@ -1,6 +1,7 @@
 import Owner from '@ember/owner';
 import {
   RenderingTestContext,
+  click,
   render,
   settled,
   waitFor,
@@ -53,6 +54,10 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         content: 'let a = 1;\nlet b = 2;',
       });
     };
+
+    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+      return new Response('let a = 1;\nlet b = 2;');
+    };
   });
 
   async function renderFormattedAiBotMessage(testScenario: any) {
@@ -100,17 +105,14 @@ puts "💎"
       '.message',
     ) as HTMLElement;
     let directChildren = messageElement.children;
-    assert.ok(directChildren[0]?.tagName == 'P');
-    assert.ok(
-      directChildren[1]?.tagName == 'SECTION' &&
-        directChildren[1]?.classList.contains('code-block'),
-    );
-    assert.ok(directChildren[2]?.tagName == 'P');
-    assert.ok(
-      directChildren[3]?.tagName == 'SECTION' &&
-        directChildren[3]?.classList.contains('code-block'),
-    );
-    assert.ok(directChildren[4]?.tagName == 'P');
+    assert.strictEqual(directChildren[0]?.tagName, 'P');
+    assert.strictEqual(directChildren[1]?.tagName, 'SECTION');
+    assert.true(directChildren[1]?.classList.contains('code-block'));
+
+    assert.strictEqual(directChildren[2]?.tagName, 'P');
+    assert.strictEqual(directChildren[3]?.tagName, 'SECTION');
+    assert.true(directChildren[3]?.classList.contains('code-block'));
+    assert.strictEqual(directChildren[4]?.tagName, 'P');
 
     assert.dom('.monaco-editor').exists({ count: 2 });
     assert.dom('pre').doesNotExist();
@@ -151,7 +153,7 @@ ${SEARCH_MARKER}
     });
     await waitUntil(() => document.querySelectorAll('.view-line').length > 3);
 
-    assert.equal(
+    assert.strictEqual(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
         .innerText,
       '// existing code ... \nlet a = 1;\nlet b = 2;\nlet c = 3;',
@@ -180,7 +182,7 @@ ${SEPARATOR_MARKER}
 
     await waitUntil(() => document.querySelectorAll('.view-line').length > 4);
 
-    assert.equal(
+    assert.strictEqual(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
         .innerText,
       '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
@@ -444,6 +446,28 @@ ${REPLACE_MARKER}
     );
   });
 
+  test('it will text code clocks as they are sent, without hiding the first line url as it streams', async function (assert) {
+    await renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `<pre data-code-language="text">https://example.com/some-url</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+      isLastAssistantMessage: true,
+    });
+
+    assert.dom('.code-block').exists();
+    assert.dom('.code-block-diff').doesNotExist();
+    await waitUntil(() => document.querySelectorAll('.view-line').length == 1);
+
+    assert.strictEqual(
+      (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+        .innerText,
+      'https://example.com/some-url',
+    );
+  });
+
   test('it will render an error message when file url is missing', async function (assert) {
     await renderFormattedAiBotMessage({
       htmlParts: parseHtmlContent(
@@ -466,6 +490,38 @@ ${REPLACE_MARKER}
     assert
       .dom(
         `[data-test-error-message="Failed to load code from malformed file url"]`,
+      )
+      .exists();
+  });
+
+  test('it will render an error message when code diff does not apply', async function (assert) {
+    await renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `
+<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+🍄 hallucinated code 🍄
+${SEPARATOR_MARKER}
+let a = 1;
+${REPLACE_MARKER}
+</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+      isLastAssistantMessage: true,
+    });
+
+    await click('[data-test-attached-file-dropdown-button="file.ts"]');
+
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Generated Content"]')
+      .hasAttribute('disabled');
+
+    assert
+      .dom(
+        `[data-test-error-message="Unable to process the code patch due to invalid code coming from AI (search pattern not found in the target source file)"]`,
       )
       .exists();
   });

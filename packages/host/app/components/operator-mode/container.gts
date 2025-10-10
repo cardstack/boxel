@@ -16,9 +16,11 @@ import { provide } from 'ember-provide-consume-context';
 import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import {
+  CardContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  CommandContextName,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -32,17 +34,20 @@ import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
 
+import type { CardContext } from 'https://cardstack.com/base/card-api';
+
 import CardCatalogModal from '../card-catalog/modal';
+import PrerenderedCardSearch from '../prerendered-card-search';
 import { Submodes } from '../submode-switcher';
 
 import ChooseFileModal from './choose-file-modal';
 
-import type BillingService from '../../services/billing-service';
 import type CardService from '../../services/card-service';
+import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmServerService from '../../services/realm-server';
-
+import type StoreService from '../../services/store';
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
@@ -52,12 +57,13 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
-  @service private declare billingService: BillingService;
   @service private declare cardService: CardService;
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare messageService: MessageService;
   @service declare realmServer: RealmServerService;
+  @service private declare commandService: CommandService;
+  @service private declare store: StoreService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -67,7 +73,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.operatorModeStateService.clearStacks();
     });
   }
-
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
   private get getCard() {
@@ -84,6 +89,24 @@ export default class OperatorModeContainer extends Component<Signature> {
   // @ts-ignore "getCardCollection" is declared but not used
   private get getCardCollection() {
     return getCardCollection;
+  }
+
+  @provide(CommandContextName)
+  private get commandContext() {
+    return this.commandService.commandContext;
+  }
+
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): CardContext {
+    return {
+      getCard: this.getCard,
+      getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
+      store: this.store,
+      commandContext: this.commandContext,
+      prerenderedCardSearchComponent: PrerenderedCardSearch,
+    };
   }
 
   private saveSource = task(async (url: URL, content: string) => {
@@ -119,7 +142,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     <div class='operator-mode'>
       <ChooseFileModal />
       <CardCatalogModal />
-      <FromElseWhere @name='restore-patched-file-modal' />
+      <FromElseWhere @name='modal-elsewhere' />
 
       {{#if
         (or
@@ -139,9 +162,9 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
-        --boxel-sp-xxl: 2.5rem; /* 40px */
-        --boxel-sp-lg: 1.25rem; /* 20px */
-        --boxel-sp-xs: 0.625rem; /* 10px */
+        --boxel-sp-xxl: calc(var(--boxel-sp) * 2.5); /* 40px */
+        --boxel-sp-lg: calc(var(--boxel-sp) * 1.25); /* 20px */
+        --boxel-sp-xs: calc(var(--boxel-sp) * 0.625); /* 10px */
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
         --container-button-size: 2.5rem;
@@ -150,9 +173,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-spacing: var(--boxel-sp-xs);
         --operator-mode-top-bar-item-height: var(--container-button-size);
         --operator-mode-bottom-bar-item-height: var(--container-button-size);
+        --submode-new-file-button-width: 96px;
       }
       :global(button:focus:not(:disabled)) {
-        outline-color: var(--boxel-header-text-color, var(--boxel-highlight));
+        outline-color: var(
+          --boxel-header-text-color,
+          var(--ring, var(--boxel-highlight))
+        );
         outline-offset: -2px;
       }
       :global(button:focus:not(:focus-visible)) {

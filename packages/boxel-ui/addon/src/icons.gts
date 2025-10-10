@@ -3,6 +3,7 @@
 
 import type { Icon } from './icons/types.ts';
 
+import AiBw from './icons/ai-bw.gts';
 import ArrowLeft from './icons/arrow-left.gts';
 import ArrowRight from './icons/arrow-right.gts';
 import ArrowTopLeft from './icons/arrow-top-left.gts';
@@ -32,6 +33,7 @@ import Folder from './icons/folder.gts';
 import FourLines from './icons/four-lines.gts';
 import Grid3x3 from './icons/grid-3x3.gts';
 import Group from './icons/group.gts';
+import HighlightIcon from './icons/highlight-icon.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
 import IconCode from './icons/icon-code.gts';
@@ -58,6 +60,7 @@ import ImagePlaceholder from './icons/image-placeholder.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
+import PublishSiteIcon from './icons/publish-site-icon.gts';
 import Rows4 from './icons/rows-4.gts';
 import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
@@ -72,6 +75,7 @@ import Upload from './icons/upload.gts';
 import Warning from './icons/warning.gts';
 
 export const ALL_ICON_COMPONENTS = [
+  AiBw,
   ArrowLeft,
   ArrowRight,
   ArrowTopLeft,
@@ -101,6 +105,7 @@ export const ALL_ICON_COMPONENTS = [
   FourLines,
   Grid3x3,
   Group,
+  HighlightIcon,
   IconCircle,
   IconCircleSelected,
   IconCode,
@@ -127,6 +132,7 @@ export const ALL_ICON_COMPONENTS = [
   LoadingIndicator,
   Lock,
   Profile,
+  PublishSiteIcon,
   Rows4,
   Send,
   Sparkle,
@@ -142,6 +148,7 @@ export const ALL_ICON_COMPONENTS = [
 ];
 export {
   type Icon,
+  AiBw,
   ArrowLeft,
   ArrowRight,
   ArrowTopLeft,
@@ -171,6 +178,7 @@ export {
   FourLines,
   Grid3x3,
   Group,
+  HighlightIcon,
   IconCircle,
   IconCircleSelected,
   IconCode,
@@ -197,6 +205,7 @@ export {
   LoadingIndicator,
   Lock,
   Profile,
+  PublishSiteIcon,
   Rows4,
   Send,
   Sparkle,

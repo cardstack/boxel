@@ -1,0 +1,42 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Route",
+        "module": "../route"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "mapConfig": {
+        "tileserverUrl": ""
+      },
+      "routeName": null,
+      "coordinates": [
+        {
+          "searchKey": "Thailand",
+          "lat": 14.8971921,
+          "lon": 100.83273
+        },
+        {
+          "searchKey": "Vietnam",
+          "lat": 15.9266657,
+          "lon": 107.9650855
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

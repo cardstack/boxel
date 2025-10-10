@@ -1,7 +1,6 @@
-import window from 'ember-window-mock';
-
 export const CurrentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 export const NewSessionIdPersistenceKey = 'aiPanelNewSessionId';
+export const AiAssistantPanelWidth = 'ai-assistant-panel-width';
 export const CodeModePanelWidths = 'code-mode-panel-widths';
 export const CodeModePanelHeights = 'code-mode-panel-heights';
 export const ModuleInspectorSelections = 'code-mode-panel-selections';
@@ -12,14 +11,15 @@ export const RecentCards = 'recent-cards';
 export const RecentFiles = 'recent-files';
 export const ScrollPositions = 'scroll-positions';
 
-export function clearLocalStorage() {
-  window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
-  window.localStorage.removeItem(NewSessionIdPersistenceKey);
-  window.localStorage.removeItem(CodeModePanelWidths);
-  window.localStorage.removeItem(CodeModePanelHeights);
-  window.localStorage.removeItem(ModuleInspectorSelections);
-  window.localStorage.removeItem(PlaygroundSelections);
-  window.localStorage.removeItem(RecentCards);
-  window.localStorage.removeItem(RecentFiles);
-  window.localStorage.removeItem(ScrollPositions);
+export function clearLocalStorage(storage: Storage | undefined) {
+  storage?.removeItem(CurrentRoomIdPersistenceKey);
+  storage?.removeItem(NewSessionIdPersistenceKey);
+  storage?.removeItem(AiAssistantPanelWidth);
+  storage?.removeItem(CodeModePanelWidths);
+  storage?.removeItem(CodeModePanelHeights);
+  storage?.removeItem(ModuleInspectorSelections);
+  storage?.removeItem(PlaygroundSelections);
+  storage?.removeItem(RecentCards);
+  storage?.removeItem(RecentFiles);
+  storage?.removeItem(ScrollPositions);
 }

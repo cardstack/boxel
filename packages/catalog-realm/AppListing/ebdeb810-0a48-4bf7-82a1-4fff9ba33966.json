@@ -1,19 +1,44 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "CRM App",
-      "summary": "CRM App\n- A comprehensive, customizable customer relationship management solution built on the Boxel platform. Streamline your sales workflow, manage client relationships, and close more deals.\n\nKey Features\n- Contact Management: Organize all your contacts, leads, and customers in one place with detailed profiles and communication history.\n- Deal Tracking: Monitor your sales pipeline with visual kanban boards. Track deal status, priority, and projected values.\n- Task Management: Create and assign tasks with due dates, priorities, and statuses to ensure nothing falls through the cracks.\n- Account Management: Track customer accounts with custom urgency tags and comprehensive relationship history.\n- Reporting & Analytics: Gain insights with detailed reports on deal sizes, revenue forecasts, and profit margins.\n\nBenefits\n- Centralize customer data and communication history\n- Visualize your sales pipeline and forecast revenue\n- Increase team collaboration through task assignments\n- Make data-driven decisions with built-in analytics",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/crm-app-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/crm-app-listing/screenshot_02.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/crm-app-listing/screenshot_03.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/crm-app-listing/screenshot_04.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/crm-app-listing/thumbnail.png"
+      "summary": "CRM App\n- A comprehensive, customizable customer relationship management solution built on the Boxel platform. Streamline your sales workflow, manage client relationships, and close more deals.\n\nKey Features\n- Contact Management: Organize all your contacts, leads, and customers in one place with detailed profiles and communication history.\n- Deal Tracking: Monitor your sales pipeline with visual kanban boards. Track deal status, priority, and projected values.\n- Task Management: Create and assign tasks with due dates, priorities, and statuses to ensure nothing falls through the cracks.\n- Account Management: Track customer accounts with custom urgency tags and comprehensive relationship history.\n- Reporting & Analytics: Gain insights with detailed reports on deal sizes, revenue forecasts, and profit margins.\n\nBenefits\n- Centralize customer data and communication history\n- Visualize your sales pipeline and forecast revenue\n- Increase team collaboration through task assignments\n- Make data-driven decisions with built-in analytics",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
       "specs.0": {
         "links": {
           "self": "../Spec/crm-account"
@@ -46,7 +71,7 @@
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/crm-app-card-list"
+          "self": "../Spec/card-list"
         }
       },
       "specs.7": {
@@ -56,7 +81,7 @@
       },
       "specs.8": {
         "links": {
-          "self": "../Spec/crm-app-contact-link"
+          "self": "../Spec/contact-link"
         }
       },
       "specs.9": {
@@ -96,12 +121,12 @@
       },
       "specs.16": {
         "links": {
-          "self": "../Spec/crm-app-grid"
+          "self": "../Spec/grid"
         }
       },
       "specs.17": {
         "links": {
-          "self": "../Spec/crm-app-layout"
+          "self": "../Spec/layout"
         }
       },
       "specs.18": {
@@ -116,7 +141,7 @@
       },
       "specs.20": {
         "links": {
-          "self": "../Spec/crm-app-sort"
+          "self": "../Spec/sort"
         }
       },
       "specs.21": {
@@ -249,31 +274,25 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
-      "categories": {
-        "links": {
-          "self": null
-        }
-      },
-      "tags": {
-        "links": {
-          "self": null
-        }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
       "examples.0": {
         "links": {
           "self": "../crm-app/CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "AppListing"
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/business-development"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/hr-people-management"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

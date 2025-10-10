@@ -1,4 +1,8 @@
-import { type Type } from '@cardstack/host/resources/card-type';
+import {
+  isCardOrFieldDeclaration,
+  type ModuleDeclaration,
+} from '@cardstack/host/resources/module-contents';
+import { type Type } from '@cardstack/host/services/card-type-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -13,4 +17,13 @@ export function calculateTotalOwnFields(
   cardType: Type,
 ): number {
   return cardType.fields.filter((field) => isOwnField(card, field.name)).length;
+}
+
+export function isSelectedItemIncompatibleWithSchemaEditor(
+  selectedDeclaration: ModuleDeclaration | undefined,
+): boolean {
+  if (!selectedDeclaration) {
+    return false;
+  }
+  return !isCardOrFieldDeclaration(selectedDeclaration);
 }

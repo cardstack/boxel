@@ -30,15 +30,12 @@ import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
-import {
-  type ModuleDeclaration,
-  findDeclarationByName,
-} from '@cardstack/host/resources/module-contents';
+import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
 import { type ModuleAnalysis } from '@cardstack/host/resources/module-contents';
-import type CardService from '@cardstack/host/services/card-service';
 import type { SaveType } from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+import { findDeclarationByName } from '@cardstack/host/services/module-contents-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -67,7 +64,6 @@ const log = logger('component:code-editor');
 export default class CodeEditor extends Component<Signature> {
   @service private declare monacoService: MonacoService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare store: StoreService;
@@ -521,7 +517,10 @@ export default class CodeEditor extends Component<Signature> {
         border-color: #454545;
       }
       .loading {
-        margin: 40vh auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
       }
     </style>
   </template>

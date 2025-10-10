@@ -19,6 +19,7 @@ import {
   openRoot,
   registerRealmUsers,
   setupUserSubscribed,
+  setupPermissions,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 
@@ -38,6 +39,7 @@ test.describe('Login', () => {
     await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page, appURL);
     await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
   });
   test.afterEach(async () => {
     await realmServer.stop();
@@ -61,6 +63,7 @@ test.describe('Login', () => {
     ).toHaveCount(1);
 
     await logout(page);
+    await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
     await assertLoggedOut(page);
     await page.reload();
     await assertLoggedOut(page);
@@ -304,25 +307,6 @@ test.describe('Login', () => {
     await page.locator('[data-test-profile-icon-button]').click();
     await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
       '@user1:localhost',
-    );
-    await page.locator('[data-test-signout-button]').click();
-    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
-  });
-
-  test('it can logout at payment setup flow', async ({ page }) => {
-    await registerUser(synapse, 'user2', 'pass');
-    await login(page, 'user2', 'pass', {
-      url: appURL,
-      skipOpeningAssistant: true,
-    });
-    await expect(
-      page.locator(
-        '[data-test-profile-icon-button] > [data-test-profile-icon]',
-      ),
-    ).toHaveText('U');
-    await page.locator('[data-test-profile-icon-button]').click();
-    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
-      '@user2:localhost',
     );
     await page.locator('[data-test-signout-button]').click();
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();

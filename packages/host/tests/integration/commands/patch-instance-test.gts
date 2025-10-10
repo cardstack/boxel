@@ -16,6 +16,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  cardInfo,
 } from '../../helpers';
 import {
   CardDef,
@@ -84,6 +85,9 @@ module('Integration | commands | patch-instance', function (hooks) {
       new URL(`${testRealmURL}Person/hassan`),
     );
     if (result && 'instance' in result) {
+      console.log(
+        `actual: ${JSON.stringify(result.instance?.attributes, null, 2)}`,
+      );
       assert.deepEqual(
         result.instance?.attributes,
         {
@@ -91,7 +95,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -108,6 +113,7 @@ module('Integration | commands | patch-instance', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );
@@ -144,7 +150,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: ['Paper'],
           thumbnailURL: null,
-          title: null,
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -161,6 +168,7 @@ module('Integration | commands | patch-instance', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );
@@ -197,7 +205,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -214,6 +223,7 @@ module('Integration | commands | patch-instance', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );
@@ -251,7 +261,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -265,6 +276,7 @@ module('Integration | commands | patch-instance', function (hooks) {
           },
           'friends.0': { links: { self: `./germaine` } },
           'friends.1': { links: { self: `./queenzy` } },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );
@@ -309,7 +321,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: ['Air'],
           thumbnailURL: null,
-          title: null,
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -322,6 +335,7 @@ module('Integration | commands | patch-instance', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );

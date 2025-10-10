@@ -9,11 +9,15 @@ import {
   Component,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
+import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
+import type {
+  GetAllRealmMetasResult,
+  RealmMetaField,
+} from 'https://cardstack.com/base/command';
 
-import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
@@ -22,88 +26,59 @@ import { task } from 'ember-concurrency';
 import {
   Accordion,
   Pill,
-  BoxelDropdown,
   BoxelButton,
-  Menu as BoxelMenu,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
+import ChooseRealmAction from '../components/choose-realm-action';
 import { ListingFittedTemplate } from '../components/listing-fitted';
+import ListOfPills from '../components/list-of-pills';
+import { listingActions, isReady } from '../resources/listing-actions';
 
-import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
+import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
-import { setupAllRealmsInfo } from '../helper';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
-  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
-    [];
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.writableRealms = setupAllRealmsInfo(this.args);
-  }
+  actionsResource = listingActions(this, () => ({
+    listing: this.args.model as Listing,
+  }));
 
-  get remixRealmOptions() {
-    return this.writableRealms
-      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
-      .map((realm) => {
-        return new MenuItem(realm.name, 'action', {
-          action: () => {
-            this.remix(realm.url);
-          },
-          iconURL: realm.iconURL ?? '/default-realm-icon.png',
-        });
-      });
-  }
+  allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
+    this,
+    GetAllRealmMetasCommand,
+  );
 
-  _remix = task(async (realm: string) => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('Missing commandContext');
+  get writableRealms(): { name: string; url: string; iconURL?: string }[] {
+    const commandResource = this.allRealmsInfoResource;
+    if (commandResource?.isSuccess && commandResource.value) {
+      const result = commandResource.value as GetAllRealmMetasResult;
+      if (result.results) {
+        return result.results
+          .filter(
+            (realmMeta: RealmMetaField) =>
+              realmMeta.canWrite &&
+              realmMeta.url !== this.args.model[realmURL]?.href,
+          )
+          .map((realmMeta: RealmMetaField) => ({
+            name: realmMeta.info.name,
+            url: realmMeta.url,
+            iconURL: realmMeta.info.iconURL,
+          }));
+      }
     }
-    await new ListingInitCommand(commandContext).execute({
-      realm,
-      actionType: 'remix',
-      listing: this.args.model as Listing,
-    });
-  });
+    return [];
+  }
 
   get hasOneOrMoreSpec() {
     return this.args.model.specs && this.args.model?.specs?.length > 0;
-  }
-
-  get isSkillListing() {
-    return this.args.model instanceof SkillListing;
-  }
-
-  get hasSkills() {
-    return this.args.model.skills && this.args.model?.skills?.length > 0;
-  }
-
-  get remixDisabled() {
-    return (
-      (!this.isSkillListing && !this.hasOneOrMoreSpec) ||
-      (this.isSkillListing && !this.hasSkills)
-    );
-  }
-
-  @action preview() {
-    if (!this.args.model.examples || this.args.model.examples.length === 0) {
-      throw new Error('No examples to preview');
-    }
-    this.args.context?.actions?.viewCard?.(this.args.model.examples[0]);
-  }
-
-  @action remix(realmUrl: string) {
-    this._remix.perform(realmUrl);
   }
 
   get appName(): string {
@@ -117,7 +92,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get specBreakdown() {
     if (!this.args.model.specs) {
-      return {} as Record<SpecType, Spec[]>;
+      return {} as Record<string, Spec[]>;
     }
     return specBreakdown(this.args.model.specs);
   }
@@ -143,6 +118,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.categories?.length);
   }
 
+  get hasTags() {
+    return Boolean(this.args.model.tags?.length);
+  }
+
   get hasImages() {
     return Boolean(this.args.model.images?.length);
   }
@@ -150,6 +129,39 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   get hasExamples() {
     return Boolean(this.args.model.examples?.length);
   }
+
+  get hasSkills() {
+    return this.args.model?.skills;
+  }
+
+  get listingActions() {
+    if (isReady(this.actionsResource)) {
+      return this.actionsResource.actions;
+    }
+    return;
+  }
+
+  get stubActions() {
+    return this.listingActions?.type === 'stub'
+      ? this.listingActions
+      : undefined;
+  }
+
+  get regularActions() {
+    return this.listingActions?.type === 'regular'
+      ? this.listingActions
+      : undefined;
+  }
+
+  get skillActions() {
+    return this.listingActions?.type === 'skill'
+      ? this.listingActions
+      : undefined;
+  }
+
+  addSkillsToCurrentRoom = task(async () => {
+    this.skillActions?.addSkillsToRoom?.();
+  });
 
   <template>
     <div class='app-listing-embedded'>
@@ -160,39 +172,45 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         @publisher={{this.publisherName}}
       >
         <:action>
-          <div class='action-buttons'>
-            {{#if this.hasExamples}}
-              <BoxelButton
-                class='action-button'
-                data-test-catalog-listing-embedded-preview-button
-                {{on 'click' this.preview}}
-              >
-                Preview
-              </BoxelButton>
-            {{/if}}
-            <BoxelDropdown @autoClose={{true}}>
-              <:trigger as |bindings|>
+          {{#if this.listingActions}}
+            <div class='action-buttons'>
+              {{#if this.listingActions.preview}}
                 <BoxelButton
                   class='action-button'
-                  data-test-catalog-listing-embedded-remix-button
-                  @kind='primary'
-                  @loading={{this._remix.isRunning}}
-                  @disabled={{this.remixDisabled}}
-                  {{bindings}}
+                  data-test-catalog-listing-embedded-preview-button
+                  {{on 'click' this.listingActions.preview}}
                 >
-                  Remix
+                  Preview
                 </BoxelButton>
-              </:trigger>
-              <:content as |dd|>
-                <BoxelMenu
-                  class='realm-dropdown-menu'
-                  @closeMenu={{dd.close}}
-                  @items={{this.remixRealmOptions}}
-                  data-test-catalog-listing-embedded-remix-dropdown
+              {{/if}}
+              {{#if this.skillActions}}
+                {{#if this.skillActions.addSkillsToRoom}}
+                  <BoxelButton
+                    class='action-button'
+                    data-test-catalog-listing-embedded-add-skills-to-room-button
+                    {{on 'click' this.skillActions.addSkillsToRoom}}
+                  >
+                    Use Skills
+                  </BoxelButton>
+                {{/if}}
+              {{/if}}
+              {{#if this.stubActions}}
+                <ChooseRealmAction
+                  @name='Build'
+                  @writableRealms={{this.writableRealms}}
+                  @onAction={{this.stubActions.build}}
                 />
-              </:content>
-            </BoxelDropdown>
-          </div>
+              {{else if this.regularActions}}
+                {{#if this.regularActions.remix}}
+                  <ChooseRealmAction
+                    @name='Remix'
+                    @writableRealms={{this.writableRealms}}
+                    @onAction={{this.regularActions.remix}}
+                  />
+                {{/if}}
+              {{/if}}
+            </div>
+          {{/if}}
         </:action>
       </AppListingHeader>
 
@@ -220,12 +238,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           class='license-section'
           data-test-catalog-listing-embedded-license-section
         >
-          <h2>License</h2>
-          {{#if @model.license.name}}
-            {{@model.license.name}}
-          {{else}}
-            <p class='no-data-text'>No License Provided</p>
-          {{/if}}
+          <div class='info-box'>
+            <h2>License</h2>
+            {{#if @model.license.name}}
+              {{@model.license.name}}
+            {{else}}
+              <p class='no-data-text'>No License Provided</p>
+            {{/if}}
+          </div>
         </div>
       </section>
 
@@ -257,8 +277,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         {{#if this.hasExamples}}
           <ul class='examples-list' data-test-catalog-listing-embedded-examples>
             {{#each @fields.examples as |Example|}}
-              <li>
-                <Example />
+              <li class='example-item'>
+                <Example class='example-card' />
               </li>
             {{/each}}
           </ul>
@@ -269,25 +289,29 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       <hr class='divider' />
 
-      <section
-        class='app-listing-categories'
-        data-test-catalog-listing-embedded-categories-section
-      >
-        <h2>Categories</h2>
-        {{#if this.hasCategories}}
-          <ul
-            class='categories-list'
-            data-test-catalog-listing-embedded-categories
-          >
-            {{#each @model.categories as |category|}}
-              <li class='categories-item'>
-                <Pill>{{category.name}}</Pill>
-              </li>
-            {{/each}}
-          </ul>
-        {{else}}
-          <p class='no-data-text'>No Categories Provided</p>
-        {{/if}}
+      <section class='two-col'>
+        <section
+          class='app-listing-categories'
+          data-test-catalog-listing-embedded-categories-section
+        >
+          <h2>Categories</h2>
+          {{#if this.hasCategories}}
+            <ListOfPills @items={{@model.categories}} />
+          {{else}}
+            <p class='no-data-text'>No Categories Provided</p>
+          {{/if}}
+        </section>
+        <section
+          class='app-listing-tags'
+          data-test-catalog-listing-embedded-tags-section
+        >
+          <h2>Tags</h2>
+          {{#if this.hasTags}}
+            <ListOfPills @items={{@model.tags}} />
+          {{else}}
+            <p class='no-data-text'>No Tags Provided</p>
+          {{/if}}
+        </section>
       </section>
 
       <hr class='divider' />
@@ -360,8 +384,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       h2 {
         font-weight: 600;
         margin: 0;
-        margin-bottom: var(--boxel-sp-sm);
+        margin-bottom: var(--boxel-sp);
       }
+
       .no-data-text {
         color: var(--boxel-400);
       }
@@ -369,20 +394,24 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         width: 100%;
         height: auto;
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-light);
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-100);
+      }
+      .info-box :deep(.markdown-content p) {
+        margin-top: 0;
       }
 
       /* container */
       .app-listing-embedded {
         container-name: app-listing-embedded;
         container-type: inline-size;
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-lg);
       }
       .app-listing-info {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xl);
-        margin-left: 60px;
+        margin-left: 72px;
         margin-top: var(--boxel-sp-lg);
       }
       .app-listing-price-plan {
@@ -395,25 +424,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         gap: var(--boxel-sp-xxs);
       }
       .action-button {
-        flex: 1;
-      }
-      .realm-dropdown-menu {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
-        --boxel-menu-item-gap: var(--boxel-sp-xs);
-        min-width: 13rem;
-        max-height: 13rem;
-        overflow-y: scroll;
-      }
-      .realm-dropdown-menu :deep(.menu-item__icon-url) {
-        border-radius: var(--boxel-border-radius-xs);
+        flex: 1 1 auto;
       }
       .app-listing-embedded
         :deep(.ember-basic-dropdown-content-wormhole-origin) {
         position: absolute;
-      }
-      .app-listing-summary {
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
       }
 
       .divider {
@@ -422,13 +437,17 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         border: 0.5px solid var(--boxel-200);
       }
 
+      /* horizontally scrollable images list */
       .images-list {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        display: flex;
+        flex-wrap: nowrap;
         gap: var(--boxel-sp);
         list-style: none;
-        margin-block: 0;
-        padding-inline-start: 0;
+        margin: 0;
+        padding: 0 0 var(--boxel-sp-xs) 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
       }
       .images-item {
         background-color: var(--boxel-200);
@@ -438,7 +457,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         padding: var(--boxel-sp-sm);
         display: flex;
         align-items: center;
-        min-height: 160px;
+        justify-content: center;
+        flex: 0 0 30%;
+        min-width: 200px;
       }
       .images-item img {
         width: 100%;
@@ -458,20 +479,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }
       .examples-list {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(auto-fill, 150px);
         gap: var(--boxel-sp);
         list-style: none;
         margin-block: 0;
         padding-inline-start: 0;
       }
-
-      .categories-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-sm);
-        list-style: none;
-        margin-block: 0;
-        padding-inline-start: 0;
+      .example-card {
+        min-height: 180px;
       }
 
       .skills-list {
@@ -481,6 +496,18 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         list-style: none;
         margin-block: 0;
         padding-inline-start: 0;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--boxel-sp-xxl);
+        margin-top: var(--boxel-sp);
+        align-items: start;
+      }
+      .two-col .app-listing-categories,
+      .two-col .app-listing-tags {
+        min-width: 0;
       }
 
       .app-listing-spec-breakdown :deep(.accordion) {
@@ -493,18 +520,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         }
         .license-statistic,
         .stats-container,
-        .pricing-plans,
-        .examples-list {
-          grid-template-columns: 1fr;
-        }
-        .images-list {
+        .pricing-plans {
           grid-template-columns: repeat(2, 1fr);
         }
       }
 
       @container app-listing-embedded (inline-size <= 360px) {
-        .images-list {
-          grid-template-columns: repeat(1, 1fr);
+        .examples-list {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -531,7 +554,7 @@ export class Listing extends CardDef {
     },
   });
 
-  static isolated = EmbeddedTemplate; //temporary
+  static isolated = EmbeddedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = ListingFittedTemplate;
 }
@@ -553,19 +576,19 @@ export class SkillListing extends Listing {
   static displayName = 'SkillListing';
 }
 
-function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {
+function specBreakdown(specs: Spec[]): Record<string, Spec[]> {
   return specs.reduce(
     (groupedSpecs, spec) => {
       if (!spec) {
         return groupedSpecs;
       }
-      const specType = spec.specType as SpecType;
-      if (!groupedSpecs[specType]) {
-        groupedSpecs[specType] = [];
+      let key = spec.specType ?? 'unknown';
+      if (!groupedSpecs[key]) {
+        groupedSpecs[key] = [];
       }
-      groupedSpecs[specType].push(spec);
+      groupedSpecs[key].push(spec);
       return groupedSpecs;
     },
-    {} as Record<SpecType, Spec[]>,
+    {} as Record<string, Spec[]>,
   );
 }

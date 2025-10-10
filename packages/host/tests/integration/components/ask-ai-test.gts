@@ -56,9 +56,10 @@ module('Integration | ask-ai', function (hooks) {
   hooks.beforeEach(async function () {
     operatorModeStateService = getService('operator-mode-state-service');
 
-    const petCard = `import { CardDef, Component } from "https://cardstack.com/base/card-api";
+    const petCard = `import { CardDef, Component, contains, field, StringField } from "https://cardstack.com/base/card-api";
       export class Pet extends CardDef {
         static displayName = 'Pet';
+        @field title = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h2><@fields.title /></h2>
@@ -156,7 +157,7 @@ module('Integration | ask-ai', function (hooks) {
 
   test('can send message to AI Assistant from workspace chooser', async function (assert) {
     operatorModeStateService.restore({
-      stacks: [[{ id: `${testRealmURL}Pet/marco`, format: 'isolated' }]],
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
     });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -166,7 +167,7 @@ module('Integration | ask-ai', function (hooks) {
         </template>
       },
     );
-    await click('[data-test-close-button]');
+    await click('[data-test-close-button]'); // close last card
     assert.dom('[data-test-workspace-chooser]').exists();
     assert.dom('[data-test-ask-ai-label]').exists();
     assert.dom('[data-test-ask-ai-input]').hasNoValue();

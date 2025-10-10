@@ -26,6 +26,8 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
     return SwitchSubmodeInput;
   }
 
+  requireInputFields = ['submode'];
+
   private get allStackItems() {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }

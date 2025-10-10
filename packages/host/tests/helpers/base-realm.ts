@@ -62,10 +62,11 @@ let Component: (typeof CardAPIModule)['Component'];
 let FieldDef: (typeof CardAPIModule)['FieldDef'];
 let contains: (typeof CardAPIModule)['contains'];
 let containsMany: (typeof CardAPIModule)['containsMany'];
+let isCard: (typeof CardAPIModule)['isCard'];
 let linksTo: (typeof CardAPIModule)['linksTo'];
 let linksToMany: (typeof CardAPIModule)['linksToMany'];
 let MaybeBase64Field: (typeof CardAPIModule)['MaybeBase64Field'];
-let recompute: (typeof CardAPIModule)['recompute'];
+let ensureLinksLoaded: (typeof CardAPIModule)['ensureLinksLoaded'];
 let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let serializeCard: (typeof CardAPIModule)['serializeCard'];
@@ -79,6 +80,7 @@ let queryableValue: (typeof CardAPIModule)['queryableValue'];
 let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
+let CardInfoField: (typeof CardAPIModule)['CardInfoField'];
 
 async function initialize() {
   let loader = getService('loader-service').loader;
@@ -149,9 +151,10 @@ async function initialize() {
     FieldDef,
     contains,
     containsMany,
+    isCard,
     linksTo,
     linksToMany,
-    recompute,
+    ensureLinksLoaded,
     createFromSerialized,
     updateFromSerialized,
     serializeCard,
@@ -166,6 +169,7 @@ async function initialize() {
     getFieldDescription,
     ReadOnlyField,
     instanceOf,
+    CardInfoField,
   } = cardAPI);
 }
 
@@ -192,9 +196,10 @@ export {
   FieldDef,
   contains,
   containsMany,
+  isCard,
   linksTo,
   linksToMany,
-  recompute,
+  ensureLinksLoaded,
   MaybeBase64Field,
   createFromSerialized,
   updateFromSerialized,
@@ -210,4 +215,5 @@ export {
   ReadOnlyField,
   Skill,
   instanceOf,
+  CardInfoField,
 };

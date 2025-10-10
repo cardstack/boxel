@@ -30,8 +30,9 @@
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
       "*": ["types/*"]
-    }
+    },
+    "types": ["@cardstack/local-types","@cardstack/local-types/matrix-js-sdk"]
   },
-  "include": ["./**/*", "../runtime-common/types/*"],
+  "include": ["./**/*"],
   "exclude": ["node_modules", "dist"]
 }

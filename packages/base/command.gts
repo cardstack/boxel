@@ -1,5 +1,6 @@
 import {
   CardDef,
+  Component,
   FieldDef,
   StringField,
   contains,
@@ -7,24 +8,23 @@ import {
   field,
   linksTo,
   linksToMany,
-  primitive,
 } from './card-api';
-import CodeRefField from './code-ref';
+import CodeRefField, { AbsoluteCodeRefField } from './code-ref';
 import BooleanField from './boolean';
+import MarkdownField from './markdown';
 import NumberField from './number';
+import ResponseField from './response-field';
 import { Skill } from './skill';
+import { Spec } from './spec';
 import {
   JsonField,
   QueryField,
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
+  SearchCardSummaryField,
 } from './commands/search-card-result';
-import { SerializedFileDef } from './file-api';
-
-export class FileDefField extends FieldDef {
-  static [primitive]: SerializedFileDef;
-}
+import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -34,12 +34,16 @@ export class SaveCardInput extends CardDef {
   @field localDir = contains(StringField);
 }
 
-export class CopyCardInput extends CardDef {
+export class CopyCardToRealmInput extends CardDef {
+  @field sourceCard = linksTo(CardDef);
+  @field targetRealm = contains(StringField);
+  @field localDir = contains(StringField);
+}
+
+export class CopyCardToStackInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
   @field targetStackIndex = contains(NumberField);
-  @field realm = contains(StringField);
   @field localDir = contains(StringField);
-  @field codeRef = contains(CodeRefField);
 }
 
 export class CopyCardResult extends CardDef {
@@ -99,10 +103,16 @@ export class WriteTextFileInput extends CardDef {
 }
 
 export class CreateInstanceInput extends CardDef {
-  @field module = contains(CodeRefField);
+  @field codeRef = contains(CodeRefField);
   @field realm = contains(StringField);
 }
 
+export class CreateInstancesInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field realm = contains(StringField);
+  @field count = contains(NumberField);
+  @field exampleCard = linksTo(CardDef);
+}
 export class UpdateCodePathWithSelectionInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field localName = contains(StringField);
@@ -153,7 +163,9 @@ export class PatchCodeInput extends CardDef {
 
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
-  @field defaultSkills = linksToMany(Skill);
+  @field enabledSkills = linksToMany(Skill);
+  @field disabledSkills = linksToMany(Skill);
+  @field llmMode = contains(StringField); // 'gpt-4o' or 'gpt-4o-mini'
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {
@@ -163,6 +175,7 @@ export class CreateAIAssistantRoomResult extends CardDef {
 export class SetActiveLLMInput extends CardDef {
   @field roomId = contains(StringField);
   @field model = contains(StringField);
+  @field mode = contains(StringField); // 'act' or 'ask'
 }
 
 export class AddSkillsToRoomInput extends CardDef {
@@ -180,6 +193,7 @@ export class UseAiAssistantInput extends CardDef {
   @field roomId = contains(StringField); // pass 'new' or leave blank to create a new room
   @field roomName = contains(StringField); // only used when creating a new room
   @field llmModel = contains(StringField);
+  @field llmMode = contains(StringField); // act vs ask
   @field openRoom = contains(BooleanField);
   @field skillCards = linksToMany(Skill);
   @field skillCardIds = containsMany(StringField);
@@ -189,6 +203,7 @@ export class UseAiAssistantInput extends CardDef {
   @field prompt = contains(StringField);
   @field clientGeneratedId = contains(StringField);
   @field openCardIds = containsMany(StringField);
+  @field requireCommandCall = contains(BooleanField); // optional: require AI to execute commands
 }
 
 export class SendAiAssistantMessageInput extends CardDef {
@@ -234,6 +249,11 @@ export class ListingActionInput extends CardDef {
   @field attachedCard = linksTo(CardDef);
 }
 
+export class ListingBuildInput extends CardDef {
+  @field realm = contains(StringField);
+  @field listing = linksTo(CardDef);
+}
+
 export class ListingInstallInput extends CardDef {
   @field realm = contains(StringField);
   @field listing = linksTo(CardDef);
@@ -247,6 +267,11 @@ export class ListingInstallResult extends CardDef {
 
 export class ListingCreateInput extends CardDef {
   @field openCardId = contains(StringField);
+  @field targetRealm = contains(StringField);
+}
+
+export class ListingCreateResult extends CardDef {
+  @field listing = linksTo(CardDef);
 }
 
 export class VisitCardsInput extends CardDef {
@@ -281,8 +306,174 @@ export class PreviewFormatInput extends CardDef {
   @field modulePath = contains(StringField);
 }
 
+export class SendRequestViaProxyInput extends CardDef {
+  @field url = contains(StringField);
+  @field method = contains(StringField);
+  @field requestBody = contains(StringField);
+  @field headers = contains(JsonField); // optional
+}
+
+export class SendRequestViaProxyResult extends CardDef {
+  @field response = contains(ResponseField);
+}
+
+export class SummarizeSessionInput extends CardDef {
+  @field roomId = contains(StringField);
+}
+
+export class SummarizeSessionResult extends CardDef {
+  @field summary = contains(StringField);
+}
+
+export class AskAiInput extends CardDef {
+  @field prompt = contains(StringField);
+  @field llmMode = contains(StringField); // 'ask' or 'act'
+}
+
+export class AskAiOutput extends CardDef {
+  @field response = contains(StringField);
+}
+
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
+  SearchCardSummaryField,
 };
+
+export class RealmInfoField extends FieldDef {
+  @field name = contains(StringField);
+  @field backgroundURL = contains(StringField);
+  @field iconURL = contains(StringField);
+  @field showAsCatalog = contains(BooleanField);
+  @field visibility = contains(StringField);
+  @field realmUserId = contains(StringField);
+  @field publishable = contains(BooleanField);
+  @field isIndexing = contains(BooleanField);
+  @field isPublic = contains(BooleanField);
+}
+
+export class RealmMetaField extends FieldDef {
+  @field info = contains(RealmInfoField);
+  @field canWrite = contains(BooleanField);
+  @field url = contains(StringField);
+}
+
+export class GetAllRealmMetasResult extends CardDef {
+  @field results = containsMany(RealmMetaField);
+}
+
+export class SearchGoogleImagesInput extends CardDef {
+  @field query = contains(StringField);
+  @field maxResults = contains(NumberField); // optional, default 10
+  @field startIndex = contains(NumberField); // optional, default 1, for pagination
+}
+
+export class SearchGoogleImagesResult extends CardDef {
+  @field images = containsMany(JsonField);
+  @field totalResults = contains(NumberField);
+  @field searchTime = contains(NumberField);
+  @field formattedTotalResults = contains(StringField);
+  @field formattedSearchTime = contains(StringField);
+  @field hasNextPage = contains(BooleanField);
+  @field nextPageStartIndex = contains(NumberField);
+  @field currentStartIndex = contains(NumberField);
+}
+
+export class CreateSpecsInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field module = contains(StringField);
+  @field targetRealm = contains(StringField);
+  @field autoGenerateReadme = contains(BooleanField);
+}
+
+export class CreateSpecsResult extends CardDef {
+  @field newSpecs = linksToMany(Spec);
+  @field specs = linksToMany(Spec);
+}
+
+export class PatchFieldsInput extends CardDef {
+  static displayName = 'Patch Fields Input';
+
+  @field cardId = contains(StringField);
+  @field fieldUpdates = contains(JsonField); // Dynamic field mapping as JSON object
+}
+
+export class PatchFieldsOutput extends CardDef {
+  static displayName = 'Patch Fields Result';
+
+  @field success = contains(BooleanField);
+  @field updatedFields = containsMany(StringField); // Array of successfully updated field paths
+  @field errors = contains(JsonField); // Field path to error message mapping
+
+  static embedded = class Embedded extends Component<typeof PatchFieldsOutput> {
+    get updatedFieldsCount(): number {
+      return this.args.model.updatedFields?.length ?? 0;
+    }
+    get commaSepUpdatedFields(): string {
+      return (this.args.model.updatedFields ?? []).join(', ');
+    }
+    get commaSepErrors(): string {
+      let errors = this.args.model.errors ?? {};
+      return Object.entries(errors)
+        .map(([field, message]) => `${field}: ${message}`)
+        .join('; ');
+    }
+    <template>
+      <div class='wrapper'>
+        {{#if (gt this.updatedFieldsCount 0)}}
+          Updated
+          {{this.updatedFieldsCount}}
+          field{{unless (eq this.updatedFieldsCount 1) 's'}}:
+          {{this.commaSepUpdatedFields}}.
+          {{#if @model.errors.length}}
+            Errors:
+            {{this.commaSepErrors}}.
+          {{/if}}
+        {{else}}
+          No fields were updated. Errors:
+          {{this.commaSepErrors}}.
+        {{/if}}
+      </div>
+      <style scoped>
+        .wrapper {
+          padding: var(--boxel-sp-sm);
+        }
+      </style>
+    </template>
+  };
+}
+
+export class GenerateReadmeSpecResult extends CardDef {
+  @field readme = contains(MarkdownField);
+}
+
+export class GenerateReadmeSpecInput extends CardDef {
+  @field spec = linksTo(Spec);
+}
+
+export class OneShotLLMRequestInput extends CardDef {
+  @field codeRef = contains(AbsoluteCodeRefField);
+  @field userPrompt = contains(StringField);
+  @field systemPrompt = contains(StringField);
+  @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
+  @field attachedFileURLs = containsMany(StringField);
+}
+
+export class OneShotLLMRequestResult extends CardDef {
+  @field output = contains(StringField);
+}
+
+// Select up to N cards of a given type using an LLM heuristic
+export class SearchAndChooseInput extends CardDef {
+  @field codeRef = contains(CodeRefField); // module + name of card type to search instances of
+  @field max = contains(NumberField); // optional, default 2
+  @field additionalSystemPrompt = contains(StringField); // optional extra hard rules
+  @field llmModel = contains(StringField); // optional model override
+}
+
+export class SearchAndChooseResult extends CardDef {
+  @field selectedIds = containsMany(StringField);
+  @field selectedCards = linksToMany(CardDef);
+}

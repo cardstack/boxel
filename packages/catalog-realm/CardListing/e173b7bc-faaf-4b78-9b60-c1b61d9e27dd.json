@@ -1,0 +1,101 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Online Product Listing",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-product-listing/screenshot_01.png"
+      ],
+      "summary": "Complete e-commerce product card template with pricing, inventory, images, and responsive layouts for online stores",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/0fe173b7-bcfa-4f9b-b8db-60c1b61d9e27"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../online-product/OnlineProduct/bluetooth-speaker-mini"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../online-product/OnlineProduct/canvas-backpack-travel"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../online-product/OnlineProduct/ceramic-coffee-mug-set"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../online-product/OnlineProduct/eco-water-bottle"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../online-product/OnlineProduct/gaming-keyboard"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../online-product/OnlineProduct/organic-cotton-tshirt"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../online-product/OnlineProduct/professional-laptop-stand"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../online-product/OnlineProduct/smart-fitness-tracker"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/e-commerce-online-sales"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

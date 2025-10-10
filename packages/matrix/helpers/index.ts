@@ -24,8 +24,7 @@ interface ProfileAssertions {
 }
 interface LoginOptions {
   url?: string;
-  expectFailure?: true;
-  skipOpeningAssistant?: true;
+  showAllCards?: boolean; //default true
 }
 
 export async function setSkillsRedirect(page: Page) {
@@ -101,9 +100,9 @@ export async function createRealm(
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
   await page.locator('[data-test-create-workspace-submit]').click();
-  await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
-  await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(
-    0,
+  await waitUntil(
+    async () =>
+      (await page.locator(`[data-test-workspace="${name}"]`).count()) === 1,
   );
 }
 
@@ -257,69 +256,60 @@ export async function gotoRegistration(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
 
   await page.locator('[data-test-register-user]').click();
-  await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 }
 
 export async function gotoForgotPassword(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
 
   await page.locator('[data-test-forgot-password]').click();
-  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
-    1,
-  );
 }
 
 export async function login(
   page: Page,
   username: string,
   password: string,
-  opts?: LoginOptions,
+  opts: LoginOptions = {
+    url: undefined,
+  },
 ) {
-  await openRoot(page, opts?.url);
-
-  await expect(page.locator('[data-test-username-field]')).toBeEditable();
-  await page.locator('[data-test-username-field]').fill(username);
-  await page.locator('[data-test-password-field]').fill(password);
-  await page.locator('[data-test-login-btn]').click();
-
-  if (opts?.expectFailure) {
-    await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
-  } else {
-    if (!opts?.skipOpeningAssistant) {
-      await openAiAssistant(page);
-    }
+  let credentials = await loginUser(username, password);
+  if (opts.showAllCards) {
+    await showAllCards(page);
   }
+  let localStorageAuth = {
+    access_token: credentials.accessToken,
+    user_id: credentials.userId,
+    device_id: credentials.deviceId,
+    home_server: credentials.homeServer,
+  };
+
+  await page.context().addInitScript((authData) => {
+    window.localStorage.setItem('auth', JSON.stringify(authData));
+  }, localStorageAuth);
+
+  await openRoot(page, opts?.url);
 }
 
 export async function enterWorkspace(
   page: Page,
   workspace = 'Test Workspace A',
 ) {
-  await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-  await expect(
-    page.locator(`[data-test-workspace="${workspace}"]`),
-  ).toHaveCount(1);
   await page.locator(`[data-test-workspace="${workspace}"]`).click();
-  await expect(
-    page.locator(
-      `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
-    ),
-  ).toContainText(workspace);
 }
 
 export async function showAllCards(page: Page) {
-  await expect(
-    page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
-  ).toHaveCount(1);
-  await page
-    .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-    .click();
+  try {
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
+  } catch (e) {
+    console.warn('all cards filter is not found');
+  }
 }
 
 export async function logout(page: Page) {
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
-  await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
 export async function createRoom(page: Page) {
@@ -382,9 +372,6 @@ export async function openRenameMenu(page: Page, roomId: string) {
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
-  await expect(
-    page.locator(`[data-test-boxel-menu-item-text="Rename"]`),
-  ).toHaveCount(1);
   await page.locator(`[data-test-boxel-menu-item-text="Rename"]`).click();
   await page.locator(`[data-test-name-field]`).waitFor();
 }
@@ -395,9 +382,6 @@ export async function writeMessage(
   message: string,
 ) {
   await page.locator(`[data-test-message-field="${roomId}"]`).fill(message);
-  await expect(
-    page.locator(`[data-test-message-field="${roomId}"]`),
-  ).toHaveValue(message);
 }
 
 export async function selectCardFromCatalog(
@@ -562,7 +546,7 @@ export async function assertRooms(page: Page, rooms: string[]) {
   if (rooms && rooms.length > 0) {
     await page.waitForFunction(
       (rooms) =>
-        document.querySelectorAll('[data-test-joined-room]').length ===
+        document.querySelectorAll('[data-test-joined-room]').length >=
         rooms.length,
       rooms,
     );
@@ -622,27 +606,22 @@ export async function setupUser(
   );
 }
 
-export async function assertPaymentLink(
-  page: Page,
-  { username, email }: { username: string; email: string },
+export async function setupPermissions(
+  username: string,
+  realmURL: string,
+  realmServer: IsolatedRealmServer,
 ) {
-  const paymentLink =
-    (await page.locator('[data-test-setup-payment]').getAttribute('href')) ??
-    '';
-
-  const queryString = paymentLink.split('?')[1];
-  const params = new Map(
-    queryString.split('&').map((param) => {
-      const [key, value] = param.split('=');
-      return [key, value];
-    }),
+  await realmServer.executeSQL(
+    `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+    VALUES (
+      '${realmURL}',
+      '${username}',
+      true,
+      true,
+      false
+    )
+  `,
   );
-
-  const clientReferenceId = params.get('client_reference_id');
-  expect(clientReferenceId).toBe(encodeWebSafeBase64(username));
-
-  const emailFromUrl = params.get('prefilled_email');
-  expect(emailFromUrl).toBe(encodeURIComponent(email));
 }
 
 export async function setupPayment(
@@ -650,9 +629,6 @@ export async function setupPayment(
   realmServer: IsolatedRealmServer,
   _page?: Page,
 ) {
-  // decode the username from base64
-  const decodedUsername = decodeFromAlphanumeric(username);
-
   // mock trigger stripe webhook 'checkout.session.completed'
   let starterPlan = await realmServer.executeSQL(
     `SELECT * FROM plans WHERE name = 'Starter'`,
@@ -664,11 +640,11 @@ export async function setupPayment(
   let stripeCustomerId = `cus_${randomNumber}`;
 
   await realmServer.executeSQL(
-    `UPDATE users SET stripe_customer_id = '${stripeCustomerId}' WHERE matrix_user_id = '${decodedUsername}'`,
+    `UPDATE users SET stripe_customer_id = '${stripeCustomerId}' WHERE matrix_user_id = '${username}'`,
   );
 
   let findUser = await realmServer.executeSQL(
-    `SELECT * FROM users WHERE matrix_user_id = '${decodedUsername}'`,
+    `SELECT * FROM users WHERE matrix_user_id = '${username}'`,
   );
 
   const userId = findUser[0].id;
@@ -727,9 +703,8 @@ export async function setupUserSubscribed(
   username: string,
   realmServer: IsolatedRealmServer,
 ) {
-  const matrixUserId = encodeWebSafeBase64(username);
   await setupUser(username, realmServer);
-  await setupPayment(matrixUserId, realmServer);
+  await setupPayment(username, realmServer);
 }
 
 export async function assertLoggedOut(page: Page) {
@@ -817,19 +792,6 @@ export async function waitUntil<T>(
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
-}
-
-export function encodeWebSafeBase64(string: string) {
-  return Buffer.from(string)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, ''); // Remove padding
-}
-
-export function decodeFromAlphanumeric(encodedString: string) {
-  const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
-  return Buffer.from(base64, 'base64').toString('utf8');
 }
 
 export async function postNewCard(

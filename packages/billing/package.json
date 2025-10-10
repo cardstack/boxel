@@ -5,9 +5,11 @@
   "dependencies": {
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "stripe": "catalog:"
+    "stripe": "catalog:",
+    "@sentry/node": "catalog:"
   },
   "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
     "concurrently": "catalog:"
   },
   "scripts": {

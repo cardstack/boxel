@@ -25,8 +25,6 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
 import RealmServerService from '@cardstack/host/services/realm-server';
 
 import CardQueryResults from './card-query-results';
@@ -34,8 +32,6 @@ import CardURLResults from './card-url-results';
 
 import RecentCardsSection from './recent-cards-section';
 import { getCodeRefFromSearchKey } from './utils';
-
-import type LoaderService from '../../services/loader-service';
 
 import type StoreService from '../../services/store';
 
@@ -78,8 +74,6 @@ export default class SearchSheet extends Component<Signature> {
 
   @tracked private searchKey = '';
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare loaderService: LoaderService;
   @service private declare realmServer: RealmServerService;
   @service private declare store: StoreService;
 
@@ -238,15 +232,17 @@ export default class SearchSheet extends Component<Signature> {
         <IconButton
           class='open-search-field'
           @icon={{IconSearch}}
-          @width='24'
+          @width='18'
           @height='24'
+          @round={{true}}
+          @variant='primary-dark'
           {{on 'click' @onFocus}}
           data-test-open-search-field
         />
       {{else}}
         <BoxelInput
           @type='search'
-          @variant='large'
+          @size='large'
           @bottomTreatment={{this.inputBottomTreatment}}
           @value={{this.searchKey}}
           @state={{this.inputValidationState}}
@@ -411,13 +407,7 @@ export default class SearchSheet extends Component<Signature> {
       .prompt .search-sheet-content {
         overflow-x: auto;
       }
-      .open-search-field {
-        padding: var(--boxel-sp-xs);
-        border-radius: 50%;
-        background-color: var(--boxel-700);
 
-        --icon-color: var(--boxel-highlight);
-      }
       .open-search-field:focus:focus-visible {
         outline-offset: 0;
         outline-width: 2px;

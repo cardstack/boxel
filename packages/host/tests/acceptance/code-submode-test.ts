@@ -35,6 +35,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   assertMessages,
 } from '../helpers';
@@ -406,7 +407,6 @@ const notFoundAdoptionInstance = `{
 }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
     let personalRealmURL: string;
@@ -429,11 +429,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     }
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -485,6 +486,12 @@ module('Acceptance | code submode tests', function (_hooks) {
             iconURL: 'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
           },
         },
+      });
+
+      setupAuthEndpoints({
+        [catalogRealmURL]: ['read'],
+        [additionalRealmURL]: ['read', 'write', 'realm-owner'],
+        [personalRealmURL]: ['read', 'write', 'realm-owner'],
       });
     });
 
@@ -540,11 +547,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       monacoService = getService('monaco-service');
 
@@ -826,6 +834,13 @@ module('Acceptance | code submode tests', function (_hooks) {
         .hasText(
           'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
         );
+
+      assert.dom('[data-test-definition-header]').includesText('File');
+
+      assert
+        .dom('[data-test-definition-realm-name]')
+        .hasText('in Test Workspace B');
+      assert.dom('[data-test-action-button="Delete"]').exists();
     });
 
     test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
@@ -884,6 +899,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           ],
         },
       ]);
+      let roomId = getService('matrix-service').currentRoomId;
+      let lastEvent = mockMatrixUtils.getRoomEvents(roomId!).pop();
+      assert.ok(
+        JSON.parse(lastEvent!.content.data).context.agentId,
+        'message has agentId context so that AI assistant knows not to respond to it',
+      );
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
 
       let originalWriteText = navigator.clipboard.writeText;
@@ -921,7 +942,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-card-error]');
 
       await click('[data-test-toggle-details]');
-      assert.dom('[data-test-error-details]').includesText('No stack trace');
+      assert
+        .dom('[data-test-error-details]')
+        .includesText(
+          'Stack trace: Error: Encountered error rendering HTML for card: intentionalError is not defined at render',
+        );
 
       await percySnapshot(assert);
     });
@@ -935,7 +960,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-module-inspector-view="preview"]');
       await waitFor('[data-test-card-error]');
       await click('[data-test-toggle-details]');
-      assert.dom('[data-test-error-details]').includesText('No stack trace');
+      assert
+        .dom('[data-test-error-details]')
+        .includesText(
+          'Stack trace: Error: Encountered error rendering HTML for card: intentionalError is not defined at render',
+        );
 
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
       await click('[data-test-send-error-to-ai-assistant]');
@@ -943,7 +972,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Card Error intentionalError is not defined`,
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error Encountered error rendering HTML for card: intentionalError is not defined`,
           files: [
             {
               name: 'broken-country.gts',
@@ -955,6 +984,52 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
     });
 
+    test('erroring cards attached as files instead and errors are included in AI context', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}broken-country.gts`,
+        aiAssistantOpen: true,
+        moduleInspector: 'preview',
+      });
+
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      let roomId = mockMatrixUtils.getRoomIds().pop()!;
+      await fillIn(
+        '[data-test-message-field]',
+        `Please try to fix the problem`,
+      );
+      await click('[data-test-send-message-btn]');
+
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `Please try to fix the problem`,
+          files: [
+            {
+              name: 'broken-country.gts',
+              sourceUrl: `${testRealmURL}broken-country.gts`,
+            },
+            {
+              name: 'broken-country',
+              sourceUrl: `${testRealmURL}BrokenCountry/broken-country.json`,
+            },
+          ],
+        },
+      ]);
+      let matrixEvents = mockMatrixUtils.getRoomEvents(roomId);
+      let lastEvent = matrixEvents[matrixEvents.length - 1];
+      let aiContext = JSON.parse(lastEvent.content.data).context;
+      assert.strictEqual(
+        aiContext.errorsDisplayed[0].message,
+        'Encountered error rendering HTML for card: intentionalError is not defined',
+      );
+      assert.ok(aiContext.errorsDisplayed[0].stack.match(/at render/));
+      assert.strictEqual(
+        aiContext.errorsDisplayed[0].sourceUrl,
+        `${testRealmURL}broken-country.gts`,
+      );
+    });
+
     test('it shows card preview errors and fix it button in module inspector', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
@@ -964,7 +1039,9 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-error-display]').exists();
       assert
         .dom('[data-test-error-display] [data-test-error-message]')
-        .hasText('intentionalError is not defined');
+        .hasText(
+          'Encountered error rendering HTML for card: intentionalError is not defined',
+        );
 
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
       await click('[data-test-send-error-to-ai-assistant]');
@@ -972,7 +1049,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Card Error intentionalError is not defined`,
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error Encountered error rendering HTML for card: intentionalError is not defined`,
           files: [
             {
               name: 'broken-country.gts',
@@ -1182,9 +1259,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .hasText('isHourly function');
       assert
-        .dom('[data-test-file-incompatibility-message]')
+        .dom('[data-test-schema-editor-file-incompatibility-message]')
         .hasText(
-          'No tools are available for the selected item: function "isHourly". Select a card or field definition in the inspector.',
+          `No tools are available for the selected item: function "isHourly". Select a card or field definition in the inspector.`,
         );
 
       await click('[data-test-boxel-selector-item-text="Isolated"]');
@@ -1196,9 +1273,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .hasText('Isolated class');
       assert
-        .dom('[data-test-file-incompatibility-message]')
+        .dom('[data-test-schema-editor-file-incompatibility-message]')
         .hasText(
-          'No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.',
+          `No tools are available for the selected item: class "Isolated". Select a card or field definition in the inspector.`,
         );
 
       await visitOperatorMode({
@@ -1207,7 +1284,9 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       await waitFor('[data-test-loading-indicator]', { count: 0 });
-      assert.dom('[data-test-file-incompatibility-message]').exists();
+      assert
+        .dom('[data-test-schema-editor-file-incompatibility-message]')
+        .exists();
     });
 
     test('displays clear message on schema-editor when file is completely unsupported', async function (assert) {
@@ -1220,7 +1299,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-file-incompatibility-message]')
         .hasText(
-          'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.',
+          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
         );
 
       await waitFor('[data-test-definition-file-extension]');
@@ -1929,6 +2008,60 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
+    });
+
+    test('Open in Interact and Edit Template buttons work correctly', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+
+      await waitFor('[data-test-card-resource-loaded]');
+
+      // Verify the buttons are rendered
+      assert
+        .dom('[data-test-edit-template-button]')
+        .exists('Edit Template button is rendered');
+      assert
+        .dom('[data-test-open-in-interact-button]')
+        .exists('Open in Interact button is rendered');
+      assert
+        .dom('.preview-text')
+        .hasText('Preview', 'Preview text is displayed');
+
+      // Test Open in Interact button
+      await click('[data-test-open-in-interact-button]');
+
+      // Verify that we're now in interact mode with the card
+      await waitFor('[data-test-interact-submode]');
+      assert
+        .dom('[data-test-interact-submode]')
+        .exists('Switched to interact mode');
+
+      // Verify the card is displayed in interact mode
+      assert.dom('[data-test-person]').includesText('Fadhlan');
+
+      // Back to code mode
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+      await waitFor('[data-test-code-submode]');
+
+      // Test Edit Template button
+      await click('[data-test-edit-template-button]');
+
+      // Verify that the code path was updated to the template file
+      await waitFor('[data-test-card-url-bar-input]');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}person.gts`);
     });
   });
 });

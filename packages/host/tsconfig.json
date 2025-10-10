@@ -29,20 +29,11 @@
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
       "*": ["types/*"]
-    }
+    },
+    "types": ["@cardstack/local-types","@cardstack/local-types/matrix-js-sdk"]
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
-    "transform": {
-      "include": [
-        "../experiments-realm/**",
-        "../catalog-realm/**/*",
-        "../base/**",
-        "app/**",
-        "tests/**",
-        "types/**/*"
-      ]
-    }
+    "environment": ["ember-loose", "ember-template-imports"]
   },
   "include": [
     "../base/**/*",

@@ -1,7 +1,8 @@
-import Owner from '@ember/owner';
+import Owner, { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { dropTask, task, timeout } from 'ember-concurrency';
@@ -13,6 +14,7 @@ import {
   type RoomMember,
   type EmittedEvents,
 } from 'matrix-js-sdk';
+import { MatrixClient } from 'matrix-js-sdk';
 import { Filter } from 'matrix-js-sdk';
 import {
   type SlidingSync,
@@ -32,8 +34,12 @@ import {
   ResolvedCodeRef,
   isCardInstance,
   Deferred,
+  SEARCH_MARKER,
+  REPLACE_MARKER,
+  SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
+import { getPromptParts } from '@cardstack/runtime-common/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -49,9 +55,9 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   DEFAULT_CODING_LLM,
   DEFAULT_LLM_LIST,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -59,6 +65,9 @@ import {
   SLIDING_SYNC_LIST_RANGE_END,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
+  type LLMMode,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -66,6 +75,8 @@ import {
   Submodes,
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+
+import type IndexController from '@cardstack/host/controllers/index';
 
 import Room, { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
@@ -89,6 +100,7 @@ import type {
   CommandResultWithOutputContent,
   RealmEventContent,
   Tool,
+  CommandResultStatus,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
@@ -147,6 +159,8 @@ export default class MatrixService extends Service {
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
 
+  @tracked private storage: Storage | undefined;
+
   profile = getMatrixProfile(this, () => this.userId);
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
@@ -178,6 +192,9 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
+  private initialSyncCompleted = false;
+  private initialSyncCompletedDeferred = new Deferred<void>();
+  private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -228,8 +245,35 @@ export default class MatrixService extends Service {
   );
 
   private loadState = task(async () => {
+    await this.requestStorageAccess();
     await this.loadSDK();
   });
+
+  private get inIframe() {
+    return !isTesting() && window.top !== window.self;
+  }
+
+  async requestStorageAccess() {
+    if (this.inIframe) {
+      this.storage = await getStorage();
+    } else {
+      this.storage = window.localStorage;
+    }
+
+    return this.storage;
+  }
+
+  private saveAuth(auth: LoginResponse) {
+    this.storage?.setItem('auth', JSON.stringify(auth));
+  }
+
+  private getAuth(): LoginResponse | undefined {
+    let auth = this.storage?.getItem('auth');
+    if (!auth) {
+      return;
+    }
+    return JSON.parse(auth) as LoginResponse;
+  }
 
   private async loadSDK() {
     await this.cardAPIModule.loaded;
@@ -333,6 +377,10 @@ export default class MatrixService extends Service {
     return 50; // this is required to set the room name
   }
 
+  async waitForInitialSync() {
+    await this.initialSyncCompletedDeferred.promise;
+  }
+
   get flushAll() {
     return Promise.all([
       this.flushMembership ?? Promise.resolve(),
@@ -422,12 +470,18 @@ export default class MatrixService extends Service {
       backgroundURL,
     });
     let { realms = [] } =
-      (await this.client.getAccountDataFromServer<{ realms: string[] }>(
+      ((await this.client.getAccountDataFromServer(
         APP_BOXEL_REALMS_EVENT_TYPE,
-      )) ?? {};
-    realms.push(personalRealmURL.href);
-    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, { realms });
-    await this.realmServer.setAvailableRealmURLs(realms);
+      )) as { realms: string[] }) ?? {};
+
+    // Clone the account data instead of using it directly,
+    // since mutating the original object would modify the Matrix client’s store
+    // and prevent updates from being sent back to the server.
+    let newRealms = [...realms, personalRealmURL.href];
+    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+      realms: newRealms,
+    });
+    await this.realmServer.setAvailableRealmURLs(newRealms);
   }
 
   async setDisplayName(displayName: string) {
@@ -446,7 +500,7 @@ export default class MatrixService extends Service {
   ) {
     let { auth, refreshRoutes } = opts;
     if (!auth) {
-      auth = getAuth();
+      auth = this.getAuth();
       if (!auth) {
         return;
       }
@@ -493,7 +547,7 @@ export default class MatrixService extends Service {
     });
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
-      saveAuth(auth);
+      this.saveAuth(auth);
       this.bindEventListeners();
 
       try {
@@ -507,9 +561,22 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        let accountDataContent = await this._client.getAccountDataFromServer<{
-          realms: string[];
-        }>(APP_BOXEL_REALMS_EVENT_TYPE);
+        let accountDataContent = (await this._client.getAccountDataFromServer(
+          APP_BOXEL_REALMS_EVENT_TYPE,
+        )) as { realms: string[] } | null;
+
+        let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
+          ([_url, realmResource]) => !realmResource.isLoggedIn,
+        );
+
+        if (noRealmsLoggedIn) {
+          // In this case we want to authenticate to all accessible realms in a single request,
+          // for performance reasons (otherwise we would make 2 auth requests for
+          // each realm, which could be a lot of requests).
+
+          await this.realmServer.authenticateToAllAccessibleRealms();
+        }
+
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(
@@ -526,7 +593,16 @@ export default class MatrixService extends Service {
         await this.logout();
       }
 
-      if (refreshRoutes) {
+      let indexController = getOwner(this)!.lookup(
+        'controller:index',
+      ) as IndexController;
+
+      if (indexController.authRedirect) {
+        console.log(
+          'authRedirect exists, redirecting to ' + indexController.authRedirect,
+        );
+        window.location.href = indexController.authRedirect;
+      } else if (refreshRoutes) {
         await this.router.refresh();
       }
     }
@@ -559,27 +635,42 @@ export default class MatrixService extends Service {
       this.client as any,
       SLIDING_SYNC_TIMEOUT,
     );
+
     this.slidingSync.on(
       SlidingSyncEvent.Lifecycle,
-      (
-        state: SlidingSyncState | null,
-        resp: MSC3575SlidingSyncResponse | null,
-      ) => {
-        if (
-          state === SlidingSyncState.Complete &&
-          resp &&
-          resp.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME].ops?.[0]?.op === 'SYNC'
-        ) {
-          for (let roomId of resp.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME].ops[0]
-            .room_ids) {
-            this.aiRoomIds.add(roomId);
-          }
-        }
-      },
+      this.onSlidingSyncLifecycle,
     );
 
     return this.slidingSync;
   }
+
+  onSlidingSyncLifecycle = (
+    state: SlidingSyncState,
+    resp: MSC3575SlidingSyncResponse | null,
+  ) => {
+    let list = resp?.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME] as
+      | { ops: { room_ids: string[] }[] }
+      | undefined;
+    let roomIds: string[] = list?.ops?.[0]?.room_ids ?? [];
+    switch (state) {
+      case SlidingSyncState.Complete:
+        if (!this.initialSyncCompleted) {
+          Promise.allSettled([
+            this.drainRoomState(),
+            this.drainMembership(),
+            this.drainTimeline(),
+          ]).then(() => {
+            this.initialSyncCompleted = true;
+            this.initialSyncCompletedDeferred.fulfill();
+          });
+        }
+        roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
+        break;
+      case SlidingSyncState.RequestFinished:
+        roomIds.forEach((id) => this.aiRoomIds.add(id));
+        break;
+    }
+  };
 
   async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
@@ -666,10 +757,8 @@ export default class MatrixService extends Service {
           enabledSkillCards as CardDef[],
         );
         // get the unique subset of enabledCommandDefinitions by functionName
-        enabledCommandDefinitions = enabledCommandDefinitions.filter(
-          (command, index, self) =>
-            index ===
-            self.findIndex((c) => c.functionName === command.functionName),
+        enabledCommandDefinitions = this.getUniqueCommandDefinitions(
+          enabledCommandDefinitions,
         );
         let enabledCommandDefFileDefs = await this.uploadCommandDefinitions(
           enabledCommandDefinitions,
@@ -689,6 +778,16 @@ export default class MatrixService extends Service {
 
   async downloadAsFileInBrowser(serializedFile: FileAPI.SerializedFile) {
     return await this.client.downloadAsFileInBrowser(serializedFile);
+  }
+
+  public getUniqueCommandDefinitions(
+    commandDefinitions: SkillModule.CommandField[],
+  ): SkillModule.CommandField[] {
+    return commandDefinitions.filter(
+      (command, index, self) =>
+        index ===
+        self.findIndex((c) => c.functionName === command.functionName),
+    );
   }
 
   async uploadCards(cards: CardDef[]) {
@@ -716,37 +815,39 @@ export default class MatrixService extends Service {
     );
   }
 
-  async sendCommandResultEvent(
-    roomId: string,
-    invokedToolFromEventId: string,
-    toolCallId: string,
-    resultCard?: CardDef,
-    attachedCards: CardDef[] = [],
-    attachedFiles: FileDef[] = [],
-    context?: BoxelContext,
-  ) {
+  async sendCommandResultEvent(params: {
+    roomId: string;
+    invokedToolFromEventId: string;
+    toolCallId: string;
+    status: CommandResultStatus;
+    resultCard?: CardDef;
+    failureReason?: string;
+    attachedCards?: CardDef[];
+    attachedFiles?: FileDef[];
+    context?: BoxelContext;
+  }) {
     let resultCardFileDef: FileDef | undefined;
-    if (resultCard) {
-      [resultCardFileDef] = await this.client.uploadCards([resultCard]);
+    if (params.resultCard) {
+      [resultCardFileDef] = await this.client.uploadCards([params.resultCard]);
     }
     let contentData = await this.withContextAndAttachments(
-      context,
-      attachedCards,
-      attachedFiles,
+      params.context,
+      params.attachedCards || [],
+      params.attachedFiles || [],
     );
-    if ((resultCard as FileForAttachmentCard)?.fileForAttachment) {
+    if ((params.resultCard as FileForAttachmentCard)?.fileForAttachment) {
       contentData.attachedFiles.push(
         (
-          (resultCard as FileForAttachmentCard)!
+          (params.resultCard as FileForAttachmentCard)!
             .fileForAttachment as unknown as FileDef
         ).serialize(),
       );
       resultCardFileDef = undefined; // don't send the card as a result if the file is attached
     }
-    if ((resultCard as CardForAttachmentCard)?.cardForAttachment) {
+    if ((params.resultCard as CardForAttachmentCard)?.cardForAttachment) {
       contentData.attachedCards.push(
         (
-          (resultCard as CardForAttachmentCard)!
+          (params.resultCard as CardForAttachmentCard)!
             .cardForAttachment as unknown as FileDef
         ).serialize(),
       );
@@ -758,10 +859,11 @@ export default class MatrixService extends Service {
     if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-        commandRequestId: toolCallId,
+        commandRequestId: params.toolCallId,
+        failureReason: params.failureReason,
         'm.relates_to': {
-          event_id: invokedToolFromEventId,
-          key: 'applied',
+          event_id: params.invokedToolFromEventId,
+          key: params.status,
           rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
         data: contentData,
@@ -770,11 +872,12 @@ export default class MatrixService extends Service {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         'm.relates_to': {
-          event_id: invokedToolFromEventId,
-          key: 'applied',
+          event_id: params.invokedToolFromEventId,
+          key: params.status,
           rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
-        commandRequestId: toolCallId,
+        commandRequestId: params.toolCallId,
+        failureReason: params.failureReason,
         data: {
           ...contentData,
           card: resultCardFileDef.serialize(),
@@ -783,7 +886,7 @@ export default class MatrixService extends Service {
     }
     try {
       return await this.sendEvent(
-        roomId,
+        params.roomId,
         APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
         content,
       );
@@ -1048,7 +1151,7 @@ export default class MatrixService extends Service {
     // Reset it here rather than in the reset function of each service
     // because it is possible that
     // there are some services that are not initialized yet
-    clearLocalStorage();
+    clearLocalStorage(this.storage);
   }
 
   private bindEventListeners() {
@@ -1073,7 +1176,19 @@ export default class MatrixService extends Service {
   }
 
   async createRoom(opts: MatrixSDK.ICreateRoomOpts) {
-    return this.client.createRoom(opts);
+    let result = await this.client.createRoom(opts);
+    await this.waitForRoomSync(result.room_id);
+    return result;
+  }
+
+  async waitForRoomSync(roomId: string) {
+    let deferred = this.roomsWaitingForSync.get(roomId);
+    if (!deferred) {
+      deferred = new Deferred<void>();
+      this.roomsWaitingForSync.set(roomId, deferred);
+    }
+    await deferred.promise;
+    this.roomsWaitingForSync.delete(roomId);
   }
 
   async createCard<T extends typeof BaseDef>(
@@ -1269,7 +1384,7 @@ export default class MatrixService extends Service {
       filter.setDefinition({
         room: {
           timeline: {
-            limit: 30,
+            limit: 100,
             not_types: [APP_BOXEL_STOP_GENERATING_EVENT_TYPE],
             'org.matrix.msc3874.not_rel_types': ['m.replace'],
           },
@@ -1321,6 +1436,10 @@ export default class MatrixService extends Service {
     });
   }
 
+  async sendLLMModeEvent(roomId: string, mode: LLMMode) {
+    await this.client.sendStateEvent(roomId, APP_BOXEL_LLM_MODE, { mode });
+  }
+
   private async addRoomEvent(event: TempEvent, oldEventId?: string) {
     let { room_id: roomId } = event;
 
@@ -1328,6 +1447,11 @@ export default class MatrixService extends Service {
       throw new Error(
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
+    }
+
+    //We don't need to store auth room events
+    if (!this.aiRoomIds.has(roomId)) {
+      return;
     }
     let roomData = this.ensureRoomData(roomId);
     roomData.addEvent(event, oldEventId);
@@ -1455,6 +1579,11 @@ export default class MatrixService extends Service {
     }
     roomStates = Array.from(roomStateMap.values());
     for (let rs of roomStates) {
+      // The auth rooms are not stored
+      // so we don't need to process the state updates
+      if (!this.aiRoomIds.has(rs.roomId)) {
+        continue;
+      }
       let roomData = this.ensureRoomData(rs.roomId);
       roomData.notifyRoomStateUpdated(rs);
     }
@@ -1534,6 +1663,39 @@ export default class MatrixService extends Service {
       return;
     }
 
+    if (!this.aiRoomIds.has(roomId)) {
+      this.processDecryptedEventFromAuthRoom(event);
+      return;
+    }
+    await this.addRoomEvent(event, oldEventId);
+
+    if (
+      event.type === 'm.room.message' &&
+      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
+      event.content?.isStreamingFinished
+    ) {
+      this.commandService.queueEventForCommandProcessing(event);
+    }
+
+    // Queue code patches for processing
+    if (
+      event.type === 'm.room.message' &&
+      event.content?.body &&
+      event.content?.isStreamingFinished
+    ) {
+      // Check if the message contains code patches by looking for search/replace blocks
+      let body = event.content.body as string;
+      if (
+        body.includes(SEARCH_MARKER) &&
+        body.includes(SEPARATOR_MARKER) &&
+        body.includes(REPLACE_MARKER)
+      ) {
+        this.commandService.queueEventForCodePatchProcessing(event);
+      }
+    }
+  }
+
+  private async processDecryptedEventFromAuthRoom(event: TempEvent) {
     // patch in any missing room events--this will support dealing with local
     // echoes, migrating older histories as well as handle any matrix syncing gaps
     // that might occur
@@ -1581,21 +1743,11 @@ export default class MatrixService extends Service {
           event.content as RealmEventContent,
         );
       }
-      return;
-    }
-    await this.addRoomEvent(event, oldEventId);
-
-    if (
-      event.type === 'm.room.message' &&
-      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
-      event.content?.isStreamingFinished
-    ) {
-      this.commandService.queueEventForCommandProcessing(event);
     }
   }
 
   private clearAuth() {
-    window.localStorage.removeItem('auth');
+    this.storage?.removeItem('auth');
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
@@ -1615,6 +1767,10 @@ export default class MatrixService extends Service {
 
   async setLLMForCodeMode() {
     return this.setLLMModel(DEFAULT_CODING_LLM);
+  }
+
+  async setLLMForInteractMode() {
+    return this.setLLMModel(DEFAULT_LLM);
   }
 
   private async setLLMModel(model: string) {
@@ -1703,18 +1859,51 @@ export default class MatrixService extends Service {
       [0, newEndRange],
     ]);
   }
-}
 
-function saveAuth(auth: LoginResponse) {
-  window.localStorage.setItem('auth', JSON.stringify(auth));
-}
+  async getPromptParts(roomId: string) {
+    const roomResource = this.roomResourcesCache.get(roomId);
+    if (!roomResource) {
+      throw new Error(`Room ${roomId} not found`);
+    }
 
-function getAuth(): LoginResponse | undefined {
-  let auth = window.localStorage.getItem('auth');
-  if (!auth) {
-    return;
+    const events = roomResource.events;
+    if (!events || events.length === 0) {
+      throw new Error('No events found in the current room to summarize');
+    }
+
+    const promptParts = await getPromptParts(
+      events,
+      this.aiBotUserId,
+      this.client as unknown as MatrixClient,
+    );
+
+    return promptParts;
   }
-  return JSON.parse(auth) as LoginResponse;
+}
+
+async function getStorage() {
+  let storage;
+
+  try {
+    // Chrome requires finer-grained permissions requests
+    // @ts-expect-error our Typescript version doesn’t know about this API
+    if (document['requestStorageAccessFor']) {
+      let requestOptions = {
+        localStorage: true,
+      };
+
+      storage = // @ts-expect-error nor about passing options and getting a handle back
+        (await document.requestStorageAccess(requestOptions)).localStorage;
+    } else {
+      await document.requestStorageAccess();
+      storage = window.localStorage;
+    }
+  } catch (e) {
+    console.error('Error accessing storage', e);
+    storage = window.localStorage;
+  }
+
+  return storage;
 }
 
 declare module '@ember/service' {

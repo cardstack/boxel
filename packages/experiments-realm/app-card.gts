@@ -11,6 +11,7 @@ import {
   realmURL,
   StringField,
   type CardContext,
+  type CreateCardFn,
   FieldsTypeFor,
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -46,6 +47,7 @@ export interface TabComponentSignature {
   currentRealm: URL;
   realms: string[];
   setActiveTab: (tabId: string) => void;
+  createCard?: CreateCardFn;
 }
 
 export interface DefaultTabSignature extends TabComponentSignature {
@@ -187,7 +189,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
       {{else}}
         <p>No cards available</p>
       {{/if}}
-      {{#if (and (bool @context.actions.createCard) (bool this.activeTabRef))}}
+      {{#if (and (bool @createCard) (bool this.activeTabRef))}}
         <div class='add-card-button'>
           <Tooltip @placement='left' @offset={{6}}>
             <:trigger>
@@ -347,7 +349,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
             : undefined,
           realmURL: this.args.currentRealm,
         };
-        await this.args.context?.actions?.createCard?.(
+        await this.args.createCard?.(
           this.activeTabRef,
           this.args.currentRealm,
           opts,
@@ -534,10 +536,6 @@ export class CardsGrid extends GlimmerComponent<{
       .cards-grid-item {
         width: var(--grid-card-width);
         height: var(--grid-card-height);
-      }
-      .card {
-        height: 100%;
-        width: 100%;
         container-name: fitted-card;
         container-type: size;
       }

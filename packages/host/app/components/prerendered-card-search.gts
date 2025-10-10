@@ -1,15 +1,20 @@
+import { setComponentTemplate } from '@ember/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { service } from '@ember/service';
+import { precompileTemplate } from '@ember/template-compilation';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { didCancel, restartableTask } from 'ember-concurrency';
+import { consume } from 'ember-provide-consume-context';
 import { flatMap, isEqual } from 'lodash';
 import { trackedFunction } from 'reactiveweb/function';
 
 import { TrackedSet } from 'tracked-built-ins';
+
+import { CardContainer } from '@cardstack/boxel-ui/components';
 
 import {
   type Query,
@@ -17,13 +22,15 @@ import {
   type PrerenderedCardLike,
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
+  QueryResultsMeta,
+  CardContextName,
 } from '@cardstack/runtime-common';
 import {
   PrerenderedCardCollectionDocument,
   isPrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
-import { type Format } from 'https://cardstack.com/base/card-api';
+import type { CardContext, Format } from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -37,11 +44,26 @@ const waiter = buildWaiter('prerendered-card-search:waiter');
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
-  constructor(public data: PrerenderedCardData) {
+  constructor(
+    public data: PrerenderedCardData,
+    cardComponentModifier?: CardContext['cardComponentModifier'],
+  ) {
     if (data.isError && !data.html) {
-      this.component = getErrorComponent(data.realmUrl, data.url);
+      this.component = wrapWithModifier(
+        getErrorComponent(data.realmUrl, data.url),
+        cardComponentModifier,
+        data.url,
+      );
     } else {
-      this.component = htmlComponent(data.html);
+      let extraAttributes: Record<string, string> = {};
+      if (data.isError) {
+        extraAttributes['data-is-error'] = 'true';
+      }
+      this.component = wrapWithModifier(
+        htmlComponent(data.html, extraAttributes),
+        cardComponentModifier,
+        data.url,
+      );
     }
   }
   get url() {
@@ -56,13 +78,23 @@ export class PrerenderedCard implements PrerenderedCardLike {
 }
 function getErrorComponent(realmURL: string, url: string) {
   let name = new RealmPaths(new URL(realmURL)).local(new URL(url));
-  const DefaultErrorResultComponent: TemplateOnlyComponent = <template>
-    <div class='error'>
-      <div class='thumbnail'>
-        <TriangleAlert />
+  const DefaultErrorResultComponent: TemplateOnlyComponent<{
+    Element: HTMLDivElement;
+  }> = <template>
+    <CardContainer
+      class='card instance-error'
+      @displayBoundaries={{true}}
+      data-test-instance-error={{true}}
+      data-test-card={{url}}
+      ...attributes
+    >
+      <div class='error'>
+        <div class='thumbnail'>
+          <TriangleAlert />
+        </div>
+        <div class='name' data-test-instance-error-name>{{name}}</div>
       </div>
-      <div class='name' data-test-instance-error-name>{{name}}</div>
-    </div>
+    </CardContainer>
     <style scoped>
       .error {
         display: flex;
@@ -94,24 +126,78 @@ function getErrorComponent(realmURL: string, url: string) {
       }
     </style>
   </template>;
-  return DefaultErrorResultComponent;
+  return DefaultErrorResultComponent as unknown as HTMLComponent;
+}
+
+const normalizeRealms = (realms: string[]) => {
+  return realms.map((r) => {
+    return new RealmPaths(new URL(r)).url;
+  });
+};
+
+interface SearchResult {
+  instances: PrerenderedCard[];
+  meta: QueryResultsMeta;
+}
+
+function wrapWithModifier(
+  innerComponent: HTMLComponent,
+  modifier: CardContext['cardComponentModifier'] | undefined,
+  cardId: string,
+): HTMLComponent {
+  if (!modifier) {
+    return innerComponent;
+  }
+
+  let cardIdForModifier = cardId;
+
+  class DecoratedPrerenderedCard extends Component {
+    component = innerComponent;
+    cardModifier = modifier!;
+    cardId = cardIdForModifier;
+  }
+
+  setComponentTemplate(
+    precompileTemplate(
+      `<this.component
+        {{this.cardModifier
+          cardId=this.cardId
+          format='data'
+          fieldType=undefined
+          fieldName=undefined
+        }}
+        ...attributes
+      />`,
+      { strictMode: true, scope: () => ({}) },
+    ),
+    DecoratedPrerenderedCard,
+  );
+
+  return DecoratedPrerenderedCard as unknown as HTMLComponent;
 }
 
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
+  @consume(CardContextName) private declare cardContext?: CardContext;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
   _lastCardUrls: string[] | undefined;
-  _lastSearchResults: PrerenderedCard[] | undefined;
+  _lastSearchResults: SearchResult | undefined;
   _lastRealms: string[] | undefined;
-  realmsNeedingRefresh = new TrackedSet<string>(this.args.realms);
+  realmsNeedingRefresh = new TrackedSet<string>(
+    normalizeRealms(this.args.realms),
+  );
+
+  private get cardComponentModifier() {
+    return this.cardContext?.cardComponentModifier;
+  }
 
   async searchPrerendered(
     query: Query,
     format: Format,
     cardUrls: string[],
     realmURL: string,
-  ): Promise<PrerenderedCard[]> {
+  ): Promise<SearchResult> {
     let json = (await this.cardService.fetchJSON(
       `${realmURL}_search-prerendered`,
       {
@@ -140,26 +226,40 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       ),
     );
 
-    return json.data.filter(Boolean).map((r) => {
-      return new PrerenderedCard({
-        url: r.id,
-        realmUrl: realmURL,
-        html: r.attributes?.html,
-        isError: !!r.attributes?.isError,
-      });
-    });
+    let modifier = this.cardComponentModifier;
+
+    return {
+      instances: json.data.filter(Boolean).map((r) => {
+        return new PrerenderedCard(
+          {
+            url: r.id,
+            realmUrl: realmURL,
+            html: r.attributes?.html,
+            isError: !!r.attributes?.isError,
+          },
+          modifier,
+        );
+      }),
+      meta: json.meta,
+    };
   }
 
   private runSearch = trackedFunction(this, async () => {
     let { query, format, cardUrls, realms } = this.args;
+    realms = normalizeRealms(realms);
 
     let realmsChanged = !isEqual(realms, this._lastRealms);
     let queryChanged = !isEqual(query, this._lastSearchQuery);
     let cardUrlsChanged = !isEqual(cardUrls, this._lastSearchQuery);
     if (realmsChanged) {
-      this._lastSearchResults = this._lastSearchResults?.filter((r) =>
-        realms.includes(r.realmUrl),
-      );
+      if (this._lastSearchResults) {
+        this._lastSearchResults = {
+          instances: this._lastSearchResults.instances.filter((r) =>
+            realms.some((realm) => r.url.startsWith(realm)),
+          ),
+          meta: this._lastSearchResults.meta,
+        };
+      }
       this.realmsNeedingRefresh = new TrackedSet(realms);
     }
     this._lastRealms = realms;
@@ -177,6 +277,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
         this.runSearchTask.lastSuccessful?.value ?? {
           instances: [],
           isLoading: true,
+          meta: {
+            page: { total: 0 },
+          },
         }
       );
     }
@@ -196,6 +299,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       this.runSearchTask.lastSuccessful?.value ?? {
         instances: [],
         isLoading: true,
+        meta: {
+          page: { total: 0 },
+        },
       }
     );
   });
@@ -209,7 +315,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       this._lastCardUrls = cardUrls;
     }
 
-    let results = [...(this._lastSearchResults || [])];
+    let results = this._lastSearchResults?.instances || [];
     let realmsNeedingRefresh = Array.from(this.realmsNeedingRefresh);
     let token = waiter.beginAsync();
     try {
@@ -231,16 +337,31 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
               `Failed to search prerendered for realm ${realm}:`,
               error,
             );
-            return [];
+            return { instances: [], meta: { page: { total: 0 } } };
           }
         },
       );
 
       const searchResults = await Promise.all(searchPromises);
-      results.push(...flatMap(searchResults));
+      const allInstances = flatMap(
+        searchResults,
+        (result) => result.instances || [],
+      );
+      results.push(...allInstances);
 
-      this._lastSearchResults = results;
-      return { instances: results, isLoading: false };
+      const combinedMeta: QueryResultsMeta = searchResults.reduce(
+        (acc, result) => {
+          if (result.meta?.page?.total !== undefined) {
+            acc.page = acc.page || { total: 0 };
+            acc.page.total = (acc.page.total || 0) + result.meta.page.total;
+          }
+          return acc;
+        },
+        { page: { total: 0 } } as QueryResultsMeta,
+      );
+
+      this._lastSearchResults = { instances: results, meta: combinedMeta };
+      return { instances: results, isLoading: false, meta: combinedMeta };
     } finally {
       waiter.endAsync(token);
     }
@@ -250,9 +371,13 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     if (this.runSearch.value) {
       return this.runSearch.value;
     } else if (this._lastSearchResults) {
-      return { instances: this._lastSearchResults, isLoading: false };
+      return {
+        instances: this._lastSearchResults.instances,
+        isLoading: false,
+        meta: this._lastSearchResults.meta,
+      };
     } else {
-      return { instances: [], isLoading: true };
+      return { instances: [], isLoading: true, meta: { page: { total: 0 } } };
     }
   }
 
@@ -264,12 +389,18 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
 
   <template>
     {{#if @isLive}}
-      {{SubscribeToRealms @realms this.markRealmNeedsRefreshing}}
+      {{SubscribeToRealms
+        (normalizeRealms @realms)
+        this.markRealmNeedsRefreshing
+      }}
     {{/if}}
     {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}
     {{else}}
       {{yield this.searchResults.instances to='response'}}
+      {{#if this.searchResults.meta}}
+        {{yield this.searchResults.meta to='meta'}}
+      {{/if}}
     {{/if}}
   </template>
 }

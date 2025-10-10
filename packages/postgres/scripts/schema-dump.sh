@@ -1,6 +1,15 @@
 #!/bin/sh
+set -euo pipefail
 
 tmpFile='./schema_tmp.sql'
+# Directory where SQLite schema files are written (relative to this script's location)
+SCHEMA_DIR="../host/config/schema"
+
+# Remove previously generated schema files so we only keep the latest one
+if [ -d "$SCHEMA_DIR" ]; then
+  # Match only files that end with _schema.sql to avoid deleting unrelated files
+  rm -f "$SCHEMA_DIR"/*_schema.sql 2>/dev/null || true
+fi
 
 docker exec boxel-pg pg_dump \
   -U postgres -w --schema-only \
@@ -18,6 +27,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=credits_ledger \
   --exclude-table-and-children=stripe_events \
   --exclude-table-and-children=ai_bot_event_processing \
+  --exclude-table-and-children=proxy_endpoints \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \

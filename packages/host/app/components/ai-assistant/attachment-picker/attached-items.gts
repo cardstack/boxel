@@ -23,8 +23,8 @@ import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 const MAX_ITEMS_TO_DISPLAY = 4;
 
@@ -104,7 +104,7 @@ export default class AttachedItems extends Component<Signature> {
   }
 
   <template>
-    <div class='attached-items'>
+    <div class='attached-items' ...attributes>
       {{#if @isLoaded}}
         {{#each this.itemsToDisplay as |item|}}
           {{#if (isCardErrorJSONAPI item)}}
@@ -226,7 +226,6 @@ export default class AttachedItems extends Component<Signature> {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxxs);
-        padding: var(--boxel-sp-xxxs);
       }
     </style>
   </template>

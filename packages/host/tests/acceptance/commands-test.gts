@@ -1,6 +1,5 @@
 import { on } from '@ember/modifier';
 import { getOwner, setOwner } from '@ember/owner';
-import { service } from '@ember/service';
 import {
   click,
   waitFor,
@@ -30,6 +29,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
@@ -42,9 +42,6 @@ import {
   waitForCompletedCommandRequest,
   waitForRealmState,
 } from '@cardstack/host/commands/utils';
-import type LoaderService from '@cardstack/host/services/loader-service';
-
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/command';
 
@@ -56,6 +53,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
 
@@ -88,8 +86,13 @@ module('Acceptance | Commands tests', function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
-  let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =
-    mockMatrixUtils;
+  let {
+    simulateRemoteMessage,
+    getRoomIds,
+    getRoomEvents,
+    getRoomState,
+    createAndJoinRoom,
+  } = mockMatrixUtils;
 
   setupBaseRealm(hooks);
 
@@ -98,7 +101,8 @@ module('Acceptance | Commands tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -150,9 +154,6 @@ module('Acceptance | Commands tests', function (hooks) {
     }
 
     class ScheduleMeetingCommand extends Command<typeof ScheduleMeetingInput> {
-      @service private declare loaderService: LoaderService;
-      @service
-      private declare operatorModeStateService: OperatorModeStateService;
       static displayName = 'ScheduleMeetingCommand';
       static actionVerb = 'Schedule';
 
@@ -310,7 +311,7 @@ module('Acceptance | Commands tests', function (hooks) {
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
             name: 'AI Assistant Room',
-            defaultSkills: [
+            enabledSkills: [
               (await getService('store').get<Skill>(
                 `${testRealmURL}Skill/useful-commands`,
               )) as Skill,
@@ -478,7 +479,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
-      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"] .field-component-card`,
     );
     await click('[data-test-schedule-meeting-button]');
     await waitUntil(() => getRoomIds().length > 0);
@@ -697,6 +698,58 @@ module('Acceptance | Commands tests', function (hooks) {
     );
   });
 
+  test('rendering a command request without a description fallsback to attributes.description', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    // open assistant
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    // open skill menu
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    // add useful-commands skill, which includes the switch-submode command
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
+          name: buildCommandFunctionName({
+            module: `${testRealmURL}search-and-open-card-command`,
+            name: 'default',
+          }),
+          arguments: JSON.stringify({
+            attributes: {
+              description: 'Finding and opening Hassan card',
+              title: 'Hassan',
+            },
+          }),
+        },
+      ],
+    });
+    // Click on the apply button
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-message-idx="0"] .command-description')
+      .containsText('Finding and opening Hassan card');
+  });
+
   test('ShowCard command added from a skill, can be automatically executed when agentId matches', async function (assert) {
     await visitOperatorMode({
       stacks: [
@@ -736,7 +789,7 @@ module('Acceptance | Commands tests', function (hooks) {
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
               cardId: 'http://test-realm/test/Person/hassan',
-              title: 'Asclepias',
+              cardInfo: { title: 'Asclepias' },
             },
           }),
         },
@@ -890,6 +943,355 @@ module('Acceptance | Commands tests', function (hooks) {
       .exists({ count: 2 });
   });
 
+  test('LLM mode event controls auto-apply of switch-submode command with timestamp checking', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // open skill menu
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+
+    // add useful-commands skill, which includes the switch-submode command
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-header] [data-test-pill-menu-button]',
+    );
+
+    // Default should be 'ask'
+    assert.dom('[data-test-llm-mode-option="ask"]').hasClass('selected');
+
+    // Simulate a switch-submode command message from the bot (requires approval)
+    let commandId = 'switch-submode-cmd-1';
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Switch to code mode',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandId,
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({
+            description: 'switch to code mode',
+            attributes: { submode: 'code' },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitFor('[data-test-message-idx="0"]');
+    // In 'ask' mode, the apply button should be visible and not auto-applied
+    assert
+      .dom('[data-test-command-apply]')
+      .exists('Apply button is shown in ask mode');
+    assert
+      .dom('[data-test-apply-state="applied"]')
+      .doesNotExist('Command is not auto-applied in ask mode');
+
+    // Switch to 'act' mode
+    await click('[data-test-llm-mode-option="act"]');
+    assert.dom('[data-test-llm-mode-option="act"]').hasClass('selected');
+    let llmModeState = getRoomState(matrixRoomId, APP_BOXEL_LLM_MODE, '');
+    assert.strictEqual(llmModeState?.mode, 'act', 'LLM mode updates to act');
+
+    // Simulate another switch-submode command message from the bot
+    let commandId2 = 'switch-submode-cmd-2';
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Switch to interact mode',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandId2,
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({
+            description: 'switch to interact mode',
+            attributes: { submode: 'interact' },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    // Wait for the new message to appear and be auto-applied
+    await waitFor(
+      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
+    );
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists('Command is auto-applied in act mode');
+
+    // Now test that commands sent BEFORE switching to act mode are NOT auto-applied
+    // Switch back to 'ask' mode
+    await click('[data-test-llm-mode-option="ask"]');
+    assert.dom('[data-test-llm-mode-option="ask"]').hasClass('selected');
+
+    // Simulate a command message from the bot (this should NOT be auto-applied)
+    let commandId3 = 'switch-submode-cmd-3';
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Switch to code mode again',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandId3,
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({
+            description: 'switch to code mode',
+            attributes: { submode: 'code' },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitFor('[data-test-message-idx="2"]');
+    // In 'ask' mode, the apply button should be visible and not auto-applied
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-command-apply]')
+      .exists('Apply button is shown in ask mode');
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .doesNotExist('Command is not auto-applied in ask mode');
+
+    // Now switch to 'act' mode again - the previous command should still NOT be auto-applied
+    await click('[data-test-llm-mode-option="act"]');
+    assert.dom('[data-test-llm-mode-option="act"]').hasClass('selected');
+
+    // Wait a moment to ensure the mode change is processed
+    await waitFor('[data-test-llm-mode-option="act"].selected');
+
+    // The command from message idx 2 should still not be auto-applied because it was sent before act mode
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-command-apply]')
+      .exists('Apply button is still shown for command sent before act mode');
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .doesNotExist('Command sent before act mode is not auto-applied');
+
+    // Simulate a new command message from the bot AFTER switching to act mode
+    let commandId4 = 'switch-submode-cmd-4';
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Switch to interact mode again',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandId4,
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({
+            description: 'switch to interact mode',
+            attributes: { submode: 'interact' },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    // Wait for the new message to appear and be auto-applied
+    await waitFor(
+      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
+    );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-apply-state="applied"]')
+      .exists('New command sent after act mode is auto-applied');
+  });
+
+  test('command request with invalid name gets an "invalid" result', async function (assert) {
+    await visitOperatorMode({
+      aiAssistantOpen: true,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-message-field]');
+    await fillIn(
+      '[data-test-message-field]',
+      'Test message to enable new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Show the card',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1554f297-e9f2-43fe-8b95-55b29251444d',
+          name: 'no-such-command',
+          arguments: JSON.stringify({
+            description:
+              'Displaying the card with the Latin word for milkweed in the title.',
+            attributes: {
+              cardId: 'http://test-realm/test/Person/hassan',
+              title: 'Asclepias',
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-message-idx="0"]');
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
+    );
+    assert
+      .dom('[data-test-boxel-alert="warning"]')
+      .containsText('No command for the name "no-such-command" was found');
+
+    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+
+    // verify that command result event was created correctly
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(
+      message.content.msgtype,
+      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(
+      message.content['m.relates_to']?.rel_type,
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    );
+    assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
+    assert.strictEqual(
+      message.content.failureReason,
+      'No command for the name "no-such-command" was found',
+    );
+    assert.strictEqual(
+      message.content.commandRequestId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    );
+  });
+
+  test('command request with arguments that do not match the json schema gets an "invalid" result', async function (assert) {
+    await visitOperatorMode({
+      aiAssistantOpen: true,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-message-field]');
+    await fillIn(
+      '[data-test-message-field]',
+      'Test message to enable new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Show the card',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1554f297-e9f2-43fe-8b95-55b29251444d',
+          name: 'show-card_566f',
+          arguments: JSON.stringify({
+            description:
+              'Displaying the card with the Latin word for milkweed in the title.',
+            attributes: {
+              title: 'Asclepias',
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-message-idx="0"]');
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
+    );
+    assert
+      .dom('[data-test-boxel-alert="warning"]')
+      .containsText(
+        'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'',
+      );
+
+    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+
+    // verify that command result event was created correctly
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(
+      message.content.msgtype,
+      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(
+      message.content['m.relates_to']?.rel_type,
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    );
+    assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
+    assert.strictEqual(
+      message.content.failureReason,
+      'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'',
+    );
+    assert.strictEqual(
+      message.content.commandRequestId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    );
+  });
+
   module('suspending global error hook', (hooks) => {
     suspendGlobalErrorHook(hooks);
 
@@ -920,7 +1322,10 @@ module('Acceptance | Commands tests', function (hooks) {
           {
             id: '2dd27b90-b473-403c-a5ae-399a29af7d62',
             name: 'maybe-boom-command_4b30',
-            arguments: JSON.stringify({}),
+            arguments: JSON.stringify({
+              description: 'Maybe it will boom',
+              attributes: {},
+            }),
           },
         ],
         data: {
@@ -934,7 +1339,7 @@ module('Acceptance | Commands tests', function (hooks) {
       let commandResultEvents = await getRoomEvents(roomId).filter(
         (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
-      assert.equal(
+      assert.strictEqual(
         commandResultEvents.length,
         0,
         'No command result event dispatched',
@@ -944,7 +1349,7 @@ module('Acceptance | Commands tests', function (hooks) {
       commandResultEvents = await getRoomEvents(roomId).filter(
         (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
-      assert.equal(
+      assert.strictEqual(
         commandResultEvents.length,
         1,
         'Command result event was dispatched',

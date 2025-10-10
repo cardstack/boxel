@@ -14,6 +14,8 @@ import {
   setupUserSubscribed,
   clearLocalStorage,
   setSkillsRedirect,
+  showAllCards,
+  setupPermissions,
 } from '../helpers';
 import {
   synapseStart,
@@ -40,6 +42,7 @@ test.describe('Skills', () => {
     await clearLocalStorage(page, appURL);
     await setupUserSubscribed('@user1:localhost', realmServer);
     await setupUserSubscribed('@user2:localhost', realmServer);
+    await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
@@ -363,6 +366,7 @@ test.describe('Skills', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
+    await showAllCards(page);
 
     // create a skill card
     await page.locator('[data-test-create-new-card-button]').click();
@@ -414,6 +418,7 @@ test.describe('Skills', () => {
     await page.locator('[data-test-message-idx="0"]').waitFor();
 
     // Update the uploaded skill card
+    await page.locator('[data-test-filter-list-item="Skill"]').click();
     await page.locator(`[data-cards-grid-item="${skillCard}"]`).click();
     await page.locator('[data-test-edit-button]').click();
     await page

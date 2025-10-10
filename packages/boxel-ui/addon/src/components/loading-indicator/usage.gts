@@ -11,7 +11,17 @@ import cssVars from '../../helpers/css-var.ts';
 import BoxelLoadingIndicator from './index.gts';
 
 export default class LoadingIndicatorUsage extends Component {
-  @tracked color = '#000';
+  @tracked color = '';
+  @tracked variant:
+    | undefined
+    | 'primary'
+    | 'secondary'
+    | 'muted'
+    | 'destructive'
+    | 'default' = undefined;
+
+  variants = ['default', 'primary', 'secondary', 'muted', 'destructive'];
+
   @cssVariable({ cssClassName: 'boxel-loading-indicator-size' })
   declare boxelLoadingIndicatorSize: CSSVariableInfo;
 
@@ -27,15 +37,24 @@ export default class LoadingIndicatorUsage extends Component {
             boxel-loading-indicator-size=this.boxelLoadingIndicatorSize.value
           }}
           @color={{this.color}}
+          @variant={{this.variant}}
         />
       </:example>
       <:api as |Args|>
         <Args.String
           @name='color'
-          @description='The color of the loading indicator'
+          @description='Custom color override (CSS color value)'
           @value={{this.color}}
           @onInput={{fn (mut this.color)}}
-          @default='black'
+          @default='undefined'
+        />
+        <Args.String
+          @name='variant'
+          @description='Theme-based color variant'
+          @value={{this.variant}}
+          @onInput={{fn (mut this.variant)}}
+          @options={{this.variants}}
+          @default='undefined'
         />
       </:api>
       <:cssVars as |Css|>

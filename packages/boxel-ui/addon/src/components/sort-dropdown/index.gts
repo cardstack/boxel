@@ -28,7 +28,11 @@ export default class SortDropdown extends Component<Signature> {
       <div>
         <BoxelDropdown>
           <:trigger as |bindings|>
-            <BoxelButton class='sort-button' {{bindings}}>
+            <BoxelButton
+              @kind='secondary-light'
+              class='sort-button'
+              {{bindings}}
+            >
               {{if @selectedOption @selectedOption.displayName 'Please Select'}}
               <DropdownIcon width='12px' height='12px' />
             </BoxelButton>
@@ -43,22 +47,24 @@ export default class SortDropdown extends Component<Signature> {
     </div>
 
     <style scoped>
-      .sort-options-group {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-xxs) var(--boxel-sp-sm);
-        text-wrap: nowrap;
-      }
-      .sort-button {
-        border-radius: var(--boxel-border-radius);
-        min-width: 200px;
-        justify-content: flex-start;
-        padding-left: var(--boxel-sp-sm);
-        padding-right: var(--boxel-sp-sm);
-      }
-      .sort-button > svg {
-        margin-left: auto;
+      @layer boxelComponentL2 {
+        .sort-options-group {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+          text-wrap: nowrap;
+        }
+        .sort-button {
+          border-radius: var(--boxel-border-radius);
+          min-width: 200px;
+          justify-content: flex-start;
+          padding-left: var(--boxel-sp-sm);
+          padding-right: var(--boxel-sp-sm);
+        }
+        .sort-button > svg {
+          margin-left: auto;
+        }
       }
     </style>
   </template>
@@ -73,7 +79,8 @@ export default class SortDropdown extends Component<Signature> {
     }
     return (this.args.options as SortOption[]).map(
       (option) =>
-        new MenuItem(option.displayName, 'action', {
+        new MenuItem({
+          label: option.displayName,
           action: () => this.args.onSelect(option),
         }),
     );

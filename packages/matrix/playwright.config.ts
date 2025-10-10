@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -24,4 +24,22 @@ export default defineConfig({
   expect: {
     timeout: 15000,
   },
+
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: [
+            // Simulate resolving a custom workspace domain to a realm server
+            '--host-resolver-rules=MAP published.realm 127.0.0.1:4205',
+            // Allow iframe to request storage access depsite being considered insecure
+            '--unsafely-treat-insecure-origin-as-secure=http://published.realm',
+          ],
+          // devtools: true,
+        },
+      },
+    },
+  ],
 });

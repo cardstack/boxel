@@ -1,7 +1,7 @@
 import { module, test, assert } from 'qunit';
-import { cleanContent } from '../helpers';
+import { cleanContent } from '@cardstack/runtime-common/ai';
 
-module('processStream', () => {
+module('cleanContent', () => {
   test('should be able to remove whitespace around the outside of the text', () => {
     const input = '   this is   \n   some text  \n ';
     const expectedResult = 'this is   \n   some text';

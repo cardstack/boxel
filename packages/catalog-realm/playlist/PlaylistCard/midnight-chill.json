@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Midnight Chill",
+      "description": "Smooth beats and dreamy melodies for late-night relaxation and contemplation.",
+      "coverImageUrl": "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=300&h=300&fit=crop&crop=center",
+      "songCount": 35,
+      "duration": "2h 18m",
+      "curator": "Alex Rivers",
+      "mood": "Chill"
+    },
+    "relationships": {
+      "songs.0": {
+        "links": {
+          "self": "../../song/SongCard/funky-suspense"
+        }
+      },
+      "songs.1": {
+        "links": {
+          "self": "../../song/SongCard/carefree"
+        }
+      },
+      "songs.2": {
+        "links": {
+          "self": "../../song/SongCard/monkeys-spinning-monkeys"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

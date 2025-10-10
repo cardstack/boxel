@@ -10,6 +10,8 @@ import {
   type Field,
   type FieldDef,
   type Format,
+  CreateCardFn,
+  CardCrudFunctions,
 } from './card-api';
 import {
   BoxComponentSignature,
@@ -17,7 +19,7 @@ import {
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
-import { AddButton, IconButton, Pill } from '@cardstack/boxel-ui/components';
+import { IconButton, Pill } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -34,6 +36,7 @@ import {
   isCardInstance,
   type ResolvedCodeRef,
   uuidv4,
+  CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -45,6 +48,7 @@ import {
 } from '@cardstack/boxel-ui/modifiers';
 
 import { action } from '@ember/object';
+import AddButton from './components/add-button';
 import { initSharedState } from './shared-state';
 
 interface Signature {
@@ -60,11 +64,14 @@ interface Signature {
     ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
     typeConstraint?: ResolvedCodeRef;
+    createCard?: CreateCardFn;
   };
 }
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  declare cardCrudFunctions: CardCrudFunctions;
   @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
@@ -121,7 +128,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           realmURL: this.realmURL,
         },
         multiSelect: true,
-        createNewCard: this.cardContext?.actions?.createCard,
+        createNewCard: this.cardCrudFunctions?.createCard,
         consumingRealm: this.realmURL,
       },
     );
@@ -190,7 +197,6 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
               {{#if permissions.canWrite}}
                 <IconButton
                   {{sortableHandle}}
-                  @variant='primary'
                   @icon={{FourLines}}
                   @width='18px'
                   @height='18px'
@@ -200,7 +206,6 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                   data-test-sort={{i}}
                 />
                 <IconButton
-                  @variant='primary'
                   @icon={{IconMinusCircle}}
                   @width='20px'
                   @height='20px'
@@ -227,11 +232,8 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       {{#if permissions.canWrite}}
         <AddButton
           class='add-new'
-          @variant='full-width'
-          @iconWidth='12px'
-          @iconHeight='12px'
           {{on 'click' @add}}
-          data-test-add-new
+          data-test-add-new={{@field.name}}
         >
           Add
           {{getPlural @field.card.displayName}}
@@ -245,11 +247,12 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         margin: 0 0 var(--boxel-sp);
       }
       .list > li + li {
-        padding-top: var(--boxel-sp);
+        margin-top: var(--boxel-sp);
       }
       .editor {
         position: relative;
         display: grid;
+        min-height: 65px;
       }
       .editor.read-only {
         grid-template-columns: 1fr;
@@ -258,23 +261,25 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         grid-template-columns: var(--boxel-icon-lg) 1fr var(--boxel-icon-lg);
       }
       .remove {
-        --icon-color: var(--boxel-light);
-        --icon-border: var(--boxel-dark);
-        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--background, var(--boxel-light));
+        --icon-border: var(--foreground, var(--boxel-dark));
+        --icon-bg: var(--foreground, var(--boxel-dark));
         align-self: auto;
         outline: 0;
         order: 1;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
+        --icon-bg: var(--primary, var(--boxel-highlight));
+        --icon-border: var(--primary, var(--boxel-highlight));
       }
-      .remove:focus + :deep(.boxel-card-container.fitted-format),
-      .remove:hover + :deep(.boxel-card-container.fitted-format) {
+      .remove:focus + :deep(.boxel-card-container),
+      .remove:hover + :deep(.boxel-card-container),
+      .sort:focus ~ :deep(.boxel-card-container),
+      .sort:hover ~ :deep(.boxel-card-container) {
         box-shadow:
-          0 0 0 1px var(--boxel-light-500),
-          var(--boxel-box-shadow-hover);
+          0 0 0 1px var(--border, var(--boxel-300)),
+          var(--shadow-lg, var(--boxel-box-shadow));
       }
       .add-new {
         width: calc(100% - var(--boxel-icon-xxl));
@@ -287,6 +292,11 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .sort:active {
         cursor: grabbing;
+      }
+      .sort:active ~ :deep(.boxel-card-container) {
+        box-shadow:
+          0 0 0 1px var(--border, var(--boxel-300)),
+          var(--boxel-box-shadow-hover);
       }
       :deep(.is-dragging) {
         z-index: 99;
@@ -326,7 +336,6 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
           <Pill class='item-pill' data-test-pill-item={{i}}>
             <Item @format='atom' @displayContainer={{false}} />
             <IconButton
-              @variant='primary'
               @icon={{IconX}}
               @width='10px'
               @height='10px'
@@ -342,10 +351,8 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
       <AddButton
         class='add-new'
         @variant='pill'
-        @iconWidth='12px'
-        @iconHeight='12px'
         {{on 'click' @add}}
-        data-test-add-new
+        data-test-add-new={{@field.name}}
       >
         Add
         {{@field.card.displayName}}
@@ -353,14 +360,12 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
     </div>
     <style scoped>
       .boxel-pills {
-        --boxel-add-button-pill-font: var(--boxel-font-sm);
         --pill-border-radius: var(--boxel-border-radius-sm);
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-form-control-border-color);
+        padding: var(--boxel-sp-xs);
+        border: 1px solid var(--border, var(--boxel-form-control-border-color));
         border-radius: var(--boxel-form-control-border-radius);
       }
       .remove-item-button {
@@ -370,18 +375,21 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         align-items: center;
       }
       .remove-item-button:hover {
-        --icon-color: var(--boxel-600);
-        color: var(--boxel-600);
+        --icon-color: var(--card-foreground, var(--boxel-600));
+        color: var(--card-foreground, var(--boxel-600));
       }
       .item-pill :deep(.atom-default-template:hover) {
         text-decoration: underline;
+        cursor: pointer;
+      }
+      .item-pill {
+        --pill-background-color: var(--card);
+        --pill-font-color: var(--card-foreground);
       }
       .item-pill:has(button:hover) {
-        color: var(--boxel-600);
-        border-color: var(--boxel-600);
-      }
-      .add-new {
-        border-radius: var(--pill-border-radius);
+        --icon-color: var(--muted-foreground, var(--boxel-600));
+        --pill-font-color: var(--muted-foreground, var(--boxel-600));
+        --pill-border-color: var(--muted-foreground, var(--boxel-600));
       }
     </style>
   </template>
@@ -487,12 +495,14 @@ export function getLinksToManyComponent({
               ...attributes
             >
               {{#each (getComponents) as |Item i|}}
-                <Item
-                  @format={{getPluralChildFormat effectiveFormat model}}
-                  @displayContainer={{@displayContainer}}
-                  class='linksToMany-item'
-                  data-test-plural-view-item={{i}}
-                />
+                <div class='linksToMany-itemContainer'>
+                  <Item
+                    @format={{getPluralChildFormat effectiveFormat model}}
+                    @displayContainer={{@displayContainer}}
+                    class='linksToMany-item'
+                    data-test-plural-view-item={{i}}
+                  />
+                </div>
               {{/each}}
             </div>
           {{/let}}
@@ -501,11 +511,11 @@ export function getLinksToManyComponent({
       <style scoped>
         @layer {
           .linksToMany-field.fitted-effectiveFormat
-            > .linksToMany-item
-            + .linksToMany-item,
+            > .linksToMany-itemContainer
+            + .linksToMany-itemContainer,
           .linksToMany-field.embedded-effectiveFormat
-            > .linksToMany-item
-            + .linksToMany-item {
+            > .linksToMany-itemContainer
+            + .linksToMany-itemContainer {
             margin-top: var(--boxel-sp);
           }
           .linksToMany-field.atom-effectiveFormat.display-container-false {
@@ -514,6 +524,10 @@ export function getLinksToManyComponent({
           .linksToMany-field.atom-effectiveFormat.display-container-true {
             display: inline-flex;
             gap: var(--boxel-sp-sm);
+          }
+          .linksToMany-field.fitted-effectiveFormat
+            > .linksToMany-itemContainer {
+            height: 65px;
           }
         }
       </style>

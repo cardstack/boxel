@@ -22,11 +22,8 @@ import {
   type getCards,
   type getCard,
   type Query,
-  isCardDef,
-  isCardDocumentString,
   isFieldDef,
   internalKeyFor,
-  loadCardDef,
   CodeRef,
   CardErrorJSONAPI,
   GetCardsContextName,
@@ -35,11 +32,8 @@ import {
   specRef,
   localId,
 } from '@cardstack/runtime-common';
-import {
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-} from '@cardstack/runtime-common/code-ref';
 
+import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
@@ -63,6 +57,7 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
+import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
@@ -78,7 +73,7 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -113,6 +108,7 @@ interface ModuleInspectorSignature {
 }
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
+  @service private declare commandService: CommandService;
   @service private declare loaderService: LoaderService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -128,31 +124,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private get declarations() {
-    return this.args.moduleAnalysis?.declarations;
-  }
-
-  get showSpecPreview() {
-    return Boolean(this.args.selectedCardOrField?.exportName);
-  }
-
-  private get hasCardDefOrFieldDef() {
-    return this.declarations.some(isCardOrFieldDeclaration);
-  }
-
-  private get isCardPreviewError() {
-    return this.args.isCard && this.args.cardError;
-  }
-
   private get isEmptyFile() {
     return this.args.readyFile?.content.match(/^\s*$/);
-  }
-
-  private get isSelectedItemIncompatibleWithSchemaEditor() {
-    if (!this.args.selectedDeclaration) {
-      return undefined;
-    }
-    return !isCardOrFieldDeclaration(this.args.selectedDeclaration);
   }
 
   private get sourceFileForCard(): FileDef | undefined {
@@ -180,49 +153,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get fileIncompatibilityMessage() {
-    if (this.args.isCard) {
-      if (this.args.cardError) {
-        return `Card preview failed. Make sure both the card instance data and card definition files have no errors and that their data schema matches. `;
-      }
-    }
-
-    if (this.args.moduleAnalysis.moduleError) {
-      return null; // Handled in code-submode schema editor
-    }
-
     if (this.args.isIncompatibleFile) {
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
-
-    // If the module is incompatible
-    if (this.args.isModule) {
-      //this will prevent displaying message during a page refresh
-      if (this.args.moduleAnalysis.isLoading) {
-        return null;
-      }
-      if (!this.hasCardDefOrFieldDef) {
-        return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
-      } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
-        return `No tools are available for the selected item: ${this.args.selectedDeclaration?.type} "${this.args.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
-      }
-    }
-    // If module inspector doesn't handle any case but we can't capture the error
-    if (!this.args.card && !this.args.selectedCardOrField) {
-      // this will prevent displaying message during a page refresh
-      if (isCardDocumentString(this.args.readyFile.content)) {
-        return null;
-      }
-      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
-    if (
-      !this.args.isModule &&
-      !this.args.readyFile?.name.endsWith('.json') &&
-      !this.args.card //for case of creating new card instance
-    ) {
-      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
     return null;
   }
 
@@ -357,36 +290,27 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return this.cardResource?.card as Spec;
   }
 
-  private createSpecTask = task(
-    async (ref: ResolvedCodeRef, specType: SpecType) => {
-      let relativeTo = new URL(ref.module);
-      let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
-      if (isResolvedCodeRef(maybeAbsoluteRef)) {
-        ref = maybeAbsoluteRef;
-      }
-      try {
-        let SpecKlass = await loadCardDef(specRef, {
-          loader: this.loaderService.loader,
-        });
-        let spec = new SpecKlass({
-          specType,
-          ref,
-          title: ref.name,
-        }) as Spec;
-        let currentRealm = this.operatorModeStateService.realmURL;
-        await this.store.add(spec, {
-          realm: currentRealm.href,
-          doNotWaitForPersist: true,
-        });
+  private createSpecTask = task(async (ref: ResolvedCodeRef) => {
+    try {
+      const createSpecCommand = new CreateSpecCommand(
+        this.commandService.commandContext,
+      );
+      let currentRealm = this.operatorModeStateService.realmURL;
+      const result = await createSpecCommand.execute({
+        codeRef: ref,
+        targetRealm: currentRealm.href,
+      });
+      const spec = result.specs?.[0];
+      if (spec) {
         this.specPanelService.setSelection(spec[localId]);
         if (this.activePanel !== 'spec') {
           this.setActivePanel('spec');
         }
-      } catch (e: any) {
-        console.log('Error saving', e);
       }
-    },
-  );
+    } catch (e: any) {
+      console.log('Error saving', e);
+    }
+  });
 
   @action private async createSpec(event: MouseEvent) {
     event.stopPropagation();
@@ -396,43 +320,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     if (!this.selectedDeclarationAsCodeRef) {
       throw new Error('bug: no code ref');
     }
-    let specType = await this.guessSpecType(this.args.selectedDeclaration);
-    this.createSpecTask.perform(this.selectedDeclarationAsCodeRef, specType);
-  }
-
-  private async guessSpecType(
-    selectedDeclaration: ModuleDeclaration,
-  ): Promise<SpecType> {
-    if (isCardOrFieldDeclaration(selectedDeclaration)) {
-      if (isCardDef(selectedDeclaration.cardOrField)) {
-        if (this.isApp(selectedDeclaration)) {
-          return 'app';
-        }
-        return 'card';
-      }
-      if (isFieldDef(selectedDeclaration.cardOrField)) {
-        return 'field';
-      }
-    }
-    throw new Error('Unidentified spec');
-  }
-
-  //TODO: Improve identification of isApp
-  //We have good primitives to identify card and field but not for app
-  //Here we are trying our best based upon schema analyses what is an app
-  //We don't try to capture deep ancestry of app
-  private isApp(selectedDeclaration: CardOrFieldDeclaration) {
-    if (selectedDeclaration.exportName === 'AppCard') {
-      return true;
-    }
-    if (
-      selectedDeclaration.super &&
-      selectedDeclaration.super.type === 'external' &&
-      selectedDeclaration.super.name === 'AppCard'
-    ) {
-      return true;
-    }
-    return false;
+    this.createSpecTask.perform(this.selectedDeclarationAsCodeRef);
   }
 
   private get canWrite() {
@@ -449,28 +337,21 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
+  get displayInspector() {
+    return this.args.selectedDeclaration;
+  }
+
   <template>
-    {{#if this.isCardPreviewError}}
-      {{! this is here to make TS happy, this is always true }}
-      {{#if @cardError}}
-        <section class='module-inspector-content error'>
-          <CardError
-            @error={{@cardError}}
-            @fileToFixWithAi={{this.sourceFileForCard}}
-          />
-        </section>
-      {{/if}}
-    {{else if this.isEmptyFile}}
+    {{#if this.isEmptyFile}}
       <SyntaxErrorDisplay @syntaxErrors='File is empty' />
     {{else if this.fileIncompatibilityMessage}}
-
       <div
         class='file-incompatible-message'
         data-test-file-incompatibility-message
       >
         {{this.fileIncompatibilityMessage}}
       </div>
-    {{else if @selectedCardOrField.cardOrField}}
+    {{else if this.displayInspector}}
       {{consumeContext this.makeCardResource}}
       {{consumeContext this.findSpecsForSelectedDefinition}}
 
@@ -478,12 +359,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         @file={{@readyFile}}
         @moduleAnalysis={{@moduleAnalysis}}
         @card={{@selectedCardOrField.cardOrField}}
-        @cardTypeResource={{@selectedCardOrField.cardType}}
+        @cardType={{@selectedCardOrField.cardType}}
+        @selectedDeclaration={{@selectedDeclaration}}
         @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
         @isReadOnly={{@isReadOnly}}
         as |SchemaEditorBadge SchemaEditorPanel|
       >
-
         <header
           class='module-inspector-header'
           {{SpecUpdatedModifier
@@ -511,7 +392,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                     @numberOfInstances={{this.specsForSelectedDefinition.length}}
                   />
                 {{else if (eq moduleInspectorView 'schema')}}
-                  <SchemaEditorBadge />
+                  {{#if @selectedCardOrField}}
+                    <SchemaEditorBadge />
+                  {{/if}}
                 {{/if}}
               </:annotation>
             </ToggleButton>
@@ -535,7 +418,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
-              @isLoadingNewModule={{@moduleAnalysis.isLoadingNewModule}}
               @setActiveModuleInspectorPanel={{this.setActivePanel}}
               @isPanelOpen={{eq this.activePanel 'spec'}}
               @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
@@ -543,19 +425,15 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               @activeSpec={{this.activeSpec}}
               @specsForSelectedDefinition={{this.specsForSelectedDefinition}}
               @showCreateSpec={{this.showCreateSpec}}
-              as |SpecPreviewContent|
             >
-              {{#if this.showSpecPreview}}
+              <:loading as |SpecPreviewLoading|>
+                <div class='non-preview-panel-content'>
+                  <SpecPreviewLoading />
+                </div>
+              </:loading>
+              <:content as |SpecPreviewContent|>
                 <SpecPreviewContent class='non-preview-panel-content' />
-              {{else}}
-                <p
-                  class='file-incompatible-message'
-                  data-test-incompatible-spec-nonexports
-                >
-                  <span>Boxel Spec is not supported for card or field
-                    definitions that are not exported.</span>
-                </p>
-              {{/if}}
+              </:content>
             </SpecPreview>
           {{/if}}
         </section>
@@ -564,6 +442,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       <SyntaxErrorDisplay
         @syntaxErrors={{@moduleAnalysis.moduleError.message}}
       />
+    {{else if @cardError}}
+      <section class='module-inspector-content error'>
+        <CardError
+          @error={{@cardError}}
+          @fileToFixWithAi={{this.sourceFileForCard}}
+        />
+      </section>
     {{else if @card}}
       <CardRendererPanel
         @card={{@card}}

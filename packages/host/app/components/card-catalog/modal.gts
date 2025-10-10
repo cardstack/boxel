@@ -19,7 +19,6 @@ import { eq, not } from '@cardstack/boxel-ui/helpers';
 import {
   type CodeRef,
   type CreateNewCard,
-  createNewCard,
   baseRealm,
   Deferred,
   Loader,
@@ -57,7 +56,6 @@ import CardCatalogFilters from './filters';
 
 import CardCatalog, { type NewCardArgs } from './index';
 
-import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
@@ -121,7 +119,7 @@ export default class CardCatalogModal extends Component<Signature> {
             <BoxelInput
               class='card-catalog-search'
               @type='search'
-              @variant='large'
+              @size='large'
               @value={{this.state.searchKey}}
               @onInput={{this.setSearchKey}}
               @onKeyPress={{this.onSearchFieldKeypress}}
@@ -230,7 +228,6 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private stateStack: State[] = new TrackedArray<State>();
   private stateId = 0;
-  @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realmServer: RealmServerService;
@@ -597,7 +594,7 @@ export default class CardCatalogModal extends Component<Signature> {
           },
         );
       } else {
-        newCardId = await createNewCard(ref, relativeTo, { realmURL });
+        throw new Error('createNewCard method not provided');
       }
       return newCardId;
     },

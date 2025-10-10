@@ -7,6 +7,7 @@ import {
   triggerKeyEvent,
   settled,
   waitUntil,
+  waitFor,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -43,8 +44,10 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
+  assertMessages,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -52,7 +55,6 @@ import { setupApplicationTest } from '../helpers/setup';
 const testRealm2URL = `http://test-realm/test2/`;
 const testRealm3URL = `http://test-realm/test3/`;
 
-let matrixRoomId: string;
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
 
@@ -69,11 +71,12 @@ module('Acceptance | interact submode tests', function (hooks) {
     mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -227,7 +230,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           let pet = this.args.model.pet;
           if (pet) {
             pet.name = 'Updated Pet';
-            this.args.context?.actions?.saveCard(pet.id);
+            this.args.saveCard?.(pet.id);
           }
         };
         <template>
@@ -238,7 +241,9 @@ module('Acceptance | interact submode tests', function (hooks) {
             <@fields.firstLetterOfTheName />
           </p>
           Pet:
-          <@fields.pet />
+          <div class='pet-container'>
+            <@fields.pet />
+          </div>
           Friends:
           <@fields.friends />
           Primary Address:
@@ -251,6 +256,12 @@ module('Acceptance | interact submode tests', function (hooks) {
           >
             Update and Save Pet
           </button>
+          <style scoped>
+            .pet-container {
+              height: 80px;
+              padding: 10px;
+            }
+          </style>
         </template>
       };
     }
@@ -841,6 +852,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         }
         if (json.data.attributes?.firstName === null) {
           // Because we create an empty card, upon choosing a catalog item, we must skip the scenario where attributes null
+          // eslint-disable-next-line qunit/no-early-return
           return;
         }
         id = url.href;
@@ -849,6 +861,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         deferred.fulfill();
       });
 
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       assert
         .dom('[data-test-card-catalog-item-selected]')
@@ -893,6 +906,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         id = url.href;
       });
 
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       assert
         .dom('[data-test-card-catalog-item-selected]')
@@ -924,6 +938,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
 
       assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       assert.dom('[data-test-card-catalog-item]').exists();
       await click('[data-test-card-catalog-cancel-button]');
@@ -956,14 +971,8 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await click('[data-test-boxel-filter-list-button="All Cards"]');
       // Simulate simultaneous clicks for spam-clicking
-      await Promise.all([
-        click(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-        ),
-        click(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-        ),
-      ]);
+      let cardSelector = `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`;
+      await Promise.all([click(cardSelector), click(cardSelector)]);
 
       assert
         .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
@@ -1042,6 +1051,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       assert.dom('[data-test-attached-card]').doesNotExist();
       // Press the + button to create a new card instance
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       // Select a card from catalog entries
       await click(
@@ -1066,6 +1076,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       await click(
         `[data-test-select="https://cardstack.com/base/cards/skill"]`,
@@ -1133,7 +1144,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           );
         }
       });
-      await click('[data-test-add-new]');
+      await click('[data-test-add-new="friends"]');
       await click(
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
@@ -1151,6 +1162,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       await click(
         `[data-test-select="https://cardstack.com/base/cards/skill"]`,
@@ -1227,7 +1239,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           );
         }
       });
-      await click('[data-test-add-new]');
+      await click('[data-test-add-new="friends"]');
       assert
         .dom(`[data-test-realm="Test Workspace C"] header`)
         .containsText('Test Workspace C No results');
@@ -1252,11 +1264,14 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-menu-item-text="New Card of This Type"]')
         .doesNotExist();
-      await click(`[data-cards-grid-item="${testRealm2URL}Pet/ringo"]`);
+      await click(
+        `[data-cards-grid-item="${testRealm2URL}Pet/ringo"] .field-component-card`,
+      );
       assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
 
       await click('[data-test-more-options-button]');
@@ -1613,7 +1628,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         '[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]',
       );
       await triggerEvent(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"] .field-component-card`,
         'mouseenter',
       );
       assert
@@ -1675,7 +1690,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         '[data-test-operator-mode-stack="0"] [data-test-close-button]',
       );
 
-      assert.dom('[data-test-workspace-chooser]').exists();
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist();
+      assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     });
 
     test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {
@@ -2016,6 +2034,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             ev.eventName === 'index' &&
             ev.indexType === 'incremental-index-initiation'
           ) {
+            // eslint-disable-next-line qunit/no-early-return
             return; // ignore the index initiation event
           }
           ev = ev as IncrementalIndexEventContent;
@@ -2080,6 +2099,144 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       await click('[data-test-more-options-button]');
       assert.dom('[data-test-boxel-menu-item-text="Delete"]').doesNotExist();
+    });
+
+    test('opens index card when non-index card is closed and workspace chooser opens when index card is closed', async function (assert) {
+      // Start with a non-index card in the stack
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      // Verify the non-index card is displayed
+      assert.dom('[data-test-stack-card-index="0"]').includesText('Fadhlan');
+      assert.dom('[data-test-workspace-chooser]').doesNotExist();
+
+      // Close the non-index card
+      await click('[data-test-stack-card-index="0"] [data-test-close-button]');
+
+      // Verify that an index card is automatically added to the stack
+      assert.dom('[data-test-stack-card-index="0"]').exists();
+      assert
+        .dom(
+          '[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]',
+        )
+        .hasText('Workspace - Test Workspace B');
+      assert.dom('[data-test-workspace-chooser]').doesNotExist();
+
+      // Close the index card
+      await click('[data-test-stack-card-index="0"] [data-test-close-button]');
+
+      // Verify that the workspace chooser opens
+      await waitFor('[data-test-workspace-chooser]');
+      assert.dom('[data-test-workspace-chooser]').exists();
+      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+    });
+
+    test('displays highlights filter with special layout and community cards', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+        selectAllCardsFilter: false,
+      });
+
+      assert.dom('[data-test-selected-filter="Highlights"]').exists();
+      assert.dom('[data-test-highlights-layout]').exists();
+
+      // Verify the NEW FEATURE section with AI App Generator
+      assert
+        .dom('[data-test-section-header="new-feature"]')
+        .containsText('NEW FEATURE');
+      assert
+        .dom('[data-test-highlights-card-container="ai-app-generator"]')
+        .exists();
+      assert
+        .dom(
+          '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+        )
+        .hasValue(
+          'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.',
+        );
+      await click('[data-test-boxel-button][title="About Me"]');
+      assert
+        .dom(
+          '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+        )
+        .hasValue(
+          'Build a personal portfolio page with your background, skills, and contact information',
+        );
+      await click('[data-test-create-this-for-me]');
+      await waitFor('[data-test-room-settled]');
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message:
+            'Build a personal portfolio page with your background, skills, and contact information',
+          cards: [{ id: `${testRealmURL}index`, title: 'Test Workspace B' }],
+        },
+      ]);
+      assert
+        .dom('[data-test-llm-mode-option="act"]')
+        .hasClass('selected', 'LLM mode starts in act mode');
+
+      // Verify the GETTING STARTED section with Welcome to Boxel
+      assert
+        .dom('[data-test-section-header="getting-started"]')
+        .containsText('GETTING STARTED');
+      assert
+        .dom('[data-test-highlights-card-container="welcome-to-boxel"]')
+        .exists();
+
+      // Verify the JOIN THE COMMUNITY section
+      assert.dom('[data-test-highlights-section="join-community"]').exists();
+
+      // Verify that the specific sections are displayed
+      assert.dom('[data-test-highlights-section]').exists({ count: 3 });
+      assert.dom('[data-test-highlights-card-container]').exists({ count: 2 }); // AI App Generator and Welcome to Boxel
+
+      // Verify social media links exist
+      assert.dom('[data-test-community-link]').exists({ count: 4 }); // Discord, Twitter, YouTube, Reddit
+
+      // Take a snapshot of the highlights layout
+      await click('[data-test-close-ai-assistant]');
+      await percySnapshot(assert);
+
+      // Verify the community cards have the correct content
+      assert
+        .dom('[data-test-community-title="Discord"]')
+        .containsText('Discord');
+      assert
+        .dom('[data-test-community-title="Twitter"]')
+        .containsText('Twitter');
+      assert
+        .dom('[data-test-community-title="YouTube"]')
+        .containsText('YouTube');
+      assert.dom('[data-test-community-title="Reddit"]').containsText('Reddit');
+
+      // Verify the filter icon is displayed
+      assert.dom('.content-icon').exists();
+
+      // Verify the content header has the border bottom
+      assert
+        .dom('.content-header')
+        .hasStyle({ 'border-bottom': '1px solid rgb(226, 226, 226)' });
+
+      // Test switching to "All Cards" filter to verify highlights layout is hidden
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      assert.dom('[data-test-highlights-layout]').doesNotExist();
+      assert.dom('[data-test-section-header]').doesNotExist();
+      assert.dom('[data-test-community-link]').doesNotExist();
+
+      // Switch back to Highlights filter
+      await click('[data-test-boxel-filter-list-button="Highlights"]');
+      assert.dom('[data-test-highlights-layout]').exists();
+      assert.dom('[data-test-section-header]').exists({ count: 3 });
+      assert.dom('[data-test-community-link]').exists({ count: 4 });
     });
   });
 });

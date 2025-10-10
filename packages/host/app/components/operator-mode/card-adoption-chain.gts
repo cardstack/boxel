@@ -11,9 +11,10 @@ import { CardInheritance } from '@cardstack/host/components/operator-mode/code-s
 import { Divider } from '@cardstack/host/components/operator-mode/definition-container';
 
 import { stripFileExtension } from '@cardstack/host/lib/utils';
-import { Type } from '@cardstack/host/resources/card-type';
+
 import type { Ready } from '@cardstack/host/resources/file';
 
+import type { Type } from '@cardstack/host/services/card-type-service';
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
 
 interface Signature {
@@ -37,8 +38,7 @@ export default class CardAdoptionChain extends Component<Signature> {
     <div ...attributes>
       {{#if @isLoading}}
         <div class='loading'>
-          <LoadingIndicator class='loading-icon' />
-          Loading...
+          <LoadingIndicator />
         </div>
       {{else}}
         {{#each @cardInheritanceChain as |data index|}}
@@ -63,12 +63,9 @@ export default class CardAdoptionChain extends Component<Signature> {
     </div>
     <style scoped>
       .loading {
-        display: inline-flex;
-      }
-      .loading-icon {
-        display: inline-block;
-        margin-right: var(--boxel-sp-xxxs);
-        vertical-align: middle;
+        display: flex;
+        justify-content: center;
+        margin: 30vh auto;
       }
     </style>
   </template>

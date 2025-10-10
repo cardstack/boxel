@@ -24,8 +24,6 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
 
-import type CardService from '../../services/card-service';
-import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
@@ -50,7 +48,7 @@ export default class CopyButton extends Component<Signature> {
       {{#if this.topMostCardCollection.isLoaded}}
         {{#if this.state}}
           <BoxelButton
-            class='copy-button'
+            class='copy-button {{if @isCopying "copying"}}'
             @kind={{this.buttonKind}}
             @loading={{@isCopying}}
             @size='tall'
@@ -110,13 +108,14 @@ export default class CopyButton extends Component<Signature> {
       .arrow-icon {
         --icon-color: var(--boxel-dark);
       }
+      .copying {
+        color: var(--boxel-light);
+      }
     </style>
   </template>
 
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
-  @service private declare loaderService: LoaderService;
-  @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @tracked private topMostCardCollection:
     | ReturnType<getCardCollection>

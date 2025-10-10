@@ -51,7 +51,7 @@ export function isResolvedCodeRef(ref?: CodeRef | {}): ref is ResolvedCodeRef {
 }
 
 export function isCodeRef(ref: any): ref is CodeRef {
-  if (typeof ref !== 'object') {
+  if (!ref || typeof ref !== 'object') {
     return false;
   }
   if (!('type' in ref)) {

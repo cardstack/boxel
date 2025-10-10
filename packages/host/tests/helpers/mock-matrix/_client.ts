@@ -25,6 +25,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -67,6 +68,7 @@ export class MockClient implements ExtendedClient {
 
   private txnCtr = 0;
   private fileDefManager: FileDefManager;
+  slidingSyncInstance: any;
 
   constructor(
     private owner: Owner,
@@ -84,17 +86,17 @@ export class MockClient implements ExtendedClient {
     });
   }
 
-  async getAccountDataFromServer<T extends { [k: string]: any }>(
-    _eventType: string,
-  ): Promise<T | null> {
+  async getAccountDataFromServer<K extends keyof MatrixSDK.AccountDataEvents>(
+    _eventType: K,
+  ): Promise<MatrixSDK.AccountDataEvents[K] | null> {
     if (_eventType === 'm.direct') {
       return {
         [this.loggedInAs!]: this.sdkOpts.directRooms ?? [],
-      } as unknown as T;
+      } as unknown as K;
     } else if (_eventType === APP_BOXEL_REALMS_EVENT_TYPE) {
       return {
         realms: this.sdkOpts.activeRealms ?? [],
-      } as unknown as T;
+      } as unknown as K;
     }
     return null;
   }
@@ -107,11 +109,22 @@ export class MockClient implements ExtendedClient {
     opts?: MatrixSDK.IStartClientOpts | undefined,
   ): Promise<void> {
     if (opts?.slidingSync) {
+      this.slidingSyncInstance = opts.slidingSync;
       await opts.slidingSync.start();
     }
 
     this.serverState.onEvent((serverEvent: IEvent) => {
       this.emitEvent(new MatrixEvent(serverEvent));
+    });
+
+    this.serverState.onSlidingSyncEvent((roomId, roomName) => {
+      if (this.slidingSyncInstance) {
+        this.slidingSyncInstance.triggerRoomSync(
+          roomId,
+          roomName,
+          this.serverState,
+        );
+      }
     });
 
     this.emitEvent(
@@ -174,7 +187,10 @@ export class MockClient implements ExtendedClient {
     return "shhh! it's a secret";
   }
 
-  setAccountData<T>(type: string, data: T): Promise<{}> {
+  setAccountData<K extends keyof MatrixSDK.AccountDataEvents>(
+    type: K,
+    data: K,
+  ): Promise<{}> {
     if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
       this.sdkOpts.activeRealms = (data as any).realms;
     } else if (type === 'm.direct') {
@@ -427,9 +443,9 @@ export class MockClient implements ExtendedClient {
     );
   }
 
-  sendStateEvent(
+  sendStateEvent<K extends keyof MatrixSDK.StateEvents>(
     roomId: string,
-    eventType: string,
+    eventType: K,
     content: MatrixSDK.IContent,
     stateKey?: string | undefined,
     _opts?: MatrixSDK.IRequestOpts | undefined,
@@ -437,7 +453,7 @@ export class MockClient implements ExtendedClient {
     let eventId = this.serverState.setRoomState(
       this.loggedInAs || 'unknown_user',
       roomId,
-      eventType,
+      eventType as string,
       content,
       stateKey,
     );
@@ -533,6 +549,7 @@ export class MockClient implements ExtendedClient {
       case 'm.room.message':
       case 'm.room.name':
       case 'm.room.member':
+      case APP_BOXEL_LLM_MODE:
         return this.sdk.RoomEvent.Timeline;
       case 'm.receipt':
         return this.sdk.RoomEvent.Receipt;
@@ -665,6 +682,16 @@ export class MockClient implements ExtendedClient {
           event.content,
         );
       }
+    }
+
+    if (this.slidingSyncInstance) {
+      setTimeout(() => {
+        this.slidingSyncInstance.triggerRoomSync(
+          roomId,
+          name,
+          this.serverState,
+        );
+      }, 0);
     }
 
     return { room_id: roomId };
@@ -829,7 +856,6 @@ export class MockClient implements ExtendedClient {
           ops: [
             {
               op: 'SYNC',
-              range: [start, end],
               room_ids: roomsInRange.map((r) => r.id),
             },
           ],

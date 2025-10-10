@@ -1,14 +1,12 @@
 import { module, test } from 'qunit';
 import { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { baseRealm, Realm } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   createJWT,
@@ -28,14 +26,7 @@ module(basename(__filename), function () {
       request = args.request;
     }
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     module('GET request', function (_hooks) {
       module(
@@ -514,6 +505,60 @@ module(basename(__filename), function () {
             'http://127.0.0.1:4444/aaron.json',
           );
         });
+
+        test('can paginate prerendered instances', async function (assert) {
+          // First page with size 2
+          let query: Query & { prerenderedHtmlFormat: string } = {
+            page: {
+              number: 0,
+              size: 2,
+            },
+            sort: [
+              {
+                by: 'firstName',
+                on: { module: `${testRealmHref}person`, name: 'Person' },
+                direction: 'asc',
+              },
+            ],
+            prerenderedHtmlFormat: 'embedded',
+          };
+
+          let response = await request
+            .get(`/_search-prerendered?${stringify(query)}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          let json = response.body;
+
+          assert.strictEqual(json.data.length, 2, 'first page has 2 results');
+          assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
+          assert.strictEqual(
+            json.data[0].id,
+            'http://127.0.0.1:4444/aaron.json',
+          );
+          assert.strictEqual(
+            json.data[1].id,
+            'http://127.0.0.1:4444/craig.json',
+          );
+
+          // Second page
+          query.page = { number: 1, size: 2 };
+          response = await request
+            .get(`/_search-prerendered?${stringify(query)}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          json = response.body;
+
+          assert.strictEqual(json.data.length, 2, 'second page has 2 results');
+          assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
+          assert.strictEqual(
+            json.data[0].id,
+            'http://127.0.0.1:4444/jane.json',
+          );
+          assert.strictEqual(
+            json.data[1].id,
+            'http://127.0.0.1:4444/jimmy.json',
+          );
+        });
       });
     });
 
@@ -892,6 +937,38 @@ module(basename(__filename), function () {
               `${testRealmHref}person.gts`,
             ],
           ]);
+        });
+
+        test('gets no results when asking for a type that the realm does not have knowledge of', async function (assert) {
+          let complexQuery = {
+            filter: {
+              on: {
+                module: `http://some-realm-server/some-realm/some-card`,
+                name: 'SomeCard',
+              },
+              not: {
+                eq: {
+                  firstName: 'Peter',
+                },
+              },
+            },
+            prerenderedHtmlFormat: 'embedded',
+          };
+
+          let response = await request
+            .post('/_search-prerendered')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(complexQuery);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+
+          assert.strictEqual(
+            json.data.length,
+            0,
+            'returned results count is correct',
+          );
         });
 
         test('can sort prerendered instances using QUERY method', async function (assert) {

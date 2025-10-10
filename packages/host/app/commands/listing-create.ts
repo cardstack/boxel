@@ -4,55 +4,54 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 import {
   isCardInstance,
-  loadCardDef,
-  specRef,
-  ResolvedCodeRef,
   LooseSingleCardDocument,
+  ResolvedCodeRef,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-
-import {
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-} from '@cardstack/runtime-common/code-ref';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-
-import {
-  type CardOrFieldDeclaration,
-  type ModuleDeclaration,
-} from '@cardstack/host/resources/module-contents';
+import { resolveAdoptedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
+
+import CreateSpecCommand from './create-specs';
+import OneShotLlmRequestCommand from './one-shot-llm-request';
+import SearchAndChooseCommand from './search-and-choose';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-const listingTypes: Record<'card' | 'app' | 'skill', string> = {
+type ListingType = 'card' | 'app' | 'skill';
+const listingSubClass: Record<ListingType, string> = {
   card: 'CardListing',
   app: 'AppListing',
   skill: 'SkillListing',
 };
 
 export default class ListingCreateCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ListingCreateInput
+  typeof BaseCommandModule.ListingCreateInput,
+  typeof BaseCommandModule.ListingCreateResult
 > {
-  @service declare private cardService: CardService;
-  @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
+  @service declare private cardService: CardService; // (kept for potential future use)
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
 
-  description = 'Create catalog listing command';
+  static actionVerb = 'Create';
+  description = 'Create a catalog listing for an example card';
 
   #cardAPI?: typeof CardAPI;
+  private serializedCardString?: string; // serialized JSON of example card
+  private adoptedCodeRef?: ResolvedCodeRef; // resolved adopted code ref for example card
 
   async loadCardAPI() {
     if (!this.#cardAPI) {
@@ -64,7 +63,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
   }
 
   get catalogRealm() {
-    return this.realmServer.catalogRealmURLs[0];
+    return this.realmServer.catalogRealmURLs.find((realm) =>
+      realm.endsWith('/catalog/'),
+    );
   }
 
   async getInputType() {
@@ -73,76 +74,15 @@ export default class ListingCreateCommand extends HostBaseCommand<
     return ListingCreateInput;
   }
 
-  async createSpecTask(
-    ref: ResolvedCodeRef,
-    specType: SpecType,
-    realm: string,
-  ): Promise<Spec | undefined> {
-    let relativeTo = new URL(ref.module);
-    let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
-    if (isResolvedCodeRef(maybeAbsoluteRef)) {
-      ref = maybeAbsoluteRef;
-    }
-    try {
-      let SpecKlass = await loadCardDef(specRef, {
-        loader: this.loaderService.loader,
-      });
-      let spec = new SpecKlass({
-        specType,
-        ref,
-        title: ref.name,
-      }) as Spec;
-      return (await this.store.add(spec, {
-        realm,
-      })) as Spec;
-    } catch (e) {
-      console.log('Error saving', e);
-      return undefined;
-    }
-  }
-
-  private isApp(selectedDeclaration: CardOrFieldDeclaration) {
-    if (selectedDeclaration.exportName === 'AppCard') {
-      return true;
-    }
-    if (
-      selectedDeclaration.super &&
-      selectedDeclaration.super.type === 'external' &&
-      selectedDeclaration.super.name === 'AppCard'
-    ) {
-      return true;
-    }
-    return false;
-  }
-
-  private async guessSpecType(
-    selectedDeclaration: ModuleDeclaration,
-  ): Promise<SpecType> {
-    if (selectedDeclaration.type === 'possibleCardOrField') {
-      if (
-        selectedDeclaration.super?.type === 'external' &&
-        selectedDeclaration.super.name === 'CardDef'
-      ) {
-        if (this.isApp(selectedDeclaration)) {
-          return 'app';
-        }
-        return 'card';
-      }
-      if (
-        selectedDeclaration.super?.type === 'external' &&
-        selectedDeclaration.super.name === 'FieldDef'
-      ) {
-        return 'field';
-      }
-    }
-    throw new Error('Unidentified spec');
-  }
+  requireInputFields = ['openCardId'];
 
   private sanitizeDeps(deps: string[]) {
     return deps.filter((dep) => {
+      // Exclude scoped CSS requests
       if (isScopedCSSRequest(dep)) {
         return false;
       }
+      // Exclude known global/package/icon sources
       if (
         [
           'https://cardstack.com',
@@ -152,140 +92,296 @@ export default class ListingCreateCommand extends HostBaseCommand<
       ) {
         return false;
       }
-      return true;
+
+      // Only allow deps that belong to a realm we can read
+      const url = new URL(dep);
+      const realmURL = this.realm.realmOfURL(url);
+      if (!realmURL) {
+        return false;
+      }
+      return this.realm.canRead(realmURL.href);
     });
   }
 
   protected async run(
     input: BaseCommandModule.ListingCreateInput,
-  ): Promise<undefined> {
+  ): Promise<BaseCommandModule.ListingCreateResult> {
     const cardAPI = await this.loadCardAPI();
-
-    let { openCardId } = input;
-
+    let { openCardId, targetRealm: targetRealmFromInput } = input;
     if (!openCardId) {
-      throw new Error('Card id is required');
+      throw new Error('openCardId is required');
     }
-
     const instance = await this.store.get<CardAPI.CardDef>(openCardId);
-
     if (!isCardInstance(instance)) {
       throw new Error('Instance is not a card');
     }
-
-    const targetRealm = instance[cardAPI.realmURL]?.href;
-
+    const exampleCard = instance as CardAPI.CardDef;
+    const targetRealm =
+      targetRealmFromInput ?? exampleCard[cardAPI.realmURL]?.href;
     if (!targetRealm) {
       throw new Error('Realm not found');
     }
 
-    const response = await this.network.authedFetch(
-      `${targetRealm}_dependencies?url=${openCardId}`,
-      {
-        headers: {
-          Accept: SupportedMimeType.CardDependencies,
-        },
-      },
-    );
-    if (!response.ok) {
-      throw new Error('Failed to fetch dependencies');
-    }
-    const deps = (await response.json()) as string[];
-    const sanitizedDeps = this.sanitizeDeps(deps ?? []);
-
-    let guessListingType: keyof typeof listingTypes = 'card';
-    let moduleRefs: {
-      fromModule: string;
-      codeRefName: string;
-      specType: SpecType;
-    }[] = [];
-    let specIds: string[] = [];
-    let relationships = {} as Record<string, { links: { self: string } }>;
-
-    for (const dep of sanitizedDeps) {
-      const url = new URL(dep);
-      let moduleSource = (await this.cardService.getSource(url)).content;
-      let moduleSyntax = new ModuleSyntax(moduleSource, url);
-
-      const moduleDeclaration = moduleSyntax.declarations.find(
-        (declaration) => declaration.exportName !== undefined,
-      );
-      if (!moduleDeclaration) {
-        throw new Error('Module declaration not found');
-      }
-      const specType = await this.guessSpecType(
-        moduleDeclaration as CardOrFieldDeclaration,
-      );
-
-      if (moduleDeclaration) {
-        moduleRefs.push({
-          fromModule: dep,
-          codeRefName: moduleDeclaration.exportName || '',
-          specType,
-        });
-      }
+    // resolve adopted code ref once for downstream string patch prompts
+    try {
+      this.adoptedCodeRef = resolveAdoptedCodeRef(exampleCard);
+    } catch {
+      this.adoptedCodeRef = undefined;
     }
 
-    // create spec from gts
-    for (const moduleRef of moduleRefs) {
-      const spec = await this.createSpecTask(
-        {
-          module: moduleRef.fromModule,
-          name: moduleRef.codeRefName || '',
-        },
-        moduleRef.specType,
-        targetRealm,
-      );
-      if (spec !== undefined) {
-        specIds.push(spec.id || '');
-      }
+    // serialize once for guessListingType context
+    try {
+      const serialized = await this.cardService.serializeCard(exampleCard);
+      this.serializedCardString = JSON.stringify(serialized?.data, null, 2);
+    } catch {
+      this.serializedCardString = undefined;
     }
 
-    // guess listing type
-    // if there is no gts to install, we assume it's a skill
-    if (moduleRefs.length === 0) {
-      guessListingType = 'skill';
-    }
-    if (moduleRefs.length > 1) {
-      guessListingType = 'app';
-    }
+    const listingType = await this.guessListingType(exampleCard);
 
-    if (specIds.length > 0) {
-      specIds.forEach((id, index) => {
-        relationships[`specs.${index}`] = {
-          links: {
-            self: id,
-          },
-        };
-      });
-    }
-
-    if (openCardId) {
-      relationships['examples.0'] = {
-        links: {
-          self: openCardId,
-        },
-      };
-    }
-
-    let listingDoc: LooseSingleCardDocument = {
+    const listingDoc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         relationships: {
-          ...relationships,
+          'examples.0': { links: { self: openCardId } },
         },
         meta: {
           adoptsFrom: {
             module: `${this.catalogRealm}catalog-app/listing/listing`,
-            name: listingTypes[guessListingType],
+            name: listingSubClass[listingType],
           },
         },
       },
     };
+    const listing = await this.store.add(listingDoc, { realm: targetRealm });
+    // Always use the transient symbol-based localId; ignore any persisted id at this stage
+    const listingId = (listing as any)[(cardAPI as any).localId];
+    if (!listingId) {
+      throw new Error('Failed to create listing card (no localId)');
+    }
+    await this.operatorModeStateService.openCardInInteractMode(listingId);
 
-    await this.store.add(listingDoc, {
-      realm: targetRealm,
-      doNotWaitForPersist: true,
-    });
+    const commandModule = await this.loadCommandModule();
+    const listingCard = listing as CardAPI.CardDef; // ensure correct type
+    await Promise.all([
+      this.autoPatchName(listingCard),
+      this.autoPatchSummary(listingCard),
+      this.autoLinkTag(listingCard),
+      this.autoLinkCategory(listingCard),
+      this.autoLinkLicense(listingCard),
+      this.linkSpecs(listingCard, openCardId, targetRealm),
+    ]);
+    //we don't need to call this save card
+    //interact stack item does auto-saving anyway
+    //await new SaveCardCommand(this.commandContext).execute({
+    //   card: listing as CardAPI.CardDef,
+    //   realm: targetRealm,
+    //});
+    const { ListingCreateResult } = commandModule;
+    return new ListingCreateResult({ listing });
   }
+
+  private async guessListingType(
+    exampleCard: CardAPI.CardDef,
+  ): Promise<ListingType> {
+    try {
+      const oneShot = new OneShotLlmRequestCommand(this.commandContext);
+      const name = (exampleCard as any).name || '';
+      const summary = (exampleCard as any).summary || '';
+      const systemPrompt =
+        'Respond ONLY with one token: card, app, or skill. No JSON, no punctuation.';
+      const serializedSnippet = this.serializedCardString
+        ? this.serializedCardString.slice(0, 1500)
+        : '';
+      const userPrompt = `ID: ${exampleCard.id || 'unknown'}\nName: ${name}\nSummary: ${summary}\n${serializedSnippet ? `Card JSON (truncated):\n\n\`\`\`json\n${serializedSnippet}\n\`\`\`` : ''}`;
+      const result = await oneShot.execute({
+        systemPrompt,
+        userPrompt,
+        llmModel: 'openai/gpt-4.1-nano',
+        ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
+      });
+      const maybeType = parseResponseToSingleWord(result.output, true);
+      if (maybeType === 'app' || maybeType === 'skill') return maybeType;
+      return 'card';
+    } catch {
+      return 'card';
+    }
+  }
+
+  private async linkSpecs(
+    listing: CardAPI.CardDef,
+    openCardId: string,
+    targetRealm: string,
+  ) {
+    const response = await this.network.authedFetch(
+      `${targetRealm}_dependencies?url=${openCardId}`,
+      { headers: { Accept: SupportedMimeType.CardDependencies } },
+    );
+    if (!response.ok) {
+      console.warn('Failed to fetch dependencies for specs');
+      return;
+    }
+    const deps = (await response.json()) as string[];
+    const sanitizedDeps = this.sanitizeDeps(deps ?? []);
+    if (!sanitizedDeps.length) return;
+    const createSpecCommand = new CreateSpecCommand(this.commandContext);
+    const specResults = await Promise.all(
+      sanitizedDeps.map((dep) =>
+        createSpecCommand
+          .execute({ module: dep, targetRealm, autoGenerateReadme: true })
+          .catch((e) => {
+            console.warn('Failed to create spec(s) for', dep, e);
+            return undefined;
+          }),
+      ),
+    );
+    const specs: Spec[] = [];
+    for (const res of specResults) {
+      if (res?.specs) specs.push(...res.specs);
+    }
+    (listing as any).specs = specs;
+  }
+
+  // --- Linking helpers now use SearchAndChooseCommand ---
+  private async chooseCards(
+    codeRef: ResolvedCodeRef,
+    opts?: { max?: number; additionalSystemPrompt?: string },
+  ) {
+    const command = new SearchAndChooseCommand(this.commandContext);
+    const result = await command.execute({
+      codeRef,
+      max: opts?.max ?? 2,
+      additionalSystemPrompt: opts?.additionalSystemPrompt,
+    });
+    return result.selectedCards ?? [];
+  }
+
+  private async autoPatchName(listing: CardAPI.CardDef) {
+    const name = await this.getStringPatch({
+      systemPrompt:
+        'You are an expert catalog curator for tech products. Produce ONLY the concise human-friendly title (3 words max) for this listing. Output just the title text—no quotes, no JSON, no punctuation beyond normal word separators, and no extra commentary.',
+      userPrompt:
+        'Provide a short, clear, human-friendly title (3-8 words) for this listing. Avoid quotes, punctuation except hyphens/spaces, and version numbers.',
+    });
+    if (name) {
+      (listing as any).name = name;
+    }
+  }
+
+  private async autoPatchSummary(listing: CardAPI.CardDef) {
+    const summary = await this.getStringPatch({
+      systemPrompt:
+        "You are an expert catalog curator for tech products. Produce ONLY a one or two sentence concise README-style summary describing the listing's value and primary purpose. Output just the summary text—no quotes, no JSON, no markdown, no extra commentary.",
+      userPrompt:
+        'Write a concise README-style summary. Focus on what this listing (software/card/app/skill) does and its primary purpose. Avoid implementation details and marketing fluff.',
+    });
+    if (summary) {
+      (listing as any).summary = summary;
+    }
+  }
+  private async autoLinkLicense(listing: CardAPI.CardDef) {
+    const selected = await this.chooseCards(
+      {
+        module: `${this.catalogRealm}catalog-app/listing/license`,
+        name: 'License',
+      } as ResolvedCodeRef,
+      { max: 1 },
+    );
+    (listing as any).license = selected[0];
+  }
+  private async autoLinkTag(listing: CardAPI.CardDef) {
+    const selected = await this.chooseCards(
+      {
+        module: `${this.catalogRealm}catalog-app/listing/tag`,
+        name: 'Tag',
+      } as ResolvedCodeRef,
+      {
+        max: 2,
+        additionalSystemPrompt:
+          'RULE: Never select or return any id that contains the substring "stub" (case-insensitive). If all contain stub return [].',
+      },
+    );
+    (listing as any).tags = selected;
+  }
+  private async autoLinkCategory(listing: CardAPI.CardDef) {
+    const selected = await this.chooseCards(
+      {
+        module: `${this.catalogRealm}catalog-app/listing/category`,
+        name: 'Category',
+      } as ResolvedCodeRef,
+      { max: 2 },
+    );
+    (listing as any).categories = selected;
+  }
+
+  // Removed bespoke AI selection/parsing helpers in favor of SearchAndChooseCommand
+
+  private async getStringPatch(opts: {
+    systemPrompt: string;
+    userPrompt: string;
+  }): Promise<string | undefined> {
+    const { systemPrompt, userPrompt } = opts;
+    const oneShot = new OneShotLlmRequestCommand(this.commandContext);
+    const result = await oneShot.execute({
+      systemPrompt,
+      userPrompt,
+      llmModel: 'openai/gpt-4.1-nano',
+      ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
+    });
+    if (!result.output) return undefined;
+    // We don't strictly need the key now; keep signature for compatibility.
+    return parseResponseToString(result.output);
+  }
+}
+
+// Parse an AI response into a concise string (e.g. title/summary first line)
+// - Strips markdown code fences
+// - If JSON with a single string property, returns that value
+// - Falls back to first non-empty line
+// - Truncates to maxLength
+function parseResponseToString(
+  response?: string,
+  maxLength: number = 1000,
+): string | undefined {
+  if (!response) return undefined;
+  let text = response.trim();
+  if (!text) return undefined;
+  if (text.startsWith('{') || text.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === 'string') {
+        return parsed.slice(0, maxLength);
+      }
+      if (Array.isArray(parsed)) {
+        const first = parsed.find((v) => typeof v === 'string');
+        if (first) return first.slice(0, maxLength);
+        return undefined;
+      }
+      if (parsed && typeof parsed === 'object') {
+        for (const v of Object.values(parsed as any)) {
+          if (typeof v === 'string' && v.trim()) {
+            return v.trim().slice(0, maxLength);
+          }
+        }
+        return undefined;
+      }
+    } catch {
+      // ignore parse errors and fall through
+    }
+  }
+  const firstLine = text.split(/\s*\n\s*/)[0];
+  if (!firstLine) return undefined;
+  return firstLine.slice(0, maxLength);
+}
+
+function parseResponseToSingleWord(
+  response?: string,
+  lowerCase: boolean = false,
+): string | undefined {
+  const str = parseResponseToString(response, 50)?.trim();
+  if (!str) return undefined;
+  let token = str.split(/\s+/)[0].replace(/[^A-Za-z0-9_-]/g, '');
+  if (!token) return undefined;
+  if (lowerCase) token = token.toLowerCase();
+  return token;
 }

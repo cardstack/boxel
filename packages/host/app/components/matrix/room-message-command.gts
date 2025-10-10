@@ -1,5 +1,4 @@
 import { array, hash } from '@ember/helper';
-import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -17,15 +16,16 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 
-import { MenuItem, bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
-import { ArrowLeft } from '@cardstack/boxel-ui/icons';
+import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 
-import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
+import {
+  cardTypeDisplayName,
+  cardTypeIcon,
+  getCardMenuItems,
+} from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import CopyCardCommand from '@cardstack/host/commands/copy-card';
-import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
 import { RoomResource } from '@cardstack/host/resources/room';
@@ -33,6 +33,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -59,6 +60,7 @@ interface Signature {
 export default class RoomMessageCommand extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
+  @service private declare realm: RealmService;
 
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;
@@ -128,25 +130,14 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get moreOptionsMenuItems() {
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy to Workspace', 'action', {
-        action: () => this.copyToWorkspace(),
-        icon: ArrowLeft,
-      }),
-    ];
-    return menuItems;
-  }
-
-  @action async copyToWorkspace() {
-    let { commandContext } = this.commandService;
-    const { newCardId } = await new CopyCardCommand(commandContext).execute({
-      sourceCard: this.commandResultCard.card as CardDef,
-    });
-
-    let showCardCommand = new ShowCardCommand(commandContext);
-    await showCardCommand.execute({
-      cardId: newCardId,
-    });
+    let menuItems =
+      this.commandResultCard.card?.[getCardMenuItems]?.({
+        canEdit: false,
+        cardCrudFunctions: {},
+        menuContext: 'ai-assistant',
+        commandContext: this.commandService.commandContext,
+      }) ?? [];
+    return toMenuItems(menuItems);
   }
 
   @cached
@@ -157,6 +148,13 @@ export default class RoomMessageCommand extends Component<Signature> {
       return undefined;
     }
     return this.matrixService.failedCommandState.get(commandRequest.id);
+  }
+
+  private get invalidCommandState() {
+    return (
+      this.args.messageCommand.status === 'invalid' &&
+      !!this.args.messageCommand.failureReason
+    );
   }
 
   <template>
@@ -203,6 +201,11 @@ export default class RoomMessageCommand extends Component<Signature> {
             />
             <Alert.Action @action={{@runCommand}} @actionName='Retry' />
           </Alert>
+        {{else if this.invalidCommandState}}
+          <Alert @type='warning' as |Alert|>
+            <Alert.Messages @messages={{array @messageCommand.failureReason}} />
+            <Alert.Action @action={{@runCommand}} @actionName='Try Anyway' />
+          </Alert>
         {{/if}}
         {{#if this.commandResultCard.card}}
           <CardContainer
@@ -237,7 +240,8 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .command-result-card-header {
         --boxel-label-color: var(--boxel-450);
-        --boxel-label-font: 600 var(--boxel-font-xs);
+        --boxel-label-font-size: var(--boxel-font-size-xs);
+        --boxel-label-line-height: calc(15 / 11);
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
       }

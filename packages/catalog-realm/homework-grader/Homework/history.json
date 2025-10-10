@@ -1,8 +1,28 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Homework",
+        "module": "../homework"
+      }
+    },
     "type": "card",
     "attributes": {
-      "instructions": "This assessment covers key events and developments in US History. You have 120 minutes to complete all questions. Please provide detailed responses with specific examples and dates where relevant. Each response will be evaluated based on historical accuracy, depth of analysis, and use of supporting evidence.",
+      "grade": {
+        "overallGrade": "A",
+        "questionPoints": [
+          24,
+          25,
+          47
+        ],
+        "overallFeedback": "Excellent work! Your responses demonstrate exceptional understanding of US History with thorough analysis, specific historical examples, and clear connections between events and their impacts.\n\n**Question 1: The American Revolution (24/25 points)**\nOutstanding analysis of the American Revolution's causes. You effectively identified three major causes with specific acts and dates, provided strong justification for why taxation without representation was most significant, and made excellent connections to how these grievances shaped early American government. Your use of specific legislation (Sugar Act 1764, Stamp Act 1765, Townshend Acts 1767, Quartering Act 1765, Coercive Acts 1774) demonstrates strong factual knowledge. The connection between colonial grievances and constitutional principles was particularly well-developed. Minor deduction: Could have elaborated more on how British military presence specifically influenced the Third Amendment's language and intent.\n\n**Question 2: Civil War Impact (25/25 points)**\nExemplary examination of the Civil War's long-term impacts. Your response expertly covered all required elements: immediate Reconstruction effects, federal-state relationship changes, and lasting racial impacts. The specific examples (13th-15th Amendments, Freedmen's Bureau, sharecropping, Jim Crow laws) and analysis of how these issues persisted into the Civil Rights Movement showed sophisticated historical thinking. Your discussion of the economic transformation from agricultural to industrial power was particularly insightful.\n\n**Question 3: The Progressive Era (47/50 points)**\nVery strong evaluation of Progressive Era reforms. You identified comprehensive reform categories, provided detailed analysis of two major initiatives with specific outcomes, and effectively connected these reforms to modern America. Your choice of the Pure Food and Drug Act and women's suffrage was excellent, with solid evidence of their success and lasting impact. The connections to modern regulatory agencies (EPA, OSHA, FDA) were well-made. Minor deductions: Could have explored some limitations or unintended consequences of Progressive reforms, and discussed opposition to these reforms in greater detail.\n\n**Overall Assessment:**\nYour writing is clear, well-organized, and demonstrates excellent command of historical chronology and causation. You consistently support arguments with specific evidence and make meaningful connections between historical events and their long-term consequences. Keep up the outstanding work!\n\n**Total Score: 96 out of 100 points (96% - A)**"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "History Homework",
+        "description": null,
+        "thumbnailURL": null
+      },
       "questions": [
         {
           "title": "1. The American Revolution",
@@ -23,21 +43,18 @@
           "maxPoints": 50
         }
       ],
-      "title": "US History: Key Developments Homework",
-      "description": "Comprehensive examination covering the American Revolution, Civil War, and Progressive Era",
-      "thumbnailURL": null
+      "instructions": "This assessment covers key events and developments in US History. You have 120 minutes to complete all questions. Please provide detailed responses with specific examples and dates where relevant. Each response will be evaluated based on historical accuracy, depth of analysis, and use of supporting evidence."
     },
     "relationships": {
       "gradingSkill": {
         "links": {
           "self": "../../Skill/homework-grader"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../homework",
-        "name": "Homework"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

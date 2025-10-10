@@ -24,6 +24,8 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   CodeRef,
+  APP_BOXEL_LLM_MODE,
+  type LLMMode,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -169,6 +171,12 @@ export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
   arguments: string;
 };
 
+export interface BoxelErrorForContext {
+  message: string;
+  stack?: string;
+  sourceUrl?: string;
+}
+
 export interface BoxelContext {
   agentId?: string;
   openCardIds?: string[];
@@ -177,6 +185,7 @@ export interface BoxelContext {
     canRead: boolean;
     canWrite: boolean;
   };
+  errorsDisplayed?: BoxelErrorForContext[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
   submode?: string;
@@ -252,6 +261,13 @@ export interface ActiveLLMEvent extends RoomStateEvent {
   };
 }
 
+export interface LLMModeEvent extends RoomStateEvent {
+  type: typeof APP_BOXEL_LLM_MODE;
+  content: {
+    mode: LLMMode;
+  };
+}
+
 export interface CommandResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
   content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
@@ -282,13 +298,16 @@ export interface CommandDefinitionSchema {
   tool: Tool;
 }
 
+export type CommandResultStatus = 'applied' | 'failed' | 'invalid';
+
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
     rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
-    key: string;
+    key: CommandResultStatus;
     event_id: string;
   };
   commandRequestId: string;
+  failureReason?: string; // only present if status is 'failed' or 'invalid'
   data: {
     // we retrieve the content on the server side by downloading the file
     card?: SerializedFile & { content?: string; error?: string };
@@ -302,11 +321,12 @@ export interface CommandResultWithOutputContent {
 export interface CommandResultWithNoOutputContent {
   'm.relates_to': {
     rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
-    key: string;
+    key: CommandResultStatus;
     event_id: string;
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
   commandRequestId: string;
+  failureReason?: string; // only present if status is 'failed' or 'invalid'
   data: {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
@@ -419,6 +439,7 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent
+  | LLMModeEvent
   | MessageEvent
   | RealmEvent
   | RealmServerEvent

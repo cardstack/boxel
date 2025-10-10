@@ -8,6 +8,8 @@ import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-sc
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import { unwrap } from '@cardstack/host/lib/current-run';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -48,6 +50,7 @@ module('Integration | card-prerender', function (hooks) {
 
     class Pet extends CardDef {
       static displayName = 'Pet';
+      @field title = contains(StringField);
       @field firstName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -99,6 +102,7 @@ module('Integration | card-prerender', function (hooks) {
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
+            @field title = contains(StringField);
             static isolated = class Isolated extends Component<typeof this> {
               <template>
                 <h1><@fields.firstName/></h1>
@@ -183,7 +187,15 @@ module('Integration | card-prerender', function (hooks) {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h3> Mango </h3>`),
+          cleanWhiteSpace(`<div
+            class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
+            data-test-boxel-card-container
+            style
+            data-test-card="http://test-realm/test/Pet/mango"
+            data-test-card-format="isolated"
+            data-test-field-component-card>
+              <h3> Mango </h3>
+          </div>`),
           'the pre-rendered HTML is correct',
         );
       } else {
@@ -197,7 +209,15 @@ module('Integration | card-prerender', function (hooks) {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h3> Van Gogh </h3>`),
+          cleanWhiteSpace(`<div
+            class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
+            data-test-boxel-card-container
+            style
+            data-test-card="http://test-realm/test/Pet/vangogh"
+            data-test-card-format="isolated"
+            data-test-field-component-card>
+              <h3> Van Gogh </h3>
+            </div>`),
           'the pre-rendered HTML is correct',
         );
       } else {
@@ -271,8 +291,8 @@ module('Integration | card-prerender', function (hooks) {
       ['test card: person jimmy', 'Fancy Person'],
     ].forEach(([title, type], index) => {
       assert.strictEqual(
-        cleanWhiteSpace(
-          stripScopedCSSAttributes(results.prerenderedCards[index].html!),
+        stripScopedCSSAttributes(
+          unwrap(cleanWhiteSpace(results.prerenderedCards[index].html!)),
         ),
         cleanWhiteSpace(`
           <div class="fitted-template">
@@ -287,7 +307,7 @@ module('Integration | card-prerender', function (hooks) {
                 stroke-linejoin="round"
                 stroke-width="2"
                 class="lucide lucide-captions card-type-icon"
-                viewBox="0 0 24 24"
+                viewbox="0 0 24 24"
                 data-test-card-type-icon><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>
             </div>
             <div class="info-section">

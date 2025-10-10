@@ -11,10 +11,10 @@ import { isCardInstance, localId, isLocalId } from '@cardstack/runtime-common';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import {
-  type CardDef,
-  type BaseDef,
-  type Format,
+import type {
+  CardDef,
+  BaseDef,
+  Format,
 } from 'https://cardstack.com/base/card-api';
 
 import OperatorModeStateService from './operator-mode-state-service';
@@ -36,7 +36,7 @@ export default class PlaygroundPanelService extends Service {
   @service declare private cardService: CardService;
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  private playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
+  playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
   private selectionsForNewInstances = new Map<
     string,
     {

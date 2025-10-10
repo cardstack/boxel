@@ -1,20 +1,15 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-
-import type StoreService from '@cardstack/host/services/store';
 
 import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';
 
 import PillMenu from './index';
 
 export default class PillMenuUsage extends Component {
-  @service private declare store: StoreService;
-
   @tracked private title = 'Pill Menu';
   private headerIconURL = headerIcon;
 

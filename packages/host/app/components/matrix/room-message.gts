@@ -22,9 +22,7 @@ import consumeContext from '@cardstack/host/helpers/consume-context';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';
-import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
@@ -151,6 +149,7 @@ export default class RoomMessage extends Component<Signature> {
         @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
+        {{! @glint-ignore }}
         @profileAvatar={{component
           Avatar
           isReady=true
@@ -159,6 +158,7 @@ export default class RoomMessage extends Component<Signature> {
         }}
         @collectionResource={{this.attachedCardCollection}}
         @files={{this.message.attachedFiles}}
+        @attachedCardsAsFiles={{this.message.attachedCardsAsFiles}}
         @errorMessage={{this.errorMessage}}
         @isDebugMessage={{this.message.isDebugMessage}}
         @isStreaming={{@isStreaming}}
@@ -184,8 +184,6 @@ export default class RoomMessage extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
   @service declare commandService: CommandService;
 
   knownErrorMessagePrefixes: { [errorMessagePrefix: string]: string }[] = [

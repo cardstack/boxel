@@ -70,20 +70,10 @@ export class PersonCard extends CardDef {
             {{#each cards as |card|}}
               <li
                 class='card'
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                 data-cards-grid-item={{removeFileExtension card.url}}
               >
-                {{! @glint-ignore the error in this module is that 'CardContainer' is not imported !}}
-                <CardContainer @displayBoundaries='true'>
-                  {{card.component}}
-                  {{! @glint-ignore the error is this module is that 'CardContainer' is not imported !}}
-                </CardContainer>
+                {{card.component}}
               </li>
             {{/each}}
           </:response>

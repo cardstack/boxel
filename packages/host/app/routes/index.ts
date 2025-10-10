@@ -4,6 +4,8 @@ import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
+import window from 'ember-window-mock';
+
 import stringify from 'safe-stable-stringify';
 
 import ENV from '@cardstack/host/config/environment';
@@ -16,13 +18,14 @@ import RealmServerService from '../services/realm-server';
 
 import type BillingService from '../services/billing-service';
 import type CardService from '../services/card-service';
+import type HostModeService from '../services/host-mode-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 const { hostsOwnAssets } = ENV;
 
-export default class Index extends Route<void> {
+export default class Index extends Route {
   queryParams = {
     operatorModeState: {
       refreshModel: true, // Enabled so that back-forward navigation works in operator mode
@@ -33,6 +36,7 @@ export default class Index extends Route<void> {
     clientSecret: { refreshModel: true },
   };
 
+  @service declare private hostModeService: HostModeService;
   @service declare private matrixService: MatrixService;
   @service declare private billingService: BillingService;
   @service declare private cardService: CardService;
@@ -50,10 +54,20 @@ export default class Index extends Route<void> {
   // care about the back button, see note at bottom). Because of that make sure
   // that there is as little async as possible in this model hook.
   async model(params: {
+    authRedirect?: string;
     cardPath?: string;
     path: string;
     operatorModeState: string;
-  }): Promise<void> {
+  }) {
+    if (this.hostModeService.isActive) {
+      // Duplicated from routes/card
+      await this.realmServer.ready;
+
+      let cardUrl = `${this.hostModeService.hostModeOrigin}/`;
+
+      return this.store.get(cardUrl);
+    }
+
     let { operatorModeState, cardPath } = params;
 
     if (!this.didMatrixServiceStart) {
@@ -64,6 +78,11 @@ export default class Index extends Route<void> {
 
     if (!this.matrixService.isLoggedIn) {
       return; // Show login component
+    }
+
+    if (params.authRedirect) {
+      window.location.href = params.authRedirect;
+      return;
     }
 
     if (!isTesting()) {
@@ -125,6 +144,8 @@ export default class Index extends Route<void> {
       await this.operatorModeStateService.restore(
         operatorModeStateObject || { stacks: [] },
       );
+
+      return;
     }
   }
 
@@ -133,7 +154,6 @@ export default class Index extends Route<void> {
     if (hostsOwnAssets) {
       // availableRealmURLs is set in matrixService.start(), so we can use it here
       let realmUrl = this.realmServer.availableRealmURLs.find((realmUrl) => {
-        console.log(realmUrl);
         let realmPathParts = new URL(realmUrl).pathname
           .split('/')
           .filter((part) => part !== '');

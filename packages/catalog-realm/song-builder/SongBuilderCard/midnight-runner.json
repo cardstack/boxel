@@ -1,0 +1,379 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../song-builder",
+        "name": "SongBuilderCard"
+      }
+    },
+    "attributes": {
+      "songTitle": "Midnight Runner",
+      "artist": "Neon Collective",
+      "description": "A pulsing synthwave journey through neon-lit city streets",
+      "genre": "Synthwave",
+      "key": "A Minor",
+      "tempo": 132,
+      "timeSignature": "4/4",
+      "sections": [
+        {
+          "sectionName": "intro",
+          "lyrics": "**[Cinematic Intro]**\n\nEngine revving in the distance\nCity lights blur past my eyes\nNeon glow and chrome resistance\nChasing shadows through the night",
+          "chords": [
+            {
+              "chordName": "Am",
+              "chordType": "minor",
+              "notes": ["A2", "C3", "E3", "A3"],
+              "rootNote": "A",
+              "quality": "minor"
+            },
+            {
+              "chordName": "F",
+              "chordType": "major", 
+              "notes": ["F2", "A2", "C3", "F3"],
+              "rootNote": "F",
+              "quality": "major"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C", 
+              "quality": "major"
+            }
+          ],
+          "duration": 18,
+          "notes": "Start with atmospheric pads and distant car sounds. Gradual build with vintage synth textures."
+        },
+        {
+          "sectionName": "verse 1",
+          "lyrics": "**Verse 1:**\n\nRunning through the empty streets\nNeon signs my only guide\nVintage synths and driving beats\nTake me on this midnight ride\n\nChrome and glass reflect my face\nIn this retro-future scene\nLost but finding my own pace\nIn this cybernetic dream",
+          "chords": [
+            {
+              "chordName": "Am",
+              "chordType": "minor",
+              "notes": ["A2", "C3", "E3", "A3"],
+              "rootNote": "A",
+              "quality": "minor"
+            },
+            {
+              "chordName": "F",
+              "chordType": "major",
+              "notes": ["F2", "A2", "C3", "F3"],
+              "rootNote": "F", 
+              "quality": "major"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            },
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G2", "B2", "D3", "G3"],
+              "rootNote": "G",
+              "quality": "major"
+            }
+          ],
+          "duration": 32,
+          "notes": "Establish driving bassline and tight drum pattern. Keep space for vocal melody."
+        },
+        {
+          "sectionName": "pre-chorus",
+          "lyrics": "**Pre-Chorus:**\n\nFeel the pulse beneath the skin\nLet the rhythm take control\nEvery heartbeat draws me in\nTo the music in my soul",
+          "chords": [
+            {
+              "chordName": "F",
+              "chordType": "major",
+              "notes": ["F2", "A2", "C3", "F3"],
+              "rootNote": "F",
+              "quality": "major"
+            },
+            {
+              "chordName": "G",
+              "chordType": "major", 
+              "notes": ["G2", "B2", "D3", "G3"],
+              "rootNote": "G",
+              "quality": "major"
+            },
+            {
+              "chordName": "Am",
+              "chordType": "minor",
+              "notes": ["A2", "C3", "E3", "A3"],
+              "rootNote": "A",
+              "quality": "minor"
+            }
+          ],
+          "duration": 16,
+          "notes": "Build tension with rising arpeggios and filter sweeps. Prepare for chorus impact."
+        },
+        {
+          "sectionName": "chorus", 
+          "lyrics": "**Chorus:**\n\nI'm a midnight runner\nRacing through the neon glow\nI'm a midnight runner\nWhere the vintage synths all flow\n\nThrough the city lights I fly\nUnder stars of electric sky\nI'm a midnight runner\nAnd I'll never let it go",
+          "chords": [
+            {
+              "chordName": "Am",
+              "chordType": "minor",
+              "notes": ["A2", "C3", "E3", "A3"],
+              "rootNote": "A",
+              "quality": "minor"
+            },
+            {
+              "chordName": "F",
+              "chordType": "major",
+              "notes": ["F2", "A2", "C3", "F3"],
+              "rootNote": "F",
+              "quality": "major"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            },
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G2", "B2", "D3", "G3"],
+              "rootNote": "G",
+              "quality": "major"
+            }
+          ],
+          "duration": 32,
+          "notes": "Full energy! Lead synth melody soars. Add vocal harmonies and big snare hits."
+        },
+        {
+          "sectionName": "verse 2",
+          "lyrics": "**Verse 2:**\n\nSynthesizers paint the air\nWith electric neon dreams\nEvery note beyond compare\nIn this world of laser beams\n\nVintage future calls my name\nThrough the speakers of the night\nNothing ever feels the same\nWhen the music feels so right",
+          "chords": [
+            {
+              "chordName": "Am",
+              "chordType": "minor",
+              "notes": ["A2", "C3", "E3", "A3"],
+              "rootNote": "A",
+              "quality": "minor"
+            },
+            {
+              "chordName": "F", 
+              "chordType": "major",
+              "notes": ["F2", "A2", "C3", "F3"],
+              "rootNote": "F",
+              "quality": "major"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            },
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G2", "B2", "D3", "G3"],
+              "rootNote": "G",
+              "quality": "major"
+            }
+          ],
+          "duration": 32,
+          "notes": "Add more percussive elements and subtle variations. Build toward bridge section."
+        },
+        {
+          "sectionName": "bridge",
+          "lyrics": "**Bridge:**\n\n*[Epic synth solo section]*\n\nIn the glow of city lights\nWhere the past and future meet\nEvery pulse ignites the night\nWith a legendary beat\n\n*[Building to explosive finale]*\nRun forever, run so free\nIn this synthwave symphony",
+          "chords": [
+            {
+              "chordName": "Dm",
+              "chordType": "minor",
+              "notes": ["D3", "F3", "A3", "D4"],
+              "rootNote": "D",
+              "quality": "minor"
+            },
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G2", "B2", "D3", "G3"],
+              "rootNote": "G", 
+              "quality": "major"
+            },
+            {
+              "chordName": "F",
+              "chordType": "major",
+              "notes": ["F2", "A2", "C3", "F3"],
+              "rootNote": "F",
+              "quality": "major"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            }
+          ],
+          "duration": 28,
+          "notes": "Breakdown to minimal elements, then massive build. Feature spectacular lead synth solo."
+        },
+        {
+          "sectionName": "final chorus",
+          "lyrics": "**Final Chorus:**\n\nI'm a midnight runner\nRacing through the neon glow\nI'm a midnight runner\nWhere the vintage synths all flow\n\nThrough the city lights I fly\nUnder stars of electric sky\nI'm a midnight runner\nAnd I'll never let it go\n\n*Never let it go!*\n*Midnight runner!*\n*Running through the neon glow!*",
+          "chords": [
+            {
+              "chordName": "Am",
+              "chordType": "minor",
+              "notes": ["A2", "C3", "E3", "A3"],
+              "rootNote": "A",
+              "quality": "minor"
+            },
+            {
+              "chordName": "F",
+              "chordType": "major",
+              "notes": ["F2", "A2", "C3", "F3"],
+              "rootNote": "F",
+              "quality": "major"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            },
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G2", "B2", "D3", "G3"],
+              "rootNote": "G",
+              "quality": "major"
+            }
+          ],
+          "duration": 42,
+          "notes": "Maximum power and energy! All elements at full intensity. Extended with vocal chants."
+        },
+        {
+          "sectionName": "outro",
+          "lyrics": "**[Outro]**\n\n*Running through the night...*\n*In the neon light...*\n*Forever free...*\n*In this synthwave reverie...*\n\n*[Fade with vintage delay and reverb]*",
+          "chords": [
+            {
+              "chordName": "Am",
+              "chordType": "minor", 
+              "notes": ["A2", "C3", "E3", "A3"],
+              "rootNote": "A",
+              "quality": "minor"
+            },
+            {
+              "chordName": "F",
+              "chordType": "major",
+              "notes": ["F2", "A2", "C3", "F3"],
+              "rootNote": "F",
+              "quality": "major"
+            }
+          ],
+          "duration": 20,
+          "notes": "Nostalgic fade with analog warmth. End on sustained Am with tape-style decay."
+        }
+      ],
+      "tracks": [
+        {
+          "trackName": "Lead Vocals",
+          "instrument": "Lead Vocals",
+          "volume": 82,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Vintage Reverb, Compression, Analog Chorus",
+          "notes": "Smooth 80s vocal style with character. Add subtle vocoder touches in bridge."
+        },
+        {
+          "trackName": "Bass Synth",
+          "instrument": "Moog Bass",
+          "volume": 90,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Compression, EQ, Analog Drive",
+          "notes": "Deep, punchy Moog-style bass. Heavy side-chain compression to kick."
+        },
+        {
+          "trackName": "Lead Synth",
+          "instrument": "Vintage Polysynth",
+          "volume": 78,
+          "pan": 12,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Analog Delay, Chorus, Filter Automation",
+          "notes": "Classic 80s lead sounds. Use filter sweeps for dramatic effect."
+        },
+        {
+          "trackName": "Pad Synth",
+          "instrument": "String Machine",
+          "volume": 68,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Hall Reverb, Ensemble, Vintage EQ",
+          "notes": "Warm string machine pads. Create lush harmonic foundation."
+        },
+        {
+          "trackName": "Arpeggiator",
+          "instrument": "Analog Sequencer",
+          "volume": 62,
+          "pan": -18,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Ping Pong Delay, High-pass Filter",
+          "notes": "Classic 16th note sequences. Use vintage analog sequencer character."
+        },
+        {
+          "trackName": "Drums",
+          "instrument": "LinnDrum",
+          "volume": 80,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Gated Reverb, SSL Compression",
+          "notes": "Iconic 80s drum machine. Gated reverb on snare is essential."
+        },
+        {
+          "trackName": "Percussion",
+          "instrument": "Vintage Percussion",
+          "volume": 48,
+          "pan": 22,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Reverb, Delay, Vintage EQ", 
+          "notes": "Hand claps, tambourine, and electronic hits. Add rhythmic texture."
+        },
+        {
+          "trackName": "Atmosphere",
+          "instrument": "Sound Design",
+          "volume": 38,
+          "pan": -28,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Wide Reverb, Vintage Tape Saturation",
+          "notes": "Car sounds, city ambience, and vinyl crackle. Create cinematic atmosphere."
+        }
+      ],
+      "masterVolume": 87,
+      "songDuration": 220,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

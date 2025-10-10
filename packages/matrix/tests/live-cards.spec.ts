@@ -55,14 +55,15 @@ test.describe('Live Cards', () => {
     await clearLocalStorage(page, serverIndexUrl);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
     await createRealm(page, realmName);
     let instanceUrl = await postNewCard(page, realmURL, {
       data: {
         attributes: {
-          title: 'test card title',
-          description: 'test card description',
+          cardInfo: {
+            title: 'test card title',
+            description: 'test card description',
+          },
         },
         meta: {
           adoptsFrom: {
@@ -86,8 +87,10 @@ test.describe('Live Cards', () => {
       data: {
         type: 'card',
         attributes: {
-          title: 'updated card title',
-          description: 'updated card description',
+          cardInfo: {
+            title: 'updated card title',
+            description: 'updated card description',
+          },
         },
         meta: {
           adoptsFrom: {
@@ -98,19 +101,13 @@ test.describe('Live Cards', () => {
       },
     });
 
-    await expect(
-      page.locator('[data-test-realm-indexing-indicator]'),
-    ).toHaveCount(1);
-    await expect(
-      page.locator(`[data-test-card="${instanceUrl}"]`),
-    ).toContainText('updated card title');
-    await expect(
-      page.locator('[data-test-realm-indexing-indicator]'),
-    ).toHaveCount(0);
-
     // assert that index card is live bound
     await page.goto(realmURL);
     await showAllCards(page);
+
+    await expect(
+      page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+    ).toHaveCount(1);
 
     await postCardSource(
       page,
@@ -144,7 +141,7 @@ test.describe('Live Cards', () => {
         },
       },
     });
-
+    await showAllCards(page);
     await expect(
       page.locator(`[data-test-cards-grid-item="${newCardURL}"]`),
     ).toHaveCount(1);
@@ -200,7 +197,6 @@ test.describe('Live Cards', () => {
     await clearLocalStorage(page, serverIndexUrl);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
     await createRealm(page, realmName);
     let instanceUrl = await postNewCard(page, realmURL, {
@@ -235,7 +231,9 @@ test.describe('Live Cards', () => {
     await new Promise((r) => setTimeout(r, 5000));
     let content = await getMonacoContent(page);
 
-    await page.locator('[data-test-field="title"] input').fill('Replacement');
+    await page
+      .locator('[data-test-field="cardInfo-name"] input')
+      .fill('Replacement');
 
     await waitUntil(async () => (await getMonacoContent(page)) !== content);
 

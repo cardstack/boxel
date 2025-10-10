@@ -9,16 +9,34 @@ import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import * as CommandModule from 'https://cardstack.com/base/command';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+
+import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
+
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
+
+import SummarizeSessionCommand from '../commands/summarize-session';
 import { Submodes } from '../components/submode-switcher';
 import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
+import { importResource } from '../resources/import';
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
+
+import { titleize } from '../utils/titleize';
 
 import LocalPersistenceService from './local-persistence-service';
 
+import { DEFAULT_MODULE_INSPECTOR_VIEW } from './operator-mode-state-service';
+
+import type CodeSemanticsService from './code-semantics-service';
 import type CommandService from './command-service';
 import type MatrixService from './matrix-service';
+import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type StoreService from './store';
 import type { Message } from '../lib/matrix-classes/message';
 
 export interface SessionRoomData {
@@ -30,10 +48,13 @@ export interface SessionRoomData {
 }
 
 export default class AiAssistantPanelService extends Service {
-  @service declare private matrixService: MatrixService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private monacoService: MonacoService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private localPersistenceService: LocalPersistenceService;
+  @service declare private store: StoreService;
 
   @tracked displayRoomError = false;
   @tracked isShowingPastSessions = false;
@@ -48,8 +69,116 @@ export default class AiAssistantPanelService extends Service {
     }
   }
 
+  private commandModuleResource = importResource(
+    this,
+    () => 'https://cardstack.com/base/command',
+  );
+
+  get commandModule() {
+    if (this.commandModuleResource.error) {
+      throw new Error(
+        `Error loading commandModule: ${JSON.stringify(this.commandModuleResource.error)}`,
+      );
+    }
+    if (!this.commandModuleResource.module) {
+      throw new Error(
+        `bug: SkillConfigField has not loaded yet--make sure to await this.loaded before using the api`,
+      );
+    }
+    return this.commandModuleResource.module as typeof CommandModule;
+  }
+
+  get isAiAssistantHidden() {
+    return this.operatorModeStateService.state.submode === Submodes.Host;
+  }
+
   get isOpen() {
-    return this.operatorModeStateService.aiAssistantOpen;
+    return (
+      this.operatorModeStateService.aiAssistantOpen && !this.isAiAssistantHidden
+    );
+  }
+
+  get isFocusPillVisible() {
+    return !!this.focusPillLabel;
+  }
+
+  get focusPillLabel() {
+    if (this.operatorModeStateService.state.submode !== Submodes.Code) {
+      return undefined;
+    }
+    let selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
+    if (selectedCodeRef?.name) {
+      return selectedCodeRef?.name;
+    }
+    if (this.operatorModeStateService.isViewingCardInCodeMode) {
+      return 'Card';
+    }
+    return undefined;
+  }
+
+  get focusPillItemType() {
+    if (this.operatorModeStateService.isViewingCardInCodeMode) {
+      return undefined;
+    }
+
+    return titleize(
+      this.operatorModeStateService.state.moduleInspector ??
+        DEFAULT_MODULE_INSPECTOR_VIEW,
+    );
+  }
+
+  get focusPillFormat(): string | undefined {
+    const format: Format | undefined =
+      this.operatorModeStateService.currentViewingFormat;
+    if (!format) {
+      return undefined;
+    }
+
+    // Capitalize the format name for display
+    return titleize(format);
+  }
+
+  get focusPillCodeRange() {
+    let selection = this.monacoService.trackedSelection;
+    if (!selection) {
+      return undefined;
+    }
+
+    // Check if there's an actual selection (not just cursor position)
+    const hasSelection =
+      selection.startLineNumber !== selection.endLineNumber ||
+      selection.startColumn !== selection.endColumn;
+
+    if (!hasSelection) {
+      return undefined;
+    }
+
+    if (selection.startLineNumber === selection.endLineNumber) {
+      return `Line ${selection.startLineNumber}`;
+    }
+    return `Lines ${selection.startLineNumber}-${selection.endLineNumber}`;
+  }
+
+  get focusPillMetaPills(): string[] {
+    const metaPills: string[] = [];
+
+    const itemType = this.focusPillItemType;
+    if (itemType) {
+      metaPills.push(itemType);
+    }
+
+    // Add format information when viewing cards
+    const format = this.focusPillFormat;
+    if (format) {
+      metaPills.push(format);
+    }
+
+    const codeRange = this.focusPillCodeRange;
+    if (codeRange) {
+      metaPills.push(codeRange);
+    }
+
+    return metaPills;
   }
 
   @action
@@ -76,8 +205,15 @@ export default class AiAssistantPanelService extends Service {
   @action
   enterRoom(roomId: string, hidePastSessionsList = true) {
     this.matrixService.currentRoomId = roomId;
-    if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      this.matrixService.setLLMForCodeMode();
+    switch (this.operatorModeStateService.state.submode) {
+      case Submodes.Code:
+        this.matrixService.setLLMForCodeMode();
+        break;
+      case Submodes.Interact:
+        this.matrixService.setLLMForInteractMode();
+        break;
+      default:
+        break;
     }
 
     this.localPersistenceService.setCurrentRoomId(roomId);
@@ -87,13 +223,29 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  async createNewSession() {
+  async createNewSession(
+    opts: {
+      addSameSkills: boolean;
+      shouldCopyFileHistory: boolean;
+      shouldSummarizeSession: boolean;
+    } = {
+      addSameSkills: false,
+      shouldCopyFileHistory: false,
+      shouldSummarizeSession: false,
+    },
+  ) {
     this.displayRoomError = false;
-    if (this.newSessionId) {
+    if (
+      this.newSessionId &&
+      !opts.addSameSkills &&
+      !opts.shouldSummarizeSession &&
+      !opts.shouldCopyFileHistory
+    ) {
       this.enterRoom(this.newSessionId);
       return;
     }
-    await this.doCreateRoom.perform();
+
+    await this.doCreateRoom.perform('New AI Assistant Chat', opts);
   }
 
   private get newSessionId() {
@@ -112,22 +264,156 @@ export default class AiAssistantPanelService extends Service {
     return this.doCreateRoom.isIdle;
   }
 
+  get currentRoomResource() {
+    if (!this.matrixService.currentRoomId) {
+      return undefined;
+    }
+    return this.matrixService.roomResources.get(
+      this.matrixService.currentRoomId,
+    );
+  }
+
+  private async extractSkillsFromCurrentRoom(): Promise<{
+    enabledSkills: SkillCard[];
+    disabledSkills: SkillCard[];
+  }> {
+    let enabledSkills: SkillCard[] = [];
+    let disabledSkills: SkillCard[] = [];
+
+    if (this.currentRoomResource?.matrixRoom?.skillsConfig) {
+      const skillConfig = this.currentRoomResource.matrixRoom.skillsConfig;
+
+      // Extract enabled skills from the current room
+      if (skillConfig.enabledSkillCards?.length) {
+        for (const fileDef of skillConfig.enabledSkillCards) {
+          try {
+            const skill = await this.store.get(fileDef.sourceUrl);
+            if (skill && isCardInstance(skill)) {
+              enabledSkills.push(skill as SkillCard);
+            }
+          } catch (e) {
+            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
+          }
+        }
+      }
+
+      // Extract disabled skills from the current room
+      if (skillConfig.disabledSkillCards?.length) {
+        for (const fileDef of skillConfig.disabledSkillCards) {
+          try {
+            const skill = await this.store.get(fileDef.sourceUrl);
+            if (skill && isCardInstance(skill)) {
+              disabledSkills.push(skill as SkillCard);
+            }
+          } catch (e) {
+            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
+          }
+        }
+      }
+    }
+
+    return { enabledSkills, disabledSkills };
+  }
+
+  private collectFileHistory(roomId: string): {
+    attachedFiles: FileDef[];
+    attachedCards: CardDef[];
+  } {
+    if (!roomId) {
+      return { attachedFiles: [], attachedCards: [] };
+    }
+
+    const roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource) {
+      return { attachedFiles: [], attachedCards: [] };
+    }
+
+    const seenFileUrls = new Set<string>();
+    const seenCardUrls = new Set<string>();
+    const attachedFiles: FileDef[] = [];
+    const attachedCards: CardDef[] = [];
+
+    // Iterate through all messages in the current room
+    for (const message of roomResource.messages) {
+      // Collect attached files
+      if (message.attachedFiles) {
+        for (const file of message.attachedFiles) {
+          if (file.sourceUrl && !seenFileUrls.has(file.sourceUrl)) {
+            seenFileUrls.add(file.sourceUrl);
+            attachedFiles.push(file);
+          }
+        }
+      }
+
+      // Collect attached cards (using sourceUrl from the message's attachedCardIds)
+      if (message.attachedCardIds) {
+        for (const cardId of message.attachedCardIds) {
+          if (cardId && !seenCardUrls.has(cardId)) {
+            seenCardUrls.add(cardId);
+            // We need to get the actual card from the store
+            const card = this.store.peek<CardDef>(cardId);
+            if (card && isCardInstance(card)) {
+              attachedCards.push(card);
+            }
+          }
+        }
+      }
+    }
+
+    return { attachedFiles, attachedCards };
+  }
+
   private doCreateRoom = restartableTask(
-    async (name: string = 'New AI Assistant Chat') => {
+    async (
+      name: string = 'New AI Assistant Chat',
+      opts: {
+        addSameSkills: boolean;
+        shouldCopyFileHistory: boolean;
+        shouldSummarizeSession: boolean;
+      },
+    ) => {
+      let { addSameSkills, shouldCopyFileHistory, shouldSummarizeSession } =
+        opts;
       try {
-        const defaultSkills = await this.matrixService.loadDefaultSkills(
-          this.operatorModeStateService.state.submode,
-        );
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
         );
-        let { roomId } = await createRoomCommand.execute({
-          name,
-          defaultSkills,
-        });
+
+        let input: any = { name };
+        let enabledSkills: SkillCard[] = [];
+        let disabledSkills: SkillCard[] = [];
+
+        if (addSameSkills) {
+          const extractedSkills = await this.extractSkillsFromCurrentRoom();
+          enabledSkills = extractedSkills.enabledSkills;
+          disabledSkills = extractedSkills.disabledSkills;
+        }
+
+        if (enabledSkills.length || disabledSkills.length) {
+          input.enabledSkills = enabledSkills;
+          input.disabledSkills = disabledSkills;
+        } else {
+          // Use default skills
+          input.enabledSkills = await this.matrixService.loadDefaultSkills(
+            this.operatorModeStateService.state.submode,
+          );
+        }
+
+        let oldRoomId = this.matrixService.currentRoomId;
+        let { roomId } = await createRoomCommand.execute(input);
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
+
+        // Enter room immediately
         this.enterRoom(roomId);
+
+        // Start background tasks for session preparation
+        if (oldRoomId && (shouldSummarizeSession || shouldCopyFileHistory)) {
+          this.prepareSessionContextTask.perform(oldRoomId, roomId, {
+            shouldSummarizeSession,
+            shouldCopyFileHistory,
+          });
+        }
       } catch (e) {
         console.log(e);
         this.displayRoomError = true;
@@ -137,11 +423,99 @@ export default class AiAssistantPanelService extends Service {
     },
   );
 
+  // Background tasks for session preparation
+  private summarizeSessionTask = restartableTask(
+    async (oldRoomId: string, newRoomId: string) => {
+      try {
+        const summarizeCommand = new SummarizeSessionCommand(
+          this.commandService.commandContext,
+        );
+        const result = await summarizeCommand.execute({
+          roomId: oldRoomId,
+        });
+        if (!result.summary) {
+          return;
+        }
+
+        const messageContent = `This is a summary of the previous conversation that should be included as context for our discussion:\n\n${result.summary}`;
+
+        await this.matrixService.sendMessage(newRoomId, messageContent, [], []);
+      } catch (error) {
+        console.error('Failed to summarize session:', error);
+      }
+    },
+  );
+
+  private copyFileHistoryTask = restartableTask(
+    async (oldRoomId: string, roomId: string) => {
+      try {
+        const fileHistory = this.collectFileHistory(oldRoomId);
+        const { attachedCards, attachedFiles } = fileHistory;
+
+        if (attachedFiles.length > 0 || attachedCards.length > 0) {
+          const messageContent =
+            'This session includes files and cards from the previous conversation for context.';
+
+          await this.matrixService.sendMessage(
+            roomId,
+            messageContent,
+            attachedCards,
+            attachedFiles,
+          );
+        }
+      } catch (error) {
+        console.error('Failed to copy file history:', error);
+      }
+    },
+  );
+
+  private prepareSessionContextTask = restartableTask(
+    async (
+      oldRoomId: string,
+      newRoomId: string,
+      opts: {
+        shouldSummarizeSession: boolean;
+        shouldCopyFileHistory: boolean;
+      },
+    ) => {
+      const { shouldSummarizeSession, shouldCopyFileHistory } = opts;
+
+      if (shouldSummarizeSession) {
+        await this.summarizeSessionTask.perform(oldRoomId, newRoomId);
+      }
+
+      if (shouldCopyFileHistory) {
+        await this.copyFileHistoryTask.perform(oldRoomId, newRoomId);
+      }
+    },
+  );
+
+  // Public getters for task loading states
+  get isSummarizingSession() {
+    return this.summarizeSessionTask.isRunning;
+  }
+
+  get isCopyingFileHistory() {
+    return this.copyFileHistoryTask.isRunning;
+  }
+
+  get isPreparingSession() {
+    return this.isSummarizingSession || this.isCopyingFileHistory;
+  }
+
+  @action
+  skipSessionPreparation() {
+    this.summarizeSessionTask.cancelAll();
+    this.copyFileHistoryTask.cancelAll();
+    this.prepareSessionContextTask.cancelAll();
+  }
+
   get loadingRooms() {
     return this.loadRoomsTask.isRunning;
   }
 
   private loadRoomsTask = restartableTask(async () => {
+    await this.matrixService.waitForInitialSync();
     await this.matrixService.flushAll;
     await allSettled(
       [...this.matrixService.roomResources.values()].map((r) => r.processing),
@@ -169,7 +543,9 @@ export default class AiAssistantPanelService extends Service {
                 clearInterval(interval);
                 resolve();
               }
-            }, 250);
+              // cast here is because @types/node is polluting our definition of
+              // setInterval on the browser.
+            }, 250) as unknown as number;
           }),
         ]);
       }
@@ -194,21 +570,7 @@ export default class AiAssistantPanelService extends Service {
       if (!resource.matrixRoom) {
         continue;
       }
-      let isAiBotInvited = !!resource.invitedMembers.find(
-        (m) => this.matrixService.aiBotUserId === m.userId,
-      );
-      let isAiBotJoined = !!resource.joinedMembers.find(
-        (m) => this.matrixService.aiBotUserId === m.userId,
-      );
-      let isUserJoined = !!resource.joinedMembers.find(
-        (m) => this.matrixService.userId === m.userId,
-      );
-      if (
-        (isAiBotInvited || isAiBotJoined) &&
-        isUserJoined &&
-        resource.name &&
-        resource.roomId
-      ) {
+      if (resource.name && resource.roomId) {
         sessions.push({
           roomId: resource.roomId,
           name: resource.name,
@@ -301,4 +663,10 @@ export default class AiAssistantPanelService extends Service {
       }
     }
   });
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'ai-assistant-panel-service': AiAssistantPanelService;
+  }
 }

@@ -47,10 +47,17 @@ test.describe('Create Realm via Dashboard', () => {
 
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
 
     await createRealm(page, 'new-workspace', '1New Workspace');
+
+    await expect(
+      page.locator(`[data-test-workspace="1New Workspace"]`),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-test-create-workspace-modal]'),
+    ).toHaveCount(0);
+
     await page.locator('[data-test-workspace="1New Workspace"]').click();
     let newRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
     await expect(
@@ -58,7 +65,11 @@ test.describe('Create Realm via Dashboard', () => {
     ).toBeVisible();
     await expect(
       page.locator(`[data-test-boxel-filter-list-button]`),
-    ).toHaveCount(1);
+    ).toHaveCount(2);
+
+    await page.locator('[data-test-submode-switcher] button').click();
+    await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
+    await expect(page.locator('[data-test-host-submode]')).toBeVisible();
 
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(

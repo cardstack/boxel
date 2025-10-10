@@ -44,6 +44,7 @@
     "classnames": "catalog:",
     "countries-list": "catalog:",
     "dayjs": "catalog:",
+    "dompurify": "catalog:",
     "ember-basic-dropdown": "8.0.4",
     "ember-css-url": "^1.0.0",
     "ember-concurrency": "catalog:",
@@ -51,7 +52,6 @@
     "ember-draggable-modifiers": "^1.0.0",
     "ember-focus-trap": "^1.0.1",
     "ember-freestyle": "^0.20.0",
-    "ember-link": "^2.1.0",
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^4.1.0",
     "ember-power-calendar": "^1.2.0",
@@ -65,8 +65,8 @@
     "focus-trap": "catalog:",
     "lodash": "catalog:",
     "pluralize": "catalog:",
-    "tracked-built-ins": "^3.2.0",
-    "typescript": "~5.1.6"
+    "tracked-built-ins": "catalog:",
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@babel/core": "catalog:",
@@ -80,6 +80,7 @@
     "@embroider/macros": "~1.16.5",
     "@rollup/plugin-babel": "catalog:",
     "@tsconfig/ember": "3.0.1",
+    "@types/dompurify": "catalog:",
     "@types/lodash": "catalog:",
     "@types/pluralize": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
@@ -102,12 +103,12 @@
     "svgo": "catalog:"
   },
   "peerDependencies": {
-    "@glint/environment-ember-loose": "1.3.0",
-    "ember-source": "^5.4.0",
-    "typescript": "^5.1.6"
+    "@glint/environment-ember-loose": "catalog:",
+    "ember-source": "catalog:",
+    "typescript": "catalog:"
   },
   "engines": {
-    "node": "20"
+    "node": "22.20.0"
   },
   "volta": {
     "extends": "../../../package.json"

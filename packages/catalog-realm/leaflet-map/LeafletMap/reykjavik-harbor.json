@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "geoPoint": {
+        "lat": 64.1466,
+        "lon": -21.9426
+      },
+      "tileserverUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "cardInfo": {
+        "title": "Reykjavik Old Harbor",
+        "description": "Charming Nordic harbor town with colorful buildings, fishing boats, and views of Mount Esja across Faxaflói Bay",
+        "thumbnailURL": null,
+        "notes": "Northernmost capital city showcasing Scandinavian coastal architecture and maritime culture"
+      },
+      "title": "Reykjavik Old Harbor",
+      "description": "Charming Nordic harbor town with colorful buildings, fishing boats, and views of Mount Esja across Faxaflói Bay"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../leaflet-map",
+        "name": "LeafletMap"
+      }
+    }
+  }
+}

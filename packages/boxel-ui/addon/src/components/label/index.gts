@@ -1,11 +1,11 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import cn from '../../helpers/cn.ts';
-import element from '../../helpers/element.ts';
+import { cn, element, eq } from '../../helpers.ts';
 
 interface Signature {
   Args: {
     ellipsize?: boolean;
+    size?: BoxelLabelFontSize;
     tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
@@ -14,22 +14,43 @@ interface Signature {
   Element: HTMLElement;
 }
 
+export type BoxelLabelFontSize = 'small' | 'default';
+
 const Label: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
-    <Tag class={{cn 'boxel-label' ellipsize=@ellipsize}} ...attributes>
+    <Tag
+      class={{cn
+        'boxel-label'
+        boxel-label--small=(eq @size 'small')
+        boxel-label--default=(eq @size 'default')
+        boxel-ellipsize=@ellipsize
+      }}
+      ...attributes
+    >
       {{yield}}
     </Tag>
   {{/let}}
   <style scoped>
-    .boxel-label {
-      color: var(--boxel-label-color);
-      font: var(--boxel-label-font, 600 var(--boxel-font-sm));
-      letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm));
-    }
-    .ellipsize {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    @layer boxelComponentL1 {
+      .boxel-label {
+        color: var(--boxel-label-color);
+        font-size: var(--boxel-label-font-size, var(--boxel-font-size-sm));
+        font-weight: var(--boxel-label-font-weight, 600);
+        line-height: var(--boxel-label-line-height, calc(18 / 13));
+        font-family: inherit;
+        letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm));
+      }
+      .boxel-label--small {
+        font-size: var(
+          --boxel-label-font-size-small,
+          var(--boxel-font-size-xs)
+        );
+        line-height: var(--boxel-label-line-height-small, calc(15 / 11));
+      }
+      .boxel-label--default {
+        font-size: var(--boxel-label-font-size, var(--boxel-font-size-sm));
+        line-height: var(--boxel-label-line-height, calc(18 / 13));
+      }
     }
   </style>
 </template>;

@@ -32,13 +32,13 @@ export const Button: TemplateOnlyComponent<ButtonSignature> = <template>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
-      transition: border-color var(--boxel-transition);
       margin: 0;
       min-height: var(--boxel-input-group-height);
       outline-offset: 0;
     }
 
     .button-accessory {
+      box-shadow: none;
       z-index: 2;
     }
 
@@ -53,7 +53,7 @@ interface IconButtonSignature {
   Blocks: {
     default: [];
   };
-  Element: HTMLButtonElement;
+  Element: HTMLButtonElement | HTMLAnchorElement;
 }
 
 export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>
@@ -69,13 +69,13 @@ export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
-      transition: border-color var(--boxel-transition);
       margin: 0;
       min-height: var(--boxel-input-group-height);
       outline-offset: 0;
     }
 
     .icon-button-accessory {
+      box-shadow: none;
       z-index: 2;
     }
   </style>
@@ -97,7 +97,6 @@ export const Text: TemplateOnlyComponent<TextSignature> = <template>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
-      transition: border-color var(--boxel-transition);
       margin: 0;
       min-height: var(--boxel-input-group-height);
       outline-offset: 0;
@@ -105,11 +104,9 @@ export const Text: TemplateOnlyComponent<TextSignature> = <template>
 
     .text-accessory {
       align-items: center;
-      background-color: var(--boxel-light);
-      color: var(--boxel-purple-900);
+      color: var(--muted-foreground, var(--boxel-700));
       display: flex;
       font-size: var(--boxel-font-size-sm);
-      line-height: var(--boxel-ratio);
       padding: var(--boxel-input-group-padding-y)
         var(--boxel-input-group-padding-x);
       text-align: center;
@@ -167,7 +164,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       .boxel-input-group__accessory {
         border: 1px solid var(--boxel-input-group-border-color);
         border-radius: var(--boxel-input-group-border-radius);
-        transition: border-color var(--boxel-transition);
         margin: 0;
         min-height: var(--boxel-input-group-height);
         outline-offset: 0;
@@ -178,15 +174,12 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       }
 
       .boxel-input-group__select-accessory :deep(.boxel-select) {
-        font: var(--boxel-button-font, var(--boxel-font-sm));
+        border: none;
         font-weight: 600;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
-          var(--boxel-sp-xs);
       }
 
       .boxel-input-group__select-accessory
         :deep(.boxel-select .ember-power-select-placeholder) {
-        font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
       }
       .boxel-input-group__select-accessory
@@ -195,13 +188,12 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       }
 
       .boxel-input-group__select-accessory--disabled {
-        border-color: var(--boxel-input-group-border-color);
-        color: rgb(0 0 0 / 50%);
+        border: 1px solid var(--boxel-input-group-border-color);
         opacity: 0.5;
       }
 
       .boxel-input-group--invalid .boxel-input-group__select-accessory {
-        border-color: var(--boxel-error-100);
+        border-color: var(--destructive, var(--boxel-error-100));
       }
 
       .boxel-input-group__select-accessory
@@ -213,7 +205,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         .boxel-input-group__select-accessory__dropdown
           .ember-power-select-option
       ) {
-        font: var(--boxel-button-font, var(--boxel-font-sm));
         padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
           var(--boxel-sp-xs);
       }

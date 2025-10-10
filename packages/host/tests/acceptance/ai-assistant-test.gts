@@ -1,13 +1,26 @@
-import { click, fillIn, waitFor, waitUntil, visit } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  waitFor,
+  waitUntil,
+  visit,
+  triggerEvent,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
-import { ResolvedCodeRef, baseRealm } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  ResolvedCodeRef,
+  baseRealm,
+  skillCardRef,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -18,17 +31,23 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import type MonacoService from '@cardstack/host/services/monaco-service';
+
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupAuthEndpoints,
   setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
   assertMessages,
+  setupRealmServerEndpoints,
   type TestContextWithSave,
+  delay,
+  getMonacoContent,
 } from '../helpers';
 
 import {
@@ -62,6 +81,7 @@ let countryDefinition = `import { field, contains, CardDef } from 'https://cards
   }`;
 
 let matrixRoomId: string;
+let mockedFileContent = 'Hello, world!';
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -73,11 +93,90 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     directRooms: [
       getRoomIdForRealmAndUser(testRealmURL, '@testuser:localhost'),
       getRoomIdForRealmAndUser(baseRealm.url, '@testuser:localhost'),
+      'test-auth-realm-server-session-room',
     ],
   });
 
   let { createAndJoinRoom, getRoomState, simulateRemoteMessage } =
     mockMatrixUtils;
+
+  // Setup realm server endpoints for summarization tests
+  setupRealmServerEndpoints(hooks, [
+    {
+      route: '_request-forward',
+      getResponse: async (req: Request) => {
+        const body = await req.json();
+
+        // Handle summarization requests
+        if (body.url.includes('openrouter.ai/api/v1/chat/completions')) {
+          const requestBody = JSON.parse(body.requestBody);
+
+          // Check if this is a summarization request
+          if (
+            requestBody.messages &&
+            requestBody.messages.some(
+              (msg: any) =>
+                msg.content &&
+                msg.content.includes('Please provide a concise summary'),
+            )
+          ) {
+            // Return a mock summary based on the conversation content
+            const conversationText = requestBody.messages
+              .filter(
+                (msg: any) =>
+                  msg.role === 'user' &&
+                  !msg.content.includes('Please provide a concise summary'),
+              )
+              .map((msg: any) => msg.content)
+              .join(' ');
+
+            let summary = 'This conversation focused on general discussion.';
+
+            if (conversationText.includes('project')) {
+              summary =
+                'This conversation focused on project help, specifically creating a new card for a person with name and age fields. The user requested assistance with card creation and field definition.';
+            } else if (
+              conversationText.includes('card') &&
+              conversationText.includes('file')
+            ) {
+              summary =
+                'This conversation involved discussing a person card (Hassan) and a pet definition file. The user shared both a Person card and a pet.gts file, then asked for help understanding the structure.';
+            } else if (conversationText.includes('error')) {
+              throw new Error('OpenRouter API error');
+            }
+
+            return new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: {
+                      content: summary,
+                    },
+                  },
+                ],
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+        }
+
+        // Default response for other requests
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { id: 123, name: 'test' },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      },
+    },
+  ]);
 
   setupBaseRealm(hooks);
 
@@ -86,7 +185,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -236,6 +336,32 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             },
           },
         },
+        'Skill/example.json': {
+          data: {
+            attributes: {
+              title: 'Exanple Skill',
+              description: 'This skill card is for testing purposes',
+              instructions: 'This is an example skill card',
+              commands: [],
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        'Skill/example2.json': {
+          data: {
+            attributes: {
+              title: 'Example 2 Skill',
+              description: 'This skill card is also for testing purposes',
+              instructions: 'This is a second example skill card',
+              commands: [],
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
@@ -245,6 +371,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         },
       },
     });
+
+    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+      return new Response(mockedFileContent);
+    };
   });
 
   test('attaches a card in a conversation multiple times', async function (assert) {
@@ -288,8 +418,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     //Test the scenario where there is an update to the card
     await click(
-      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"] .field-component-card`,
     );
+    await waitFor(`[data-test-stack-card="${testCard}"]`);
 
     await click(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`);
     await fillIn(
@@ -457,6 +588,50 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
   });
 
+  test('defaults to openai/gpt-5 in interact mode', async function (assert) {
+    let defaultInteractLLMId = DEFAULT_LLM;
+    let defaultInteractLLMName = DEFAULT_LLM_ID_TO_NAME[defaultInteractLLMId];
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    // Interact mode is default, verify the LLM is set correctly
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
+
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test-2',
+    });
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor("[data-test-enter-room='mock_room_1']");
+    await click('[data-test-enter-room="mock_room_1"]');
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
+
+    // Switch to Code mode and back to Interact mode to verify LLM changes
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(defaultInteractLLMName);
+  });
+
   test('auto-attached file is not displayed in interact mode', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
@@ -471,8 +646,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
 
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
-      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"] .field-component-card',
     );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
@@ -504,11 +680,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
 
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
-      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"] .field-component-card',
     );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-autoattached-card]') ||
+        document.querySelector('[data-test-autoattached-file]'),
+    );
     assert.dom('[data-test-autoattached-file]').doesNotExist();
     assert.dom('[data-test-autoattached-card]').exists();
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
@@ -539,6 +721,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     assert.dom('[data-test-attached-card]').doesNotExist();
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
     await click(`[data-test-select="https://cardstack.com/base/types/card"]`);
 
@@ -547,7 +730,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitUntil(() => id);
     id = id!;
 
-    await fillIn('[data-test-field="title"] input', 'new card');
+    await fillIn('[data-test-field="cardInfo-name"] input', 'new card');
     assert.dom(`[data-test-attached-card]`).containsText('new card');
 
     await fillIn('[data-test-message-field]', `Message with updated card`);
@@ -560,6 +743,61 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         cards: [{ id, title: 'new card' }],
       },
     ]);
+  });
+
+  test('can open attached card dropdown menu', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"] .field-component-card',
+    );
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-autoattached-card]') ||
+        document.querySelector('[data-test-autoattached-file]'),
+    );
+
+    await fillIn('[data-test-message-field]', `Message with updated card`);
+    await click('[data-test-send-message-btn]');
+
+    mockedFileContent = 'test card content';
+
+    await click('[data-test-attached-file-dropdown-button="Fadhlan"]');
+
+    assert.dom('[data-test-boxel-menu-item-text="Open in Code Mode"]').exists();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Submitted Content"]')
+      .exists();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Submitted Content"]')
+      .exists();
+
+    await waitFor('[data-test-copy-file-content="test card content"]');
+    await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+
+    await waitUntil(
+      () =>
+        getMonacoContent().startsWith(
+          '{"data":{"type":"card","id":"http://test-realm/test/Person/fadhlan"',
+        ),
+      {
+        timeout: 5000,
+      },
+    );
   });
 
   test('can open attach file modal', async function (assert) {
@@ -577,6 +815,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
+    await (getService('monaco-service') as MonacoService).getMonacoContext();
 
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -778,7 +1017,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-autoattached-file]').doesNotExist();
@@ -893,7 +1135,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
@@ -941,7 +1186,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
@@ -1001,7 +1249,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
@@ -1074,7 +1325,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In interact mode, auto-attached cards must be the top most cards in the stack
     // unless the card is manually chosen
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
@@ -1112,6 +1366,24 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
+    assert.dom('[data-test-focus-pill-main]').containsText('Card');
+    assert
+      .dom('[data-test-focus-pill-meta]')
+      .exists({ count: 1 }, 'FocusPill shows one meta pill');
+    let metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[0] as Element)
+      .hasText('Isolated', 'FocusPill shows item type "Format"');
+
+    await click('[data-test-format-chooser="embedded"]');
+    assert
+      .dom('[data-test-focus-pill-meta]')
+      .exists({ count: 1 }, 'FocusPill shows one meta pill');
+    metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[0] as Element)
+      .hasText('Embedded', 'FocusPill shows item type "Format"');
+
     await fillIn('[data-test-message-field]', `Message - 1`);
     await click('[data-test-send-message-btn]');
 
@@ -1159,7 +1431,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode!.previewPanelSelection,
       {
         cardId: `${testRealmURL}Plant/highbush-blueberry`,
-        format: 'isolated',
+        format: 'embedded',
       },
       'Context sent with message contains correct previewPanelSelection',
     );
@@ -1187,6 +1459,19 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct realmPermissions',
     );
     await click('[data-test-clickable-definition-container]');
+
+    // After selecting a definition, FocusPill should appear with label and meta
+    await waitFor('[data-test-focus-pill-main]');
+    assert
+      .dom('[data-test-focus-pill-main]')
+      .containsText('Plant', 'FocusPill shows selected code label');
+    assert
+      .dom('[data-test-focus-pill-meta]')
+      .exists({ count: 1 }, 'FocusPill shows one meta pill');
+    metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[0] as Element)
+      .hasText('Schema', 'FocusPill shows item type "Schema"');
 
     await fillIn('[data-test-message-field]', `Message - 2`);
     await click('[data-test-send-message-btn]');
@@ -1316,6 +1601,35 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       });
     }
 
+    // FocusPill should reflect Preview item type, format, and multi-line selection range
+    await waitFor('[data-test-focus-pill-main]');
+    await delay(20); // editor selection updates are debounced
+    assert
+      .dom('[data-test-focus-pill-main]')
+      .containsText('Plant', 'FocusPill still shows selected code label');
+    assert
+      .dom('[data-test-focus-pill-meta]')
+      .exists({ count: 3 }, 'FocusPill shows three meta pills');
+    metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[0] as Element)
+      .hasText('Preview', 'FocusPill shows item type "Preview"');
+    assert
+      .dom(metaEls[1] as Element)
+      .hasText('Isolated', 'FocusPill shows format "Isolated"');
+    assert
+      .dom(metaEls[2] as Element)
+      .hasText(
+        'Lines 3-6',
+        'FocusPill shows multi-line selection range "Lines 3-6"',
+      );
+
+    await click('[data-test-format-chooser="fitted"]');
+    metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+    assert
+      .dom(metaEls[1] as Element)
+      .hasText('Fitted', 'FocusPill shows format "Fitted"');
+
     await fillIn('[data-test-message-field]', `Message - 3`);
     await click('[data-test-send-message-btn]');
 
@@ -1362,7 +1676,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode!.previewPanelSelection,
       {
         cardId: `${testRealmURL}Plant/highbush-blueberry`,
-        format: 'isolated',
+        format: 'fitted',
       },
       'Context sent with message contains correct previewPanelSelection',
     );
@@ -1391,6 +1705,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click(
       '[data-test-boxel-button][data-test-module-inspector-view="spec"]',
     );
+
+    // FocusPill should reflect Spec item type (selection range unchanged)
+    await waitFor('[data-test-focus-pill-main]');
+    {
+      const metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+      assert
+        .dom(metaEls[0] as Element)
+        .hasText('Spec', 'FocusPill shows item type "Spec"');
+    }
     await fillIn('[data-test-message-field]', `Message - 4`);
     await click('[data-test-send-message-btn]');
 
@@ -1961,5 +2284,691 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       autoAttachedSpecCardsAfterReturn.length > 0,
       'Spec card should be auto-attached again when returning to spec panel',
     );
+  });
+
+  test('"Add Same Skills" copies skill configuration to new session', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // First, let's add some skills to the current room
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(`[data-test-card-catalog-item="${testRealmURL}Skill/example"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}Skill/example2"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          '[data-test-skill-menu] [data-test-attached-card]',
+        )?.length === 2,
+    );
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example2"]`,
+      )
+      .exists();
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example-on"`)
+      .exists();
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`)
+      .exists();
+    await click(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`);
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`)
+      .exists();
+
+    // Enabling create new session by sending a message
+    await fillIn(
+      '[data-test-message-field]',
+      'Enabling create new session button',
+    );
+    await click('[data-test-send-message-btn]');
+
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click('[data-test-new-session-settings-option="Add Same Skills"]');
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu]');
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          '[data-test-skill-menu] [data-test-attached-card]',
+        )?.length === 2,
+    );
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example2"]`,
+      )
+      .exists();
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example-on"`)
+      .exists();
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`)
+      .exists();
+
+    // Normal click scenario
+    // Enabling create new session by sending a message
+    await fillIn(
+      '[data-test-message-field]',
+      'Enabling create new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu]');
+    assert
+      .dom('[data-test-skill-menu] [data-test-attached-card]')
+      .exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="http://localhost:4201/skills/Skill/boxel-environment"]`,
+      )
+      .exists();
+  });
+
+  test('copies file history when creating new session with option checked', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send first message with a card
+    await fillIn('[data-test-message-field]', 'Message with card');
+    await selectCardFromCatalog(`${testRealmURL}Person/hassan`);
+    await click('[data-test-send-message-btn]');
+
+    // Send second message with a file
+    await fillIn('[data-test-message-field]', 'Message with file');
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+    await click('[data-test-send-message-btn]');
+
+    // Send third message with another card
+    await fillIn('[data-test-message-field]', 'Message with another card');
+    await selectCardFromCatalog(`${testRealmURL}Pet/mango`);
+    await click('[data-test-send-message-btn]');
+
+    // Verify messages were sent with attachments
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message with card',
+        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Message with file',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Message with another card',
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+      },
+    ]);
+    // Create new session with "Copy File History" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click('[data-test-new-session-settings-option="Copy File History"]');
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message:
+          'This session includes files and cards from the previous conversation for context.',
+        cards: [
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+        ],
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+    ]);
+  });
+
+  test('summarizes current session when creating new session with option checked', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send several messages to create conversation history
+    await fillIn(
+      '[data-test-message-field]',
+      'Hello, I need help with my project',
+    );
+    await click('[data-test-send-message-btn]');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'I want to create a new card for a person',
+    );
+    await click('[data-test-send-message-btn]');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'The person should have a name and age field',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Verify messages were sent
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Hello, I need help with my project',
+      },
+      {
+        from: 'testuser',
+        message: 'I want to create a new card for a person',
+      },
+      {
+        from: 'testuser',
+        message: 'The person should have a name and age field',
+      },
+    ]);
+
+    // Create new session with "Summarize Current Session" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click(
+      '[data-test-new-session-settings-option="Summarize Current Session"]',
+    );
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+
+    // Verify the summary message was sent to the new room
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message:
+          'This is a summary of the previous conversation that should be included as context for our discussion: This conversation focused on project help, specifically creating a new card for a person with name and age fields. The user requested assistance with card creation and field definition.',
+      },
+    ]);
+  });
+
+  test('summarizes current session with cards and files when creating new session', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send message with a card
+    await fillIn('[data-test-message-field]', 'I have a person card here');
+    await selectCardFromCatalog(`${testRealmURL}Person/hassan`);
+    await click('[data-test-send-message-btn]');
+
+    // Send message with a file
+    await fillIn(
+      '[data-test-message-field]',
+      'And here is the pet definition file',
+    );
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+    await click('[data-test-send-message-btn]');
+
+    // Send another message
+    await fillIn(
+      '[data-test-message-field]',
+      'Can you help me understand this structure?',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Verify messages were sent with attachments
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'I have a person card here',
+        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+      },
+      {
+        from: 'testuser',
+        message: 'And here is the pet definition file',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Can you help me understand this structure?',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+    ]);
+
+    // Create new session with "Summarize Current Session" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click(
+      '[data-test-new-session-settings-option="Summarize Current Session"]',
+    );
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+
+    // Verify the summary message was sent to the new room
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message:
+          'This is a summary of the previous conversation that should be included as context for our discussion: This conversation involved discussing a person card (Hassan) and a pet definition file. The user shared both a Person card and a pet.gts file, then asked for help understanding the structure.',
+      },
+    ]);
+  });
+
+  test('handles summarization error gracefully when creating new session', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send a message to create some history
+    await fillIn('[data-test-message-field]', 'Test message for summarization');
+    await click('[data-test-send-message-btn]');
+
+    // Mock the realm server to return an error for summarization
+    // This would be handled by the realm server endpoint mock
+    const originalRequestForward = getService('realm-server').requestForward;
+    getService('realm-server').requestForward = async () => {
+      throw new Error('Summarization service unavailable');
+    };
+
+    // Create new session with "Summarize Current Session" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click(
+      '[data-test-new-session-settings-option="Summarize Current Session"]',
+    );
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+
+    // Verify that the new session was created without the summary (graceful fallback)
+    assertMessages(assert, []);
+
+    // Restore the original function
+    getService('realm-server').requestForward = originalRequestForward;
+  });
+
+  test('skip button skips session preparation and shows correct wording', async function (assert) {
+    // Mock the matrix service getPromptParts method to block summarization
+    const matrixService = getService('matrix-service');
+    const originalGetPromptParts = matrixService.getPromptParts;
+    matrixService.getPromptParts = async (roomId: string) => {
+      if (summarizationDeferred) {
+        await summarizationDeferred.promise;
+      }
+      return originalGetPromptParts.call(matrixService, roomId);
+    };
+
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send a message to create some history
+    await fillIn('[data-test-message-field]', 'Test message for summarization');
+    await click('[data-test-send-message-btn]');
+
+    let summarizationDeferred = new Deferred<void>();
+    // Create new session with "Summarize Current Session" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click(
+      '[data-test-new-session-settings-option="Summarize Current Session"]',
+    );
+    await click('[data-test-new-session-settings-create-button]');
+
+    // Verify the session preparation message is shown with correct wording
+    assert
+      .dom('[data-test-session-preparation]')
+      .includesText('Summarizing previous session');
+    assert
+      .dom('[data-test-session-preparation]')
+      .includesText('Takes 10-20 seconds');
+    assert.dom('[data-test-session-preparation-skip-button]').exists();
+    assert.dom('[data-test-session-preparation-skip-button]').hasText('Skip');
+    // Click the skip button to skip session preparation
+    await click('[data-test-session-preparation-skip-button]');
+
+    // Verify that the session preparation UI is no longer shown
+    assert.dom('[data-test-session-preparation]').doesNotExist();
+
+    // Verify that the message input is now enabled (canSend should be true)
+    assert.dom('[data-test-message-field]').isNotDisabled();
+
+    assertMessages(assert, []);
+
+    // Resolve the deferred promise to clean up
+    summarizationDeferred.fulfill();
+
+    // Restore the original getPromptParts method
+    matrixService.getPromptParts = originalGetPromptParts;
+  });
+
+  test('ai assistant panel width persists to localStorage', async function (assert) {
+    // Clear any existing localStorage data for AI assistant panel width
+    window.localStorage.removeItem('ai-assistant-panel-width');
+
+    // First, set a specific width in localStorage
+    const testWidth = 60; // 25% width
+    window.localStorage.setItem('ai-assistant-panel-width', String(testWidth));
+
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert.dom('[data-test-ai-assistant-panel]').exists();
+    // Verify the panel follows the width from localStorage
+    let aiAssistantPanel = document.querySelector(
+      '[data-test-ai-assistant-panel]',
+    );
+    assert.ok(aiAssistantPanel, 'AI assistant panel should exist');
+
+    let initialWidth = aiAssistantPanel!.getBoundingClientRect().width;
+    assert.ok(initialWidth > 0, 'AI assistant panel should have a width');
+
+    // Calculate the percentage width of the AI assistant panel
+    let submodeLayout = document.querySelector('[data-test-submode-layout]');
+    assert.ok(submodeLayout, 'submode layout should exist');
+    let submodeLayoutWidth = submodeLayout!.getBoundingClientRect().width;
+    let actualPercentageWidth = (initialWidth / submodeLayoutWidth) * 100;
+
+    // Verify the width was loaded from localStorage and matches the actual panel width
+    let storedWidth = window.localStorage.getItem('ai-assistant-panel-width');
+    assert.ok(storedWidth, 'Width should be in localStorage');
+    assert.strictEqual(
+      Number(storedWidth),
+      testWidth,
+      'Stored width should match the test width',
+    );
+    // Verify the actual panel width percentage matches the stored width (with some tolerance for rounding)
+    assert.ok(
+      Math.abs(actualPercentageWidth - testWidth) < 5,
+      `Actual panel width percentage (${actualPercentageWidth.toFixed(
+        1,
+      )}%) should be close to stored width (${testWidth}%)`,
+    );
+
+    // Now test resizing the panel and verify localStorage updates
+    let resizeHandle = document.querySelector(
+      '[data-boxel-panel-resize-handle-id]',
+    );
+    assert.ok(resizeHandle, 'Resize handle should exist');
+
+    let resizeHandleRect = resizeHandle!.getBoundingClientRect();
+    // Simulate a resize by triggering mouse events on the resize handle
+    // This will actually trigger the ResizablePanelGroup's resize logic
+    await triggerEvent(resizeHandle!, 'pointerdown', {
+      clientX: resizeHandleRect.x,
+      clientY: resizeHandleRect.y,
+    });
+    await triggerEvent(resizeHandle!, 'pointermove', {
+      clientX: resizeHandleRect.x + 20,
+      clientY: resizeHandleRect.y,
+    }); // Move left to make AI panel smaller
+    await triggerEvent(resizeHandle!, 'pointerup');
+
+    // Wait a moment for the layout to update
+    await waitFor('[data-test-ai-assistant-panel]');
+
+    // Verify the width has been updated in localStorage
+    let updatedStoredWidth = window.localStorage.getItem(
+      'ai-assistant-panel-width',
+    );
+    assert.ok(
+      updatedStoredWidth,
+      'Width should still be in localStorage after resize',
+    );
+
+    let updatedParsedWidth = Number(updatedStoredWidth);
+    assert.ok(
+      updatedParsedWidth > 0,
+      'Updated width should be a positive number',
+    );
+    assert.ok(
+      updatedParsedWidth <= 100,
+      'Updated width should be a percentage (<= 100)',
+    );
+
+    // Verify the width changed (it should be different from the initial test width)
+    assert.notStrictEqual(
+      updatedParsedWidth,
+      testWidth,
+      'Width should have changed after resize',
+    );
+
+    // Verify the panel width actually changed
+    let resizedWidth = aiAssistantPanel!.getBoundingClientRect().width;
+    assert.ok(
+      resizedWidth > 0,
+      'AI assistant panel should still have a width after resize',
+    );
+  });
+
+  test('creates new session with settings even when empty new session exists', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // 1. Create first room and add messages with files
+    await fillIn('[data-test-message-field]', 'First message with card');
+    await selectCardFromCatalog(`${testRealmURL}Person/hassan`);
+    await click('[data-test-send-message-btn]');
+
+    await fillIn('[data-test-message-field]', 'Second message with file');
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+    await click('[data-test-send-message-btn]');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'Third message with another card',
+    );
+    await selectCardFromCatalog(`${testRealmURL}Pet/mango`);
+    await click('[data-test-send-message-btn]');
+
+    // Verify first room messages
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'First message with card',
+        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Second message with file',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Third message with another card',
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+      },
+    ]);
+
+    // Get the first room ID
+    const matrixService = getService('matrix-service');
+    const firstRoomId = matrixService.currentRoomId;
+    assert.ok(firstRoomId, 'Should have first room ID');
+
+    // 2. Create second room (new session)
+    await click('[data-test-create-room-btn]');
+    await waitFor(`[data-room-settled]`);
+
+    const secondRoomId = matrixService.currentRoomId;
+    assert.ok(secondRoomId, 'Should have second room ID');
+    assert.notStrictEqual(
+      secondRoomId,
+      firstRoomId,
+      'Second room should be different from first room',
+    );
+
+    // 3. Switch back to first room with message history
+    await click('[data-test-past-sessions-button]');
+    await waitFor(`[data-test-enter-room="${firstRoomId}"]`);
+    await click(`[data-test-enter-room="${firstRoomId}"]`);
+    await waitFor(`[data-room-settled]`);
+
+    // Verify we're back in the first room
+    assert.strictEqual(
+      matrixService.currentRoomId,
+      firstRoomId,
+      'Should be back in the first room',
+    );
+
+    // Verify first room messages are still there
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'First message with card',
+        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Second message with file',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Third message with another card',
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+      },
+    ]);
+
+    // 4. Create third room with "Copy File History" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click('[data-test-new-session-settings-option="Copy File History"]');
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+    await waitFor('[data-test-user-message]');
+
+    const thirdRoomId = matrixService.currentRoomId;
+    assert.ok(thirdRoomId, 'Should have third room ID');
+    assert.notStrictEqual(
+      thirdRoomId,
+      firstRoomId,
+      'Third room should be different from first room',
+    );
+    assert.notStrictEqual(
+      thirdRoomId,
+      secondRoomId,
+      'Third room should be different from second room',
+    );
+
+    // 5. Assert that the third room has the first message with files from the first room
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message:
+          'This session includes files and cards from the previous conversation for context.',
+        cards: [
+          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+        ],
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+    ]);
   });
 });

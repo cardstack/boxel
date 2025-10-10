@@ -150,6 +150,12 @@ export default class MessageBuilder {
     return errorMessage;
   }
 
+  get attachedCardsAsFiles() {
+    return (this.event.content as CardMessageContent).data?.attachedCards?.map(
+      (card) => this.matrixService.fileAPI.createFileDef(card),
+    );
+  }
+
   async buildMessage(): Promise<Message> {
     let { event } = this;
     let message = this.coreMessageArgs;
@@ -159,6 +165,7 @@ export default class MessageBuilder {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
       message.attachedCardIds = this.attachedCardIds;
+      message.attachedCardsAsFiles = this.attachedCardsAsFiles;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
         message.setCommands(await this.buildMessageCommands(message));
       }
@@ -249,6 +256,7 @@ export default class MessageBuilder {
             APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
               ? event.content.data.card
               : undefined;
+          messageCommand.failureReason = event.content.failureReason;
         }
       }
     }
@@ -334,6 +342,7 @@ export default class MessageBuilder {
         ? commandResultEvent.content.data.card
         : undefined,
       getOwner(this)!,
+      commandResultEvent?.content.failureReason,
     );
     return messageCommand;
   }
@@ -381,6 +390,7 @@ export default class MessageBuilder {
           finalFileUrlAfterCodePatching,
           originalUploadedFileUrl,
           getOwner(this)!,
+          codePatchResultEvent.content.failureReason,
         ),
       );
     }

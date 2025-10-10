@@ -1,3 +1,4 @@
+import { copyCardURLToClipboard } from './helpers/clipboard.ts';
 import cn from './helpers/cn.ts';
 import compact from './helpers/compact.ts';
 import { getContrastColor } from './helpers/contrast-color.ts';
@@ -5,6 +6,7 @@ import cssVar from './helpers/css-var.ts';
 import currencyFormat from './helpers/currency-format.ts';
 import { dayjsFormat } from './helpers/dayjs-format.ts';
 import element from './helpers/element.ts';
+import { extractCssVariables } from './helpers/extract-css-variables.ts';
 import formatAge from './helpers/format-age.ts';
 import formatCountdown from './helpers/format-countdown.ts';
 import formatCurrency from './helpers/format-currency.ts';
@@ -17,11 +19,18 @@ import formatNumber from './helpers/format-number.ts';
 import formatOrdinal from './helpers/format-ordinal.ts';
 import formatPeriod from './helpers/format-period.ts';
 import formatRelativeTime from './helpers/format-relative-time.ts';
+import { generateCssVariables } from './helpers/generate-css-variables.ts';
 import { add, divide, multiply, subtract } from './helpers/math-helpers.ts';
 import menuDivider, { MenuDivider } from './helpers/menu-divider.ts';
-import menuItem, { MenuItem, menuItemFunc } from './helpers/menu-item.ts';
+import menuItem, {
+  type MenuItemOptions,
+  MenuItem,
+  menuItemFunc,
+  toMenuItems,
+} from './helpers/menu-item.ts';
 import optional from './helpers/optional.ts';
 import pick from './helpers/pick.ts';
+import { sanitizeHtml, sanitizeHtmlSafe } from './helpers/sanitize-html.ts';
 import { substring } from './helpers/string.ts';
 import {
   and,
@@ -36,17 +45,20 @@ import {
 } from './helpers/truth-helpers.ts';
 
 export {
+  type MenuItemOptions,
   add,
   and,
   bool,
   cn,
   compact,
+  copyCardURLToClipboard,
   cssVar,
   currencyFormat,
   dayjsFormat,
   divide,
   element,
   eq,
+  extractCssVariables,
   formatAge,
   formatCountdown,
   formatCurrency,
@@ -59,6 +71,7 @@ export {
   formatOrdinal,
   formatPeriod,
   formatRelativeTime,
+  generateCssVariables,
   getContrastColor,
   gt,
   gte,
@@ -74,6 +87,9 @@ export {
   optional,
   or,
   pick,
+  sanitizeHtml,
+  sanitizeHtmlSafe,
   substring,
   subtract,
+  toMenuItems,
 };

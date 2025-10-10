@@ -1,13 +1,15 @@
 import Koa from 'koa';
 import {
   type FromScratchResult,
-  type FromScratchArgs,
-  fetchUserPermissions,
+  type QueuePublisher,
+  type Job,
+  type Realm,
   userInitiatedPriority,
   SupportedMimeType,
   RealmPaths,
+  DBAdapter,
 } from '@cardstack/runtime-common';
-import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
+import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
@@ -19,6 +21,7 @@ export default function handleReindex({
   queue,
   serverURL,
   dbAdapter,
+  realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let realmPath = ctxt.URL.searchParams.get('realm')?.replace(/\/$/, '');
@@ -29,41 +32,30 @@ export default function handleReindex({
       );
       return;
     }
-    let realm = new RealmPaths(new URL(serverURL)).directoryURL(realmPath).href;
-
-    let permissions = await fetchUserPermissions(dbAdapter, new URL(realm));
-    let owners = Object.entries(permissions)
-      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
-      .map(([userId]) => userId);
-    let realmUserId =
-      owners.length === 1
-        ? owners[0]
-        : owners.find((userId) => !userId.startsWith('@realm/'));
-    let realmUsername = realmUserId?.startsWith('@')
-      ? getMatrixUsername(realmUserId)
-      : realmUserId;
-    if (!realmUsername) {
-      await sendResponseForSystemError(
+    let realmURL = new RealmPaths(new URL(serverURL)).directoryURL(
+      realmPath,
+    ).href;
+    let realm = realms.find((r) => r.url === realmURL);
+    if (!realm) {
+      await sendResponseForBadRequest(
         ctxt,
-        `Could not determine user to index as for realm ${realm}`,
+        `realm ${realmURL} does not exist on this server`,
       );
       return;
     }
 
-    let args: FromScratchArgs = {
-      realmURL: realm,
-      realmUsername,
-    };
-
-    let job = await queue.publish<FromScratchResult>({
-      jobType: `from-scratch-index`,
-      concurrencyGroup: `indexing:${realm}`,
-      timeout: 3 * 60,
-      priority: userInitiatedPriority,
-      args,
-    });
+    let job: Job<FromScratchResult>;
+    try {
+      job = await reindex({
+        queue,
+        dbAdapter,
+        realm,
+      });
+    } catch (e: any) {
+      await sendResponseForSystemError(ctxt, e.message);
+      return;
+    }
     let { stats } = await job.done;
-
     await setContextResponse(
       ctxt,
       new Response(JSON.stringify(stats, null, 2), {
@@ -71,4 +63,24 @@ export default function handleReindex({
       }),
     );
   };
+}
+
+export async function reindex({
+  realm,
+  queue,
+  dbAdapter,
+  priority = userInitiatedPriority,
+}: {
+  realm: Realm;
+  queue: QueuePublisher;
+  dbAdapter: DBAdapter;
+  priority?: number;
+}) {
+  return await enqueueReindexRealmJob(
+    realm.url,
+    await realm.getRealmOwnerUsername(),
+    queue,
+    dbAdapter,
+    priority,
+  );
 }

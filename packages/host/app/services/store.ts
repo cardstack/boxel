@@ -54,10 +54,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
-import IdentityContext, {
-  getDeps,
-  type ReferenceCount,
-} from '../lib/gc-identity-context';
+import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
 import { type CardSaveSubscriber } from './card-service';
 
@@ -66,6 +63,7 @@ import EnvironmentService from './environment-service';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
+import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
@@ -83,6 +81,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
+  @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -97,7 +96,7 @@ export default class StoreService extends Service implements StoreInterface {
   private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
-  private identityContext = new IdentityContext(this.referenceCount);
+  private store: CardStore;
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
@@ -106,6 +105,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   constructor(owner: Owner) {
     super(owner);
+    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
     this.reset.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
@@ -136,7 +136,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardMutations = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
-    this.identityContext = new IdentityContext(this.referenceCount);
+    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
     this.ready = this.setup();
   }
 
@@ -194,6 +194,10 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
+  loaded(): Promise<void> {
+    return this.store.loaded();
+  }
+
   // This method creates a new instance in the store and return the new card ID
   async create(
     doc: LooseSingleCardDocument,
@@ -247,8 +251,8 @@ export default class StoreService extends Service implements StoreInterface {
       let api = await this.cardService.getAPI();
       let deps = getDeps(api, instance);
       for (let dep of deps) {
-        if (!this.identityContext.get(dep[localIdSymbol])) {
-          this.identityContext.set(dep.id ?? dep[localIdSymbol], dep);
+        if (!this.store.get(dep[localIdSymbol])) {
+          this.store.set(dep.id ?? dep[localIdSymbol], dep);
         }
       }
     }
@@ -260,7 +264,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     let maybeOldInstance = instance.id
-      ? this.identityContext.get(instance.id)
+      ? this.store.get(instance.id)
       : undefined;
     if (maybeOldInstance) {
       await this.stopAutoSaving(maybeOldInstance);
@@ -271,13 +275,17 @@ export default class StoreService extends Service implements StoreInterface {
 
     if (opts?.doNotWaitForPersist) {
       // intentionally not awaiting
-      this.persistAndUpdate(instance, { realm: opts?.realm });
+      this.persistAndUpdate(instance, {
+        realm: opts?.realm,
+        localDir: opts?.localDir,
+      });
     } else if (!opts?.doNotPersist) {
       if (instance.id) {
         this.save(instance.id);
       } else {
         return (await this.persistAndUpdate(instance, {
           realm: opts?.realm,
+          localDir: opts?.localDir,
         })) as T | CardErrorJSONAPI;
       }
     }
@@ -288,12 +296,12 @@ export default class StoreService extends Service implements StoreInterface {
   // peek will return a stale instance in the case the server has an error for
   // this id
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
-    return this.identityContext.getInstanceOrError(id) as T | undefined;
+    return this.store.getInstanceOrError(id) as T | undefined;
   }
 
   // peekError will always return the current server state regarding errors for this id
   peekError(id: string): CardErrorJSONAPI | undefined {
-    return this.identityContext.getError(id);
+    return this.store.getError(id);
   }
 
   // peekLive will always return the current server state for both instances and errors
@@ -311,7 +319,7 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     this.unsubscribeFromInstance(id);
-    this.identityContext.delete(id);
+    this.store.delete(id);
     await this.cardService.fetchJSON(id, { method: 'DELETE' });
   }
 
@@ -365,7 +373,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
     let api = await this.cardService.getAPI();
-    await api.updateFromSerialized(instance, doc, this.identityContext);
+    await api.updateFromSerialized(instance, doc, this.store);
     if (opts?.doNotPersist) {
       await this.startAutoSaving(instance);
     } else {
@@ -461,7 +469,7 @@ export default class StoreService extends Service implements StoreInterface {
         await this.startAutoSaving(instanceOrError);
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
-          this.identityContext.addInstanceOrError(url, instanceOrError);
+          this.store.addInstanceOrError(url, instanceOrError);
         }
         deferred.fulfill();
       } catch (e) {
@@ -481,30 +489,25 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<T> {
     let api = await this.cardService.getAPI();
     let card = (await api.createFromSerialized(resource, doc, relativeTo, {
-      identityContext: this.identityContext,
+      store: this.store,
     })) as T;
-    // it's important that we absorb the field async here so that glimmer won't
-    // encounter NotLoaded errors, since we don't have the luxury of the indexer
-    // being able to inform us of which fields are used or not at this point.
-    // (this is something that the card compiler could optimize for us in the
-    // future)
-    await api.recompute(card, {
-      recomputeAllFields: true,
-      loadFields: true,
-    });
+    if (!(globalThis as any).__lazilyLoadLinks) {
+      // TODO we should be able to get rid of this when we decommission the old prerender
+      await api.ensureLinksLoaded(card);
+    }
     return card;
   }
 
   private async setup() {
     let api = await this.cardService.getAPI();
     this.gcInterval = setInterval(
-      () => this.identityContext.sweep(api),
+      () => this.store.sweep(api),
       2 * 60_000,
     ) as unknown as number;
   }
 
   private unsubscribeFromInstance(id: string) {
-    let instance = this.identityContext.get(id);
+    let instance = this.store.get(id);
     if (instance) {
       if (this.cardApiCache && instance) {
         this.cardApiCache?.unsubscribeFromChanges(
@@ -550,7 +553,7 @@ export default class StoreService extends Service implements StoreInterface {
       // need to flush the loader so that we can pick up any updated
       // code before re-running the card
       this.loaderService.resetLoader();
-      this.identityContext.reset();
+      this.store.reset();
       this.reestablishReferences.perform();
     }
 
@@ -597,6 +600,10 @@ export default class StoreService extends Service implements StoreInterface {
 
         if (reloadFile) {
           this.reloadTask.perform(instance);
+        } else {
+          realmEventsLogger.debug(
+            `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
+          );
         }
       } else {
         // load the card using just the ID because we don't have a running card on hand
@@ -611,7 +618,7 @@ export default class StoreService extends Service implements StoreInterface {
   private loadInstanceTask = task(
     async (idOrDoc: string | LooseSingleCardDocument) => {
       let url = asURL(idOrDoc);
-      let oldInstance = url ? this.identityContext.get(url) : undefined;
+      let oldInstance = url ? this.store.get(url) : undefined;
       let instanceOrError = await this.getInstance({
         idOrDoc,
         opts: { noCache: true },
@@ -631,7 +638,7 @@ export default class StoreService extends Service implements StoreInterface {
         continue;
       }
       if (isLocalId(id)) {
-        for (let remoteId of this.identityContext.getRemoteIds(id)) {
+        for (let remoteId of this.store.getRemoteIds(id)) {
           remoteIds.add(remoteId);
         }
       } else {
@@ -668,7 +675,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     if (isDelete) {
       await this.stopAutoSaving(instance);
-      this.identityContext.delete(instance.id);
+      this.store.delete(instance.id);
     }
   });
 
@@ -691,7 +698,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!instance && !instanceOrError.id) {
       return;
     }
-    this.identityContext.addInstanceOrError(
+    this.store.addInstanceOrError(
       instance ? (instance.id ?? instance[localIdSymbol]) : instanceOrError.id!, // we checked above to make sure errors have id's
       instanceOrError,
     );
@@ -759,7 +766,7 @@ export default class StoreService extends Service implements StoreInterface {
         if (!isCardInstance(maybeError)) {
           return maybeError;
         }
-        this.identityContext.set(newInstance.id, newInstance);
+        this.store.set(newInstance.id, newInstance);
         deferred?.fulfill(newInstance);
         return newInstance as T;
       }
@@ -771,7 +778,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
       if (isLocalId(id)) {
         // we might have lost the local id via a loader refresh, try loading from remote id instead
-        let remoteId = this.identityContext.getRemoteIds(id)?.[0];
+        let remoteId = this.store.getRemoteIds(id)?.[0];
         if (!remoteId) {
           throw new Error(
             `instance with local id ${id} does not exist in the store`,
@@ -784,12 +791,28 @@ export default class StoreService extends Service implements StoreInterface {
         | SingleCardDocument
         | undefined;
       if (!doc) {
-        let json = await this.cardService.fetchJSON(url);
+        let json: CardDocument | undefined;
+        if ((globalThis as any).__boxelRenderContext) {
+          let result = await this.cardService.getSource(new URL(`${url}.json`));
+          if (result.status === 200) {
+            json = JSON.parse(result.content);
+          } else {
+            throw new Error(
+              `Received non-200 status fetching instance source ${url}.json: ${result.content}`,
+            );
+          }
+        } else {
+          json = await this.cardService.fetchJSON(url);
+        }
         if (!isSingleCardDocument(json)) {
           throw new Error(
             `bug: server returned a non card document for ${url}:
         ${JSON.stringify(json, null, 2)}`,
           );
+        }
+        if (!json.data.id) {
+          // card source format is not serialized with the ID, so we add that back in.
+          json.data.id = url;
         }
         doc = json;
       }
@@ -800,7 +823,7 @@ export default class StoreService extends Service implements StoreInterface {
       );
       // in case the url is an alias for the id (like index card without the
       // "/index") we also add this
-      this.identityContext.set(url, instance);
+      this.store.set(url, instance);
       deferred?.fulfill(instance);
       if (!existingInstance || !isCardInstance(existingInstance)) {
         this.setIdentityContext(instance);
@@ -823,17 +846,19 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  // this function is used to determine if the instance will be auto-saved or not
-  // this is a temporary function that is likely to go away with the creation of completion emphemeral state solution of the store/realm
-  // the only use-case for this function is determining if a preview instance in catalog realm (which is a read-only),
-  // st a card can be mutable without persisting to the server
+  // this function is used to determine if the instance will be auto-saved or
+  // note this is a temporary function that is likely to go away with the
+  // creation of completion ephemeral state solution of the store/realm the
+  // only use-case for this function is determining if a preview instance in
+  // catalog realm (which is a read-only), st a card can be mutable without
+  // persisting to the server
   private useEphemeralState(instance: CardDef | undefined): boolean {
     if (!instance) {
       return false;
     }
     let realmURL = instance[realmURLSymbol];
     if (!realmURL) {
-      // if a proper cannot derived, I just revert to the default behaviour of auto-save
+      // if a proper cannot derived, I just revert to the default behavior of auto-save
       return false;
     }
     let permissionToWrite = this.realm.permissions(realmURL.href).canWrite;
@@ -846,7 +871,7 @@ export default class StoreService extends Service implements StoreInterface {
   ) {
     let instance: CardDef | undefined;
     if (typeof idOrInstance === 'string') {
-      instance = this.identityContext.get(idOrInstance);
+      instance = this.store.get(idOrInstance);
       if (!instance) {
         return;
       }
@@ -1057,11 +1082,7 @@ export default class StoreService extends Service implements StoreInterface {
           let serverState = cloneDeep(json);
           delete serverState.data.attributes;
           delete serverState.data.relationships;
-          await api.updateFromSerialized(
-            instance,
-            serverState,
-            this.identityContext,
-          );
+          await api.updateFromSerialized(instance, serverState, this.store);
         }
         if (isNew) {
           api.setId(instance, json.data.id!);
@@ -1098,7 +1119,7 @@ export default class StoreService extends Service implements StoreInterface {
   // link's remote id and have those consumers update in their respective
   // realms.
   private async updateForeignConsumersOf(instance: CardDef) {
-    let consumers = this.identityContext.consumersOf(
+    let consumers = this.store.consumersOf(
       await this.cardService.getAPI(),
       instance,
     );
@@ -1134,7 +1155,7 @@ export default class StoreService extends Service implements StoreInterface {
       await api.updateFromSerialized<typeof CardDef>(
         instance,
         incomingDoc,
-        this.identityContext,
+        this.store,
       );
     });
   }

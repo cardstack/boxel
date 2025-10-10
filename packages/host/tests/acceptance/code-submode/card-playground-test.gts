@@ -17,11 +17,10 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 
-import { BULK_GENERATED_ITEM_COUNT } from '@cardstack/host/components/operator-mode/code-submode/playground/instance-chooser-dropdown';
-
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
+  setupAuthEndpoints,
   setupLocalIndexing,
   setupOnSave,
   setupUserSubscription,
@@ -92,7 +91,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
     }
 }`;
 
-const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
   import DatetimeField from 'https://cardstack.com/base/datetime';
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import { Author } from './author';
@@ -106,7 +105,9 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     }
   }
 
-  class LocalCategoryCard extends Category {}
+  class LocalCategoryCard extends Category {
+    static displayName = 'Local Category'
+  }
 
   export class RandomClass {}
 
@@ -117,6 +118,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     @field categories = linksToMany(Category);
     @field localCategories = linksToMany(LocalCategoryCard);
     @field body = contains(MarkdownField);
+    @field title = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
     <template>
@@ -146,8 +148,6 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
-let matrixRoomId: string;
-
 module('Acceptance | code-submode | card playground', function (_hooks) {
   module('single realm', function (hooks) {
     let realm: Realm;
@@ -171,11 +171,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
       let { CardsGrid } = cardsGrid;
 
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -264,7 +265,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/city-design.json': {
             data: {
-              attributes: { title: 'City Design' },
+              attributes: { cardInfo: { title: 'City Design' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -275,7 +276,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/future-tech.json': {
             data: {
-              attributes: { title: 'Future Tech' },
+              attributes: { cardInfo: { title: 'Future Tech' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -286,7 +287,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/interior-design.json': {
             data: {
-              attributes: { title: 'Interior Design' },
+              attributes: { cardInfo: { title: 'Interior Design' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -297,7 +298,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/landscaping.json': {
             data: {
-              attributes: { title: 'Landscaping' },
+              attributes: { cardInfo: { title: 'Landscaping' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -308,7 +309,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/home-gym.json': {
             data: {
-              attributes: { title: 'Home Gym' },
+              attributes: { cardInfo: { title: 'Home Gym' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -319,7 +320,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Person/pet-mango.json': {
             data: {
-              attributes: { title: 'Mango' },
+              attributes: { cardInfo: { title: 'Mango' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}person`,
@@ -369,21 +370,25 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-module-inspector-view="schema"]');
       await selectDeclaration('LocalCategoryCard');
-      assert.dom('[data-test-incompatible-nonexports]').doesNotExist();
       await togglePlaygroundPanel();
       assert
         .dom('[data-test-playground-panel]')
         .doesNotExist(
-          'playground preview is not available for LocalCategory (local card def)',
+          'playground panel exists for Category (exported card def)',
         );
-      assert.dom('[data-test-incompatible-nonexports]').exists();
+      assert.dom('[data-test-playground-incompatible-message]').exists();
+      assert
+        .dom('[data-test-playground-incompatible-message] span')
+        .containsText('Playground is not currently supported for this type.');
 
       await selectDeclaration('RandomClass');
       assert
         .dom('[data-test-module-inspector-view="preview"]')
-        .doesNotExist(
-          'does not exist for RandomClass (not a card or field def)',
-        );
+        .exists('inspector exists for RandomClass (not a card or field def)');
+      assert.dom('[data-test-playground-incompatible-message]').exists();
+      assert
+        .dom('[data-test-playground-incompatible-message] span')
+        .containsText('Playground is not currently supported for this type.');
 
       await selectDeclaration('BlogPost');
       assert
@@ -808,7 +813,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'new card is rendered in isolated format',
       );
 
-      await click('[data-test-instance-chooser]');
       assert
         .dom('[data-option-index]')
         .exists({ count: 1 }, 'dropdown instance count is correct');
@@ -954,6 +958,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
               return 'Scheduled';
             },
           });
+          @field title = contains(StringField);
 
           static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -1286,8 +1291,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can request AI assistant to bulk generate samples', async function (assert) {
-      const prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples of the attached card instance.`;
-      const menuItem = `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`;
+      const prompt = `Generate 3 additional instances of the specified card definition, populated with sample data`;
+      const menuItem = `Generate 3 examples with AI`;
       const commandMessage = {
         from: 'testuser',
         message: prompt,
@@ -1326,11 +1331,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -1488,11 +1494,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     `;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
       setActiveRealms([testRealmURL]);
       setRealmPermissions({
         [testRealmURL]: ['read', 'write'],
@@ -1507,7 +1514,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'syntax-error.gts': syntaxError,
           'Person/delilah.json': {
             data: {
-              attributes: { title: 'Delilah' },
+              attributes: { cardInfo: { title: 'Delilah' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}person`,
@@ -1653,26 +1660,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .hasText('This card contains an error.');
       assert.dom('[data-test-error-message]').hasText('Boom!');
 
-      await withoutLoaderMonitoring(async () => {
-        // The loader service is shared between the realm server and the host.
-        // need to reset the loader to pick up the changed module in the indexer
-        getService('loader-service').resetLoader();
-        // the error was introduced in a part of the card that is run directly
-        // in the realm server so we also need to make sure to reset the realm's loader
-        // (not just the loader for the index). This is a test env idiosyncrasy
-        // that doesn't exist in real life.
-        realm.__resetLoaderForTest();
-        // fix error
-        await realm.write(
-          'boom-pet.gts',
-          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+      getService('loader-service').resetLoader();
+      // fix error
+      await realm.write(
+        'boom-pet.gts',
+        `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
             export class BoomPet extends CardDef {
               static displayName = 'Boom Pet';
               @field boom = contains(StringField);
             }
           `,
-        );
-      });
+      );
       await waitFor(`[data-test-error-container]`, {
         count: 0,
         timeout: 5_000,
@@ -1766,9 +1764,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'Person',
       });
       await click('[data-test-edit-button]');
-
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"] input')
+        .dom(
+          '[data-test-playground-panel] [data-test-field="cardInfo-name"] input',
+        )
         .hasValue('Delilah');
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert.dom('[data-test-format-chooser]').exists();
@@ -1779,7 +1778,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { title: 'Lila' },
+            attributes: { cardInfo: { title: 'Lila' } },
             relationships: {
               pet: {
                 links: {
@@ -1799,7 +1798,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
 
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"] input')
+        .dom(
+          '[data-test-playground-panel] [data-test-field="cardInfo-name"] input',
+        )
         .hasValue('Delilah');
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert.dom('[data-test-format-chooser]').exists();
@@ -1812,7 +1813,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { title: 'Lila' },
+            attributes: { cardInfo: { title: 'Lila' } },
             relationships: {
               pet: {
                 links: {
@@ -1847,7 +1848,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Card Error: Link Not Found');
       assert.dom('[data-test-card-error]').exists();
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
@@ -1863,7 +1864,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { title: 'Lila' },
+            attributes: { cardInfo: { title: 'Lila' } },
             meta: {
               adoptsFrom: {
                 module: `${testRealmURL}person`,
@@ -1876,7 +1877,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
         .containsText('Lila');
       assert
         .dom('[data-test-error-container]')

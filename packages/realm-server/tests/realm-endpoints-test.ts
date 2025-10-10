@@ -6,7 +6,6 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
   baseRealm,
-  loadCardDef,
   Realm,
   SupportedMimeType,
   type LooseSingleCardDocument,
@@ -14,7 +13,6 @@ import {
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
@@ -26,7 +24,6 @@ import {
   realmSecretSeed,
   grafanaSecret,
   createVirtualNetwork,
-  createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
   getFastbootState,
@@ -36,13 +33,14 @@ import {
   testRealmHref,
   testRealmURL,
   createJWT,
+  cardInfo,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { type PgAdapter } from '@cardstack/postgres';
+
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   IncrementalIndexEventContent,
@@ -52,7 +50,6 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
-const testRealm2Href = testRealm2URL.href;
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
@@ -91,14 +88,7 @@ module(basename(__filename), function () {
       };
     }
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {
@@ -108,6 +98,7 @@ module(basename(__filename), function () {
     });
 
     let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
+    let virtualNetwork = createVirtualNetwork();
 
     async function startRealmServer(
       dbAdapter: PgAdapter,
@@ -208,52 +199,6 @@ module(basename(__filename), function () {
       );
     });
 
-    test('can dynamically load a card definition from own realm', async function (assert) {
-      let ref = {
-        module: `${testRealmHref}person`,
-        name: 'Person',
-      };
-      await loadCardDef(ref, { loader });
-      let doc = {
-        data: {
-          attributes: { firstName: 'Mango' },
-          meta: { adoptsFrom: ref },
-        },
-      };
-      let api = await loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
-      );
-      let person = await api.createFromSerialized<any>(
-        doc.data,
-        doc,
-        undefined,
-      );
-      assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
-    });
-
-    test('can dynamically load a card definition from a different realm', async function (assert) {
-      let ref = {
-        module: `${testRealm2Href}person`,
-        name: 'Person',
-      };
-      await loadCardDef(ref, { loader });
-      let doc = {
-        data: {
-          attributes: { firstName: 'Mango' },
-          meta: { adoptsFrom: ref },
-        },
-      };
-      let api = await loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
-      );
-      let person = await api.createFromSerialized<any>(
-        doc.data,
-        doc,
-        undefined,
-      );
-      assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
-    });
-
     test('can load a module when "last_modified" field in index is null', async function (assert) {
       await dbAdapter.execute('update boxel_index set last_modified = null');
       let response = await request
@@ -264,30 +209,6 @@ module(basename(__filename), function () {
           `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
         );
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-    });
-
-    test('can instantiate a card that uses a code-ref field', async function (assert) {
-      let adoptsFrom = {
-        module: `${testRealm2Href}code-ref-test`,
-        name: 'TestCard',
-      };
-      await loadCardDef(adoptsFrom, { loader });
-      let ref = { module: `${testRealm2Href}person`, name: 'Person' };
-      let doc = {
-        data: {
-          attributes: { ref },
-          meta: { adoptsFrom },
-        },
-      };
-      let api = await loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
-      );
-      let testCard = await api.createFromSerialized<any>(
-        doc.data,
-        doc,
-        undefined,
-      );
-      assert.deepEqual(testCard.ref, ref, 'card data is correct');
     });
 
     test('can index a newly added file', async function (assert) {
@@ -318,6 +239,15 @@ module(basename(__filename), function () {
 
       let newCardId = postResponse.body.data.id;
       let newCardPath = new URL(newCardId).pathname;
+
+      assert.ok(
+        postResponse.body.data.meta.resourceCreatedAt,
+        'created date should be set for new JSON file',
+      );
+      assert.ok(
+        postResponse.headers['x-created'],
+        'x-created header should be set for new JSON file',
+      );
 
       await waitForIncrementalIndexEvent(
         getMessagesSince,
@@ -374,6 +304,7 @@ module(basename(__filename), function () {
               firstName: 'Mango',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             },
             meta: {
               adoptsFrom: {
@@ -388,6 +319,13 @@ module(basename(__filename), function () {
             },
             links: {
               self: newCardId,
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
           },
         });
@@ -530,14 +468,7 @@ module(basename(__filename), function () {
 
     let dir: DirResult;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();
@@ -576,6 +507,7 @@ module(basename(__filename), function () {
       let json = response.body;
       for (let relationship of Object.values(json.data.relationships)) {
         delete (relationship as any).meta.lastModified;
+        delete (relationship as any).meta.resourceCreatedAt;
       }
       assert.deepEqual(
         json,
@@ -688,6 +620,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'f.js': {
+                links: {
+                  related: `${testRealmHref}f.js`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'family_photo_card.gts': {
                 links: {
                   related: `${testRealmHref}family_photo_card.gts`,
@@ -715,6 +655,14 @@ module(basename(__filename), function () {
               'friend.gts': {
                 links: {
                   related: `${testRealmHref}friend.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'g.js': {
+                links: {
+                  related: `${testRealmHref}g.js`,
                 },
                 meta: {
                   kind: 'file',
@@ -895,7 +843,7 @@ module(basename(__filename), function () {
     let base: Realm;
     let testRealm: Realm;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
+    let virtualNetwork = createVirtualNetwork();
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
 
     hooks.beforeEach(async function () {
@@ -964,11 +912,6 @@ module(basename(__filename), function () {
       },
     });
 
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
     test(`Can perform full indexing multiple times on a server that runs multiple realms`, async function (assert) {
       {
         let response = await request
@@ -1006,14 +949,7 @@ module(basename(__filename), function () {
 
     let dir: DirResult;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

@@ -16,9 +16,6 @@ import {
   VirtualNetwork,
   Worker,
   RunnerOptionsManager,
-  Loader,
-  fetcher,
-  maybeHandleScopedCSSRequest,
   insertPermissions,
   IndexWriter,
   asExpressions,
@@ -26,22 +23,25 @@ import {
   insert,
   param,
   unixTime,
+  uuidv4,
   RealmPaths,
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
   type IndexRunner,
+  type Definition,
   User,
   Subscription,
   Plan,
   RealmAdapter,
+  PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmServer } from '../../server';
+
 import {
   PgAdapter,
   PgQueuePublisher,
@@ -49,7 +49,6 @@ import {
 } from '@cardstack/postgres';
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { shimExternals } from '../../lib/externals';
 
 import supertest, { SuperTest, Test } from 'supertest';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -93,8 +92,6 @@ export async function waitUntil<T>(
   );
 }
 
-export * from '@cardstack/runtime-common/helpers/indexer';
-
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
 export const matrixURL = new URL('http://localhost:8008');
@@ -110,6 +107,7 @@ export const testRealmInfo = {
   visibility: 'public',
   realmUserId: testMatrix.username,
   publishable: null,
+  lastPublishedAt: null,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
@@ -130,23 +128,11 @@ let fastbootState:
   | undefined;
 
 export function cleanWhiteSpace(text: string) {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-export function createVirtualNetworkAndLoader() {
-  let virtualNetwork = createVirtualNetwork();
-  let fetch = fetcher(virtualNetwork.fetch, [
-    async (req, next) => {
-      return (await maybeHandleScopedCSSRequest(req)) || next(req);
-    },
-  ]);
-  let loader = new Loader(fetch, virtualNetwork.resolveImport);
-  return { virtualNetwork, loader };
+  return text.replace('<!---->', '').replace(/\s+/g, ' ').trim();
 }
 
 export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
-  shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   return virtualNetwork;
 }
@@ -288,12 +274,17 @@ export async function createRealm({
     worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
       queue: runner,
+      dbAdapter,
+      queuePublisher: publisher,
       runnerOptsManager: manager,
       indexRunner,
       virtualNetwork,
       matrixURL: matrixConfig.url,
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
+      prerenderer: async () => {
+        throw new Error(`prerenderer not implemented yet`);
+      },
     });
   }
   let realmServerMatrixClient = new MatrixClient({
@@ -318,17 +309,13 @@ export async function createRealm({
   return { realm, adapter };
 }
 
-export function setupBaseRealmServer(
-  hooks: NestedHooks,
-  virtualNetwork: VirtualNetwork,
-  matrixURL: URL,
-) {
+export function setupBaseRealmServer(hooks: NestedHooks, matrixURL: URL) {
   let baseRealmServer: Server;
   setupDB(hooks, {
     before: async (dbAdapter, publisher, runner) => {
       let dir = dirSync();
       baseRealmServer = await runBaseRealmServer(
-        virtualNetwork,
+        createVirtualNetwork(),
         publisher,
         runner,
         dbAdapter,
@@ -358,12 +345,17 @@ export async function runBaseRealmServer(
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
+    dbAdapter,
+    queuePublisher: publisher,
     runnerOptsManager: manager,
     indexRunner,
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
+    prerenderer: async () => {
+      throw new Error(`prerenderer not implemented yet`);
+    },
   });
   let { realm: testBaseRealm } = await createRealm({
     dir: basePath,
@@ -413,6 +405,10 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
+  domainsForPublishedRealms = {
+    boxelSpace: 'localhost',
+    boxelSite: 'localhost',
+  },
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -426,17 +422,26 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
+  domainsForPublishedRealms?: {
+    boxelSpace?: string;
+    boxelSite?: string;
+  };
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
+    dbAdapter,
+    queuePublisher: publisher,
     runnerOptsManager: manager,
     indexRunner,
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
+    prerenderer: async () => {
+      throw new Error(`prerenderer not implemented yet`);
+    },
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
@@ -475,6 +480,7 @@ export async function runTestRealmServer({
     grafanaSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    domainsForPublishedRealms,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();
@@ -486,16 +492,6 @@ export async function runTestRealmServer({
     testRealmAdapter,
     matrixClient,
   };
-}
-
-export function setupCardLogs(
-  hooks: NestedHooks,
-  apiThunk: () => Promise<typeof CardAPI>,
-) {
-  hooks.afterEach(async function () {
-    let api = await apiThunk();
-    await api.flushLogs();
-  });
 }
 
 export async function insertUser(
@@ -744,6 +740,7 @@ export function setupPermissionedRealm(
     onRealmSetup,
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
+    published = false,
   }: {
     permissions: RealmPermissions;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -758,6 +755,7 @@ export function setupPermissionedRealm(
     }) => void;
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
+    published?: boolean;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -771,7 +769,34 @@ export function setupPermissionedRealm(
       runner: QueueRunner,
     ) => {
       let dir = dirSync();
-      let testRealmDir = join(dir.name, 'realm_server_1', 'test');
+
+      let testRealmDir;
+
+      if (published) {
+        let publishedRealmId = uuidv4();
+
+        testRealmDir = join(
+          dir.name,
+          'realm_server_1',
+          PUBLISHED_DIRECTORY_NAME,
+          publishedRealmId,
+        );
+
+        dbAdapter.execute(
+          `INSERT INTO
+            published_realms
+            (id, owner_username, source_realm_url, published_realm_url)
+            VALUES
+            (
+              '${publishedRealmId}',
+              '@user:localhost',
+              'http://example.localhost/source',
+              '${testRealmHref}'
+            )`,
+        );
+      } else {
+        testRealmDir = join(dir.name, 'realm_server_1', 'test');
+      }
 
       ensureDirSync(testRealmDir);
 
@@ -817,6 +842,91 @@ export function setupPermissionedRealm(
   });
 }
 
+export function setupPermissionedRealms(
+  hooks: NestedHooks,
+  {
+    mode = 'beforeEach',
+    realms: realmsArg,
+    onRealmSetup,
+  }: {
+    mode?: 'beforeEach' | 'before';
+    realms: {
+      realmURL: string;
+      permissions: RealmPermissions;
+      fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    }[];
+    onRealmSetup?: (args: {
+      dbAdapter: PgAdapter;
+      realms: {
+        realm: Realm;
+        realmPath: string;
+        realmHttpServer: Server;
+        realmAdapter: RealmAdapter;
+      }[];
+    }) => void;
+  },
+) {
+  // We want 2 different realm users to test authorization between them - these
+  // names are selected because they are already available in the test
+  // environment (via register-realm-users.ts)
+  let matrixUsers = ['test_realm', 'node-test_realm'];
+  let realms: {
+    realm: Realm;
+    realmPath: string;
+    realmHttpServer: Server;
+    realmAdapter: RealmAdapter;
+  }[] = [];
+  let _dbAdapter: PgAdapter;
+  setupDB(hooks, {
+    [mode]: async (
+      dbAdapter: PgAdapter,
+      publisher: QueuePublisher,
+      runner: QueueRunner,
+    ) => {
+      _dbAdapter = dbAdapter;
+      for (let [i, realmArg] of realmsArg.entries()) {
+        let {
+          testRealmDir: realmPath,
+          testRealm: realm,
+          testRealmHttpServer: realmHttpServer,
+          testRealmAdapter: realmAdapter,
+        } = await runTestRealmServer({
+          virtualNetwork: await createVirtualNetwork(),
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
+          realmURL: new URL(realmArg.realmURL),
+          fileSystem: realmArg.fileSystem,
+          permissions: realmArg.permissions,
+          matrixURL,
+          matrixConfig: {
+            url: matrixURL,
+            username: matrixUsers[i] ?? matrixUsers[0],
+          },
+          dbAdapter,
+          publisher,
+          runner,
+        });
+        realms.push({
+          realm,
+          realmPath,
+          realmHttpServer,
+          realmAdapter,
+        });
+      }
+      onRealmSetup?.({
+        dbAdapter: _dbAdapter!,
+        realms,
+      });
+    },
+  });
+
+  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
+    for (let realm of realms) {
+      await closeServer(realm.realmHttpServer);
+    }
+  });
+}
+
 export function createJWT(
   realm: Realm,
   user: string,
@@ -832,3 +942,530 @@ export function createJWT(
     '7d',
   );
 }
+
+export const cardInfo = {
+  notes: null,
+  title: null,
+  description: null,
+  thumbnailURL: null,
+};
+
+export const cardDefinition: Definition['fields'] = {
+  id: {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'ReadOnlyField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  title: {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  description: {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  thumbnailURL: {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  cardInfo: {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CardInfoField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.title': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.description': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.thumbnailURL': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.notes': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'MarkdownField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme': {
+    type: 'linksTo',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'Theme',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.theme.id': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'ReadOnlyField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.title': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.description': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.thumbnailURL': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CardInfoField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.theme.cardInfo.title': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.description': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.thumbnailURL': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.notes': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'MarkdownField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cssVariables': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CSSField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cssImports': {
+    type: 'containsMany',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CssImportField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme': {
+    type: 'linksTo',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'Theme',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.theme.cardInfo.theme.id': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'ReadOnlyField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.title': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CardInfoField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.title': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.description': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.notes': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'MarkdownField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.description': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cssVariables': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CSSField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cssImports': {
+    type: 'containsMany',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CssImportField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.thumbnailURL': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme': {
+    type: 'linksTo',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'Theme',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.id': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'ReadOnlyField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CardInfoField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.notes': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'MarkdownField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CSSField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
+    type: 'containsMany',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CssImportField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme': {
+    type: 'linksTo',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'Theme',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.id': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'ReadOnlyField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CardInfoField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: false,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
+    {
+      type: 'contains',
+      isComputed: false,
+      fieldOrCard: {
+        name: 'StringField',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
+    },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
+    {
+      type: 'contains',
+      isComputed: false,
+      fieldOrCard: {
+        name: 'StringField',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
+    },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
+    {
+      type: 'contains',
+      isComputed: false,
+      fieldOrCard: {
+        name: 'MaybeBase64Field',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
+    },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CSSField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
+    type: 'containsMany',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'CssImportField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
+    type: 'contains',
+    isComputed: true,
+    fieldOrCard: {
+      name: 'MaybeBase64Field',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
+    {
+      type: 'linksTo',
+      isComputed: false,
+      fieldOrCard: {
+        name: 'Theme',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: false,
+    },
+};

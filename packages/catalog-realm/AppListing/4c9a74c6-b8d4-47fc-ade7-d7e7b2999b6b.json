@@ -1,0 +1,83 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Online Store",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/screenshot_03.png"
+      ],
+      "summary": "A comprehensive e-commerce management system that provides everything needed to run an online store. Features include real-time dashboard metrics, product catalog management with inventory tracking, order processing and status management, customer relationship management with loyalty tiers, and customizable branding options. \n\nThe interface offers tabbed navigation between Products, Orders, and Customers sections, with responsive design that adapts from compact views to full dashboard layouts. \n\nPerfect for small to medium businesses looking to manage their online retail operations efficiently.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/d9a1b093-132a-4020-9823-15a7329d38dc"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/0fe173b7-bcfa-4f9b-b8db-60c1b61d9e27"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/e6267d3b-2f56-4938-9585-26a6dc72cf5d"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/3a7a139d-cc13-4a07-80f4-b8aa264f8eba"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../online-store/OnlineStore/stellar-vintage-books"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/e-commerce-online-sales"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

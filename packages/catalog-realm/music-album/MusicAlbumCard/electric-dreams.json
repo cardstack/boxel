@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "albumTitle": "Electric Dreams",
+      "artist": "Voltage Collective",
+      "artworkUrl": "https://dummyimage.com/400x400/4c1d95/a78bfa&text=Electric+Dreams",
+      "releaseYear": 2024,
+      "genre": "Synthwave",
+      "trackCount": 10
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../music-album",
+        "name": "MusicAlbumCard"
+      }
+    }
+  }
+}

@@ -9,22 +9,22 @@ import {
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
 import {
-  baseRealm,
   RealmPaths,
   Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   testRealmURL,
   createJWT,
+  cardInfo,
 } from './helpers';
+import { query, param } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
@@ -38,17 +38,20 @@ module(basename(__filename), function () {
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
 
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dir: DirResult;
+      dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dir = args.dir;
+      dbAdapter = args.dbAdapter;
     }
 
     function getRealmSetup() {
@@ -59,14 +62,7 @@ module(basename(__filename), function () {
         dir,
       };
     }
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
@@ -146,7 +142,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             response.headers['content-type'],
-            'text/plain; charset=utf-8',
+            'text/plain;charset=UTF-8',
             'content type is correct',
           );
           assert.strictEqual(
@@ -441,6 +437,10 @@ module(basename(__filename), function () {
             .send(`//TEST UPDATE\n${cardSrc}`);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.ok(
+            response.headers['x-created'],
+            'created date should be set for new GTS file',
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -489,6 +489,14 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
 
+          let fileResponse = await request
+            .get('/hello-world.txt')
+            .set('Accept', 'application/vnd.card+source');
+          assert.ok(
+            fileResponse.headers['x-created'],
+            'created date should be set for new TXT file',
+          );
+
           let txtFile = join(
             dir.name,
             'realm_server_1',
@@ -498,6 +506,53 @@ module(basename(__filename), function () {
           assert.ok(existsSync(txtFile), 'file exists');
           let src = readFileSync(txtFile, { encoding: 'utf8' });
           assert.strictEqual(src, 'Hello World');
+        });
+
+        test('removes file meta on delete', async function (assert) {
+          // ensure an existing file (write like hello-world first)
+          let reqPath = '/hello-world.txt';
+          let dbPath = 'hello-world.txt';
+          let post = await request
+            .post(reqPath)
+            .set('Accept', 'application/vnd.card+source')
+            .send('hello-world');
+          assert.strictEqual(post.status, 204, 'HTTP 204 status');
+          assert.ok(
+            post.headers['x-created'],
+            'created header present on POST',
+          );
+
+          // row exists in realm_file_meta
+          let rowsBefore = await query(dbAdapter, [
+            'SELECT created_at FROM realm_file_meta WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param(dbPath),
+          ]);
+          assert.strictEqual(
+            rowsBefore.length,
+            1,
+            'meta row exists after POST',
+          );
+
+          // delete the file
+          let del = await request
+            .delete(reqPath)
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(del.status, 204, 'HTTP 204 status');
+
+          // row removed from realm_file_meta
+          let rowsAfter = await query(dbAdapter, [
+            'SELECT 1 FROM realm_file_meta WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param(dbPath),
+          ]);
+          assert.strictEqual(
+            rowsAfter.length,
+            0,
+            'meta row removed after DELETE',
+          );
         });
 
         test('can serialize a card instance correctly after card definition is changed', async function (assert) {
@@ -580,9 +635,10 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: null,
-              title: null,
+              title: 'Untitled Card',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             });
           }
 
@@ -622,9 +678,10 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: 'c',
-              title: null,
+              title: 'Untitled Card',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             });
           }
 
@@ -648,9 +705,14 @@ module(basename(__filename), function () {
                   attributes: {
                     field1: 'a',
                     field2a: 'c',
-                    title: null,
-                    description: null,
-                    thumbnailURL: null,
+                    cardInfo,
+                  },
+                  relationships: {
+                    'cardInfo.theme': {
+                      links: {
+                        self: null,
+                      },
+                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -675,9 +737,10 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: 'c',
-              title: null,
+              title: 'Untitled Card',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             });
           }
 

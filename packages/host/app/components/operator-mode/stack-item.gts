@@ -1,8 +1,9 @@
 import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { schedule, scheduleOnce } from '@ember/runloop';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
 
@@ -12,30 +13,30 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import Captions from '@cardstack/boxel-icons/captions';
-import {
-  restartableTask,
-  timeout,
-  waitForProperty,
-  dropTask,
-} from 'ember-concurrency';
+import DeselectIcon from '@cardstack/boxel-icons/deselect';
+import SelectAllIcon from '@cardstack/boxel-icons/select-all';
+import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
-import { TrackedArray } from 'tracked-built-ins';
+import pluralize from 'pluralize';
+import { TrackedSet } from 'tracked-built-ins';
 
 import {
   CardContainer,
   CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
+import {
+  MenuItem,
+  getContrastColor,
+  toMenuItems,
+} from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
-import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
+import { IconTrash } from '@cardstack/boxel-ui/icons';
 
 import {
-  type Actions,
   type Permissions,
   type getCard,
   type getCards,
@@ -46,17 +47,22 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
-  Deferred,
   cardTypeIcon,
   CommandContext,
   realmURL,
-  identifyCard,
+  CardContextName,
+  CardCrudFunctionsContextName,
+  getCardMenuItems,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardCrudFunctions,
+  CardDef,
+} from 'https://cardstack.com/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
@@ -65,21 +71,17 @@ import ElementTracker, {
 import CardRenderer from '../card-renderer';
 
 import CardError from './card-error';
+import DeleteModal from './delete-modal';
 
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
-import type EnvironmentService from '../../services/environment-service';
-import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;
-  doWithStableScroll: (
-    changeSizeCallback: () => Promise<void>,
-  ) => Promise<void>;
   scrollIntoView: (selector: string) => Promise<void>;
   startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
 }
@@ -89,7 +91,7 @@ interface Signature {
     item: StackItem;
     stackItems: StackItem[];
     index: number;
-    publicAPI: Actions;
+    requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     commandContext: CommandContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
@@ -111,22 +113,30 @@ export interface StackItemRenderedCardForOverlayActions
   stackItem: StackItem;
 }
 
-type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
-
 export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare cardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  private declare cardCrudFunctions: CardCrudFunctions;
 
   @service private declare cardService: CardService;
-  @service private declare environmentService: EnvironmentService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
-  @service private declare loaderService: LoaderService;
   @service private declare store: StoreService;
 
-  @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
+  @tracked private selectedCards = new TrackedSet<string>();
+
+  private normalizeCardId(cardDefOrId: CardDefOrId): string {
+    return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+  }
+
+  @tracked private showDeleteModal = false;
+  @tracked private numberOfCardsToDelete = 0;
+  @tracked private isDeletingCards = false;
+  @tracked private deleteError: string | undefined;
   @tracked private animationType:
     | 'opening'
     | 'closing'
@@ -158,8 +168,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.args.setupStackItem(this.args.item, {
       clearSelections: this.clearSelections,
-      doWithStableScroll: this.doWithStableScroll.perform,
-      scrollIntoView: this.scrollIntoView.perform,
+      scrollIntoView: this.scrollIntoViewTask.perform,
       startAnimation: this.startAnimation.perform,
     });
   }
@@ -250,15 +259,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url === `${this.realmURL.href}index`;
   }
 
-  private get cardContext(): StackItemCardContext {
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): StackItemCardContext {
     return {
+      ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
-      actions: this.args.publicAPI,
-      commandContext: this.args.commandContext,
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
     };
   }
 
@@ -269,12 +275,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   });
 
   @action private toggleSelect(cardDefOrId: CardDefOrId) {
-    let index = this.selectedCards.findIndex((c) => c === cardDefOrId);
+    const cardId = this.normalizeCardId(cardDefOrId);
 
-    if (index === -1) {
-      this.selectedCards.push(cardDefOrId);
+    if (this.selectedCards.has(cardId)) {
+      this.selectedCards.delete(cardId);
     } else {
-      this.selectedCards.splice(index, 1);
+      this.selectedCards.add(cardId);
     }
 
     // pass a copy of the array so that this doesn't become a
@@ -283,8 +289,136 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private clearSelections = () => {
-    this.selectedCards.splice(0, this.selectedCards.length);
+    this.selectedCards.clear();
   };
+
+  private selectAll = () => {
+    // Get all selectable cards from the current view using cardTracker
+    const availableCards = this.renderedCardsForOverlayActions.map((entry) =>
+      this.normalizeCardId(entry.cardDefOrId),
+    );
+
+    // Add all available cards to the set (Set naturally handles duplicates)
+    availableCards.forEach((cardId) => {
+      this.selectedCards.add(cardId);
+    });
+
+    // Notify parent component of selection changes
+    this.args.onSelectedCards([...this.selectedCards], this.args.item);
+  };
+
+  private confirmAndDeleteSelected = () => {
+    this.numberOfCardsToDelete = this.selectedCards.size;
+    this.showDeleteModal = true;
+    this.deleteError = undefined;
+  };
+
+  private cancelDelete = () => {
+    this.showDeleteModal = false;
+    this.numberOfCardsToDelete = 0;
+    this.deleteError = undefined;
+  };
+
+  private performBulkDelete = async () => {
+    this.isDeletingCards = true;
+    this.deleteError = undefined;
+
+    const selectedIds = [...this.selectedCards];
+    const failedDeletes: string[] = [];
+    let successfulDeletes = 0;
+
+    try {
+      // Delete cards sequentially to avoid overwhelming the server
+      for (const cardId of selectedIds) {
+        try {
+          await this.operatorModeStateService.deleteCard(cardId);
+          successfulDeletes++;
+
+          // Remove successfully deleted card from selection
+          this.selectedCards.delete(cardId);
+        } catch (error) {
+          console.error('Failed to delete card:', error);
+          failedDeletes.push(cardId);
+        }
+      }
+
+      // Handle results and show appropriate message
+      if (failedDeletes.length === 0) {
+        // All deletions successful
+        this.showDeleteModal = false;
+        this.numberOfCardsToDelete = 0;
+        this.selectedCards.clear();
+        console.debug(`Successfully deleted ${successfulDeletes} items`);
+      } else if (successfulDeletes > 0) {
+        // Partial success
+        this.deleteError = `Deleted ${successfulDeletes} of ${selectedIds.length} items. ${failedDeletes.length} failed.`;
+        // Keep modal open for retry option
+      } else {
+        // All deletions failed
+        this.deleteError = `Failed to delete ${selectedIds.length} items. Please try again.`;
+      }
+    } catch (error) {
+      console.error('Bulk delete operation failed:', error);
+      this.deleteError = 'An unexpected error occurred. Please try again.';
+    } finally {
+      this.isDeletingCards = false;
+
+      // Notify parent component of selection changes
+      this.args.onSelectedCards([...this.selectedCards], this.args.item);
+    }
+  };
+
+  private get utilityMenu() {
+    if (this.selectedCards.size === 0) {
+      return undefined;
+    }
+
+    const selectedCount = this.selectedCards.size;
+    const availableCards = this.renderedCardsForOverlayActions;
+    const totalAvailableCount = availableCards.length;
+    const allSelected = selectedCount >= totalAvailableCount;
+
+    const menuItems: (MenuItem | { type: 'divider' })[] = [];
+
+    // Add "Select All" option if not all cards are selected
+    if (!allSelected && totalAvailableCount > selectedCount) {
+      menuItems.push(
+        new MenuItem({
+          label: 'Select All',
+          icon: SelectAllIcon,
+          action: this.selectAll,
+          disabled: false,
+        }),
+      );
+    }
+
+    // Add "Deselect All" option
+    menuItems.push(
+      new MenuItem({
+        label: 'Deselect All',
+        icon: DeselectIcon,
+        action: this.clearSelections,
+      }),
+    );
+
+    // Add divider before delete action
+    menuItems.push({ type: 'divider' });
+
+    // Add "Delete N items" option
+    menuItems.push(
+      new MenuItem({
+        label: `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
+        action: this.confirmAndDeleteSelected,
+        icon: IconTrash,
+        dangerous: true,
+      }),
+    );
+
+    return {
+      triggerText: `${selectedCount} Selected`,
+      menuItems,
+    };
+  }
 
   private get cardIdentifier() {
     return this.url;
@@ -308,12 +442,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
     return [
-      new MenuItem('Delete Card', 'action', {
+      new MenuItem({
+        label: 'Delete Card',
         action: () =>
           this.cardIdentifier &&
-          this.args.publicAPI.delete(this.cardIdentifier),
+          this.cardCrudFunctions.deleteCard?.(this.cardIdentifier),
         icon: IconTrash,
         dangerous: true,
+        disabled: !this.cardCrudFunctions.deleteCard,
       }),
     ];
   }
@@ -323,48 +459,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
 
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy Card URL', 'action', {
-        action: () =>
-          this.card
-            ? this.args.publicAPI.copyURLToClipboard(this.card)
-            : undefined,
-        icon: IconLink,
-        disabled: !this.url,
-      }),
-    ];
-    if (
-      !this.isIndexCard && // workspace index card cannot be deleted
-      this.url &&
-      this.realm.canWrite(this.url)
-    ) {
-      menuItems.push(
-        new MenuItem('New Card of This Type', 'action', {
-          action: () => {
-            if (!this.card) {
-              return;
-            }
-            let ref = identifyCard(this.card.constructor);
-            if (!ref) {
-              return;
-            }
-            this.args.publicAPI.createCard(ref, undefined, {
-              realmURL: this.operatorModeStateService.getWritableRealmURL(),
-            });
-          },
-          icon: this.card ? (cardTypeIcon(this.card) as any) : Captions,
-          disabled: !this.card,
-        }),
-        new MenuItem('Delete', 'action', {
-          action: () =>
-            this.card ? this.args.publicAPI.delete(this.card) : undefined,
-          icon: IconTrash,
-          dangerous: true,
-          disabled: !this.url,
-        }),
-      );
-    }
-    return menuItems;
+    return toMenuItems(
+      this.card?.[getCardMenuItems]?.({
+        canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
+        cardCrudFunctions: this.cardCrudFunctions,
+        menuContext: 'interact',
+        commandContext: this.args.commandContext,
+      }) ?? [],
+    );
   }
 
   @cached
@@ -427,31 +529,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
   };
 
-  private doWithStableScroll = restartableTask(
-    async (changeSizeCallback: () => Promise<void>) => {
-      if (!this.contentEl) {
-        return;
-      }
-      let deferred = new Deferred<void>();
-      let el = this.contentEl;
-      let currentScrollTop = this.contentEl.scrollTop;
-      await changeSizeCallback();
-      await this.cardService.cardsSettled();
-      schedule('afterRender', () => {
-        el.scrollTop = currentScrollTop;
-        deferred.fulfill();
-      });
-      await deferred.promise;
-    },
-  );
-
-  private scrollIntoView = restartableTask(async (selector: string) => {
+  private scrollIntoViewTask = restartableTask(async (selector: string) => {
     if (!this.contentEl || !this.containerEl) {
       return;
     }
-    // this has the effect of waiting for a search to complete
-    // in the scenario the stack item is a cards-grid
-    await waitForProperty(this.doWithStableScroll, 'isIdle', true);
     await timeout(500); // need to wait for DOM to update with new card(s)
 
     let item = document.querySelector(selector);
@@ -659,7 +740,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{realmInfo}}
-              @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
+              @utilityMenu={{this.utilityMenu}}
+              @onEdit={{if
+                this.canEdit
+                (fn this.cardCrudFunctions.editCard this.card)
+              }}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
               @onClose={{unless this.isBuried this.closeItem}}
               class='stack-item-header'
@@ -698,13 +783,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
               class='stack-item-preview'
               @card={{this.card}}
               @format={{@item.format}}
-              @cardContext={{this.cardContext}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-              @publicAPI={{@publicAPI}}
+              @requestDeleteCard={{@requestDeleteCard}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
+              @viewCard={{this.cardCrudFunctions.viewCard}}
             />
           </div>
         {{/if}}
@@ -850,6 +935,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
         align-items: center;
       }
     </style>
+
+    {{! Delete confirmation modal }}
+    {{#if this.showDeleteModal}}
+      <DeleteModal
+        @itemToDelete={{hash
+          id='bulk-delete'
+          selectedCount=this.numberOfCardsToDelete
+        }}
+        @isDeleteRunning={{this.isDeletingCards}}
+        @error={{this.deleteError}}
+        @onConfirm={{this.performBulkDelete}}
+        @onCancel={{this.cancelDelete}}
+      >
+        <:content>
+          Delete
+          {{this.numberOfCardsToDelete}}
+          {{pluralize 'card' this.numberOfCardsToDelete}}?
+        </:content>
+      </DeleteModal>
+    {{/if}}
   </template>
 }
 

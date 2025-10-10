@@ -1,0 +1,56 @@
+{
+  "data": {
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../fields/geo-search-point",
+              "name": "GeoSearchPointField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "GeoSearchPointField",
+        "module": "../fields/geo-search-point"
+      },
+      "title": "GeoSearchPointField",
+      "readMe": "# GeoSearchPointField\n\nA field type that extends GeoPointField to include address search functionality with geocoding. This field allows users to search for locations by address and automatically converts them to geographic coordinate.\n\n## Usage\n\n### Basic Implementation\n\n```gts\nimport { GeoSearchPointField } from '../fields/geo-search-point';\nimport { CardDef, field, contains } from 'https://cardstack.com/base/card-api';\n\nexport class MyCard extends CardDef {\n  @field location = contains(GeoSearchPointField);\n}\n```\n\n### Field Properties\n\nInherits all properties from GeoPointField:\n- **lat**: Latitude coordinate (number)\n- **lon**: Longitude coordinate (number) \n\nAdds:\n- **searchKey**: The address or location name used for searching (string)\n\n### Display Formats\n\n- **Atom**: Compact view with map icon and address name\n- **Embedded**: Full view with address, coordinate, and interactive map\n- **Edit**: Address search input with live geocoding and marker color picker\n\n### Example Data\n\n```json\n{\n  \"searchKey\": \"Glo Damansara\",\n  \"lat\": 3.1336268,\n  \"lon\": 101.6299203\n}\n```",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
+      "description": "Spec of GeoSearchPointField",
+      "containedExamples": [
+        {
+          "searchKey": "Glo Damansara",
+          "lat": 3.1336268,
+          "lon": 101.6299203
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

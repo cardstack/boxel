@@ -1,0 +1,82 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Event Ticket",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/event-ticket-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/event-ticket-listing/screenshot_02.png"
+      ],
+      "summary": "A comprehensive event ticket management system for tracking and managing event attendance with QR codes, pricing, and venue information.",
+      "cardInfo": {
+        "notes": null,
+        "title": "Event Ticket",
+        "description": "Create and manage event tickets with built-in QR codes, pricing, seating sections, and attendance tracking. Perfect for concerts, conferences, workshops, and any ticketed events.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/event-ticket-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/46a57708-3eb2-4809-8366-6d85f757dc5c"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/a577083e-b2d8-4983-a66d-85f757dc5c69"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../event-ticket/EventTicketCard/indie-showcase"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../event-ticket/EventTicketCard/synthwave-night"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/events-celebrations"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

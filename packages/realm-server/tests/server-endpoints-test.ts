@@ -5,22 +5,21 @@ import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, existsSync, ensureDirSync, readJSONSync } from 'fs-extra';
 import {
-  baseRealm,
   Deferred,
   Realm,
-  fetchUserPermissions,
+  fetchRealmPermissions,
   baseCardRef,
   type SingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
-  encodeWebSafeBase64,
+  DEFAULT_PERMISSIONS,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 import { Query } from '@cardstack/runtime-common/query';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
@@ -28,7 +27,6 @@ import {
   realmServerTestMatrix,
   realmSecretSeed,
   createVirtualNetwork,
-  createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
   testRealmInfo,
@@ -57,6 +55,7 @@ import {
 import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
+import * as boxelUIChangeChecker from '../lib/boxel-ui-change-checker';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   MatrixEvent,
@@ -75,8 +74,6 @@ module(basename(__filename), function () {
       let dir: DirResult;
       let dbAdapter: PgAdapter;
 
-      let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
       function onRealmSetup(args: {
         testRealm: Realm;
         request: SuperTest<Test>;
@@ -88,13 +85,7 @@ module(basename(__filename), function () {
         dir = args.dir;
         dbAdapter = args.dbAdapter;
       }
-
-      setupCardLogs(
-        hooks,
-        async () => await loader.import(`${baseRealm.url}card-api`),
-      );
-
-      setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+      setupBaseRealmServer(hooks, matrixURL);
 
       hooks.beforeEach(async function () {
         dir = dirSync();
@@ -104,12 +95,13 @@ module(basename(__filename), function () {
       module('various other realm tests', function (hooks) {
         let testRealmHttpServer2: Server;
         let testRealmServer2: RealmServer;
-        let testRealm2: Realm;
         let dbAdapter: PgAdapter;
         let publisher: QueuePublisher;
         let runner: QueueRunner;
         let request2: SuperTest<Test>;
         let testRealmDir: string;
+        let virtualNetwork: VirtualNetwork;
+        let ownerUserId = '@mango:localhost';
 
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -123,11 +115,8 @@ module(basename(__filename), function () {
           publisher: QueuePublisher,
           runner: QueueRunner,
         ) {
-          if (testRealm2) {
-            virtualNetwork.unmount(testRealm2.handle);
-          }
+          virtualNetwork = createVirtualNetwork();
           ({
-            testRealm: testRealm2,
             testRealmServer: testRealmServer2,
             testRealmHttpServer: testRealmHttpServer2,
           } = await runTestRealmServer({
@@ -139,6 +128,10 @@ module(basename(__filename), function () {
             publisher,
             runner,
             matrixURL,
+            permissions: {
+              '*': ['read', 'write'],
+              [ownerUserId]: DEFAULT_PERMISSIONS,
+            },
           }));
           request2 = supertest(testRealmHttpServer2);
         }
@@ -202,6 +195,7 @@ module(basename(__filename), function () {
                   endpoint,
                   backgroundURL: 'http://example.com/background.jpg',
                   iconURL: 'http://example.com/icon.jpg',
+                  publishable: true,
                 },
               },
             },
@@ -216,6 +210,7 @@ module(basename(__filename), function () {
               name: 'Test Realm',
               backgroundURL: 'http://example.com/background.jpg',
               iconURL: 'http://example.com/icon.jpg',
+              publishable: true,
             },
             '.realm.json is correct',
           );
@@ -223,7 +218,7 @@ module(basename(__filename), function () {
             existsSync(join(realmPath, 'index.json')),
             'seed file index.json exists',
           );
-          let permissions = await fetchUserPermissions(
+          let permissions = await fetchRealmPermissions(
             dbAdapter,
             new URL(json.data.id),
           );
@@ -247,9 +242,7 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: {
-                    title: 'Test Card',
-                  },
+                  attributes: { cardInfo: { title: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',
@@ -321,8 +314,8 @@ module(basename(__filename), function () {
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let results = response.body as CardCollectionDocument;
-            assert.strictEqual(results.data.length, 1),
-              'correct number of search results';
+            (assert.strictEqual(results.data.length, 1),
+              'correct number of search results');
           }
         });
 
@@ -444,9 +437,7 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: {
-                    title: 'Test Card',
-                  },
+                  attributes: { cardInfo: { title: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',
@@ -1250,7 +1241,9 @@ module(basename(__filename), function () {
               moduleErrors: 0,
               instanceErrors: 0,
               modulesIndexed: 0,
-              instancesIndexed: 0,
+              instancesIndexed: 1,
+              definitionErrors: 0,
+              definitionsIndexed: 0,
               totalIndexEntries: 1,
             });
           }
@@ -1318,6 +1311,239 @@ module(basename(__filename), function () {
           {
             let response = await request2
               .get(`/_grafana-reindex?realm=${encodeURIComponent(realmURL)}`)
+              .set('Content-Type', 'application/json');
+            assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          }
+          let finalJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            finalJobs.length,
+            initialJobs.length,
+            'an index job was not created',
+          );
+        });
+
+        test('can reindex all realms via post-deployment endpoint called from CI pipeline', async function (assert: Assert) {
+          let compareCurrentBoxelUIChecksumStub: sinon.SinonStub;
+          let writeCurrentBoxelUIChecksumStub: sinon.SinonStub;
+
+          // Test case 1: Missing authorization header - should be unauthorized
+          {
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json');
+
+            assert.strictEqual(
+              response.status,
+              401,
+              'HTTP 401 status for missing auth header',
+            );
+          }
+
+          // Test case 2: Wrong authorization header - should be unauthorized
+          {
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', 'wrong-secret');
+
+            assert.strictEqual(
+              response.status,
+              401,
+              'HTTP 401 status for wrong auth header',
+            );
+          }
+
+          // Test case 3: Checksums are different - should trigger reindex
+          {
+            compareCurrentBoxelUIChecksumStub = sinon
+              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+              .resolves({
+                previousChecksum: 'old-checksum-123',
+                currentChecksum: 'new-checksum-456',
+              });
+            writeCurrentBoxelUIChecksumStub = sinon.stub(
+              boxelUIChangeChecker,
+              'writeCurrentBoxelUIChecksum',
+            );
+
+            let initialJobs = await dbAdapter.execute('select * from jobs');
+            let initialJobCount = initialJobs.length;
+
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', "mum's the word");
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            assert.deepEqual(
+              response.body,
+              {
+                previousChecksum: 'old-checksum-123',
+                currentChecksum: 'new-checksum-456',
+              },
+              'response body contains checksum comparison result',
+            );
+
+            // Verify that a full-reindex job was published
+            let finalJobs = await dbAdapter.execute('select * from jobs');
+            assert.strictEqual(
+              finalJobs.length,
+              initialJobCount + 1,
+              'a new full-reindex job was created when checksums differ',
+            );
+
+            let reindexJob = finalJobs.find(
+              (job) => job.job_type === 'full-reindex',
+            );
+            assert.ok(reindexJob, 'full-reindex job exists');
+            if (reindexJob) {
+              assert.strictEqual(
+                reindexJob.concurrency_group,
+                'full-reindex-group',
+                'job has correct concurrency group',
+              );
+              assert.strictEqual(
+                reindexJob.timeout,
+                360,
+                'job has correct timeout (6 minutes)',
+              );
+            }
+
+            // Verify that writeCurrentBoxelUIChecksum was called
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.calledOnce,
+              'writeCurrentBoxelUIChecksum was called',
+            );
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.calledWith('new-checksum-456'),
+              'writeCurrentBoxelUIChecksum called with new checksum',
+            );
+
+            compareCurrentBoxelUIChecksumStub.restore();
+            writeCurrentBoxelUIChecksumStub.restore();
+          }
+
+          // Test case 4: Checksums are the same - should not trigger reindex
+          {
+            compareCurrentBoxelUIChecksumStub = sinon
+              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+              .resolves({
+                previousChecksum: 'same-checksum-789',
+                currentChecksum: 'same-checksum-789',
+              });
+            writeCurrentBoxelUIChecksumStub = sinon.stub(
+              boxelUIChangeChecker,
+              'writeCurrentBoxelUIChecksum',
+            );
+
+            let initialJobs = await dbAdapter.execute('select * from jobs');
+            let initialJobCount = initialJobs.length;
+
+            let response = await request2
+              .post('/_post-deployment')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', "mum's the word");
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            assert.deepEqual(
+              response.body,
+              {
+                previousChecksum: 'same-checksum-789',
+                currentChecksum: 'same-checksum-789',
+              },
+              'response body contains checksum comparison result',
+            );
+
+            // Verify that no new job was published
+            let finalJobs = await dbAdapter.execute('select * from jobs');
+            assert.strictEqual(
+              finalJobs.length,
+              initialJobCount,
+              'no new job was created when checksums are the same',
+            );
+
+            // Verify that writeCurrentBoxelUIChecksum was not called
+            assert.ok(
+              writeCurrentBoxelUIChecksumStub.notCalled,
+              'writeCurrentBoxelUIChecksum was not called when checksums are same',
+            );
+
+            compareCurrentBoxelUIChecksumStub.restore();
+            writeCurrentBoxelUIChecksumStub.restore();
+          }
+        });
+
+        test('can reindex all realms via grafana endpoint', async function (assert) {
+          let endpoint = `test-realm-${uuidv4()}`;
+          let owner = 'mango';
+          let ownerUserId = `@${owner}:localhost`;
+          let realmURL: string;
+          {
+            let response = await request2
+              .post('/_create-realm')
+              .set('Accept', 'application/vnd.api+json')
+              .set('Content-Type', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createRealmServerJWT(
+                  { user: ownerUserId, sessionRoom: 'session-room-test' },
+                  realmSecretSeed,
+                )}`,
+              )
+              .send(
+                JSON.stringify({
+                  data: {
+                    type: 'realm',
+                    attributes: {
+                      name: 'Test Realm',
+                      endpoint,
+                    },
+                  },
+                }),
+              );
+            assert.strictEqual(response.status, 201, 'HTTP 201 status');
+            realmURL = response.body.data.id;
+          }
+          let initialJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            initialJobs.length,
+            2,
+            'number of jobs initially is correct',
+          );
+          {
+            let response = await request2
+              .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
+              .set('Content-Type', 'application/json');
+            assert.deepEqual(
+              response.body.realms,
+              [testRealm2URL.href, realmURL],
+              'indexed realms are correct',
+            );
+          }
+          let finalJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            finalJobs.length,
+            3,
+            'realm full reindex job was created',
+          );
+          let jobs = finalJobs.slice(2);
+          assert.strictEqual(
+            jobs[0].job_type,
+            'full-reindex',
+            'job type is correct',
+          );
+          assert.strictEqual(
+            jobs[0].concurrency_group,
+            `full-reindex-group`,
+            'concurrency group is correct',
+          );
+        });
+
+        test('returns 401 when calling grafana full reindex endpoint without a grafana secret', async function (assert) {
+          let initialJobs = await dbAdapter.execute('select * from jobs');
+          {
+            let response = await request2
+              .get(`/_grafana-full-reindex`)
               .set('Content-Type', 'application/json');
             assert.strictEqual(response.status, 401, 'HTTP 401 status');
           }
@@ -1401,18 +1627,16 @@ module(basename(__filename), function () {
         });
 
         test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {
-          virtualNetwork.mount(
-            async (req: Request) => {
-              if (req.url.includes('_info')) {
-                return new Response('Failed to fetch realm info', {
-                  status: 500,
-                  statusText: 'Internal Server Error',
-                });
-              }
-              return null;
-            },
-            { prepend: true },
-          );
+          let failedRealmInfoMock = async (req: Request) => {
+            if (req.url.includes('_info')) {
+              return new Response('Failed to fetch realm info', {
+                status: 500,
+                statusText: 'Internal Server Error',
+              });
+            }
+            return null;
+          };
+          virtualNetwork.mount(failedRealmInfoMock, { prepend: true });
           let response = await request2
             .get('/_catalog-realms')
             .set('Accept', 'application/json');
@@ -1421,6 +1645,39 @@ module(basename(__filename), function () {
           assert.deepEqual(response.body, {
             data: [],
           });
+        });
+
+        test('GET /_check-site-name-availability without JWT returns 401', async function (assert) {
+          let response = await request2
+            .get('/_check-site-name-availability?subdomain=test-site')
+            .set('Accept', 'application/json');
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('GET /_check-site-name-availability with invalid JWT returns 401', async function (assert) {
+          let response = await request2
+            .get('/_check-site-name-availability?subdomain=test-site')
+            .set('Accept', 'application/json')
+            .set('Authorization', 'Bearer invalid-jwt');
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('GET /_check-site-name-availability with valid JWT returns 200', async function (assert) {
+          let ownerUserId = '@mango:localhost';
+          let response = await request2
+            .get('/_check-site-name-availability?subdomain=valid-site')
+            .set('Accept', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
         });
       });
 
@@ -1974,7 +2231,12 @@ module(basename(__filename), function () {
 
         test('sends billing notification on checkout session completed event', async function (assert) {
           const secret = process.env.STRIPE_WEBHOOK_SECRET;
-          await insertUser(dbAdapter, userId!, 'cus_123', 'user@test.com');
+          let user = await insertUser(
+            dbAdapter,
+            userId!,
+            'cus_123',
+            'user@test.com',
+          );
           await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
           if (!secret) {
             throw new Error('STRIPE_WEBHOOK_SECRET is not set');
@@ -1986,9 +2248,10 @@ module(basename(__filename), function () {
               object: {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
-                client_reference_id: encodeWebSafeBase64(userId),
-                customer: undefined,
-                metadata: {},
+                customer: 'cus_123',
+                metadata: {
+                  user_id: user.id,
+                },
               },
             },
             type: 'checkout.session.completed',
@@ -2009,6 +2272,534 @@ module(basename(__filename), function () {
             .set('Content-Type', 'application/json')
             .set('stripe-signature', signature);
           waitForBillingNotification(assert, assert.async());
+        });
+      });
+
+      module('stripe session handler', function (hooks) {
+        let createCustomerStub: sinon.SinonStub;
+        let createCheckoutSessionStub: sinon.SinonStub;
+        let listSubscriptionsStub: sinon.SinonStub;
+        let retrieveProductStub: sinon.SinonStub;
+        let createBillingPortalSessionStub: sinon.SinonStub;
+        let matrixClient: MatrixClient;
+        let userId = '@test_realm:localhost';
+        let jwtToken: string;
+
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          onRealmSetup,
+        });
+
+        hooks.beforeEach(async function () {
+          let stripe = getStripe();
+          createCustomerStub = sinon.stub(stripe.customers, 'create');
+          createCheckoutSessionStub = sinon.stub(
+            stripe.checkout.sessions,
+            'create',
+          );
+          listSubscriptionsStub = sinon.stub(stripe.subscriptions, 'list');
+          retrieveProductStub = sinon.stub(stripe.products, 'retrieve');
+          createBillingPortalSessionStub = sinon.stub(
+            stripe.billingPortal.sessions,
+            'create',
+          );
+
+          matrixClient = new MatrixClient({
+            matrixURL: realmServerTestMatrix.url,
+            username: 'test_realm',
+            seed: realmSecretSeed,
+          });
+          await matrixClient.login();
+          let userId = matrixClient.getUserId();
+
+          let response = await request
+            .post('/_server-session')
+            .send(JSON.stringify({ user: userId }))
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json');
+          let json = response.body;
+
+          let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+          if (!rooms.includes(json.room)) {
+            await matrixClient.joinRoom(json.room);
+          }
+
+          await matrixClient.sendEvent(json.room, 'm.room.message', {
+            body: `auth-response: ${json.challenge}`,
+            msgtype: 'm.text',
+          });
+
+          response = await request
+            .post('/_server-session')
+            .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json');
+
+          jwtToken = response.headers['authorization'];
+        });
+
+        hooks.afterEach(async function () {
+          createCustomerStub.restore();
+          createCheckoutSessionStub.restore();
+          listSubscriptionsStub.restore();
+          retrieveProductStub.restore();
+          createBillingPortalSessionStub.restore();
+        });
+
+        test('creates checkout session for AI tokens when user has no Stripe customer', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            userId,
+            '', // no stripe customer id
+            '',
+          );
+
+          const mockCustomer = {
+            id: 'cus_test123',
+            email: 'test@example.com',
+          };
+
+          const mockSession = {
+            id: 'cs_test123',
+            url: 'https://checkout.stripe.com/test123',
+          };
+
+          createCustomerStub.resolves(mockCustomer);
+          createCheckoutSessionStub.resolves(mockSession);
+
+          let response = await request
+            .post(
+              '/_stripe-session?returnUrl=http%3A//example.com/return&email=test@example.com&aiTokenAmount=2500',
+            )
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', jwtToken);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              url: 'https://checkout.stripe.com/test123',
+              sessionId: 'cs_test123',
+              type: 'checkout',
+            },
+            'response body is correct',
+          );
+
+          // Verify Stripe customer was created
+          assert.ok(
+            createCustomerStub.calledOnce,
+            'customer.create was called',
+          );
+          assert.deepEqual(
+            createCustomerStub.firstCall.args[0],
+            { email: 'test@example.com' },
+            'customer created with correct email',
+          );
+
+          // Verify checkout session was created
+          assert.ok(
+            createCheckoutSessionStub.calledOnce,
+            'checkout.sessions.create was called',
+          );
+          let sessionArgs = createCheckoutSessionStub.firstCall.args[0];
+          assert.strictEqual(
+            sessionArgs.customer,
+            'cus_test123',
+            'session created with correct customer',
+          );
+          assert.strictEqual(
+            sessionArgs.mode,
+            'payment',
+            'session mode is payment',
+          );
+          assert.strictEqual(
+            sessionArgs.success_url,
+            'http://example.com/return',
+            'success URL is correct',
+          );
+          assert.strictEqual(
+            sessionArgs.cancel_url,
+            'http://example.com/return',
+            'cancel URL is correct',
+          );
+          assert.strictEqual(
+            sessionArgs.line_items[0].price_data.unit_amount,
+            500,
+            'price is correct (5 USD)',
+          );
+          assert.strictEqual(
+            sessionArgs.line_items[0].price_data.product_data.name,
+            '2,500 AI credits',
+            'product name is correct',
+          );
+          assert.strictEqual(
+            sessionArgs.metadata.credit_reload_amount,
+            '2500',
+            'metadata has correct credit amount',
+          );
+          assert.strictEqual(
+            sessionArgs.metadata.user_id,
+            user.id,
+            'metadata has correct user id',
+          );
+
+          // Verify user was updated with Stripe customer info
+          let updatedUser = await getUserByMatrixUserId(dbAdapter, userId);
+          assert.strictEqual(
+            updatedUser?.stripeCustomerId,
+            'cus_test123',
+            'user updated with customer ID',
+          );
+          assert.strictEqual(
+            updatedUser?.stripeCustomerEmail,
+            'test@example.com',
+            'user updated with customer email',
+          );
+        });
+
+        test('creates checkout session for AI tokens when user already has Stripe customer', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            userId,
+            'cus_existing123', // existing stripe customer id
+            'existing@example.com',
+          );
+
+          const mockSession = {
+            id: 'cs_test456',
+            url: 'https://checkout.stripe.com/test456',
+          };
+
+          createCheckoutSessionStub.resolves(mockSession);
+
+          let response = await request
+            .post(
+              '/_stripe-session?returnUrl=http%3A//example.com/return&email=test@example.com&aiTokenAmount=20000',
+            )
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', jwtToken);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              url: 'https://checkout.stripe.com/test456',
+              sessionId: 'cs_test456',
+              type: 'checkout',
+            },
+            'response body is correct',
+          );
+
+          // Verify Stripe customer was NOT created (since user already has one)
+          assert.ok(
+            createCustomerStub.notCalled,
+            'customer.create was not called',
+          );
+
+          // Verify checkout session was created with existing customer
+          assert.ok(
+            createCheckoutSessionStub.calledOnce,
+            'checkout.sessions.create was called',
+          );
+          let sessionArgs = createCheckoutSessionStub.firstCall.args[0];
+          assert.strictEqual(
+            sessionArgs.customer,
+            'cus_existing123',
+            'session created with existing customer ID',
+          );
+          assert.strictEqual(
+            sessionArgs.mode,
+            'payment',
+            'session mode is payment',
+          );
+          assert.strictEqual(
+            sessionArgs.success_url,
+            'http://example.com/return',
+            'success URL is correct',
+          );
+          assert.strictEqual(
+            sessionArgs.cancel_url,
+            'http://example.com/return',
+            'cancel URL is correct',
+          );
+          assert.strictEqual(
+            sessionArgs.line_items[0].price_data.unit_amount,
+            3000,
+            'price is correct (30 USD for 20000 tokens)',
+          );
+          assert.strictEqual(
+            sessionArgs.line_items[0].price_data.product_data.name,
+            '20,000 AI credits',
+            'product name is correct',
+          );
+          assert.strictEqual(
+            sessionArgs.metadata.credit_reload_amount,
+            '20000',
+            'metadata has correct credit amount',
+          );
+          assert.strictEqual(
+            sessionArgs.metadata.user_id,
+            user.id,
+            'metadata has correct user id',
+          );
+
+          // Verify user info remains unchanged
+          let updatedUser = await getUserByMatrixUserId(dbAdapter, userId);
+          assert.strictEqual(
+            updatedUser?.stripeCustomerId,
+            'cus_existing123',
+            'user customer ID unchanged',
+          );
+          assert.strictEqual(
+            updatedUser?.stripeCustomerEmail,
+            'existing@example.com',
+            'user customer email unchanged',
+          );
+        });
+
+        test('creates checkout session for subscription when user has no active subscription', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            userId,
+            'cus_existing123', // existing stripe customer id
+            'existing@example.com',
+          );
+
+          // Create a test plan
+          let plan = await insertPlan(
+            dbAdapter,
+            'TestPlan',
+            12,
+            5000,
+            'prod_test_plan',
+          );
+
+          const mockSession = {
+            id: 'cs_subscription_test',
+            url: 'https://checkout.stripe.com/subscription',
+          };
+
+          const mockProduct = {
+            id: 'prod_test_plan',
+            default_price: 'price_123',
+          };
+
+          // User has no active subscriptions
+          listSubscriptionsStub.resolves({ data: [] });
+          retrieveProductStub.resolves(mockProduct);
+          createCheckoutSessionStub.resolves(mockSession);
+
+          let response = await request
+            .post(
+              '/_stripe-session?returnUrl=http%3A//example.com/return&plan=TestPlan',
+            )
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', jwtToken);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              url: 'https://checkout.stripe.com/subscription',
+              sessionId: 'cs_subscription_test',
+              type: 'checkout',
+            },
+            'response body is correct',
+          );
+
+          // Verify subscriptions.list was called to check for active subscriptions
+          assert.ok(
+            listSubscriptionsStub.calledOnce,
+            'subscriptions.list was called',
+          );
+          assert.deepEqual(
+            listSubscriptionsStub.firstCall.args[0],
+            {
+              customer: 'cus_existing123',
+              status: 'active',
+              limit: 1,
+            },
+            'subscriptions listed with correct parameters',
+          );
+
+          // Verify product was retrieved
+          assert.ok(
+            retrieveProductStub.calledOnce,
+            'products.retrieve was called',
+          );
+          assert.strictEqual(
+            retrieveProductStub.firstCall.args[0],
+            'prod_test_plan',
+            'correct product ID was used',
+          );
+
+          // Verify checkout session was created for subscription
+          assert.ok(
+            createCheckoutSessionStub.calledOnce,
+            'checkout.sessions.create was called',
+          );
+          let sessionArgs = createCheckoutSessionStub.firstCall.args[0];
+          assert.strictEqual(
+            sessionArgs.customer,
+            'cus_existing123',
+            'session created with correct customer',
+          );
+          assert.strictEqual(
+            sessionArgs.mode,
+            'subscription',
+            'session mode is subscription',
+          );
+          assert.strictEqual(
+            sessionArgs.success_url,
+            'http://example.com/return',
+            'success URL is correct',
+          );
+          assert.strictEqual(
+            sessionArgs.cancel_url,
+            'http://example.com/return',
+            'cancel URL is correct',
+          );
+          assert.deepEqual(
+            sessionArgs.line_items,
+            [
+              {
+                price: 'price_123',
+                quantity: 1,
+              },
+            ],
+            'line items are correct',
+          );
+          assert.deepEqual(
+            sessionArgs.payment_method_data,
+            {
+              allow_redisplay: 'always',
+            },
+            'payment method data allows redisplay',
+          );
+          assert.deepEqual(
+            sessionArgs.metadata,
+            {
+              plan_name: 'TestPlan',
+              plan_id: plan.id,
+              user_id: user.id,
+            },
+            'metadata is correct',
+          );
+
+          // Verify Stripe customer was NOT created (since user already has one)
+          assert.ok(
+            createCustomerStub.notCalled,
+            'customer.create was not called',
+          );
+        });
+
+        test('creates billing portal session when user already has active subscription', async function (assert) {
+          // Create a test plan
+          await insertPlan(
+            dbAdapter,
+            'ExistingPlan',
+            15,
+            7500,
+            'prod_existing_plan',
+          );
+
+          await insertUser(
+            dbAdapter,
+            userId,
+            'cus_existing456',
+            'existing@example.com',
+          );
+
+          const mockPortalSession = {
+            url: 'https://billing.stripe.com/portal123',
+          };
+
+          // User has an active subscription
+          listSubscriptionsStub.resolves({
+            data: [
+              {
+                id: 'sub_active123',
+                status: 'active',
+                customer: 'cus_existing456',
+              },
+            ],
+          });
+          createBillingPortalSessionStub.resolves(mockPortalSession);
+
+          let response = await request
+            .post(
+              '/_stripe-session?returnUrl=http%3A//example.com/return&plan=ExistingPlan',
+            )
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', jwtToken);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              url: 'https://billing.stripe.com/portal123',
+              type: 'portal',
+              message:
+                'You already have an active subscription. Redirecting to manage your subscription...',
+            },
+            'response body is correct',
+          );
+
+          // Verify subscriptions.list was called to check for active subscriptions
+          assert.ok(
+            listSubscriptionsStub.calledOnce,
+            'subscriptions.list was called',
+          );
+          assert.deepEqual(
+            listSubscriptionsStub.firstCall.args[0],
+            {
+              customer: 'cus_existing456',
+              status: 'active',
+              limit: 1,
+            },
+            'subscriptions listed with correct parameters',
+          );
+
+          // Verify billing portal session was created
+          assert.ok(
+            createBillingPortalSessionStub.calledOnce,
+            'billingPortal.sessions.create was called',
+          );
+          assert.deepEqual(
+            createBillingPortalSessionStub.firstCall.args[0],
+            {
+              customer: 'cus_existing456',
+              return_url: 'http://example.com/return',
+            },
+            'billing portal session created with correct parameters',
+          );
+
+          // Verify product retrieval and checkout session creation were NOT called
+          assert.ok(
+            retrieveProductStub.notCalled,
+            'products.retrieve was not called',
+          );
+          assert.ok(
+            createCheckoutSessionStub.notCalled,
+            'checkout.sessions.create was not called',
+          );
+
+          // Verify Stripe customer was NOT created
+          assert.ok(
+            createCustomerStub.notCalled,
+            'customer.create was not called',
+          );
         });
       });
 
@@ -2059,19 +2850,10 @@ module(basename(__filename), function () {
   );
   module('Realm server authentication', function (hooks) {
     let testRealmServer: Server;
-
     let request: SuperTest<Test>;
-
     let dir: DirResult;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

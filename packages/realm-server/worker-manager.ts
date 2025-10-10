@@ -54,6 +54,7 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
+  prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start worker manager')
   .options({
@@ -97,11 +98,18 @@ let {
       demandOption: true,
       type: 'string',
     },
+    prerendererUrl: {
+      // TODO make this required when feature flag is removed
+      description: 'URL of the prerender server to invoke',
+      type: 'string',
+    },
   })
   .parseSync();
 
 let isReady = false;
 let isExiting = false;
+let workers: ChildProcess[] = [];
+
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
 
@@ -159,6 +167,17 @@ if (port) {
 
 const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
+
+  // Stop all workers
+  if (workers.length > 0) {
+    log.info(`Stopping ${workers.length} worker(s)...`);
+    workers.forEach((worker) => {
+      if (!worker.killed && worker.pid) {
+        worker.send?.('stop');
+      }
+    });
+  }
+
   webServerInstance?.closeAllConnections();
   webServerInstance?.close((err?: Error) => {
     if (err) {
@@ -180,12 +199,33 @@ process.on('uncaughtException', (err) => {
 
 process.on('message', (message) => {
   if (message === 'stop') {
+    if (adapter) {
+      adapter.close(); // warning this is async
+    }
     shutdown(() => {
       process.send?.('stopped');
     });
   } else if (message === 'kill') {
     log.info(`Ending worker manager process for ${port}...`);
     process.exit(0);
+  } else if (
+    typeof message === 'string' &&
+    message.startsWith('execute-sql:')
+  ) {
+    let sql = message.substring('execute-sql:'.length);
+    adapter
+      .execute(sql)
+      .then((results) => {
+        if (process.send) {
+          let serializedResults = JSON.stringify(results);
+          process.send(`sql-results:${serializedResults}`);
+        }
+      })
+      .catch((e) => {
+        if (process.send) {
+          process.send(`sql-error:${e.message}`);
+        }
+      });
   }
 });
 
@@ -275,7 +315,8 @@ async function markFailedIndexEntry({
   log.info(`marking index entry ${url} with an error doc`);
   let indexWriter = new IndexWriter(adapter);
   let batch = await indexWriter.createBatch(new URL(realm));
-  let invalidations = await batch.invalidate([new URL(url)]);
+  await batch.invalidate([new URL(url)]);
+  let invalidations = batch.invalidations;
   for (let file of [url, ...invalidations]) {
     await batch.updateEntry(new URL(file), {
       type: 'error',
@@ -350,6 +391,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
       'worker',
       `--matrixURL='${matrixURL}'`,
       `--distURL='${distURL}'`,
+      `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,
       ...flattenDeep(
         urlMappings.map(([from, to]) => [
@@ -372,8 +414,16 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
   let workerId: string | undefined;
   let currentState: IndexState | undefined;
 
+  workers.push(worker);
+
   worker.on('exit', () => {
     clearInterval(watchdog);
+    // Remove from workers array
+    const index = workers.indexOf(worker);
+    if (index > -1) {
+      workers.splice(index, 1);
+    }
+
     if (!isExiting) {
       log.info(`worker ${name} exited. spawning replacement worker`);
       startWorker(priority, urlMappings);
@@ -388,7 +438,10 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
   if (worker.stderr) {
     worker.stderr.on('data', (data: Buffer) => {
       let message = data.toString();
-      log.error(`[worker ${name} priority ${priority}]: ${message}`);
+      let maybeLogUrl = currentState?.url ? ` (for ${currentState.url})` : '';
+      log.error(
+        `[worker ${name} priority ${priority}]${maybeLogUrl}: ${message}`,
+      );
       if (message.includes('FATAL ERROR')) {
         (async () => {
           if (currentState?.url && currentState?.realm) {

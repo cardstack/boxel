@@ -2,7 +2,6 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
-import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -12,6 +11,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { modifier } from 'ember-modifier';
+import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -37,6 +37,7 @@ import config from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
+import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
 
 import SearchSheet, {
   SearchSheetMode,
@@ -52,9 +53,9 @@ import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
-import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 
 interface Signature {
@@ -74,6 +75,7 @@ interface Signature {
         updateSubmode: (submode: Submode) => void;
       },
     ];
+    topBar: [];
   };
 }
 
@@ -105,25 +107,43 @@ export default class SubmodeLayout extends Component<Signature> {
     defaultWidth: 30,
     minWidth: 25,
   });
-  @service private declare commandService: CommandService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
-  @service private declare router: RouterService;
   @service private declare store: StoreService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service private declare recentCardsService: RecentCardsService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
 
+  @action
+  private onLayoutChange(layout: number[]) {
+    // layout is an array of two numbers,
+    // the first number is the width of the main panel,
+    // the second number is the width of the ai panel.
+    if (layout.length === 2) {
+      window.localStorage.setItem(AiAssistantPanelWidth, String(layout[1]));
+    }
+  }
+
+  // Handles window resize and initializes AI panel width from localStorage
   onWindowResize = (windowWidth: number) => {
     let aiPanelDefaultWidthInPixels = 371;
     if (windowWidth < aiPanelDefaultWidthInPixels) {
       aiPanelDefaultWidthInPixels = windowWidth;
     }
     let aiPanelDefaultWidth = (aiPanelDefaultWidthInPixels / windowWidth) * 100;
+    const persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth)
+      ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
+      : undefined;
 
-    this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
+    if (!persistedWidth || persistedWidth < aiPanelDefaultWidth) {
+      this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
+    } else {
+      this.aiPanelWidths.defaultWidth = persistedWidth;
+    }
+
     this.aiPanelWidths.minWidth = aiPanelDefaultWidth;
   };
 
@@ -170,7 +190,39 @@ export default class SubmodeLayout extends Component<Signature> {
         let currentSubmode = this.operatorModeStateService.state.submode;
 
         if (currentSubmode === Submodes.Code) {
-          this.operatorModeStateService.updateTrail([]);
+          // Check if current code path is a card instance ID
+          let codePathString = this.operatorModeStateService.codePathString;
+          if (codePathString) {
+            let cardId = codePathString.replace(/\.json$/, '');
+            let card = this.store.peek(cardId);
+
+            if (card && this.isCardInstance(card)) {
+              // Current code path is a card instance, use it directly
+              this.operatorModeStateService.updateTrail([codePathString]);
+            } else {
+              // Current code path is a card definition, try to get card ID from playground panel
+              let playgroundSelection =
+                this.operatorModeStateService.playgroundPanelSelection;
+              if (playgroundSelection?.cardId) {
+                this.operatorModeStateService.updateTrail([
+                  playgroundSelection.cardId + '.json',
+                ]);
+              } else {
+                // Try to find any card instance related to this definition
+                let relatedCardId =
+                  await this.findRelatedCardInstance(codePathString);
+                if (relatedCardId) {
+                  this.operatorModeStateService.updateTrail([
+                    relatedCardId + '.json',
+                  ]);
+                } else {
+                  this.operatorModeStateService.updateTrail([]);
+                }
+              }
+            }
+          } else {
+            this.operatorModeStateService.updateTrail([]);
+          }
         } else if (currentSubmode === Submodes.Interact) {
           this.operatorModeStateService.updateTrail(
             this.lastCardIdInRightMostStack
@@ -186,6 +238,45 @@ export default class SubmodeLayout extends Component<Signature> {
     }
 
     this.operatorModeStateService.updateSubmode(submode);
+  }
+
+  private isCardInstance(card: any): boolean {
+    return card && typeof card === 'object' && 'id' in card && card.id;
+  }
+
+  private async findRelatedCardInstance(
+    definitionPath: string,
+  ): Promise<string | null> {
+    try {
+      // Try to find any card instance that adopts from this definition
+      // This is a simplified approach - in a real implementation you might want to
+      // search through recent cards or use a more sophisticated lookup
+      let recentCards = this.recentCardsService.recentCards;
+
+      for (let recentCard of recentCards) {
+        let card = this.store.peek(recentCard.cardId);
+        if (card && this.isCardInstance(card)) {
+          // Check if this card adopts from the definition we're looking at
+          // This is a simplified check - you might need more sophisticated logic
+          let definitionName = definitionPath
+            .split('/')
+            .pop()
+            ?.replace('.json', '');
+          if (
+            definitionName &&
+            card.constructor.name === definitionName &&
+            card.id
+          ) {
+            return card.id;
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('Error finding related card instance:', error);
+      return null;
+    }
   }
 
   @action private closeSearchSheet() {
@@ -284,15 +375,17 @@ export default class SubmodeLayout extends Component<Signature> {
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
       class='submode-layout {{this.aiAssistantVisibilityClass}}'
+      data-test-submode-layout
       ...attributes
     >
       <ResizablePanelGroup
+        @onLayoutChange={{this.onLayoutChange}}
         @orientation='horizontal'
         class='columns'
         as |ResizablePanel ResizeHandle|
       >
         <ResizablePanel class='main-panel'>
-          <div class='top-left-menu'>
+          <div class='top-bar'>
             <IconButton
               @icon={{BoxelIcon}}
               @width='40px'
@@ -325,7 +418,20 @@ export default class SubmodeLayout extends Component<Signature> {
                   }}
                 />
               {{/if}}
+              {{yield to='topBar'}}
             {{/if}}
+
+            <button
+              class='profile-icon-button'
+              {{on 'click' this.toggleProfileSummary}}
+              data-test-profile-icon-button
+            >
+              <Avatar
+                @isReady={{this.matrixService.profile.loaded}}
+                @userId={{this.matrixService.userId}}
+                @displayName={{this.matrixService.profile.displayName}}
+              />
+            </button>
           </div>
           {{#if this.workspaceChooserOpened}}
             <WorkspaceChooser />
@@ -338,17 +444,6 @@ export default class SubmodeLayout extends Component<Signature> {
               updateSubmode=this.updateSubmode
             )
           }}
-          <button
-            class='profile-icon-button'
-            {{on 'click' this.toggleProfileSummary}}
-            data-test-profile-icon-button
-          >
-            <Avatar
-              @isReady={{this.matrixService.profile.loaded}}
-              @userId={{this.matrixService.userId}}
-              @displayName={{this.matrixService.profile.displayName}}
-            />
-          </button>
           {{#if @onCardSelectFromSearch}}
             <SearchSheet
               @mode={{this.searchSheetMode}}
@@ -370,18 +465,20 @@ export default class SubmodeLayout extends Component<Signature> {
               <AskAiContainer />
             {{/if}}
           {{/if}}
-          <AiAssistantButton
-            class='chat-btn'
-            @isActive={{this.aiAssistantPanelService.isOpen}}
-            {{on
-              'click'
-              (if
-                this.aiAssistantPanelService.isOpen
-                this.aiAssistantPanelService.closePanel
-                this.aiAssistantPanelService.openPanel
-              )
-            }}
-          />
+          {{#if (not this.aiAssistantPanelService.isAiAssistantHidden)}}
+            <AiAssistantButton
+              class='chat-btn'
+              @isActive={{this.aiAssistantPanelService.isOpen}}
+              {{on
+                'click'
+                (if
+                  this.aiAssistantPanelService.isOpen
+                  this.aiAssistantPanelService.closePanel
+                  this.aiAssistantPanelService.openPanel
+                )
+              }}
+            />
+          {{/if}}
           {{#if this.profileSummaryOpened}}
             <ProfileInfoPopover
               {{onClickOutside
@@ -443,6 +540,8 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .main-panel {
+        display: flex;
+        flex-direction: column;
         position: relative;
       }
 
@@ -463,24 +562,14 @@ export default class SubmodeLayout extends Component<Signature> {
         z-index: var(--host-ai-panel-z-index);
       }
 
-      .top-left-menu {
-        width: var(--operator-mode-left-column);
-        position: absolute;
-        top: 0;
-        left: 0;
+      .top-bar {
+        width: 100%;
         padding: var(--operator-mode-spacing);
-        z-index: var(--host-top-left-menu-z-index);
+        z-index: var(--host-top-bar-z-index);
 
         display: flex;
         align-items: center;
-      }
-      .top-left-menu
-        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
-        margin-left: var(--operator-mode-spacing);
-      }
-
-      .code-submode-layout .top-left-menu {
-        background-color: var(--code-mode-top-bar-background-color);
+        gap: var(--operator-mode-spacing);
       }
 
       .boxel-title {
@@ -506,16 +595,18 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
+        width: var(--submode-new-file-button-width);
       }
 
       .profile-icon-button {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
-        position: absolute;
-        top: var(--operator-mode-spacing);
-        right: var(--operator-mode-spacing);
-        padding: 0;
+
         background: none;
+
+        padding: 0;
+        margin-left: auto;
+
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
@@ -523,6 +614,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .workspace-button {
+        --icon-color: var(--boxel-highlight);
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);

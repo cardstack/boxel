@@ -27,7 +27,7 @@ import {
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-import IdentityContext from '@cardstack/host/lib/gc-identity-context';
+import CardStore from '@cardstack/host/lib/gc-card-store';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
@@ -74,9 +74,9 @@ module('Integration | Store', function (hooks) {
   let loaderService: LoaderService;
   let testRealm: Realm;
   let testRealmAdapter: TestRealmAdapter;
-  let store: StoreService;
+  let storeService: StoreService;
   let operatorModeStateService: OperatorModeStateService;
-  let identityContext: IdentityContext;
+  let cardStore: CardStore;
   let PersonDef: typeof CardDefType;
   let BoomPersonDef: typeof CardDefType;
   let realmService: RealmService;
@@ -96,8 +96,8 @@ module('Integration | Store', function (hooks) {
 
   function forceGC() {
     // it takes 2 sweeps to trigger GC
-    identityContext.sweep(api);
-    identityContext.sweep(api);
+    cardStore.sweep(api);
+    cardStore.sweep(api);
   }
 
   function setCardInOperatorModeState(
@@ -145,9 +145,9 @@ module('Integration | Store', function (hooks) {
     loaderService = getService('loader-service');
     loader = loaderService.loader;
     api = await loader.import(`${baseRealm.url}card-api`);
-    store = getService('store');
+    storeService = getService('store');
     operatorModeStateService = getService('operator-mode-state-service');
-    identityContext = (store as any).identityContext as IdentityContext;
+    cardStore = (storeService as any).store as CardStore;
     realmService = getService('realm');
 
     ({ adapter: testRealmAdapter, realm: testRealm } =
@@ -167,17 +167,17 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can peek a card instance', async function (assert) {
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
-    let instance = store.peek(`${testRealmURL}Person/hassan`);
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+    let instance = storeService.peek(`${testRealmURL}Person/hassan`);
     assert.true(isCardInstance(instance), 'peeked item is a card instance');
   });
 
   test('can peek a card by local id', async function (assert) {
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
-    let instanceA = store.peek(`${testRealmURL}Person/hassan`);
-    let instanceB = store.peek((instanceA as CardDefType)[localId]);
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+    let instanceA = storeService.peek(`${testRealmURL}Person/hassan`);
+    let instanceB = storeService.peek((instanceA as CardDefType)[localId]);
     assert.true(isCardInstance(instanceB), 'peeked item is a card instance');
     assert.strictEqual(
       instanceA,
@@ -204,9 +204,9 @@ module('Integration | Store', function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
-    let error = store.peek(`${testRealmURL}Person/hassan`);
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+    let error = storeService.peek(`${testRealmURL}Person/hassan`);
     assert.false(isCardInstance(error), 'error is not a card instance');
     assert.ok(
       (error as CardErrorJSONAPI).message.includes('intentional error thrown'),
@@ -215,8 +215,8 @@ module('Integration | Store', function (hooks) {
   });
 
   test('peek returns a stale instance when the server state reflects an error', async function (assert) {
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
 
     await testRealm.write(
       'Person/hassan.json',
@@ -236,9 +236,11 @@ module('Integration | Store', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    await waitUntil(() => store.peekError(`${testRealmURL}Person/hassan`));
+    await waitUntil(() =>
+      storeService.peekError(`${testRealmURL}Person/hassan`),
+    );
 
-    let staleInstance = store.peek(`${testRealmURL}Person/hassan`);
+    let staleInstance = storeService.peek(`${testRealmURL}Person/hassan`);
     assert.true(
       isCardInstance(staleInstance),
       'the peek-ed instance is not an error',
@@ -246,13 +248,13 @@ module('Integration | Store', function (hooks) {
   });
 
   test('peek for an uncached returns undefined', async function (assert) {
-    let instance = store.peek(`${testRealmURL}Person/does-not-exist`);
+    let instance = storeService.peek(`${testRealmURL}Person/does-not-exist`);
     assert.strictEqual(instance, undefined, 'instance is undefined');
   });
 
   test('peekError returns the server state error when a stale instance exists', async function (assert) {
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
 
     await testRealm.write(
       'Person/hassan.json',
@@ -272,9 +274,11 @@ module('Integration | Store', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    await waitUntil(() => store.peekError(`${testRealmURL}Person/hassan`));
+    await waitUntil(() =>
+      storeService.peekError(`${testRealmURL}Person/hassan`),
+    );
 
-    let error = store.peekError(`${testRealmURL}Person/hassan`);
+    let error = storeService.peekError(`${testRealmURL}Person/hassan`);
     assert.false(isCardInstance(error), 'error is not a card instance');
     assert.ok(
       (error as CardErrorJSONAPI).message.includes('intentional error thrown'),
@@ -283,13 +287,13 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can add reference to a card url', async function (assert) {
-    let instance = store.peek(`${testRealmURL}hassan`);
+    let instance = storeService.peek(`${testRealmURL}hassan`);
     assert.strictEqual(instance, undefined, 'instance is not in store yet');
 
-    store.addReference(`${testRealmURL}Person/hassan`);
+    storeService.addReference(`${testRealmURL}Person/hassan`);
 
-    await store.flush();
-    instance = store.peek(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+    instance = storeService.peek(`${testRealmURL}Person/hassan`);
     if (isCardInstance(instance)) {
       assert.strictEqual(
         (instance as any).name,
@@ -305,7 +309,7 @@ module('Integration | Store', function (hooks) {
 
     forceGC();
 
-    instance = store.peek(`${testRealmURL}Person/hassan`);
+    instance = storeService.peek(`${testRealmURL}Person/hassan`);
     if (isCardInstance(instance)) {
       assert.strictEqual(
         (instance as any).name,
@@ -326,12 +330,12 @@ module('Integration | Store', function (hooks) {
 
   test('can add reference to a local id', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance, { doNotPersist: true });
-    store.addReference(instance[localId]);
+    await storeService.add(instance, { doNotPersist: true });
+    storeService.addReference(instance[localId]);
 
     forceGC();
 
-    let peekedInstance = store.peek(instance[localId]);
+    let peekedInstance = storeService.peek(instance[localId]);
     assert.strictEqual(
       peekedInstance,
       instance,
@@ -340,16 +344,16 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can drop reference to a card url', async function (assert) {
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
-    let instance = store.peek(`${testRealmURL}Person/hassan`);
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+    let instance = storeService.peek(`${testRealmURL}Person/hassan`);
     assert.ok(instance, 'instance is in store');
-    store.dropReference(`${testRealmURL}Person/hassan`);
+    storeService.dropReference(`${testRealmURL}Person/hassan`);
 
     forceGC();
 
     assert.strictEqual(
-      store.peek(`${testRealmURL}Person/hassan`),
+      storeService.peek(`${testRealmURL}Person/hassan`),
       undefined,
       'instance has been garbage collected from the store',
     );
@@ -357,12 +361,12 @@ module('Integration | Store', function (hooks) {
 
   test('can drop reference to a local id', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance, { doNotPersist: true });
-    store.addReference(instance[localId]);
-    store.dropReference(instance[localId]);
+    await storeService.add(instance, { doNotPersist: true });
+    storeService.addReference(instance[localId]);
+    storeService.dropReference(instance[localId]);
     forceGC();
 
-    let peekedInstance = store.peek(instance[localId]);
+    let peekedInstance = storeService.peek(instance[localId]);
     assert.strictEqual(
       peekedInstance,
       undefined,
@@ -372,8 +376,8 @@ module('Integration | Store', function (hooks) {
 
   test<TestContextWithSave>('can manually save an instance', async function (assert) {
     assert.expect(2);
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
 
     this.onSave((url, doc) => {
       assert.strictEqual(
@@ -388,11 +392,11 @@ module('Integration | Store', function (hooks) {
       );
     });
 
-    store.save(`${testRealmURL}Person/hassan`);
+    storeService.save(`${testRealmURL}Person/hassan`);
   });
 
   test('can create an instance', async function (assert) {
-    let url = await store.create({
+    let url = await storeService.create({
       data: {
         attributes: {
           name: 'Andrea',
@@ -405,8 +409,8 @@ module('Integration | Store', function (hooks) {
         },
       },
     });
-    assert.ok(typeof url === 'string', 'received a url for new instance');
-    let instance = store.peek(url as string);
+    assert.strictEqual(typeof url, 'string', 'received a url for new instance');
+    let instance = storeService.peek(url as string);
     assert.strictEqual((instance as CardDefType).id, url);
     assert.strictEqual((instance as any).name, 'Andrea');
 
@@ -419,7 +423,7 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can handle card error when creating an instance', async function (assert) {
-    let error = await store.create({
+    let error = await storeService.create({
       data: {
         attributes: {
           name: 'Andrea',
@@ -433,7 +437,11 @@ module('Integration | Store', function (hooks) {
         },
       },
     });
-    assert.ok(typeof error === 'object', 'received a error for new instance');
+    assert.strictEqual(
+      typeof error,
+      'object',
+      'received a error for new instance',
+    );
     assert.ok(
       (error as any).message.includes(
         'intentional error thrown',
@@ -455,11 +463,11 @@ module('Integration | Store', function (hooks) {
     );
 
     let instance = new BoomPersonDef({ name: 'Andrea' });
-    let error = await store.add(instance, { realm: testRealmURL });
-    store.addReference(instance[localId]);
-    await store.flush();
+    let error = await storeService.add(instance, { realm: testRealmURL });
+    storeService.addReference(instance[localId]);
+    await storeService.flush();
 
-    let stale = store.peek(instance[localId])!;
+    let stale = storeService.peek(instance[localId])!;
     if (isCardInstance(stale)) {
       assert.strictEqual(
         (stale as any).name,
@@ -473,7 +481,7 @@ module('Integration | Store', function (hooks) {
       );
     }
 
-    let peekedError = store.peekError(instance[localId])!;
+    let peekedError = storeService.peekError(instance[localId])!;
     assert.strictEqual(
       peekedError,
       error,
@@ -512,11 +520,11 @@ module('Integration | Store', function (hooks) {
       `.trim(),
       );
 
-      await waitUntil(() => !store.peekError(instance[localId]), {
+      await waitUntil(() => !storeService.peekError(instance[localId]), {
         timeout: 5_000,
       });
 
-      let peek = store.peek(instance[localId])!;
+      let peek = storeService.peek(instance[localId])!;
       assert.strictEqual(
         (peek as any).name,
         'Andrea',
@@ -537,9 +545,9 @@ module('Integration | Store', function (hooks) {
       );
     });
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance);
+    await storeService.add(instance);
     assert.ok(instance.id, 'instance has been assigned remote id');
-    let peekedInstance = store.peek(instance.id);
+    let peekedInstance = storeService.peek(instance.id);
     assert.strictEqual(instance, peekedInstance, 'instance is the same');
 
     let file = await testRealmAdapter.openFile(
@@ -559,7 +567,7 @@ module('Integration | Store', function (hooks) {
         'card data is correct',
       );
     });
-    let instance = (await store.add({
+    let instance = (await storeService.add({
       data: {
         attributes: {
           name: 'Andrea',
@@ -573,7 +581,7 @@ module('Integration | Store', function (hooks) {
       },
     })) as CardDefType;
     assert.ok(instance.id, 'instance has been assigned remote id');
-    let peekedInstance = store.peek(instance.id);
+    let peekedInstance = storeService.peek(instance.id);
     assert.strictEqual(instance, peekedInstance, 'instance is the same');
     assert.strictEqual(
       (instance as any).name,
@@ -594,7 +602,7 @@ module('Integration | Store', function (hooks) {
     this.onSave(() => {
       assert.ok(false, 'save should not happen');
     });
-    let instance = (await store.add(
+    let instance = (await storeService.add(
       {
         data: {
           attributes: {
@@ -615,7 +623,7 @@ module('Integration | Store', function (hooks) {
       undefined,
       'instance has NOT been assigned remote id',
     );
-    let peekedInstance = store.peek(instance[localId]);
+    let peekedInstance = storeService.peek(instance[localId]);
     assert.strictEqual(instance, peekedInstance, 'instance is the same');
     assert.strictEqual(
       (instance as any).name,
@@ -636,13 +644,13 @@ module('Integration | Store', function (hooks) {
       );
     });
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance, { doNotWaitForPersist: true });
+    await storeService.add(instance, { doNotWaitForPersist: true });
     assert.false(didSave, 'the instance has not saved yet');
 
     await waitUntil(() => instance.id);
 
     assert.ok(instance.id, 'instance has been assigned remote id');
-    let peekedInstance = store.peek(instance.id);
+    let peekedInstance = storeService.peek(instance.id);
     assert.strictEqual(instance, peekedInstance, 'instance is the same');
 
     let file = await testRealmAdapter.openFile(
@@ -661,7 +669,7 @@ module('Integration | Store', function (hooks) {
       'realmURL meta is not set on the instance',
     );
 
-    await store.add(instance, {
+    await storeService.add(instance, {
       doNotPersist: true,
       realm: testRealmURL,
     });
@@ -682,21 +690,21 @@ module('Integration | Store', function (hooks) {
       friends: [michael],
     });
 
-    await store.add(lin, { doNotPersist: true });
+    await storeService.add(lin, { doNotPersist: true });
 
-    let peekedMichael = store.peek(michael[localId]);
+    let peekedMichael = storeService.peek(michael[localId]);
     assert.strictEqual(
       peekedMichael,
       michael,
       'michael instance added to store',
     );
-    let peekedWu = store.peek(wu[localId]);
+    let peekedWu = storeService.peek(wu[localId]);
     assert.strictEqual(peekedWu, wu, 'wu instance added to store');
   });
 
   test('can reject a card added to the store that has a conflicting local ID for a given URL', async function (assert) {
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
     let doc: SingleCardDocument = {
       data: {
         type: 'card',
@@ -716,7 +724,7 @@ module('Integration | Store', function (hooks) {
       typeof CardDefType
     >(doc.data, doc, undefined);
     try {
-      await store.add(conflictingInstance, { doNotPersist: true });
+      await storeService.add(conflictingInstance, { doNotPersist: true });
       throw new Error('expected exception to be thrown');
     } catch (err: any) {
       assert.ok(
@@ -729,7 +737,7 @@ module('Integration | Store', function (hooks) {
   test<TestContextWithSave>('added instance that was previously not saved will begin to auto save after being added', async function (assert) {
     assert.expect(2);
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance);
+    await storeService.add(instance);
 
     this.onSave((url, doc) => {
       assert.strictEqual(url.href, instance.id, 'the instance URL is correct');
@@ -744,7 +752,7 @@ module('Integration | Store', function (hooks) {
 
   test<TestContextWithSave>('an instance will auto save when its data changes', async function (assert) {
     assert.expect(2);
-    let instance = await store.get(`${testRealmURL}Person/hassan`);
+    let instance = await storeService.get(`${testRealmURL}Person/hassan`);
 
     this.onSave((url, doc) => {
       assert.strictEqual(url.href, instance.id, 'the instance URL is correct');
@@ -760,7 +768,7 @@ module('Integration | Store', function (hooks) {
   test<TestContextWithSave>('an unsaved instance will auto save when its data changes', async function (assert) {
     assert.expect(2);
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance, { doNotPersist: true });
+    await storeService.add(instance, { doNotPersist: true });
 
     this.onSave((url, doc) => {
       assert.strictEqual(
@@ -779,7 +787,7 @@ module('Integration | Store', function (hooks) {
   });
 
   test<TestContextWithSave>('an instance will NOT auto save when its data changes, if the user does not have write permissions', async function (assert) {
-    (store as any).realm.permissions = () => ({
+    (storeService as any).realm.permissions = () => ({
       get canRead() {
         return true;
       },
@@ -787,14 +795,14 @@ module('Integration | Store', function (hooks) {
         return false;
       },
     });
-    let instance = await store.get(`${testRealmURL}Person/hassan`);
+    let instance = await storeService.get(`${testRealmURL}Person/hassan`);
     this.onSave(() => {
       assert.ok(false, 'should not save');
     });
     (instance as any).name = 'Paper';
     assert.strictEqual((instance as any).name, 'Paper');
     let id = instance.id;
-    assert.deepEqual(store.getSaveState(id!), {
+    assert.deepEqual(storeService.getSaveState(id!), {
       hasUnsavedChanges: true,
       isSaving: false,
       lastSaveError: undefined,
@@ -859,10 +867,10 @@ module('Integration | Store', function (hooks) {
 
   test<TestContextWithSave>('getSaveState works for initially unsaved instance', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance, { doNotPersist: true });
+    await storeService.add(instance, { doNotPersist: true });
 
     assert.strictEqual(
-      store.getSaveState(instance[localId]),
+      storeService.getSaveState(instance[localId]),
       undefined,
       'save state is undefined',
     );
@@ -870,33 +878,37 @@ module('Integration | Store', function (hooks) {
     (instance as any).name = 'Air';
 
     assert.true(
-      store.getSaveState(instance[localId])?.isSaving,
+      storeService.getSaveState(instance[localId])?.isSaving,
       'isSaving state is correct',
     );
 
-    await waitUntil(() => store.getSaveState(instance[localId])?.lastSaved);
+    await waitUntil(
+      () => storeService.getSaveState(instance[localId])?.lastSaved,
+    );
 
     assert.false(
-      store.getSaveState(instance[localId])?.isSaving,
+      storeService.getSaveState(instance[localId])?.isSaving,
       'isSaving state is correct',
     );
     assert.false(
-      store.getSaveState(instance.id)?.isSaving,
+      storeService.getSaveState(instance.id)?.isSaving,
       'isSaving state is correct (by remote id)',
     );
     assert.ok(
-      store.getSaveState(instance.id)?.lastSaved,
+      storeService.getSaveState(instance.id)?.lastSaved,
       'lastSaved state is correct (by remote id)',
     );
   });
 
   test('can capture error when auto saving', async function (assert) {
-    let instance = await store.get(`${testRealmURL}Person/hassan`);
+    let instance = await storeService.get(`${testRealmURL}Person/hassan`);
     (instance as any).hasError = true;
     await waitUntil(
-      () => store.getSaveState(`${testRealmURL}Person/hassan`)?.lastSaveError,
+      () =>
+        storeService.getSaveState(`${testRealmURL}Person/hassan`)
+          ?.lastSaveError,
     );
-    let saveState = store.getSaveState(`${testRealmURL}Person/hassan`);
+    let saveState = storeService.getSaveState(`${testRealmURL}Person/hassan`);
     assert.ok(
       saveState!.lastSavedErrorMsg?.includes('intentional error thrown'),
       'error message is correct',
@@ -904,18 +916,20 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can delete card from the store', async function (assert) {
-    store.addReference(`${testRealmURL}Person/boris`);
-    await store.flush();
-    let instance = store.peek(`${testRealmURL}Person/boris`) as CardDefType;
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+    let instance = storeService.peek(
+      `${testRealmURL}Person/boris`,
+    ) as CardDefType;
 
-    await store.delete(`${testRealmURL}Person/boris`);
+    await storeService.delete(`${testRealmURL}Person/boris`);
     assert.strictEqual(
-      store.peek(instance.id),
+      storeService.peek(instance.id),
       undefined,
       'the instance is no longer in the store',
     );
     assert.strictEqual(
-      store.peek(instance[localId]),
+      storeService.peek(instance[localId]),
       undefined,
       'the instance is no longer in the store (via local id)',
     );
@@ -925,7 +939,7 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can patch an instance', async function (assert) {
-    let instance = await store.patch(`${testRealmURL}Person/hassan`, {
+    let instance = await storeService.patch(`${testRealmURL}Person/hassan`, {
       attributes: {
         name: 'Hassan Updated',
       },
@@ -939,9 +953,9 @@ module('Integration | Store', function (hooks) {
       },
     });
 
-    let peekedInstance = store.peek(`${testRealmURL}Person/hassan`);
-    let jade = store.peek(`${testRealmURL}Person/jade`);
-    let germaine = store.peek(`${testRealmURL}Person/germaine`);
+    let peekedInstance = storeService.peek(`${testRealmURL}Person/hassan`);
+    let jade = storeService.peek(`${testRealmURL}Person/jade`);
+    let germaine = storeService.peek(`${testRealmURL}Person/germaine`);
     assert.strictEqual(
       peekedInstance,
       instance,
@@ -969,9 +983,12 @@ module('Integration | Store', function (hooks) {
 
   test('can patch an unsaved instance', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance, { doNotPersist: true, realm: testRealmURL });
+    await storeService.add(instance, {
+      doNotPersist: true,
+      realm: testRealmURL,
+    });
 
-    await store.patch(instance[localId], {
+    await storeService.patch(instance[localId], {
       attributes: {
         name: 'Andrea Updated',
       },
@@ -985,9 +1002,9 @@ module('Integration | Store', function (hooks) {
       },
     });
 
-    let peekedInstance = store.peek(instance[localId]);
-    let queenzy = store.peek(`${testRealmURL}Person/queenzy`);
-    let germaine = store.peek(`${testRealmURL}Person/germaine`);
+    let peekedInstance = storeService.peek(instance[localId]);
+    let queenzy = storeService.peek(`${testRealmURL}Person/queenzy`);
+    let germaine = storeService.peek(`${testRealmURL}Person/germaine`);
     assert.strictEqual(
       peekedInstance,
       instance,
@@ -1028,7 +1045,7 @@ module('Integration | Store', function (hooks) {
       assert.ok(false, 'should not save');
     });
 
-    let instance = await store.patch(
+    let instance = await storeService.patch(
       `${testRealmURL}Person/hassan`,
       {
         attributes: {
@@ -1046,9 +1063,9 @@ module('Integration | Store', function (hooks) {
       { doNotPersist: true },
     );
 
-    let peekedInstance = store.peek(`${testRealmURL}Person/hassan`);
-    let jade = store.peek(`${testRealmURL}Person/jade`);
-    let germaine = store.peek(`${testRealmURL}Person/germaine`);
+    let peekedInstance = storeService.peek(`${testRealmURL}Person/hassan`);
+    let jade = storeService.peek(`${testRealmURL}Person/jade`);
+    let germaine = storeService.peek(`${testRealmURL}Person/germaine`);
     assert.strictEqual(
       peekedInstance,
       instance,
@@ -1075,7 +1092,7 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can search', async function (assert) {
-    let results = await store.search(
+    let results = await storeService.search(
       {
         filter: {
           on: {
@@ -1131,7 +1148,7 @@ module('Integration | Store', function (hooks) {
     );
     await waitUntil(
       () =>
-        (store.peek(`${testRealmURL}Person/hassan`) as any)?.name ===
+        (storeService.peek(`${testRealmURL}Person/hassan`) as any)?.name ===
         'Hassan updated',
     );
     assert
@@ -1149,7 +1166,7 @@ module('Integration | Store', function (hooks) {
         </template>
       },
     );
-    let instance = (await store.get(
+    let instance = (await storeService.get(
       `${testRealmURL}Person/hassan`,
     )) as CardDefType;
     await testRealm.write(
@@ -1172,7 +1189,9 @@ module('Integration | Store', function (hooks) {
     assert
       .dom('[test-update]')
       .containsText('Hello', 'the instance rendered with the new code');
-    let newInstance = store.peek(`${testRealmURL}Person/hassan`) as CardDefType;
+    let newInstance = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
     assert.notStrictEqual(
       instance[localId],
       newInstance[localId],
@@ -1210,11 +1229,13 @@ module('Integration | Store', function (hooks) {
     );
 
     await waitFor('[data-test-card-error]');
-    assert.dom('[data-test-error-message]').hasText('intentional error thrown');
+    assert
+      .dom('[data-test-error-message]')
+      .containsText('intentional error thrown');
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')
-      .includesText('Stack trace: No stack trace is available.');
+      .includesText('Stack trace: Error: Encountered error rendering HTML');
 
     await testRealm.write(
       'Person/hassan.json',
@@ -1283,7 +1304,7 @@ module('Integration | Store', function (hooks) {
 
   test('an instance that started out with a local ID can be restored after a loader reset', async function (assert) {
     let newInstance = new PersonDef({ name: 'Andrea' });
-    await store.add(newInstance, { realm: testRealmURL });
+    await storeService.add(newInstance, { realm: testRealmURL });
     setCardInOperatorModeState(newInstance[localId]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1321,11 +1342,13 @@ module('Integration | Store', function (hooks) {
 
   test('an unsaved instance live updates when realm event matching local ID is received', async function (assert) {
     let newInstance = new PersonDef({ name: 'Andrea' });
-    await store.add(newInstance, { doNotPersist: true });
+    await storeService.add(newInstance, { doNotPersist: true });
 
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
-    let instance = store.peek(`${testRealmURL}Person/hassan`) as CardDefType;
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+    let instance = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
 
     (instance as any).friends = [newInstance];
 
@@ -1343,11 +1366,13 @@ module('Integration | Store', function (hooks) {
   test<TestContextWithSave>('an unsaved instance will auto save after it has been assigned a remote ID', async function (assert) {
     assert.expect(2);
     let newInstance = new PersonDef({ name: 'Andrea' });
-    await store.add(newInstance, { doNotPersist: true });
+    await storeService.add(newInstance, { doNotPersist: true });
 
-    store.addReference(`${testRealmURL}Person/hassan`);
-    await store.flush();
-    let instance = store.peek(`${testRealmURL}Person/hassan`) as CardDefType;
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+    let instance = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
 
     (instance as any).friends = [newInstance];
 
@@ -1404,12 +1429,12 @@ module('Integration | Store', function (hooks) {
     driver.id = hassan;
     await waitFor(`[data-test-rendered-card="${hassan}"]`);
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       0,
       `reference count for ${jade} is 0`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       1,
       `reference count for ${hassan} is 1`,
     );
@@ -1417,12 +1442,12 @@ module('Integration | Store', function (hooks) {
     driver.id = jade;
     await waitFor(`[data-test-rendered-card="${jade}"]`);
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       0,
       `reference count for ${hassan} is 0`,
     );
@@ -1430,12 +1455,12 @@ module('Integration | Store', function (hooks) {
     driver.showComponent = false;
     await waitFor(`[data-test-rendered-card]`, { count: 0 });
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       0,
       `reference count for ${jade} is 0`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       0,
       `reference count for ${hassan} is 0`,
     );
@@ -1455,7 +1480,7 @@ module('Integration | Store', function (hooks) {
     );
 
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       1,
       `reference count for ${hassan} is 1`,
     );
@@ -1467,13 +1492,13 @@ module('Integration | Store', function (hooks) {
         ' Paper',
       );
       assert.strictEqual(
-        store.getReferenceCount(hassan),
+        storeService.getReferenceCount(hassan),
         1,
         `reference count for ${hassan} is 1`,
       );
     });
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       1,
       `reference count for ${hassan} is 1`,
     );
@@ -1520,12 +1545,12 @@ module('Integration | Store', function (hooks) {
     driver.id = hassan;
     await waitFor(`[data-test-rendered-card="${hassan}"]`);
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       0,
       `reference count for ${jade} is 0`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       1,
       `reference count for ${hassan} is 1`,
     );
@@ -1533,12 +1558,12 @@ module('Integration | Store', function (hooks) {
     driver.id = jade;
     await waitFor(`[data-test-rendered-card="${jade}"]`);
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       0,
       `reference count for ${hassan} is 0`,
     );
@@ -1546,12 +1571,12 @@ module('Integration | Store', function (hooks) {
     driver.showComponent = false;
     await waitFor(`[data-test-rendered-card]`, { count: 0 });
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       0,
       `reference count for ${jade} is 0`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       0,
       `reference count for ${hassan} is 0`,
     );
@@ -1609,12 +1634,12 @@ module('Integration | Store', function (hooks) {
     driver.id = hassan;
     await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       0,
       `reference count for ${jade} is 0`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       1,
       `reference count for ${hassan} is 1`,
     );
@@ -1622,12 +1647,12 @@ module('Integration | Store', function (hooks) {
     driver.id = jade;
     await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       0,
       `reference count for ${hassan} is 0`,
     );
@@ -1635,12 +1660,12 @@ module('Integration | Store', function (hooks) {
     driver.showComponent = false;
     await waitFor(`[data-test-rendered-card]`, { count: 0 });
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       0,
       `reference count for ${jade} is 0`,
     );
     assert.strictEqual(
-      store.getReferenceCount(hassan),
+      storeService.getReferenceCount(hassan),
       0,
       `reference count for ${hassan} is 0`,
     );
@@ -1697,7 +1722,7 @@ module('Integration | Store', function (hooks) {
     driver.id = jade;
     await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );
@@ -1750,7 +1775,7 @@ module('Integration | Store', function (hooks) {
     );
 
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );
@@ -1792,7 +1817,7 @@ module('Integration | Store', function (hooks) {
     driver.id = jade;
     await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );
@@ -1845,7 +1870,7 @@ module('Integration | Store', function (hooks) {
     );
 
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );
@@ -1884,7 +1909,7 @@ module('Integration | Store', function (hooks) {
     driver.id = jade;
     await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );
@@ -1937,7 +1962,7 @@ module('Integration | Store', function (hooks) {
     );
 
     assert.strictEqual(
-      store.getReferenceCount(jade),
+      storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
     );

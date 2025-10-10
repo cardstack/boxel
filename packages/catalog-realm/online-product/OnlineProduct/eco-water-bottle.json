@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "Stainless Steel Eco Water Bottle",
+      "price": 34.99,
+      "salePrice": 24.99,
+      "sku": "EWB-750",
+      "category": "Home & Kitchen",
+      "shortDescription": "Premium 750ml stainless steel water bottle with double-wall insulation. Keeps drinks cold for 24 hours and hot for 12 hours. BPA-free and eco-friendly design.",
+      "inventory": 42,
+      "inStock": true,
+      "imageUrl": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=800&q=80",
+      "title": "Stainless Steel Eco Water Bottle",
+      "cardInfo": {
+        "title": "Stainless Steel Eco Water Bottle",
+        "description": "Premium 750ml stainless steel water bottle with double-wall insulation. Category: Home & Kitchen. SKU: EWB-750",
+        "thumbnailURL": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=400&q=80",
+        "notes": null
+      },
+      "description": "Premium 750ml stainless steel water bottle with double-wall insulation. Category: Home & Kitchen. SKU: EWB-750",
+      "thumbnailURL": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=400&q=80"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-product",
+        "name": "OnlineProduct"
+      },
+      "realmURL": "http://localhost:4201/catalog/"
+    }
+  }
+}

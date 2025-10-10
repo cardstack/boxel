@@ -9,6 +9,7 @@ const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
 const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 const withSideWatch = require('./lib/with-side-watch');
 const Funnel = require('broccoli-funnel');
+const { BoxelUIChecksumPlugin } = require('./lib/build/package-dist-checksums');
 
 module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
@@ -84,6 +85,8 @@ module.exports = function (defaults) {
               // 'en' is built into moment and cannot be removed. This strips the others.
               localesToKeep: [],
             }),
+            // boxel-ui packages dist checksum needed for the realm server to figure out if boxel-ui changed, and trigger a reindex of cards that use it (to update cards' prerendered HTML)
+            new BoxelUIChecksumPlugin(__dirname),
           ],
           externals: {
             'content-tag': 'ContentTagGlobal',
@@ -97,7 +100,10 @@ module.exports = function (defaults) {
               stream: require.resolve('stream-browserify'),
             },
             alias: {
-              'matrix-js-sdk$': 'matrix-js-sdk/src/browser-index.ts', // Consume matrix-js-sdk via Typescript ESM so that code splitting works to exlcude massive matrix-sdk-crypto-wasm from the main bundle
+              // Exclude the rust-crypto module from the bundle
+              // because it wont work in fastboot and we don't use it
+              'matrix-js-sdk$': 'matrix-js-sdk/src/browser-index.ts',
+              './rust-crypto/index.ts': false,
             },
           },
           node: {

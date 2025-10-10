@@ -1,20 +1,21 @@
-import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
+import { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
-import { MatrixClient, sendErrorEvent, sendMessageEvent } from './util';
 import { thinkingMessage } from '../../constants';
 import ResponseState from '../response-state';
 import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
+import { sendErrorEvent, sendMessageEvent } from '@cardstack/runtime-common/ai';
 import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 import ResponseEventData from './response-event-data';
 import { logger } from '@cardstack/runtime-common';
+import { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
 function toCommandRequest(
-  toolCall: ChatCompletionMessageToolCall,
+  toolCall: ChatCompletionMessageFunctionToolCall,
 ): Partial<CommandRequest> {
   let { id, function: f } = toolCall;
   let result = {} as Partial<CommandRequest>;
@@ -116,7 +117,7 @@ export default class MatrixResponsePublisher {
           this.currentResponseEventId,
           extraData,
           responseStateSnapshot.toolCalls.map((toolCall) =>
-            toCommandRequest(toolCall as ChatCompletionMessageToolCall),
+            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
           ),
           reasoningAndContent.reasoning,
         );
@@ -156,9 +157,11 @@ export default class MatrixResponsePublisher {
         contentAndReasoning.content,
         this.currentResponseEventId,
         extraData,
-        responseStateSnapshot.toolCalls.map((toolCall) =>
-          toCommandRequest(toolCall as ChatCompletionMessageToolCall),
-        ),
+        responseStateSnapshot.toolCalls
+          .filter(Boolean) // Elide empty tool calls, which can be produced by gpt-5 at the time of this writing
+          .map((toolCall) =>
+            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
+          ),
         contentAndReasoning.reasoning,
       );
       if (!this.currentResponseEvent.eventId) {

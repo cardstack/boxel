@@ -35,6 +35,7 @@ import {
   setupAcceptanceTestRealm,
   setupOnSave,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
   setMonacoContent,
@@ -396,7 +397,6 @@ const localInheritSource = `
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
-  let matrixRoomId: string;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -416,11 +416,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       [testRealmURL2]: ['read', 'write'],
     });
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -444,6 +445,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'imports.gts': importsSource,
         're-export.gts': reExportSource,
         'local-inherit.gts': localInheritSource,
+        'empty-file.gts': '',
         'person-entry.json': {
           data: {
             type: 'card',
@@ -744,7 +746,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         `[data-test-card-schema="exported card"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
-    assert.dom(`[data-test-total-fields]`).containsText('4');
+    assert.dom(`[data-test-total-fields]`).containsText('5');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     // clicking on a field
@@ -780,9 +782,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert
-      .dom('[data-test-file-incompatibility-message]')
+      .dom('[data-test-schema-editor-file-incompatibility-message]')
       .hasText(
-        'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
+        `No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.`,
       );
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
   });
@@ -1444,11 +1446,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .includesText('Re-exported Base Definition');
     assert.dom('[data-test-card-module-definition]').includesText('Base');
     assert.true(monacoService.getLineCursorOn()?.includes('BDef'));
-    assert
-      .dom('[data-test-file-incompatibility-message]')
-      .hasText(
-        'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.',
-      );
+    assert.dom('[data-test-file-incompatibility-message]').doesNotExist();
 
     //clicking on re-export (which doesn't enter module scope)
     elementName = 'Person';
@@ -1464,11 +1462,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .includesText('Re-exported Card Definition');
     assert.dom('[data-test-card-module-definition]').includesText('Card');
     assert.true(monacoService.getLineCursorOn()?.includes('Human'));
-    assert
-      .dom('[data-test-file-incompatibility-message]')
-      .hasText(
-        'No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.',
-      );
+    assert.dom('[data-test-file-incompatibility-message]').doesNotExist();
   });
 
   test('"in-this-file" panel displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
@@ -1526,7 +1520,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .exists({ count: 1 });
     assert.dom(`[data-test-card-schema="local parent"]`).exists();
     assert.dom(`[data-test-card-schema="local grandparent"]`).exists();
-    assert.dom(`[data-test-total-fields]`).containsText('3');
+    assert.dom(`[data-test-total-fields]`).containsText('4');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
     assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
 
@@ -1622,7 +1616,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert
-      .dom('[data-test-file-incompatibility-message]')
+      .dom('[data-test-schema-editor-file-incompatibility-message]')
       .hasText(
         'No tools are available for the selected item: function "exportedFunction". Select a card or field definition in the inspector.',
       );
@@ -1659,7 +1653,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert
-      .dom('[data-test-file-incompatibility-message]')
+      .dom('[data-test-schema-editor-file-incompatibility-message]')
       .hasText(
         `No tools are available for the selected item: function "${renamedElementName}". Select a card or field definition in the inspector.`,
       );
@@ -1723,7 +1717,7 @@ export class TestCard extends ExportedCard {
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
-    assert.dom('[data-test-total-fields]').containsText('4');
+    assert.dom('[data-test-total-fields]').containsText('5');
 
     // assert modal state is cleared
     await settled();
@@ -1881,7 +1875,7 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
-    assert.dom('[data-test-total-fields]').containsText('4');
+    assert.dom('[data-test-total-fields]').containsText('5');
   });
 
   test('field error message displays if you try to inherit using a filename that already exists', async function (assert) {
@@ -2106,6 +2100,22 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a Find instances button');
   });
 
+  test('inspector shows empty file panel with delete button when file is empty', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}empty-file.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name="empty-file.gts"]');
+
+    assert.dom('[data-test-current-module-name="empty-file.gts"]').exists();
+    assert.dom('[data-test-in-this-file-selector]').doesNotExist();
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+    assert.dom('[data-test-delete-module-button]').exists();
+  });
+
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
       setRealmPermissions({ [testRealmURL]: ['read'] });
@@ -2135,6 +2145,16 @@ export class ExportedCard extends ExportedCardParent {
         codePath: `${testRealmURL}readme.md`,
       });
       assert.dom('[data-test-action-button="Delete"]').doesNotExist();
+    });
+
+    test('delete button is not displayed for empty file when user does not have permission to write to realm', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}empty-file.gts`,
+      });
+      await waitFor('[data-test-current-module-name="empty-file.gts"]');
+      assert.dom('[data-test-delete-module-button]').doesNotExist();
     });
   });
 });

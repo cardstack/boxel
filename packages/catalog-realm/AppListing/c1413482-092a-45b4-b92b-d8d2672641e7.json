@@ -1,0 +1,86 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Song",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/song-listing/screenshot_01.png"
+      ],
+      "summary": "Manage and display music tracks with comprehensive metadata including artist, duration, genre, and audio streaming capabilities",
+      "cardInfo": {
+        "notes": null,
+        "title": "Song",
+        "description": "Manage and display music tracks with comprehensive metadata including artist, duration, genre, and audio streaming capabilities",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/song-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/25c14134-8209-4af5-b4f9-2bd8d2672641"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/9925c141-3482-492a-b5b4-f92bd8d26726"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../song/SongCard/monkeys-spinning-monkeys"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../song/SongCard/funky-suspense"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../song/SongCard/carefree"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/creative-projects"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

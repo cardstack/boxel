@@ -1,0 +1,142 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": "Perfect for applications that want to evoke wonder, magic, and a deep connection to nature. The color palette balances earthiness with ethereal gold accents, while typography flows like ancient forest spells.",
+        "title": "Forest Fairy",
+        "description": "An enchanting design system inspired by the magical beauty of woodland fairy realms, featuring organic curves, nature-inspired colors, and ethereal typography.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&h=300&fit=crop&crop=center"
+      },
+      "styleName": "Forest Fairy",
+      "visualDNA": "A magical design language that captures the ethereal beauty of an enchanted woodland realm. Soft, organic curves mirror the gentle bend of fern fronds and flower petals. Deep forest greens dance with luminous golds that catch like sunlight filtering through ancient canopy leaves. Delicate textures evoke morning dew on spider webs and the velvety softness of moss-covered logs. Typography flows like handwritten spells in an ancient grimoire, while gentle animations suggest the flutter of fairy wings and the sway of wildflowers in a hidden glade.",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Crimson+Text:wght@400;600&display=swap"
+      ],
+      "inspirations": [
+        "Miyazaki Studio Ghibli films",
+        "Enchanted forest photography",
+        "Celtic mythology",
+        "Botanical illustrations",
+        "Whimsical cottage core",
+        "Moonlit woodland scenes",
+        "Fairy tale book covers",
+        "Moss-covered stone paths"
+      ],
+      "rootVariables": {
+        "card": "#ffffff",
+        "ring": "#4a7c59",
+        "input": "#ffffff",
+        "muted": "#f0f9f0",
+        "accent": "#d4af37",
+        "border": "#d9e8d9",
+        "chart1": "#4a7c59",
+        "chart2": "#d4af37",
+        "chart3": "#8fbc8f",
+        "chart4": "#98d982",
+        "chart5": "#f0e68c",
+        "radius": "8px",
+        "shadow": "0 4px 8px rgba(26, 61, 26, 0.12)",
+        "popover": "#f0f9f0",
+        "primary": "#4a7c59",
+        "sidebar": "#f0f9f0",
+        "spacing": "4px",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "fontSans": "'Inter', 'Segoe UI', system-ui, sans-serif",
+        "shadowLg": "0 10px 24px rgba(26, 61, 26, 0.18)",
+        "shadowMd": "0 6px 16px rgba(26, 61, 26, 0.15)",
+        "shadowSm": "0 2px 4px rgba(26, 61, 26, 0.1)",
+        "shadowXl": "0 16px 32px rgba(26, 61, 26, 0.2)",
+        "shadowXs": "0 1px 3px rgba(26, 61, 26, 0.1)",
+        "fontSerif": "'Crimson Text', 'Times New Roman', serif",
+        "secondary": "#e8f5e8",
+        "shadow2xl": "0 24px 48px rgba(26, 61, 26, 0.25)",
+        "shadow2xs": "0 1px 2px rgba(26, 61, 26, 0.05)",
+        "background": "#f8fdf8",
+        "foreground": "#1a3d1a",
+        "destructive": "#dc2626",
+        "sidebarRing": "#4a7c59",
+        "sidebarAccent": "#d4af37",
+        "sidebarBorder": "#d9e8d9",
+        "cardForeground": "#2d5a2d",
+        "sidebarPrimary": "#4a7c59",
+        "trackingNormal": "0.01em",
+        "mutedForeground": "#6b8e6b",
+        "accentForeground": "#1a3d1a",
+        "popoverForeground": "#1a3d1a",
+        "primaryForeground": "#ffffff",
+        "sidebarForeground": "#1a3d1a",
+        "secondaryForeground": "#2d5a2d",
+        "destructiveForeground": "#ffffff",
+        "sidebarAccentForeground": "#1a3d1a",
+        "sidebarPrimaryForeground": "#ffffff"
+      },
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=600&fit=crop&crop=center",
+        "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&h=600&fit=crop&crop=center",
+        "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&crop=center"
+      ],
+      "darkModeVariables": {
+        "card": "#1a2a1a",
+        "ring": "#7ba987",
+        "input": "#2a3a2a",
+        "muted": "#2a3a2a",
+        "accent": "#e6d55a",
+        "border": "#3a4a3a",
+        "chart1": "#7ba987",
+        "chart2": "#e6d55a",
+        "chart3": "#a8c8a8",
+        "chart4": "#b8e6a2",
+        "chart5": "#f5f2aa",
+        "radius": "8px",
+        "shadow": "0 4px 8px rgba(0, 0, 0, 0.25)",
+        "popover": "#1a2a1a",
+        "primary": "#7ba987",
+        "sidebar": "#1a2a1a",
+        "spacing": "4px",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "fontSans": "'Inter', 'Segoe UI', system-ui, sans-serif",
+        "shadowLg": "0 10px 24px rgba(0, 0, 0, 0.35)",
+        "shadowMd": "0 6px 16px rgba(0, 0, 0, 0.3)",
+        "shadowSm": "0 2px 4px rgba(0, 0, 0, 0.2)",
+        "shadowXl": "0 16px 32px rgba(0, 0, 0, 0.4)",
+        "shadowXs": "0 1px 3px rgba(0, 0, 0, 0.2)",
+        "fontSerif": "'Crimson Text', 'Times New Roman', serif",
+        "secondary": "#2a3a2a",
+        "shadow2xl": "0 24px 48px rgba(0, 0, 0, 0.5)",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.15)",
+        "background": "#0a1a0a",
+        "foreground": "#d4e6d4",
+        "destructive": "#ef4444",
+        "sidebarRing": "#7ba987",
+        "sidebarAccent": "#e6d55a",
+        "sidebarBorder": "#3a4a3a",
+        "cardForeground": "#c9dcc9",
+        "sidebarPrimary": "#7ba987",
+        "trackingNormal": "0.01em",
+        "mutedForeground": "#8ba88b",
+        "accentForeground": "#0a1a0a",
+        "popoverForeground": "#d4e6d4",
+        "primaryForeground": "#0a1a0a",
+        "sidebarForeground": "#d4e6d4",
+        "secondaryForeground": "#b8d0b8",
+        "destructiveForeground": "#ffffff",
+        "sidebarAccentForeground": "#0a1a0a",
+        "sidebarPrimaryForeground": "#0a1a0a"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

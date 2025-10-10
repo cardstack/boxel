@@ -20,6 +20,7 @@ import {
   isLocalId,
   SupportedMimeType,
   internalKeyFor,
+  realmURL as realmURLSymbol,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -41,7 +42,7 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
 
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
@@ -49,16 +50,14 @@ import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
 
-import {
-  ModuleInspectorSelections,
-  PlaygroundSelections,
-} from '../utils/local-storage-keys';
+import { ModuleInspectorSelections } from '../utils/local-storage-keys';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
+import type ErrorDisplayService from './error-display';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type SpecPanelService from './spec-panel-service';
@@ -125,7 +124,7 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     trail: [],
     openDirs: new TrackedMap<string, string[]>(),
-    aiAssistantOpen: false,
+    aiAssistantOpen: true,
     newFileDropdownOpen: false,
     cardPreviewFormat: 'isolated' as Format,
     workspaceChooserOpened: false,
@@ -140,6 +139,7 @@ export default class OperatorModeStateService extends Service {
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
+  @service declare private errorDisplay: ErrorDisplayService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private monacoService: MonacoService;
@@ -310,7 +310,17 @@ export default class OperatorModeStateService extends Service {
     }
 
     if (this._state.stacks.length === 0) {
-      this._state.workspaceChooserOpened = true;
+      const realmURL = this.getRealmURLFromItemId(item.id);
+      const isIndexCard = this.isIndexCard(realmURL, item);
+      if (isIndexCard) {
+        // Only open workspace chooser if the trimmed item was an index card
+        this._state.workspaceChooserOpened = true;
+      } else {
+        // If the trimmed item was not an index card, add an index card to the stack
+        const indexCardId = `${realmURL}index`;
+        const indexCardItem = this.createStackItem(indexCardId, 0);
+        this.addItemToStack(indexCardItem);
+      }
     }
 
     this.schedulePersist();
@@ -378,10 +388,47 @@ export default class OperatorModeStateService extends Service {
 
   get currentTrailItem() {
     if (this._state.trail.length === 0) {
-      return new URL('./index.json', this.realmURL).href;
+      // Try to get realm from last stack item, fallback to default readable realm
+      let realmPath =
+        this.getRealmFromLastStackItem() ||
+        this.realm.defaultReadableRealm.path;
+      return new URL('./index.json', realmPath).href;
     }
 
     return this._state.trail[this._state.trail.length - 1];
+  }
+
+  private getRealmFromLastStackItem(): string | null {
+    // Get the last stack item from the rightmost stack
+    let rightMostStack = this.rightMostStack();
+    if (rightMostStack && rightMostStack.length > 0) {
+      let lastStackItem = rightMostStack[rightMostStack.length - 1];
+      if (lastStackItem?.id) {
+        try {
+          let realm = this.realm.url(lastStackItem.id);
+          if (realm) {
+            return realm;
+          }
+        } catch (error) {
+          // If we can't determine the realm from the stack item, continue to fallback
+        }
+      }
+    }
+    return null;
+  }
+
+  private getRealmURLFromItemId(itemId: string): string {
+    try {
+      const url = new URL(itemId);
+      return this.realm.realmOfURL(url)?.href ?? this.realmURL.href;
+    } catch (error) {
+      return this.realmURL.href;
+    }
+  }
+
+  private isIndexCard(realmURL: string, item: StackItem): boolean {
+    const itemUrl = item.id;
+    return itemUrl === `${realmURL}index`;
   }
 
   get isViewingCardInCodeMode() {
@@ -389,6 +436,29 @@ export default class OperatorModeStateService extends Service {
       this._state.submode === Submodes.Code &&
       this.codePathString?.endsWith('.json')
     );
+  }
+
+  /**
+   * Determines if we're currently viewing a card in the playground panel
+   */
+  get isViewingCardInPlaygroundPanel(): boolean {
+    return (
+      this._state.submode === Submodes.Code &&
+      this.moduleInspectorPanel === 'preview' &&
+      !!this.playgroundPanelSelection?.cardId
+    );
+  }
+
+  /**
+   * Gets the current format being viewed for focus pill display
+   */
+  get currentViewingFormat(): Format | undefined {
+    if (this.isViewingCardInCodeMode) {
+      return this._state.cardPreviewFormat ?? 'isolated';
+    } else if (this.isViewingCardInPlaygroundPanel) {
+      return this.playgroundPanelSelection?.format ?? 'isolated';
+    }
+    return undefined;
   }
 
   getOpenCardIds(): string[] {
@@ -460,6 +530,8 @@ export default class OperatorModeStateService extends Service {
         this.matrixService.setLLMForCodeMode(),
         this.matrixService.activateCodingSkill(),
       ]);
+    } else if (submode === Submodes.Interact) {
+      await this.matrixService.setLLMForInteractMode();
     }
   }
 
@@ -892,6 +964,20 @@ export default class OperatorModeStateService extends Service {
       }
     }
 
+    // For host mode, determine realm from trail using availableRealmIndexCardIds
+    if (submode === Submodes.Host) {
+      // Check if current trail item is an available realm index card
+      let currentTrailItem = this.currentTrailItem;
+      // If trail item is not an index card, try to find the realm from the card's realm
+      if (currentTrailItem) {
+        let cardId = currentTrailItem.replace('.json', '');
+        let realm = this.realm.url(cardId);
+        if (realm) {
+          return new URL(realm);
+        }
+      }
+    }
+
     if (this.cachedRealmURL) {
       return this.cachedRealmURL;
     }
@@ -970,13 +1056,30 @@ export default class OperatorModeStateService extends Service {
 
   openCardInInteractMode(id: string, format: Format = 'isolated') {
     this.clearStacks();
+    // Determine realm URL. If id is a localId, look up the instance in the store to read its realm.
+    let realmHref: string | undefined;
+    if (isLocalId(id)) {
+      let instance = this.store.peek(id);
+      if (instance && isCardInstance(instance)) {
+        realmHref = (instance as any)[realmURLSymbol]?.href;
+      }
+    } else {
+      realmHref = this.realm.url(id) ?? undefined;
+    }
+    if (!realmHref) {
+      // Fallback to default readable realm so UI still opens; this should be unusual.
+      realmHref = this.realm.defaultReadableRealm.path;
+    }
+    if (!realmHref.endsWith('/')) {
+      realmHref = realmHref + '/';
+    }
     let indexItem = new StackItem({
-      id: `${this.realm.url(id)}index`,
+      id: `${realmHref}index`,
       stackIndex: 0,
       format: 'isolated',
     });
     let newItem = new StackItem({
-      id,
+      id, // keep provided id (may be localId) so later replacement on save works
       stackIndex: 0,
       format,
     });
@@ -996,6 +1099,10 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspace = async (realmUrl: string) => {
+    // Ensure realmUrl has a trailing slash
+    if (!realmUrl.endsWith('/')) {
+      realmUrl = realmUrl + '/';
+    }
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
       id,
@@ -1047,9 +1154,8 @@ export default class OperatorModeStateService extends Service {
 
   get playgroundPanelSelection(): PlaygroundSelection | undefined {
     if (this.moduleInspectorPanel === 'preview') {
-      let playgroundSelections = JSON.parse(
-        window.localStorage.getItem(PlaygroundSelections) ?? '{}',
-      );
+      let playgroundSelections =
+        this.playgroundPanelService.playgroundSelections ?? {};
       if (this.codePathString && playgroundSelections[this.codePathString]) {
         return playgroundSelections[this.codePathString];
       }
@@ -1078,13 +1184,18 @@ export default class OperatorModeStateService extends Service {
         name: this.realm.info(url).name,
         type: 'catalog-workspace' as const,
       }));
-      return {
+      let result: BoxelContext = {
         agentId: this.matrixService.agentId,
         submode: 'workspace-chooser',
         debug: this.operatorModeController.debug,
         openCardIds: [],
         workspaces: [...userWorkspaces, ...catalogWorkspaces],
       };
+      let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
+      if (errorsDisplayed.length) {
+        result.errorsDisplayed = errorsDisplayed;
+      }
+      return result;
     }
     if (this._state.submode === Submodes.Code) {
       codeMode = {
@@ -1106,14 +1217,14 @@ export default class OperatorModeStateService extends Service {
         codeMode.moduleInspectorPanel = 'preview';
         codeMode.previewPanelSelection = {
           cardId: this.codePathString!.replace(/\.json$/, ''),
-          format: this._state.cardPreviewFormat ?? 'isolated',
+          format: this.currentViewingFormat ?? 'isolated',
         };
       } else {
         codeMode.moduleInspectorPanel = this.moduleInspectorPanel;
         codeMode.previewPanelSelection = this.playgroundPanelSelection
           ? {
               cardId: this.playgroundPanelSelection.cardId,
-              format: this.playgroundPanelSelection.format,
+              format: this.currentViewingFormat!,
             }
           : undefined;
         codeMode.selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
@@ -1137,7 +1248,7 @@ export default class OperatorModeStateService extends Service {
       canWrite: this.realm.canWrite(realmUrl),
     };
 
-    return {
+    let result: BoxelContext = {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
@@ -1146,6 +1257,11 @@ export default class OperatorModeStateService extends Service {
       realmPermissions,
       codeMode,
     };
+    let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
+    if (errorsDisplayed.length) {
+      result.errorsDisplayed = errorsDisplayed;
+    }
+    return result;
   }
 
   private makeRemoteIdsList(ids: (string | undefined)[]) {

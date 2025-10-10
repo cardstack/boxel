@@ -1,29 +1,27 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
 import {
-  baseRealm,
   DBAdapter,
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
   type IndexedInstance,
+  RealmAdapter,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
   testRealm,
-  setupCardLogs,
   setupBaseRealmServer,
   setupDB,
-  runTestRealmServer,
   createVirtualNetwork,
-  createVirtualNetworkAndLoader,
   matrixURL,
-  closeServer,
+  setupPermissionedRealms,
   cleanWhiteSpace,
   testRealmServerMatrixUserId,
+  cardDefinition,
+  cardInfo,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
-import { Server } from 'http';
 import { basename } from 'path';
 
 function trimCardContainer(text: string) {
@@ -42,9 +40,6 @@ let testDbAdapter: DBAdapter;
 
 module(basename(__filename), function () {
   module('indexing', function (hooks) {
-    let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
-      createVirtualNetworkAndLoader();
-
     async function getInstance(
       realm: Realm,
       url: URL,
@@ -55,22 +50,19 @@ module(basename(__filename), function () {
       }
       return maybeInstance;
     }
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
 
     let dir: string;
     let realm: Realm;
+    let adapter: RealmAdapter;
 
-    setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
         testDbAdapter = dbAdapter;
         let virtualNetwork = createVirtualNetwork();
         dir = dirSync().name;
-        ({ realm } = await createRealm({
+        ({ realm, adapter } = await createRealm({
           withWorker: true,
           dir,
           virtualNetwork,
@@ -161,6 +153,7 @@ module(basename(__filename), function () {
             import { Person } from "./person";
 
             export class Post extends CardDef {
+              static displayName = 'Post';
               @field author = linksTo(Person);
               @field message = contains(StringField);
               static isolated = class Isolated extends Component<typeof this> {
@@ -620,7 +613,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.errorDetail.message,
-          'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed for http://localhost:9000/this-is-a-link-to-nowhere',
+          'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed',
         );
         assert.deepEqual(entry.error.errorDetail.deps, [
           `${testRealm}post`,
@@ -628,6 +621,631 @@ module(basename(__filename), function () {
         ]);
       } else {
         assert.ok('false', 'expected search entry to be an error document');
+      }
+    });
+
+    test('can make a definition entry in the index', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.getOwnDefinition({
+        module: `${testRealm}post.gts`,
+        name: 'Post',
+      });
+      if (entry?.type === 'definition') {
+        assert.ok(entry.lastModified, 'last modified date is set');
+        assert.ok(entry.resourceCreatedAt, 'created date is set');
+        assert.deepEqual(
+          entry.types,
+          [
+            `${testRealm}post/Post`,
+            'https://cardstack.com/base/card-api/CardDef',
+          ],
+          'types are correct',
+        );
+        assert.deepEqual(
+          entry.definition.codeRef,
+          {
+            name: 'Post',
+            module: `${testRealm}post`,
+          },
+          'code ref is correct',
+        );
+        assert.strictEqual(
+          entry.definition.displayName,
+          'Post',
+          'display name is correct',
+        );
+
+        assert.deepEqual(
+          entry.definition.fields,
+          {
+            ...cardDefinition,
+            message: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            author: {
+              type: 'linksTo',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'Person',
+                module: `${testRealm}person`,
+              },
+              isPrimitive: false,
+            },
+            'author.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.title': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.firstName': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.hourlyRate': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'default',
+                module: 'https://cardstack.com/base/number',
+              },
+              isPrimitive: true,
+              serializerName: 'number',
+            },
+            'author.description': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.thumbnailURL': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CardInfoField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.notes': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MarkdownField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme': {
+              type: 'linksTo',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'Theme',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.title': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.description': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.thumbnailURL': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CardInfoField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme.cardInfo.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.notes': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MarkdownField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cssVariables': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CSSField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme': {
+              type: 'linksTo',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'Theme',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme.cardInfo.theme.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.title': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CardInfoField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.notes': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MarkdownField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.description': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cssVariables': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CSSField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.thumbnailURL': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme': {
+              type: 'linksTo',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'Theme',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CardInfoField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'MaybeBase64Field',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.notes':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'MarkdownField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
+              type: 'contains',
+              isComputed: true,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'CSSField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
+              type: 'containsMany',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CssImportField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
+              {
+                type: 'contains',
+                isComputed: true,
+                fieldOrCard: {
+                  name: 'MaybeBase64Field',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
+              {
+                type: 'linksTo',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'Theme',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: false,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.id':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'ReadOnlyField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title':
+              {
+                type: 'contains',
+                isComputed: true,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'CardInfoField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: false,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'MaybeBase64Field',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description':
+              {
+                type: 'contains',
+                isComputed: true,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'CSSField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports':
+              {
+                type: 'containsMany',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'CssImportField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
+              {
+                type: 'contains',
+                isComputed: true,
+                fieldOrCard: {
+                  name: 'MaybeBase64Field',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
+              {
+                type: 'linksTo',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'Theme',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: false,
+              },
+          },
+          'definition is correct',
+        );
+
+        // this is a crazy long list that includes encoded CSS, so we'll just
+        // check a few deps
+        assert.ok(
+          entry!.deps!.includes(`${testRealm}post`),
+          'deps include ./post',
+        );
+        assert.ok(
+          entry!.deps!.includes(`${testRealm}person`),
+          'deps include ./person',
+        );
+        assert.ok(
+          entry!.deps!.includes(`https://cardstack.com/base/card-api`),
+          'deps include card api',
+        );
+      } else {
+        assert.ok('false', 'expected entry to be a card def');
       }
     });
 
@@ -664,7 +1282,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 16,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -692,9 +1312,21 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
+      );
+      let petDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}pet`,
+          name: 'Pet',
+        });
+      assert.strictEqual(
+        petDefinitionEntry,
+        undefined,
+        'Pet card def does not exist',
       );
       await realm.write(
         'person.gts',
@@ -711,7 +1343,9 @@ module(basename(__filename), function () {
           instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
-          totalIndexEntries: 6,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
+          totalIndexEntries: 11,
         },
         'indexed correct number of files',
       );
@@ -724,6 +1358,26 @@ module(basename(__filename), function () {
         result,
         [],
         'the broken type results in no instance results',
+      );
+      let personDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}person`,
+          name: 'Person',
+        });
+      assert.strictEqual(
+        personDefinitionEntry,
+        undefined,
+        'Person card def does not exist',
+      );
+      let fancyPersonDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}fancy-person`,
+          name: 'FancyPerson',
+        });
+      assert.strictEqual(
+        fancyPersonDefinitionEntry,
+        undefined,
+        'FancyPerson card def does not exist',
       );
       await realm.write(
         'person.gts',
@@ -744,7 +1398,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 12,
+          definitionErrors: 0,
+          definitionsIndexed: 3, // Person card, Post card, FancyPerson card
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
       );
@@ -759,6 +1415,26 @@ module(basename(__filename), function () {
         result.length,
         2,
         'correct number of instances returned',
+      );
+      personDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}person`,
+          name: 'Person',
+        });
+      assert.strictEqual(
+        personDefinitionEntry?.type,
+        'definition',
+        'Person card def has recovered',
+      );
+      fancyPersonDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}fancy-person`,
+          name: 'FancyPerson',
+        });
+      assert.strictEqual(
+        fancyPersonDefinitionEntry?.type,
+        'definition',
+        'FancyPerson card def has recovered',
       );
     });
 
@@ -782,9 +1458,21 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
+      );
+      let petDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}pet`,
+          name: 'Pet',
+        });
+      assert.strictEqual(
+        petDefinitionEntry,
+        undefined,
+        'Pet card def does not exist',
       );
       await realm.write(
         'name.gts',
@@ -808,6 +1496,15 @@ module(basename(__filename), function () {
         'module',
         'Name module is successfully indexed',
       );
+      petDefinitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
+        module: `${testRealm}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(
+        petDefinitionEntry?.type,
+        'definition',
+        'Pet card def has recovered',
+      );
 
       // Since the name is ready, the pet should be indexed and not in an error state
       assert.deepEqual(
@@ -817,7 +1514,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 16,
+          definitionErrors: 0,
+          definitionsIndexed: 3,
+          totalIndexEntries: 27,
         },
         'indexed correct number of files',
       );
@@ -826,7 +1525,6 @@ module(basename(__filename), function () {
       let pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
       );
-      // Currently, encountered error loading module "http://test-realm/pet.gts": http://test-realm/name not found
       assert.strictEqual(
         pet?.type,
         'module',
@@ -856,7 +1554,10 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+
+          definitionErrors: 0,
+          definitionsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'instance and module are in error state before dependency is available',
       );
@@ -934,7 +1635,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 15,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
+          totalIndexEntries: 25,
         },
         'index did not touch any files',
       );
@@ -975,7 +1678,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 16,
+          definitionErrors: 0,
+          definitionsIndexed: 1,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1017,7 +1722,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 16,
+          definitionErrors: 0,
+          definitionsIndexed: 3,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1068,7 +1775,9 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 14,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
+          totalIndexEntries: 23,
         },
         'indexed correct number of files',
       );
@@ -1109,7 +1818,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 16,
+          definitionErrors: 0,
+          definitionsIndexed: 1,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1126,11 +1837,12 @@ module(basename(__filename), function () {
         assert.deepEqual(
           hassan.doc.data.attributes,
           {
-            title: null,
+            title: 'Untitled Card',
             nickName: "Ringo's buddy",
             firstName: 'Hassan',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           'doc attributes are correct',
         );
@@ -1140,6 +1852,11 @@ module(basename(__filename), function () {
             pet: {
               links: {
                 self: './ringo',
+              },
+            },
+            'cardInfo.theme': {
+              links: {
+                self: null,
               },
             },
           },
@@ -1160,14 +1877,22 @@ module(basename(__filename), function () {
             id: hassanId,
             pet: {
               id: `${testRealm}ringo`,
-              title: null,
+              title: 'Untitled Card',
               firstName: 'Ringo',
               description: null,
               thumbnailURL: null,
+              cardInfo: {
+                ...cardInfo,
+                theme: null,
+              },
             },
             nickName: "Ringo's buddy",
             _cardType: 'PetPerson',
             firstName: 'Hassan',
+            title: 'Untitled Card',
+            cardInfo: {
+              theme: null,
+            },
           },
           'searchData is correct',
         );
@@ -1183,7 +1908,9 @@ module(basename(__filename), function () {
           instanceErrors: 6,
           modulesIndexed: 10,
           instancesIndexed: 6,
-          totalIndexEntries: 16,
+          definitionErrors: 0,
+          definitionsIndexed: 10,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1210,7 +1937,7 @@ module(basename(__filename), function () {
 
             export class Task extends CardDef {
               static displayName = 'Sprint Task';
-              @field team = linksTo(() => Team, {isUsed: true}); 
+              @field team = linksTo(() => Team, {isUsed: true});
               @field shortId = contains(StringField, {
                 computeVia: function (this: Task) {
                   return this.team?.name
@@ -1386,7 +2113,7 @@ module(basename(__filename), function () {
               import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
               import { BlogApp } from "./blog-app";
-              
+
               export class Author extends CardDef {
                 @field name = contains(StringField);
                 @field blog = linksTo(BlogApp);
@@ -1415,7 +2142,7 @@ module(basename(__filename), function () {
           import StringField from "https://cardstack.com/base/string";
           import { Author } from "./author";
           import { BlogApp } from "./blog-app";
-          
+
           export class BlogPost extends CardDef {
             @field title = contains(StringField);
             @field author = linksToMany(Author);
@@ -1430,7 +2157,7 @@ module(basename(__filename), function () {
           import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           import type { BlogPost } from "./blog-post";
-          
+
           export class BlogApp extends CardDef {
             @field title = contains(StringField);
           }
@@ -1482,7 +2209,7 @@ module(basename(__filename), function () {
               import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
               import { BlogApp } from "./blog-app";
-              
+
               export class Author extends CardDef {
                 @field name = contains(StringField);
                 @field blog = linksTo(() => BlogApp);
@@ -1511,7 +2238,7 @@ module(basename(__filename), function () {
           import StringField from "https://cardstack.com/base/string";
           import { Author } from "./author";
           import { BlogApp } from "./blog-app";
-          
+
           export class BlogPost extends CardDef {
             @field title = contains(StringField);
             @field author = linksToMany(() => Author);
@@ -1526,7 +2253,7 @@ module(basename(__filename), function () {
           import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           import type { BlogPost } from "./blog-post";
-          
+
           export class BlogApp extends CardDef {
             @field title = contains(StringField);
           }
@@ -1613,7 +2340,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 2,
-          totalIndexEntries: 18,
+          definitionErrors: 0,
+          definitionsIndexed: 2,
+          totalIndexEntries: 30,
         },
         'indexed correct number of files',
       );
@@ -1664,39 +2393,84 @@ module(basename(__filename), function () {
         // we splat because despite having the same shape, the constructors are different
         { ...realm.realmIndexUpdater.stats },
         {
+          // this is a little misleading because now that we are batching out the
+          // modules and instances to ensure that the definition is generated before
+          // we trying file serialization, this will only report the last batch
+          // of indexing when in fact there where actually 2 batches of indexing
+          // generated by this writeMany()
           instancesIndexed: 1,
           instanceErrors: 0,
           moduleErrors: 0,
-          modulesIndexed: 1,
-          totalIndexEntries: 18,
+          modulesIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
+          totalIndexEntries: 29,
         },
         'indexed correct number of files',
+      );
+    });
+
+    test('can tombstone deleted files when running fromScratch indexing', async function (assert) {
+      await realm.write(
+        'test-file.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              firstName: 'Test Person',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        }),
+      );
+
+      let testFile = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}test-file`),
+      );
+      assert.strictEqual(testFile?.type, 'instance', 'test file was indexed');
+
+      await adapter.remove('test-file.json'); // incremental doesn't get triggered (like in development) here bcos there is no filewatcher enabled
+      let fileExists = await adapter.exists('test-file.json');
+      assert.false(fileExists);
+      await realm.realmIndexUpdater.fullIndex();
+
+      let deletedEntries = (await testDbAdapter.execute(
+        `SELECT * FROM boxel_index where is_deleted = true and type = 'instance'`,
+      )) as { url: string; is_deleted: boolean }[];
+
+      assert.strictEqual(deletedEntries.length, 1, 'found tombstone entry');
+      assert.strictEqual(
+        deletedEntries[0].url,
+        `${testRealm}test-file.json`,
+        'tombstone has correct URL',
+      );
+      assert.true(
+        deletedEntries[0].is_deleted,
+        'tombstone is marked as deleted',
+      );
+
+      // Verify the file is no longer retrievable through the query engine
+      let deletedFile = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}test-file`),
+      );
+      assert.strictEqual(
+        deletedFile,
+        undefined,
+        'deleted file is not retrievable',
       );
     });
   });
 
   module('permissioned realm', function (hooks) {
-    let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
-      createVirtualNetworkAndLoader();
+    setupBaseRealmServer(hooks, matrixURL);
 
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
-
-    // We want 2 different realm users to test authorization between them - these
-    // names are selected because they are already available in the test
-    // environment (via register-realm-users.ts)
-    let matrixUser1 = 'test_realm';
-    let matrixUser2 = 'node-test_realm';
-    let testRealm1URL = new URL('http://127.0.0.1:4447/');
-    let testRealm2URL = new URL('http://127.0.0.1:4448/');
-
+    let testRealm1URL = 'http://127.0.0.1:4447/';
+    let testRealm2URL = 'http://127.0.0.1:4448/';
     let testRealm2: Realm;
-    let testRealmServer1: Server;
-    let testRealmServer2: Server;
 
     function setupRealms(
       hooks: NestedHooks,
@@ -1705,74 +2479,49 @@ module(basename(__filename), function () {
         provider: RealmPermissions;
       },
     ) {
-      setupDB(hooks, {
-        beforeEach: async (dbAdapter, publisher, runner) => {
-          ({ testRealmHttpServer: testRealmServer1 } = await runTestRealmServer(
-            {
-              virtualNetwork: await createVirtualNetwork(),
-              testRealmDir: dirSync().name,
-              realmsRootPath: dirSync().name,
-              realmURL: testRealm1URL,
-              fileSystem: {
-                'article.gts': `
+      setupPermissionedRealms(hooks, {
+        // provider
+        realms: [
+          {
+            realmURL: testRealm1URL,
+            permissions: permissions.provider,
+            fileSystem: {
+              'article.gts': `
               import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
               export class Article extends CardDef {
                 @field title = contains(StringField);
               }
             `,
-              },
-              permissions: permissions.provider,
-              matrixURL,
-              matrixConfig: {
-                url: matrixURL,
-                username: matrixUser1,
-              },
-              dbAdapter,
-              publisher,
-              runner,
             },
-          ));
-
-          ({ testRealmHttpServer: testRealmServer2, testRealm: testRealm2 } =
-            await runTestRealmServer({
-              virtualNetwork: await createVirtualNetwork(),
-              testRealmDir: dirSync().name,
-              realmsRootPath: dirSync().name,
-              realmURL: testRealm2URL,
-              fileSystem: {
-                'website.gts': `
-                import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-                import { Article } from "${testRealm1URL.href}article" // importing from another realm;
-                export class Website extends CardDef {
-                  @field linkedArticle = linksTo(Article);
-                }`,
-                'website-1.json': {
-                  data: {
-                    attributes: {},
-                    meta: {
-                      adoptsFrom: {
-                        module: './website',
-                        name: 'Website',
-                      },
+          },
+          // consumer
+          {
+            realmURL: testRealm2URL,
+            permissions: permissions.consumer,
+            fileSystem: {
+              'website.gts': `
+              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import { Article } from "${testRealm1URL}article" // importing from another realm;
+              export class Website extends CardDef {
+                @field linkedArticle = linksTo(Article);
+              }`,
+              'website-1.json': {
+                data: {
+                  attributes: {},
+                  meta: {
+                    adoptsFrom: {
+                      module: './website',
+                      name: 'Website',
                     },
                   },
                 },
               },
-              permissions: permissions.consumer,
-              matrixURL,
-              matrixConfig: {
-                url: matrixURL,
-                username: matrixUser2,
-              },
-              dbAdapter,
-              publisher,
-              runner,
-            }));
-        },
-        afterEach: async () => {
-          await closeServer(testRealmServer1);
-          await closeServer(testRealmServer2);
+            },
+          },
+        ],
+        onRealmSetup({ realms: [_, realm2] }) {
+          testRealm2 = realm2.realm;
         },
       });
     }
@@ -1796,7 +2545,9 @@ module(basename(__filename), function () {
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            totalIndexEntries: 2,
+            definitionErrors: 0,
+            definitionsIndexed: 1,
+            totalIndexEntries: 3,
           },
           'has no module errors',
         );
@@ -1824,6 +2575,8 @@ module(basename(__filename), function () {
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
+            definitionErrors: 0,
+            definitionsIndexed: 0,
             totalIndexEntries: 0,
           },
           'has a module error',

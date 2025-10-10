@@ -70,10 +70,10 @@ export interface Signature {
     optional?: boolean;
     placeholder?: string;
     required?: boolean;
+    size?: 'large' | 'default';
     state?: InputValidationState;
     type?: InputType;
     value: string | number | null | undefined;
-    variant?: 'large' | 'default';
   };
   Element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement;
 }
@@ -151,7 +151,8 @@ export default class BoxelInput extends Component<Signature> {
             has-validation=this.hasValidation
             invalid=this.isInvalid
             search=this.isSearch
-            boxel-input--large=(eq @variant 'large')
+            loading=(eq @state 'loading')
+            boxel-input--large=(eq @size 'large')
             boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
           }}
           id={{this.id}}
@@ -196,7 +197,10 @@ export default class BoxelInput extends Component<Signature> {
         {{/if}}
         {{#if this.validationIcon}}
           <div class='validation-icon-container'>
-            <this.validationIcon role='presentation' />
+            <this.validationIcon
+              class='validation-icon-{{@state}}'
+              role='presentation'
+            />
           </div>
         {{/if}}
         {{#if this.shouldShowErrorMessage}}
@@ -217,170 +221,208 @@ export default class BoxelInput extends Component<Signature> {
       {{/let}}
     </div>
     <style scoped>
-      .input-container {
-        --icon-size: var(--boxel-icon-sm);
-        --icon-space: var(--boxel-sp-xs);
-        --icon-full-length: calc(var(--boxel-icon-sm) + var(--boxel-sp-xs) * 2);
-
-        display: grid;
-        grid-template-columns: var(--icon-full-length) 1fr var(
-            --icon-full-length
+      @layer boxelComponentL1 {
+        .input-container {
+          --icon-size: var(--boxel-icon-sm);
+          --icon-space: var(--boxel-sp-xs);
+          --icon-full-length: calc(
+            var(--boxel-icon-sm) + var(--boxel-sp-xs) * 2
           );
-        grid-template-areas:
-          'optional optional optional'
-          'pre-icon input post-icon'
-          'error error error'
-          'helper helper helper';
-        width: 100%;
-      }
 
-      .boxel-input {
-        --boxel-input-height: var(--boxel-form-control-height);
+          display: grid;
+          grid-template-columns: var(--icon-full-length) 1fr var(
+              --icon-full-length
+            );
+          grid-template-areas:
+            'optional optional optional'
+            'pre-icon input post-icon'
+            'error error error'
+            'helper helper helper';
+          width: 100%;
+        }
 
-        grid-column: 1 / span 3;
-        grid-row: 2;
+        .boxel-input {
+          --boxel-input-height: var(--boxel-form-control-height);
 
-        box-sizing: border-box;
-        width: 100%;
-        min-height: var(--boxel-input-height);
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
-        font: var(--boxel-font-sm);
-        font-weight: 400;
-        letter-spacing: var(--boxel-lsp-xs);
-        transition: border-color var(--boxel-transition);
-      }
+          grid-column: 1 / span 3;
+          grid-row: 2;
 
-      .boxel-input--large {
-        --boxel-form-control-height: 4.375rem;
+          box-sizing: border-box;
+          width: 100%;
+          max-width: 100%;
+          min-height: var(--boxel-input-height);
+          padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+          background-color: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          border: 1px solid
+            var(--border, var(--boxel-form-control-border-color));
+          border-radius: var(--boxel-form-control-border-radius);
+          box-shadow: var(--shadow);
+          outline: 1px solid transparent;
+          transition:
+            var(--boxel-transition-properties),
+            outline-color var(--boxel-transition);
+        }
 
-        font: var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
+        .boxel-input--large {
+          --boxel-form-control-height: 4.375rem;
+          font-size: var(--boxel-font-size);
+        }
 
-      .boxel-text-area {
-        --boxel-input-height: 10rem;
-      }
+        .boxel-text-area {
+          --boxel-input-height: 10rem;
+        }
 
-      .boxel-input:disabled {
-        background-color: var(--boxel-light);
-        border-color: var(--boxel-purple-300);
-        color: rgb(0 0 0 / 50%);
-        opacity: 0.5;
-      }
+        .boxel-input:not([type='color']):disabled {
+          opacity: 0.5;
+        }
 
-      .boxel-input:hover:not(:disabled) {
-        border-color: var(--boxel-dark);
-      }
+        .boxel-input:focus-visible {
+          outline-color: var(--ring, var(--boxel-highlight));
+          border-color: var(--ring, var(--boxel-highlight));
+        }
 
-      .invalid {
-        border-color: var(--boxel-error-100);
-        box-shadow: 0 0 0 1px var(--boxel-error-100);
-      }
+        .boxel-input::placeholder {
+          color: var(--muted-foreground, var(--boxel-450));
+        }
 
-      .invalid:focus {
-        outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
-        box-shadow: 0 0 0 1.5px var(--boxel-error-100);
-      }
+        .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid):not(
+            :invalid
+          ):not(.search) {
+          border-color: var(--border, currentColor);
+        }
 
-      .invalid:hover:not(:disabled) {
-        border-color: var(--boxel-error-100);
-      }
+        .invalid:not(:disabled),
+        :invalid:not(:disabled) {
+          border-color: var(--destructive, var(--boxel-error-100));
+          box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
+        }
 
-      .search {
-        --search-input-color: var(
-          --boxel-input-search-color,
-          var(--boxel-light)
-        );
+        .invalid:focus-visible,
+        :invalid:focus-visible {
+          outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
+          box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
+        }
 
-        --search-input-background-color: var(
-          --boxel-input-search-background-color,
-          var(--boxel-dark)
-        );
+        .invalid:hover:not(:disabled),
+        :invalid:hover:not(:disabled) {
+          border-color: var(--destructive, var(--boxel-error-100));
+        }
 
-        --boxel-form-control-border-color: var(--boxel-dark);
-        --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
+        .search {
+          --search-input-color: var(
+            --boxel-input-search-color,
+            var(--background, var(--boxel-light))
+          );
 
-        background-color: var(--search-input-background-color);
-        color: var(--search-input-color);
-        padding-top: var(--boxel-sp-xxxs);
-        padding-right: var(--boxel-sp-xl);
-        padding-bottom: var(--boxel-sp-xxxs);
-        /* to account for the icon being on the left */
-        padding-right: unset;
-        padding-left: var(--boxel-sp-xxl); /* leave room for icon */
-      }
+          --search-input-background-color: var(
+            --boxel-input-search-background-color,
+            var(--foreground, var(--boxel-dark))
+          );
 
-      .boxel-input--bottom-flat {
-        --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
-          var(--boxel-border-radius-xl) 0 0;
-      }
+          --boxel-form-control-border-color: var(--border, var(--boxel-dark));
+          --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
-      .search-icon {
-        --icon-color: var(
-          --boxel-input-search-icon-color,
-          var(--boxel-highlight)
-        );
-      }
+          background-color: var(--search-input-background-color);
+          color: var(--search-input-color);
+          padding-top: var(--boxel-sp-xxxs);
+          padding-right: var(--boxel-sp-xl);
+          padding-bottom: var(--boxel-sp-xxxs);
+          /* to account for the icon being on the left */
+          padding-right: unset;
+          padding-left: var(--boxel-sp-xxl); /* leave room for icon */
+          outline-width: 1px;
+        }
 
-      .search-icon-container {
-        grid-area: pre-icon;
+        .boxel-input--bottom-flat {
+          --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
+            var(--boxel-border-radius-xl) 0 0;
+        }
 
-        display: flex;
-        height: 100%;
-        align-items: center;
-        justify-content: center;
-      }
+        .search-icon {
+          --icon-color: var(
+            --boxel-input-search-icon-color,
+            var(--boxel-highlight)
+          );
+        }
 
-      .validation-icon-container {
-        grid-area: post-icon;
+        .search-icon-container {
+          grid-area: pre-icon;
 
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        user-select: none;
-      }
+          display: flex;
+          height: 100%;
+          align-items: center;
+          justify-content: center;
+        }
 
-      .optional {
-        grid-area: optional;
+        .validation-icon-container {
+          grid-area: post-icon;
 
-        margin-bottom: var(--boxel-sp-xxxs);
-        color: rgb(0 0 0 / 75%);
-        font: var(--boxel-font-sm);
-        font-style: oblique;
-        letter-spacing: var(--boxel-lsp);
-        text-align: right;
-      }
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          user-select: none;
+        }
 
-      .error-message {
-        grid-area: error;
+        .search ~ .validation-icon-container .validation-icon-loading {
+          color: var(--primary, var(--boxel-highlight));
+          --icon-color: currentColor;
+        }
+        .search ~ .search-icon-container .search-icon {
+          color: var(
+            --boxel-input-search-icon-color,
+            var(--primary, var(--boxel-highlight))
+          );
+          --icon-color: currentColor;
+        }
 
-        margin-top: var(--boxel-sp-xxxs);
-        margin-left: calc(var(--boxel-sp-sm) + 1px);
-        color: var(--boxel-error-200);
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-      }
+        .optional {
+          grid-area: optional;
+          justify-self: end;
 
-      .helper-text {
-        grid-area: helper;
+          margin-bottom: var(--boxel-sp-xxxs);
+          font-size: var(--boxel-font-size-xs);
+          font-style: oblique;
+          letter-spacing: var(--boxel-lsp);
+          opacity: 0.75;
+        }
 
-        margin-top: var(--boxel-sp-xs);
-        margin-left: calc(var(--boxel-sp-sm) + 1px);
-        color: rgb(0 0 0 / 75%);
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-      }
+        .error-message {
+          grid-area: error;
 
-      .boxel-input:disabled ~ .error-message,
-      .boxel-input:disabled ~ .helper-text {
-        display: none;
-      }
+          margin-top: var(--boxel-sp-xxxs);
+          margin-left: calc(var(--boxel-sp-sm) + 1px);
+          color: var(--destructive, var(--boxel-error-200));
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
+          letter-spacing: var(--boxel-lsp);
+        }
 
-      .boxel-input.search::placeholder {
-        color: inherit;
-        opacity: 0.6;
+        .helper-text {
+          grid-area: helper;
+
+          margin-top: var(--boxel-sp-xs);
+          margin-left: calc(var(--boxel-sp-sm) + 1px);
+          font-size: var(--boxel-font-size-sm);
+          letter-spacing: var(--boxel-lsp);
+          opacity: 0.75;
+        }
+
+        .boxel-input:disabled ~ .error-message,
+        .boxel-input:disabled ~ .helper-text {
+          display: none;
+        }
+
+        .boxel-input.search::placeholder {
+          color: inherit;
+          opacity: 0.6;
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+          .validation-icon-loading {
+            animation: var(--boxel-infinite-spin-animation);
+          }
+        }
       }
     </style>
   </template>

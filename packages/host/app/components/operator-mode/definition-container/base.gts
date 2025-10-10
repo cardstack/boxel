@@ -30,7 +30,6 @@ const BaseContainerHeader: TemplateOnlyComponent<BaseContainerHeaderSignature> =
   <template>
     <Header
       @title={{@title}}
-      @hasBackground={{true}}
       class={{cn 'base-container-header' active=@isActive}}
       ...attributes
     >
@@ -41,15 +40,12 @@ const BaseContainerHeader: TemplateOnlyComponent<BaseContainerHeaderSignature> =
     <style scoped>
       .base-container-header {
         --boxel-header-min-height: 1.56rem;
-        --boxel-header-font-weight: 500;
-        --boxel-header-text-font: var(--boxel-font-xs);
         --boxel-header-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        --boxel-header-text-transform: uppercase;
-        --boxel-header-letter-spacing: var(--boxel-lsp-xl);
-        --boxel-header-detail-max-width: none;
         --boxel-header-background-color: var(--boxel-300);
         --boxel-header-text-color: var(--boxel-dark);
-        --boxel-header-detail-max-width: 100%;
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xl);
+        text-transform: uppercase;
         height: var(
           --base-container-header-height,
           var(--boxel-header-min-height)
@@ -128,6 +124,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
                   class='realm-name'
                   data-test-definition-realm-name
                   @ellipsize={{true}}
+                  @size='small'
                 >in
                   {{realmInfo.name}}</Label>
               </div>
@@ -156,7 +153,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
         --boxel-realm-icon-size: var(--code-mode-realm-icon-size);
       }
       .realm-name {
-        --boxel-label-font: var(--boxel-font-xs);
+        --boxel-label-font-weight: 400;
       }
       .definition-info {
         display: flex;

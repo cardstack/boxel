@@ -8,10 +8,11 @@ import {
 import Koa from 'koa';
 import {
   createResponse,
+  DEFAULT_PERMISSIONS,
   logger,
   Realm,
-  RealmPermissions,
   SupportedMimeType,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import { CreateRoutesArgs } from '../routes';
@@ -29,11 +30,6 @@ interface RealmCreationJSON {
 }
 
 const log = logger('realm-server');
-const DEFAULT_PERMISSIONS = Object.freeze([
-  'read',
-  'write',
-  'realm-owner',
-]) as RealmPermissions['user'];
 
 export default function handleCreateRealmRequest({
   createRealm,
@@ -72,13 +68,16 @@ export default function handleCreateRealmRequest({
     }
 
     let realm: Realm | undefined;
+    let info: Partial<RealmInfo> | undefined;
     let start = Date.now();
     let indexStart: number | undefined;
     try {
-      realm = await createRealm({
+      let result = await createRealm({
         ownerUserId,
         ...json.data.attributes,
       });
+      realm = result.realm;
+      info = result.info;
       log.debug(`created new realm ${realm.url} in ${Date.now() - start} ms`);
       log.debug(`indexing new realm ${realm.url}`);
       indexStart = Date.now();
@@ -119,7 +118,7 @@ export default function handleCreateRealmRequest({
           data: {
             type: 'realm',
             id: realm.url,
-            attributes: { ...json.data.attributes },
+            attributes: { ...json.data.attributes, ...info },
           },
         },
         null,

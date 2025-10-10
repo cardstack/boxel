@@ -1,0 +1,55 @@
+{
+  "data": {
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../fields/geo-point",
+              "name": "GeoPointField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "GeoPointField",
+        "module": "../fields/geo-point"
+      },
+      "title": "GeoPointField",
+      "readMe": "# GeoPointField\n\nA field type for storing and displaying geographic coordinates (latitude and longitude).\n\n## Usage\n\n### Basic Implementation\n\n```gts\nimport { GeoPointField } from '../fields/geo-point';\nimport { CardDef, field, contains } from 'https://cardstack.com/base/card-api';\n\nexport class MyCard extends CardDef {\n  @field location = contains(GeoPointField);\n}\n```\n\n### Field Properties\n\n- **lat**: Latitude coordinate (number)\n- **lon**: Longitude coordinate (number)\n\n### Display Formats\n\n- **Atom**: Compact view with map icon and coordinates\n- **Embedded**: Full view with interactive map and coordinate editing\n- **Edit**: Form fields for latitude and longitude input\n\n### Example Data\n\n```json\n{\n  \"lat\": 37.7746,\n  \"lon\": -122.4068\n}\n```",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
+      "description": "Spec of GeoPointField",
+      "containedExamples": [
+        {
+          "lat": 3.1336268,
+          "lon": 101.6299203
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -20,10 +20,14 @@ export default class ReadTextFileCommand extends HostBaseCommand<
     return ReadTextFileInput;
   }
 
+  requireInputFields = ['path'];
+
   protected async run(
     input: BaseCommandModule.ReadTextFileInput,
   ): Promise<BaseCommandModule.FileContents> {
-    let url = new URL(input.path, input.realm);
+    let url = input.realm
+      ? new URL(input.path, input.realm)
+      : new URL(input.path);
     let response = await this.network.authedFetch(url);
 
     let { FileContents } = await this.loadCommandModule();

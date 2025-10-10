@@ -15,9 +15,9 @@
       "@cardstack/runtime-common/*": ["../runtime-common/*"],
       "babel-plugin-ember-template-compilation": [
         "node_modules/babel-plugin-ember-template-compilation/*"
-      ],
-      "*": ["types/*"]
-    }
+      ]
+    },
+    "types": ["@cardstack/local-types","@cardstack/local-types/matrix-js-sdk"]
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]

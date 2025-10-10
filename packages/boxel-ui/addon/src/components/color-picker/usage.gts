@@ -6,9 +6,8 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import ColorPicker from './index.gts';
 
 export default class ColorPickerUsage extends Component {
-  @tracked color: string | null = null;
+  @tracked color: string | null = 'oklch(59.69% 0.56 49.77 / .5)';
   @tracked disabled = false;
-  @tracked showHexString = true;
 
   private onChange = (newColor: string | null) => {
     this.color = newColor;
@@ -17,22 +16,24 @@ export default class ColorPickerUsage extends Component {
   <template>
     <FreestyleUsage
       @name='ColorPicker'
-      @description='A color picker that allows users to select a color from the color spectrum.'
+      @description='Color input field that allows users to select a color from the color spectrum or type in a color code.'
     >
       <:example>
-        <ColorPicker
-          @color={{this.color}}
-          @onChange={{this.onChange}}
-          @showHexString={{this.showHexString}}
-          @disabled={{this.disabled}}
-        />
+        <label>
+          <span class='boxel-sr-only'>Color</span>
+          <ColorPicker
+            @color={{this.color}}
+            @onChange={{this.onChange}}
+            @disabled={{this.disabled}}
+          />
+        </label>
       </:example>
 
       <:api as |Args|>
         <Args.String
           @name='color'
           @optional={{false}}
-          @description='Hex color value.'
+          @description='Color value'
           @value={{this.color}}
           @onInput={{fn (mut this.color)}}
         />
@@ -48,13 +49,6 @@ export default class ColorPickerUsage extends Component {
           @value={{this.disabled}}
           @onInput={{fn (mut this.disabled)}}
           @defaultValue={{false}}
-        />
-        <Args.Bool
-          @name='showHexString'
-          @description='Whether to show the hex color value next to the picker.'
-          @value={{this.showHexString}}
-          @onInput={{fn (mut this.showHexString)}}
-          @defaultValue={{true}}
         />
       </:api>
     </FreestyleUsage>

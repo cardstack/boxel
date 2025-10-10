@@ -1,4 +1,15 @@
-@layer reset, utilities;
+/* Note on css layers: css @layer rules are used to create a layering system for the css.
+   The order of the layers is important as it determines the precedence of the styles.
+   The layers are defined in the following order:
+   1. reset: for resetting default browser styles
+   2. utilities: for utility classes that can be used throughout the application
+   3. boxelComponentL1: for base component styles
+   4. boxelComponentL2: for component styles that build on top of base styles
+   5. boxelComponentL3: for component styles that build on top of L2 styles
+   This layering system allows for easier overrides and customizations of styles at different levels.
+   More info: https://developer.mozilla.org/en-US/docs/Web/CSS/@layer
+*/
+@layer reset, utilities, boxelComponentL1, boxelComponentL2, boxelComponentL3;
 
 @layer reset {
   * {
@@ -85,9 +96,32 @@
     outline-color: transparent;
   }
 
-  input:focus,
-  select:focus,
-  textarea:focus {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
+  input:not([type='color']):disabled,
+  select:disabled,
+  textarea:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  input[type='color']:disabled {
+    pointer-events: none;
+  }
+
+  input:focus:not(:focus-visible),
+  textarea:focus:not(:focus-visible) {
+    outline-color: transparent;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible {
     outline-color: var(--boxel-highlight);
   }
 }
@@ -110,6 +144,26 @@
     clip-path: inset(50%);
     overflow: hidden;
     white-space: nowrap;
+  }
+
+  /* may need to add "max-width: 100%;" in some cases */
+  .boxel-ellipsize {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* can be used via `--boxel-infinite-spin-animation` css-variable. example:
+    @media (prefers-reduced-motion: no-preference) {
+      .loading-icon {
+        animation: var(--boxel-infinite-spin-animation);
+      }
+    }
+  */
+  @keyframes boxel-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 }
 

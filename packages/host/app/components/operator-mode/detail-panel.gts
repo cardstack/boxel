@@ -28,12 +28,10 @@ import {
   isBaseDef,
   internalKeyFor,
   type ResolvedCodeRef,
+  type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
-import {
-  getResolvedCodeRef,
-  getCardType,
-} from '@cardstack/host/resources/card-type';
+import { getCardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
 
 import {
@@ -42,12 +40,10 @@ import {
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
+import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -92,6 +88,7 @@ interface Signature {
       sourceInstance?: CardDef,
     ) => Promise<void>;
     delete: (item: CardDef | URL | null | undefined) => void;
+    cardError: CardErrorJSONAPI | undefined;
   };
 }
 
@@ -101,6 +98,10 @@ export default class DetailPanel extends Component<Signature> {
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
+  // it is ad-hoc that cardInstanceType is loaded as a resource here
+  // the reason for it,
+  // for modules, we do module analysis and do not want to re-compute that information so its passed down thru args
+  // for card instances, we don't have that information at hand so we load it here
   @use private cardInstanceType = resource(() => {
     if (this.args.cardInstance !== undefined) {
       let cardDefinition = this.args.cardInstance.constructor as typeof BaseDef;
@@ -115,6 +116,10 @@ export default class DetailPanel extends Component<Signature> {
 
   private get showInThisFilePanel() {
     return this.isModule && this.declarations.length > 0;
+  }
+
+  private get showInThisEmptyFilePanel() {
+    return this.isModule && this.isEmptyFile;
   }
 
   private get codePath() {
@@ -132,7 +137,10 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get showDetailsPanel() {
-    return !this.isModule && !isCardDocumentString(this.args.readyFile.content);
+    return (
+      this.args.cardError ||
+      (!this.isModule && !isCardDocumentString(this.args.readyFile.content))
+    );
   }
 
   private get cardType() {
@@ -147,18 +155,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get isLoading() {
-    return (
-      this.args.moduleAnalysis.isLoadingNewModule ||
-      this.declarations.some((dec) => {
-        if (isCardOrFieldDeclaration(dec)) {
-          return dec.cardType?.isLoading;
-        } else {
-          return false;
-        }
-      }) ||
-      this.cardType?.isLoading ||
-      this.cardInstanceType?.isLoading
-    );
+    return this.cardInstanceType?.isLoading;
   }
 
   private get definitionActions() {
@@ -350,6 +347,10 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
+  private get isEmptyFile() {
+    return this.args.readyFile?.content.match(/^\s*$/);
+  }
+
   private get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
   }
@@ -423,6 +424,32 @@ export default class DetailPanel extends Component<Signature> {
         </PanelSection>
       {{/if}}
 
+      {{#if this.showInThisEmptyFilePanel}}
+        <PanelSection as |PanelHeader|>
+          <PanelHeader aria-label='In This Empty File Header'>
+            In This File
+          </PanelHeader>
+          <BaseContainer as |BaseHeader|>
+            <BaseHeader
+              @title={{@readyFile.name}}
+              data-test-current-module-name={{@readyFile.name}}
+            >
+              {{#if (this.realm.canWrite @readyFile.url)}}
+                <IconButton
+                  @icon={{IconTrash}}
+                  @width='15'
+                  @height='15'
+                  {{on 'click' (fn @delete this.codePath)}}
+                  class='delete-module-button'
+                  aria-label='Delete Module'
+                  data-test-delete-module-button
+                />
+              {{/if}}
+            </BaseHeader>
+          </BaseContainer>
+        </PanelSection>
+      {{/if}}
+
       {{#if this.showInheritancePanel}}
         <PanelSection as |PanelHeader|>
           <PanelHeader
@@ -443,7 +470,7 @@ export default class DetailPanel extends Component<Signature> {
             <Divider @label='Adopts From' />
             {{#if this.cardInstanceType.type}}
               {{#let
-                (getResolvedCodeRef this.cardInstanceType.type)
+                (getResolvedCodeRefFromType this.cardInstanceType.type)
                 as |codeRef|
               }}
                 <ClickableModuleDefinitionContainer
@@ -466,41 +493,44 @@ export default class DetailPanel extends Component<Signature> {
 
                 <ModuleDefinitionContainer
                   @title={{definitionTitle}}
-                  @fileURL={{this.cardType.type.module}}
-                  @name={{this.cardType.type.displayName}}
-                  @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                  @fileURL={{this.cardType.module}}
+                  @name={{this.cardType.displayName}}
+                  @fileExtension={{this.cardType.moduleInfo.extension}}
                   @infoText={{this.lastModified.value}}
                   @isActive={{true}}
                   @actions={{this.definitionActions}}
                 />
-                {{#if this.cardType.type.super}}
+                {{#if this.cardType.super}}
                   {{#let
-                    (getResolvedCodeRef this.cardType.type.super)
+                    (getResolvedCodeRefFromType this.cardType.super)
                     as |codeRef|
                   }}
                     <Divider @label='Inherits From' />
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
-                      @fileURL={{this.cardType.type.super.module}}
-                      @name={{this.cardType.type.super.displayName}}
-                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @fileURL={{this.cardType.super.module}}
+                      @name={{this.cardType.super.displayName}}
+                      @fileExtension={{this.cardType.super.moduleInfo.extension}}
                       @goToDefinition={{@goToDefinition}}
                       @codeRef={{codeRef}}
-                      @localName={{this.cardType.type.super.localName}}
+                      @localName={{this.cardType.super.localName}}
                     />
                   {{/let}}
                 {{/if}}
               {{else if (isReexportCardOrField @selectedDeclaration)}}
-                {{#if this.cardType.type}}
-                  {{#let (getResolvedCodeRef this.cardType.type) as |codeRef|}}
+                {{#if this.cardType}}
+                  {{#let
+                    (getResolvedCodeRefFromType this.cardType)
+                    as |codeRef|
+                  }}
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
-                      @fileURL={{this.cardType.type.module}}
-                      @name={{this.cardType.type.displayName}}
-                      @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                      @fileURL={{this.cardType.module}}
+                      @name={{this.cardType.displayName}}
+                      @fileExtension={{this.cardType.moduleInfo.extension}}
                       @goToDefinition={{@goToDefinition}}
                       @codeRef={{codeRef}}
-                      @localName={{this.cardType.type.localName}}
+                      @localName={{this.cardType.localName}}
                     />
                   {{/let}}
                 {{/if}}
@@ -538,6 +568,8 @@ export default class DetailPanel extends Component<Signature> {
       .loading {
         display: flex;
         justify-content: center;
+        align-items: center;
+        height: 100%;
       }
       .delete-module-button {
         --icon-stroke-width: 1.2px;

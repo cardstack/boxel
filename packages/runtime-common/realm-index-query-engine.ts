@@ -9,11 +9,12 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
+  type IndexedDefinitionOrError,
   type InstanceOrError,
+  type ResolvedCodeRef,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
-import { Loader } from './loader';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
 import {
@@ -22,6 +23,7 @@ import {
   type CardCollectionDocument,
 } from './document-types';
 import { type CardResource, type Saved } from './resource-types';
+import { type DefinitionsCache } from './definitions-cache';
 
 type Options = {
   loadLinks?: true;
@@ -45,31 +47,27 @@ export interface SearchResultError {
 export class RealmIndexQueryEngine {
   #realm: Realm;
   #fetch: typeof globalThis.fetch;
-  #loader: Loader;
   #indexQueryEngine: IndexQueryEngine;
 
   constructor({
     realm,
     dbAdapter,
     fetch,
+    definitionsCache,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     fetch: typeof globalThis.fetch;
+    definitionsCache: DefinitionsCache;
   }) {
     if (!dbAdapter) {
       throw new Error(
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter);
+    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionsCache);
     this.#realm = realm;
     this.#fetch = fetch;
-    this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
-  }
-
-  get loader() {
-    return this.#loader;
   }
 
   @Memoize()
@@ -79,10 +77,9 @@ export class RealmIndexQueryEngine {
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
     let doc: CardCollectionDocument;
-    let { cards: data, meta: _meta } = await this.#indexQueryEngine.search(
+    let { cards: data, meta } = await this.#indexQueryEngine.search(
       new URL(this.#realm.url),
       query,
-      this.loader,
       opts,
     );
     doc = {
@@ -90,6 +87,7 @@ export class RealmIndexQueryEngine {
         ...resource,
         ...{ links: { self: resource.id } },
       })),
+      meta,
     };
 
     let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
@@ -128,7 +126,6 @@ export class RealmIndexQueryEngine {
     let results = await this.#indexQueryEngine.searchPrerendered(
       new URL(this.#realm.url),
       query,
-      this.loader,
       opts,
     );
 
@@ -196,6 +193,13 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<IndexedModuleOrError | undefined> {
     return await this.#indexQueryEngine.getModule(url, opts);
+  }
+
+  async getOwnDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: Options,
+  ): Promise<IndexedDefinitionOrError | undefined> {
+    return await this.#indexQueryEngine.getOwnDefinition(codeRef, opts);
   }
 
   async instance(

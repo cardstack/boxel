@@ -20,6 +20,10 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
 
+import config from '@cardstack/host/config/environment';
+
+import RealmService from './realm';
+
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
 import type ResetService from './reset';
@@ -57,12 +61,13 @@ type RealmServerEventSubscriber = (data: any) => Promise<void>;
 export default class RealmServerService extends Service {
   @service declare private network: NetworkService;
   @service declare private reset: ResetService;
+  @service declare private realm: RealmService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
     { type: 'base', url: baseRealm.url },
   ]);
-  private ready = new Deferred<void>();
+  private _ready = new Deferred<void>();
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
     new Map();
 
@@ -70,6 +75,10 @@ export default class RealmServerService extends Service {
     super(owner);
     this.reset.register(this);
     this.fetchCatalogRealms();
+  }
+
+  get ready() {
+    return this._ready.promise;
   }
 
   resetState() {
@@ -80,6 +89,28 @@ export default class RealmServerService extends Service {
     this.client = client;
     this.token =
       window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
+  }
+
+  async createStripeSession(email: string) {
+    let url = new URL(`${this.url.href}_stripe-session`);
+    url.searchParams.set('email', email);
+
+    let response = await this.network.fetch(url.href, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      let err = `Could not create Stripe session: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    return response;
   }
 
   async createUser(matrixUserId: string, registrationToken?: string) {
@@ -156,6 +187,37 @@ export default class RealmServerService extends Service {
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
+  async fetchTokensForAccessibleRealms() {
+    await this.login();
+    let response = await this.network.fetch(`${this.url.href}_realm-auth`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+
+      // Temporary development instruction to help with user setup
+      let isDevelopment = config.environment === 'development';
+      if (isDevelopment && responseText.includes('User in JWT not found')) {
+        console.error(
+          '\x1b[1m\x1b[31m%s\x1b[0m',
+          'Failed to login to realms due to missing entry in the users table. It is likely the user setup is incomplete - run pnpm register-all in matrix package',
+        );
+      }
+
+      throw new Error(
+        `Failed to fetch tokens for accessible realms: ${response.status} - ${responseText}`,
+      );
+    }
+
+    return response.json();
+  }
+
   @cached
   get availableRealmURLs() {
     return this.availableRealms.map((r) => r.url);
@@ -180,8 +242,18 @@ export default class RealmServerService extends Service {
     return this.availableRealmURLs.map((url) => `${url}index`);
   }
 
+  async authenticateToAllAccessibleRealms() {
+    let tokens = (await this.fetchTokensForAccessibleRealms()) as {
+      [realmURL: string]: string;
+    };
+
+    for (let [realmURL, token] of Object.entries(tokens)) {
+      this.realm.getOrCreateRealmResource(realmURL, token);
+    }
+  }
+
   async setAvailableRealmURLs(userRealmURLs: string[]) {
-    await this.ready.promise;
+    await this._ready.promise;
     userRealmURLs.forEach((userRealmURL) => {
       if (!this.availableRealms.find((r) => r.url === userRealmURL)) {
         this.availableRealms.push({
@@ -226,7 +298,7 @@ export default class RealmServerService extends Service {
         });
       }
     });
-    this.ready.fulfill();
+    this._ready.fulfill();
   }
 
   async handleEvent(event: Partial<IEvent>) {
@@ -323,8 +395,6 @@ export default class RealmServerService extends Service {
 
   private loggingIn: Promise<void> | undefined;
 
-  // login happens lazily as you need to interact with realm server which
-  // currently only constitutes creating realms
   async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
       return;
@@ -350,13 +420,128 @@ export default class RealmServerService extends Service {
       );
       let token = await realmAuthClient.getJWT();
       this.token = token;
-    } catch (e) {
-      console.error('Failed to login to realm', e);
+    } catch (e: any) {
+      console.error(
+        `RealmServerService - failed to login to realm: ${e.message}`,
+        e,
+      );
       this.token = undefined;
     } finally {
       this.loggingIn = undefined;
     }
   });
+
+  async authedFetch(url: string, options: RequestInit = {}) {
+    const headers = new Headers(options.headers);
+    headers.set('Authorization', `Bearer ${await this.getToken()}`);
+
+    let response = await this.network.fetch(url, {
+      ...options,
+      headers,
+    });
+
+    return response;
+  }
+
+  async requestForward(args: {
+    url: string;
+    method: string;
+    requestBody: string;
+    headers?: Record<string, string>;
+  }) {
+    await this.login();
+
+    const response = await this.network.fetch(
+      `${this.url.href}_request-forward`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(args),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Request forward failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return response;
+  }
+
+  async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
+    await this.login();
+
+    const response = await this.network.fetch(
+      `${this.url.href}_publish-realm`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          sourceRealmURL,
+          publishedRealmURL,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Publish realm failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return response.json();
+  }
+
+  async unpublishRealm(publishedRealmURL: string) {
+    await this.login();
+
+    const response = await this.network.fetch(
+      `${this.url.href}_unpublish-realm`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          publishedRealmURL,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Unpublish realm failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return response.json();
+  }
+
+  private async getToken() {
+    if (!this.token) {
+      await this.login();
+    }
+
+    if (!this.token) {
+      throw new Error('Failed to get realm server token');
+    }
+
+    return this.token;
+  }
 }
 
 const tokenRefreshPeriodSec = 5 * 60; // 5 minutes

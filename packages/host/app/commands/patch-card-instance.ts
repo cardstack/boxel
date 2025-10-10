@@ -41,6 +41,8 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
     return PatchCardInput;
   }
 
+  requireInputFields = ['cardId', 'patch'];
+
   protected async run(
     input: BaseCommandModule.PatchCardInput,
   ): Promise<undefined> {

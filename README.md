@@ -86,6 +86,8 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4211 | Test Worker Manager (spins up 1 worker by default)                                            | ✅                  | 🚫                   |
 | :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker)                     | ✅                  | 🚫                   |
 | :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅                  | 🚫                   |
+| :4221 | Prerender  server                                                                             | 🚫                  | 🚫                   |
+| :4222 | Prerender manager                                                                             | 🚫                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP                                     | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                                                                   | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                                                         | ✅                  | 🚫                   |
@@ -94,12 +96,63 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 
 You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers (which are normally started in `start:all`.
 
-### Card Pre-rendering
+### Card Pre-rendering (Deprecated)
 
 In order to support server-side rendered cards, this project incorporates FastBoot. By default `pnpm start` in the `packages/host` workspace will serve server-side rendered cards. Specifically, the route `/render?url=card_url&format=isolated` will serve pre-rendered cards. There is additional build overhead required to serve pre-rendered cards. If you are not working on the `/render` route in the host, then you would likely benefit from disabling FastBoot when starting up the host server so that you can have faster rebuilds. To do so, you can start the host server using:
 `FASTBOOT_DISABLED=true pnpm start`.
 
 The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to start to the host app first before starting the realm server so that the host app's `dist/` output will be generated. If you are making changes that effect the `/render` route in the host app, you'll want to restart the host app (or run `pnpm build`) in order for the realm server to pick up your changes.
+
+### Headless-Chrome Pre-rendering
+
+Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
+
+- Prerender server: Handles POST /prerender requests that include user/session permissions and a target card URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
+- Pooling: Each prerender server maintains up to PRERENDER_PAGE_POOL_SIZE pages (default 4). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively.
+- Prerender manager: When multiple prerender servers are running, a central manager receives /prerender requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
+
+#### Pre-rendering start scripts
+
+From `packages/realm-server`:
+
+1. Prerender manager
+  - `pnpm start:prerender-manager-dev` (defaults to port 4222)
+2. Prerender server
+  - `pnpm start:prerender-dev` (defaults to port 4221)
+
+First start the pre-rendering manager. Then start the prerender server. (TBD: incorporate into start:all)
+
+
+#### Pre-rendering Environment variables
+
+Prerender server:
+
+- REALM_SECRET_SEED (required): Secret used to create session tokens for realms.
+- BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to http://localhost:4200 in dev scripts.
+- PRERENDER_MANAGER_URL (optional): Base URL of the prerender manager to register with. Defaults to http://localhost:4222.
+- PRERENDER_SERVER_URL (optional): Explicit public URL for this server when registering with the manager (overrides inference).
+- PRERENDER_PAGE_POOL_SIZE (optional): Max number of per-realm pages to keep open in the pool. Default 4.
+- BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
+
+Prerender manager:
+
+- PRERENDER_MULTIPLEX (optional): Number of distinct servers to assign per realm for rotation. Minimum 1. Default 1.
+- PRERENDER_SERVER_DEFAULT_PORT (optional): When a server registers without a URL, the manager can infer the URL from the source IP and this default port. Default 4223.
+- PRERENDER_SERVER_TIMEOUT_MS (optional): Timeout for proxying a prerender request to a target server. Default 30000.
+- PRERENDER_HEALTHCHECK_TIMEOUT_MS (optional): Timeout for manager health checks of servers. Default 1000.
+- PRERENDER_HEALTHCHECK_INTERVAL_MS (optional): Interval in milliseconds for periodic health sweeps. When > 0, the manager regularly checks all registered servers and evicts unhealthy ones. Default 0 (disabled).
+
+Headers used when integrating with the manager:
+
+- X-Prerender-Server-Url: Servers may provide their URL via this header when registering or unregistering. If omitted, the manager attempts to infer from the client IP plus PRERENDER_SERVER_DEFAULT_PORT.
+
+Manager routing behavior at a glance:
+
+- Realm affinity: Subsequent requests for the same realm prefer servers already assigned to that realm.
+- Multiplexing: If PRERENDER_MULTIPLEX > 1, the manager will spread a realm across multiple servers (up to the multiplex count) and rotate requests among them.
+- Capacity-aware: Prefer servers with available capacity (based on active realm count vs. server capacity from registration).
+- Pressure mode: When all servers are at capacity, choose a server handling the globally least-recently-used realm.
+- Health sweep: Unreachable servers are removed from the registry; their realm mappings are cleaned up.
 
 ### Request Accept Header
 
@@ -264,6 +317,68 @@ STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
 5. Perform "Setup up Secure Payment Method" flow. Subscribe with valid test card [here](https://docs.stripe.com/testing#cards)
 
 You should be able to subscribe successfully after you perform the steps above.
+
+## External API Proxy Setup
+The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, you need to configure your api key inside the `proxy_endpoints` db. 
+
+#### Setup api key in DB locally
+
+```sql
+INSERT INTO proxy_endpoints (
+  id, url, api_key, credit_strategy, supports_streaming,
+  auth_method, auth_parameter_name, created_at, updated_at
+) VALUES (
+  gen_random_uuid(),
+  'https://openrouter.ai/api/v1/chat/completions', 
+  '<your-openrouter-api-key>',
+  'openrouter',
+  true,
+  'header',
+  'Authorization',
+  NOW(), NOW()
+);
+```
+
+Typically, it is needed for our openrouter setup which is used widely throughout our codebase. But, additionally you can add in your own proxy.
+
+#### Configuration Options
+
+- **url**: The base URL of the external API endpoint
+- **apiKey**: The API key to use for authentication (will be automatically added to requests)
+- **creditStrategy**: The credit strategy to use for this endpoint
+  - `"openrouter"`: Uses OpenRouter credit system (for paid AI APIs)
+  - `"no-credit"`: No credit system (for free APIs or APIs with their own billing)
+- **supportsStreaming**: Whether this endpoint supports streaming responses
+
+#### Examples
+
+**OpenRouter (AI API with credit system):**
+
+```json
+{
+  "url": "https://openrouter.ai/api/v1/chat/completions",
+  "apiKey": "your-openrouter-api-key",
+  "creditStrategy": "openrouter",
+  "supportsStreaming": true
+}
+```
+
+**Free API (no credit system):**
+
+```json
+{
+  "url": "https://api.example.com",
+  "apiKey": "your-example-api-key",
+  "creditStrategy": "no-credit",
+  "supportsStreaming": false
+}
+```
+
+#### Security Notes
+
+- API keys are automatically added to requests and should be kept secure
+- The proxy validates all requests against the allowed destinations list
+- Credit strategies help manage usage and costs for paid APIs
 
 ## Running the Tests
 

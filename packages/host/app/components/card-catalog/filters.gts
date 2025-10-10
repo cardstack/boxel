@@ -21,7 +21,8 @@ export default class CardCatalogFilters extends Component<Signature> {
     }
     return Object.entries(this.args.availableRealms).map(
       ([realmUrl, realmInfo]) => {
-        return new MenuItem(realmInfo.name, 'action', {
+        return new MenuItem({
+          label: realmInfo.name,
           action: () => {
             let isSelected = this.args.selectedRealmUrls.includes(realmUrl);
 
@@ -33,7 +34,7 @@ export default class CardCatalogFilters extends Component<Signature> {
 
             return false;
           },
-          selected: this.args.selectedRealmUrls.includes(realmUrl),
+          checked: this.args.selectedRealmUrls.includes(realmUrl),
           iconURL: realmInfo.iconURL ?? 'default-realm-icon.png',
         });
       },
@@ -87,9 +88,8 @@ export default class CardCatalogFilters extends Component<Signature> {
     <style scoped>
       .filter-dropdown-trigger {
         height: 37px;
-        width: fit-content;
-        min-width: 15rem;
-        max-width: 100%;
+        width: 100%;
+        max-width: 15rem;
         display: flex;
         justify-content: flex-start;
         gap: var(--boxel-sp-sm);

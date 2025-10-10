@@ -10,25 +10,82 @@ import { type CodeRef } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
-import { CardType, Type } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
 import { inheritanceChain } from '@cardstack/host/resources/inheritance-chain';
-import type { ModuleAnalysis } from '@cardstack/host/resources/module-contents';
+import type {
+  ModuleAnalysis,
+  ModuleDeclaration,
+} from '@cardstack/host/resources/module-contents';
+import { type Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
-import { BaseDef } from 'https://cardstack.com/base/card-api';
+import {
+  calculateTotalOwnFields,
+  isSelectedItemIncompatibleWithSchemaEditor,
+} from '@cardstack/host/utils/schema-editor';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import type { WithBoundArgs } from '@glint/template';
+
+interface UnsupportedMessageSignature {
+  Element: HTMLDivElement;
+  Args: {
+    selectedDeclaration?: ModuleDeclaration;
+  };
+}
+
+class UnsupportedMessage extends Component<UnsupportedMessageSignature> {
+  private get unsupportedMessage() {
+    if (
+      isSelectedItemIncompatibleWithSchemaEditor(this.args.selectedDeclaration)
+    ) {
+      return `No tools are available for the selected item: ${this.args.selectedDeclaration?.type} "${this.args.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
+    }
+    return `No tools are available for the selected item. Select a card or field definition in the inspector.`;
+  }
+
+  <template>
+    <p
+      class='file-incompatible-message'
+      data-test-schema-editor-file-incompatibility-message
+    >
+      <span>
+        {{this.unsupportedMessage}}
+      </span>
+    </p>
+
+    <style scoped>
+      .file-incompatible-message {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        justify-content: center;
+        text-align: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        padding: var(--boxel-sp-xl);
+        margin-block: 0;
+      }
+      .file-incompatible-message > span {
+        max-width: 400px;
+      }
+    </style>
+  </template>
+}
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     file: Ready;
     moduleAnalysis: ModuleAnalysis;
-    cardTypeResource?: CardType;
-    card: typeof BaseDef;
+    cardType?: Type;
+    card?: typeof BaseDef;
     isReadOnly: boolean;
+    selectedDeclaration?: ModuleDeclaration;
     goToDefinition: (
       codeRef: CodeRef | undefined,
       localName: string | undefined,
@@ -99,7 +156,7 @@ export default class SchemaEditor extends Component<Signature> {
     this,
     () => this.args.file.url,
     () => this.args.card,
-    () => this.args.cardTypeResource,
+    () => this.args.cardType,
   );
 
   get totalFields() {
@@ -120,24 +177,32 @@ export default class SchemaEditor extends Component<Signature> {
   }
 
   get isLoading() {
-    return (
-      this.args.moduleAnalysis.isLoadingNewModule ||
-      this.cardInheritanceChain.isLoading
-    );
+    return this.cardInheritanceChain.isLoading;
+  }
+
+  get shouldRender() {
+    return this.args.card && this.args.cardType;
   }
 
   <template>
-    {{yield
-      (component SchemaEditorBadge totalFields=this.totalFields)
-      (component
-        CardAdoptionChain
-        file=@file
-        isReadOnly=@isReadOnly
-        moduleSyntax=this.moduleSyntax
-        cardInheritanceChain=this.cardInheritanceChain.value
-        goToDefinition=@goToDefinition
-        isLoading=this.isLoading
-      )
-    }}
+    {{#if this.shouldRender}}
+      {{yield
+        (component SchemaEditorBadge totalFields=this.totalFields)
+        (component
+          CardAdoptionChain
+          file=@file
+          isReadOnly=@isReadOnly
+          moduleSyntax=this.moduleSyntax
+          cardInheritanceChain=this.cardInheritanceChain.value
+          goToDefinition=@goToDefinition
+          isLoading=this.isLoading
+        )
+      }}
+    {{else}}
+      {{yield
+        (component SchemaEditorBadge totalFields=this.totalFields)
+        (component UnsupportedMessage selectedDeclaration=@selectedDeclaration)
+      }}
+    {{/if}}
   </template>
 }

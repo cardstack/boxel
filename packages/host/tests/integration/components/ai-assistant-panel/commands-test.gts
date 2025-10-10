@@ -146,10 +146,18 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
             <@fields.firstLetterOfTheName />
           </p>
           Pet:
-          <@fields.pet />
+          <div class='pet-container'>
+            <@fields.pet />
+          </div>
           Friends:
           <@fields.friends />
           <div data-test-addresses>Address: <@fields.address /></div>
+          <style scoped>
+            .pet-container {
+              height: 120px;
+              padding: 10px;
+            }
+          </style>
         </template>
       };
     }
@@ -533,7 +541,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
@@ -558,7 +566,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       1,
       'command result event is dispatched',
@@ -617,7 +625,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
@@ -636,7 +644,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     commandResultEvents = getRoomEvents(roomId).filter(
       (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       1,
       'command result event is dispatched',
@@ -672,8 +680,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           id: 'search1',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: JSON.stringify({
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               type: {
                 module: `${testRealmURL}pet`,
                 name: 'Pet',
@@ -761,8 +769,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: JSON.stringify({
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               type: {
                 module: `${testRealmURL}person`,
                 name: 'Person',
@@ -910,7 +918,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();
-    assert.dom('[data-test-workspace-chooser]').exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+    await click('[data-test-close-button]'); // close index card
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
@@ -1013,7 +1022,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
-
     await percySnapshot(assert); // can preview code in ViewCode panel
   });
 
@@ -1219,7 +1227,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
@@ -1242,7 +1250,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       1,
       'command result event is dispatched',
@@ -1317,7 +1325,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
@@ -1340,7 +1348,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       1,
       'command result event is dispatched',

@@ -1,3 +1,5 @@
+import DeselectIcon from '@cardstack/boxel-icons/deselect';
+import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { array, fn } from '@ember/helper';
 import Component from '@glimmer/component';
@@ -11,9 +13,9 @@ import {
 
 import cssVar from '../../helpers/css-var.ts';
 import { MenuItem } from '../../helpers/menu-item.ts';
-import { IconLink } from '../../icons.gts';
+import { IconLink, IconTrash } from '../../icons.gts';
 import CardContainer from '../card-container/index.gts';
-import CardHeader from './index.gts';
+import CardHeader, { type CardHeaderUtilityMenu } from './index.gts';
 
 interface CardTypeIconSignature {
   Element: SVGElement;
@@ -54,7 +56,8 @@ export default class CardHeaderUsage extends Component {
     publishable: null,
   };
   @tracked moreOptionsMenuItems: MenuItem[] = [
-    new MenuItem('Copy Card URL', 'action', {
+    new MenuItem({
+      label: 'Copy Card URL',
       action: () => console.log('Copy Card URL'),
       icon: IconLink,
       disabled: false,
@@ -66,6 +69,35 @@ export default class CardHeaderUsage extends Component {
   };
   onFinishEditing = () => {
     this.isEditing = false;
+  };
+
+  @tracked utilityMenu?: CardHeaderUtilityMenu = {
+    triggerText: '2 Selected',
+    menuItems: [
+      new MenuItem({
+        label: 'Deselect All',
+        icon: DeselectIcon,
+        action: () => {
+          console.log('Deselect all');
+          console.log('Delete 2 items');
+        },
+      }),
+      new MenuItem({
+        label: 'Select All',
+        icon: SelectAllIcon,
+        action: () => {
+          console.log('Select all');
+        },
+      }),
+      new MenuItem({
+        label: 'Delete 2 items',
+        dangerous: true,
+        icon: IconTrash,
+        action: () => {
+          console.log('Delete 2 items');
+        },
+      }),
+    ],
   };
 
   @cssVariable({ cssClassName: 'header-freestyle-container' })
@@ -116,6 +148,7 @@ export default class CardHeaderUsage extends Component {
               @onEdit={{unless this.isEditing this.onEdit}}
               @onFinishEditing={{if this.isEditing this.onFinishEditing}}
               @onClose={{this.close}}
+              @utilityMenu={{this.utilityMenu}}
             />
           </CardContainer>
         </:example>
@@ -166,6 +199,11 @@ export default class CardHeaderUsage extends Component {
             @name='realmInfo'
             @description='realm information'
             @value={{this.realmInfo}}
+          />
+          <Args.Object
+            @name='utilityMenu'
+            @description='when present, renders as a dropdown menu'
+            @value={{this.utilityMenu}}
           />
         </:api>
         <:cssVars as |Css|>

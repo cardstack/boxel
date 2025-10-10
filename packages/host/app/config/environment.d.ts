@@ -14,9 +14,9 @@ declare const config: {
   matrixURL: string;
   matrixServerName: string;
 
+  realmServerURL: string;
   resolvedBaseRealmURL: string;
   resolvedSkillsRealmURL: string;
-  hostModeDomainRoot?: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
@@ -34,4 +34,6 @@ declare const config: {
   featureFlags?: {
     SHOW_ASK_AI?: boolean;
   };
+  publishedRealmBoxelSpaceDomain: string;
+  publishedRealmBoxelSiteDomain: string;
 };

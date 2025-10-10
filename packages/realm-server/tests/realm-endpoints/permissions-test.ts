@@ -3,16 +3,10 @@ import { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
+import { Realm, fetchRealmPermissions } from '@cardstack/runtime-common';
 import {
-  baseRealm,
-  Realm,
-  fetchUserPermissions,
-} from '@cardstack/runtime-common';
-import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   testRealmURL,
@@ -28,8 +22,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let dir: DirResult;
     let dbAdapter: PgAdapter;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
     function onRealmSetup(args: {
       testRealm: Realm;
       request: SuperTest<Test>;
@@ -42,12 +34,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       dir = args.dir;
     }
 
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();
@@ -129,7 +116,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           });
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
-        let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
         assert.deepEqual(
           permissions,
           {
@@ -183,7 +170,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           'permissions response is correct',
         );
-        let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
         assert.deepEqual(
           permissions,
           {
@@ -236,7 +223,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           'permissions response is correct',
         );
-        let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
         assert.deepEqual(
           permissions,
           {
@@ -287,7 +274,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           'permissions response is correct',
         );
-        let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
         assert.deepEqual(
           permissions,
           {
@@ -322,7 +309,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           });
 
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
         assert.deepEqual(
           permissions,
           {
@@ -358,7 +345,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           });
 
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
         assert.deepEqual(
           permissions,
           {
@@ -386,7 +373,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           });
 
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
         assert.deepEqual(
           permissions,
           {
@@ -422,7 +409,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           });
 
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        let permissions = await fetchUserPermissions(dbAdapter, testRealmURL);
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
         assert.deepEqual(
           permissions,
           {

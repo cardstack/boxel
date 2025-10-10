@@ -4,22 +4,23 @@ import {
   IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
+import type { MatrixClient } from 'matrix-js-sdk';
+import type {
+  MatrixEvent as DiscreteMatrixEvent,
+  CommandResultWithOutputContent,
+  CommandResultWithNoOutputContent,
+  EncodedCommandRequest,
+  CodePatchResultContent,
+  CardMessageContent,
+} from 'https://cardstack.com/base/matrix-event';
+import { ChatCompletionMessageParam } from 'openai/resources';
 import {
   type OpenAIPromptMessage,
   isCodePatchResultStatusApplied,
   isCommandResultStatusApplied,
   attachedCardsToMessage,
   getRelevantCards,
-} from '../helpers';
-import type { MatrixClient } from './matrix/util';
-import type {
-  MatrixEvent as DiscreteMatrixEvent,
-  CommandResultEvent,
-  CommandResultWithOutputContent,
-  CommandResultWithNoOutputContent,
-  EncodedCommandRequest,
-} from 'https://cardstack.com/base/matrix-event';
-import { ChatCompletionMessageParam } from 'openai/resources';
+} from '@cardstack/runtime-common/ai';
 import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
@@ -33,7 +34,7 @@ export async function setTitle(
   roomId: string,
   history: DiscreteMatrixEvent[],
   userId: string,
-  event?: CommandResultEvent,
+  event?: MatrixEvent,
 ) {
   let startOfConversation: OpenAIPromptMessage[] = [
     {
@@ -41,7 +42,7 @@ export async function setTitle(
       content: SET_TITLE_SYSTEM_MESSAGE,
     },
     ...getStartOfConversation(history, userId),
-    ...getLatestCommandApplyMessage(history, userId, event),
+    ...getLatestResultMessage(history, userId, event),
     {
       role: 'user',
       content: 'Create a short title for this chat, limited to 6 words.',
@@ -98,48 +99,72 @@ export function getStartOfConversation(
   return messages;
 }
 
-export const getLatestCommandApplyMessage = (
+export const getLatestResultMessage = (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  event?: CommandResultEvent,
+  event?: MatrixEvent,
 ): OpenAIPromptMessage[] => {
   if (!event) {
     return [];
   }
-  // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
   let eventContent = event.getContent() as
     | CommandResultWithOutputContent
-    | CommandResultWithNoOutputContent;
+    | CommandResultWithNoOutputContent
+    | CodePatchResultContent;
   let messageRelation: IEventRelation | undefined =
     eventContent['m.relates_to'];
   let eventId = messageRelation?.event_id;
-  let commandSourceEvent = history.find((e) => e.event_id === eventId);
-  if (commandSourceEvent === undefined) {
+  let resultSourceEvent = history.find((e) => e.event_id === eventId);
+  if (resultSourceEvent === undefined) {
     return [];
   }
   let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
     history,
     aiBotUserId,
   );
-  // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-  let commandRequest = commandSourceEvent.content[
-    APP_BOXEL_COMMAND_REQUESTS_KEY
-  ].find((cr: EncodedCommandRequest) => {
-    return cr.id === eventContent.commandRequestId;
-  });
-  if (!commandRequest) {
-    return [];
+
+  let commandRequestId = (
+    eventContent as
+      | CommandResultWithOutputContent
+      | CommandResultWithNoOutputContent
+  ).commandRequestId;
+  if (commandRequestId) {
+    let commandRequests = (resultSourceEvent.content as CardMessageContent)[
+      APP_BOXEL_COMMAND_REQUESTS_KEY
+    ];
+    if (commandRequests) {
+      let commandRequest = commandRequests.find(
+        (cr: Partial<EncodedCommandRequest>) => {
+          return cr.id === commandRequestId;
+        },
+      );
+      if (!commandRequest) {
+        return [];
+      }
+      return [
+        {
+          role: 'user',
+          content: `Applying tool call ${commandRequest.name} with args ${commandRequest.arguments}. Cards shared are: ${attachedCardsToMessage(
+            mostRecentlyAttachedCard,
+            attachedCards,
+          )}`,
+        },
+      ];
+    }
   }
-  let content = `Applying tool call ${commandRequest.name} with args ${commandRequest.arguments}. Cards shared are: ${attachedCardsToMessage(
-    mostRecentlyAttachedCard,
-    attachedCards,
-  )}`;
-  return [
-    {
-      role: 'user',
-      content,
-    },
-  ];
+
+  if (isCodePatchResultStatusApplied(event)) {
+    return [
+      {
+        role: 'user',
+        content: `File(s) updated via code patch. Cards shared are: ${attachedCardsToMessage(
+          mostRecentlyAttachedCard,
+          attachedCards,
+        )}`,
+      },
+    ];
+  }
+  return [];
 };
 
 export const roomTitleAlreadySet = (rawEventLog: IRoomEvent[]) => {

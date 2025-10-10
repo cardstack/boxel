@@ -3,15 +3,22 @@ import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { ComponentLike } from '@glint/template';
-import Serializer from '@simple-dom/serializer';
 
+//@ts-ignore no types are available
+import createDocument from '@simple-dom/document';
+import Parser, { Tokenizer } from '@simple-dom/parser';
+import Serializer from '@simple-dom/serializer';
 import voidMap from '@simple-dom/void-map';
+
+import { tokenize } from 'simple-html-tokenizer';
 
 import {
   logger,
   baseRealm,
   RealmPaths,
+  loadDocument,
   type CodeRef,
+  type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { isCardError, CardError } from '@cardstack/runtime-common/error';
@@ -22,10 +29,11 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
-import {
-  type CardDef,
-  type Format,
-  type IdentityContext,
+import type {
+  CardDef,
+  Format,
+  CardStore,
+  BoxComponent,
 } from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -41,31 +49,59 @@ const log = logger('renderer');
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
 
-export class IdentityContextWithErrors implements IdentityContext {
+export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
+  #fetch: typeof globalThis.fetch;
+  #inFlight: Promise<unknown>[] = [];
+  #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
+    new Map();
 
-  get(url: string): CardDef | undefined {
-    return this.#cards.get(url);
+  constructor(fetch: typeof globalThis.fetch) {
+    this.#fetch = fetch;
   }
-  set(url: string, instance: CardDef): void {
-    this.#cards.set(url, instance);
+
+  get(id: string): CardDef | undefined {
+    id = id.replace(/\.json$/, '');
+    return this.#cards.get(id);
+  }
+  set(id: string, instance: CardDef): void {
+    id = id.replace(/\.json$/, '');
+    this.#cards.set(id, instance);
   }
   setNonTracked(id: string, instance: CardDef) {
+    id = id.replace(/\.json$/, '');
     return this.#cards.set(id, instance);
   }
   makeTracked(_id: string) {}
 
   readonly errors = new Set<string>();
+
+  async loadDocument(url: string) {
+    let promise = this.#docsInFlight.get(url);
+    if (promise) {
+      return await promise;
+    }
+    try {
+      promise = loadDocument(this.#fetch, url);
+      this.#docsInFlight.set(url, promise);
+      return await promise;
+    } finally {
+      this.#docsInFlight.delete(url);
+    }
+  }
+  trackLoad(load: Promise<unknown>) {
+    this.#inFlight.push(load);
+  }
+  async loaded() {
+    await Promise.allSettled(this.#inFlight);
+  }
 }
 
 export interface RenderCardParams {
   card: CardDef;
-  visit: (
-    url: URL,
-    identityContext: IdentityContextWithErrors | undefined,
-  ) => Promise<void>;
+  visit: (url: URL, store: CardStoreWithErrors | undefined) => Promise<void>;
   format?: Format;
-  identityContext: IdentityContextWithErrors;
+  store: CardStoreWithErrors;
   realmPath: RealmPaths;
   componentCodeRef?: CodeRef;
 }
@@ -90,11 +126,14 @@ export default class RenderService extends Service {
       card,
       visit,
       format = 'embedded',
-      identityContext,
+      store,
       realmPath,
       componentCodeRef,
     } = params;
-    let component = card.constructor.getComponent(card, undefined, {
+    const cardApi = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    let component = cardApi.getComponent(card, undefined, {
       componentCodeRef,
     });
 
@@ -122,7 +161,7 @@ export default class RenderService extends Service {
           await this.resolveField({
             card: errorInstance,
             fieldName,
-            identityContext,
+            store,
             visit,
             realmPath,
           });
@@ -146,6 +185,18 @@ export default class RenderService extends Service {
     return parseCardHtml(html);
   };
 
+  renderCardComponent(
+    component: BoxComponent,
+    capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
+    format: Format = 'isolated',
+  ): string {
+    let element = getIsolatedRenderElement(this.document);
+    render(component, element, this.owner, format);
+    let serializer = new Serializer(voidMap);
+    let html = serializer.serialize(element);
+    return parseCardHtml(html, capture);
+  }
+
   render = (component: ComponentLike): string => {
     let element = getIsolatedRenderElement(this.document);
     render(component, element, this.owner);
@@ -159,14 +210,12 @@ export default class RenderService extends Service {
   private async resolveField(
     params: Omit<RenderCardParams, 'format'> & { fieldName: string },
   ): Promise<void> {
-    let { card, visit, identityContext, realmPath, fieldName } = params;
+    let { card, visit, store, realmPath, fieldName } = params;
     let api = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
     try {
-      await api.getIfReady(card, fieldName as keyof CardDef, undefined, {
-        loadFields: true,
-      });
+      await api.getIfReady(card, fieldName as keyof CardDef);
     } catch (error: any) {
       let errors = Array.isArray(error) ? error : [error];
       for (let err of errors) {
@@ -179,12 +228,12 @@ export default class RenderService extends Service {
               ? [notLoaded.reference]
               : notLoaded.reference;
           for (let link of links) {
-            if (identityContext.errors.has(link)) {
+            if (store.errors.has(link)) {
               throw err; // the linked card was already found to be in an error state
             }
             let linkURL = new URL(`${link}.json`);
             if (realmPath.inRealm(linkURL)) {
-              await visit(linkURL, identityContext);
+              await visit(linkURL, store);
             } else {
               // in this case the instance we are linked to is a missing instance
               // in an external realm.
@@ -199,13 +248,35 @@ export default class RenderService extends Service {
   }
 }
 
-function parseCardHtml(html: string): string {
-  let matches = html.matchAll(
-    /<div id="isolated-render"[^>]*>[\n\s]*(?<html>[\W\w\n\s]*)[\s\n]*<\/div>/gm,
-  );
-  for (let match of matches) {
-    let { html } = match.groups as { html: string };
-    return html.trim();
+export function parseCardHtml(
+  html: string,
+  capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
+): string {
+  let document = createDocument();
+  let parser = new Parser(tokenize as Tokenizer, document, voidMap);
+  let fragment = parser.parse(html).firstChild;
+  if (!fragment) {
+    throw new Error(`no HTML to parse`);
+  }
+  let serializer = new Serializer(voidMap);
+
+  let parts: string[] = [];
+  for (let node = fragment.firstChild; node; node = node.nextSibling) {
+    if (capture === 'innerHTML') {
+      if (node.nodeType !== ELEMENT_NODE_TYPE) {
+        continue;
+      }
+      let element = node as SimpleElement;
+      for (let child = element.firstChild; child; child = child.nextSibling) {
+        parts.push(serializer.serialize(child));
+      }
+      return parts.join('').trim();
+    } else {
+      parts.push(serializer.serialize(node));
+    }
+  }
+  if (capture === 'outerHTML') {
+    return parts.join('').trim();
   }
   throw new Error(`unable to determine HTML for card. found HTML:\n${html}`);
 }

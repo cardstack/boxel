@@ -41,6 +41,8 @@ import RealmIconUsage from './components/realm-icon/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
 import SkeletonPlaceholderUsage from './components/skeleton-placeholder/usage.gts';
+import SortDropdownUsage from './components/sort-dropdown/usage.gts';
+import SwatchUsage from './components/swatch/usage.gts';
 import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TagListUsage from './components/tag-list/usage.gts';
@@ -89,6 +91,8 @@ export const ALL_USAGE_COMPONENTS = [
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
   ['SkeletonPlaceholder', SkeletonPlaceholderUsage],
+  ['SortDropdown', SortDropdownUsage],
+  ['Swatch', SwatchUsage],
   ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
   ['TagList', TagListUsage],

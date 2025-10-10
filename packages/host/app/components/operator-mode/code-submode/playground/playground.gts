@@ -27,6 +27,7 @@ class UnsupportedMessage extends Component<UnsupportedMessageSignature> {
   <template>
     <p
       class='file-incompatible-message'
+      data-test-playground-incompatible-message
       data-test-incompatible-nonexports={{not @codeRef}}
       data-test-incompatible-primitives={{isPrimitive @cardOrField}}
     >

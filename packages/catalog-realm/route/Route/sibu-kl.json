@@ -1,0 +1,42 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Route",
+        "module": "../route"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "mapConfig": {
+        "tileserverUrl": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+      },
+      "routeName": "Sibu-Kl",
+      "coordinates": [
+        {
+          "searchKey": "Sibu",
+          "lat": 2.2996601,
+          "lon": 111.8710012
+        },
+        {
+          "searchKey": "Kl",
+          "lat": 3.1526589,
+          "lon": 101.7022205
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

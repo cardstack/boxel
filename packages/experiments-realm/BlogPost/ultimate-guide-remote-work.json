@@ -15,8 +15,10 @@
         "height": null,
         "width": null
       },
-      "description": "In today's digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.",
-      "thumbnailURL": "https://images.unsplash.com/photo-1614624532983-4ce03382d63d?q=80&w=3131&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+      "cardInfo": {
+        "description": "In today's digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1614624532983-4ce03382d63d?q=80&w=3131&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+      }
     },
     "relationships": {
       "authors.0": {

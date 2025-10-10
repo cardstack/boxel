@@ -210,7 +210,10 @@ export default class Login extends Component<Signature> {
       // component being removed from the DOM and destroyed. Keep in mind that in EC tasks,
       // awaits are really just syntactic sugar for yields, and that we yield to
       // this.matrixService.start()
-      await this.matrixService.start({ auth, refreshRoutes: true });
+      await this.matrixService.start({
+        auth,
+        refreshRoutes: true,
+      });
     } else {
       throw new Error(
         `bug: should be impossible to get here - successful matrix login with no auth response`,
@@ -232,11 +235,5 @@ export function extractMatrixErrorMessage(e: MatrixError) {
     return 'Too many failed attempts, try again later.';
   } else {
     return `Unknown error ${e.httpStatus}: ${e.data.error}`;
-  }
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Login {
-    'Matrix::Login': typeof Login;
   }
 }

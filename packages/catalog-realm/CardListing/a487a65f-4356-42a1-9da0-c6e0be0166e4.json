@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "The Astral Gardens",
+      "summary": "Immersive art installation showcase with kaleidoscope visual design - explore cosmic garden sections, experience details, and booking information while viewing animated art-deco presentations. Features ornate framing, marquee text animations, section navigation, contact integration, and ethereal space-themed aesthetics for premium experiential art marketing.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/astral-gardens-listing/screenshot_01.png ",
+        "https://boxel-images.boxel.ai/app-assets/catalog/astral-gardens-listing/screenshot_02.png "
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/astral-gardens-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/07100678-a3a3-402f-8071-4e67719b4d6f"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../astral-garden/AstralGardens/3480eb5f-8d7c-45f5-be3b-5285fd473037"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

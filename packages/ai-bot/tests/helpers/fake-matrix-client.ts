@@ -1,8 +1,13 @@
-import type { IContent } from 'matrix-js-sdk';
-import type { MatrixClient } from '../../lib/matrix/util';
-import { Method } from 'matrix-js-sdk';
+import type {
+  IContent,
+  IHttpOpts,
+  IRequestOpts,
+  MatrixHttpApi,
+  StateEvents,
+} from 'matrix-js-sdk';
+import { Method, MatrixClient } from 'matrix-js-sdk';
 
-export class FakeMatrixClient implements MatrixClient {
+export class FakeMatrixClient extends MatrixClient {
   private eventId = 0;
   private sentEvents: {
     eventId: string;
@@ -12,6 +17,10 @@ export class FakeMatrixClient implements MatrixClient {
   }[] = [];
 
   baseUrl = 'https://example.com';
+
+  constructor() {
+    super({ baseUrl: 'test' });
+  }
 
   async uploadContent(
     _content: string,
@@ -24,28 +33,47 @@ export class FakeMatrixClient implements MatrixClient {
     };
   }
 
-  http: {
-    authedRequest: (
-      method: Method,
-      path: string,
-      queryParams: any,
-    ) => Promise<any>;
-  } = {
+  http = {
+    // Core request methods
     authedRequest: async (
       _method: Method,
       _path: string,
       _queryParams: any,
+      _body?: any,
+      _opts?: any,
     ) => {
       return { chunk: [] };
     },
-  };
+  } as unknown as MatrixHttpApi<IHttpOpts & { onlyData: true }>;
 
-  async sendEvent(
+  sendEvent(
     roomId: string,
     eventType: string,
     content: IContent,
-  ): Promise<{ event_id: string }> {
+    txnId?: string,
+  ): Promise<{ event_id: string }>;
+  sendEvent(
+    roomId: string,
+    threadId: string | null,
+    eventType: string,
+    content: IContent,
+    txnId?: string,
+  ): Promise<{ event_id: string }>;
+  async sendEvent(...args: any[]): Promise<{ event_id: string }> {
     const messageEventId = this.eventId.toString();
+
+    let roomId: string;
+    let eventType: string;
+    let content: IContent;
+
+    if (typeof args[2] === 'object') {
+      // First overload: (roomId, eventType, content, txnId?)
+      [roomId, eventType, content] = args;
+    } else {
+      // Second overload: (roomId, threadId, eventType, content, txnId?)
+      [roomId, , eventType, content] = args;
+    }
+
     this.sentEvents.push({
       eventId: messageEventId,
       roomId,
@@ -68,11 +96,12 @@ export class FakeMatrixClient implements MatrixClient {
     return this.sentEvents;
   }
 
-  sendStateEvent(
+  sendStateEvent<K extends keyof StateEvents>(
     _roomId: string,
-    _eventType: string,
-    _content: IContent,
-    _stateKey: string,
+    _eventType: K,
+    _content: StateEvents[K],
+    _stateKey?: string | undefined,
+    _opts?: IRequestOpts | undefined,
   ): Promise<{ event_id: string }> {
     throw new Error('Method not implemented.');
   }

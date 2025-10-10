@@ -1,17 +1,18 @@
 import { logger } from '@cardstack/runtime-common';
-import { isCommandOrCodePatchResult, type MatrixClient } from './matrix/util';
+import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
 import throttle from 'lodash/throttle';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
-import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
+import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
+import { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
@@ -94,10 +95,14 @@ export class Responder {
       chunk.choices?.[0]?.delta as { reasoning?: string }
     )?.reasoning;
 
+    let toolCalls = snapshot.choices?.[0]?.message?.tool_calls?.filter((call) =>
+      Boolean(call),
+    );
+
     const responseStateChanged = this.responseState.update(
       newReasoningContent,
       snapshot.choices?.[0]?.message?.content,
-      snapshot.choices?.[0]?.message?.tool_calls,
+      toolCalls,
       chunk.choices?.[0]?.finish_reason === 'stop',
     );
     log.debug('onChunk', {
@@ -123,7 +128,7 @@ export class Responder {
   }
 
   deserializeToolCall(
-    toolCall: ChatCompletionMessageToolCall,
+    toolCall: ChatCompletionMessageFunctionToolCall,
   ): FunctionToolCall {
     let { id, function: f } = toolCall;
     return {
@@ -135,7 +140,12 @@ export class Responder {
   }
 
   async onError(error: OpenAIError | string) {
-    Sentry.captureException(error);
+    Sentry.captureException(error, {
+      extra: {
+        roomId: this.matrixResponsePublisher.roomId,
+        agentId: this.matrixResponsePublisher.agentId,
+      },
+    });
     if (this.responseState.isStreamingFinished) {
       return;
     }

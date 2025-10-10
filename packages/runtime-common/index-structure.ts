@@ -1,13 +1,14 @@
-import { type CardResource } from './index';
+import { type CardResource, type SerializerName, type CodeRef } from './index';
 import { type SerializedError } from './error';
 import { type PgPrimitive } from './expression';
+import { type FieldType } from 'https://cardstack.com/base/card-api';
 
 export interface BoxelIndexTable {
   url: string;
   file_alias: string;
   realm_version: number;
   realm_url: string;
-  type: 'instance' | 'module' | 'error';
+  type: 'instance' | 'definition' | 'module' | 'error';
   // TODO in followup PR update this to be a document not a resource
   pristine_doc: CardResource | null;
   error_doc: SerializedError | null;
@@ -17,6 +18,7 @@ export interface BoxelIndexTable {
   deps: string[] | null;
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
+  definition: Definition | null;
   types: string[] | null;
   display_names: string[] | null;
   transpiled_code: string | null;
@@ -51,6 +53,23 @@ export interface RealmMetaTable {
   indexed_at: string | null;
 }
 
+export interface FieldDefinition {
+  type: FieldType;
+  isPrimitive: boolean;
+  isComputed: boolean;
+  fieldOrCard: CodeRef;
+  serializerName?: SerializerName;
+}
+
+export interface Definition {
+  type: 'card-def' | 'field-def';
+  codeRef: CodeRef;
+  displayName: string | null;
+  fields: {
+    [fieldName: string]: FieldDefinition;
+  };
+}
+
 export const coerceTypes = Object.freeze({
   deps: 'JSON',
   types: 'JSON',
@@ -60,9 +79,18 @@ export const coerceTypes = Object.freeze({
   embedded_html: 'JSON',
   fitted_html: 'JSON',
   display_names: 'JSON',
+  definition: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
   resource_created_at: 'VARCHAR',
   indexed_at: 'VARCHAR',
   value: 'JSON',
 });
+
+export interface PublishedRealmTable {
+  id: string;
+  owner_username: string;
+  source_realm_url: string;
+  published_realm_url: string;
+  last_published_at: string;
+}

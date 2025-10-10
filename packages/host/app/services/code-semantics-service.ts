@@ -25,9 +25,9 @@ import {
   moduleContentsResource,
   type State,
   type ModuleDeclaration,
-  findDeclarationByName,
   isCardOrFieldDeclaration,
 } from '../resources/module-contents';
+import { findDeclarationByName } from '../services/module-contents-service';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -52,7 +52,6 @@ export default class CodeSemanticsService extends Service {
         declarations: [],
         moduleError: undefined,
         isLoading: false,
-        isLoadingNewModule: false,
       };
     }
 
@@ -89,12 +88,6 @@ export default class CodeSemanticsService extends Service {
     if (!isModule) return false;
     let resource = this.getResourceForFile(file);
     return resource.isLoading;
-  }
-
-  getIsLoadingNewModule(file: Ready | undefined, isModule: boolean): boolean {
-    if (!isModule) return false;
-    let resource = this.getResourceForFile(file);
-    return resource.isLoadingNewModule;
   }
 
   getSelectedDeclaration(
@@ -141,11 +134,7 @@ export default class CodeSemanticsService extends Service {
   }
 
   get isModule() {
-    return (
-      this.isReady &&
-      hasExecutableExtension(this.readyFile.url) &&
-      !this.isIncompatibleFile
-    );
+    return this.isReady && hasExecutableExtension(this.readyFile.url);
   }
 
   get isReady() {
@@ -153,13 +142,13 @@ export default class CodeSemanticsService extends Service {
   }
 
   get isIncompatibleFile() {
-    return this.readyFile.isBinary || this.isNonCardJson;
+    return this.readyFile.isBinary || (!this.isModule && this.isNonCardJson);
   }
 
   private get isNonCardJson() {
-    return (
+    return !(
       this.readyFile.name.endsWith('.json') &&
-      !isCardDocumentString(this.readyFile.content)
+      isCardDocumentString(this.readyFile.content)
     );
   }
 

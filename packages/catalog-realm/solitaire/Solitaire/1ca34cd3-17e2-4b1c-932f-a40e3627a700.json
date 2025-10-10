@@ -1,0 +1,417 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Solitaire",
+        "module": "../solitaire"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "stock": [
+        {
+          "suit": "♣",
+          "rank": "Q",
+          "value": 12,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "J",
+          "value": 11,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "5",
+          "value": 5,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "J",
+          "value": 11,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "J",
+          "value": 11,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "A",
+          "value": 1,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "K",
+          "value": 13,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "2",
+          "value": 2,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "5",
+          "value": 5,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "8",
+          "value": 8,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "K",
+          "value": 13,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "9",
+          "value": 9,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "7",
+          "value": 7,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "3",
+          "value": 3,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "7",
+          "value": 7,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "10",
+          "value": 10,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "2",
+          "value": 2,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "Q",
+          "value": 12,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "K",
+          "value": 13,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "4",
+          "value": 4,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "4",
+          "value": 4,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "8",
+          "value": 8,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "4",
+          "value": 4,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "7",
+          "value": 7,
+          "color": "black",
+          "faceUp": false
+        }
+      ],
+      "waste": [],
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "gameState": "",
+      "tableauPile0": [
+        {
+          "suit": "♥",
+          "rank": "6",
+          "value": 6,
+          "color": "red",
+          "faceUp": true
+        }
+      ],
+      "tableauPile1": [
+        {
+          "suit": "♦",
+          "rank": "8",
+          "value": 8,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "3",
+          "value": 3,
+          "color": "red",
+          "faceUp": true
+        }
+      ],
+      "tableauPile2": [
+        {
+          "suit": "♥",
+          "rank": "10",
+          "value": 10,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "3",
+          "value": 3,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "2",
+          "value": 2,
+          "color": "black",
+          "faceUp": true
+        }
+      ],
+      "tableauPile3": [
+        {
+          "suit": "♣",
+          "rank": "6",
+          "value": 6,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "7",
+          "value": 7,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "A",
+          "value": 1,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "A",
+          "value": 1,
+          "color": "red",
+          "faceUp": true
+        }
+      ],
+      "tableauPile4": [
+        {
+          "suit": "♦",
+          "rank": "6",
+          "value": 6,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "9",
+          "value": 9,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "Q",
+          "value": 12,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "5",
+          "value": 5,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "6",
+          "value": 6,
+          "color": "black",
+          "faceUp": true
+        }
+      ],
+      "tableauPile5": [
+        {
+          "suit": "♥",
+          "rank": "A",
+          "value": 1,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "8",
+          "value": 8,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "2",
+          "value": 2,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "5",
+          "value": 5,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "3",
+          "value": 3,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "10",
+          "value": 10,
+          "color": "black",
+          "faceUp": true
+        }
+      ],
+      "tableauPile6": [
+        {
+          "suit": "♥",
+          "rank": "4",
+          "value": 4,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "10",
+          "value": 10,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♦",
+          "rank": "9",
+          "value": 9,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "K",
+          "value": 13,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♥",
+          "rank": "J",
+          "value": 11,
+          "color": "red",
+          "faceUp": false
+        },
+        {
+          "suit": "♣",
+          "rank": "9",
+          "value": 9,
+          "color": "black",
+          "faceUp": false
+        },
+        {
+          "suit": "♠",
+          "rank": "Q",
+          "value": 12,
+          "color": "black",
+          "faceUp": true
+        }
+      ],
+      "foundationPile0": [],
+      "foundationPile1": [],
+      "foundationPile2": [],
+      "foundationPile3": []
+    },
+    "relationships": {
+      "player": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

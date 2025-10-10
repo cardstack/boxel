@@ -42,6 +42,7 @@ import {
   setupOnSave,
   getMonacoContent,
   setMonacoContent,
+  setupRealmServerEndpoints,
 } from '../../../helpers';
 import {
   CardDef,
@@ -96,6 +97,84 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     setReadReceipt,
     getRoomEvents,
   } = mockMatrixUtils;
+
+  // Setup realm server endpoints for summarization tests
+  setupRealmServerEndpoints(hooks, [
+    {
+      route: '_request-forward',
+      getResponse: async (req: Request) => {
+        const body = await req.json();
+
+        // Handle summarization requests
+        if (body.url.includes('openrouter.ai/api/v1/chat/completions')) {
+          const requestBody = JSON.parse(body.requestBody);
+
+          // Check if this is a summarization request
+          if (
+            requestBody.messages &&
+            requestBody.messages.some(
+              (msg: any) =>
+                msg.content &&
+                msg.content.includes('Please provide a concise summary'),
+            )
+          ) {
+            // Return a mock summary based on the conversation content
+            const conversationText = requestBody.messages
+              .filter(
+                (msg: any) =>
+                  msg.role === 'user' &&
+                  !msg.content.includes('Please provide a concise summary'),
+              )
+              .map((msg: any) => msg.content)
+              .join(' ');
+
+            let summary = 'This conversation focused on general discussion.';
+
+            if (conversationText.includes('project')) {
+              summary =
+                'This conversation focused on project help, specifically creating a new card for a person with name and age fields. The user requested assistance with card creation and field definition.';
+            } else if (
+              conversationText.includes('card') &&
+              conversationText.includes('file')
+            ) {
+              summary =
+                'This conversation involved discussing a person card (Hassan) and a pet definition file. The user shared both a Person card and a pet.gts file, then asked for help understanding the structure.';
+            } else if (conversationText.includes('error')) {
+              throw new Error('OpenRouter API error');
+            }
+
+            return new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: {
+                      content: summary,
+                    },
+                  },
+                ],
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+        }
+
+        // Default response for other requests
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { id: 123, name: 'test' },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      },
+    },
+  ]);
 
   let noop = () => {};
 
@@ -1310,5 +1389,190 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click(`[data-test-llm-select-selected]`);
     assert.dom('.menu-content').containsText('non-standard-llm-1');
     assert.dom('.menu-content').containsText('non-standard-llm-2');
+  });
+
+  test('new session settings menu - comprehensive functionality', async function (assert) {
+    await renderAiAssistantPanel();
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+
+    // Test initial state
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should not be visible initially');
+
+    // Test tooltip appears on hover
+    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+
+    await waitFor('[data-test-tooltip-content]');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText(
+        'New Session (Shift+Click for options)',
+        'Tooltip shows correct text when menu is closed',
+      );
+
+    // Test menu opens on Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+
+    await waitFor('[data-test-new-session-settings-menu]');
+
+    // Test tooltip changes when menu is open
+    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText(
+        'Close New Session Settings',
+        'Tooltip shows correct text when menu is open',
+      );
+
+    assert
+      .dom('[data-test-new-session-settings-title]')
+      .hasText('New Session Options', 'Menu title is displayed correctly');
+
+    assert
+      .dom('[data-test-new-session-settings-option]')
+      .exists({ count: 3 }, 'All three options are present');
+    assert
+      .dom('[data-test-new-session-settings-label="Add Same Skills"]')
+      .exists('First option is present');
+    assert
+      .dom('[data-test-new-session-settings-label="Copy File History"]')
+      .exists('Second option is present');
+    assert
+      .dom('[data-test-new-session-settings-label="Summarize Current Session"]')
+      .exists('Third option is present');
+
+    assert
+      .dom('[data-test-new-session-settings-option].checked')
+      .doesNotExist('No checkboxes are initially checked');
+    await percySnapshot(assert);
+
+    // Test checkbox functionality
+    await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
+
+    assert
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 1 }, 'One checkbox should be checked');
+
+    await click(
+      '[data-test-new-session-settings-checkbox="Copy File History"]',
+    );
+
+    assert
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 2 }, 'One checkboxes should be checked');
+
+    assert
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 2 }, 'Two checkboxes should be checked');
+
+    await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
+
+    assert
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 1 }, 'One checkbox should be checked after unchecking');
+
+    // Test close button functionality
+    assert
+      .dom('[data-test-new-session-settings-close-button]')
+      .exists('Close button should be present');
+
+    await click('[data-test-new-session-settings-close-button]');
+
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should be hidden after clicking close button');
+
+    // Test menu opens again on Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await waitFor('[data-test-new-session-settings-menu]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .exists('Menu should be visible after Shift+Click again');
+
+    // Use plus button to close menu
+    await click('[data-test-create-room-btn]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu shoud be hidden after clicking plus button');
+
+    // Test menu opens again on Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await waitFor('[data-test-new-session-settings-menu]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .exists('Menu should be visible after Shift+Click again');
+
+    // Test create button functionality
+    assert
+      .dom('[data-test-new-session-settings-create-button]')
+      .hasText('Start New Session', 'Create button should have correct text');
+    await click('[data-test-new-session-settings-create-button]');
+
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should be hidden after clicking create button');
+
+    // Make create button enabled
+    await waitFor('[data-test-room-settled]');
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+    // Test menu opens again and create with options selected
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await waitFor('[data-test-new-session-settings-menu]');
+
+    // Select some options
+    await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
+
+    assert
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 2 }, 'Two checkboxes should be checked before creating');
+
+    await click('[data-test-new-session-settings-create-button]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist(
+        'Menu should be hidden after creating with options selected',
+      );
+
+    // Make create button enabled
+    await waitFor('[data-test-room-settled]');
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+    // Test click outside functionality
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+
+    await waitFor('[data-test-new-session-settings-menu]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .exists('Menu should be visible for click outside test');
+
+    // Click outside the menu
+    await click('[data-test-boxel-input-id="ai-chat-input"]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should be hidden after clicking outside');
+
+    // Test normal click creates session immediately (without opening menu)
+    await click('[data-test-create-room-btn]');
+
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should not open on normal click');
+
+    // Make create button enalebed
+    await waitFor('[data-test-room-settled]');
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+    // Verify tooltip shows correct text after normal click
+    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+    await waitFor('[data-test-tooltip-content]');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText(
+        'New Session (Shift+Click for options)',
+        'Tooltip shows correct text after normal click',
+      );
   });
 });

@@ -3,14 +3,13 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import cssUrl from 'ember-css-url';
-import { Link } from 'ember-link';
 
 import cn from '../../helpers/cn.ts';
 import compact from '../../helpers/compact.ts';
 import type { MenuDivider } from '../../helpers/menu-divider.ts';
-import type { MenuItem } from '../../helpers/menu-item.ts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import type { MenuAction, MenuItem } from '../../helpers/menu-item.ts';
 import CheckMark from '../../icons/check-mark.gts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 
 // This little component helps to make glint understand when we have a MenuItem and when we have a MenuDivider
 class MenuItemRenderer extends Component<{
@@ -24,7 +23,7 @@ class MenuItemRenderer extends Component<{
     return this.args.menuItem as MenuItem;
   }
   <template>
-    {{#if (eq @menuItem.type 'divider')}}
+    {{#if @menuItem.isDivider}}
       {{yield to='divider'}}
     {{else}}
       {{yield this.asMenuItem to='item'}}
@@ -38,13 +37,14 @@ interface Signature {
     closeMenu?: () => void;
     itemClass?: string;
     items: Array<MenuItem | MenuDivider>;
+    loading?: boolean;
   };
   Element: HTMLUListElement;
 }
 
 export default class Menu extends Component<Signature> {
   @action invokeMenuItemAction(
-    actionOrLink: unknown,
+    action: MenuAction,
     e: Event | KeyboardEvent,
   ): void {
     e.preventDefault();
@@ -52,19 +52,22 @@ export default class Menu extends Component<Signature> {
     if (e.type === 'keypress' && (e as KeyboardEvent).key !== 'Enter') {
       return;
     }
-
-    if (actionOrLink instanceof Link && actionOrLink.transitionTo) {
-      actionOrLink.transitionTo();
-    } else {
-      (actionOrLink as () => never)();
-    }
-    let { closeMenu } = this.args;
-    closeMenu && closeMenu();
+    action();
+    this.args.closeMenu?.();
   }
 
   <template>
     <ul role='menu' class={{cn 'boxel-menu' @class}} ...attributes>
-      {{#if @items}}
+      {{#if @loading}}
+        <li role='none' class='boxel-menu__item' data-test-boxel-menu-loading>
+          <div class='boxel-menu__item__content'>
+            <span class='menu-item'>
+              <LoadingIndicator />
+              Loading...
+            </span>
+          </div>
+        </li>
+      {{else if @items}}
         {{#each (compact @items) as |menuItem|}}
           <MenuItemRenderer @menuItem={{menuItem}}>
             <:divider>
@@ -81,19 +84,19 @@ export default class Menu extends Component<Signature> {
                   @itemClass
                   boxel-menu__item--dangerous=menuItem.dangerous
                   boxel-menu__item--has-icon=(if menuItem.icon true false)
-                  boxel-menu__item--selected=menuItem.selected
+                  boxel-menu__item--checked=menuItem.checked
                   boxel-menu__item--disabled=menuItem.disabled
                 }}
                 data-test-boxel-menu-item
-                data-test-boxel-menu-item-selected={{menuItem.selected}}
+                data-test-boxel-menu-item-selected={{menuItem.checked}}
               >
                 {{! template-lint-disable require-context-role }}
                 <div
                   class='boxel-menu__item__content'
                   role='menuitem'
                   href='#'
-                  data-test-boxel-menu-item-text={{menuItem.text}}
-                  tabindex={{menuItem.tabindex}}
+                  data-test-boxel-menu-item-text={{menuItem.label}}
+                  tabindex='0'
                   {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
                   {{on
                     'keypress'
@@ -110,7 +113,7 @@ export default class Menu extends Component<Signature> {
                         style={{cssUrl 'background-image' menuItem.iconURL}}
                       />
                     {{/if}}
-                    {{menuItem.text}}
+                    {{menuItem.label}}
                     {{#if menuItem.subtext}}
                       <span class='subtext'>
                         {{menuItem.subtext}}
@@ -127,7 +130,7 @@ export default class Menu extends Component<Signature> {
                   <span
                     class={{cn
                       'check-icon'
-                      check-icon--selected=menuItem.selected
+                      check-icon--selected=menuItem.checked
                     }}
                   >
                     <CheckMark class='checkmark' width='12' height='12' />
@@ -144,6 +147,7 @@ export default class Menu extends Component<Signature> {
         .boxel-menu {
           --boxel-menu-border-radius: var(--boxel-border-radius);
           --boxel-menu-color: var(--boxel-light);
+          --boxel-menu-text-color: var(--boxel-dark);
           --boxel-menu-current-color: var(--boxel-light-100);
           --boxel-menu-selected-color: var(--boxel-highlight);
           --boxel-menu-disabled-color: var(--boxel-highlight);
@@ -153,21 +157,23 @@ export default class Menu extends Component<Signature> {
           list-style-type: none;
           margin: 0;
           padding: 0;
+          color: var(--boxel-menu-text-color, inherit);
           background-color: var(--boxel-menu-color);
           border-radius: var(--boxel-menu-border-radius);
         }
 
         .boxel-menu__item {
           font: var(--boxel-menu-font);
+          font-family: inherit;
           letter-spacing: var(--boxel-lsp-sm);
         }
 
-        .boxel-menu__item--selected {
+        .boxel-menu__item--checked {
           background-color: var(--boxel-menu-selected-background-color);
           color: var(--boxel-menu-selected-font-color);
         }
 
-        .boxel-menu__item--selected:not(.boxel-menu__item--disabled):hover {
+        .boxel-menu__item--checked:not(.boxel-menu__item--disabled):hover {
           color: var(--boxel-menu-selected-hover-font-color);
         }
 

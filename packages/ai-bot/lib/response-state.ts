@@ -1,6 +1,6 @@
-import { cleanContent } from '../helpers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
+import { cleanContent } from '@cardstack/runtime-common/ai';
 
 export default class ResponseState {
   latestReasoning: string = '';
@@ -62,6 +62,11 @@ export default class ResponseState {
         this.latestReasoning = '';
       }
       this.latestReasoning = this.latestReasoning + newReasoningContent;
+      // gpt-5 has an annoying habit of beginning new headers without a preceding blank line
+      this.latestReasoning = this.latestReasoning.replace(
+        /(\S)(\*\*[^*]+\*\*\n\n)/,
+        '$1\n\n$2',
+      );
       return true;
     }
     return false;

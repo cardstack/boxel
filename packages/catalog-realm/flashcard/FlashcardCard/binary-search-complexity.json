@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "question": "What is the time complexity of binary search?",
+      "answer": "O(log n) - Binary search eliminates half of the remaining elements with each comparison, resulting in logarithmic time complexity.",
+      "difficulty": "medium",
+      "subject": "Computer Science",
+      "tags": "algorithms,binary-search,complexity,data-structures",
+      "reviewCount": 15,
+      "correctCount": 12,
+      "lastReviewed": "2025-01-15T10:00:00.000Z",
+      "nextReview": "2025-01-18T10:00:00.000Z",
+      "mastery": 80
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../flashcard",
+        "name": "FlashcardCard"
+      }
+    }
+  }
+}

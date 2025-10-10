@@ -10,19 +10,23 @@ export default async function visitOperatorMode({
   codePath,
   fileView,
   openDirs,
+  aiAssistantOpen,
   moduleInspector,
   workspaceChooserOpened,
-}: Partial<SerializedState>) {
+  trail,
+}: Partial<SerializedState> & { selectAllCardsFilter?: boolean }) {
   let operatorModeState = {
     stacks: stacks || [],
     submode: submode || 'interact',
     workspaceChooserOpened: workspaceChooserOpened
       ? workspaceChooserOpened
       : false,
+    aiAssistantOpen: aiAssistantOpen ?? false,
     ...(codePath ? { codePath } : {}),
     ...(fileView ? { fileView } : {}),
     ...(openDirs ? { openDirs } : {}),
     ...(moduleInspector ? { moduleInspector } : {}),
+    ...(trail ? { trail } : {}),
   };
 
   let operatorModeStateParam = stringify(operatorModeState)!;

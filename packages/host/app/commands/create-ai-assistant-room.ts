@@ -4,6 +4,7 @@ import format from 'date-fns/format';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -42,15 +43,29 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
         'Requires userId to execute CreateAiAssistantRoomCommand',
       );
     }
-    let { defaultSkills } = input;
-    let skillFileDefs: FileDef[] | undefined;
+    let { enabledSkills, disabledSkills } = input;
+    let enabledSkillFileDefs: FileDef[] | undefined;
     let commandFileDefs: FileDef[] | undefined;
-    if (defaultSkills) {
-      let skills = input.defaultSkills;
-      skillFileDefs = await matrixService.uploadCards(input.defaultSkills);
-      const commandDefinitions = skills.flatMap((skill) => skill.commands);
-      commandFileDefs =
-        await matrixService.uploadCommandDefinitions(commandDefinitions);
+    let disabledSkillFileDefs: FileDef[] | undefined;
+
+    if (enabledSkills?.length) {
+      enabledSkillFileDefs = await matrixService.uploadCards(enabledSkills);
+    }
+    if (disabledSkills?.length) {
+      disabledSkillFileDefs = await matrixService.uploadCards(disabledSkills);
+    } else {
+      disabledSkillFileDefs = [];
+    }
+
+    const uniqueCommandDefinitions = matrixService.getUniqueCommandDefinitions([
+      ...(enabledSkills?.flatMap((skill) => skill.commands) || []),
+      ...(disabledSkills?.flatMap((skill) => skill.commands) || []),
+    ]);
+
+    if (uniqueCommandDefinitions.length) {
+      commandFileDefs = await matrixService.uploadCommandDefinitions(
+        uniqueCommandDefinitions,
+      );
     }
 
     // Run room creation and module loading in parallel
@@ -79,13 +94,22 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
             },
           },
           {
+            type: APP_BOXEL_LLM_MODE,
+            content: {
+              mode: input.llmMode || 'ask',
+            },
+          },
+          {
             type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
             content: {
               enabledSkillCards:
-                skillFileDefs?.map((skillFileDef) =>
+                enabledSkillFileDefs?.map((skillFileDef) =>
                   skillFileDef.serialize(),
                 ) ?? [],
-              disabledSkillCards: [],
+              disabledSkillCards:
+                disabledSkillFileDefs?.map((skillFileDef) =>
+                  skillFileDef.serialize(),
+                ) ?? [],
               commandDefinitions:
                 commandFileDefs?.map((commandFileDef) =>
                   commandFileDef.serialize(),

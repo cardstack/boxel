@@ -24,10 +24,10 @@ import {
   type SortOption,
   sortByCardTitleAsc,
   SortMenu,
-} from './components/sort';
-import { CardList } from './components/card-list';
-import { CardsGrid } from './components/grid';
-import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
+} from '../components/sort';
+import { CardList } from '../components/card-list';
+import { CardsGrid } from '../components/grid';
+import { TitleGroup, Layout, type LayoutFilter } from '../components/layout';
 
 import {
   BasicFitted,
@@ -172,6 +172,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       @filters={{this.filters}}
       @activeFilter={{this.activeFilter}}
       @onFilterChange={{this.onFilterChange}}
+      class='blog-app'
     >
       <:sidebar>
         <TitleGroup
@@ -182,11 +183,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
           @element='header'
           aria-label='Sidebar Header'
         />
-        {{#if @context.actions.createCard}}
+        {{#if @createCard}}
           <BoxelButton
             class='sidebar-create-button'
             @kind='primary'
-            @size='large'
             @disabled={{this.activeFilter.isCreateNewDisabled}}
             @loading={{this.createCard.isRunning}}
             {{on 'click' this.createNew}}
@@ -407,7 +407,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         },
       },
     };
-    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
+    await this.args.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
       doc,
     });

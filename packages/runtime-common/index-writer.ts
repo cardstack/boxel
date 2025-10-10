@@ -5,14 +5,17 @@ import {
   type CardResource,
   type RealmInfo,
   type JobInfo,
+  type CodeRef,
   jobIdentity,
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
   unixTime,
   logger,
+  isUrlLike,
 } from './index';
 import { transpileJS } from './transpile';
+import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
   type Expression,
   param,
@@ -33,6 +36,7 @@ import {
   RealmMetaTable,
   type BoxelIndexTable,
   type RealmVersionsTable,
+  type Definition,
 } from './index-structure';
 
 export class IndexWriter {
@@ -60,7 +64,11 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
+export type IndexEntry =
+  | InstanceEntry
+  | ModuleEntry
+  | DefinitionEntry
+  | ErrorEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null }
@@ -98,6 +106,16 @@ interface ModuleEntry {
   deps: Set<string>;
 }
 
+interface DefinitionEntry {
+  type: 'definition';
+  definition: Definition;
+  types: string[];
+  fileAlias: string;
+  lastModified: number;
+  resourceCreatedAt: number;
+  deps: Set<string>;
+}
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -116,12 +134,25 @@ export class Batch {
   }
 
   get invalidations() {
-    return [...this.#invalidations];
+    // the card def id's are notional, they are not file resources that can be
+    // visited, so we don't expose them to the outside world
+    return [...this.#invalidations].filter((i) => !isDefinitionId(i));
+  }
+
+  // Look up created_at for a given file path from realm_file_meta
+  async getCreatedTime(localPath: string): Promise<number | undefined> {
+    // delegate to shared helper
+    return getCreatedTime(this.#dbAdapter, this.realmURL.href, localPath);
+  }
+
+  // Ensure a created_at row exists for this file in realm_file_meta and return it
+  async ensureFileCreatedAt(localPath: string): Promise<number> {
+    return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
   @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.#invalidations].map(
+    return [...this.invalidations].map(
       (href) => trimExecutableExtension(new URL(href)).href,
     );
   }
@@ -132,12 +163,18 @@ export class Batch {
        FROM boxel_index as i
           WHERE i.realm_url =`,
       param(this.realmURL.href),
+      // definition entries are notional so we skip over those
+      `AND type != 'definition'`,
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified'
     >[];
     let result: LastModifiedTimes = new Map();
     for (let { url, type, last_modified: lastModified } of results) {
+      // there might be errors docs from definition entries that we need to strip out
+      if (isDefinitionId(url)) {
+        continue;
+      }
       result.set(url, {
         type,
         // lastModified is unix time, so it should be safe to cast to number
@@ -222,6 +259,21 @@ export class Batch {
       this.updateIds(entry.search_doc, sourceRealmURL);
       entry.indexed_at = now;
 
+      entry.definition = entry.definition
+        ? {
+            type: entry.definition.type,
+            displayName: entry.definition.displayName,
+            codeRef: this.copiedCodeRef(
+              sourceRealmURL,
+              entry.definition.codeRef,
+            ),
+            fields: this.fieldDefinitionsWithCopiedCodeRefs(
+              sourceRealmURL,
+              entry.definition.fields,
+            ),
+          }
+        : entry.definition;
+
       let { valueExpressions, nameExpressions } = asExpressions(entry);
       columns = nameExpressions;
       return valueExpressions;
@@ -290,14 +342,25 @@ export class Batch {
               ),
               error_doc: null,
             }
-          : {
-              types: entry.types,
-              search_doc: entry.searchData,
-              // favor the last known good types over the types derived from the error state
-              ...((await this.getProductionVersion(url)) ?? {}),
-              type: 'error',
-              error_doc: entry.error,
-            }),
+          : entry.type === 'definition'
+            ? {
+                type: 'definition',
+                definition: entry.definition,
+                types: entry.types,
+                file_alias: entry.fileAlias,
+                deps: [...entry.deps],
+                last_modified: entry.lastModified,
+                resource_created_at: entry.resourceCreatedAt,
+                error_doc: null,
+              }
+            : {
+                types: entry.types,
+                search_doc: entry.searchData,
+                // favor the last known good types over the types derived from the error state
+                ...((await this.getProductionVersion(url)) ?? {}),
+                type: 'error',
+                error_doc: entry.error,
+              }),
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass
@@ -512,7 +575,44 @@ export class Batch {
     }
   }
 
-  async invalidate(urls: URL[]): Promise<string[]> {
+  private async tombstoneEntries(invalidations: string[]) {
+    // insert tombstone into next version of the realm index
+    let columns = [
+      'url',
+      'file_alias',
+      'type',
+      'realm_version',
+      'realm_url',
+      'is_deleted',
+    ].map((c) => [c]);
+    let rows = invalidations.map((id) =>
+      [
+        id,
+        isDefinitionId(id)
+          ? trimExportNameFromDefinitionId(id)
+          : trimExecutableExtension(new URL(id)).href,
+        hasExecutableExtension(id)
+          ? 'module'
+          : isDefinitionId(id)
+            ? 'definition'
+            : 'instance',
+        this.realmVersion,
+        this.realmURL.href,
+        true,
+      ].map((v) => [param(v)]),
+    );
+
+    await this.#query([
+      ...upsertMultipleRows(
+        'boxel_index_working',
+        'boxel_index_working_pkey',
+        columns,
+        rows,
+      ),
+    ]);
+  }
+
+  async invalidate(urls: URL[]): Promise<void> {
     await this.ready;
     let start = Date.now();
     this.#perfLog.debug(
@@ -534,38 +634,11 @@ export class Batch {
     }
 
     if (invalidations.length === 0) {
-      return [];
+      return;
     }
 
-    // insert tombstone into next version of the realm index
-    let columns = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_version',
-      'realm_url',
-      'is_deleted',
-    ].map((c) => [c]);
-    let rows = invalidations.map((id) =>
-      [
-        id,
-        trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id) ? 'module' : 'instance',
-        this.realmVersion,
-        this.realmURL.href,
-        true,
-      ].map((v) => [param(v)]),
-    );
-
     let insertStart = Date.now();
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    await this.tombstoneEntries(invalidations);
 
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${urls.map((u) => u.href).join()} in ${
@@ -578,21 +651,22 @@ export class Batch {
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
-    return invalidations;
   }
 
-  private async itemsThatReference(
-    resolvedPath: string,
-  ): Promise<
-    { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
+  private async itemsThatReference(resolvedPath: string): Promise<
+    {
+      url: string;
+      alias: string;
+      type: 'instance' | 'module' | 'definition' | 'error';
+    }[]
   > {
     let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: 'instance' | 'module' | 'definition' | 'error';
     })[] = [];
     let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: 'instance' | 'module' | 'definition' | 'error';
     })[] = [];
     let pageNumber = 0;
     do {
@@ -624,7 +698,7 @@ export class Batch {
         ]),
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'module' | 'error';
+        type: 'instance' | 'definition' | 'module' | 'error';
       })[];
       results = [...results, ...rows];
       pageNumber++;
@@ -655,8 +729,13 @@ export class Batch {
     let items = await this.itemsThatReference(resolvedPath);
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias: moduleAlias, type, url }) =>
-      // for instances we expect that the deps for an entry always includes .json extension
-      type === 'instance' ? url : moduleAlias,
+      type === 'instance'
+        ? // for instances we expect that the deps for an entry always includes .json extension
+          url
+        : type === 'definition'
+          ? // for definition we expect that the deps for an entry doesn't include the final export name path segment
+            trimExportNameFromDefinitionId(url)
+          : moduleAlias,
     );
     let results = [
       ...invalidations,
@@ -690,6 +769,39 @@ export class Batch {
     return result;
   }
 
+  private fieldDefinitionsWithCopiedCodeRefs(
+    fromRealm: URL,
+    fieldDefinitions: Definition['fields'],
+  ): Definition['fields'] {
+    return Object.fromEntries(
+      Object.entries(fieldDefinitions).map(([fieldName, fieldDefinition]) => [
+        fieldName,
+        {
+          ...fieldDefinition,
+          fieldOrCard: this.copiedCodeRef(
+            fromRealm,
+            fieldDefinition.fieldOrCard,
+          ),
+        },
+      ]),
+    );
+  }
+
+  private copiedCodeRef(fromRealm: URL, codeRef: CodeRef): CodeRef {
+    if (!('type' in codeRef)) {
+      if (isUrlLike(codeRef.module)) {
+        let module = this.copiedRealmURL(
+          fromRealm,
+          new URL(codeRef.module),
+        ).href;
+        return { ...codeRef, module };
+      } else {
+        return { ...codeRef };
+      }
+    }
+    return { ...codeRef, card: this.copiedCodeRef(fromRealm, codeRef.card) };
+  }
+
   private updateIds(obj: any, fromRealm: URL) {
     if (Array.isArray(obj)) {
       obj.forEach((i) => this.updateIds(i, fromRealm));
@@ -708,4 +820,12 @@ export class Batch {
       }
     }
   }
+}
+
+export function isDefinitionId(id: string) {
+  return !id.split('/').pop()!.includes('.'); // URL without an extension
+}
+
+export function trimExportNameFromDefinitionId(id: string) {
+  return id.split('/').slice(0, -1).join('/');
 }

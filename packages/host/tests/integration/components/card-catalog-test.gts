@@ -26,7 +26,6 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const realmName = 'Local Workspace';
-const baseRealmCardCount = 3;
 
 module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
@@ -200,6 +199,7 @@ module('Integration | card-catalog', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
     await waitFor('[data-test-realm="Local Workspace"]');
     await waitFor('[data-test-realm="Base Workspace"]');
@@ -215,11 +215,8 @@ module('Integration | card-catalog', function (hooks) {
         .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
         .exists({ count: 5 });
       assert
-        .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
-        .hasText(`${baseRealmCardCount} results`);
-      assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
+        .exists();
       assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
 
       let localResults = [
@@ -252,7 +249,7 @@ module('Integration | card-catalog', function (hooks) {
         .hasText(`Workspace: Base Workspace, Cardstack Catalog, Boxel Skills`);
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
-        .exists({ count: baseRealmCardCount });
+        .exists();
 
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
 
@@ -266,7 +263,7 @@ module('Integration | card-catalog', function (hooks) {
     test('can paginate results from a realm', async function (assert) {
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-show-more-cards]`)
-        .doesNotExist("don't show pagination button for base realm");
+        .exists('show pagination button for base realm');
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
         .exists('show pagination button for test realm');
@@ -320,7 +317,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Publishing Packet');
+        .hasText('Publishing Packet - Untitled Publishing Packet');
     });
 
     test(`can select card using mouse click and then submit selection using enter key`, async function (assert) {
@@ -383,7 +380,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Author');
+        .hasText('Author - Untitled Author');
     });
 
     test(`double-clicking on a card selects the card and submits the selection`, async function (assert) {

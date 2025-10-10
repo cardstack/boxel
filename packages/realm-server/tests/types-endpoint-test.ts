@@ -5,19 +5,17 @@ import { Server } from 'http';
 import { type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
-  baseRealm,
   Realm,
   type QueuePublisher,
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
-  createVirtualNetworkAndLoader,
+  createVirtualNetwork,
   matrixURL,
   closeServer,
 } from './helpers';
@@ -60,14 +58,7 @@ module(basename(__filename), function () {
         dir,
       };
     }
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -82,6 +73,7 @@ module(basename(__filename), function () {
     });
 
     setupMatrixRoom(hooks, getRealmSetup);
+    let virtualNetwork = createVirtualNetwork();
 
     async function startRealmServer(
       dbAdapter: PgAdapter,
@@ -132,6 +124,15 @@ module(basename(__filename), function () {
         data: [
           {
             type: 'card-type-summary',
+            id: 'http://127.0.0.1:4444/family_photo_card/FamilyPhotoCard',
+            attributes: {
+              displayName: 'Family Photo Card',
+              total: 2,
+              iconHTML,
+            },
+          },
+          {
+            type: 'card-type-summary',
             id: `${testRealm.url}friend/Friend`,
             attributes: {
               displayName: 'Friend',
@@ -163,6 +164,15 @@ module(basename(__filename), function () {
             attributes: {
               displayName: 'Person',
               total: 3,
+              iconHTML,
+            },
+          },
+          {
+            type: 'card-type-summary',
+            id: 'http://127.0.0.1:4444/person-with-error/PersonCard',
+            attributes: {
+              displayName: 'Person',
+              total: 4,
               iconHTML,
             },
           },

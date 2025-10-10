@@ -6,6 +6,7 @@
   "devDependencies": {
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@types/lodash": "catalog:",
     "chess.js": "catalog:",
@@ -13,7 +14,7 @@
     "ember-concurrency": "catalog:",
     "ember-modifier": "^4.1.0",
     "ember-template-lint": "catalog:",
-    "tracked-built-ins": "^3.3.0"
+    "tracked-built-ins": "catalog:"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:"

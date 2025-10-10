@@ -7,12 +7,17 @@ import {
   RunnerOptionsManager,
   IndexWriter,
   type StatusArgs,
+  type Prerenderer,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import { makeFastBootIndexRunner } from './fastboot';
-import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
-import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  PgQueueRunner,
+} from '@cardstack/postgres';
+import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 
 let log = logger('worker');
 
@@ -47,6 +52,7 @@ let {
   toUrl: toUrls,
   priority = 0,
   migrateDB,
+  prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
   .options({
@@ -80,10 +86,25 @@ let {
         'The minimum priority of jobs that the worker should process (defaults to 0)',
       type: 'number',
     },
+    prerendererUrl: {
+      // TODO make this required when feature flag is removed
+      description: 'URL of the prerender server to invoke',
+      type: 'string',
+    },
   })
   .parseSync();
 
 log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
+let prerenderer: Prerenderer;
+if (process.env.USE_HEADLESS_CHROME_INDEXING && prerendererUrl) {
+  (globalThis as any).__useHeadlessChromePrerender = true;
+  log.info(`Using prerender server ${prerendererUrl}`);
+  prerenderer = createRemotePrerenderer(prerendererUrl);
+} else {
+  prerenderer = async () => {
+    throw new Error(`Prerenderer server has not been configured/enabled`);
+  };
+}
 
 if (fromUrls.length !== toUrls.length) {
   log.error(
@@ -93,9 +114,6 @@ if (fromUrls.length !== toUrls.length) {
 }
 
 let virtualNetwork = new VirtualNetwork();
-
-shimExternals(virtualNetwork);
-
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl)),
   new URL(String(toUrls[i])),
@@ -132,6 +150,9 @@ let autoMigrate = migrateDB || undefined;
     indexRunner: getRunner,
     reportStatus,
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
+    dbAdapter,
+    queuePublisher: new PgQueuePublisher(dbAdapter),
+    prerenderer,
   });
 
   await worker.run();
@@ -139,6 +160,27 @@ let autoMigrate = migrateDB || undefined;
   if (process.send) {
     process.send(`ready:${workerId}`);
   }
+
+  // Handle graceful shutdown
+  const shutdown = async () => {
+    log.info(`Shutting down worker ${workerId}...`);
+    try {
+      await queue.destroy();
+      await dbAdapter.close();
+      log.info(`Worker ${workerId} shut down gracefully`);
+      process.exit(0);
+    } catch (err) {
+      log.error(`Error during worker shutdown:`, err);
+      process.exit(1);
+    }
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  process.on('message', (message) => {
+    if (message === 'stop') {
+      shutdown(); // warning this is async
+    }
+  });
 })().catch((e: any) => {
   Sentry.captureException(e);
   log.error(

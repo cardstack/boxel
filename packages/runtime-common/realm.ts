@@ -4,9 +4,9 @@ import {
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './document-types';
-import { type CardResource } from './resource-types';
-import { Loader } from './loader';
+import { isMeta, type CardResource } from './resource-types';
 import { RealmPaths, LocalPath, join } from './paths';
+import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
 import {
   systemError,
   notFound,
@@ -24,11 +24,13 @@ import {
   hasExecutableExtension,
   isNode,
   logger,
-  fetchUserPermissions,
+  fetchRealmPermissions,
   insertPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
   internalKeyFor,
+  query,
+  param,
   isValidPrerenderedHtmlFormat,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -38,12 +40,20 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
+  type ResolvedCodeRef,
+  type FieldDefinition,
+  type RealmPermissions,
+  type RealmAction,
+  codeRefWithAbsoluteURL,
+  isResolvedCodeRef,
   userInitiatedPriority,
   userIdFromUsername,
+  isCardDocumentString,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
+import { type CardFields } from './resource-types';
 import {
   fileContentToText,
   readFileAsText,
@@ -63,7 +73,6 @@ import {
 } from './router';
 import { InvalidQueryError, assertQuery, parseQuery } from './query';
 import type { Readable } from 'stream';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
@@ -77,6 +86,7 @@ import { RealmAuthDataSource } from './realm-auth-data-source';
 import { fetcher } from './fetcher';
 import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
+import serialize from './file-serializer';
 
 import {
   MatrixBackendAuthentication,
@@ -94,6 +104,10 @@ import {
   AtomicPayloadValidationError,
   filterAtomicOperations,
 } from './atomic-document';
+import {
+  DefinitionsCache,
+  isFilterRefersToNonexistentTypeError,
+} from './definitions-cache';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -112,13 +126,13 @@ export type RealmInfo = {
   visibility: RealmVisibility;
   realmUserId?: string;
   publishable: boolean | null;
+  lastPublishedAt: string | Record<string, string> | null;
 };
 
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
-  created: number;
 
   [key: symbol]: object;
 }
@@ -130,17 +144,15 @@ export interface TokenClaims {
   permissions: RealmPermissions['user'];
 }
 
-export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
-
-export interface RealmPermissions {
-  [username: string]: RealmAction[] | null;
-}
-
-export interface FileWriteResult {
+export interface AdapterWriteResult {
   path: string;
   lastModified: number;
-  created: number;
-  isNew: boolean;
+}
+
+export interface FileWriteResult extends AdapterWriteResult {
+  path: string;
+  lastModified: number;
+  created: number | null;
 }
 
 export interface WriteOptions {
@@ -164,7 +176,7 @@ export interface RealmAdapter {
 
   exists(path: LocalPath): Promise<boolean>;
 
-  write(path: LocalPath, contents: string): Promise<FileWriteResult>;
+  write(path: LocalPath, contents: string): Promise<AdapterWriteResult>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -191,8 +203,6 @@ export interface RealmAdapter {
   subscribe(cb: (message: UpdateRealmEventContent) => void): Promise<void>;
 
   unsubscribe(): void;
-
-  setLoader?(loader: Loader): void;
 
   broadcastRealmEvent(
     event: RealmEventContent,
@@ -241,6 +251,8 @@ export class Realm {
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
   #realmServerMatrixUserId: string;
+  #definitionsCache: DefinitionsCache;
+  #copiedFromRealm: URL | undefined;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -257,7 +269,7 @@ export class Realm {
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
-  #loaderTemplate: Loader;
+  readonly __fetchForTesting: typeof globalThis.fetch;
   readonly paths: RealmPaths;
 
   private visibilityPromise?: Promise<RealmVisibility>;
@@ -306,6 +318,7 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
     let _fetch = fetcher(virtualNetwork.fetch, [
       // when we run cards directly in node we do so under the authority of the
@@ -317,7 +330,6 @@ export class Realm {
           owner = await this.getRealmOwnerUserId();
         }
         req.headers.set('X-Boxel-Assume-User', owner);
-        req.headers.set('X-Boxel-Disable-Module-Cache', 'true');
         return next(req);
       },
       async (req, next) => {
@@ -337,10 +349,9 @@ export class Realm {
         new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
       ),
     ]);
+    this.#definitionsCache = new DefinitionsCache(_fetch);
 
-    let loader = new Loader(_fetch, virtualNetwork.resolveImport);
-    adapter.setLoader?.(loader);
-    this.#loaderTemplate = loader;
+    this.__fetchForTesting = _fetch;
 
     this.#realmIndexUpdater = new RealmIndexUpdater({
       realm: this,
@@ -351,6 +362,7 @@ export class Realm {
       realm: this,
       dbAdapter,
       fetch: _fetch,
+      definitionsCache: this.#definitionsCache,
     });
 
     this.#router = new Router(new URL(url))
@@ -393,6 +405,11 @@ export class Realm {
         '/_permissions',
         SupportedMimeType.Permissions,
         this.patchRealmPermissions.bind(this),
+      )
+      .get(
+        '/_definition',
+        SupportedMimeType.JSONAPI,
+        this.getDefinition.bind(this),
       )
       .get(
         '/_readiness-check',
@@ -476,10 +493,6 @@ export class Realm {
     });
   }
 
-  get loaderTemplate() {
-    return this.#loaderTemplate;
-  }
-
   async indexing() {
     return this.#realmIndexUpdater.indexing();
   }
@@ -527,9 +540,47 @@ export class Realm {
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
     await this.indexing();
-    let results: FileWriteResult[] = [];
     let urls: URL[] = [];
+    // Collect write results for all files we wrote
+    let results: { path: LocalPath; lastModified: number }[] = [];
+    let fileMetaRows: { path: LocalPath }[] = [];
+    let lastWriteType: 'module' | 'instance' | undefined;
+    let currentWriteType: 'module' | 'instance' | undefined;
+    let invalidations: Set<string> = new Set();
+    let clientRequestId: string | null | undefined;
+    let performIndex = async () => {
+      await this.#realmIndexUpdater.update(urls, {
+        onInvalidation: (invalidatedURLs: URL[]) => {
+          if (invalidatedURLs.find((u) => hasExecutableExtension(u.href))) {
+            this.#definitionsCache.invalidate();
+          }
+          invalidations = new Set([
+            ...invalidations,
+            ...invalidatedURLs.map((u) => u.href),
+          ]);
+          clientRequestId = clientRequestId ?? options?.clientRequestId;
+        },
+      });
+    };
+
     for (let [path, content] of files) {
+      lastWriteType = currentWriteType ?? lastWriteType;
+      currentWriteType = hasExecutableExtension(path)
+        ? 'module'
+        : path.endsWith('.json') && isCardDocumentString(content)
+          ? 'instance'
+          : undefined;
+      if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        // we need to generate/update possible definition in order for
+        // instance file serialization that may depend on the included module to
+        // work. TODO: we could be more precise here and keep track of what
+        // modules the instances depend on and only flush the modules to index
+        // when you you see that you have an instance that you are about to
+        // write to disk that depends on a module that is part of this
+        // operation.
+        await performIndex();
+        urls = [];
+      }
       let url = this.paths.fileURL(path);
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
@@ -543,28 +594,57 @@ export class Realm {
           content = JSON.stringify(serialized, null, 2);
         }
       } catch (e: any) {
-        if (e.message.includes('not found')) {
-          throw new Error(e);
+        if (
+          e.message?.includes?.('not found') ||
+          isFilterRefersToNonexistentTypeError(e)
+        ) {
+          throw e;
         }
       }
-      let { lastModified, created, isNew } = await this.#adapter.write(
-        path,
-        content,
-      );
-      results.push({ path, lastModified, created, isNew });
+      let { lastModified } = await this.#adapter.write(path, content);
+      results.push({ path, lastModified });
+      fileMetaRows.push({ path });
       urls.push(url);
     }
-    await this.#realmIndexUpdater.update(urls, {
-      onInvalidation: (invalidatedURLs: URL[]) => {
-        this.broadcastRealmEvent({
-          eventName: 'index',
-          indexType: 'incremental',
-          invalidations: invalidatedURLs.map((u) => u.href),
-          clientRequestId: options?.clientRequestId ?? null,
-        });
-      },
+
+    // persist file meta (created_at) to DB independent of index and retrieve created
+    let createdMap = await this.persistFileMeta(fileMetaRows);
+    if (urls.length > 0) {
+      await performIndex();
+    }
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [...invalidations],
+      clientRequestId,
     });
-    return results;
+    return results.map(({ path, lastModified }) => ({
+      path,
+      lastModified,
+      created: createdMap.get(path) ?? null,
+    }));
+  }
+
+  // persist created_at into realm_file_meta table using db adapter
+  private async persistFileMeta(
+    rows: { path: LocalPath }[],
+  ): Promise<Map<LocalPath, number>> {
+    if (!this.#dbAdapter || rows.length === 0) return new Map();
+    const createdMap = await persistFileMeta(
+      this.#dbAdapter,
+      this.url,
+      rows.map((r) => r.path),
+    );
+    // maintain LocalPath typing on keys
+    return new Map(
+      Array.from(createdMap.entries()).map(([p, c]) => [p as LocalPath, c]),
+    );
+  }
+
+  // remove file meta rows for deleted paths
+  private async removeFileMeta(paths: LocalPath[]): Promise<void> {
+    if (!this.#dbAdapter || paths.length === 0) return;
+    await removeFileMeta(this.#dbAdapter, this.url, paths);
   }
 
   validate(json: any): AtomicPayloadValidationError[] {
@@ -822,9 +902,14 @@ export class Realm {
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
+    // Remove file meta for this path
+    await this.removeFileMeta([path]);
     await this.#realmIndexUpdater.update([url], {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
+        if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+          this.#definitionsCache.invalidate();
+        }
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -834,26 +919,36 @@ export class Realm {
     });
   }
 
-  private get loader() {
-    // the current loader used by the search index will contain the latest
-    // module updates as we obtain a new loader for each indexing run.
-    if (isNode) {
-      return this.realmIndexUpdater.loader;
-    } else {
-      // when we are under test (via browser) we are using a loader that was
-      // pre-configured and handed to us which is shared between the host app
-      // and the realm. in order for cards to run correctly and instance data
-      // buckets not to be smeared across different loaders we need to continue
-      // to use the same loader that we were handed in the test setup. Right now
-      // we are using `isNode` as a heuristic to determine if we are running in
-      // a test. This might need to change in the future if we want the Realm to
-      // really run in teh browser in a non testing scenario.
-      return this.loaderTemplate;
-    }
-  }
+  async deleteAll(paths: LocalPath[]): Promise<void> {
+    let urls: URL[] = [];
+    let trackPromises: Promise<void>[] = [];
+    let removePromises: Promise<void>[] = [];
 
-  __resetLoaderForTest() {
-    this.#loaderTemplate = Loader.cloneLoader(this.#loaderTemplate);
+    for (let path of paths) {
+      let url = this.paths.fileURL(path);
+      urls.push(url);
+      this.sendIndexInitiationEvent(url.href);
+      trackPromises.push(this.trackOwnWrite(path, { isDelete: true }));
+      removePromises.push(this.#adapter.remove(path));
+    }
+
+    await Promise.all(trackPromises);
+    await Promise.all(removePromises);
+    // Remove file meta for all deleted paths
+    await this.removeFileMeta(paths);
+    await this.#realmIndexUpdater.update(urls, {
+      delete: true,
+      onInvalidation: (invalidatedURLs: URL[]) => {
+        if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+          this.#definitionsCache.invalidate();
+        }
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: invalidatedURLs.map((u) => u.href),
+        });
+      },
+    });
   }
 
   get realmIndexUpdater() {
@@ -866,6 +961,7 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.fullIndex();
+    this.#definitionsCache.invalidate();
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'full',
@@ -875,19 +971,28 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     let startTime = Date.now();
-    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    if (isNewIndex || this.#fullIndexOnStartup) {
-      let promise = this.#realmIndexUpdater.fullIndex();
-      if (isNewIndex) {
-        // we only await the full indexing at boot if this is a brand new index
-        await promise;
-      }
-      // not sure how useful this event is--nothing is currently listening for
-      // it, and it may happen during or after the full index...
+    if (this.#copiedFromRealm) {
+      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
       this.broadcastRealmEvent({
         eventName: 'index',
-        indexType: 'full',
+        indexType: 'copy',
+        sourceRealmURL: this.#copiedFromRealm.href,
       });
+    } else {
+      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      if (isNewIndex || this.#fullIndexOnStartup) {
+        let promise = this.#realmIndexUpdater.fullIndex();
+        if (isNewIndex) {
+          // we only await the full indexing at boot if this is a brand new index
+          await promise;
+        }
+        // not sure how useful this event is--nothing is currently listening for
+        // it, and it may happen during or after the full index...
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'full',
+        });
+      }
     }
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
@@ -912,13 +1017,13 @@ export class Realm {
   };
 
   async getRealmOwnerUserId(): Promise<string> {
-    let permissions = await fetchUserPermissions(
+    let permissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
 
     let userIds = Object.entries(permissions)
-      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
+      .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
       .map(([userId]) => userId);
     if (userIds.length > 1) {
       // we want to use the realm's human owner for the realm and not the bot
@@ -1237,9 +1342,9 @@ export class Realm {
         requestContext,
       });
     }
-    let headers = {
+    let createdFromDb = await this.getCreatedTime(ref.path);
+    let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
-      'x-created': formatRFC7231(ref.created * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
@@ -1247,6 +1352,9 @@ export class Realm {
       etag: String(ref.lastModified),
       'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
     };
+    if (createdFromDb != null) {
+      headers['x-created'] = formatRFC7231(createdFromDb * 1000);
+    }
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
@@ -1295,6 +1403,9 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
+      this.#log.warn(
+        `auth failed for ${request.method} ${request.url} missing auth header`,
+      );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
       );
@@ -1333,21 +1444,33 @@ export class Realm {
         JSON.stringify(token.permissions?.sort()) !==
           JSON.stringify(userPermissions.sort())
       ) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url}, for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+        );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
         );
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url}, for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+        );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
       }
-    } catch (e) {
+    } catch (e: any) {
       if (e instanceof TokenExpiredError) {
+        this.#log.warn(
+          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e instanceof JsonWebTokenError) {
+        this.#log.warn(
+          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
       throw e;
@@ -1358,7 +1481,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { lastModified } = await this.write(
+    let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       {
@@ -1370,7 +1493,10 @@ export class Realm {
       body: null,
       init: {
         status: 204,
-        headers: { 'last-modified': formatRFC7231(lastModified * 1000) },
+        headers: {
+          'last-modified': formatRFC7231(lastModified * 1000),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
       },
       requestContext,
     });
@@ -1398,6 +1524,14 @@ export class Realm {
             requestContext,
           });
         }
+        // Build headers, adding x-created from DB when possible
+        let dbPath = this.paths.local(canonicalURL);
+        let createdAt = await this.getCreatedTime(dbPath);
+        let createdHeader: Record<string, string> =
+          createdAt != null
+            ? { 'x-created': formatRFC7231(createdAt * 1000) }
+            : {};
+
         return createResponse({
           body: source,
           init: {
@@ -1405,6 +1539,7 @@ export class Realm {
               ...(lastModified != null
                 ? { 'last-modified': formatRFC7231(lastModified * 1000) }
                 : {}),
+              ...createdHeader,
             },
           },
           requestContext,
@@ -1438,9 +1573,16 @@ export class Realm {
         });
       }
 
+      // Build headers, adding x-created from DB when possible
+      let createdAt = await this.getCreatedTime(handle.path);
+      let createdHeader: Record<string, string> =
+        createdAt != null
+          ? { 'x-created': formatRFC7231(createdAt * 1000) }
+          : {};
       return await this.serveLocalFile(request, handle, requestContext, {
         defaultHeaders: {
           'content-type': 'text/plain; charset=utf-8',
+          ...createdHeader,
         },
       });
     } finally {
@@ -1488,7 +1630,11 @@ export class Realm {
           }`,
         );
       }
-      return { canonicalURL: new URL(canonicalURL), lastModified, source };
+      return {
+        canonicalURL: new URL(canonicalURL),
+        lastModified,
+        source,
+      };
     }
     return undefined;
   }
@@ -1652,7 +1798,7 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
 
@@ -1687,6 +1833,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
@@ -1847,7 +1994,7 @@ export class Realm {
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1878,6 +2025,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
@@ -1946,12 +2094,18 @@ export class Realm {
         });
       }
 
+      // Prefer created_at from DB for instance JSON
+      let pathForDb = this.paths.local(url) + '.json';
+      let createdAt = await this.getCreatedTime(pathForDb);
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             ...lastModifiedHeader(card),
+            ...(createdAt != null
+              ? { 'x-created': formatRFC7231(createdAt * 1000) }
+              : {}),
           },
         },
         requestContext,
@@ -1979,6 +2133,12 @@ export class Realm {
       init: { status: 204 },
       requestContext,
     });
+  }
+
+  // Look up created_at for a given file path from realm_file_meta
+  private async getCreatedTime(path: LocalPath): Promise<number | undefined> {
+    if (!this.#dbAdapter) return undefined;
+    return getCreatedTime(this.#dbAdapter, this.url, path);
   }
 
   private async directoryEntries(
@@ -2038,10 +2198,14 @@ export class Realm {
         let innerPath = this.paths.local(
           new URL(`${this.paths.directoryURL(dir).href}${entry.name}`),
         );
+        let createdFromDb = await this.getCreatedTime(innerPath);
         meta = {
           kind: 'file',
           lastModified: (await this.#adapter.lastModified(innerPath)) ?? null,
-        };
+          ...(createdFromDb != null
+            ? { resourceCreatedAt: createdFromDb }
+            : {}),
+        } as FileMeta;
       } else {
         meta = { kind: 'directory' };
       }
@@ -2298,6 +2462,78 @@ export class Realm {
     });
   }
 
+  private async getDefinition(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let href = new URL(request.url).search.slice(1);
+    let payload = parseQuery(href);
+    if (!payload.codeRef) {
+      return badRequest({
+        message: `The request body is missing the codeRef parameter`,
+        requestContext,
+      });
+    }
+    if (!isResolvedCodeRef(payload.codeRef)) {
+      return badRequest({
+        message: `The coderef parameter is not a valid code ref`,
+        requestContext,
+      });
+    }
+    let { codeRef } = payload;
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Building-Index'),
+    );
+    let maybeError = await this.#realmIndexQueryEngine.getOwnDefinition(
+      codeRef,
+      {
+        useWorkInProgressIndex,
+      },
+    );
+    if (!maybeError) {
+      return notFound(request, requestContext);
+    }
+    let id = internalKeyFor(codeRef, undefined);
+    if (maybeError.type === 'error') {
+      return systemError({
+        requestContext,
+        message: `cannot get definition, ${request.url}, from index: ${maybeError.error.message}`,
+        id,
+        additionalError: CardError.fromSerializableError(maybeError.error),
+        // This is based on https://jsonapi.org/format/#errors
+        body: {
+          id,
+          status: maybeError.error.status,
+          title: maybeError.error.title,
+          message: maybeError.error.message,
+          // note that this is actually available as part of the response
+          // header too--it's just easier for clients when it is here
+          realm: this.url,
+          meta: {
+            stack: maybeError.error.stack,
+          },
+        },
+      });
+    }
+    let { definition } = maybeError;
+    let doc: CardAPI.JSONAPISingleResourceDocument = {
+      data: {
+        id,
+        type: 'definition',
+        attributes: {
+          ...definition,
+        },
+      },
+    };
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
   private async getCardDependencies(
     request: Request,
     requestContext: RequestContext,
@@ -2389,7 +2625,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let permissions = await fetchUserPermissions(
+    let permissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
@@ -2439,7 +2675,7 @@ export class Realm {
       });
     }
 
-    let currentPermissions = await fetchUserPermissions(
+    let currentPermissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
     );
@@ -2462,6 +2698,66 @@ export class Realm {
     return await this.getRealmPermissions(request, requestContext);
   }
 
+  private async getLastPublishedAt(): Promise<
+    string | Record<string, string> | null
+  > {
+    try {
+      // First check if this realm is a published realm
+      let publishedRealmData = await this.queryPublishedRealm();
+      if (publishedRealmData) {
+        return publishedRealmData.last_published_at;
+      }
+
+      // If not published, check if this is a source realm with published versions
+      let publishedVersions = await this.querySourceRealmPublications();
+      if (publishedVersions.length > 0) {
+        return Object.fromEntries(
+          publishedVersions.map((p) => [
+            p.published_realm_url,
+            p.last_published_at,
+          ]),
+        );
+      }
+
+      return null; // Never published
+    } catch (error) {
+      this.#log.warn(`Failed to get lastPublishedAt: ${error}`);
+      return null;
+    }
+  }
+
+  private async queryPublishedRealm(): Promise<{
+    last_published_at: string;
+  } | null> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
+        param(this.url),
+      ])) as { last_published_at: string }[];
+
+      return results.length > 0 ? results[0] : null;
+    } catch (error) {
+      this.#log.warn(`Failed to query published realm: ${error}`);
+      return null;
+    }
+  }
+
+  private async querySourceRealmPublications(): Promise<
+    { published_realm_url: string; last_published_at: string }[]
+  > {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT published_realm_url, last_published_at FROM published_realms WHERE source_realm_url =`,
+        param(this.url),
+      ])) as { published_realm_url: string; last_published_at: string }[];
+
+      return results;
+    } catch (error) {
+      this.#log.warn(`Failed to query source realm publications: ${error}`);
+      return [];
+    }
+  }
+
   private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
@@ -2475,6 +2771,7 @@ export class Realm {
       realmUserId:
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
       publishable: null,
+      lastPublishedAt: await this.getLastPublishedAt(),
     };
     if (!realmConfig) {
       return realmInfo;
@@ -2527,21 +2824,107 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL,
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
-    let card = (await api.createFromSerialized(doc.data, doc, relativeTo, {
-      ignoreBrokenLinks: true,
-    })) as CardDef;
-    await api.flushLogs();
-    let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
-    delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
-    delete data.data.lid;
-    delete data.included;
-    for (let relationship of Object.values(data.data.relationships ?? {})) {
-      delete relationship.data;
+    let absoluteCodeRef = codeRefWithAbsoluteURL(
+      doc.data.meta.adoptsFrom,
+      relativeTo,
+    ) as ResolvedCodeRef;
+    let definition =
+      await this.#definitionsCache.getDefinition(absoluteCodeRef);
+    if (!definition) {
+      throw new Error(
+        `Could not find card definition for: ${JSON.stringify(absoluteCodeRef)}`,
+      );
     }
-    return data;
+
+    let customFieldDefinitions: Record<string, FieldDefinition> = {};
+    if (doc.data.meta?.fields) {
+      await this.buildCustomFieldDefinitions(
+        doc.data.meta.fields,
+        '',
+        customFieldDefinitions,
+        relativeTo,
+      );
+    }
+
+    return serialize({
+      doc,
+      definition,
+      realm: this.url,
+      relativeTo,
+      customFieldDefinitions,
+    });
+  }
+
+  private async buildCustomFieldDefinitions(
+    fields: CardFields,
+    basePath: string,
+    customFieldDefinitions: Record<string, FieldDefinition>,
+    relativeTo: URL,
+  ): Promise<void> {
+    for (const [fieldName, fieldValue] of Object.entries(fields)) {
+      const fieldPath = basePath ? `${basePath}.${fieldName}` : fieldName;
+      if (isMeta(fieldValue) && fieldValue?.fields) {
+        // if we have nested fields, we need to recurse into them
+        await this.buildCustomFieldDefinitions(
+          fieldValue.fields,
+          fieldPath,
+          customFieldDefinitions,
+          relativeTo,
+        );
+        continue;
+      }
+      if (Array.isArray(fieldValue)) {
+        for (const item of fieldValue) {
+          if (item.adoptsFrom) {
+            let absoluteCodeRef = codeRefWithAbsoluteURL(
+              item.adoptsFrom,
+              relativeTo,
+            ) as ResolvedCodeRef;
+            let fieldDefinition =
+              await this.#definitionsCache.getDefinition(absoluteCodeRef);
+            if (fieldDefinition) {
+              for (const [subFieldName, subFieldDefinition] of Object.entries(
+                fieldDefinition.fields,
+              )) {
+                const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
+                customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
+              }
+            }
+          }
+          if (item.fields) {
+            await this.buildCustomFieldDefinitions(
+              item.fields,
+              fieldPath,
+              customFieldDefinitions,
+              relativeTo,
+            );
+          }
+        }
+      } else if (fieldValue.adoptsFrom) {
+        let absoluteCodeRef = codeRefWithAbsoluteURL(
+          fieldValue.adoptsFrom,
+          relativeTo,
+        ) as ResolvedCodeRef;
+        let fieldDefinition =
+          await this.#definitionsCache.getDefinition(absoluteCodeRef);
+        if (fieldDefinition) {
+          for (const [subFieldName, subFieldDefinition] of Object.entries(
+            fieldDefinition.fields,
+          )) {
+            const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
+            customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
+          }
+        }
+        if (fieldValue.fields) {
+          await this.buildCustomFieldDefinitions(
+            fieldValue.fields,
+            fieldPath,
+            customFieldDefinitions,
+            relativeTo,
+          );
+        }
+      }
+    }
   }
 
   private async startFileWatcher() {
@@ -2577,6 +2960,9 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update([url], {
         onInvalidation: (invalidatedURLs: URL[]) => {
+          if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+            this.#definitionsCache.invalidate();
+          }
           this.broadcastRealmEvent({
             eventName: 'index',
             indexType: 'incremental',
@@ -2604,7 +2990,7 @@ export class Realm {
   private async createRequestContext(): Promise<RequestContext> {
     let permissions = {
       [this.#realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
-      ...(await fetchUserPermissions(this.#dbAdapter, new URL(this.url))),
+      ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
     };
     return {
       realm: this,
@@ -2618,7 +3004,7 @@ export class Realm {
     }
 
     this.visibilityPromise = (async () => {
-      let permissions = await fetchUserPermissions(
+      let permissions = await fetchRealmPermissions(
         this.#dbAdapter,
         new URL(this.url),
       );

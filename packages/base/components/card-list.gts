@@ -1,9 +1,6 @@
 import Component from '@glimmer/component';
 
-import {
-  CardContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
@@ -18,7 +15,7 @@ interface Signature {
     realms: string[];
     isLive?: boolean;
     format: Format;
-    cards?: BoxComponent & BoxComponent[];
+    cards?: BoxComponent[];
     viewOption?: string;
   };
   Element: HTMLElement;
@@ -43,29 +40,20 @@ export default class CardList extends Component<Signature> {
           @isLive={{@isLive}}
         >
           <:loading>
-            <LoadingIndicator />
+            <div class='loading-container'>
+              <LoadingIndicator />
+            </div>
           </:loading>
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
               <li
                 class={{cn 'boxel-card-list-item' instance-error=card.isError}}
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
                 data-test-instance-error={{card.isError}}
                 data-test-cards-grid-item={{removeFileExtension card.url}}
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                 data-cards-grid-item={{removeFileExtension card.url}}
               >
-                <CardContainer
-                  class='card-item {{@format}}-card-item'
-                  @displayBoundaries={{true}}
-                >
-                  <card.component />
-                </CardContainer>
+                <card.component />
               </li>
             {{else}}
               <p>No results were found</p>
@@ -116,17 +104,8 @@ export default class CardList extends Component<Signature> {
         width: var(--item-width);
         height: var(--item-height);
       }
-      .boxel-card-list-item > :deep(.fitted-card-item) {
-        container-name: fitted-card;
-        container-type: size;
-        height: 100%;
-        width: 100%;
-      }
-      .boxel-card-list-item > :deep(.atom-card-item) {
-        width: fit-content;
-        max-width: 100%;
-      }
-      .boxel-card-list-item > :deep(.embedded-card-item) {
+
+      .boxel-card-list-item > :deep(.field-component-card.embedded-format) {
         width: 100%;
         height: auto;
         max-width: var(--embedded-card-max-width);
@@ -149,6 +128,11 @@ export default class CardList extends Component<Signature> {
       }
       .instance-error:hover .boundaries {
         box-shadow: 0 0 0 1px var(--boxel-dark);
+      }
+      .loading-container {
+        grid-column: 1 / -1;
+        justify-content: center;
+        min-height: 50vh;
       }
     </style>
   </template>

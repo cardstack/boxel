@@ -56,6 +56,7 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
+          REALM_SERVER_ROOT: https://realms-staging.stack.cards/
           RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
           RESOLVED_SKILLS_REALM_URL: https://realms-staging.stack.cards/skills/
           MATRIX_URL: https://matrix-staging.stack.cards
@@ -64,6 +65,8 @@ jobs:
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
+          PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: staging.boxel.dev
+          PUBLISHED_REALM_BOXEL_SITE_DOMAIN: staging.boxel.build
         with:
           package: boxel-host
           environment: staging
@@ -86,6 +89,7 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
+          REALM_SERVER_ROOT: https://app.boxel.ai/
           RESOLVED_BASE_REALM_URL: https://app.boxel.ai/base/
           RESOLVED_SKILLS_REALM_URL: https://app.boxel.ai/skills/
           MATRIX_URL: https://matrix.boxel.ai
@@ -94,6 +98,8 @@ jobs:
           AWS_S3_BUCKET: boxel-host-preview.boxel.ai
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
+          PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: boxel.space
+          PUBLISHED_REALM_BOXEL_SITE_DOMAIN: boxel.site
         with:
           package: boxel-host
           environment: production

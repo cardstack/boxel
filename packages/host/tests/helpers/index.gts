@@ -7,10 +7,13 @@ import {
 } from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
 import ms from 'ms';
+
+import { validate as uuidValidate } from 'uuid';
 
 import {
   RealmAdapter,
@@ -19,17 +22,22 @@ import {
   RealmPermissions,
   Worker,
   RunnerOptionsManager,
+  IndexWriter,
   type RealmInfo,
   type TokenClaims,
-  IndexWriter,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
+  type Prerenderer,
+  type FromScratchArgsWithPermissions,
+  type IncrementalArgsWithPermissions,
   insertPermissions,
   unixTime,
+  RealmAction,
 } from '@cardstack/runtime-common';
-
+import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 import {
+  testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
   testRealmURLToUsername,
@@ -47,22 +55,29 @@ import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
-  type IdentityContext,
+  type CardStore,
   type CardDef,
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
+import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
-import type { MockUtils } from './mock-matrix/_utils';
-
-export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
+export {
+  visitOperatorMode,
+  testHostModeRealmURL,
+  testRealmURL,
+  testRealmInfo,
+  percySnapshot,
+};
 export * from '@cardstack/runtime-common/helpers';
-export * from '@cardstack/runtime-common/helpers/indexer';
+export * from './indexer';
+
+export const testModuleRealm = 'http://localhost:4202/test/';
 
 const { sqlSchema } = ENV;
 
@@ -79,8 +94,8 @@ export { provide as provideConsumeContext } from 'ember-provide-consume-context/
 export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
   // to be appearing in date/time serialization in some envs
-  // eslint-disable-next-line no-irregular-whitespace
-  return text.replace(/[\s ]+/g, ' ').trim();
+
+  return text.replace('<!---->', '').replace(/[\s]+/g, ' ').trim();
 }
 
 export function getMonacoContent(
@@ -199,6 +214,21 @@ export interface TestContextWithSave extends TestContext {
   unregisterOnSave: () => void;
 }
 
+export async function capturePrerenderResult(
+  capture: 'textContent' | 'innerHTML' | 'outerHTML',
+  expectedStatus: 'ready' | 'error' = 'ready',
+): Promise<{ status: 'ready' | 'error'; value: string }> {
+  await waitFor(`[data-prerender-status="${expectedStatus}"]`);
+  let element = document.querySelector('[data-prerender]') as HTMLElement;
+  let status = element.dataset.prerenderStatus as 'ready' | 'error';
+  if (status === 'error') {
+    // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
+    return { status, value: element.innerHTML!.replace(/}[^}]*$/, '}') };
+  } else {
+    return { status, value: element.children[0][capture]! };
+  }
+}
+
 async function makeRenderer() {
   // This emulates the application.hbs
   await renderComponent(
@@ -211,29 +241,35 @@ async function makeRenderer() {
 }
 
 class MockLocalIndexer extends Service {
+  @tracked renderError: string | undefined;
+  @tracked prerenderStatus:
+    | 'ready'
+    | 'loading'
+    | 'error'
+    | 'unusable'
+    | undefined;
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
   #indexWriter: IndexWriter | undefined;
-  #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
+  #prerenderer: Prerenderer | undefined;
+  #fromScratch:
+    | ((args: FromScratchArgsWithPermissions) => Promise<IndexResults>)
+    | undefined;
   #incremental:
-    | ((
-        urls: URL[],
-        realmURL: URL,
-        operation: 'update' | 'delete',
-        ignoreData: Record<string, string>,
-      ) => Promise<IndexResults>)
+    | ((args: IncrementalArgsWithPermissions) => Promise<IndexResults>)
     | undefined;
   setup(
-    fromScratch: (realmURL: URL) => Promise<IndexResults>,
-    incremental: (
-      urls: URL[],
-      realmURL: URL,
-      operation: 'update' | 'delete',
-      ignoreData: Record<string, string>,
+    fromScratch: (
+      args: FromScratchArgsWithPermissions,
     ) => Promise<IndexResults>,
+    incremental: (
+      args: IncrementalArgsWithPermissions,
+    ) => Promise<IndexResults>,
+    prerenderer: Prerenderer,
   ) {
     this.#fromScratch = fromScratch;
     this.#incremental = incremental;
+    this.#prerenderer = prerenderer;
   }
   async configureRunner(
     registerRunner: RunnerRegistration,
@@ -264,6 +300,18 @@ class MockLocalIndexer extends Service {
     }
     return this.#indexWriter;
   }
+  get prerenderer() {
+    if (!this.#prerenderer) {
+      throw new Error(`prerenderer not registered with MockLocalIndexer`);
+    }
+    return this.#prerenderer;
+  }
+  setPrerenderStatus(status: 'ready' | 'loading' | 'error' | 'unusable') {
+    this.prerenderStatus = status;
+  }
+  setRenderError(error: string) {
+    this.renderError = error;
+  }
 }
 
 export function setupLocalIndexing(hooks: NestedHooks) {
@@ -280,7 +328,9 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     // Without this, we have been experiencing test failures related to a destroyed owner, e.g.
     // "Cannot call .factoryFor('template:index-card_error') after the owner has been destroyed"
     await settled();
-    await getService('store').flushSaves();
+    let store = getService('store');
+    await store.flushSaves();
+    await store.loaded();
   });
 }
 
@@ -314,6 +364,7 @@ export async function setupAcceptanceTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  setupAuthEndpoints();
   return await setupTestRealm({
     contents,
     realmURL,
@@ -326,16 +377,20 @@ export async function setupAcceptanceTestRealm({
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
+  permissions,
   mockMatrixUtils,
 }: {
   contents: RealmContents;
   realmURL?: string;
+  permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  setupAuthEndpoints();
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: false,
+    permissions: permissions as RealmPermissions,
     mockMatrixUtils,
   });
 }
@@ -369,11 +424,6 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
-  let realmServer = getService('realm-server');
-  if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    realmServer.setAvailableRealmURLs([realmURL]);
-  }
-
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
@@ -404,12 +454,15 @@ async function setupTestRealm({
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
+    dbAdapter,
+    queuePublisher: queue,
     runnerOptsManager: runnerOptsMgr,
     indexRunner,
     virtualNetwork,
     matrixURL: baseTestMatrix.url,
     secretSeed: testRealmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
+    prerenderer: localIndexer.prerenderer,
   });
 
   realm = new Realm({
@@ -430,6 +483,11 @@ async function setupTestRealm({
     }),
   });
 
+  // we use this to run cards that were added to the test filesystem
+  adapter.setLoader(
+    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+  );
+
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
   await mockMatrixUtils.start();
@@ -437,10 +495,77 @@ async function setupTestRealm({
   await worker.run();
   await realm.start();
 
+  let realmServer = getService('realm-server');
+  if (!realmServer.availableRealmURLs.includes(realmURL)) {
+    realmServer.setAvailableRealmURLs([realmURL]);
+  }
+
   return { realm, adapter };
 }
 
-export function setupUserSubscription(matrixRoomId: string) {
+export function setupAuthEndpoints(
+  realmPermissions: Record<string, string[]> = {
+    [testRealmURL]: ['read', 'write'],
+  },
+) {
+  getService('network').mount(
+    async (req: Request) => {
+      if (req.url.includes('_realm-auth')) {
+        const authTokens: Record<string, string> = {};
+        for (const [realmURL, permissions] of Object.entries(
+          realmPermissions,
+        )) {
+          authTokens[realmURL] = createJWT(
+            {
+              user: '@testuser:localhost',
+              sessionRoom: getRoomIdForRealmAndUser(
+                realmURL,
+                '@testuser:localhost',
+              ),
+              permissions: permissions as RealmAction[],
+              realm: realmURL,
+            },
+            '1d',
+            testRealmSecretSeed,
+          );
+        }
+        return new Response(JSON.stringify(authTokens), { status: 200 });
+      }
+      if (req.url.includes('_server-session')) {
+        let data = await req.json();
+        if (!data.challenge) {
+          return new Response(
+            JSON.stringify({
+              challenge: 'test',
+              room: 'test-auth-realm-server-session-room',
+            }),
+            {
+              status: 401,
+            },
+          );
+        } else {
+          return new Response('Ok', {
+            status: 200,
+            headers: {
+              Authorization: createJWT(
+                {
+                  user: '@testuser:localhost',
+                  sessionRoom: 'test-auth-realm-server-session-room',
+                },
+                '1d',
+                testRealmSecretSeed,
+              ),
+            },
+          });
+        }
+      }
+      return null;
+    },
+    { prepend: true },
+  );
+}
+
+export function setupUserSubscription() {
   const userResponseBody = {
     data: {
       type: 'user',
@@ -496,34 +621,6 @@ export function setupUserSubscription(matrixRoomId: string) {
       if (req.url.includes('_user')) {
         return new Response(JSON.stringify(userResponseBody));
       }
-      if (req.url.includes('_server-session')) {
-        let data = await req.json();
-        if (!data.challenge) {
-          return new Response(
-            JSON.stringify({
-              challenge: 'test',
-              room: matrixRoomId,
-            }),
-            {
-              status: 401,
-            },
-          );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: '@testuser:localhost',
-                  sessionRoom: matrixRoomId,
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
-        }
-      }
       return null;
     },
     { prepend: true },
@@ -534,12 +631,12 @@ export async function saveCard(
   instance: CardDef,
   id: string,
   loader: Loader,
-  identityContext?: IdentityContext,
+  store?: CardStore,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);
   doc.data.id = id;
-  await api.updateFromSerialized(instance, doc, identityContext);
+  await api.updateFromSerialized(instance, doc, store);
   return doc;
 }
 
@@ -580,6 +677,16 @@ export function delay(delayAmountMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayAmountMs);
   });
+}
+
+// --- Created-at test utilities ---
+// Returns created_at (epoch seconds) from realm_file_meta for a given local file path like 'Pet/mango.json'.
+export async function getFileCreatedAt(
+  realm: Realm,
+  localPath: string,
+): Promise<number | undefined> {
+  let db = await getDbAdapter();
+  return getCreatedTime(db, realm.url, localPath);
 }
 
 function changedEntry(
@@ -635,6 +742,12 @@ export function setupRealmServerEndpoints(
   endpoints?: RealmServerEndpoint[],
 ) {
   let defaultEndpoints: RealmServerEndpoint[] = [
+    {
+      route: '_realm-auth',
+      getResponse: async function (_req: Request) {
+        return new Response(JSON.stringify({}), { status: 200 });
+      },
+    },
     {
       route: '_server-session',
       getResponse: async function (req: Request) {
@@ -811,7 +924,7 @@ export async function assertMessages(
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
         .exists({ count: cards.length });
-      cards.map(async (card) => {
+      cards.map((card) => {
         if (card.title) {
           if (message != null && card.title.includes(message)) {
             throw new Error(
@@ -842,7 +955,7 @@ export async function assertMessages(
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-file]`)
         .exists({ count: files.length });
-      files.map(async (file) => {
+      files.map((file) => {
         assert
           .dom(
             `[data-test-message-idx="${index}"] [data-test-attached-file="${file.sourceUrl}"]`,
@@ -856,5 +969,120 @@ export async function assertMessages(
         .dom(`[data-test-message-idx="${index}"] [data-test-message-items]`)
         .doesNotExist();
     }
+  }
+}
+
+export const cardInfo = Object.freeze({
+  title: null,
+  description: null,
+  thumbnailURL: null,
+  notes: null,
+});
+
+// UI interaction helpers for acceptance tests
+
+/**
+ * Verifies that a specific submode is active in the submode switcher
+ */
+export async function verifySubmode(assert: Assert, submode: string) {
+  await waitFor(`[data-test-submode-switcher=${submode}]`);
+  assert.dom(`[data-test-submode-switcher=${submode}]`).exists();
+}
+
+/**
+ * Toggles the file browser tree panel open/closed
+ */
+export async function toggleFileTree() {
+  await waitFor('[data-test-file-browser-toggle]');
+  await click('[data-test-file-browser-toggle]');
+}
+
+// File tree navigation and verification helpers for acceptance tests
+
+/**
+ * Opens a directory path in the file tree by clicking through the folder hierarchy
+ */
+export async function openDir(assert: Assert, path: string) {
+  const isFilePath = !path.endsWith('/');
+  const pathToProcess = isFilePath
+    ? path.substring(0, path.lastIndexOf('/'))
+    : path;
+
+  const pathSegments = pathToProcess
+    .split('/')
+    .filter((segment) => segment.length > 0);
+
+  let currentPath = '';
+
+  for (const segment of pathSegments) {
+    currentPath = currentPath ? `${currentPath}${segment}/` : `${segment}/`;
+
+    let selector = `[data-test-directory="${currentPath}"] .icon`;
+    let element = document.querySelector(selector);
+
+    if ((element as HTMLElement)?.classList.contains('closed')) {
+      await click(`[data-test-directory="${currentPath}"]`);
+    }
+
+    assert.dom(selector).hasClass('open');
+  }
+
+  let finalSelector = `[data-test-directory="${pathToProcess}"] .icon`;
+  let finalElement = document.querySelector(finalSelector);
+  let dirName = finalElement?.getAttribute('data-test-directory');
+  return dirName;
+}
+
+/**
+ * Verifies a folder with UUID pattern exists in the file tree and validates the UUID
+ */
+export async function verifyFolderWithUUIDInFileTree(
+  assert: Assert,
+  dirNamePrefix: string, // name without UUID
+) {
+  await waitFor(`[data-test-directory^="${dirNamePrefix}-"]`);
+  const element = document.querySelector(
+    `[data-test-directory^="${dirNamePrefix}-"]`,
+  );
+  const dirName = element?.getAttribute('data-test-directory');
+  const uuid = dirName?.replace(`${dirNamePrefix}-`, '').replace('/', '') || '';
+  const { validate: uuidValidate } = await import('uuid');
+  assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+  return dirName;
+}
+
+/**
+ * Verifies a file exists in the file tree
+ */
+export async function verifyFileInFileTree(assert: Assert, fileName: string) {
+  const fileSelector = `[data-test-file="${fileName}"]`;
+  await waitFor(fileSelector);
+  assert.dom(fileSelector).exists();
+}
+
+/**
+ * Verifies a JSON file with UUID pattern exists in a folder and validates the UUID
+ * TODO: this api is not very good because it looks for the first file in the directory and users may not assume that
+ */
+
+export async function verifyJSONWithUUIDInFolder(
+  assert: Assert,
+  dirPath: string,
+) {
+  const fileSelector = `[data-test-file^="${dirPath}"]`;
+  await waitFor(fileSelector);
+  assert.dom(fileSelector).exists();
+  const element = document.querySelector(fileSelector);
+  const filePath = element?.getAttribute('data-test-file');
+  let parts = filePath?.split('/');
+  if (parts) {
+    let fileName = parts[parts.length - 1];
+    let uuid = fileName.replace(`.json`, '');
+    assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+    return filePath;
+  } else {
+    throw new Error(
+      'file name shape not as expected when checking for [uuid].[extension]',
+    );
   }
 }

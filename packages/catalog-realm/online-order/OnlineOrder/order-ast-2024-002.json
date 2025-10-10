@@ -1,0 +1,45 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OnlineOrder",
+        "module": "../online-order"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": "Customer requested express shipping due to urgent project deadline. PayPal payment processed successfully.",
+        "title": "Tech Startup Order",
+        "description": "Complete order details for AST-2024-002 including wireless peripherals shipped to Portland office",
+        "thumbnailURL": null
+      },
+      "orderDate": "2025-01-02T14:22:00.000Z",
+      "orderTotal": 87.45,
+      "orderNumber": "AST-2024-002",
+      "orderStatus": "shipped",
+      "customerEmail": "marcus.rodriguez@techstartup.io",
+      "paymentMethod": "PayPal",
+      "trackingNumber": "1Z999AA9876543210",
+      "shippingAddress": {
+        "city": "Portland",
+        "state": "Oregon",
+        "country": {
+          "code": "US",
+          "name": "United States"
+        },
+        "postalCode": "97205",
+        "poBoxNumber": null,
+        "addressLine1": "2847 Pine Valley Drive",
+        "addressLine2": "Apt 12B"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

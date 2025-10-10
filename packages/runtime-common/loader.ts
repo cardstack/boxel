@@ -102,7 +102,6 @@ export class Loader {
     Function,
     { module: string; name: string }
   >();
-  private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
@@ -123,6 +122,10 @@ export class Loader {
       clone.shimModule(moduleIdentifier, module);
     }
     return clone;
+  }
+
+  get fetch() {
+    return this.fetchImplementation;
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -165,11 +168,6 @@ export class Loader {
       }
     }
     if (module?.state === 'evaluated' || module?.state === 'broken') {
-      let cached = this.consumptionCache.get(module);
-      if (cached) {
-        consumed.push(...cached);
-        return [...new Set(consumed)];
-      }
       for (let consumedModule of module?.consumedModules ?? []) {
         await this.getConsumedModules(
           consumedModule,
@@ -177,10 +175,7 @@ export class Loader {
           initialIdentifier,
         );
       }
-      cached = consumed;
-      this.consumptionCache.set(module, cached);
-
-      return [...new Set(cached)]; // Get rid of duplicates
+      return [...new Set(consumed)]; // Get rid of duplicates
     }
     return [];
   }
@@ -416,7 +411,7 @@ export class Loader {
     return new Request(urlOrRequest, init);
   }
 
-  private fetch = async (
+  private _fetch = async (
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<MaybeCachedResponse> => {
@@ -675,7 +670,7 @@ export class Loader {
   > {
     let response: MaybeCachedResponse;
     try {
-      response = await this.fetch(moduleURL);
+      response = await this._fetch(moduleURL);
     } catch (err) {
       this.log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a

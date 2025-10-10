@@ -17,8 +17,6 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
-  encodeWebSafeBase64,
-  primitive,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -42,6 +40,7 @@ import {
   visitOperatorMode,
   createJWT,
   testRealmSecretSeed,
+  setupAuthEndpoints,
   setupUserSubscription,
   setupRealmServerEndpoints,
 } from '../helpers';
@@ -84,7 +83,8 @@ module('Acceptance | operator mode tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     setExpiresInSec(60 * 60);
 
@@ -97,21 +97,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     let {
       field,
       contains,
-      deserialize,
       linksTo,
       linksToMany,
-      BaseDef,
-      CardDef,
       Component,
       FieldDef,
+      CardDef,
     } = cardApi;
     let { default: StringField } = string;
-    type BaseDefConstructor = typeof BaseDef;
-    type BaseInstanceType<T extends BaseDefConstructor> = T extends {
-      [primitive]: infer P;
-    }
-      ? P
-      : InstanceType<T>;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -280,24 +272,14 @@ module('Acceptance | operator mode tests', function (hooks) {
       };
     }
 
-    class BoomField extends FieldDef {
-      static [primitive]: string;
-      static async [deserialize]<T extends BaseDefConstructor>(
-        this: T,
-      ): Promise<BaseInstanceType<T>> {
-        throw new Error('Boom!');
-      }
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          {{@model}}
-        </template>
-      };
-    }
-
     class BoomPerson extends CardDef {
       static displayName = 'Boom Person';
       @field firstName = contains(StringField);
-      @field boom = contains(BoomField);
+      @field boom = contains(StringField, {
+        computeVia: function (this: BoomPerson) {
+          throw new Error('Boom!');
+        },
+      });
       @field title = contains(StringField, {
         computeVia: function (this: BoomPerson) {
           return this.firstName;
@@ -309,7 +291,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       mockMatrixUtils,
       contents: {
         'address.gts': { Address },
-        'boom-field.gts': { BoomField },
         'boom-person.gts': { BoomPerson },
         'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
         'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },
@@ -512,6 +493,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
       .doesNotExist('grid cards do not show other grid cards');
+    await click('[data-test-close-ai-assistant]');
     assert.dom('[data-test-ask-ai-input]').exists();
 
     await percySnapshot(assert);
@@ -528,7 +510,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       submode: Submodes.Interact,
     });
 
-    await click(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
+    );
     await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
 
     await percySnapshot(assert); /* snapshot for special styling */
@@ -597,7 +581,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
         await percySnapshot(assert);
         await click(
-          `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+          `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
         );
 
         assert.dom(`[data-test-card-error]`).exists();
@@ -610,7 +594,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         await click('[data-test-boxel-filter-list-button="All Cards"]');
 
         await triggerEvent(
-          `[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]`,
+          `[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"] .field-component-card`,
           'mouseenter',
         );
         await click(
@@ -768,9 +752,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     urlParameters = new URLSearchParams(url);
     let operatorModeStateParam = urlParameters.get('operatorModeState');
 
+    assert.ok(operatorModeStateParam);
     assert.true(
-      operatorModeStateParam &&
-        JSON.parse(operatorModeStateParam).workspaceChooserOpened,
+      JSON.parse(operatorModeStateParam ?? '{}').workspaceChooserOpened,
     );
     await percySnapshot(assert);
   });
@@ -1121,6 +1105,71 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-profile-icon]').hasText('J'); // From display name "John"
     });
 
+    test('buy/subscribe links redirect to stripe checkout', async function (assert) {
+      await visitOperatorMode({
+        submode: 'interact',
+        codePath: `${testRealmURL}employee.gts`,
+      });
+      await waitFor('[data-test-profile-icon-button]');
+      await click('[data-test-profile-icon-button]');
+      await click('[data-test-buy-more-credits] button');
+
+      let stripeCheckoutLinkExample =
+        'https://checkout.stripe.com/c/pay/abcdef';
+
+      // Stub realm server service
+      let realmServerService = getService('realm-server');
+      realmServerService.authedFetch = () => {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              url: stripeCheckoutLinkExample,
+            }),
+          ),
+        );
+      };
+
+      let redirectedToUrl = '';
+      let billingService = getService('billing-service');
+      billingService.redirectToUrl = (url: string) => {
+        redirectedToUrl = url;
+      };
+
+      stripeCheckoutLinkExample =
+        'https://checkout.stripe.com/c/pay/2500-credits';
+      await click('[data-test-buy-more-credits-button="2500"]');
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
+
+      stripeCheckoutLinkExample =
+        'https://checkout.stripe.com/c/pay/20000-credits';
+      await click('[data-test-buy-more-credits-button="20000"]');
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
+
+      stripeCheckoutLinkExample =
+        'https://checkout.stripe.com/c/pay/80000-credits';
+      await click('[data-test-buy-more-credits-button="80000"]');
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
+
+      await click('[data-test-close-modal]');
+      await click('[data-test-profile-icon-button]');
+      await click('[data-test-upgrade-plan-button]');
+
+      stripeCheckoutLinkExample =
+        'https://checkout.stripe.com/c/pay/starter-plan';
+      await click('[data-test-starter-plan-button]');
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
+
+      stripeCheckoutLinkExample =
+        'https://checkout.stripe.com/c/pay/creator-plan';
+      await click('[data-test-creator-plan-button]');
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
+
+      stripeCheckoutLinkExample =
+        'https://checkout.stripe.com/c/pay/power-user-plan';
+      await click('[data-test-power-user-plan-button]');
+      assert.strictEqual(redirectedToUrl, stripeCheckoutLinkExample);
+    });
+
     test(`displays credit info in account popover`, async function (assert) {
       await visitOperatorMode({
         submode: 'interact',
@@ -1153,25 +1202,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
       await click('[data-test-upgrade-plan-button]');
+
       assert.dom('[data-test-choose-subscription-plan-modal]').exists();
-      assert
-        .dom('[data-test-starter-plan-button]')
-        .hasAttribute(
-          'href',
-          'https://buy.stripe.com/starter-plan-payment-link?client_reference_id=QHRlc3R1c2VyOmxvY2FsaG9zdA&prefilled_email=testuser%40example.com',
-        );
-      assert
-        .dom('[data-test-creator-plan-button]')
-        .hasAttribute(
-          'href',
-          'https://buy.stripe.com/creator-plan-payment-link?client_reference_id=QHRlc3R1c2VyOmxvY2FsaG9zdA&prefilled_email=testuser%40example.com',
-        );
-      assert
-        .dom('[data-test-power-user-plan-button]')
-        .hasAttribute(
-          'href',
-          'https://buy.stripe.com/power-user-plan-payment-link?client_reference_id=QHRlc3R1c2VyOmxvY2FsaG9zdA&prefilled_email=testuser%40example.com',
-        );
+      assert.dom('[data-test-starter-plan-button]').exists();
+      assert.dom('[data-test-creator-plan-button]').exists();
+      assert.dom('[data-test-power-user-plan-button]').exists();
 
       assert
         .dom('[data-test-current-plan-badge]')
@@ -1202,40 +1237,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
-      assert
-        .dom('[data-test-manage-plan-button]')
-        .hasAttribute('href', 'https://customer-portal-link');
-      assert
-        .dom('[data-test-manage-plan-button]')
-        .hasAttribute('target', '_blank');
-      assert.dom('[data-test-payment-link]').exists({ count: 3 });
-      assert
-        .dom('[data-test-pay-button="0"]')
-        .hasAttribute(
-          'href',
-          `https://extra-credits-payment-link-1250?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:localhost',
-          )}&prefilled_email=testuser%40example.com`,
-        );
-      assert.dom('[data-test-pay-button="0"]').hasAttribute('target', '_blank');
-      assert
-        .dom('[data-test-pay-button="1"]')
-        .hasAttribute(
-          'href',
-          `https://extra-credits-payment-link-15000?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:localhost',
-          )}&prefilled_email=testuser%40example.com`,
-        );
-      assert.dom('[data-test-pay-button="1"]').hasAttribute('target', '_blank');
-      assert
-        .dom('[data-test-pay-button="2"]')
-        .hasAttribute(
-          'href',
-          `https://extra-credits-payment-link-80000?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:localhost',
-          )}&prefilled_email=testuser%40example.com`,
-        );
-      assert.dom('[data-test-pay-button="2"]').hasAttribute('target', '_blank');
+      assert.dom('[data-test-manage-plan-button]').exists();
 
       // out of credit
       await click('[aria-label="close modal"]');

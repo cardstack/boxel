@@ -29,15 +29,15 @@ export class PgAdapter implements DBAdapter {
   private started: Promise<void>;
   private config: Config;
 
-  constructor(opts?: { autoMigrate?: true }) {
+  constructor(opts?: { autoMigrate?: boolean; migrationLogging?: boolean }) {
     if (opts?.autoMigrate) {
-      this.started = this.migrateDb();
+      this.started = this.migrateDb(opts.migrationLogging !== false);
     } else {
       this.started = Promise.resolve();
     }
     this.config = config();
     let { user, host, database, password, port } = this.config;
-    log.info(`connecting to DB ${this.url}`);
+    log.debug(`connecting to DB ${this.url}`);
     this.pool = new Pool({
       user,
       host,
@@ -57,7 +57,7 @@ export class PgAdapter implements DBAdapter {
   }
 
   async close() {
-    log.info(`closing ${this.url}`);
+    log.debug(`closing ${this.url}`);
     this.#isClosed = true;
     await this.started;
     await this.pool.end();
@@ -149,7 +149,7 @@ export class PgAdapter implements DBAdapter {
     return result.map((row) => row.column_name) as string[];
   }
 
-  private async migrateDb() {
+  private async migrateDb(enableLogging: boolean) {
     const config = postgresConfig();
     let client = new Client(
       Object.assign({}, config, { database: 'postgres' }),
@@ -193,7 +193,7 @@ export class PgAdapter implements DBAdapter {
           count: Infinity,
           dir: join(__dirname, 'migrations'),
           ignorePattern: '.*\\.eslintrc\\.js',
-          log: (...args) => log.info(...args),
+          log: enableLogging ? (...args) => log.info(...args) : () => undefined,
         });
         return;
       } catch (err: any) {

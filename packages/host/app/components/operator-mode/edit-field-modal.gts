@@ -34,12 +34,12 @@ import {
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import {
-  getCodeRef,
-  type FieldOfType,
-} from '@cardstack/host/resources/card-type';
-
 import { Ready } from '@cardstack/host/resources/file';
+
+import {
+  getCodeRefFromType,
+  type FieldOfType,
+} from '@cardstack/host/services/card-type-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -151,23 +151,25 @@ export default class EditFieldModal extends Component<Signature> {
       ? 'many'
       : 'one';
 
-    let ref = getCodeRef(field);
+    let ref = getCodeRefFromType(field);
 
-    this.fieldCard = await loadCardDef(ref, {
-      loader: this.loaderService.loader,
-    });
+    if (ref) {
+      this.fieldCard = await loadCardDef(ref, {
+        loader: this.loaderService.loader,
+      });
 
-    let moduleRef = moduleFrom(ref);
-    this.fieldModuleURL = new URL(moduleRef);
-    this.cardURL = new URL(moduleRef);
-    this.fieldRef = ref;
+      let moduleRef = moduleFrom(ref);
+      this.fieldModuleURL = new URL(moduleRef);
+      this.cardURL = new URL(moduleRef);
+      this.fieldRef = ref;
 
-    // Field's card can descend from a FieldDef or a CardDef, so we need to determine which one it is. We do this by checking the field's type -
-    // contains/containsMany is a FieldDef, and linksTo/linksToMany is a CardDef. When spawning the card chooser, the spec will have the isField property set,
-    // which dictates the field type. But at this point where we are editing an existing field, we don't have the spec available, so we need to determine isFieldDef
-    // from the field's type
-    this.isFieldDef =
-      this.determineFieldOrCardFromFieldType(field.type) === 'field';
+      // Field's card can descend from a FieldDef or a CardDef, so we need to determine which one it is. We do this by checking the field's type -
+      // contains/containsMany is a FieldDef, and linksTo/linksToMany is a CardDef. When spawning the card chooser, the spec will have the isField property set,
+      // which dictates the field type. But at this point where we are editing an existing field, we don't have the spec available, so we need to determine isFieldDef
+      // from the field's type
+      this.isFieldDef =
+        this.determineFieldOrCardFromFieldType(field.type) === 'field';
+    }
   });
 
   private chooseCardTask = restartableTask(async () => {

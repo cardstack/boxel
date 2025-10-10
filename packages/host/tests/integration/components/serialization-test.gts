@@ -18,7 +18,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
   p,
@@ -29,6 +29,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  cardInfo,
 } from '../../helpers';
 
 import {
@@ -52,7 +53,6 @@ import {
   FieldDef,
   containsMany,
   linksToMany,
-  recompute,
   BigIntegerField,
   getQueryableValue,
   EthereumAddressField,
@@ -70,6 +70,9 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function () {
+    // Ensure consistent behavior by explicitly disabling lazy loading
+    (globalThis as any).__lazilyLoadLinks = false;
+
     let permissions: Permissions = {
       canWrite: true,
       canRead: true,
@@ -77,6 +80,11 @@ module('Integration | serialization', function (hooks) {
     provideConsumeContext(PermissionsContextName, permissions);
 
     loader = getService('loader-service').loader;
+  });
+
+  hooks.afterEach(function () {
+    // Clean up the global flag
+    delete (globalThis as any).__lazilyLoadLinks;
   });
   setupLocalIndexing(hooks);
 
@@ -214,18 +222,10 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Person/mango`,
       'instance id is set',
     );
-    assert.strictEqual(
-      isSaved(savedCard),
-      true,
-      'API recognizes card as saved',
-    );
+    assert.true(isSaved(savedCard), 'API recognizes card as saved');
 
     let unsavedCard = new Person();
-    assert.strictEqual(
-      isSaved(unsavedCard),
-      false,
-      'API recognizes card as unsaved',
-    );
+    assert.false(isSaved(unsavedCard), 'API recognizes card as unsaved');
   });
 
   test('can deserialize a card with a local id', async function (assert) {
@@ -297,6 +297,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Mango',
+          cardInfo,
         },
         meta: {
           adoptsFrom: {
@@ -373,7 +374,7 @@ module('Integration | serialization', function (hooks) {
       firstName: 'Mango',
     });
 
-    assert.strictEqual(isSaved(card), false, 'card is not saved');
+    assert.false(isSaved(card), 'card is not saved');
 
     let result = await updateFromSerialized(card, {
       data: {
@@ -390,7 +391,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    assert.strictEqual(isSaved(card), true, 'card is saved');
+    assert.true(isSaved(card), 'card is saved');
     assert.strictEqual(result, card, 'returns the same instance provided');
     assert.strictEqual(
       card.id,
@@ -494,8 +495,9 @@ module('Integration | serialization', function (hooks) {
       { data: resource },
       undefined,
     );
-    assert.ok(
-      driver.ref !== ref,
+    assert.notStrictEqual(
+      driver.ref,
+      ref,
       'the card ref value is not strict equals to its serialized counter part',
     );
     assert.deepEqual(
@@ -526,8 +528,9 @@ module('Integration | serialization', function (hooks) {
     let driver = new DriverCard({ ref });
     let serializedRef = serializeCard(driver, { includeUnrenderedFields: true })
       .data.attributes?.ref;
-    assert.ok(
-      serializedRef !== ref,
+    assert.notStrictEqual(
+      serializedRef,
+      ref,
       'the card ref value is not strict equals to its serialized counter part',
     );
     assert.deepEqual(
@@ -621,6 +624,7 @@ module('Integration | serialization', function (hooks) {
         },
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
+      @field description = contains(StringField);
     }
     class Pet extends CardDef {
       @field firstName = contains(StringField);
@@ -679,6 +683,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo,
         },
         relationships: {
           pet: {
@@ -704,6 +709,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -717,6 +723,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo,
           },
           relationships: {
             favoriteToy: {
@@ -748,6 +755,7 @@ module('Integration | serialization', function (hooks) {
         },
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
+      @field description = contains(StringField);
     }
     class Pet extends CardDef {
       @field firstName = contains(StringField);
@@ -800,6 +808,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo,
         },
         relationships: {
           pet: {
@@ -822,6 +831,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -835,6 +845,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo,
           },
           relationships: {
             favoriteToy: {
@@ -878,6 +889,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo: {},
         },
         relationships: {
           pet: {
@@ -903,6 +915,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -916,6 +929,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo: {},
           },
           relationships: {
             favoriteToy: {
@@ -947,11 +961,11 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(card.firstName, 'Hassan');
     let { pet } = card;
     if (pet instanceof Pet) {
-      assert.strictEqual(isSaved(pet), true, 'Pet card is saved');
+      assert.true(isSaved(pet), 'Pet card is saved');
       assert.strictEqual(pet.firstName, 'Mango');
       let { favoriteToy } = pet;
       if (favoriteToy instanceof Toy) {
-        assert.strictEqual(isSaved(favoriteToy), true, 'Toy card is saved');
+        assert.true(isSaved(favoriteToy), 'Toy card is saved');
         assert.strictEqual(
           favoriteToy.description,
           'Toilet paper ghost: Poooo!',
@@ -972,11 +986,7 @@ module('Integration | serialization', function (hooks) {
     } else {
       if (relationship?.type === 'loaded') {
         let relatedCard = relationship.card;
-        assert.strictEqual(
-          relatedCard instanceof Pet,
-          true,
-          'related card is a Pet',
-        );
+        assert.true(relatedCard instanceof Pet, 'related card is a Pet');
         assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
       } else {
         assert.ok(false, 'relationship type was not "loaded"');
@@ -1055,8 +1065,8 @@ module('Integration | serialization', function (hooks) {
     } catch (err: any) {
       assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
       assert.strictEqual(
-        'The field Person.pet refers to the card instance http://test-realm/test/Pet/mango which is not loaded',
         err.message,
+        'The field Person.pet refers to the card instance http://test-realm/test/Pet/mango which is not loaded',
         'NotLoaded error describes field not loaded',
       );
     }
@@ -1082,6 +1092,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo,
         },
         relationships: {
           pet: {
@@ -1139,6 +1150,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo,
         },
         relationships: {
           pet: {
@@ -1164,6 +1176,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Mango',
+          cardInfo,
         },
         relationships: {
           pet: {
@@ -1298,7 +1311,7 @@ module('Integration | serialization', function (hooks) {
 
     let { owner, favoriteToy, toys } = card;
     if (owner instanceof Person) {
-      assert.strictEqual(isSaved(owner), true, 'Person card is saved');
+      assert.true(isSaved(owner), 'Person card is saved');
       assert.strictEqual(owner.firstName, 'Burcu');
     } else {
       assert.ok(false, '"owner" field value is not an instance of Person');
@@ -1324,11 +1337,7 @@ module('Integration | serialization', function (hooks) {
     } else {
       if (relationship?.type === 'loaded') {
         let relatedCard = relationship.card;
-        assert.strictEqual(
-          relatedCard instanceof Person,
-          true,
-          'related card is a Person',
-        );
+        assert.true(relatedCard instanceof Person, 'related card is a Person');
         assert.strictEqual(relatedCard?.id, `${testRealmURL}Person/burcu`);
       } else {
         assert.ok(false, 'relationship type was not "loaded"');
@@ -1376,6 +1385,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo,
         },
         relationships: {
           friend: {
@@ -1401,6 +1411,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo,
           },
           relationships: {
             friend: {
@@ -1442,9 +1453,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Mango',
-          description: null,
-          thumbnailURL: null,
-          title: null,
+          cardInfo,
         },
         relationships: {
           friend: {
@@ -1545,6 +1554,7 @@ module('Integration | serialization', function (hooks) {
         },
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
+      @field description = contains(StringField);
     }
     class Pet extends FieldDef {
       @field firstName = contains(StringField);
@@ -1601,6 +1611,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo,
           pet: {
             firstName: 'Mango',
           },
@@ -1629,6 +1640,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -1675,6 +1687,7 @@ module('Integration | serialization', function (hooks) {
         },
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
+      @field description = contains(StringField);
     }
     class Pet extends FieldDef {
       @field favoriteToy = linksTo(Toy);
@@ -1725,6 +1738,7 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           firstName: 'Hassan',
           pet: {},
+          cardInfo,
         },
         relationships: {
           'pet.favoriteToy': {
@@ -1750,6 +1764,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -1857,6 +1872,7 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Mango',
             },
           ],
+          cardInfo,
         },
         relationships: {
           'pets.0.favoriteToy': {
@@ -1882,6 +1898,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -2172,6 +2189,8 @@ module('Integration | serialization', function (hooks) {
           return this.author?.title ?? 'Post';
         },
       });
+      @field description = contains(StringField);
+      @field thumbnailURL = contains(StringField);
     }
 
     await setupIntegrationTestRealm({
@@ -2202,6 +2221,7 @@ module('Integration | serialization', function (hooks) {
       },
       description: 'Post by Mango',
       thumbnailURL: './post.jpg',
+      cardInfo,
     });
     // this means the field card for the value is the same as the field's card
     assert.deepEqual(serialized.data.meta.fields, undefined);
@@ -2513,6 +2533,10 @@ module('Integration | serialization', function (hooks) {
             author: {
               firstName: 'Carl Stack',
             },
+            cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2681,9 +2705,10 @@ module('Integration | serialization', function (hooks) {
         lid: burcu[localId],
         attributes: {
           firstName: 'Burcu',
-          title: null,
+          title: 'Untitled Card',
           description: 'Person',
           thumbnailURL: '../../person.svg',
+          cardInfo,
         },
         relationships: {
           pet: { links: { self: null } },
@@ -2707,9 +2732,10 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             name: 'Mango',
-            title: null,
+            title: 'Untitled Card',
             description: 'Pet',
             thumbnailURL: '../pet.svg',
+            cardInfo,
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -2720,9 +2746,10 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Hassan',
-            title: null,
+            title: 'Untitled Card',
             description: 'Person',
             thumbnailURL: '../../person.svg',
+            cardInfo,
           },
           relationships: {
             pet: {
@@ -2822,7 +2849,7 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(card.firstName, 'Burcu');
       let { friendPet } = card;
       if (friendPet instanceof Pet) {
-        assert.strictEqual(isSaved(friendPet), true, 'Pet card is saved');
+        assert.true(isSaved(friendPet), 'Pet card is saved');
         assert.strictEqual(friendPet.name, 'Mango');
       } else {
         assert.ok(false, '"friendPet" field value is not an instance of Pet');
@@ -2837,11 +2864,7 @@ module('Integration | serialization', function (hooks) {
       } else {
         if (relationship?.type === 'loaded') {
           let relatedCard = relationship.card;
-          assert.strictEqual(
-            relatedCard instanceof Pet,
-            true,
-            'related card is a Pet',
-          );
+          assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
           assert.ok(false, 'relationship type was not "loaded"');
@@ -2880,9 +2903,10 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Burcu',
-            title: null,
+            title: 'Untitled Card',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             pet: { links: { self: null } },
@@ -3187,6 +3211,8 @@ module('Integration | serialization', function (hooks) {
   test('can serialize a card with primitive fields', async function (assert) {
     class Post extends CardDef {
       @field title = contains(StringField);
+      @field description = contains(StringField);
+      @field thumbnailURL = contains(StringField);
       @field created = contains(DateField);
       @field published = contains(DatetimeField);
     }
@@ -3204,7 +3230,6 @@ module('Integration | serialization', function (hooks) {
       description: 'Introductory post',
       thumbnailURL: './intro.png',
     });
-    await recompute(firstPost);
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(
       payload,
@@ -3218,6 +3243,7 @@ module('Integration | serialization', function (hooks) {
             published: '2022-04-27T16:30:00.000Z',
             description: 'Introductory post',
             thumbnailURL: './intro.png',
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -3284,6 +3310,7 @@ module('Integration | serialization', function (hooks) {
             species: 'canis familiaris',
             description: 'A dog',
           },
+          cardInfo,
         },
         meta: {
           adoptsFrom: {
@@ -3348,6 +3375,7 @@ module('Integration | serialization', function (hooks) {
             birthdate: '2019-10-30',
             department: 'wagging',
           },
+          cardInfo,
         },
         meta: {
           adoptsFrom: {
@@ -3449,6 +3477,7 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Van Gogh',
             },
           },
+          cardInfo,
         },
         meta: {
           adoptsFrom: {
@@ -3567,6 +3596,7 @@ module('Integration | serialization', function (hooks) {
               billAmount: 100,
             },
           ],
+          cardInfo,
         },
         meta: {
           adoptsFrom: {
@@ -3614,6 +3644,146 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(second.billAmount, 100);
     } else {
       assert.ok(false, 'Not a customer');
+    }
+  });
+
+  test('can serialize polymorphic containsMany fields nested within a field', async function (assert) {
+    class Tag extends FieldDef {
+      @field name = contains(StringField);
+      @field color = contains(StringField);
+    }
+
+    class PriorityTag extends Tag {
+      @field priority = contains(NumberField);
+    }
+
+    class StatusTag extends Tag {
+      @field isActive = contains(NumberField);
+    }
+
+    class Category extends FieldDef {
+      @field title = contains(StringField);
+      @field tags = containsMany(Tag);
+      @field priority = contains(NumberField);
+    }
+
+    class Article extends CardDef {
+      @field title = contains(StringField);
+      @field category = contains(Category);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Tag, PriorityTag, StatusTag, Category, Article },
+      },
+    });
+
+    let article = new Article({
+      title: 'How to Test Nested Fields',
+      category: new Category({
+        title: 'Programming',
+        priority: 1,
+        tags: [
+          new PriorityTag({ name: 'javascript', color: 'yellow', priority: 5 }),
+          new StatusTag({ name: 'testing', color: 'green', isActive: 1 }),
+          new Tag({ name: 'serialization', color: 'blue' }),
+        ],
+      }),
+    });
+
+    let serialized = serializeCard(article, { includeUnrenderedFields: true });
+
+    assert.deepEqual(serialized, {
+      data: {
+        lid: article[localId],
+        type: 'card',
+        attributes: {
+          title: 'How to Test Nested Fields',
+          category: {
+            title: 'Programming',
+            priority: 1,
+            tags: [
+              { name: 'javascript', color: 'yellow', priority: 5 },
+              { name: 'testing', color: 'green', isActive: 1 },
+              { name: 'serialization', color: 'blue' },
+            ],
+          },
+          cardInfo,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Article',
+          },
+          fields: {
+            category: {
+              fields: {
+                tags: [
+                  {
+                    adoptsFrom: {
+                      module: `${testRealmURL}test-cards`,
+                      name: 'PriorityTag',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: `${testRealmURL}test-cards`,
+                      name: 'StatusTag',
+                    },
+                  },
+                  {},
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Test deserialization roundtrip
+    let deserializedArticle = await createFromSerialized(
+      serialized.data,
+      serialized,
+      undefined,
+    );
+
+    if (deserializedArticle instanceof Article) {
+      assert.strictEqual(
+        deserializedArticle.title,
+        'How to Test Nested Fields',
+      );
+      let { category } = deserializedArticle;
+
+      if (category instanceof Category) {
+        assert.strictEqual(category.title, 'Programming');
+        assert.strictEqual(category.priority, 1);
+        assert.strictEqual(category.tags.length, 3, 'correct number of tags');
+
+        // Check first tag (PriorityTag)
+        let tag0 = category.tags[0] as PriorityTag;
+        assert.ok(tag0 instanceof PriorityTag, 'first tag is PriorityTag');
+        assert.strictEqual(tag0.name, 'javascript');
+        assert.strictEqual(tag0.color, 'yellow');
+        assert.strictEqual(tag0.priority, 5);
+
+        // Check second tag (StatusTag)
+        let tag1 = category.tags[1] as StatusTag;
+        assert.ok(tag1 instanceof StatusTag, 'second tag is StatusTag');
+        assert.strictEqual(tag1.name, 'testing');
+        assert.strictEqual(tag1.color, 'green');
+        assert.strictEqual(tag1.isActive, 1);
+
+        // Check third tag (base Tag)
+        let tag2 = category.tags[2] as Tag;
+        assert.ok(tag2 instanceof Tag, 'third tag is base Tag');
+        assert.strictEqual(tag2.name, 'serialization');
+        assert.strictEqual(tag2.color, 'blue');
+      } else {
+        assert.ok(false, 'category field is not an instance of Category');
+      }
+    } else {
+      assert.ok(false, 'deserialized card is not an instance of Article');
     }
   });
 
@@ -3698,6 +3868,7 @@ module('Integration | serialization', function (hooks) {
               ],
             },
           ],
+          cardInfo,
         },
         meta: {
           adoptsFrom: {
@@ -3837,7 +4008,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(card.firstName, 'Hassan');
     let { pet } = card;
     assert.ok(pet instanceof Pet, '"pet" field value is an instance of Pet');
-    assert.strictEqual(isSaved(pet), true, 'Pet card is saved');
+    assert.true(isSaved(pet), 'Pet card is saved');
     assert.strictEqual(pet.firstName, 'Mango');
     let { favorite } = pet;
     assert.ok(
@@ -3898,6 +4069,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -3974,6 +4146,7 @@ module('Integration | serialization', function (hooks) {
             author: {
               firstName: 'Mango',
             },
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -4085,7 +4258,7 @@ module('Integration | serialization', function (hooks) {
                 },
               },
             ],
-            title: null,
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -4163,6 +4336,7 @@ module('Integration | serialization', function (hooks) {
               },
             },
           ],
+          cardInfo: {},
         },
         relationships: {
           'editor.certificate': {
@@ -4208,6 +4382,7 @@ module('Integration | serialization', function (hooks) {
             level: 25,
             earnedOn: '2022-05-01',
             thumbnailURL: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4223,6 +4398,7 @@ module('Integration | serialization', function (hooks) {
             level: 20,
             earnedOn: '2023-11-05',
             thumbnailURL: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4238,6 +4414,7 @@ module('Integration | serialization', function (hooks) {
             level: 18,
             earnedOn: '2023-10-01',
             thumbnailURL: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4291,7 +4468,7 @@ module('Integration | serialization', function (hooks) {
                 },
               },
             ],
-            title: null,
+            cardInfo,
           },
           relationships: {
             'editor.certificate': {
@@ -4332,11 +4509,9 @@ module('Integration | serialization', function (hooks) {
         included: [
           {
             attributes: {
-              description: null,
               earnedOn: '2023-11-05',
               level: 20,
-              thumbnailURL: null,
-              title: null,
+              cardInfo,
             },
             id: `${testRealmURL}Certificate/1`,
             meta: {
@@ -4349,11 +4524,9 @@ module('Integration | serialization', function (hooks) {
           },
           {
             attributes: {
-              description: null,
               earnedOn: '2023-10-01',
               level: 18,
-              thumbnailURL: null,
-              title: null,
+              cardInfo,
             },
             id: `${testRealmURL}Certificate/2`,
             meta: {
@@ -4366,11 +4539,9 @@ module('Integration | serialization', function (hooks) {
           },
           {
             attributes: {
-              description: null,
               earnedOn: '2022-05-01',
               level: 25,
-              thumbnailURL: null,
-              title: null,
+              cardInfo,
             },
             id: `${testRealmURL}Certificate/0`,
             meta: {
@@ -4423,6 +4594,10 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           birthdate: '2019-10-30',
+          cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -4447,6 +4622,10 @@ module('Integration | serialization', function (hooks) {
           title: 'Person',
           description: 'A person with birthdate',
           thumbnailURL: null,
+          cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -4487,9 +4666,7 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           firstName: 'Mango',
           unRenderedField: null,
-          title: null,
-          description: null,
-          thumbnailURL: null,
+          cardInfo,
         },
         meta: {
           adoptsFrom: {
@@ -4533,10 +4710,8 @@ module('Integration | serialization', function (hooks) {
           lid: mangoTheBoat[localId],
           type: 'card',
           attributes: {
-            description: null,
             name: 'Mango',
-            thumbnailURL: null,
-            title: null,
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -4588,10 +4763,8 @@ module('Integration | serialization', function (hooks) {
           lid: mangoThePet[localId],
           type: 'card',
           attributes: {
-            description: null,
             name: 'Mango',
-            thumbnailURL: null,
-            title: null,
+            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -4649,9 +4822,8 @@ module('Integration | serialization', function (hooks) {
           lid: hassan[localId],
           type: 'card',
           attributes: {
-            description: null,
             firstName: 'Hassan',
-            thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             'pets.0': {
@@ -4676,9 +4848,8 @@ module('Integration | serialization', function (hooks) {
             id: `${testRealmURL}Pet/mango`,
             type: 'card',
             attributes: {
-              description: null,
               firstName: 'Mango',
-              thumbnailURL: null,
+              cardInfo,
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4688,9 +4859,8 @@ module('Integration | serialization', function (hooks) {
             id: `${testRealmURL}Pet/vanGogh`,
             type: 'card',
             attributes: {
-              description: null,
               firstName: 'Van Gogh',
-              thumbnailURL: null,
+              cardInfo,
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4741,9 +4911,8 @@ module('Integration | serialization', function (hooks) {
           lid: hassan[localId],
           type: 'card',
           attributes: {
-            description: null,
             firstName: 'Hassan',
-            thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             'pets.0': {
@@ -4762,9 +4931,8 @@ module('Integration | serialization', function (hooks) {
             lid: mango[localId],
             type: 'card',
             attributes: {
-              description: null,
               firstName: 'Mango',
-              thumbnailURL: null,
+              cardInfo,
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4774,9 +4942,8 @@ module('Integration | serialization', function (hooks) {
             lid: vanGogh[localId],
             type: 'card',
             attributes: {
-              description: null,
               firstName: 'Van Gogh',
-              thumbnailURL: null,
+              cardInfo,
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4807,6 +4974,7 @@ module('Integration | serialization', function (hooks) {
             description: null,
             firstName: 'Hassan',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             'pets.0': {
@@ -4840,6 +5008,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Mango',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4852,6 +5021,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Van Gogh',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4873,13 +5043,13 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(pets.length, 2, 'pets has 2 items');
       let [mango, vanGogh] = pets;
       if (mango instanceof Pet) {
-        assert.strictEqual(isSaved(mango), true, 'Pet[0] card is saved');
+        assert.true(isSaved(mango), 'Pet[0] card is saved');
         assert.strictEqual(mango.firstName, 'Mango');
       } else {
         assert.ok(false, '"pets[0]" is not an instance of Pet');
       }
       if (vanGogh instanceof Pet) {
-        assert.strictEqual(isSaved(vanGogh), true, 'Pet[1] card is saved');
+        assert.true(isSaved(vanGogh), 'Pet[1] card is saved');
         assert.strictEqual(vanGogh.firstName, 'Van Gogh');
       } else {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
@@ -4891,22 +5061,14 @@ module('Integration | serialization', function (hooks) {
 
         if (mangoRelationship?.type === 'loaded') {
           let relatedCard = mangoRelationship.card;
-          assert.strictEqual(
-            relatedCard instanceof Pet,
-            true,
-            'related card is a Pet',
-          );
+          assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
           assert.ok(false, 'relationship type was not "loaded" for mango');
         }
         if (vanGoghRelationship?.type === 'loaded') {
           let relatedCard = vanGoghRelationship.card;
-          assert.strictEqual(
-            relatedCard instanceof Pet,
-            true,
-            'related card is a Pet',
-          );
+          assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/vanGogh`);
         } else {
           assert.ok(false, 'relationship type was not "loaded" for vanGogh');
@@ -4980,9 +5142,8 @@ module('Integration | serialization', function (hooks) {
           lid: hassan[localId],
           type: 'card',
           attributes: {
-            description: null,
             firstName: 'Hassan',
-            thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             'pets.0': {
@@ -5002,7 +5163,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               description: 'Toilet paper ghost: Poooo!',
-              thumbnailURL: null,
+              cardInfo,
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Toy' },
@@ -5012,9 +5173,8 @@ module('Integration | serialization', function (hooks) {
             id: `${testRealmURL}Pet/mango`,
             type: 'card',
             attributes: {
-              description: null,
               firstName: 'Mango',
-              thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               favoriteToy: {
@@ -5107,6 +5267,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Hassan',
+            cardInfo,
           },
           relationships: {
             pets: {
@@ -5129,6 +5290,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo,
           },
           relationships: {
             pets: {
@@ -5166,6 +5328,7 @@ module('Integration | serialization', function (hooks) {
             description: null,
             firstName: 'Hassan',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             pets: {
@@ -5228,6 +5391,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Hassan',
+            cardInfo,
           },
           relationships: {
             'pets.0': {
@@ -5262,6 +5426,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Mango',
+              cardInfo,
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5319,6 +5484,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Hassan',
+            cardInfo,
           },
           relationships: {
             'pets.0': {
@@ -5347,6 +5513,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Mango',
+              cardInfo,
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5395,6 +5562,7 @@ module('Integration | serialization', function (hooks) {
           id: `${testRealmURL}Person/hassan`,
           attributes: {
             firstName: 'Hassan',
+            cardInfo,
           },
           relationships: {
             'friends.0': {
@@ -5416,6 +5584,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Mango',
+              cardInfo,
             },
             relationships: {
               friends: { links: { self: null } },
@@ -5429,6 +5598,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Van Gogh',
+              cardInfo,
             },
             relationships: {
               friends: { links: { self: null } },
@@ -5587,9 +5757,10 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Burcu',
-          title: null,
+          title: 'Untitled Card',
           description: null,
           thumbnailURL: null,
+          cardInfo,
         },
         relationships: {
           friend: {
@@ -5616,9 +5787,10 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             name: 'Mango',
-            title: null,
+            title: 'Untitled Card',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5629,9 +5801,10 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             name: 'Van Gogh',
-            title: null,
+            title: 'Untitled Card',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5642,9 +5815,10 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Hassan',
-            title: null,
+            title: 'Untitled Card',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             'pets.0': {
@@ -5760,13 +5934,13 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(friendPets.length, 2, 'pets has 2 items');
       let [mango, vanGogh] = friendPets;
       if (mango instanceof Pet) {
-        assert.strictEqual(isSaved(mango), true, 'Pet[0] card is saved');
+        assert.true(isSaved(mango), 'Pet[0] card is saved');
         assert.strictEqual(mango.name, 'Mango');
       } else {
         assert.ok(false, '"pets[0]" is not an instance of Pet');
       }
       if (vanGogh instanceof Pet) {
-        assert.strictEqual(isSaved(vanGogh), true, 'Pet[1] card is saved');
+        assert.true(isSaved(vanGogh), 'Pet[1] card is saved');
         assert.strictEqual(vanGogh.name, 'Van Gogh');
       } else {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
@@ -5813,9 +5987,10 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Burcu',
-            title: null,
+            title: 'Untitled Card',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             friend: { links: { self: null } },
@@ -6111,12 +6286,12 @@ module('Integration | serialization', function (hooks) {
         });
 
         assert.strictEqual(
-          typeof serialized?.data?.attributes?.someNumber === 'number',
-          true,
+          typeof serialized?.data?.attributes?.someNumber,
+          'number',
         );
-        assert.strictEqual(
-          typeof serialized?.data?.attributes?.someNumber !== 'string',
-          true,
+        assert.notStrictEqual(
+          typeof serialized?.data?.attributes?.someNumber,
+          'string',
         );
         assert.strictEqual(serialized?.data?.attributes?.someNumber, 42);
         assert.strictEqual(serialized?.data?.attributes?.someNull, null);
@@ -6169,10 +6344,10 @@ module('Integration | serialization', function (hooks) {
           undefined,
         );
 
-        assert.strictEqual(isBigInt(sample.someBigInt), true);
-        assert.strictEqual(isBigInt(sample.someNumber), true);
-        assert.strictEqual(isBigInt(sample.someNegativeNumber), true);
-        assert.strictEqual(isBigInt(sample.someZeroString), true);
+        assert.true(isBigInt(sample.someBigInt));
+        assert.true(isBigInt(sample.someNumber));
+        assert.true(isBigInt(sample.someNegativeNumber));
+        assert.true(isBigInt(sample.someZeroString));
 
         // failed to deserialize
         assert.strictEqual(sample.someNull, null);
@@ -6204,12 +6379,12 @@ module('Integration | serialization', function (hooks) {
         });
 
         assert.strictEqual(
-          typeof serialized?.data?.attributes?.someBigInt === 'string',
-          true,
+          typeof serialized?.data?.attributes?.someBigInt,
+          'string',
         );
-        assert.strictEqual(
-          typeof serialized?.data?.attributes?.someBigInt !== 'number',
-          true,
+        assert.notStrictEqual(
+          typeof serialized?.data?.attributes?.someBigInt,
+          'number',
         );
         assert.strictEqual(
           serialized?.data?.attributes?.someBigInt,
@@ -6322,11 +6497,8 @@ module('Integration | serialization', function (hooks) {
           undefined,
         );
 
-        assert.strictEqual(isEthAddress(sample.someAddress), true);
-        assert.strictEqual(
-          isEthAddress(sample.checksummedAddressThatDontLookLikeOne),
-          true,
-        );
+        assert.true(isEthAddress(sample.someAddress));
+        assert.true(isEthAddress(sample.checksummedAddressThatDontLookLikeOne));
 
         // failed to deserialize
         assert.strictEqual(sample.faultyAddress, null);
@@ -6362,12 +6534,12 @@ module('Integration | serialization', function (hooks) {
         });
 
         assert.strictEqual(
-          typeof serialized?.data?.attributes?.someAddress === 'string',
-          true,
+          typeof serialized?.data?.attributes?.someAddress,
+          'string',
         );
-        assert.strictEqual(
-          typeof serialized?.data?.attributes?.someAddress !== 'number',
-          true,
+        assert.notStrictEqual(
+          typeof serialized?.data?.attributes?.someAddress,
+          'number',
         );
         assert.strictEqual(
           serialized?.data?.attributes?.someAddress,

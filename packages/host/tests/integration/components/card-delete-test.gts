@@ -39,7 +39,7 @@ module('Integration | card-delete', function (hooks) {
   let adapter: TestRealmAdapter;
   let noop = () => {};
   async function loadCard(url: string): Promise<CardDef> {
-    let { createFromSerialized, recompute } = cardApi;
+    let { createFromSerialized, ensureLinksLoaded } = cardApi;
     let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
@@ -53,7 +53,7 @@ module('Integration | card-delete', function (hooks) {
       result.doc,
       new URL(url),
     );
-    await recompute(card, { loadFields: true });
+    await ensureLinksLoaded(card);
     return card;
   }
   setupRenderingTest(hooks);
@@ -190,7 +190,7 @@ module('Integration | card-delete', function (hooks) {
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
     await click(
@@ -230,7 +230,7 @@ module('Integration | card-delete', function (hooks) {
     assert.ok(fileRef, 'card instance exists in file system');
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
     await click(
@@ -431,7 +431,7 @@ module('Integration | card-delete', function (hooks) {
       `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
-      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
     await click(
@@ -492,7 +492,7 @@ module('Integration | card-delete', function (hooks) {
       )
       .exists();
     await triggerEvent(
-      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
     await click(
@@ -554,7 +554,7 @@ module('Integration | card-delete', function (hooks) {
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     await click('[data-test-search-sheet-cancel-button]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
     await click(
@@ -601,14 +601,14 @@ module('Integration | card-delete', function (hooks) {
       `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-select]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"] .field-component-card`,
       'mouseenter',
     );
     await click(

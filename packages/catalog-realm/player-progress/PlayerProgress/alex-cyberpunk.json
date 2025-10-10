@@ -1,0 +1,48 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PlayerProgress",
+        "module": "../player-progress"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "## Amazing Experience!\n\nCyberpunk 2077 really delivered after all the updates. The story was incredible and Night City felt truly alive. The side quests were surprisingly deep.\n\n**Highlights:**\n- Main story: Absolutely fantastic\n- Graphics: Stunning on high settings\n- Gameplay: Combat felt smooth and satisfying\n- Characters: Well-developed and memorable\n\n**Minor Issues:**\n- Still encountered a few bugs\n- Some missions felt repetitive\n\nDefinitely recommend to any RPG fan!",
+      "rating": 8,
+      "status": "completed",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "startDate": "2024-11-15",
+      "hoursPlayed": 85,
+      "completedDate": "2024-12-28",
+      "lastPlayedDate": "2024-12-28T22:30:00.000Z",
+      "screenshotUrls": [
+        "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&h=450&fit=crop"
+      ],
+      "achievementsUnlocked": 38,
+      "completionPercentage": 92
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../../video-game/VideoGame/cyberpunk-2077"
+        }
+      },
+      "player": {
+        "links": {
+          "self": "../../gaming-hub/GamingHub/alex-shadowblade"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

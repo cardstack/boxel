@@ -1,408 +1,53 @@
-import {
-  Component,
-  CardDef,
-  CardContext,
-  realmURL,
-} from 'https://cardstack.com/base/card-api';
-import GlimmerComponent from '@glimmer/component';
-
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { task } from 'ember-concurrency';
-import { on } from '@ember/modifier';
-import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { fn } from '@ember/helper';
+import { Component, realmURL } from 'https://cardstack.com/base/card-api';
+import { commandData } from 'https://cardstack.com/base/resources/command-data';
+import type {
+  GetAllRealmMetasResult,
+  RealmMetaField,
+} from 'https://cardstack.com/base/command';
 
 import { type Listing } from '../listing/listing';
-import { setupAllRealmsInfo } from '../helper';
 
-import {
-  BoxelDropdown,
-  BoxelButton,
-  Menu as BoxelMenu,
-} from '@cardstack/boxel-ui/components';
+import ChooseRealmAction from './choose-realm-action';
+import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
-import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
+import { listingActions, isReady } from '../resources/listing-actions';
 
-interface Signature {
-  Element: HTMLElement;
-  Args: {
-    context: CardContext | undefined;
-    id: string | undefined;
-    items: string[];
-    examples?: CardDef[];
-  };
-}
-
-class CarouselComponent extends GlimmerComponent<Signature> {
-  @tracked currentIndex = 0;
-
-  get totalSlides() {
-    return this.args.items?.length ?? 0;
-  }
-
-  get prevIndex() {
-    return this.currentIndex === 0
-      ? this.totalSlides - 1
-      : this.currentIndex - 1;
-  }
-
-  get nextIndex() {
-    return this.currentIndex === this.totalSlides - 1
-      ? 0
-      : this.currentIndex + 1;
-  }
-
-  get hasSlide() {
-    return this.totalSlides > 0;
-  }
-
-  get hasMultipleSlides() {
-    return this.totalSlides > 1;
-  }
-
-  get hasExample() {
-    return this.args.examples && this.args.examples.length > 0;
-  }
-
-  @action
-  _stopPropagation(e: MouseEvent) {
-    e.stopPropagation();
-  }
-
-  @action previewExample(e: MouseEvent) {
-    e.stopPropagation();
-
-    if (!this.hasExample) {
-      throw new Error('No valid example found to preview');
-    }
-
-    this.args.context?.actions?.viewCard?.(this.args.examples![0]);
-  }
-
-  @action viewListingDetails(e: MouseEvent) {
-    e.stopPropagation();
-
-    if (!this.args.id) {
-      throw new Error('No card id');
-    }
-
-    this.args.context?.actions?.viewCard?.(new URL(this.args.id), 'isolated');
-  }
-
-  @action
-  updateCurrentIndex(index: number, e: MouseEvent) {
-    e.stopPropagation();
-
-    if (index < 0 || index >= this.totalSlides) {
-      return;
-    }
-    this.currentIndex = index;
-  }
-
-  <template>
-    <div
-      class='carousel'
-      tabindex='0'
-      data-test-catalog-listing-fitted-preview
-      aria-label='Preview Example'
-      {{on 'click' this.previewExample}}
-    >
-      <div
-        class='actions-buttons-container'
-        {{on 'mouseenter' this._stopPropagation}}
-      >
-        {{#if this.hasExample}}
-          <BoxelButton
-            @kind='secondary-dark'
-            class='preview-button'
-            data-test-catalog-listing-fitted-preview-button
-            aria-label='Preview Example'
-            {{on 'click' this.previewExample}}
-          >
-            Preview
-          </BoxelButton>
-        {{/if}}
-
-        <BoxelButton
-          @kind='secondary-dark'
-          class='details-button'
-          data-test-catalog-listing-fitted-details-button
-          aria-label='View Listing Details'
-          {{on 'click' this.viewListingDetails}}
-        >
-          Details
-        </BoxelButton>
-      </div>
-
-      <div class='carousel-items'>
-        {{#each @items as |item index|}}
-          <div
-            class='carousel-item carousel-item-{{index}}
-              {{if (eq this.currentIndex index) "is-active"}}'
-            aria-hidden={{if (eq this.currentIndex index) 'false' 'true'}}
-          >
-            <img
-              src={{item}}
-              alt='Slide {{add index 1}} of {{this.totalSlides}}'
-            />
-          </div>
-        {{/each}}
-      </div>
-
-      {{#if this.hasMultipleSlides}}
-        <div
-          class='carousel-nav'
-          role='presentation'
-          {{on 'mouseenter' this._stopPropagation}}
-        >
-          <button
-            class='carousel-arrow carousel-arrow-prev'
-            aria-label='Previous slide'
-            {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
-          >
-            &#10094;
-          </button>
-          <button
-            class='carousel-arrow carousel-arrow-next'
-            aria-label='Next slide'
-            {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
-          >
-            &#10095;
-          </button>
-        </div>
-      {{/if}}
-
-      {{#if this.hasMultipleSlides}}
-        <div
-          class='carousel-dots'
-          role='presentation'
-          {{on 'mouseenter' this._stopPropagation}}
-        >
-          {{#each @items as |_ index|}}
-            <div
-              class='carousel-dot
-                {{if (eq this.currentIndex index) "is-active"}}'
-              {{on 'click' (fn this.updateCurrentIndex index)}}
-              role='button'
-              aria-label='Go to slide {{add index 1}}'
-            />
-          {{/each}}
-        </div>
-      {{/if}}
-    </div>
-
-    <style scoped>
-      @layer {
-        .carousel {
-          --boxel-carousel-z-index: 1;
-          position: relative;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          container-type: inline-size;
-          outline: none;
-        }
-        .carousel:focus-visible {
-          outline: 2px solid var(--boxel-highlight);
-          outline-offset: 2px;
-        }
-        .carousel-items {
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          position: relative;
-        }
-        .carousel-item {
-          position: absolute;
-          visibility: hidden;
-          flex: 0 0 100%;
-          justify-content: center;
-          align-items: center;
-          padding: var(--boxel-sp) var(--boxel-sp-xs);
-          display: flex;
-          opacity: 0;
-          transition:
-            opacity 1s ease,
-            visibility 0s linear 1s;
-        }
-        .carousel-item.is-active {
-          visibility: visible;
-          opacity: 1;
-          transition:
-            opacity 1s ease,
-            visibility 0s;
-        }
-        .carousel-item img {
-          width: 100%;
-          height: auto;
-          object-fit: cover;
-          display: block;
-          border-radius: var(--boxel-border-radius-sm);
-          box-shadow:
-            0 15px 20px rgba(0, 0, 0, 0.12),
-            0 5px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .carousel-arrow {
-          all: unset;
-          cursor: pointer;
-          user-select: none;
-          padding: 0px;
-          width: 2rem;
-          height: 2rem;
-          display: inline-flex;
-          justify-content: center;
-          align-items: center;
-        }
-        .carousel-arrow-prev {
-          position: absolute;
-          left: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: calc(var(--boxel-carousel-z-index));
-        }
-        .carousel-arrow-next {
-          position: absolute;
-          right: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: calc(var(--boxel-carousel-z-index));
-        }
-
-        .carousel-arrow-next {
-          position: absolute;
-          right: 0;
-          top: 50%;
-          transform: translateY(-50%);
-        }
-        .carousel-dots {
-          position: absolute;
-          bottom: 5px;
-          left: 50%;
-          z-index: var(--boxel-carousel-z-index);
-          transform: translateX(-50%);
-          display: flex;
-          justify-content: center;
-          gap: 0.5rem;
-        }
-        .carousel-dot {
-          width: 10px;
-          height: 10px;
-          background-color: var(--boxel-100);
-          border: 1px solid var(--boxel-500);
-          border-radius: 50%;
-          cursor: pointer;
-          padding: 0px;
-        }
-        .carousel-dot.is-active {
-          background-color: var(--boxel-400);
-          border: 1px solid var(--boxel-700);
-        }
-
-        .actions-buttons-container {
-          position: absolute;
-          top: 0;
-          left: 0;
-          z-index: var(--boxel-carousel-z-index);
-          width: 100%;
-          height: 100%;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: var(--boxel-sp-sm);
-          opacity: 0;
-          background-color: rgba(0, 0, 0, 0.6);
-          transition: opacity 0.3s ease;
-        }
-
-        .carousel:hover .carousel-item img {
-          box-shadow:
-            0 15px 20px rgba(0, 0, 0, 0.2),
-            0 7px 10px rgba(0, 0, 0, 0.12);
-        }
-        .carousel:hover .actions-buttons-container {
-          opacity: 1;
-        }
-        .carousel:hover .carousel-arrow {
-          color: var(--boxel-200);
-        }
-
-        .preview-button,
-        .details-button {
-          --boxel-button-font: 600 var(--boxel-font-sm);
-          --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-          --boxel-button-border: 1px solid var(--boxel-light);
-          --boxel-button-text-color: var(--boxel-100);
-          box-shadow:
-            0 15px 20px rgba(0, 0, 0, 0.12),
-            0 5px 10px rgba(0, 0, 0, 0.1);
-          pointer-events: auto;
-        }
-        .preview-button:hover,
-        .details-button:hover {
-          --boxel-button-text-color: var(--boxel-light);
-          --boxel-button-color: var(--boxel-purple);
-          box-shadow:
-            0 15px 25px rgba(0, 0, 0, 0.2),
-            0 7px 15px rgba(0, 0, 0, 0.15);
-          cursor: pointer;
-        }
-
-        @container (max-width: 250px) {
-          .actions-buttons-container {
-            flex-direction: column;
-          }
-          .preview-button,
-          .details-button {
-            --boxel-button-font: 600 var(--boxel-font-xs);
-            --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
-          }
-        }
-
-        @container (max-height: 140px) {
-          .actions-buttons-container,
-          .carousel-nav,
-          .carousel-dots {
-            display: none;
-          }
-          .carousel-item {
-            padding: var(--boxel-sp-4xs);
-          }
-          .carousel-item img,
-          .carousel:hover .carousel-item img {
-            box-shadow: none;
-            border-radius: var(--boxel-border-radius-xs);
-          }
-        }
-      }
-    </style>
-  </template>
-}
+import { on } from '@ember/modifier';
+import { CatalogImageOverlay } from './catalog-image-overlay';
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
-  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
-    [];
+  allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
+    this,
+    GetAllRealmMetasCommand,
+  );
 
-  roomId: string | null = null;
-
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.writableRealms = setupAllRealmsInfo(this.args);
+  get writableRealms(): { name: string; url: string; iconURL?: string }[] {
+    const commandResource = this.allRealmsInfoResource;
+    if (commandResource?.isSuccess && commandResource) {
+      const result = commandResource.value;
+      if (result?.results) {
+        return result.results
+          .filter(
+            (realmMeta: RealmMetaField) =>
+              realmMeta.canWrite &&
+              realmMeta.url !== this.args.model[realmURL]?.href,
+          )
+          .map((realmMeta: RealmMetaField) => ({
+            name: realmMeta.info.name,
+            url: realmMeta.url,
+            iconURL: realmMeta.info.iconURL,
+          }));
+      }
+    }
+    return [];
   }
 
-  get remixRealmOptions() {
-    return this.writableRealms
-      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
-      .map((realm) => {
-        return new MenuItem(realm.name, 'action', {
-          action: () => {
-            this.remix(realm.url);
-          },
-          iconURL: realm.iconURL ?? '/default-realm-icon.png',
-        });
-      });
+  actionsResource = listingActions(this, () => ({
+    listing: this.args.model as Listing,
+  }));
+
+  get images() {
+    return this.args.model.images ?? [];
   }
 
   get firstImage() {
@@ -422,103 +67,104 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.tags?.[0]?.name;
   }
 
-  _openRoomWithSkillAndPrompt = task(async (realmUrl: string) => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('Missing commandContext');
+  get listingActions() {
+    if (isReady(this.actionsResource)) {
+      return this.actionsResource.actions;
     }
-    await new ListingInitCommand(commandContext).execute({
-      realm: realmUrl,
-      actionType: 'remix',
-      listing: this.args.model as Listing,
-    });
-  });
-
-  @action remix(realmUrl: string) {
-    this._openRoomWithSkillAndPrompt.perform(realmUrl);
+    return;
   }
 
-  @action viewListingDetails(e: MouseEvent) {
-    e.stopPropagation();
-
-    if (!this.args.model.id) {
-      throw new Error('No card id');
-    }
-
-    this.args.context?.actions?.viewCard?.(
-      new URL(this.args.model.id),
-      'isolated',
-    );
+  get stubActions() {
+    return this.listingActions?.type === 'stub'
+      ? this.listingActions
+      : undefined;
   }
 
-  @action
-  _stopPropagation(e: MouseEvent) {
-    e.stopPropagation();
+  get skillActions() {
+    return this.listingActions?.type === 'skill'
+      ? this.listingActions
+      : undefined;
   }
+
+  get regularActions() {
+    return this.listingActions?.type === 'regular'
+      ? this.listingActions
+      : undefined;
+  }
+
+  viewDetails = () => {
+    this.listingActions?.view();
+  };
 
   <template>
-    <div class='fitted-template'>
-      <div class='display-section'>
-        {{#if @model.images}}
-          <CarouselComponent
-            @context={{@context}}
-            @id={{@model.id}}
-            @items={{@model.images}}
-            @examples={{@model.examples}}
-          />
-        {{else}}
-          <@model.constructor.icon
-            data-test-card-type-icon
-            class='card-type-icon'
-          />
-        {{/if}}
-      </div>
-      <div
-        class='info-section'
-        tabindex='0'
-        data-test-catalog-listing-fitted-details
-        aria-label='View Listing Details'
-        {{on 'click' this.viewListingDetails}}
-      >
-        <div class='card-content'>
-          <h3 class='card-title' data-test-card-title={{@model.name}}>
-            {{@model.name}}
-          </h3>
-          <h4 class='card-display-name' data-test-card-display-name>
-            {{this.publisherInfo}}
-          </h4>
-        </div>
-        <div class='card-tags-action'>
-          {{#if this.hasTags}}
-            <span class='card-tags'># {{this.firstTagName}}</span>
-          {{/if}}
-          <BoxelDropdown @autoClose={{true}}>
-            <:trigger as |bindings|>
-              <BoxelButton
-                data-test-catalog-listing-fitted-remix-button
-                @kind='primary'
-                @size='extra-small'
-                class='card-remix-button'
-                @loading={{this._openRoomWithSkillAndPrompt.isRunning}}
-                {{on 'click' this._stopPropagation}}
-                {{bindings}}
-                aria-label='Remix listing'
-              >
-                Remix
-              </BoxelButton>
-            </:trigger>
-            <:content as |dd|>
-              <BoxelMenu
-                class='realm-dropdown-menu'
-                @closeMenu={{dd.close}}
-                @items={{this.remixRealmOptions}}
-                data-test-catalog-listing-fitted-remix-dropdown
+    {{#if this.listingActions}}
+      <div class='fitted-template'>
+        <div class='display-section'>
+          <CatalogImageOverlay
+            @listingActions={{this.listingActions}}
+            @images={{this.images}}
+          >
+            <:icon>
+              <@model.constructor.icon
+                data-test-card-type-icon
+                class='card-type-icon'
               />
-            </:content>
-          </BoxelDropdown>
+            </:icon>
+          </CatalogImageOverlay>
         </div>
+        <div
+          class='info-section'
+          tabindex='0'
+          data-test-catalog-listing-fitted-details
+          aria-label='View Listing Details'
+          {{on 'click' this.viewDetails}}
+        >
+          <div class='card-content'>
+            <h3 class='card-title' data-test-card-title={{@model.name}}>
+              {{@model.name}}
+            </h3>
+            <h4 class='card-display-name' data-test-card-display-name>
+              {{this.publisherInfo}}
+            </h4>
+          </div>
+          <div class='card-tags-action'>
+            {{#if this.hasTags}}
+              <span class='card-tags'># {{this.firstTagName}}</span>
+            {{/if}}
+            {{#if this.stubActions}}
+              <ChooseRealmAction
+                @name='Build'
+                @writableRealms={{this.writableRealms}}
+                @onAction={{this.stubActions.build}}
+                @context={{@context}}
+                @size='extra-small'
+              />
+            {{else if this.skillActions}}
+              {{#if this.skillActions.remix}}
+                <ChooseRealmAction
+                  @name='Remix'
+                  @writableRealms={{this.writableRealms}}
+                  @onAction={{this.skillActions.remix}}
+                  @context={{@context}}
+                  @size='extra-small'
+                />
+              {{/if}}
+            {{else if this.regularActions}}
+              {{#if this.regularActions.remix}}
+                <ChooseRealmAction
+                  @name='Remix'
+                  @writableRealms={{this.writableRealms}}
+                  @onAction={{this.regularActions.remix}}
+                  @context={{@context}}
+                  @size='extra-small'
+                />
+              {{/if}}
+            {{/if}}
+          </div>
+        </div>
+
       </div>
-    </div>
+    {{/if}}
 
     {{! template-lint-disable no-whitespace-for-layout  }}
     {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
@@ -595,21 +241,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           flex: 1 1 auto;
           overflow: hidden;
         }
-        .card-remix-button {
-          --boxel-button-font: 600 var(--boxel-font-sm);
-          margin-left: auto;
-          flex: 0 0 auto;
-        }
-        .realm-dropdown-menu {
-          --boxel-menu-item-content-padding: var(--boxel-sp-xs);
-          --boxel-menu-item-gap: var(--boxel-sp-xs);
-          min-width: 13rem;
-          max-height: 13rem;
-          overflow-y: scroll;
-        }
-        .realm-dropdown-menu :deep(.menu-item__icon-url) {
-          border-radius: var(--boxel-border-radius-xs);
-        }
       }
 
       /* Aspect Ratio <= 1.0 (Vertical) */
@@ -630,9 +261,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         .card-tags-action {
           flex-direction: row;
           justify-content: space-between;
-        }
-        .card-remix-button {
-          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp);
         }
       }
 
@@ -661,9 +289,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         .card-display-name,
         .card-tags {
           display: none;
-        }
-        .card-remix-button {
-          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
         }
       }
       /* Tall Tile (150 x 275) */

@@ -16,6 +16,8 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import { unwrap } from '@cardstack/host/lib/current-run';
+
 import {
   testRealmURL,
   testRealmInfo,
@@ -23,7 +25,10 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  testModuleRealm,
+  cardInfo,
 } from '../helpers';
+import { getFileCreatedAt } from '../helpers';
 import {
   CardDef,
   Component,
@@ -40,9 +45,20 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
-const testModuleRealm = 'http://localhost:4202/test/';
-
 let loader: Loader;
+
+function assertInnerHtmlMatches(
+  assert: Assert,
+  actual: string | null | undefined,
+  expected: string | null | undefined,
+  message?: string,
+) {
+  let cleanedActual = cleanWhiteSpace(
+    stripScopedCSSAttributes(unwrap(actual!)),
+  );
+  let cleanedExpected = cleanWhiteSpace(expected!);
+  assert.strictEqual(cleanedActual, cleanedExpected, message);
+}
 
 module(`Integration | realm indexing`, function (hooks) {
   setupRenderingTest(hooks);
@@ -87,6 +103,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
+    let createdAt = await getFileCreatedAt(realm, 'empty.json');
     let queryEngine = realm.realmIndexQueryEngine;
     let { data: cards } = await queryEngine.search({});
     assert.deepEqual(cards, [
@@ -94,9 +111,13 @@ module(`Integration | realm indexing`, function (hooks) {
         id: `${testRealmURL}empty`,
         type: 'card',
         attributes: {
-          title: null,
+          cardInfo,
+          title: 'Untitled Card',
           description: null,
           thumbnailURL: null,
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -106,9 +127,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}empty.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}empty.json`,
-          ),
+          resourceCreatedAt: createdAt!,
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -143,6 +162,14 @@ module(`Integration | realm indexing`, function (hooks) {
             },
           },
         },
+        'pet.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class Pet extends CardDef {
+            @field firstName = contains(StringField);
+          }
+        `,
       },
     });
     assert.deepEqual(
@@ -151,8 +178,10 @@ module(`Integration | realm indexing`, function (hooks) {
         instanceErrors: 0,
         instancesIndexed: 2,
         moduleErrors: 0,
-        modulesIndexed: 0,
-        totalIndexEntries: 2,
+        modulesIndexed: 1,
+        definitionErrors: 0,
+        definitionsIndexed: 1,
+        totalIndexEntries: 4,
       },
       'indexer stats are correct',
     );
@@ -176,6 +205,17 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
+
+    let definitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
+      module: `${testRealmURL}pet`,
+      name: 'Pet',
+    });
+    assert.strictEqual(
+      definitionEntry?.type,
+      'definition',
+      'definition entry exists',
+    );
+
     await realm.fullIndex();
 
     assert.deepEqual(
@@ -185,9 +225,23 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 1,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 2,
+        definitionErrors: 0,
+        definitionsIndexed: 0,
+        totalIndexEntries: 4,
       },
       'indexer stats are correct',
+    );
+
+    // meta entries are notional so we want to make sure they didn't
+    // get tombstoned because the file wasn't found
+    definitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
+      module: `${testRealmURL}pet`,
+      name: 'Pet',
+    });
+    assert.strictEqual(
+      definitionEntry?.type,
+      'definition',
+      'definition entry exists',
     );
   });
 
@@ -218,6 +272,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'Pet/mango.json');
     let queryEngine = realm.realmIndexQueryEngine;
     {
       let mango = await queryEngine.cardDocument(
@@ -269,6 +324,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Mango',
             title: 'Mango',
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             owner: {
@@ -276,6 +332,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 self: `../Person/owner`,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -285,9 +342,7 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Pet/mango.json`,
-            ),
+            resourceCreatedAt: mangoCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -357,6 +412,7 @@ module(`Integration | realm indexing`, function (hooks) {
           firstName: 'Mango',
           title: 'Mango',
           thumbnailURL: null,
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -364,6 +420,7 @@ module(`Integration | realm indexing`, function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -401,6 +458,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             owner: {
@@ -408,6 +466,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 self: null,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -468,6 +527,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'Pet/mango.json');
     let queryEngine = realm.realmIndexQueryEngine;
     let mango = await queryEngine.cardDocument(
       new URL(`${testRealmURL}Pet/mango`),
@@ -484,6 +544,7 @@ module(`Integration | realm indexing`, function (hooks) {
           firstName: 'Mango',
           title: 'Mango',
           thumbnailURL: null,
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -491,6 +552,7 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `../Person/owner`,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -500,9 +562,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/mango.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}Pet/mango.json`,
-          ),
+          resourceCreatedAt: mangoCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -556,6 +616,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'Pet/mango.json');
     let indexer = realm.realmIndexQueryEngine;
     let mango = await indexer.cardDocument(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
@@ -570,6 +631,7 @@ module(`Integration | realm indexing`, function (hooks) {
           firstName: 'Mango',
           title: 'Mango',
           thumbnailURL: null,
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -577,6 +639,7 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `../Person/owner`,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -586,9 +649,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/mango.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}Pet/mango.json`,
-          ),
+          resourceCreatedAt: mangoCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -631,6 +692,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
+    let personSpecCreatedAt = await getFileCreatedAt(realm, 'person-spec.json');
     let indexer = realm.realmIndexQueryEngine;
     let entry = await indexer.cardDocument(
       new URL(`${testRealmURL}person-spec`),
@@ -657,6 +719,10 @@ module(`Integration | realm indexing`, function (hooks) {
             name: 'Person',
           },
           containedExamples: [],
+          cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -666,9 +732,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}person-spec.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}person-spec.json`,
-          ),
+          resourceCreatedAt: personSpecCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -688,6 +752,7 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -745,6 +810,11 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
+    let personSpecCreatedAt = await getFileCreatedAt(realm, 'person-spec.json');
+    let peopleSkillCreatedAt = await getFileCreatedAt(
+      realm,
+      'people-skill.json',
+    );
     let indexer = realm.realmIndexQueryEngine;
     let entry = await indexer.cardDocument(
       new URL(`${testRealmURL}person-spec`),
@@ -771,6 +841,10 @@ module(`Integration | realm indexing`, function (hooks) {
             name: 'Person',
           },
           containedExamples: [],
+          cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -780,9 +854,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}person-spec.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}person-spec.json`,
-          ),
+          resourceCreatedAt: personSpecCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -802,6 +874,7 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -832,15 +905,17 @@ module(`Integration | realm indexing`, function (hooks) {
           instructions: 'How to win friends and influence people',
           thumbnailURL: null,
           title: null,
+          cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: skillCardRef,
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}people-skill.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}people-skill.json`,
-          ),
+          resourceCreatedAt: peopleSkillCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -859,6 +934,7 @@ module(`Integration | realm indexing`, function (hooks) {
             requiresApproval: false,
           },
         ],
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -960,25 +1036,16 @@ module(`Integration | realm indexing`, function (hooks) {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
           let { isolatedHtml, embeddedHtml, fittedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
-          assert.strictEqual(
-            cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
-            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+          assertInnerHtmlMatches(assert, isolatedHtml, `<h1> Van Gogh </h1>`);
+          assertInnerHtmlMatches(
+            assert,
+            embeddedHtml![`${testRealmURL}person/Person`],
+            `<h1> Person Embedded Card: Van Gogh </h1>`,
           );
-          assert.strictEqual(
-            cleanWhiteSpace(
-              stripScopedCSSAttributes(
-                embeddedHtml![`${testRealmURL}person/Person`],
-              ),
-            ),
-            cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
-          );
-          assert.strictEqual(
-            cleanWhiteSpace(
-              stripScopedCSSAttributes(
-                fittedHtml![`${testRealmURL}person/Person`],
-              ),
-            ),
-            cleanWhiteSpace(`<h1> Person Fitted Card: Van Gogh </h1>`),
+          assertInnerHtmlMatches(
+            assert,
+            fittedHtml![`${testRealmURL}person/Person`],
+            `<h1> Person Fitted Card: Van Gogh </h1>`,
           );
         } else {
           assert.ok(
@@ -997,25 +1064,16 @@ module(`Integration | realm indexing`, function (hooks) {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
           let { isolatedHtml, embeddedHtml, fittedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
-          assert.strictEqual(
-            cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
-            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+          assertInnerHtmlMatches(assert, isolatedHtml, `<h1> Van Gogh </h1>`);
+          assertInnerHtmlMatches(
+            assert,
+            embeddedHtml![`${testRealmURL}person/Person`],
+            `<h1> Person Embedded Card: Van Gogh </h1>`,
           );
-          assert.strictEqual(
-            cleanWhiteSpace(
-              stripScopedCSSAttributes(
-                embeddedHtml![`${testRealmURL}person/Person`],
-              ),
-            ),
-            cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
-          );
-          assert.strictEqual(
-            cleanWhiteSpace(
-              stripScopedCSSAttributes(
-                fittedHtml![`${testRealmURL}person/Person`],
-              ),
-            ),
-            cleanWhiteSpace(`<h1> Person Fitted Card: Van Gogh </h1>`),
+          assertInnerHtmlMatches(
+            assert,
+            fittedHtml![`${testRealmURL}person/Person`],
+            `<h1> Person Fitted Card: Van Gogh </h1>`,
           );
         } else {
           assert.ok(
@@ -1131,23 +1189,16 @@ module(`Integration | realm indexing`, function (hooks) {
           realm,
           new URL(`${testRealmURL}working-van-gogh`),
         )) ?? {};
-      assert.strictEqual(
-        cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
-        cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+      assertInnerHtmlMatches(assert, isolatedHtml!, `<h1> Van Gogh </h1>`);
+      assertInnerHtmlMatches(
+        assert,
+        embeddedHtml![`${testRealmURL}person/Person`],
+        `<h1> Person Embedded Card: Van Gogh </h1>`,
       );
-      assert.strictEqual(
-        cleanWhiteSpace(
-          stripScopedCSSAttributes(
-            embeddedHtml![`${testRealmURL}person/Person`],
-          ),
-        ),
-        cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
-      );
-      assert.strictEqual(
-        cleanWhiteSpace(
-          stripScopedCSSAttributes(fittedHtml![`${testRealmURL}person/Person`]),
-        ),
-        cleanWhiteSpace(`<h1> Person Fitted Card: Van Gogh </h1>`),
+      assertInnerHtmlMatches(
+        assert,
+        fittedHtml![`${testRealmURL}person/Person`],
+        `<h1> Person Fitted Card: Van Gogh </h1>`,
       );
     } else {
       assert.ok(
@@ -1265,36 +1316,26 @@ module(`Integration | realm indexing`, function (hooks) {
       let { isolatedHtml, embeddedHtml, fittedHtml } =
         (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
         {};
-      assert.strictEqual(
-        cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
-        cleanWhiteSpace(`<h1> Van Gogh </h1>`),
-      );
-      assert.strictEqual(
-        false,
+      assertInnerHtmlMatches(assert, isolatedHtml!, `<h1> Van Gogh </h1>`);
+      assert.false(
         isolatedHtml!.includes('id="ember'),
         `isolated HTML does not include ember ID's`,
       );
-      assert.strictEqual(
-        cleanWhiteSpace(
-          stripScopedCSSAttributes(
-            embeddedHtml![`${testRealmURL}person/Person`],
-          ),
-        ),
-        cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
+      assertInnerHtmlMatches(
+        assert,
+        embeddedHtml![`${testRealmURL}person/Person`],
+        `<h1> Person Embedded Card: Van Gogh </h1>`,
       );
-      assert.strictEqual(
-        cleanWhiteSpace(
-          stripScopedCSSAttributes(fittedHtml![`${testRealmURL}person/Person`]),
-        ),
-        cleanWhiteSpace(`<h1> Person Fitted Card: Van Gogh </h1>`),
+      assertInnerHtmlMatches(
+        assert,
+        fittedHtml![`${testRealmURL}person/Person`],
+        `<h1> Person Fitted Card: Van Gogh </h1>`,
       );
-      assert.strictEqual(
-        false,
+      assert.false(
         Object.values(embeddedHtml!).join('').includes('id="ember'),
         `embeddedHtml HTML does not include ember ID's`,
       );
-      assert.strictEqual(
-        false,
+      assert.false(
         Object.values(fittedHtml!).join('').includes('id="ember'),
         `fittedHtml HTML does not include ember ID's`,
       );
@@ -1347,8 +1388,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
       'atom html is correct',
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       atomHtml!.includes('id="ember'),
       `atom HTML does not include ember ID's`,
     );
@@ -1357,6 +1397,7 @@ module(`Integration | realm indexing`, function (hooks) {
   test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
     class Person extends CardDef {
       static displayName = 'Person';
+      @field description = contains(StringField);
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -1404,8 +1445,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let { embeddedHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      false,
+    assert.false(
       Object.values(embeddedHtml!).join('').includes('id="ember'),
       `Embedded HTML does not include ember ID's`,
     );
@@ -1416,7 +1456,13 @@ module(`Integration | realm indexing`, function (hooks) {
         ),
       ),
       cleanWhiteSpace(
-        `<h1> Fancy Person Embedded Card: Germaine - hot pink </h1>`,
+        `<div
+          class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
+          data-test-boxel-card-container
+          style
+          data-test-card="http://test-realm/test/germaine"
+          data-test-card-format="embedded"
+          data-test-field-component-card> <h1> Fancy Person Embedded Card: Germaine - hot pink </h1> </div>`,
       ),
       'default embedded HTML is correct',
     );
@@ -1436,18 +1482,29 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(
         stripScopedCSSAttributes(embeddedHtml![`${testRealmURL}person/Person`]),
       ),
-      cleanWhiteSpace(`<h1> Person Embedded Card: Germaine </h1>`),
+      cleanWhiteSpace(`<div
+        class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
+        data-test-boxel-card-container
+        style
+        data-test-card="http://test-realm/test/germaine"
+        data-test-card-format="embedded"
+        data-test-field-component-card> <h1> Person Embedded Card: Germaine </h1> </div>`),
       `${testRealmURL}person/Person embedded HTML is correct`,
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person embedded HTML does not include ember ID's`,
     );
 
     assert.strictEqual(
       cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
-      cleanWhiteSpace(`
+      cleanWhiteSpace(`<div
+        class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
+        data-test-boxel-card-container
+        style
+        data-test-card="http://test-realm/test/germaine"
+        data-test-card-format="embedded"
+        data-test-field-component-card>
           <div class="embedded-template">
             <div class="thumbnail-section">
               <div class="card-thumbnail">
@@ -1455,19 +1512,19 @@ module(`Integration | realm indexing`, function (hooks) {
               </div>
             </div>
             <div class="info-section">
-              <h3 class="card-title" data-test-card-title></h3>
+              <h3 class="card-title" data-test-card-title>Untitled Fancy Person</h3>
               <h4 class="card-display-name" data-test-card-display-name>
                 Fancy Person
               </h4>
             </div>
             <div class="card-description" data-test-card-description>Fancy Germaine</div>
           </div>
+        </div>
       `),
       `${cardDefRefURL} embedded HTML is correct`,
     );
 
-    assert.strictEqual(
-      false,
+    assert.false(
       embeddedHtml![cardDefRefURL].includes('id="ember'),
       `${cardDefRefURL} fitted HTML does not include ember ID's`,
     );
@@ -1477,6 +1534,7 @@ module(`Integration | realm indexing`, function (hooks) {
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
+      @field description = contains(StringField);
       static fitted = class Fitted extends Component<typeof this> {
         <template>
           <h1> Person Fitted Card: <@fields.firstName /></h1>
@@ -1521,10 +1579,9 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
 
-    let { fittedHtml } =
+    let { embeddedHtml, fittedHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      false,
+    assert.false(
       Object.values(fittedHtml!).join('').includes('id="ember'),
       `Fitted HTML does not include ember ID's`,
     );
@@ -1535,7 +1592,13 @@ module(`Integration | realm indexing`, function (hooks) {
         ),
       ),
       cleanWhiteSpace(
-        `<h1> Fancy Person Fitted Card: Germaine - hot pink </h1>`,
+        `<div
+          class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
+          data-test-boxel-card-container
+          style
+          data-test-card="http://test-realm/test/germaine"
+          data-test-card-format="fitted"
+          data-test-field-component-card> <h1> Fancy Person Fitted Card: Germaine - hot pink </h1> </div>`,
       ),
       'default fitted HTML is correct',
     );
@@ -1555,38 +1618,48 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(
         stripScopedCSSAttributes(fittedHtml![`${testRealmURL}person/Person`]),
       ),
-      cleanWhiteSpace(`<h1> Person Fitted Card: Germaine </h1>`),
+      cleanWhiteSpace(`<div
+      class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
+      data-test-boxel-card-container
+      style
+      data-test-card="http://test-realm/test/germaine"
+      data-test-card-format="fitted"
+      data-test-field-component-card> <h1> Person Fitted Card: Germaine </h1> </div>`),
       `${testRealmURL}person/Person fitted HTML is correct`,
     );
-    assert.strictEqual(
-      false,
+    assert.false(
       fittedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person fitted HTML does not include ember ID's`,
     );
 
     assert.strictEqual(
-      cleanWhiteSpace(stripScopedCSSAttributes(fittedHtml![cardDefRefURL])),
-      cleanWhiteSpace(`
-          <div class="fitted-template">
-            <div class="thumbnail-section">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions card-type-icon" viewBox="0 0 24 24" data-test-card-type-icon><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>
+      cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
+      cleanWhiteSpace(`<div
+      class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
+      data-test-boxel-card-container
+      style
+      data-test-card="http://test-realm/test/germaine"
+      data-test-card-format="embedded"
+      data-test-field-component-card>
+        <div class="embedded-template">
+          <div class="thumbnail-section">
+            <div class="card-thumbnail">
+              <div class="card-thumbnail-placeholder" data-test-card-thumbnail-placeholder></div>
             </div>
-            <div class="info-section">
-              <h3 class="card-title" data-test-card-title></h3>
-              <h4 class="card-display-name" data-test-card-display-name>
-                Fancy Person
-              </h4>
-            </div>
-            <div class="card-description" data-test-card-description>Fancy Germaine</div>
           </div>
-      `),
+          <div class="info-section">
+            <h3 class="card-title" data-test-card-title>Untitled Fancy Person</h3>
+            <h4 class="card-display-name" data-test-card-display-name> Fancy Person </h4>
+          </div>
+          <div class="card-description" data-test-card-description>Fancy Germaine</div>
+        </div>
+      </div>`),
       `${cardDefRefURL} embedded HTML is correct`,
     );
 
-    assert.strictEqual(
-      false,
-      fittedHtml![cardDefRefURL].includes('id="ember'),
-      `${cardDefRefURL} fitted HTML does not include ember ID's`,
+    assert.false(
+      embeddedHtml![cardDefRefURL].includes('id="ember'),
+      `${cardDefRefURL} embedded HTML does not include ember ID's`,
     );
   });
 
@@ -1613,6 +1686,8 @@ module(`Integration | realm indexing`, function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField);
+      @field thumbnailURL = contains(StringField);
     }
 
     let { realm } = await setupIntegrationTestRealm({
@@ -1668,11 +1743,13 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         description: 'Dog',
         thumbnailURL: `./jackie.jpg`,
+        cardInfo,
       });
       assert.deepEqual(card.doc.data.relationships, {
         'appointment.contact.pet': {
           links: { self: `${testRealmURL}mango` },
         },
+        'cardInfo.theme': { links: { self: null } },
       });
     } else {
       assert.ok(
@@ -1757,6 +1834,9 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let indexer = realm.realmIndexQueryEngine;
+    let vendorCreatedAt = await getFileCreatedAt(realm, 'Vendor/vendor1.json');
+    let chain1CreatedAt = await getFileCreatedAt(realm, 'Chain/1.json');
+    let chain2CreatedAt = await getFileCreatedAt(realm, 'Chain/2.json');
     let vendor = await indexer.cardDocument(
       new URL(`${testRealmURL}Vendor/vendor1`),
       {
@@ -1790,6 +1870,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 },
               },
             ],
+            cardInfo,
           },
           relationships: {
             'paymentMethods.0.payment.chain': {
@@ -1810,6 +1891,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 self: `${testRealmURL}Chain/2`,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1819,9 +1901,7 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Vendor/vendor1.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Vendor/vendor1.json`,
-            ),
+            resourceCreatedAt: vendorCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -1839,6 +1919,10 @@ module(`Integration | realm indexing`, function (hooks) {
               chainId: 1,
               description: `Chain 1`,
               thumbnailURL: `Ethereum Mainnet-icon.png`,
+              cardInfo,
+            },
+            relationships: {
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -1848,9 +1932,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Chain/1.json`,
               ),
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${testRealmURL}Chain/1.json`,
-              ),
+              resourceCreatedAt: chain1CreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
             },
@@ -1867,6 +1949,10 @@ module(`Integration | realm indexing`, function (hooks) {
               chainId: 137,
               description: `Chain 137`,
               thumbnailURL: `Polygon-icon.png`,
+              cardInfo,
+            },
+            relationships: {
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -1876,9 +1962,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Chain/2.json`,
               ),
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${testRealmURL}Chain/2.json`,
-              ),
+              resourceCreatedAt: chain2CreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
             },
@@ -2009,6 +2093,7 @@ module(`Integration | realm indexing`, function (hooks) {
         description: 'Person',
         fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
+        cardInfo: { theme: null },
       },
       `search doc includes fullName field`,
     );
@@ -2092,6 +2177,7 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Publication/pacific`,
         },
         views: 5,
+        cardInfo: { theme: null },
       },
       `post 1 search doc includes publication relationship`,
     );
@@ -2111,6 +2197,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           { id: `${testRealmURL}Post/2` },
         ],
+        cardInfo: { theme: null },
       },
       `publication search doc includes featuredPosts relationship`,
     );
@@ -2201,6 +2288,7 @@ module(`Integration | realm indexing`, function (hooks) {
       isCard: true,
       isComponent: false,
       isField: false,
+      cardInfo: { theme: null },
     });
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
@@ -2257,6 +2345,12 @@ module(`Integration | realm indexing`, function (hooks) {
     });
 
     let indexer = realm.realmIndexQueryEngine;
+    let hassanCreatedAt = await getFileCreatedAt(
+      realm,
+      'PetPerson/hassan.json',
+    );
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'Pet/mango.json');
+    let vanGoghCreatedAt = await getFileCreatedAt(realm, 'Pet/vanGogh.json');
     let hassan = await indexer.cardDocument(
       new URL(`${testRealmURL}PetPerson/hassan`),
       { loadLinks: true },
@@ -2272,6 +2366,7 @@ module(`Integration | realm indexing`, function (hooks) {
           title: 'Hassan Pet Person',
           description: 'A person with pets',
           thumbnailURL: null,
+          cardInfo,
         },
         relationships: {
           friend: {
@@ -2287,6 +2382,7 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: `../Pet/vanGogh` },
             data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2296,9 +2392,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}PetPerson/hassan.json`,
           ),
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}PetPerson/hassan.json`,
-          ),
+          resourceCreatedAt: hassanCreatedAt!,
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -2313,16 +2407,18 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Mango',
             title: 'Mango',
             thumbnailURL: null,
+            cardInfo,
           },
-          relationships: { owner: { links: { self: null } } },
+          relationships: {
+            owner: { links: { self: null } },
+            'cardInfo.theme': { links: { self: null } },
+          },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Pet/mango.json`,
-            ),
+            resourceCreatedAt: mangoCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2336,16 +2432,18 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
             thumbnailURL: null,
+            cardInfo,
           },
-          relationships: { owner: { links: { self: null } } },
+          relationships: {
+            owner: { links: { self: null } },
+            'cardInfo.theme': { links: { self: null } },
+          },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/vanGogh.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Pet/vanGogh.json`,
-            ),
+            resourceCreatedAt: vanGoghCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2375,6 +2473,7 @@ module(`Integration | realm indexing`, function (hooks) {
             owner: null,
             title: 'Mango',
             thumbnailURL: null,
+            cardInfo: { theme: null, ...cardInfo },
           },
           {
             id: `${testRealmURL}Pet/vanGogh`,
@@ -2383,12 +2482,14 @@ module(`Integration | realm indexing`, function (hooks) {
             owner: null,
             title: 'Van Gogh',
             thumbnailURL: null,
+            cardInfo: { theme: null, ...cardInfo },
           },
         ],
         friend: null,
         title: 'Hassan Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -2405,7 +2506,10 @@ module(`Integration | realm indexing`, function (hooks) {
         'PetPerson/burcu.json': {
           data: {
             attributes: { firstName: 'Burcu' },
-            relationships: { pets: { links: { self: null } } },
+            relationships: {
+              pets: { links: { self: null } },
+              'cardInfo.theme': { links: { self: null } },
+            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}pet-person`,
@@ -2424,6 +2528,8 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     );
 
+    let burcuCreatedAt = await getFileCreatedAt(realm, 'PetPerson/burcu.json');
+
     if (card?.type === 'doc') {
       assert.deepEqual(card.doc, {
         data: {
@@ -2435,10 +2541,12 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Burcu Pet Person',
             description: 'A person with pets',
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             pets: { links: { self: null } },
             friend: { links: { self: null } },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2448,9 +2556,7 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}PetPerson/burcu.json`,
             ),
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}PetPerson/burcu.json`,
-            ),
+            resourceCreatedAt: burcuCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2477,6 +2583,7 @@ module(`Integration | realm indexing`, function (hooks) {
         title: 'Burcu Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -2540,6 +2647,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}pet-person-spec`),
       { loadLinks: true },
     );
+    let createdAt = await getFileCreatedAt(realm, 'pet-person-spec.json');
 
     if (spec?.type === 'doc') {
       assert.deepEqual(spec.doc.data, {
@@ -2561,6 +2669,10 @@ module(`Integration | realm indexing`, function (hooks) {
           isCard: true,
           isComponent: false,
           isField: false,
+          cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2572,9 +2684,7 @@ module(`Integration | realm indexing`, function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}pet-person-spec.json`,
-          ),
+          resourceCreatedAt: createdAt!,
         },
       });
     } else {
@@ -2601,6 +2711,7 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -2684,6 +2795,10 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let indexer = realm.realmIndexQueryEngine;
+    let friendHassanCreatedAt = await getFileCreatedAt(
+      realm,
+      'Friend/hassan.json',
+    );
     let hassan = await indexer.cardDocument(
       new URL(`${testRealmURL}Friend/hassan`),
     );
@@ -2699,6 +2814,7 @@ module(`Integration | realm indexing`, function (hooks) {
           title: 'Hassan',
           description: 'Friend of dogs',
           thumbnailURL: null,
+          cardInfo,
         },
         relationships: {
           friend: {
@@ -2706,6 +2822,7 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `./mango`,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2717,9 +2834,7 @@ module(`Integration | realm indexing`, function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
-          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-            `${testRealmURL}Friend/hassan.json`,
-          ),
+          resourceCreatedAt: friendHassanCreatedAt!,
         },
       });
     } else {
@@ -2752,8 +2867,11 @@ module(`Integration | realm indexing`, function (hooks) {
             friend: null,
             description: 'Dog friend',
             thumbnailURL: 'van-gogh.jpg',
+            cardInfo: { theme: null },
           },
+          cardInfo: { theme: null },
         },
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -2820,6 +2938,8 @@ module(`Integration | realm indexing`, function (hooks) {
         loadLinks: true,
       },
     );
+    let hassanCreatedAt = await getFileCreatedAt(realm, 'Friend/hassan.json');
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'Friend/mango.json');
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc, {
         data: {
@@ -2831,6 +2951,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Hassan',
             description: 'Dog owner',
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             friend: {
@@ -2842,6 +2963,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/mango`,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2853,9 +2975,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Friend/hassan.json`,
-            ),
+            resourceCreatedAt: hassanCreatedAt!,
           },
         },
         included: [
@@ -2868,6 +2988,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Mango',
               description: 'Dog friend',
               thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               friend: {
@@ -2879,6 +3000,7 @@ module(`Integration | realm indexing`, function (hooks) {
                   id: `${testRealmURL}Friend/hassan`,
                 },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -2890,9 +3012,7 @@ module(`Integration | realm indexing`, function (hooks) {
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${testRealmURL}Friend/mango.json`,
-              ),
+              resourceCreatedAt: mangoCreatedAt!,
             },
           },
         ],
@@ -2922,8 +3042,10 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
           },
           description: 'Dog friend',
+          cardInfo: { theme: null },
         },
         title: 'Hassan',
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -2932,6 +3054,14 @@ module(`Integration | realm indexing`, function (hooks) {
       );
     }
 
+    let mangoHassanCreatedAt = await getFileCreatedAt(
+      realm,
+      'Friend/mango.json',
+    );
+    let hassanAgainCreatedAt = await getFileCreatedAt(
+      realm,
+      'Friend/hassan.json',
+    );
     let mango = await indexer.cardDocument(
       new URL(`${testRealmURL}Friend/mango`),
       {
@@ -2949,6 +3079,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Mango',
             description: 'Dog friend',
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             friend: {
@@ -2960,6 +3091,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/hassan`,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2971,9 +3103,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Friend/mango.json`,
-            ),
+            resourceCreatedAt: mangoHassanCreatedAt!,
           },
         },
         included: [
@@ -2986,6 +3116,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Hassan',
               description: 'Dog owner',
               thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               friend: {
@@ -2997,6 +3128,7 @@ module(`Integration | realm indexing`, function (hooks) {
                   id: `${testRealmURL}Friend/mango`,
                 },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -3008,9 +3140,7 @@ module(`Integration | realm indexing`, function (hooks) {
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${testRealmURL}Friend/hassan.json`,
-              ),
+              resourceCreatedAt: hassanAgainCreatedAt!,
             },
           },
         ],
@@ -3041,7 +3171,9 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           description: 'Dog owner',
+          cardInfo: { theme: null },
         },
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -3086,6 +3218,7 @@ module(`Integration | realm indexing`, function (hooks) {
         loadLinks: true,
       },
     );
+    let createdAt = await getFileCreatedAt(realm, 'Friend/hassan.json');
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc, {
         data: {
@@ -3097,6 +3230,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Hassan',
             description: 'Dog owner',
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             friend: {
@@ -3108,6 +3242,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/hassan`,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3119,9 +3254,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${testRealmURL}Friend/hassan.json`,
-            ),
+            resourceCreatedAt: createdAt!,
           },
         },
       });
@@ -3146,6 +3279,7 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Friend/hassan`,
         },
         title: 'Hassan',
+        cardInfo: { theme: null },
       });
     } else {
       assert.ok(
@@ -3201,6 +3335,8 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 3,
         moduleErrors: 0,
         modulesIndexed: 0,
+        definitionErrors: 0,
+        definitionsIndexed: 0,
         totalIndexEntries: 3,
       },
       'instances are indexed without error',
@@ -3209,6 +3345,12 @@ module(`Integration | realm indexing`, function (hooks) {
     let hassan = await queryEngine.cardDocument(new URL(hassanID), {
       loadLinks: true,
     });
+    let hassanCreatedAt = await getFileCreatedAt(realm, 'Friends/hassan.json');
+    let mangoCreatedAt = await getFileCreatedAt(realm, 'Friends/mango.json');
+    let vanGoghCreatedAt = await getFileCreatedAt(
+      realm,
+      'Friends/vanGogh.json',
+    );
     if (hassan?.type === 'doc') {
       assert.deepEqual(
         hassan.doc.data,
@@ -3221,6 +3363,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Hassan',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             'friends.0': {
@@ -3231,15 +3374,14 @@ module(`Integration | realm indexing`, function (hooks) {
               links: { self: './vanGogh' },
               data: { type: 'card', id: vanGoghID },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
+            resourceCreatedAt: hassanCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${hassanID}.json`,
-            ),
           },
         },
         'hassan doc.data is correct',
@@ -3257,21 +3399,21 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Mango',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               'friends.0': {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
+              resourceCreatedAt: mangoCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${mangoID}.json`,
-              ),
             },
           },
           {
@@ -3283,21 +3425,21 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Van Gogh',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               'friends.0': {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
+              resourceCreatedAt: vanGoghCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${vanGoghID}.json`,
-              ),
             },
           },
         ],
@@ -3324,15 +3466,20 @@ module(`Integration | realm indexing`, function (hooks) {
               id: mangoID,
               firstName: 'Mango',
               title: 'Mango',
+              description: null,
+              thumbnailURL: null,
               friends: [{ id: hassanID }],
+              cardInfo: { theme: null, ...cardInfo },
             },
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               title: 'Van Gogh',
+              cardInfo: { theme: null },
             },
           ],
+          cardInfo: { theme: null },
         },
         'hassan searchData is correct',
       );
@@ -3355,21 +3502,21 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Mango',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             'friends.0': {
               links: { self: './hassan' },
               data: { type: 'card', id: hassanID },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
+            resourceCreatedAt: mangoCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${mangoID}.json`,
-            ),
           },
         },
         'mango doc.data is correct',
@@ -3386,6 +3533,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Hassan',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               'friends.0': {
@@ -3396,15 +3544,14 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './vanGogh' },
                 data: { type: 'card', id: vanGoghID },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
+              resourceCreatedAt: hassanCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${hassanID}.json`,
-              ),
             },
           },
           {
@@ -3416,21 +3563,21 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Van Gogh',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               'friends.0': {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
+              resourceCreatedAt: vanGoghCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${vanGoghID}.json`,
-              ),
             },
           },
         ],
@@ -3468,10 +3615,13 @@ module(`Integration | realm indexing`, function (hooks) {
                       id: hassanID,
                     },
                   ],
+                  cardInfo: { theme: null },
                 },
               ],
+              cardInfo: { theme: null },
             },
           ],
+          cardInfo: { theme: null },
         },
         'mango searchData is correct',
       );
@@ -3494,21 +3644,21 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Van Gogh',
             description: null,
             thumbnailURL: null,
+            cardInfo,
           },
           relationships: {
             'friends.0': {
               links: { self: './hassan' },
               data: { type: 'card', id: hassanID },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
+            resourceCreatedAt: vanGoghCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-              `${vanGoghID}.json`,
-            ),
           },
         },
         'vanGogh doc.data is correct',
@@ -3525,6 +3675,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Hassan',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               'friends.0': {
@@ -3535,15 +3686,14 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './vanGogh' },
                 data: { type: 'card', id: vanGoghID },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
+              resourceCreatedAt: hassanCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${hassanID}.json`,
-              ),
             },
           },
           {
@@ -3555,21 +3705,21 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Mango',
               description: null,
               thumbnailURL: null,
+              cardInfo,
             },
             relationships: {
               'friends.0': {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
+              resourceCreatedAt: mangoCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
-                `${mangoID}.json`,
-              ),
             },
           },
         ],
@@ -3596,17 +3746,24 @@ module(`Integration | realm indexing`, function (hooks) {
               id: hassanID,
               firstName: 'Hassan',
               title: 'Hassan',
+              description: null,
+              thumbnailURL: null,
               friends: [
                 {
                   id: mangoID,
                   firstName: 'Mango',
                   title: 'Mango',
+                  description: null,
+                  thumbnailURL: null,
                   friends: [{ id: hassanID }],
+                  cardInfo: { theme: null, ...cardInfo },
                 },
                 { id: vanGoghID },
               ],
+              cardInfo: { theme: null, ...cardInfo },
             },
           ],
+          cardInfo: { theme: null },
         },
         'vanGogh searchData is correct',
       );
@@ -3643,19 +3800,38 @@ module(`Integration | realm indexing`, function (hooks) {
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
         'http://localhost:4202/test/person',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-box-left-middle.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-left.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/arrow-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/code.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/eye.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/folder-pen.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/import.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/link.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/notepad-text.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
         'https://cardstack.com/base/card-api',
+        'https://cardstack.com/base/card-menu-items',
+        'https://cardstack.com/base/card-serialization',
+        'https://cardstack.com/base/components/add-button',
         'https://cardstack.com/base/contains-many-component',
         'https://cardstack.com/base/default-templates/atom',
+        'https://cardstack.com/base/default-templates/card-info',
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
+        'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
+        'https://cardstack.com/base/field-support',
+        'https://cardstack.com/base/helpers/sanitized-html',
+        'https://cardstack.com/base/helpers/set-background-image',
         'https://cardstack.com/base/links-to-editor',
         'https://cardstack.com/base/links-to-many-component',
         'https://cardstack.com/base/number',
@@ -3663,8 +3839,15 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
+        'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
+        'https://packages/@cardstack/boxel-host/commands/listing-create',
+        'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
+        'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
+        'https://packages/@cardstack/boxel-host/commands/show-card',
+        'https://packages/@cardstack/boxel-host/commands/switch-submode',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
         'https://packages/@cardstack/boxel-ui/icons',
@@ -3675,6 +3858,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@ember/helper',
         'https://packages/@ember/modifier',
         'https://packages/@ember/object',
+        'https://packages/@ember/template',
         'https://packages/@ember/template-factory',
         'https://packages/@glimmer/component',
         'https://packages/@glimmer/tracking',
@@ -3734,30 +3918,47 @@ module(`Integration | realm indexing`, function (hooks) {
       [
         'http://localhost:4202/test/person',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-box-left-middle.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/apps.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/arrow-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/book-open-text.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/box-model.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/code.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/eye.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/folder-pen.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/git-branch.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/import.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/layers-subtract.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/layout-list.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/link.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/notepad-text.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/stack.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/toggle-left.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
         'https://cardstack.com/base/boolean',
         'https://cardstack.com/base/card-api',
+        'https://cardstack.com/base/card-menu-items',
+        'https://cardstack.com/base/card-serialization',
         'https://cardstack.com/base/code-ref',
+        'https://cardstack.com/base/components/add-button',
         'https://cardstack.com/base/contains-many-component',
         'https://cardstack.com/base/default-templates/atom',
+        'https://cardstack.com/base/default-templates/card-info',
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
+        'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
+        'https://cardstack.com/base/field-support',
+        'https://cardstack.com/base/helpers/sanitized-html',
+        'https://cardstack.com/base/helpers/set-background-image',
         'https://cardstack.com/base/links-to-editor',
         'https://cardstack.com/base/links-to-many-component',
         'https://cardstack.com/base/markdown',
@@ -3767,8 +3968,16 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
+        'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
+        'https://packages/@cardstack/boxel-host/commands/generate-readme-spec',
+        'https://packages/@cardstack/boxel-host/commands/listing-create',
+        'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
+        'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
+        'https://packages/@cardstack/boxel-host/commands/show-card',
+        'https://packages/@cardstack/boxel-host/commands/switch-submode',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
         'https://packages/@cardstack/boxel-ui/icons',
@@ -3779,6 +3988,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@ember/helper',
         'https://packages/@ember/modifier',
         'https://packages/@ember/object',
+        'https://packages/@ember/template',
         'https://packages/@ember/template-factory',
         'https://packages/@glimmer/component',
         'https://packages/@glimmer/tracking',

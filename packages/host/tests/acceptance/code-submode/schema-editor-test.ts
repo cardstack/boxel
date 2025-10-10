@@ -21,6 +21,7 @@ import {
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
 } from '../../helpers';
@@ -240,7 +241,6 @@ const ambiguousDisplayNamesCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let monacoService: MonacoService;
 
@@ -256,11 +256,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -365,7 +366,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText('8');
+    assert.dom('[data-test-total-fields]').containsText('9');
 
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
@@ -425,7 +426,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     assert
       .dom('[data-test-card-schema="Card"] [data-test-total-fields]')
-      .containsText('+ 3 Fields');
+      .containsText('+ 4 Fields');
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-overridden-field-link]`,
@@ -435,7 +436,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-field-types]`,
       )
-      .hasText('Overridden');
+      .hasText('Overridden, Computed');
 
     assert
       .dom(
@@ -516,7 +517,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click(`button[data-test-clickable-definition-container`);
     await waitFor('[data-test-card-schema]');
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText('8');
+    assert.dom('[data-test-total-fields]').containsText('9');
   });
 
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
@@ -547,6 +548,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
 
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+    );
+
     // Click on card definition button
     await click(
       '[data-test-card-schema="Person"] [data-test-card-schema-navigational-button]',
@@ -562,12 +567,24 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
 
+    await click(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="Employee"]',
+    );
     await waitFor(
-      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
 
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"]',
+    );
+    assert
+      .dom(
+        '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name]',
+      )
+      .hasText('String');
+
     await click(
-      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name]',
     );
 
     await waitFor('[data-test-current-module-name="card-api.gts"]');
@@ -619,6 +636,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .hasText('BigInteger');
 
     await click('[data-test-choose-card-button]');
+
+    await waitFor('[data-test-search-field]');
+    await fillIn('[data-test-search-field]', 'Date');
 
     await waitFor(
       '[data-test-select="https://cardstack.com/base/fields/date-field"]',

@@ -14,6 +14,7 @@ import {
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -171,7 +172,6 @@ const filesB: Record<string, any> = {
   },
 };
 
-let matrixRoomId: string;
 module('Acceptance | code submode | create-file tests', function (hooks) {
   async function openNewFileModal(
     menuSelection: string,
@@ -216,11 +216,12 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       mockMatrixUtils,
     }));
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     getService('network').mount(
       async (req: Request) => {
@@ -348,6 +349,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
                 self: null,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           'relationships data is correct',
         );
@@ -414,8 +416,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         }
         assert.strictEqual(
           json.data.attributes?.title,
-          null,
-          'title field is empty',
+          'Untitled Card',
+          'title field defaults to fallback',
         );
         assert.strictEqual(
           json.data.meta.realmURL,
@@ -445,7 +447,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         )
         .hasAttribute('aria-label', 'Test Workspace A');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
-      assert.dom('[data-test-field="title"] input').hasValue('');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue('');
       assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileURL}.json`);
 
       await deferred.promise;
@@ -476,8 +478,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         }
         assert.strictEqual(
           json.data.attributes?.title,
-          null,
-          'title field is empty',
+          'Untitled Card',
+          'title field defaults to fallback',
         );
         assert.strictEqual(
           json.data.meta.realmURL,
@@ -504,7 +506,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         )
         .hasAttribute('aria-label', 'Test Workspace B');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
-      assert.dom('[data-test-field="title"] input').hasValue('');
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue('');
       assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
       await deferred.promise;
@@ -631,8 +633,8 @@ export class TrèsTestCard extends CardDef {
         );
       assert
         .dom('[data-test-total-fields]')
-        .containsText('3')
-        .hasAttribute('title', '3 fields');
+        .containsText('4')
+        .hasAttribute('title', '4 fields');
     });
 
     test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {

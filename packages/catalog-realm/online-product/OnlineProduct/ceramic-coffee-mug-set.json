@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "Handcrafted Ceramic Coffee Mug Set",
+      "price": 49.99,
+      "salePrice": 34.99,
+      "sku": "CCM-SET-4PC",
+      "category": "Home & Kitchen",
+      "shortDescription": "Beautiful set of 4 handcrafted ceramic coffee mugs with unique glazed finishes. Each mug holds 12oz and features an ergonomic handle design. Microwave and dishwasher safe. Perfect for morning coffee, afternoon tea, or as a thoughtful gift.",
+      "inventory": 8,
+      "inStock": true,
+      "imageUrl": "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg",
+      "title": "Handcrafted Ceramic Coffee Mug Set",
+      "cardInfo": {
+        "title": "Handcrafted Ceramic Coffee Mug Set",
+        "description": "Beautiful set of 4 handcrafted ceramic coffee mugs with unique glazed finishes. Category: Home & Kitchen. SKU: CCM-SET-4PC",
+        "thumbnailURL": "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg",
+        "notes": null
+      },
+      "description": "Beautiful set of 4 handcrafted ceramic coffee mugs with unique glazed finishes. Category: Home & Kitchen. SKU: CCM-SET-4PC",
+      "thumbnailURL": "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-product",
+        "name": "OnlineProduct"
+      },
+      "realmURL": "http://localhost:4201/catalog/"
+    }
+  }
+}

@@ -67,7 +67,7 @@ export function formattedError(
       meta = {
         lastKnownGoodHtml,
         scopedCssUrls,
-        stack: cardError.stack ?? err.stack ?? error.stack ?? null,
+        stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
         cardTitle,
       };
     } else if (isCardError(additionalError)) {
@@ -87,11 +87,11 @@ export function formattedError(
             cardError.title ??
             status.message[cardError.status] ??
             cardError.message,
-          realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+          realm: error?.responseHeaders?.get('X-Boxel-Realm-Url'),
           meta: meta ?? {
             lastKnownGoodHtml: null,
             scopedCssUrls: [],
-            stack: cardError.stack ?? err.stack ?? error.stack ?? null,
+            stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
             cardTitle: null,
             ...(cardError.id ? { isCreationError: true } : {}),
           },
@@ -118,7 +118,7 @@ export function formattedError(
     errors: [
       {
         id: url,
-        status: errorStatus ?? '500',
+        status: errorStatus ?? 500,
         title: err?.title ?? status.message[errorStatus] ?? errorMessage,
         message: errorMessage,
         realm: err?.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
@@ -143,8 +143,9 @@ export class CardError extends Error implements SerializedError {
   source?: ErrorDetails['source'];
   responseText?: string;
   isCardError: true = true;
-  additionalErrors: (CardError | SearchResultError['error'] | Error)[] | null =
-    null;
+  additionalErrors:
+    | (CardError | SearchResultError['error'] | Error | CardErrorJSONAPI)[]
+    | null = null;
   deps?: string[];
 
   constructor(
@@ -165,6 +166,7 @@ export class CardError extends Error implements SerializedError {
       title: this.title,
       message: this.message,
       code: this.status,
+      status: this.status,
       source: this.source,
       stack: this.stack,
     };
@@ -187,6 +189,20 @@ export class CardError extends Error implements SerializedError {
       );
     }
     return result;
+  }
+
+  static fromCardErrorJsonAPI(
+    errorJSONAPI: CardErrorJSONAPI,
+    url?: string,
+    httpStatus?: number,
+  ) {
+    let error = CardError.fromSerializableError(errorJSONAPI);
+    if (url && httpStatus != null && [404, 406].includes(httpStatus)) {
+      error.deps = [url];
+    }
+    error.stack = errorJSONAPI.meta.stack;
+
+    return error;
   }
 
   static async fromFetchResponse(

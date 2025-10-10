@@ -3,6 +3,7 @@ import {
   type QueuePublisher,
   type Realm,
   type VirtualNetwork,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -11,6 +12,8 @@ import handleCreateRealmRequest from './handlers/handle-create-realm';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
 import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
+import handlePublishRealm from './handlers/handle-publish-realm';
+import handleUnpublishRealm from './handlers/handle-unpublish-realm';
 import {
   healthCheck,
   jwtMiddleware,
@@ -18,12 +21,17 @@ import {
   grafanaAuthorization,
 } from './middleware';
 import Koa from 'koa';
-import handleStripeLinksRequest from './handlers/handle-stripe-links';
 import handleCreateUserRequest from './handlers/handle-create-user';
 import handleQueueStatusRequest from './handlers/handle-queue-status';
 import handleReindex from './handlers/handle-reindex';
+import handleFullReindex from './handlers/handle-full-reindex';
 import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
+import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
+import handleRequestForward from './handlers/handle-request-forward';
+import handlePostDeployment from './handlers/handle-post-deployment';
+import { handleCheckSiteNameAvailabilityRequest } from './handlers/handle-check-site-name-availability';
+import handleRealmAuth from './handlers/handle-realm-auth';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -34,6 +42,16 @@ export type CreateRoutesArgs = {
   realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
+  realms: Realm[];
+  realmsRootPath: string;
+  getMatrixRegistrationSecret: () => Promise<string>;
+  createAndMountRealm: (
+    path: string,
+    url: string,
+    username: string,
+    copiedFromRealm?: URL,
+    enableFileWatcher?: boolean,
+  ) => Realm;
   createRealm: ({
     ownerUserId,
     endpoint,
@@ -46,10 +64,19 @@ export type CreateRoutesArgs = {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }) => Promise<Realm>;
+  }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
-  sendEvent: (user: string, eventType: string) => Promise<void>;
+  sendEvent: (
+    user: string,
+    eventType: string,
+    data?: Record<string, any>,
+  ) => Promise<void>;
+  domainsForPublishedRealms?: {
+    boxelSpace?: string;
+    boxelSite?: string;
+  };
+  assetsURL: URL;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -66,6 +93,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
+  router.post(
+    '/_stripe-session',
+    jwtMiddleware(args.realmSecretSeed),
+    handleCreateStripeSessionRequest(args),
+  );
   router.get(
     '/_user',
     jwtMiddleware(args.realmSecretSeed),
@@ -76,7 +108,23 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleCreateUserRequest(args),
   );
-  router.get('/_stripe-links', handleStripeLinksRequest());
+  router.post(
+    '/_request-forward',
+    jwtMiddleware(args.realmSecretSeed),
+    handleRequestForward({
+      dbAdapter: args.dbAdapter,
+    }),
+  );
+  router.post(
+    '/_publish-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePublishRealm(args),
+  );
+  router.post(
+    '/_unpublish-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleUnpublishRealm(args),
+  );
 
   // it's awkward that these are GET's but we are working around grafana's limitations
   router.get(
@@ -93,6 +141,22 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_grafana-add-credit',
     grafanaAuthorization(args.grafanaSecret),
     handleAddCredit(args),
+  );
+  router.get(
+    '/_grafana-full-reindex',
+    grafanaAuthorization(args.grafanaSecret),
+    handleFullReindex(args),
+  );
+  router.post('/_post-deployment', handlePostDeployment(args));
+  router.get(
+    '/_check-site-name-availability',
+    jwtMiddleware(args.realmSecretSeed),
+    handleCheckSiteNameAvailabilityRequest(args),
+  );
+  router.post(
+    '/_realm-auth',
+    jwtMiddleware(args.realmSecretSeed),
+    handleRealmAuth(args),
   );
 
   return router.routes();

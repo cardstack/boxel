@@ -218,6 +218,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           this,
           this.args.codeData.fileUrl,
           this.args.codeData.searchReplaceBlock,
+          this.args.codePatchStatus as CodePatchStatus,
         )
       : undefined;
     return this._codeDiffResource;
@@ -263,6 +264,17 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       : null;
   }
 
+  private get codePatchErrorMessage() {
+    if (this.args.codePatchStatus === 'applied') {
+      return null;
+    } else if (this.args.codePatchStatus === 'failed') {
+      return this.args.codePatchResult?.failureReason;
+    } else if (this.codeDiffResource?.errorMessage) {
+      return this.codeDiffResource.errorMessage;
+    }
+    return null;
+  }
+
   <template>
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
@@ -279,36 +291,34 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
               @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
               @codePatchStatus={{@codePatchStatus}}
+              @codePatchErrorMessage={{this.codePatchErrorMessage}}
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             />
+
             <codeBlock.editor @code={{this.codeForEditor}} />
+
             <codeBlock.actions as |actions|>
               <actions.copyCode
                 @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
               />
-              {{#if (eq @codePatchStatus 'applied')}}
-                {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
-                <actions.applyCodePatch
-                  @codeData={{@codeData}}
-                  @patchCodeStatus={{@codePatchStatus}}
-                />
-              {{/if}}
+              {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
+              <actions.applyCodePatch
+                @codeData={{@codeData}}
+                @patchCodeStatus={{@codePatchStatus}}
+              />
             </codeBlock.actions>
+
+            {{#if this.codePatchErrorMessage}}
+              <codeBlock.patchFooter>
+                <Alert @type='error' class='code-patch-error' as |Alert|>
+                  <Alert.Messages
+                    @messages={{array this.codePatchErrorMessage}}
+                  />
+                </Alert>
+              </codeBlock.patchFooter>
+            {{/if}}
           </div>
         {{else}}
-          {{#if this.codeDiffResource.errorMessage}}
-            <Alert
-              data-test-error-message={{this.codeDiffResource.errorMessage}}
-              @type='error'
-              as |Alert|
-            >
-              <Alert.Messages
-                @messages={{array
-                  (this.errorMessage this.codeDiffResource.errorMessage)
-                }}
-              />
-            </Alert>
-          {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
             <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
@@ -316,23 +326,46 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
               @codePatchStatus={{@codePatchStatus}}
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
+              @codePatchErrorMessage={{this.codePatchErrorMessage}}
             />
+
             <codeBlock.diffEditor
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
               @language={{@codeData.language}}
               @updateDiffEditorStats={{this.updateDiffEditorStats}}
             />
+
             <codeBlock.actions as |actions|>
               <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+
               <actions.applyCodePatch
                 @codeData={{@codeData}}
                 @performPatch={{fn @onPatchCode @codeData}}
-                @patchCodeStatus={{@codePatchStatus}}
+                @patchCodeStatus={{if
+                  this.codePatchErrorMessage
+                  'failed'
+                  @codePatchStatus
+                }}
                 @originalCode={{this.codeDiffResource.originalCode}}
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />
             </codeBlock.actions>
+          {{/if}}
+
+          {{#if this.codePatchErrorMessage}}
+            <codeBlock.patchFooter>
+              <Alert
+                @type='error'
+                class='code-patch-error'
+                data-test-error-message={{this.codePatchErrorMessage}}
+                as |Alert|
+              >
+                <Alert.Messages
+                  @messages={{array this.codePatchErrorMessage}}
+                />
+              </Alert>
+            </codeBlock.patchFooter>
           {{/if}}
         {{/if}}
       {{else}}

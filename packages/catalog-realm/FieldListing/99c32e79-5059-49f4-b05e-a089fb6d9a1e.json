@@ -1,0 +1,66 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "FieldListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "QR Code Field",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/qr-code-listing/screenshot_01.png"
+      ],
+      "summary": "A field for generating and displaying QR codes in Boxel cards. Perfect for creating scannable codes that link to card data, IDs, or URLs.",
+      "cardInfo": {
+        "notes": null,
+        "title": "QR Code Field Listing",
+        "description": "",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/qr-code-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/1dde6ecb-e779-4fb7-89de-597399bb1530"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/developer-tools-code"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../fields-preview/QRCodePreview/789e97cd-bdf2-46ba-aa31-dcdc069c4551"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

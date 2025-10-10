@@ -1,0 +1,98 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Leaflet Map",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/screenshot_03.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/screenshot_01.png"
+      ],
+      "summary": "The Leaflet Map card is an interactive mapping component built using the Leaflet.js library. It accepts three key parameters: latitude and longitude coordinates for map positioning, and an optional custom tile server URL (defaulting to OpenStreetMap). The map is rendered in a full-width and full-height container, automatically loading the necessary Leaflet.js library and CSS from CDN.\n\nThe component centers the map on the specified coordinates with a default zoom level of 13, providing users with an interactive experience that includes panning and zooming capabilities. It supports both isolated and embedded views, though the embedded view functionality is currently not implemented. This makes it a versatile tool for displaying geographical data in various contexts.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/239b84fc-b080-4465-ae9f-b3e9abd0ec3f"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/7f239b84-fcb0-40f4-a56e-9fb3e9abd0ec"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/a0047f23-9b84-4cb0-80f4-656e9fb3e9ab"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/9e538a36-264e-4b5d-b031-6b2c5298af95"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../leaflet-map/LeafletMap/reykjavik-harbor"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../leaflet-map/LeafletMap/sydney-opera-house"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../leaflet-map/LeafletMap/tokyo-station"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/travel-experiences"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
@@ -50,9 +51,9 @@ import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { RoomResource } from '@cardstack/host/resources/room';
 
+import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -60,13 +61,15 @@ import type PlaygroundPanelService from '@cardstack/host/services/playground-pan
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
+import FocusPill from '../ai-assistant/focus-pill';
+import LLMModeToggle from '../ai-assistant/llm-mode-toggle';
 import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
@@ -112,10 +115,52 @@ export default class Room extends Component<Signature> {
           @setScrollPosition={{this.setScrollPosition}}
         >
           {{#if this.matrixService.isLoadingTimeline}}
-            <LoadingIndicator
-              @color='var(--boxel-light)'
-              class='loading-indicator'
-            />
+            <div class='session-preparation-container'>
+              <LoadingIndicator
+                @color='var(--boxel-light)'
+                class='loading-indicator'
+              />
+            </div>
+          {{else if this.aiAssistantPanelService.isPreparingSession}}
+            <div
+              class='session-preparation-container'
+              data-test-session-preparation
+            >
+              <LoadingIndicator
+                @color='var(--boxel-light)'
+                class='loading-indicator'
+              />
+              <span class='session-preparation-message'>
+                {{#if
+                  (and
+                    this.aiAssistantPanelService.isSummarizingSession
+                    this.aiAssistantPanelService.isCopyingFileHistory
+                  )
+                }}
+                  Summarizing session and copying files
+                {{else if this.aiAssistantPanelService.isSummarizingSession}}
+                  Summarizing previous session
+                {{else if this.aiAssistantPanelService.isCopyingFileHistory}}
+                  Copying file history from previous session
+                {{else}}
+                  Preparing session context
+                {{/if}}
+              </span>
+              <span class='session-preparation-message'>
+                Please keep Assistant open
+              </span>
+              <span class='session-preparation-small-message'>
+                Takes 10-20 seconds
+              </span>
+              <button
+                type='button'
+                class='session-preparation-skip-button'
+                {{on 'click' this.skipSessionPreparation}}
+                data-test-session-preparation-skip-button
+              >
+                Skip
+              </button>
+            </div>
           {{else}}
             {{#each this.messages key='eventId' as |message i|}}
               <RoomMessage
@@ -156,7 +201,7 @@ export default class Room extends Component<Signature> {
               <AiAssistantActionBar
                 @acceptAll={{perform this.executeAllReadyActionsTask}}
                 @cancel={{this.cancelActionBar}}
-                @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
+                @acceptingAll={{this.isAcceptingAll}}
                 @acceptingAllLabel={{this.acceptingAllLabel}}
                 @generatingResults={{this.generatingResults}}
                 @stop={{perform this.stopGeneratingTask}}
@@ -175,8 +220,15 @@ export default class Room extends Component<Signature> {
                 @canSend={{this.canSend}}
                 data-test-message-field={{@roomId}}
               />
+              {{#if this.aiAssistantPanelService.isFocusPillVisible}}
+                <FocusPill
+                  @label={{this.aiAssistantPanelService.focusPillLabel}}
+                  @metaPills={{this.aiAssistantPanelService.focusPillMetaPills}}
+                  class='pill-row'
+                />
+              {{/if}}
               {{#if this.displayAttachedItems}}
-                <AttachedItems />
+                <AttachedItems class='pill-row' />
               {{/if}}
 
               <div class='chat-input-area__bottom-actions'>
@@ -202,6 +254,14 @@ export default class Room extends Component<Signature> {
                     @disabled={{@roomResource.isActivatingLLM}}
                     @onExpand={{fn this.setSelectedBottomAction 'llm-select'}}
                     @onCollapse={{fn this.setSelectedBottomAction undefined}}
+                  />
+                {{/if}}
+                {{#if this.displayLLMModeSelect}}
+                  <LLMModeToggle
+                    class='llm-mode-toggle'
+                    @selected={{@roomResource.activeLLMMode}}
+                    @onChange={{perform @roomResource.activateLLMModeTask}}
+                    @disabled={{@roomResource.isActivatingLLMMode}}
                   />
                 {{/if}}
               </div>
@@ -259,6 +319,7 @@ export default class Room extends Component<Signature> {
         --chat-input-area-bottom-padding: var(--boxel-sp-sm);
 
         background-color: var(--boxel-light);
+        color: var(--boxel-dark);
         border-radius: var(--chat-input-area-border-radius);
 
         position: relative;
@@ -284,15 +345,62 @@ export default class Room extends Component<Signature> {
         padding: 0;
       }
 
+      .pill-row {
+        margin: var(--boxel-sp-xxxs);
+      }
+
+      .pill-row + .pill-row {
+        margin-top: 0;
+      }
+
+      .llm-mode-toggle {
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
 
+      .session-preparation-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
+        gap: 4px;
+      }
+
       .loading-indicator {
-        margin-top: auto;
-        margin-bottom: auto;
-        margin-left: auto;
-        margin-right: auto;
+        margin-bottom: var(--boxel-sp-xxs);
+      }
+
+      .session-preparation-message {
+        text-align: center;
+        color: var(--boxel-light);
+        font: 500 var(--boxel-font-sm);
+      }
+
+      .session-preparation-small-message {
+        color: var(--boxel-400);
+        font: 500 var(--boxel-font-xs);
+      }
+
+      .session-preparation-skip-button {
+        background: none;
+        border: 1px solid var(--boxel-400);
+        border-radius: var(--boxel-border-radius-lg);
+        color: var(--boxel-light);
+        font: 500 var(--boxel-font-xs);
+        padding: 4px 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-top: var(--boxel-sp-sm);
+      }
+
+      .session-preparation-skip-button:hover {
+        background: var(--boxel-400);
+        color: var(--boxel-light);
       }
 
       .chat-input-area :deep(.pill-menu-button) {
@@ -328,9 +436,9 @@ export default class Room extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare loaderService: LoaderService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare specPanelService: SpecPanelService;
+  @service private declare aiAssistantPanelService: AiAssistantPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
@@ -613,6 +721,13 @@ export default class Room extends Component<Signature> {
     );
   }
 
+  private get isAcceptingAll() {
+    return (
+      this.executeAllReadyActionsTask.isRunning ||
+      this.commandService.isPerformingAcceptAllForRoom(this.args.roomId)
+    );
+  }
+
   private get unreadMessageText() {
     return `${this.numberOfUnreadMessages} New ${pluralize(
       'Message',
@@ -865,18 +980,32 @@ export default class Room extends Component<Signature> {
       let context =
         await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
-        let cards: CardDef[] | undefined;
+        let cards: CardDef[] | undefined = [];
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just
           // serialized and send to matrix--these don't appear
           // elsewhere in our app.
-          cards = (
-            await Promise.all(
-              (cardsOrIds as string[]).map((id) => this.store.get(id)),
-            )
-          )
-            .filter(Boolean)
-            .filter(isCardInstance) as CardDef[];
+          let cardsOrErrors = await Promise.all(
+            (cardsOrIds as string[]).map((id) => this.store.get(id)),
+          );
+          cardsOrErrors = cardsOrErrors.filter(Boolean);
+          for (let cardOrError of cardsOrErrors) {
+            if (isCardInstance(cardOrError)) {
+              cards?.push(cardOrError as CardDef);
+            } else {
+              // error, let's attach it as a file instead if possible
+              if (cardOrError.id) {
+                let cardFileDef = this.matrixService.fileAPI.createFileDef({
+                  sourceUrl: cardOrError.id + '.json',
+                  name: cardOrError.id.split('/').pop(),
+                });
+                if (!files) {
+                  files = [];
+                }
+                files.push(cardFileDef);
+              }
+            }
+          }
         } else {
           cards = cardsOrIds as CardDef[] | undefined;
         }
@@ -934,7 +1063,8 @@ export default class Room extends Component<Signature> {
       ) &&
       !!this.room &&
       !this.messages.some((m) => this.isPendingMessage(m)) &&
-      !this.matrixService.isLoadingTimeline
+      !this.matrixService.isLoadingTimeline &&
+      !this.aiAssistantPanelService.isPreparingSession
     );
   }
 
@@ -968,6 +1098,11 @@ export default class Room extends Component<Signature> {
     this.selectedBottomAction = action;
   }
 
+  @action
+  private skipSessionPreparation() {
+    this.aiAssistantPanelService.skipSessionPreparation();
+  }
+
   private get displaySkillMenu() {
     return (
       !this.selectedBottomAction || this.selectedBottomAction === 'skill-menu'
@@ -978,6 +1113,10 @@ export default class Room extends Component<Signature> {
     return (
       !this.selectedBottomAction || this.selectedBottomAction === 'llm-select'
     );
+  }
+
+  private get displayLLMModeSelect() {
+    return this.displaySkillMenu && this.displayLLMSelect;
   }
 
   private get displayAttachedItems() {
@@ -1007,17 +1146,7 @@ export default class Room extends Component<Signature> {
   private get readyCodePatches() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage || !lastMessage.htmlParts) return [];
-    let result = [];
-    for (let i = 0; i < lastMessage.htmlParts.length; i++) {
-      let htmlPart = lastMessage.htmlParts[i];
-      let codeData = htmlPart.codeData;
-      if (!codeData || !codeData.searchReplaceBlock) continue;
-      let status = this.commandService.getCodePatchStatus(codeData);
-      if (status && status === 'ready') {
-        result.push(codeData);
-      }
-    }
-    return result;
+    return this.commandService.getReadyCodePatches(lastMessage.htmlParts);
   }
 
   private get generatingResults() {
@@ -1042,7 +1171,7 @@ export default class Room extends Component<Signature> {
       this.generatingResults ||
       this.readyCommands.length > 0 ||
       this.readyCodePatches.length > 0 ||
-      this.executeAllReadyActionsTask.isRunning
+      this.isAcceptingAll
     );
   }
 
@@ -1055,20 +1184,13 @@ export default class Room extends Component<Signature> {
   }
 
   private async executeReadyCodePatches() {
-    // Group code patches by fileUrl
-    let grouped: Record<string, typeof this.readyCodePatches> = {};
-    for (let codeData of this.readyCodePatches) {
-      if (!codeData.fileUrl) continue;
-      if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
-      grouped[codeData.fileUrl].push(codeData);
-    }
-    for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
-      await this.commandService.patchCode(
-        codeDataItems[0].roomId,
-        fileUrl,
-        codeDataItems,
-      );
-    }
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || !lastMessage.htmlParts) return;
+
+    await this.commandService.executeReadyCodePatches(
+      this.args.roomId,
+      lastMessage.htmlParts,
+    );
   }
 
   private executeAllReadyActionsTask = task(async () => {
@@ -1087,10 +1209,4 @@ export default class Room extends Component<Signature> {
   private stopGeneratingTask = task(async () => {
     await this.matrixService.sendStopGeneratingEvent(this.args.roomId);
   });
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Room {
-    'Matrix::Room': typeof Room;
-  }
 }

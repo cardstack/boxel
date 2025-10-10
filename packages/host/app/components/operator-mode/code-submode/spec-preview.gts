@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
-import { consume } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import {
   BoxelButton,
@@ -26,6 +26,7 @@ import {
   realmURL as realmURLSymbol,
   localId,
   isLocalId,
+  CardContextName,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -33,7 +34,6 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -41,7 +41,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -56,7 +56,6 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     activeSpec: Spec | undefined;
-    isLoadingNewModule: boolean;
     isPanelOpen: boolean;
     selectedDeclaration?: ModuleDeclaration;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
@@ -66,18 +65,18 @@ interface Signature {
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {
-    default: [
-      | WithBoundArgs<
-          typeof SpecPreviewContent,
-          | 'showCreateSpec'
-          | 'canWrite'
-          | 'onSelectSpec'
-          | 'activeSpec'
-          | 'isLoading'
-          | 'allSpecs'
-          | 'viewSpecInPlayground'
-        >
-      | WithBoundArgs<typeof SpecPreviewLoading, never>,
+    loading: [WithBoundArgs<typeof SpecPreviewLoading, never>];
+    content: [
+      WithBoundArgs<
+        typeof SpecPreviewContent,
+        | 'showCreateSpec'
+        | 'canWrite'
+        | 'onSelectSpec'
+        | 'activeSpec'
+        | 'isLoading'
+        | 'allSpecs'
+        | 'viewSpecInPlayground'
+      >,
     ];
   };
 }
@@ -105,6 +104,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare cardContext: CardContext;
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare specPanelService: SpecPanelService;
@@ -116,12 +116,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.allSpecs.length === 1;
   }
 
-  private get cardContext(): SpecPreviewCardContext {
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): SpecPreviewCardContext {
     return {
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
+      ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
     };
   }
@@ -213,11 +212,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                           <span data-test-spec-selector-item-path>
                             {{data.localPath}}
                           </span>
-                        {{else}}
-                          <LoadingIndicator />
-                          <span data-test-spec-item-path-creating>
-                            Creating...
-                          </span>
                         {{/if}}
                       </div>
                     {{/if}}
@@ -239,17 +233,9 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               @onSelectCard={{@viewSpecInPlayground}}
             />
             {{#if this.displayIsolated}}
-              <CardRenderer
-                @card={{@activeSpec}}
-                @format='isolated'
-                @cardContext={{this.cardContext}}
-              />
+              <CardRenderer @card={{@activeSpec}} @format='isolated' />
             {{else}}
-              <CardRenderer
-                @card={{@activeSpec}}
-                @format='edit'
-                @cardContext={{this.cardContext}}
-              />
+              <CardRenderer @card={{@activeSpec}} @format='edit' />
             {{/if}}
           </div>
         {{/if}}
@@ -319,28 +305,14 @@ interface SpecPreviewLoadingSignature {
 
 const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
   <template>
-    <div class='container'>
-      <div class='loading'>
-        <LoadingIndicator class='loading-icon' />
-        Loading...
-      </div>
+    <div class='loading'>
+      <LoadingIndicator />
     </div>
     <style scoped>
-      .container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        height: 100%;
-        width: 100%;
-      }
       .loading {
-        display: inline-flex;
-      }
-      .loading-icon {
-        display: inline-block;
-        margin-right: var(--boxel-sp-xxxs);
-        vertical-align: middle;
+        display: flex;
+        justify-content: center;
+        margin: 30vh auto;
       }
     </style>
   </template>;
@@ -348,7 +320,6 @@ const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
-  @service private declare loaderService: LoaderService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
@@ -362,7 +333,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   get isLoading() {
-    return this.args.isLoadingNewModule;
+    return false;
   }
 
   private viewSpecInPlayground = (spec: CardDefOrId) => {
@@ -375,7 +346,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   <template>
     {{#if this.isLoading}}
-      {{yield (component SpecPreviewLoading)}}
+      {{yield (component SpecPreviewLoading) to='loading'}}
     {{else}}
       {{yield
         (component
@@ -388,6 +359,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           allSpecs=@specsForSelectedDefinition
           viewSpecInPlayground=this.viewSpecInPlayground
         )
+        to='content'
       }}
     {{/if}}
   </template>
