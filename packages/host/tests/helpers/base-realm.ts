@@ -16,7 +16,7 @@ import type * as NumberFieldModule from 'https://cardstack.com/base/number';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
-import type * as LLMEnvironmentModule from 'https://cardstack.com/base/llm-environment';
+import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -57,11 +57,11 @@ let CardsGrid: CardsGrid;
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
 
-type ModelConfiguration = (typeof LLMEnvironmentModule)['ModelConfiguration'];
+type ModelConfiguration = (typeof SystemCardModule)['ModelConfiguration'];
 let ModelConfiguration: ModelConfiguration;
 
-type LLMEnvironment = (typeof LLMEnvironmentModule)['LLMEnvironment'];
-let LLMEnvironment: LLMEnvironment;
+type SystemCard = (typeof SystemCardModule)['SystemCard'];
+let SystemCard: SystemCard;
 
 let field: (typeof CardAPIModule)['field'];
 let CardDef: (typeof CardAPIModule)['CardDef'];
@@ -148,16 +148,16 @@ async function initialize() {
     .Skill;
 
   ModelConfiguration = (
-    await loader.import<typeof LLMEnvironmentModule>(
-      `${baseRealm.url}llm-environment`,
+    await loader.import<typeof SystemCardModule>(
+      `${baseRealm.url}system-card`,
     )
   ).ModelConfiguration;
 
-  LLMEnvironment = (
-    await loader.import<typeof LLMEnvironmentModule>(
-      `${baseRealm.url}llm-environment`,
+  SystemCard = (
+    await loader.import<typeof SystemCardModule>(
+      `${baseRealm.url}system-card`,
     )
-  ).LLMEnvironment;
+  ).SystemCard;
 
   let cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,
@@ -209,7 +209,7 @@ export {
   MarkdownField,
   TextAreaField,
   CardsGrid,
-  LLMEnvironment,
+  SystemCard,
   ModelConfiguration,
   field,
   CardDef,

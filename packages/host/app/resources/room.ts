@@ -358,18 +358,18 @@ export class RoomResource extends Resource<Args> {
   }
 
   private get defaultLLM(): string {
-    // Use the first model from the LLM environment if available
-    let llmEnvironment = this.matrixService.llmEnvironment;
-    console.log('Room resource llmEnvironment:', llmEnvironment);
-    console.log('modelConfigurations:', llmEnvironment?.modelConfigurations);
-    console.log('first model:', llmEnvironment?.modelConfigurations?.[0]);
+    // Use the first model from the system card if available
+    let systemCard = this.matrixService.systemCard;
+    console.log('Room resource systemCard:', systemCard);
+    console.log('modelConfigurations:', systemCard?.modelConfigurations);
+    console.log('first model:', systemCard?.modelConfigurations?.[0]);
     console.log(
       'first modelId:',
-      llmEnvironment?.modelConfigurations?.[0]?.modelId,
+      systemCard?.modelConfigurations?.[0]?.modelId,
     );
-    if (llmEnvironment?.modelConfigurations?.[0]?.modelId) {
-      let defaultModel = llmEnvironment.modelConfigurations[0].modelId;
-      console.log('Using default LLM from environment:', defaultModel);
+    if (systemCard?.modelConfigurations?.[0]?.modelId) {
+      let defaultModel = systemCard.modelConfigurations[0].modelId;
+      console.log('Using default LLM from system card:', defaultModel);
       return defaultModel;
     }
     // Fallback to hardcoded default

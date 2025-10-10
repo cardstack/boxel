@@ -19,10 +19,10 @@ export class ModelConfiguration extends CardDef {
   });
 }
 
-export class LLMEnvironment extends CardDef {
-  static displayName = 'LLM Environment';
+export class SystemCard extends CardDef {
+  static displayName = 'System Card';
 
   @field modelConfigurations = linksToMany(ModelConfiguration, {
-    description: 'List of available model configurations for this environment',
+    description: 'List of available model configurations for this system',
   });
 }

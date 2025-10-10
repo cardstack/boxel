@@ -61,7 +61,7 @@ import {
   field,
   setupBaseRealm,
   StringField,
-  LLMEnvironment,
+  SystemCard,
   ModelConfiguration,
 } from '../helpers/base-realm';
 
@@ -289,8 +289,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       toolsSupported: true,
     });
 
-    // Create LLM environment with model configurations
-    let llmEnvironment = new LLMEnvironment({
+    // Create system card with model configurations
+    let systemCard = new SystemCard({
       modelConfigurations: [model1, model2, model3],
     });
 
@@ -395,7 +395,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'ModelConfiguration/gpt-4-turbo.json': model1,
         'ModelConfiguration/claude-3.5-haiku.json': model2,
         'ModelConfiguration/claude-3.7-sonnet.json': model3,
-        'LLMEnvironment/default.json': llmEnvironment,
+        'SystemCard/default.json': systemCard,
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
@@ -410,8 +410,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       return new Response(mockedFileContent);
     };
 
-    // Set the LLM environment in the matrix service
-    getService('matrix-service').setLLMEnvironment(llmEnvironment.id);
+    // Set the system card in the matrix service
+    getService('matrix-service').setSystemCard(systemCard.id);
   });
 
   test('attaches a card in a conversation multiple times', async function (assert) {
@@ -571,13 +571,13 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
-    // Default model should be the first one in the LLM environment
+    // Default model should be the first one in the system card
     let defaultModelName = 'GPT-4 Turbo';
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
 
-    // Should have 3 models from our LLM environment
+    // Should have 3 models from our system card
     assert.dom('[data-test-llm-select-item]').exists({
       count: 3,
     });

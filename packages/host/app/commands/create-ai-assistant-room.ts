@@ -26,10 +26,10 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
   static actionVerb = 'Create';
 
   private getDefaultLLM(): string {
-    // Use the first model from the LLM environment if available
-    let llmEnvironment = this.matrixService.llmEnvironment;
-    if (llmEnvironment?.modelConfigurations?.[0]?.modelId) {
-      let defaultModel = llmEnvironment.modelConfigurations[0].modelId;
+    // Use the first model from the system card if available
+    let systemCard = this.matrixService.systemCard;
+    if (systemCard?.modelConfigurations?.[0]?.modelId) {
+      let defaultModel = systemCard.modelConfigurations[0].modelId;
       return defaultModel;
     }
     // Fallback to hardcoded default

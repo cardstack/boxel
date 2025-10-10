@@ -69,7 +69,7 @@ import {
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_LLM_ENVIRONMENT_EVENT_TYPE,
+  APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -106,7 +106,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
-import type { LLMEnvironment } from 'https://cardstack.com/base/llm-environment';
+import type { SystemCard } from 'https://cardstack.com/base/system-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { addPatchTools } from '../commands/utils';
@@ -198,7 +198,7 @@ export default class MatrixService extends Service {
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
-  @tracked private _llmEnvironment: LLMEnvironment | undefined;
+  @tracked private _systemCard: SystemCard | undefined;
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -303,11 +303,11 @@ export default class MatrixService extends Service {
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
           // what if we're not logged in yet? Should we delay?
-          if (e.event.type === APP_BOXEL_LLM_ENVIRONMENT_EVENT_TYPE) {
-            await this.setLLMEnvironment(e.event.content.id);
+          if (e.event.type === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
+            await this.setSystemCard(e.event.content.id);
           } else {
-            await this.setLLMEnvironment(
-              'http://localhost:4201/admin/llm-envs/CardDef/78eeabe0-9a82-45a8-98b0-839f7273d579',
+            await this.setSystemCard(
+              'http://localhost:4201/admin/system-cards/CardDef/78eeabe0-9a82-45a8-98b0-839f7273d579',
             );
           }
           if (e.event.type == APP_BOXEL_REALMS_EVENT_TYPE) {
@@ -1782,8 +1782,8 @@ export default class MatrixService extends Service {
   }
 
   async setLLMForInteractMode() {
-    if (this.llmEnvironment?.modelConfigurations?.length) {
-      let preferredModel = this.llmEnvironment.modelConfigurations[0].modelId;
+    if (this.systemCard?.modelConfigurations?.length) {
+      let preferredModel = this.systemCard.modelConfigurations[0].modelId;
       return this.setLLMModel(preferredModel);
     } else {
       return this.setLLMModel(DEFAULT_LLM);
@@ -1850,31 +1850,31 @@ export default class MatrixService extends Service {
     return this._isLoadingMoreAIRooms;
   }
 
-  get llmEnvironment() {
-    return this._llmEnvironment;
+  get systemCard() {
+    return this._systemCard;
   }
 
-  async setLLMEnvironment(environmentCardId: string) {
-    if (environmentCardId === this._llmEnvironment?.id) {
-      // it's OK to call this multiple times with the same environment card id
+  async setSystemCard(systemCardId: string) {
+    if (systemCardId === this._systemCard?.id) {
+      // it's OK to call this multiple times with the same system card id
       // we shouldn't do anything.
       return;
     }
     console.log(
-      'MatrixService setLLMEnvironment called with:',
-      environmentCardId,
+      'MatrixService setSystemCard called with:',
+      systemCardId,
     );
 
-    let environment = await this.store.get<LLMEnvironment>(environmentCardId);
+    let environment = await this.store.get<SystemCard>(systemCardId);
     if (isCardErrorJSONAPI(environment)) {
-      console.error('Error loading LLM environment:', environment);
+      console.error('Error loading system card:', environment);
       return;
     }
 
-    this.store.dropReference(this._llmEnvironment?.id);
-    this.store.addReference(environmentCardId);
-    this._llmEnvironment = environment;
-    console.log('MatrixService _llmEnvironment set to:', this._llmEnvironment);
+    this.store.dropReference(this._systemCard?.id);
+    this.store.addReference(systemCardId);
+    this._systemCard = environment;
+    console.log('MatrixService _systemCard set to:', this._systemCard);
   }
 
   async loadMoreAuthRooms(realms: string[]) {
