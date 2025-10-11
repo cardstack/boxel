@@ -24,6 +24,9 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
         overflow: hidden;
         padding: 0;
       }
+      .workspace:focus-visible {
+        outline-offset: -1px;
+      }
     </style>
   </template>;
 

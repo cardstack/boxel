@@ -786,7 +786,7 @@ export default class InteractSubmode extends Component {
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
       }
 
-      .interact-submode-layout :deep(.top-bar) {
+      .interact-submode-layout :deep(.submode-layout-top-bar) {
         position: absolute;
       }
 
