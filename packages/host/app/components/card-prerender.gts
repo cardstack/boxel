@@ -74,11 +74,13 @@ export default class CardPrerender extends Component {
     realm,
     userId,
     permissions,
+    includesCodeChange,
   }: {
     realm: string;
     url: string;
     userId: string;
     permissions: RealmPermissions;
+    includesCodeChange?: boolean;
   }): Promise<RenderResponse> {
     try {
       let results = await this.prerenderTask.perform({
@@ -86,6 +88,7 @@ export default class CardPrerender extends Component {
         realm,
         userId,
         permissions,
+        includesCodeChange,
       });
       return results;
     } catch (e: any) {
@@ -102,15 +105,18 @@ export default class CardPrerender extends Component {
   private prerenderTask = enqueueTask(
     async ({
       url,
+      includesCodeChange = false,
     }: {
       realm: string;
       url: string;
       userId: string;
       permissions: RealmPermissions;
+      includesCodeChange?: boolean;
     }): Promise<RenderResponse> => {
       this.#nonce++;
       this.localIndexer.renderError = undefined;
       this.localIndexer.prerenderStatus = 'loading';
+      this.store.resetCache();
       let error: RenderError | undefined;
       let isolatedHTML: string | null = null;
       let meta: PrerenderMeta = {
@@ -125,10 +131,26 @@ export default class CardPrerender extends Component {
       let embeddedHTML: Record<string, string> | null = null;
       let fittedHTML: Record<string, string> | null = null;
       try {
-        isolatedHTML = await this.renderHTML.perform(url, 'isolated');
-        meta = await this.renderMeta.perform(url);
-        atomHTML = await this.renderHTML.perform(url, 'atom');
-        iconHTML = await this.renderIcon.perform(url);
+        let includesCodeChangeForRoute = includesCodeChange;
+        isolatedHTML = await this.renderHTML.perform(
+          url,
+          'isolated',
+          0,
+          includesCodeChangeForRoute,
+        );
+        // once we've reset the loader for this card, subsequent renders can remain false
+        includesCodeChangeForRoute = false;
+        meta = await this.renderMeta.perform(url, includesCodeChangeForRoute);
+        atomHTML = await this.renderHTML.perform(
+          url,
+          'atom',
+          0,
+          includesCodeChangeForRoute,
+        );
+        iconHTML = await this.renderIcon.perform(
+          url,
+          includesCodeChangeForRoute,
+        );
         if (meta?.types) {
           embeddedHTML = await this.renderAncestors.perform(
             url,
@@ -156,6 +178,7 @@ export default class CardPrerender extends Component {
             type: 'error',
           };
         }
+        this.store.resetCache();
       }
       if (this.localIndexer.prerenderStatus === 'loading') {
         this.localIndexer.prerenderStatus = 'ready';
@@ -173,11 +196,17 @@ export default class CardPrerender extends Component {
   );
 
   private renderHTML = enqueueTask(
-    async (url: string, format: Format, ancestorLevel = 0) => {
+    async (
+      url: string,
+      format: Format,
+      ancestorLevel = 0,
+      includesCodeChange = false,
+    ) => {
+      let includesCodeChangeSegment = includesCodeChange ? 'true' : 'false';
       let routeInfo = await this.router.recognizeAndLoad(
         `/render/${encodeURIComponent(url)}/${
           this.#nonce
-        }/html/${format}/${ancestorLevel}`,
+        }/${includesCodeChangeSegment}/html/${format}/${ancestorLevel}`,
       );
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
@@ -204,27 +233,37 @@ export default class CardPrerender extends Component {
     },
   );
 
-  private renderMeta = enqueueTask(async (url: string) => {
-    let routeInfo = await this.router.recognizeAndLoad(
-      `/render/${encodeURIComponent(url)}/${this.#nonce}/meta`,
-    );
-    if (this.localIndexer.renderError) {
-      throw new Error(this.localIndexer.renderError);
-    }
-    return routeInfo.attributes as PrerenderMeta;
-  });
+  private renderMeta = enqueueTask(
+    async (url: string, includesCodeChange = false) => {
+      let includesCodeChangeSegment = includesCodeChange ? 'true' : 'false';
+      let routeInfo = await this.router.recognizeAndLoad(
+        `/render/${encodeURIComponent(url)}/${
+          this.#nonce
+        }/${includesCodeChangeSegment}/meta`,
+      );
+      if (this.localIndexer.renderError) {
+        throw new Error(this.localIndexer.renderError);
+      }
+      return routeInfo.attributes as PrerenderMeta;
+    },
+  );
 
-  private renderIcon = enqueueTask(async (url: string) => {
-    let routeInfo = await this.router.recognizeAndLoad(
-      `/render/${encodeURIComponent(url)}/${this.#nonce}/icon`,
-    );
-    if (this.localIndexer.renderError) {
-      throw new Error(this.localIndexer.renderError);
-    }
-    let component = routeInfo.attributes.Component;
-    let captured = this.renderService.renderCardComponent(component);
-    return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
-  });
+  private renderIcon = enqueueTask(
+    async (url: string, includesCodeChange = false) => {
+      let includesCodeChangeSegment = includesCodeChange ? 'true' : 'false';
+      let routeInfo = await this.router.recognizeAndLoad(
+        `/render/${encodeURIComponent(url)}/${
+          this.#nonce
+        }/${includesCodeChangeSegment}/icon`,
+      );
+      if (this.localIndexer.renderError) {
+        throw new Error(this.localIndexer.renderError);
+      }
+      let component = routeInfo.attributes.Component;
+      let captured = this.renderService.renderCardComponent(component);
+      return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
+    },
+  );
 
   private async fromScratch({
     realmURL,

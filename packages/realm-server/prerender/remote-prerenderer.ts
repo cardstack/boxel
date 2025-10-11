@@ -15,8 +15,10 @@ export function createRemotePrerenderer(
     url,
     userId,
     permissions,
+    includesCodeChange,
   }: Parameters<Prerenderer>[0]): Promise<RenderResponse> {
     let endpoint = new URL('prerender', prerenderURL);
+    let includesCodeChangeFlag = Boolean(includesCodeChange);
 
     let body = {
       data: {
@@ -26,6 +28,7 @@ export function createRemotePrerenderer(
           url,
           userId,
           permissions,
+          includesCodeChange: includesCodeChangeFlag,
         },
       },
     };
@@ -60,10 +63,6 @@ export function createRemotePrerenderer(
     if (!renderResponse) {
       throw new Error('Prerender response did not contain data.attributes');
     }
-
-    console.log(
-      `====> received prerender request for ${url}:\n${JSON.stringify(renderResponse.serialized, null, 2)}`,
-    );
 
     return renderResponse;
   };

@@ -7,13 +7,18 @@ import { createPrerenderHttpServer } from './prerender-app';
 
 let log = logger('prerender-server');
 
-let { port } = yargs(process.argv.slice(2))
+let { port, silent } = yargs(process.argv.slice(2))
   .usage('Start prerender server')
   .options({
     port: {
       description: 'HTTP port for prerender server',
       demandOption: true,
       type: 'number',
+    },
+    silent: {
+      description: 'Disable forwarding Puppeteer console output to server logs',
+      type: 'boolean',
+      default: false,
     },
   })
   .parseSync();
@@ -29,6 +34,7 @@ if (!REALM_SECRET_SEED) {
 let webServerInstance: Server | undefined;
 webServerInstance = createPrerenderHttpServer({
   secretSeed: REALM_SECRET_SEED,
+  silent,
 }).listen(port);
 log.info(`prerender server HTTP listening on port ${port}`);
 

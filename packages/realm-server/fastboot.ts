@@ -31,8 +31,9 @@ export async function makeFastBootIndexRunner(
     (defaultGlobals: any) => {
       return Object.assign({}, defaultGlobals, {
         __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
-        __useHeadlessChromePrerender: (globalThis as any)
-          .__useHeadlessChromePrerender,
+        // in browser context this is a function
+        __useHeadlessChromePrerender: () =>
+          (globalThis as any).__useHeadlessChromePrerender,
         URL: globalThis.URL,
         Request: globalThis.Request,
         Response: globalThis.Response,
