@@ -40,7 +40,11 @@ import HostModeStateService from '@cardstack/host/services/host-mode-state-servi
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 
 export interface HostModeComponentSignature {
   Args: {
@@ -136,6 +140,16 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     return ids;
   }
 
+  private viewCard: ViewCardFn = (cardOrURL) => {
+    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    if (!cardId) {
+      return;
+    }
+
+    let normalizedId = cardId.replace(/\.json$/, '');
+    this.hostModeStateService.pushCard(normalizedId);
+  };
+
   @action
   closeCard(cardId: string) {
     this.hostModeStateService.closeCard(cardId);
@@ -223,6 +237,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
           <HostModeContent
             @cardIds={{this.cardIds}}
             @removeCard={{this.closeCard}}
+            @viewCard={{this.viewCard}}
             class='full-host-mode-content'
           />
         </section>

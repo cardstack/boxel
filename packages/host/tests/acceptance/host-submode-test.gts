@@ -17,6 +17,7 @@ import {
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 
+import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -66,6 +67,7 @@ module('Acceptance | host submode', function (hooks) {
         publishable: false,
       },
       'person.gts': personCardSource,
+      'view-card-demo.gts': viewCardDemoCardSource,
       'Person/1.json': {
         data: {
           type: 'card',
@@ -107,6 +109,21 @@ module('Acceptance | host submode', function (hooks) {
             adoptsFrom: {
               module: '../person',
               name: 'Person',
+            },
+          },
+        },
+      },
+      'ViewCardDemo/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'View Person One',
+            targetCardURL: `${testRealmURL}Person/1.json`,
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../view-card-demo',
+              name: 'ViewCardDemo',
             },
           },
         },
@@ -232,6 +249,26 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('.host-mode-content').doesNotHaveClass('is-wide');
       // The width is applied via CSS class, not inline style
       assert.dom('.host-mode-content:not(.is-wide)').exists();
+    });
+
+    test('viewCard stacks the linked card in host submode', async function (assert) {
+      let targetStackId = `${testRealmURL}Person/1`;
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}ViewCardDemo/1.json`],
+      });
+
+      assert
+        .dom(`[data-test-host-mode-stack-item="${targetStackId}"]`)
+        .doesNotExist();
+
+      await click('[data-test-view-card-demo-button]');
+      await waitFor(`[data-test-host-mode-stack-item="${targetStackId}"]`);
+
+      assert
+        .dom(`[data-test-host-mode-stack-item="${targetStackId}"]`)
+        .exists();
     });
 
     test('breadcrumbs can close stacked cards', async function (assert) {

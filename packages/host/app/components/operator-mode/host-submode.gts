@@ -23,6 +23,8 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
+import type { ViewCardFn } from 'https://cardstack.com/base/card-api';
+
 import HostModeContent from '../host-mode/content';
 
 import PublishRealmModal from './publish-realm-modal';
@@ -155,6 +157,19 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return Number.isFinite(publishedAt) ? publishedAt : 0;
   }
 
+  private viewCard: ViewCardFn = (cardOrURL) => {
+    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    if (!cardId) {
+      return;
+    }
+
+    let normalizedId = cardId.replace(/\.json$/, '');
+    let trailId = cardId.endsWith('.json') ? cardId : `${normalizedId}.json`;
+    let trail = this.operatorModeStateService.state.trail ?? [];
+    let updatedTrail = [...trail.filter((id) => id !== trailId), trailId];
+    this.operatorModeStateService.updateTrail(updatedTrail);
+  };
+
   <template>
     <SubmodeLayout class='host-submode-layout' data-test-host-submode>
       <:topBar>
@@ -222,6 +237,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
           @cardIds={{this.cardIds}}
           @removeCard={{this.removeCardFromTrail}}
           @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
+          @viewCard={{this.viewCard}}
         />
       </:default>
     </SubmodeLayout>
