@@ -461,7 +461,7 @@ module('Acceptance | host submode', function (hooks) {
           return null;
         };
         await click(
-          '[data-test-publish-realm-modal] [data-test-open-site-button]',
+          '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
         );
       });
 

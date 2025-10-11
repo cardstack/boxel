@@ -35,6 +35,12 @@ export interface RealmServerTokenClaims {
   sessionRoom: string;
 }
 
+export interface SubdomainAvailabilityResult {
+  available: boolean;
+  domain: string;
+  error?: string;
+}
+
 interface RealmServerEvent {
   eventType: string;
   data: any;
@@ -503,6 +509,32 @@ export default class RealmServerService extends Service {
     }
 
     return response.json();
+  }
+
+  async checkSiteNameAvailability(
+    subdomain: string,
+  ): Promise<SubdomainAvailabilityResult> {
+    await this.login();
+
+    let url = new URL(`${this.url.href}_check-site-name-availability`);
+    url.searchParams.set('subdomain', subdomain);
+
+    let response = await this.network.fetch(url.href, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      let errorText = await response.text();
+      throw new Error(
+        `Check site name availability failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return (await response.json()) as SubdomainAvailabilityResult;
   }
 
   async unpublishRealm(publishedRealmURL: string) {
