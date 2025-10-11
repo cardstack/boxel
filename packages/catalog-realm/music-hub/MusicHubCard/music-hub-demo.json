@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "MusicHubCard",
-        "module": "../music-hub"
+        "module": "../music-hub/music-hub"
       }
     },
     "type": "card",

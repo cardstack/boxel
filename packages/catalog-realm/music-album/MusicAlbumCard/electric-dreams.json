@@ -12,7 +12,7 @@
     "relationships": {},
     "meta": {
       "adoptsFrom": {
-        "module": "../music-album",
+        "module": "../music-album/music-album",
         "name": "MusicAlbumCard"
       }
     }
