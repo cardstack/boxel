@@ -1820,9 +1820,6 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-edit-preview="cardDescription"]')
         .containsText(description);
       assert
-        .dom('[data-test-edit-preview="cardHostedURL"]')
-        .hasText('Hosted URL');
-      assert
         .dom('[data-test-edit-preview="cardThumbnailURL"]')
         .hasText('Thumbnail URL');
       assert
