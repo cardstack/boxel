@@ -240,6 +240,23 @@ module(basename(__filename), function () {
           'index entries should reference the published realm URL',
         );
 
+        let catalogResponse = await request
+          .get('/_catalog-realms')
+          .set('Accept', 'application/vnd.api+json');
+
+        assert.strictEqual(
+          catalogResponse.status,
+          200,
+          'catalog realms HTTP 200 status',
+        );
+        let catalogRealmIds = catalogResponse.body.data.map(
+          (item: { id: string }) => item.id,
+        );
+        assert.false(
+          catalogRealmIds.includes(publishedRealmURL),
+          'catalog realms should not include the published realm',
+        );
+
         let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
         let sourceRealmInfoPath = `${sourceRealmPath}_info`;
 
