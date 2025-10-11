@@ -76,7 +76,11 @@ import type { Readable } from 'stream';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import { MatrixClient, getMatrixUsername } from './matrix-client';
+import {
+  MatrixClient,
+  ensureFullMatrixUserId,
+  getMatrixUsername,
+} from './matrix-client';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
@@ -108,6 +112,10 @@ import {
   DefinitionsCache,
   isFilterRefersToNonexistentTypeError,
 } from './definitions-cache';
+import {
+  fetchSessionRoom,
+  upsertSessionRoom,
+} from './db-queries/session-room-queries';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -206,7 +214,9 @@ export interface RealmAdapter {
 
   broadcastRealmEvent(
     event: RealmEventContent,
+    realmUrl: string,
     matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
   ): Promise<void>;
 
   // optional, set this to override _lint endpoint behavior in tests
@@ -1098,6 +1108,10 @@ export class Realm {
             this.#realmSecretSeed,
           );
         },
+        getSessionRoom: async (userId: string) =>
+          fetchSessionRoom(this.#dbAdapter, this.url, userId),
+        setSessionRoom: (userId: string, roomId: string) =>
+          upsertSessionRoom(this.#dbAdapter, this.url, userId, roomId),
       } as Utils,
     );
 
@@ -2768,8 +2782,10 @@ export class Realm {
       iconURL: null,
       showAsCatalog: null,
       visibility: await this.visibility(),
-      realmUserId:
+      realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
+        this.#matrixClient.matrixURL.href,
+      ),
       publishable: null,
       lastPublishedAt: await this.getLastPublishedAt(),
     };
@@ -2786,9 +2802,11 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
-        realmInfo.realmUserId =
+        realmInfo.realmUserId = ensureFullMatrixUserId(
           realmConfigJson.realmUserId ??
-          (this.#matrixClient.getUserId()! || this.#matrixClient.username);
+            (this.#matrixClient.getUserId()! || this.#matrixClient.username),
+          this.#matrixClient.matrixURL.href,
+        );
         realmInfo.publishable =
           realmConfigJson.publishable ?? realmInfo.publishable;
       } catch (e) {
@@ -2984,7 +3002,12 @@ export class Realm {
   }
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
+    this.#adapter.broadcastRealmEvent(
+      event,
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+    );
   }
 
   private async createRequestContext(): Promise<RequestContext> {

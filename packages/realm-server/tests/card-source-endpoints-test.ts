@@ -60,6 +60,7 @@ module(basename(__filename), function () {
         testRealmHttpServer,
         request,
         dir,
+        dbAdapter,
       };
     }
     setupBaseRealmServer(hooks, matrixURL);
