@@ -278,14 +278,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let model2 = new ModelConfiguration({
       cardInfo: new CardInfoField({ title: 'Anthropic: Claude Sonnet 4' }),
-      modelId: 'anthropic/claude-4-sonnet',
+      modelId: 'anthropic/claude-sonnet-4',
       temperature: 0.0,
       toolsSupported: true,
     });
 
     let model3 = new ModelConfiguration({
       cardInfo: new CardInfoField({ title: 'Anthropic: Claude Sonnet 3.7' }),
-      modelId: 'anthropic/claude-3.7-sonnet',
+      modelId: 'anthropic/claude-sonnet-3.7',
       temperature: 0.1,
       toolsSupported: true,
     });
@@ -393,9 +393,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             },
           },
         },
-        'ModelConfiguration/gpt-4-turbo.json': model1,
-        'ModelConfiguration/claude-3.5-haiku.json': model2,
-        'ModelConfiguration/claude-3.7-sonnet.json': model3,
+        'ModelConfiguration/gpt-5.json': model1,
+        'ModelConfiguration/claude-sonnet-4.json': model2,
+        'ModelConfiguration/claude-sonnet-3.7.json': model3,
         'SystemCard/default.json': systemCard,
         'index.json': new CardsGrid(),
         '.realm.json': {
@@ -570,7 +570,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     // Default model should be the first one in the system card
-    let defaultModelName = 'GPT-4 Turbo';
+    let defaultModelName = 'OpenAI: GPT-5';
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
@@ -580,8 +580,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       count: 3,
     });
 
-    let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
-    let llmNameToChangeTo = 'Claude 3.7 Sonnet'; // Expected display name
+    let llmIdToChangeTo = 'anthropic/claude-sonnet-3.7';
+    let llmNameToChangeTo = 'Anthropic: Claude Sonnet 3.7';
 
     assert
       .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
