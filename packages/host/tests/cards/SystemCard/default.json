@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {},
+    "relationships": {
+      "modelConfigurations.0": {
+        "links": {
+          "self": "../ModelConfiguration/test-gpt"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/system-card",
+        "name": "SystemCard"
+      }
+    }
+  }
+}
