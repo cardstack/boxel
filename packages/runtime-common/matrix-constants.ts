@@ -36,6 +36,7 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
   'anthropic/claude-3.7-sonnet:thinking':
     'Anthropic: Claude 3.7 Sonnet (thinking)',
+  'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
   'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
   'anthropic/claude-opus-4.1': 'Anthropic: Claude Opus 4.1',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
