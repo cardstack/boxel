@@ -311,6 +311,7 @@ export class SendRequestViaProxyInput extends CardDef {
   @field method = contains(StringField);
   @field requestBody = contains(StringField);
   @field headers = contains(JsonField); // optional
+  @field multipart = contains(BooleanField); // optional
 }
 
 export class SendRequestViaProxyResult extends CardDef {
