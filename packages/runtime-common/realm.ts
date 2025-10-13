@@ -2725,11 +2725,13 @@ export class Realm {
       // If not published, check if this is a source realm with published versions
       let publishedVersions = await this.querySourceRealmPublications();
       if (publishedVersions.length > 0) {
-        return Object.fromEntries(
-          publishedVersions.map((p) => [
-            p.published_realm_url,
-            p.last_published_at,
-          ]),
+        return (
+          Object.fromEntries(
+            publishedVersions.map((p) => [
+              p.published_realm_url,
+              p.last_published_at,
+            ]),
+          ) ?? null
         );
       }
 
@@ -2776,6 +2778,7 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
+    let lastPublishedAt = await this.getLastPublishedAt();
     let realmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
@@ -2787,7 +2790,7 @@ export class Realm {
         this.#matrixClient.matrixURL.href,
       ),
       publishable: null,
-      lastPublishedAt: await this.getLastPublishedAt(),
+      lastPublishedAt,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -2809,6 +2812,8 @@ export class Realm {
         );
         realmInfo.publishable =
           realmConfigJson.publishable ?? realmInfo.publishable;
+        realmInfo.lastPublishedAt =
+          realmConfigJson.lastPublishedAt || realmInfo.lastPublishedAt;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
