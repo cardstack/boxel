@@ -51,6 +51,7 @@ export async function startServer(includePublishedRealm = false) {
     `--port=4212`,
     `--matrixURL='http://localhost:8008'`,
     `--distURL="${process.env.HOST_URL ?? 'http://localhost:4200'}"`,
+    `--prerendererUrl='http://localhost:4221'`,
     `--migrateDB`,
 
     `--fromUrl='http://localhost:4205/test/'`,

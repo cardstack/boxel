@@ -29,7 +29,11 @@ exports.up = (pgm) => {
     },
   });
 
-  pgm.createIndex('claimed_domains_for_sites', ['hostname'], { unique: true });
+  pgm.createIndex('claimed_domains_for_sites', ['hostname'], {
+    unique: true,
+    where: 'removed_at IS NULL',
+    name: 'claimed_domains_for_sites_hostname_unique_index',
+  });
   pgm.createIndex('claimed_domains_for_sites', ['removed_at']);
   pgm.createIndex('claimed_domains_for_sites', ['user_id']);
   pgm.createIndex('claimed_domains_for_sites', ['source_realm_url']);
@@ -37,7 +41,10 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.dropIndex('claimed_domains_for_sites', ['removed_at']);
-  pgm.dropIndex('claimed_domains_for_sites', ['hostname']);
+  pgm.dropIndex(
+    'claimed_domains_for_sites',
+    'claimed_domains_for_sites_hostname_unique_index',
+  );
   pgm.dropIndex('claimed_domains_for_sites', ['user_id']);
   pgm.dropIndex('claimed_domains_for_sites', ['source_realm_url']);
   pgm.dropTable('claimed_domains_for_sites');
