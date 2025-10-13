@@ -303,7 +303,7 @@ export default class MatrixService extends Service {
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
           // what if we're not logged in yet? Should we delay?
-          switch (e.eventType) {
+          switch (e.event.type) {
             case APP_BOXEL_REALMS_EVENT_TYPE:
               await this.realmServer.setAvailableRealmURLs(
                 e.event.content.realms,
