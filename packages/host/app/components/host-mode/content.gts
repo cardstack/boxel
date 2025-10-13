@@ -16,10 +16,6 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import type {
-  CreateCardFn,
-  DeleteCardFn,
-  EditCardFn,
-  SaveCardFn,
   ViewCardFn,
   CardCrudFunctions,
 } from 'https://cardstack.com/base/card-api';
@@ -77,20 +73,11 @@ export default class HostModeContent extends Component<Signature> {
     return (this.primaryCard.constructor as typeof CardDef).prefersWideFormat;
   }
 
-  private noopCreateCard: CreateCardFn = async () => undefined;
-  private noopSaveCard: SaveCardFn = () => {};
-  private noopEditCard: EditCardFn = () => {};
-  private noopDeleteCard: DeleteCardFn = async () => {};
-
   @provide(CardCrudFunctionsContextName)
   // @ts-ignore "cardCrudFunctions" is declared but not used
   private get cardCrudFunctions(): CardCrudFunctions {
     return {
-      createCard: this.noopCreateCard,
-      saveCard: this.noopSaveCard,
-      editCard: this.noopEditCard,
       viewCard: this.args.viewCard,
-      deleteCard: this.noopDeleteCard,
     };
   }
 

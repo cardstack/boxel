@@ -2067,11 +2067,11 @@ export type SaveCardFn = (id: string) => void;
 export type DeleteCardFn = (cardOrId: CardDef | URL | string) => Promise<void>;
 
 export interface CardCrudFunctions {
-  createCard: CreateCardFn;
-  saveCard: SaveCardFn;
-  editCard: EditCardFn;
+  createCard?: CreateCardFn;
+  saveCard?: SaveCardFn;
+  editCard?: EditCardFn;
   viewCard: ViewCardFn;
-  deleteCard: DeleteCardFn;
+  deleteCard?: DeleteCardFn;
 }
 
 export type BaseDefComponent = ComponentLike<{
@@ -2087,10 +2087,10 @@ export type BaseDefComponent = ComponentLike<{
     context?: CardContext;
     canEdit?: boolean;
     typeConstraint?: ResolvedCodeRef;
-    createCard: CreateCardFn;
-    viewCard: ViewCardFn;
-    editCard: EditCardFn;
-    saveCard: SaveCardFn;
+    createCard?: CreateCardFn;
+    viewCard?: ViewCardFn;
+    editCard?: EditCardFn;
+    saveCard?: SaveCardFn;
   };
 }>;
 
