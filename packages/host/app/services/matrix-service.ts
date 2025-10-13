@@ -599,11 +599,7 @@ export default class MatrixService extends Service {
             APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
           )) as { id?: string } | null;
 
-        if (systemCardAccountData?.id) {
-          await this.setSystemCard(systemCardAccountData.id);
-        } else if (!this.systemCard && ENV.defaultSystemCardId) {
-          await this.setSystemCard(ENV.defaultSystemCardId);
-        }
+        await this.setSystemCard(systemCardAccountData?.id);
 
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
@@ -1863,14 +1859,17 @@ export default class MatrixService extends Service {
     return this._systemCard;
   }
 
-  async setSystemCard(systemCardId: string) {
+  private async setSystemCard(systemCardId: string | undefined) {
+    // Set the system card to use
+    // If there is none, we fall back to the default
+    if (!systemCardId) {
+      systemCardId = ENV.defaultSystemCardId;
+    }
     if (systemCardId === this._systemCard?.id) {
       // it's OK to call this multiple times with the same system card id
       // we shouldn't do anything.
       return;
     }
-    console.log('MatrixService setSystemCard called with:', systemCardId);
-
     let systemCard = await this.store.get<SystemCard>(systemCardId);
     if (isCardErrorJSONAPI(systemCard)) {
       console.error('Error loading system card:', systemCard);
@@ -1880,7 +1879,14 @@ export default class MatrixService extends Service {
     this.store.dropReference(this._systemCard?.id);
     this.store.addReference(systemCardId);
     this._systemCard = systemCard;
-    console.log('MatrixService _systemCard set to:', this._systemCard);
+  }
+
+  async setUserSystemCard(systemCardId: string | undefined) {
+    // This sets the users account data for their preferred system card
+    // If there is none, we fall back to the default
+    await this.client.setAccountData(APP_BOXEL_SYSTEM_CARD_EVENT_TYPE, {
+      id: systemCardId,
+    });
   }
 
   async loadMoreAuthRooms(realms: string[]) {
