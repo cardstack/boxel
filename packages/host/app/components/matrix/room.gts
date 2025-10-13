@@ -791,8 +791,9 @@ export default class Room extends Component<Signature> {
     if (systemCard?.modelConfigurations) {
       let options: Record<string, string> = {};
       for (let modelConfig of systemCard.modelConfigurations) {
-        if (modelConfig.modelId && modelConfig.title) {
-          options[modelConfig.modelId] = modelConfig.title;
+        if (modelConfig.modelId) {
+          options[modelConfig.modelId] =
+            modelConfig.title || modelConfig.modelId;
         }
       }
       // Add any used LLMs that aren't already in the options
