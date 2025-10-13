@@ -205,6 +205,12 @@ export class MockClient implements ExtendedClient {
         'Support for updating this event type in account data is not yet implemented in this mock.',
       );
     }
+    this.emitEvent(
+      new MatrixEvent({
+        type: type as string,
+        content: data as unknown as Record<string, unknown>,
+      }),
+    );
     return Promise.resolve({});
   }
 
@@ -543,6 +549,7 @@ export class MockClient implements ExtendedClient {
   private eventHandlerType(type: string) {
     switch (type) {
       case APP_BOXEL_REALMS_EVENT_TYPE:
+      case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:

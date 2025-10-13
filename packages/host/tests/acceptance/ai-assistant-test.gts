@@ -269,30 +269,72 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     let mangoPet = new Pet({ name: 'Mango' });
 
     // Create model configurations for testing
-    let model1 = new ModelConfiguration({
-      cardInfo: new CardInfoField({ title: 'OpenAI: GPT-5' }),
+    let openAiGpt5Model = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        title: DEFAULT_LLM_ID_TO_NAME['openai/gpt-5'],
+      }),
       modelId: 'openai/gpt-5',
       temperature: 0.1,
       toolsSupported: true,
     });
 
-    let model2 = new ModelConfiguration({
-      cardInfo: new CardInfoField({ title: 'Anthropic: Claude Sonnet 4' }),
+    let openAiGpt4oMiniModel = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        title: DEFAULT_LLM_ID_TO_NAME['openai/gpt-4o-mini'],
+      }),
+      modelId: 'openai/gpt-4o-mini',
+      temperature: 0.6,
+      toolsSupported: true,
+    });
+
+    let anthropicClaudeSonnet4Model = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        title: DEFAULT_LLM_ID_TO_NAME['anthropic/claude-sonnet-4'],
+      }),
       modelId: 'anthropic/claude-sonnet-4',
       temperature: 0.0,
       toolsSupported: true,
     });
 
-    let model3 = new ModelConfiguration({
-      cardInfo: new CardInfoField({ title: 'Anthropic: Claude Sonnet 3.7' }),
-      modelId: 'anthropic/claude-sonnet-3.7',
+    let anthropicClaudeSonnet37Model = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        title: DEFAULT_LLM_ID_TO_NAME['anthropic/claude-3.7-sonnet'],
+      }),
+      modelId: 'anthropic/claude-3.7-sonnet',
       temperature: 0.1,
       toolsSupported: true,
     });
 
     // Create system card with model configurations
-    let systemCard = new SystemCard({
-      modelConfigurations: [model1, model2, model3],
+    let defaultSystemCard = new SystemCard({
+      modelConfigurations: [
+        openAiGpt5Model,
+        openAiGpt4oMiniModel,
+        anthropicClaudeSonnet4Model,
+        anthropicClaudeSonnet37Model,
+      ],
+    });
+
+    let deepseekModel = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        title: DEFAULT_LLM_ID_TO_NAME['deepseek/deepseek-chat-v3-0324'],
+      }),
+      modelId: 'deepseek/deepseek-chat-v3-0324',
+      temperature: 0.2,
+      toolsSupported: true,
+    });
+
+    let geminiFlashModel = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        title: DEFAULT_LLM_ID_TO_NAME['google/gemini-2.5-flash'],
+      }),
+      modelId: 'google/gemini-2.5-flash',
+      temperature: 0.4,
+      toolsSupported: true,
+    });
+
+    let alternateSystemCard = new SystemCard({
+      modelConfigurations: [deepseekModel, geminiFlashModel, openAiGpt5Model],
     });
 
     await setupAcceptanceTestRealm({
@@ -393,10 +435,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             },
           },
         },
-        'ModelConfiguration/gpt-5.json': model1,
-        'ModelConfiguration/claude-sonnet-4.json': model2,
-        'ModelConfiguration/claude-sonnet-3.7.json': model3,
-        'SystemCard/default.json': systemCard,
+        'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
+        'ModelConfiguration/gpt-5.json': openAiGpt5Model,
+        'ModelConfiguration/claude-sonnet-4.json': anthropicClaudeSonnet4Model,
+        'ModelConfiguration/claude-sonnet-3.7.json':
+          anthropicClaudeSonnet37Model,
+        'SystemCard/default.json': defaultSystemCard,
+        'ModelConfiguration/deepseek-chat-v3-0324.json': deepseekModel,
+        'ModelConfiguration/gemini-2.5-flash.json': geminiFlashModel,
+        'SystemCard/productivity.json': alternateSystemCard,
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
@@ -570,24 +617,25 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     // Default model should be the first one in the system card
-    let defaultModelName = 'OpenAI: GPT-5';
+    let defaultModelName = DEFAULT_LLM_ID_TO_NAME['openai/gpt-5'];
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
 
-    // Should have 3 models from our system card
+    // Should have 4 models from our system card
     assert.dom('[data-test-llm-select-item]').exists({
-      count: 3,
+      count: 4,
     });
 
-    let llmIdToChangeTo = 'anthropic/claude-sonnet-3.7';
-    let llmNameToChangeTo = 'Anthropic: Claude Sonnet 3.7';
+    let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
+    let llmNameToChangeTo =
+      DEFAULT_LLM_ID_TO_NAME['anthropic/claude-3.7-sonnet'];
 
     assert
       .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
       .hasText(llmNameToChangeTo);
     await click(`[data-test-llm-select-item="${llmIdToChangeTo}"] button`);
-    await click('[data-test-pill-menu-button]');
+    await click('[data-test-llm-select-selected]');
     assert.dom('[data-test-llm-select-selected]').hasText(llmNameToChangeTo);
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
@@ -626,9 +674,43 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
   });
 
-  test('defaults to openai/gpt-5 in interact mode', async function (assert) {
-    let defaultInteractLLMId = DEFAULT_LLM;
-    let defaultInteractLLMName = DEFAULT_LLM_ID_TO_NAME[defaultInteractLLMId];
+  test('defaults to the first system card model in interact mode', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    let matrixService = getService('matrix-service');
+    let firstSystemModelId =
+      matrixService.systemCard?.modelConfigurations?.[0]?.modelId;
+
+    assert.ok(firstSystemModelId, 'system card provides a first model');
+    let expectedName =
+      DEFAULT_LLM_ID_TO_NAME[firstSystemModelId!] ?? firstSystemModelId;
+
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(expectedName);
+
+    assert.strictEqual(
+      firstSystemModelId,
+      'openai/gpt-5',
+      'gpt-5 remains the leading option',
+    );
+
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('switching back to interact mode uses openai/gpt-5', async function (assert) {
+    let interactFallbackName = DEFAULT_LLM_ID_TO_NAME[DEFAULT_LLM];
 
     await visitOperatorMode({
       stacks: [
@@ -643,31 +725,76 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
-    // Interact mode is default, verify the LLM is set correctly
+
+    // Initial interact mode defaults to first system card model
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(defaultInteractLLMName);
+      .hasText(DEFAULT_LLM_ID_TO_NAME['openai/gpt-5']);
 
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test-2',
-    });
-
-    await click('[data-test-past-sessions-button]');
-    await waitFor("[data-test-enter-room='mock_room_1']");
-    await click('[data-test-enter-room="mock_room_1"]');
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(defaultInteractLLMName);
-
-    // Switch to Code mode and back to Interact mode to verify LLM changes
+    // Switch to Code mode and confirm coding default is applied
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Interact"]');
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(defaultInteractLLMName);
+      .hasText(DEFAULT_LLM_ID_TO_NAME['anthropic/claude-sonnet-4']);
+
+    // Switch back to Interact mode and ensure we fall back to GPT-5
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert.dom('[data-test-llm-select-selected]').hasText(interactFallbackName);
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('selecting a new system card via menu updates available models', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}SystemCard/productivity`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await click('[data-test-llm-select-selected]');
+    assert
+      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .doesNotExist();
+    await click('[data-test-llm-select-selected]');
+    await click('[data-test-close-ai-assistant]');
+
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Set as my system card"]');
+
+    let matrixService = getService('matrix-service');
+    await waitUntil(
+      () =>
+        matrixService.systemCard?.modelConfigurations?.[0]?.modelId ===
+        'deepseek/deepseek-chat-v3-0324',
+    );
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(
+        DEFAULT_LLM_ID_TO_NAME['deepseek/deepseek-chat-v3-0324'],
+      );
+    await click('[data-test-llm-select-selected]');
+    assert
+      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .exists();
+    assert
+      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .hasText(DEFAULT_LLM_ID_TO_NAME['deepseek/deepseek-chat-v3-0324']);
+    assert
+      .dom('[data-test-llm-select-item="google/gemini-2.5-flash"]')
+      .exists();
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
   });
 
   test('auto-attached file is not displayed in interact mode', async function (assert) {
