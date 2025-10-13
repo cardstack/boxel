@@ -31,9 +31,6 @@ module(basename(__filename), function () {
         domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
       } as any);
 
-      // Clean up any existing claims to ensure clean state
-      await query(dbAdapter, ['DELETE FROM claimed_domains_for_sites']);
-
       user = await insertUser(dbAdapter, 'matrix-user-id', 'test-user');
       otherUser = await insertUser(
         dbAdapter,
