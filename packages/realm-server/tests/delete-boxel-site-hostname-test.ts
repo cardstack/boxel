@@ -236,8 +236,12 @@ module(basename(__filename), function () {
       ]);
       const removedAt = Number(claims[0].removed_at);
       assert.ok(
-        removedAt >= beforeDelete && removedAt <= afterDelete,
-        `removed_at timestamp should be between ${beforeDelete} and ${afterDelete}, got ${removedAt}`,
+        removedAt >= beforeDelete,
+        `removed_at timestamp should be >= ${beforeDelete}, got ${removedAt}`,
+      );
+      assert.ok(
+        removedAt <= afterDelete,
+        `removed_at timestamp should be <= ${afterDelete}, got ${removedAt}`,
       );
     });
 
