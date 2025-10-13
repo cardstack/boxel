@@ -1,5 +1,5 @@
 import { getOwner } from '@ember/owner';
-import { visit } from '@ember/test-helpers';
+import { click, currentURL, visit } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
@@ -169,7 +169,9 @@ module('Acceptance | host mode tests', function (hooks) {
         'url("https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg")',
     });
 
-    assert.dom(`[data-test-card="${testHostModeRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+      .exists();
     assert.dom('[data-test-host-mode-container]').hasNoClass('is-wide');
     assert.strictEqual(getPageTitle(), 'Mango');
 
@@ -179,7 +181,9 @@ module('Acceptance | host mode tests', function (hooks) {
   test('visiting a full width card in host mode', async function (assert) {
     await visit('/test');
 
-    assert.dom(`[data-test-card="${testHostModeRealmURL}index"]`).exists();
+    assert
+      .dom(`[data-test-host-mode-card="${testHostModeRealmURL}index"]`)
+      .exists();
     assert.strictEqual(getPageTitle(), 'Test Workspace B');
     assert.dom('[data-test-host-mode-container]').hasClass('is-wide');
 
@@ -198,6 +202,27 @@ module('Acceptance | host mode tests', function (hooks) {
     );
   });
 
+  test('stack state persists in query parameter', async function (assert) {
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([`${testHostModeRealmURL}index`]),
+    );
+
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+
+    assert
+      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
+      .exists();
+    await click(
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"] .close-button`,
+    );
+
+    assert.strictEqual(currentURL(), '/test/Pet/mango.json');
+    assert.strictEqual(
+      new URL(window.location.href).searchParams.get('hostModeStack'),
+      null,
+    );
+  });
+
   module('with a custom subdomain', function (hooks) {
     hooks.beforeEach(function (this) {
       getOwner(this)!.register(
@@ -210,7 +235,7 @@ module('Acceptance | host mode tests', function (hooks) {
       await visit('/Pet/mango.json');
 
       assert
-        .dom(`[data-test-card="${testHostModeRealmURL}Pet/mango"]`)
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
         .exists();
     });
   });
