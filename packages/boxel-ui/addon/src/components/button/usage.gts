@@ -34,6 +34,9 @@ export default class ButtonUsage extends Component {
 
   @action
   alert(): void {
+    if (this.loading) {
+      return;
+    }
     alert('Hey! You clicked the button.');
   }
 

@@ -79,7 +79,8 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
     {{#if (or (not @as) (eq @as 'button'))}}
       <button
         class={{classes}}
-        tabindex={{if @loading -1 0}}
+        aria-label={{if @loading 'loading'}}
+        aria-disabled={{@disabled}}
         disabled={{@disabled}}
         data-test-boxel-button
         ...attributes
@@ -159,6 +160,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       }
       .boxel-button:focus-visible {
         outline-color: var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
       }
 
       .loading-indicator {
