@@ -27,7 +27,7 @@ export default class SetUserSystemCardCommand extends HostBaseCommand<
     if (!input.cardId) {
       throw new Error('cardId is required');
     }
-
+    await this.matrixService.ready;
     await this.matrixService.setUserSystemCard(input.cardId);
     return undefined;
   }
