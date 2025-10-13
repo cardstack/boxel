@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "ModelConfiguration",
+        "module": "https://cardstack.com/base/system-card"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Model Configuration",
+      "description": "Spec for Model Configuration card",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-4o-mini"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-37-sonnet"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../ModelConfiguration/google-gemini-25-flash"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

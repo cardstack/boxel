@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "SystemCard",
+        "module": "https://cardstack.com/base/system-card"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "System Card",
+      "description": "Spec for System Card",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../SystemCard/default"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
