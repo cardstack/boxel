@@ -34,3 +34,4 @@ import './request-forward-test';
 import './publish-unpublish-realm-test';
 import './get-boxel-site-hostname-test';
 import './claim-boxel-site-hostname-test';
+import './delete-boxel-site-hostname-test';

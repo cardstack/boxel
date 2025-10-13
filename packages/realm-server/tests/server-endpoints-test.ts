@@ -14,6 +14,9 @@ import {
   type QueueRunner,
   DEFAULT_PERMISSIONS,
   VirtualNetwork,
+  query,
+  insert,
+  asExpressions,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
@@ -1680,6 +1683,99 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
         });
 
+        test('GET /_boxel-site-hostname without JWT returns 401', async function (assert) {
+          let response = await request2
+            .get('/_boxel-site-hostname')
+            .query({ source_realm_url: 'https://test-realm.com' })
+            .set('Accept', 'application/json');
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('GET /_boxel-site-hostname with invalid JWT returns 401', async function (assert) {
+          let response = await request2
+            .get('/_boxel-site-hostname')
+            .query({ source_realm_url: 'https://test-realm.com' })
+            .set('Accept', 'application/json')
+            .set('Authorization', 'Bearer invalid-jwt');
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('GET /_boxel-site-hostname without source_realm_url returns 400', async function (assert) {
+          let ownerUserId = '@mango:localhost';
+
+          // Create user in database
+          await insertUser(dbAdapter, ownerUserId, '', '');
+
+          let response = await request2
+            .get('/_boxel-site-hostname')
+            .set('Accept', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            );
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+
+        test('GET /_boxel-site-hostname with valid JWT returns 200 when claim exists', async function (assert) {
+          let ownerUserId = '@mango:localhost';
+          let sourceRealmURL = 'https://test-realm.com';
+          let hostname = 'my-site.localhost';
+
+          // Create user in database
+          let user = await insertUser(dbAdapter, ownerUserId, '', '');
+
+          // Create a claim
+          let { valueExpressions, nameExpressions } = asExpressions({
+            user_id: user.id,
+            source_realm_url: sourceRealmURL,
+            hostname: hostname,
+            claimed_at: Math.floor(Date.now() / 1000),
+          });
+          await query(
+            dbAdapter,
+            insert(
+              'claimed_domains_for_sites',
+              nameExpressions,
+              valueExpressions,
+            ),
+          );
+
+          let response = await request2
+            .get('/_boxel-site-hostname')
+            .query({ source_realm_url: sourceRealmURL })
+            .set('Accept', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.data.attributes.hostname,
+            hostname,
+            'Should return correct hostname',
+          );
+          assert.strictEqual(
+            response.body.data.attributes.subdomain,
+            'my-site',
+            'Should return correct subdomain',
+          );
+          assert.strictEqual(
+            response.body.data.attributes.sourceRealmURL,
+            sourceRealmURL,
+            'Should return correct source realm URL',
+          );
+        });
+
         test('POST /_boxel-site-hostname without JWT returns 401', async function (assert) {
           let response = await request2
             .post('/_boxel-site-hostname')
@@ -1742,6 +1838,52 @@ module(basename(__filename), function () {
             });
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        });
+
+        test('DELETE /_boxel-site-hostname/:hostname without JWT returns 401', async function (assert) {
+          let response = await request2
+            .delete('/_boxel-site-hostname/test-site.localhost')
+            .set('Accept', 'application/json');
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('DELETE /_boxel-site-hostname/:hostname with valid JWT returns 204', async function (assert) {
+          let ownerUserId = '@mango:localhost';
+          let hostname = 'delete-test.localhost';
+          let sourceRealmURL = 'https://test-realm.com';
+
+          // Create user in database
+          let user = await insertUser(dbAdapter, ownerUserId, '', '');
+
+          // Create a claim
+          let { valueExpressions, nameExpressions } = asExpressions({
+            user_id: user.id,
+            source_realm_url: sourceRealmURL,
+            hostname: hostname,
+            claimed_at: Math.floor(Date.now() / 1000),
+          });
+          await query(
+            dbAdapter,
+            insert(
+              'claimed_domains_for_sites',
+              nameExpressions,
+              valueExpressions,
+            ),
+          );
+
+          let response = await request2
+            .delete(`/_boxel-site-hostname/${hostname}`)
+            .set('Accept', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            );
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
         });
       });
 
