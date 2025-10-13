@@ -18,8 +18,8 @@ import {
   extendDefinition,
   extendConfig,
   languageConfigs,
-} from '@cardstack/host/utils/editor-language';
-import { createMonacoWaiterManager } from '@cardstack/host/utils/monaco-test-waiter';
+} from '@cardstack/host/utils/editor/editor-language';
+import { createMonacoWaiterManager } from '@cardstack/host/utils/editor/monaco-test-waiter';
 
 import type * as _MonacoSDK from 'monaco-editor';
 
