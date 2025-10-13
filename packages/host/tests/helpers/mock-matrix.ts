@@ -23,6 +23,7 @@ export interface Config {
   autostart?: boolean;
   now?: () => number;
   directRooms?: string[];
+  systemCardAccountData?: { id?: string };
 }
 
 export function setupMockMatrix(
