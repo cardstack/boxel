@@ -7,7 +7,7 @@ interface PlayerPreviewSignature {
     wins: number;
     losses: number;
     draws: number;
-    total: number;
+    totalGames: number;
     rank: number;
   };
   Element: HTMLElement;
@@ -17,10 +17,10 @@ export default class PlayerPreview extends GlimmerComponent<PlayerPreviewSignatu
   private getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   private get winRate() {
-    if (!this.args.total) {
+    if (!this.args.totalGames) {
       return 0;
     }
-    return Math.round((this.args.wins / this.args.total) * 100);
+    return Math.round((this.args.wins / this.args.totalGames) * 100);
   }
 
   get rankString() {
@@ -47,8 +47,8 @@ export default class PlayerPreview extends GlimmerComponent<PlayerPreviewSignatu
           <span class='player-preview__stat-value'>{{@wins}}</span>
         </span>
         <span class='player-preview__stat'>
-          <span class='player-preview__stat-label'>Total</span>
-          <span class='player-preview__stat-value'>{{@total}}</span>
+          <span class='player-preview__stat-label'>Games</span>
+          <span class='player-preview__stat-value'>{{@totalGames}}</span>
         </span>
         <span class='player-preview__stat'>
           <span class='player-preview__stat-label'>Win Rate</span>

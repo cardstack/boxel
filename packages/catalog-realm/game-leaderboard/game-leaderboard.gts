@@ -46,7 +46,7 @@ interface PlayerLeaderboardEntry {
   wins: number;
   losses: number;
   draws: number;
-  total: number;
+  totalGames: number;
   rank: number;
 }
 
@@ -215,7 +215,7 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
         wins: number;
         losses: number;
         draws: number;
-        total: number;
+        totalGames: number;
       }
     >();
 
@@ -235,13 +235,13 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
           wins: 0,
           losses: 0,
           draws: 0,
-          total: 0,
+          totalGames: 0,
         });
       }
 
       // Get existing player entry and increment total games
       let entry = leaderboard.get(player.id)!;
-      entry.total += 1;
+      entry.totalGames += 1;
 
       // Increment specific outcome counter based on game result
       switch (result.outcome?.outcome?.label) {
@@ -266,8 +266,8 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
         }
 
         // SECONDARY SORT: If tied on wins, most total games first (descending)
-        if (b.total !== a.total) {
-          return b.total - a.total;
+        if (b.totalGames !== a.totalGames) {
+          return b.totalGames - a.totalGames;
         }
 
         // TERTIARY SORT: If still tied, alphabetical by player name (ascending)
@@ -281,7 +281,7 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
         wins: entry.wins,
         losses: entry.losses,
         draws: entry.draws,
-        total: entry.total,
+        totalGames: entry.totalGames,
         rank: index + 1, // Convert 0-based index to 1-based rank
       }));
   }
@@ -387,7 +387,7 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
                     @wins={{entry.wins}}
                     @losses={{entry.losses}}
                     @draws={{entry.draws}}
-                    @total={{entry.total}}
+                    @totalGames={{entry.totalGames}}
                     @rank={{entry.rank}}
                   />
                 </li>
