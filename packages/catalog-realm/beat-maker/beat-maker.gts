@@ -86,7 +86,7 @@ export class DrumKitField extends FieldDef {
         .drum-kit-field {
           padding: 0.5rem;
           border: 1px solid #374151;
-          border-radius: 6px;
+          border-radius: var(--radius, var(--boxel-border-radius));
           background: #1e293b;
           color: white;
         }
@@ -164,7 +164,7 @@ export class DrumKitCard extends CardDef {
       <style scoped>
         .drum-kit-card {
           background: linear-gradient(135deg, #1e293b 0%, #374151 100%);
-          border-radius: 12px;
+          border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
           padding: 1rem;
           color: white;
           border: 1px solid #4b5563;
@@ -198,7 +198,7 @@ export class DrumKitCard extends CardDef {
           background: #10b981;
           color: white;
           padding: 0.25rem 0.5rem;
-          border-radius: 12px;
+          border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
           font-size: 0.625rem;
           font-weight: 600;
           text-transform: uppercase;
@@ -261,7 +261,7 @@ export class DrumKitCard extends CardDef {
       <style scoped>
         .beat-pattern-card {
           background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          border-radius: 12px;
+          border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
           padding: 1rem;
           color: white;
           border: 1px solid #374151;
@@ -301,7 +301,7 @@ export class DrumKitCard extends CardDef {
           background: #374151;
           color: #e5e7eb;
           padding: 0.25rem 0.5rem;
-          border-radius: 12px;
+          border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
           font-size: 0.625rem;
           font-weight: 600;
           text-transform: uppercase;
@@ -311,7 +311,7 @@ export class DrumKitCard extends CardDef {
           background: #10b981;
           color: white;
           padding: 0.25rem 0.5rem;
-          border-radius: 6px;
+          border-radius: var(--radius, var(--boxel-border-radius));
           font-size: 0.625rem;
           font-weight: 700;
           font-family: 'JetBrains Mono', monospace;
@@ -423,7 +423,7 @@ export class BeatPatternField extends FieldDef {
         .beat-pattern-field {
           padding: 0.5rem;
           border: 1px solid #e5e7eb;
-          border-radius: 6px;
+          border-radius: var(--radius, var(--boxel-border-radius));
           background: white;
         }
 
@@ -443,7 +443,7 @@ export class BeatPatternField extends FieldDef {
           width: 12px;
           height: 8px;
           background: #f3f4f6;
-          border-radius: 1px;
+          border-radius: var(--radius-xxs, var(--boxel-border-radius-xxs));
         }
 
         .pattern-step.has-kick {
@@ -515,7 +515,7 @@ export class BeatPatternCard extends CardDef {
       <style scoped>
         .beat-pattern-card {
           background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          border-radius: 12px;
+          border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
           padding: 1rem;
           color: white;
           border: 1px solid #374151;
@@ -555,7 +555,7 @@ export class BeatPatternCard extends CardDef {
           background: #374151;
           color: #e5e7eb;
           padding: 0.25rem 0.5rem;
-          border-radius: 12px;
+          border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
           font-size: 0.625rem;
           font-weight: 600;
           text-transform: uppercase;
@@ -565,7 +565,7 @@ export class BeatPatternCard extends CardDef {
           background: #10b981;
           color: white;
           padding: 0.25rem 0.5rem;
-          border-radius: 6px;
+          border-radius: var(--radius, var(--boxel-border-radius));
           font-size: 0.625rem;
           font-weight: 700;
           font-family: 'JetBrains Mono', monospace;
@@ -1566,7 +1566,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
       /* ²² Enhanced Beat maker styles with Claymorphic theme */
       .beat-maker-card {
         background: linear-gradient(145deg, #0a0e1a, #1a1f2e);
-        border-radius: var(--radius, 16px);
+        border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
         padding: 1.5rem;
         color: var(--foreground, #ffffff);
         font-family: var(--font-mono);
@@ -1613,7 +1613,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         border: 1px solid var(--border, #4b5563);
         color: var(--card-foreground, #ffffff);
         padding: var(--spacing, 0.375rem) calc(var(--spacing, 0.25rem) * 3);
-        border-radius: var(--radius-sm, 6px);
+        border-radius: var(--radius, var(--boxel-border-radius));
         font-size: 0.75rem;
         font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
       }
@@ -1652,7 +1652,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         width: 60px;
         height: 4px;
         background: var(--input, #374151);
-        border-radius: var(--radius-sm, 2px);
+        border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
         outline: none;
         -webkit-appearance: none;
       }
@@ -1720,7 +1720,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         margin-bottom: 1rem;
         padding: calc(var(--spacing, 0.25rem) * 3);
         background: linear-gradient(145deg, #0d1117, #1c2128);
-        border-radius: var(--radius-md, 6px);
+        border-radius: var(--radius, var(--boxel-border-radius));
         border: 1px solid #2a3441;
         backdrop-filter: blur(8px);
         box-shadow:
@@ -1750,7 +1750,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
         background: var(--accent, rgba(245, 158, 11, 0.1));
         padding: var(--spacing, 0.125rem) calc(var(--spacing, 0.25rem) * 1.5);
-        border-radius: var(--radius-sm, 3px);
+        border-radius: var(--radius-sm, var(--boxel-border-radius-sm));
         border: 1px solid var(--border, rgba(245, 158, 11, 0.2));
       }
 
@@ -1769,12 +1769,12 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
 
       .preset-buttons::-webkit-scrollbar-track {
         background: rgba(55, 65, 81, 0.3);
-        border-radius: 2px;
+        border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
       }
 
       .preset-buttons::-webkit-scrollbar-thumb {
         background: rgba(245, 158, 11, 0.5);
-        border-radius: 2px;
+        border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
       }
 
       .preset-buttons::-webkit-scrollbar-thumb:hover {
@@ -1789,7 +1789,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         background: linear-gradient(145deg, #1e2530, #2a3441);
         border: 1px solid #3a4451;
         color: var(--secondary-foreground, #ffffff);
-        border-radius: var(--radius-md, 6px);
+        border-radius: var(--radius, var(--boxel-border-radius));
         cursor: pointer;
         transition: all 0.2s ease;
         position: relative;
@@ -1871,7 +1871,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         background: rgba(156, 163, 175, 0.2);
         color: #d1d5db;
         padding: 0.0625rem 0.25rem;
-        border-radius: 2px;
+        border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
         font-weight: 500;
         text-transform: uppercase;
         letter-spacing: 0.025em;
@@ -1882,7 +1882,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         background: rgba(34, 211, 238, 0.2);
         color: #22d3ee;
         padding: 0.0625rem 0.25rem;
-        border-radius: 2px;
+        border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
         font-weight: 600;
         font-family: 'JetBrains Mono', monospace;
       }
@@ -1906,7 +1906,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
       /* Enhanced Beat Grid */
       .beat-grid {
         background: linear-gradient(145deg, #0f1419, #1e2530);
-        border-radius: var(--radius-lg, 12px);
+        border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
         padding: calc(var(--spacing, 0.25rem) * 4);
         margin-bottom: 1.5rem;
         border: 1px solid #2a3441;
@@ -1970,7 +1970,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         width: 40px;
         height: 3px;
         background: var(--input, #374151);
-        border-radius: var(--radius-sm, 2px);
+        border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
         outline: none;
         -webkit-appearance: none;
       }
@@ -2013,7 +2013,7 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         background: transparent;
         border: 1px solid var(--border, #4b5563);
         color: var(--muted-foreground, #9ca3af);
-        border-radius: var(--radius-sm, 3px);
+        border-radius: var(--radius-sm, var(--boxel-border-radius-sm));
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -2589,7 +2589,7 @@ export class BeatMakerCard extends CardDef {
           padding: clamp(0.1875rem, 2%, 0.625rem);
           box-sizing: border-box;
           background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          border-radius: 12px;
+          border-radius: var(--radius-xl, var(--boxel-border-radius-xl));
           overflow: hidden;
         }
 
@@ -2625,7 +2625,7 @@ export class BeatMakerCard extends CardDef {
           width: 8px;
           height: 8px;
           background: rgba(245, 158, 11, 0.3);
-          border-radius: 2px;
+          border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
           transition: all 0.3s ease;
         }
 
@@ -2700,7 +2700,7 @@ export class BeatMakerCard extends CardDef {
         .beat-bar {
           width: 4px;
           background: rgba(245, 158, 11, 0.3);
-          border-radius: 2px;
+          border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
           transition: all 0.3s ease;
         }
 
@@ -2769,7 +2769,7 @@ export class BeatMakerCard extends CardDef {
           padding: 0.25rem 0.5rem;
           background: rgba(239, 68, 68, 0.2);
           border: 1px solid #ef4444;
-          border-radius: 6px;
+          border-radius: var(--radius, var(--boxel-border-radius));
           font-size: 0.625rem;
           font-weight: 700;
           color: #ef4444;
@@ -2813,7 +2813,7 @@ export class BeatMakerCard extends CardDef {
           align-items: center;
           justify-content: center;
           margin-bottom: 1rem;
-          border-radius: 8px;
+          border-radius: var(--radius-lg, var(--boxel-border-radius-lg));
         }
 
         .sequencer-grid {
@@ -2831,7 +2831,7 @@ export class BeatMakerCard extends CardDef {
           width: 8px;
           height: 8px;
           background: rgba(255, 255, 255, 0.3);
-          border-radius: 2px;
+          border-radius: var(--radius-xs, var(--boxel-border-radius-xs));
           transition: all 0.3s ease;
         }
 
@@ -2850,7 +2850,7 @@ export class BeatMakerCard extends CardDef {
           padding: 0.25rem 0.5rem;
           background: rgba(255, 255, 255, 0.2);
           backdrop-filter: blur(8px);
-          border-radius: 6px;
+          border-radius: var(--radius, var(--boxel-border-radius));
           font-size: 0.625rem;
           font-weight: 700;
           color: white;
@@ -2931,7 +2931,7 @@ export class BeatMakerCard extends CardDef {
           color: #f59e0b;
           font-size: 0.625rem;
           font-weight: 600;
-          border-radius: 4px;
+          border-radius: var(--radius-sm, var(--boxel-border-radius-sm));
           font-family: 'JetBrains Mono', monospace;
         }
 
@@ -2949,7 +2949,7 @@ export class BeatMakerCard extends CardDef {
           justify-content: space-between;
           background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
           padding: 1rem;
-          border-radius: 8px;
+          border-radius: var(--radius-lg, var(--boxel-border-radius-lg));
           margin-bottom: 1rem;
         }
 
@@ -2979,14 +2979,14 @@ export class BeatMakerCard extends CardDef {
           padding: 0.75rem;
           background: rgba(15, 23, 42, 0.7);
           backdrop-filter: blur(8px);
-          border-radius: 8px;
+          border-radius: var(--radius-lg, var(--boxel-border-radius-lg));
           min-width: 120px;
         }
 
         .machine-display {
           background: #0f172a;
           padding: 0.5rem;
-          border-radius: 4px;
+          border-radius: var(--radius-sm, var(--boxel-border-radius-sm));
           border: 1px solid rgba(245, 158, 11, 0.3);
         }
 
@@ -3038,7 +3038,7 @@ export class BeatMakerCard extends CardDef {
           width: 2px;
           height: 6px;
           background: #f59e0b;
-          border-radius: 1px;
+          border-radius: var(--radius-xxs, var(--boxel-border-radius-xxs));
         }
 
         .card-grid {
@@ -3047,7 +3047,7 @@ export class BeatMakerCard extends CardDef {
           gap: 1rem;
           margin-bottom: 1rem;
           background: rgba(248, 250, 252, 0.1);
-          border-radius: 8px;
+          border-radius: var(--radius-lg, var(--boxel-border-radius-lg));
           padding: 1rem;
         }
 
@@ -3096,7 +3096,7 @@ export class BeatMakerCard extends CardDef {
           color: white;
           font-size: 0.75rem;
           font-weight: 600;
-          border-radius: 6px;
+          border-radius: var(--radius, var(--boxel-border-radius));
           border: 1px solid rgba(255, 255, 255, 0.1);
         }
       </style>
