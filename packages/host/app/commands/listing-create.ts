@@ -16,9 +16,10 @@ import * as BaseCommandModule from 'https://cardstack.com/base/command';
 import { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
+
 import CreateSpecCommand from './create-specs';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
-import { SearchCardsByTypeAndTitleCommand } from './search-cards';
+import SearchAndChooseCommand from './search-and-choose';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
@@ -226,10 +227,12 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const createSpecCommand = new CreateSpecCommand(this.commandContext);
     const specResults = await Promise.all(
       sanitizedDeps.map((dep) =>
-        createSpecCommand.execute({ module: dep, targetRealm }).catch((e) => {
-          console.warn('Failed to create spec(s) for', dep, e);
-          return undefined;
-        }),
+        createSpecCommand
+          .execute({ module: dep, targetRealm, autoGenerateReadme: true })
+          .catch((e) => {
+            console.warn('Failed to create spec(s) for', dep, e);
+            return undefined;
+          }),
       ),
     );
     const specs: Spec[] = [];
@@ -239,39 +242,18 @@ export default class ListingCreateCommand extends HostBaseCommand<
     (listing as any).specs = specs;
   }
 
-  private async askAiCardToLink(
-    searchTypeCodeRef: ResolvedCodeRef,
-  ): Promise<any[]> {
-    const search = new SearchCardsByTypeAndTitleCommand(this.commandContext);
-    const result = await search.execute({ type: searchTypeCodeRef });
-    const instances = result.instances ?? [];
-    const summariesString = this.instancesToPromptString(instances);
-    const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-    const systemPrompt = `You are an expert catalog curator. Select the most relevant 1 or 2 ids that represent ${searchTypeCodeRef.name} (maximum 2) from the provided list. Output ONLY a JSON array of 1 or 2 id strings. No commentary.`;
-    const userPrompt = `Options (id :: title):\n${summariesString}\n\nRules:\n- Return a JSON array with 1 or 2 ids (max 2).\n- No duplicates.\n- Only use ids from the list.\nOutput examples: ["idA"] or ["idA","idB"].`;
-    const r = await oneShot.execute({
-      systemPrompt,
-      userPrompt,
-      llmModel: 'openai/gpt-5-nano',
-      ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
+  // --- Linking helpers now use SearchAndChooseCommand ---
+  private async chooseCards(
+    codeRef: ResolvedCodeRef,
+    opts?: { max?: number; additionalSystemPrompt?: string },
+  ) {
+    const command = new SearchAndChooseCommand(this.commandContext);
+    const result = await command.execute({
+      codeRef,
+      max: opts?.max ?? 2,
+      additionalSystemPrompt: opts?.additionalSystemPrompt,
     });
-    // If adoptedCodeRef exists, re-run with code context for potential refinement (optional simple approach)
-    if (!r.output) return [];
-    return this.parseLinkingOutput(r.output, instances);
-  }
-
-  private parseLinkingOutput(output: string, instances: any[]): any[] {
-    const selectedIds: string[] = this.parseIdsFromOutput(output);
-    const normalized = selectedIds.filter(Boolean);
-    const matched = new Set();
-    for (let inst of instances) {
-      const instId = (inst as any)?.id;
-      if (!instId) continue;
-      if (normalized.some((sel) => instId === sel || instId.includes(sel))) {
-        matched.add(inst);
-      }
-    }
-    return Array.from(matched);
+    return result.selectedCards ?? [];
   }
 
   private async autoPatchName(listing: CardAPI.CardDef) {
@@ -298,59 +280,41 @@ export default class ListingCreateCommand extends HostBaseCommand<
     }
   }
   private async autoLinkLicense(listing: CardAPI.CardDef) {
-    const instances = await this.askAiCardToLink({
-      module: `${this.catalogRealm}catalog-app/listing/license`,
-      name: 'License',
-    } as ResolvedCodeRef);
-    (listing as any).license = instances[0];
+    const selected = await this.chooseCards(
+      {
+        module: `${this.catalogRealm}catalog-app/listing/license`,
+        name: 'License',
+      } as ResolvedCodeRef,
+      { max: 1 },
+    );
+    (listing as any).license = selected[0];
   }
   private async autoLinkTag(listing: CardAPI.CardDef) {
-    const instances = await this.askAiCardToLink({
-      module: `${this.catalogRealm}catalog-app/listing/tag`,
-      name: 'Tag',
-    } as ResolvedCodeRef);
-    (listing as any).tags = instances;
+    const selected = await this.chooseCards(
+      {
+        module: `${this.catalogRealm}catalog-app/listing/tag`,
+        name: 'Tag',
+      } as ResolvedCodeRef,
+      {
+        max: 2,
+        additionalSystemPrompt:
+          'RULE: Never select or return any id that contains the substring "stub" (case-insensitive). If all contain stub return [].',
+      },
+    );
+    (listing as any).tags = selected;
   }
   private async autoLinkCategory(listing: CardAPI.CardDef) {
-    const instances = await this.askAiCardToLink({
-      module: `${this.catalogRealm}catalog-app/listing/category`,
-      name: 'Category',
-    } as ResolvedCodeRef);
-    (listing as any).categories = instances;
+    const selected = await this.chooseCards(
+      {
+        module: `${this.catalogRealm}catalog-app/listing/category`,
+        name: 'Category',
+      } as ResolvedCodeRef,
+      { max: 2 },
+    );
+    (listing as any).categories = selected;
   }
 
-  private parseIdsFromOutput(output: string): string[] {
-    if (!output)
-      throw new Error('Expected JSON array of ids, got empty output');
-    let text = output.trim();
-    if (text.startsWith('```')) {
-      text = text
-        .replace(/^```[a-zA-Z0-9-*]*\n?/, '')
-        .replace(/```$/, '')
-        .trim();
-    }
-    try {
-      const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed)) throw new Error('Output is not a JSON array');
-      for (const v of parsed) {
-        if (typeof v !== 'string') throw new Error('All ids must be strings');
-      }
-      return parsed as string[];
-    } catch {
-      throw new Error(
-        'Failed to parse ids: expected a JSON array of strings. Original output: ' +
-          output,
-      );
-    }
-  }
-
-  private instancesToPromptString(instances: any[]): string {
-    if (!Array.isArray(instances)) return '';
-    return instances
-      .filter((c) => c && c.id)
-      .map((c) => `${c.id} :: ${c.title || ''}`.trim())
-      .join('\n');
-  }
+  // Removed bespoke AI selection/parsing helpers in favor of SearchAndChooseCommand
 
   private async getStringPatch(opts: {
     systemPrompt: string;
@@ -377,7 +341,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
 // - Truncates to maxLength
 function parseResponseToString(
   response?: string,
-  maxLength: number = 200,
+  maxLength: number = 1000,
 ): string | undefined {
   if (!response) return undefined;
   let text = response.trim();

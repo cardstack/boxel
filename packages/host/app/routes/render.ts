@@ -8,20 +8,26 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   formattedError,
-  isCardErrorJSONAPI,
-  isCardError,
+  CardError,
+  SupportedMimeType,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
+  type RenderError,
 } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import EmberHealthService from '../services/ember-health';
-import LoaderService from '../services/loader-service';
-import NetworkService from '../services/network';
-import RealmService from '../services/realm';
-import RealmServerService from '../services/realm-server';
-import StoreService from '../services/store';
+import {
+  renderErrorHandler,
+  errorJsonApiToErrorEntry,
+} from '../lib/render-error-handler';
+
+import type EmberHealthService from '../services/ember-health';
+import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
+import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 
 export type Model = { instance: CardDef; ready: boolean };
 
@@ -35,53 +41,19 @@ export default class RenderRoute extends Route<Model> {
   @service declare emberHealth: EmberHealthService;
 
   errorHandler = (event: Event) => {
-    let [_a, _b, encodedId] = (this.router.currentURL ?? '').split('/');
-    let id = encodedId ? decodeURIComponent(encodedId) : undefined;
-    let reason =
-      'reason' in event
-        ? (event as any).reason
-        : (event as CustomEvent).detail?.reason;
-    // Coerce stringified JSON into objects so our type guards work
-    if (typeof reason === 'string') {
-      try {
-        reason = JSON.parse(reason);
-      } catch (_e) {
-        // leave as string
-      }
-    }
-    let element: HTMLElement = document.querySelector('[data-prerender]')!;
-    let payload: any;
-    if (reason) {
-      if (isCardErrorJSONAPI(reason) || isCardError(reason)) {
-        payload = reason;
-      } else if (
-        typeof reason === 'object' &&
-        reason !== null &&
-        'errors' in (reason as any) &&
-        Array.isArray((reason as any).errors) &&
-        (reason as any).errors.length > 0
-      ) {
-        payload = (reason as any).errors[0];
-      } else {
-        payload = formattedError(id, reason).errors[0];
-      }
-    } else {
-      payload = { message: 'indexing failed' };
-    }
-    element.innerHTML = `${JSON.stringify(payload)}`;
-    // Defer setting prerender status until we know Ember health
-    void this.emberHealth
-      .isResponsive()
-      .then((alive) => {
-        element.dataset.emberAlive = alive ? 'true' : 'false';
-        element.dataset.prerenderStatus = alive ? 'error' : 'unusable';
-      })
-      .catch(() => {
-        element.dataset.emberAlive = 'false';
-        element.dataset.prerenderStatus = 'unusable';
-      });
-
-    event.preventDefault?.();
+    renderErrorHandler({
+      event,
+      setPrerenderStatus(status) {
+        let element: HTMLElement = document.querySelector('[data-prerender]')!;
+        element.dataset.prerenderStatus = status;
+      },
+      setError(error) {
+        let element: HTMLElement = document.querySelector('[data-prerender]')!;
+        element.innerHTML = error;
+      },
+      healthCheck: this.emberHealth.isResponsive,
+      currentURL: this.router.currentURL,
+    });
     (globalThis as any)._lazilyLoadLinks = undefined;
     (globalThis as any)._boxelRenderContext = undefined;
   };
@@ -108,7 +80,7 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderContext = true;
   }
 
-  async model({ id }: { id: string }) {
+  async model({ id, nonce: _nonce }: { id: string; nonce: string }) {
     // Make it easy for Puppeteer to do regular Ember transitions
     (globalThis as any).boxelTransitionTo = (
       ...args: Parameters<RouterService['transitionTo']>
@@ -124,7 +96,7 @@ export default class RenderRoute extends Route<Model> {
     let response = await this.network.authedFetch(id, {
       method: 'GET',
       headers: {
-        Accept: 'application/vnd.card+source',
+        Accept: SupportedMimeType.CardSource,
       },
     });
 
@@ -155,6 +127,7 @@ export default class RenderRoute extends Route<Model> {
 
       instance = await this.store.add(enhancedDoc, {
         relativeTo: new URL(id),
+        realm: realmURL,
         doNotPersist: true,
       });
     }
@@ -180,8 +153,15 @@ export default class RenderRoute extends Route<Model> {
     transition.abort();
     let serializedError: string;
     try {
-      JSON.parse(error.message);
-      serializedError = error.message;
+      let cardError: CardError = JSON.parse(error.message);
+      serializedError = JSON.stringify(
+        {
+          type: 'error',
+          error: cardError,
+        } as RenderError,
+        null,
+        2,
+      );
     } catch (e) {
       let current: Transition['to'] | null = transition?.to;
       let id: string | undefined;
@@ -191,11 +171,9 @@ export default class RenderRoute extends Route<Model> {
           current = current?.parent;
         }
       } while (current && !id);
-      serializedError = JSON.stringify(
-        formattedError(id, error).errors[0],
-        null,
-        2,
-      );
+      let errorJSONAPI = formattedError(id, error).errors[0];
+      let errorPayload = errorJsonApiToErrorEntry(errorJSONAPI);
+      serializedError = JSON.stringify(errorPayload, null, 2);
     }
     this.router.transitionTo('render-error', serializedError);
     return false;

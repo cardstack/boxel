@@ -160,7 +160,7 @@ export default class Tooltip extends Component<Signature> {
 
     <style scoped>
       .trigger {
-        width: max-content;
+        width: fit-content;
       }
 
       .tooltip {

@@ -311,6 +311,7 @@ export class SendRequestViaProxyInput extends CardDef {
   @field method = contains(StringField);
   @field requestBody = contains(StringField);
   @field headers = contains(JsonField); // optional
+  @field multipart = contains(BooleanField); // optional
 }
 
 export class SendRequestViaProxyResult extends CardDef {
@@ -463,4 +464,17 @@ export class OneShotLLMRequestInput extends CardDef {
 
 export class OneShotLLMRequestResult extends CardDef {
   @field output = contains(StringField);
+}
+
+// Select up to N cards of a given type using an LLM heuristic
+export class SearchAndChooseInput extends CardDef {
+  @field codeRef = contains(CodeRefField); // module + name of card type to search instances of
+  @field max = contains(NumberField); // optional, default 2
+  @field additionalSystemPrompt = contains(StringField); // optional extra hard rules
+  @field llmModel = contains(StringField); // optional model override
+}
+
+export class SearchAndChooseResult extends CardDef {
+  @field selectedIds = containsMany(StringField);
+  @field selectedCards = linksToMany(CardDef);
 }

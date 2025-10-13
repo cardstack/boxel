@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sessionTitle": "Mathematics Problem Solving",
+      "subject": "Mathematics",
+      "startTime": "2025-01-14T15:00:00.000Z",
+      "endTime": "2025-01-14T16:30:00.000Z",
+      "plannedDuration": 90,
+      "actualDuration": 90,
+      "sessionType": "practice",
+      "focusScore": 9,
+      "notes": "Worked through eigenvalue problems. Feeling much more confident with the concepts now.",
+      "isCompleted": true,
+      "tags": "eigenvalues,practice,linear-algebra"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../study-session",
+        "name": "StudySession"
+      }
+    }
+  }
+}

@@ -11,6 +11,8 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
+START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
@@ -45,7 +47,7 @@ NODE_ENV=development \
   --fromUrl='http://localhost:4201/skills/' \
   --toUrl='http://localhost:4201/skills/' \
   \
-  --path='../experiments-realm' \
-  --username='experiments_realm' \
-  --fromUrl='http://localhost:4201/experiments/' \
-  --toUrl='http://localhost:4201/experiments/'
+  ${START_EXPERIMENTS:+--path='../experiments-realm'} \
+  ${START_EXPERIMENTS:+--username='experiments_realm'} \
+  ${START_EXPERIMENTS:+--fromUrl='http://localhost:4201/experiments/'} \
+  ${START_EXPERIMENTS:+--toUrl='http://localhost:4201/experiments/'}

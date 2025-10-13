@@ -9,6 +9,7 @@
     "@types/node": "catalog:",
     "@types/stream-chain": "catalog:",
     "@types/stream-json": "catalog:",
+    "debug": "^4.4.3",
     "lodash": "catalog:",
     "matrix-js-sdk": "catalog:",
     "openai": "catalog:",
@@ -21,11 +22,14 @@
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@sinonjs/fake-timers": "catalog:",
+    "@types/debug": "^4.1.12",
     "@types/fs-extra": "catalog:",
+    "@types/pg": "catalog:",
     "@types/qunit": "catalog:",
     "@types/sinonjs__fake-timers": "catalog:",
     "concurrently": "catalog:",
     "fs-extra": "catalog:",
+    "pg": "catalog:",
     "qunit": "^2.24.1"
   },
   "scripts": {

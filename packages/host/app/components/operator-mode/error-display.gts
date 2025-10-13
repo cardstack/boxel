@@ -168,7 +168,7 @@ export default class ErrorDisplay
         min-width: fit-content;
         width: 100%;
         box-shadow: var(--boxel-deep-box-shadow);
-        overflow: hidden;
+        overflow: auto;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);

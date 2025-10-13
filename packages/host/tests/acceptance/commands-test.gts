@@ -53,6 +53,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
 
@@ -100,7 +101,8 @@ module('Acceptance | Commands tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -477,7 +479,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
-      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"] .field-component-card`,
     );
     await click('[data-test-schedule-meeting-button]');
     await waitUntil(() => getRoomIds().length > 0);

@@ -145,7 +145,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     targetRealm: string,
     SpecKlass: typeof BaseDef,
     createIfExists: boolean = false,
-    autoGenerateReadme: boolean = true,
+    autoGenerateReadme: boolean = false,
   ): Promise<CreateSpecResult> {
     const title = codeRef.name;
     const specType = new SpecTypeGuesser(declaration).type;
@@ -286,6 +286,9 @@ export default class CreateSpecCommand extends HostBaseCommand<
             specCodeRef,
             targetRealm,
             SpecKlass,
+            false,
+            false,
+            // intentionally not generating readme for multiple spec creation
           );
         } catch (e) {
           console.warn(

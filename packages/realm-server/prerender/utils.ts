@@ -1,6 +1,5 @@
 import {
   delay,
-  type CardErrorJSONAPI,
   type PrerenderMeta,
   type RenderError,
 } from '@cardstack/runtime-common';
@@ -36,15 +35,12 @@ export async function renderHTML(
   ancestorLevel: number,
 ): Promise<string | RenderError> {
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
-  let result = await captureResult(page, 'innerHTML');
+  let result = await captureResult(
+    page,
+    ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
+  );
   if (result.status === 'error' || result.status === 'unusable') {
-    let error = JSON.parse(result.value) as CardErrorJSONAPI;
-    const err: RenderError = {
-      ...(error as unknown as RenderError),
-      error: error.message,
-      evict: result.status === 'unusable',
-    };
-    return err;
+    return renderCaptureToError(page, result, 'render.html');
   }
   return result.value;
 }
@@ -53,13 +49,7 @@ export async function renderIcon(page: Page): Promise<string | RenderError> {
   await transitionTo(page, 'render.icon');
   let result = await captureResult(page, 'outerHTML');
   if (result.status === 'error' || result.status === 'unusable') {
-    let error = JSON.parse(result.value) as CardErrorJSONAPI;
-    const err: RenderError = {
-      ...(error as unknown as RenderError),
-      error: error.message,
-      evict: result.status === 'unusable',
-    };
-    return err;
+    return renderCaptureToError(page, result, 'render.icon');
   }
   return result.value;
 }
@@ -70,15 +60,68 @@ export async function renderMeta(
   await transitionTo(page, 'render.meta');
   let result = await captureResult(page, 'textContent');
   if (result.status === 'error' || result.status === 'unusable') {
-    let error = JSON.parse(result.value) as CardErrorJSONAPI;
-    const err: RenderError = {
-      ...(error as unknown as RenderError),
-      error: error.message,
-      evict: result.status === 'unusable',
-    };
-    return err;
+    return renderCaptureToError(page, result, 'render.meta');
   }
-  return JSON.parse(result.value) as PrerenderMeta;
+  try {
+    return JSON.parse(result.value) as PrerenderMeta;
+  } catch {
+    return buildInvalidRenderResponseError(
+      page,
+      `render.meta returned a non-JSON response: ${result.value}`,
+      { title: 'Invalid render meta response' },
+    );
+  }
+}
+
+function renderCaptureToError(
+  page: Page,
+  capture: RenderCapture,
+  context: string,
+): RenderError {
+  try {
+    let error = JSON.parse(capture.value) as RenderError;
+    error.evict = capture.status === 'unusable';
+    return error;
+  } catch {
+    let title =
+      context === 'render.meta'
+        ? 'Invalid render meta response'
+        : 'Invalid render response';
+    return buildInvalidRenderResponseError(
+      page,
+      `${context} returned an invalid error payload: ${capture.value}`,
+      {
+        evict: capture.status === 'unusable',
+        title,
+      },
+    );
+  }
+}
+
+function buildInvalidRenderResponseError(
+  page: Page,
+  message: string,
+  options?: { title?: string; evict?: boolean },
+): RenderError {
+  let id: string | null = null;
+  try {
+    let pathname = new URL(page.url()).pathname;
+    let match = /\/render\/([^/]+)\//.exec(pathname);
+    id = match?.[1] ?? null;
+  } catch {
+    id = null;
+  }
+  return {
+    type: 'error',
+    error: {
+      id,
+      status: 500,
+      title: options?.title ?? 'Invalid render response',
+      message,
+      additionalErrors: null,
+    },
+    ...(options?.evict ? { evict: true } : {}),
+  };
 }
 
 export async function renderAncestors(
@@ -186,17 +229,11 @@ export async function withTimeout<T>(
     let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
     return {
-      error: message,
-      id,
-      status: 504,
-      title: 'Render timeout',
-      message,
-      realm: undefined,
-      meta: {
-        lastKnownGoodHtml: null,
-        cardTitle: null,
-        scopedCssUrls: [],
-        stack: null,
+      error: {
+        id,
+        status: 504,
+        title: 'Render timeout',
+        message,
       },
       evict: true,
     } as RenderError;

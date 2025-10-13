@@ -6,6 +6,7 @@ import {
 } from './document-types';
 import { isMeta, type CardResource } from './resource-types';
 import { RealmPaths, LocalPath, join } from './paths';
+import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
 import {
   systemError,
   notFound,
@@ -132,7 +133,6 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
-  created: number;
 
   [key: symbol]: object;
 }
@@ -144,11 +144,15 @@ export interface TokenClaims {
   permissions: RealmPermissions['user'];
 }
 
-export interface FileWriteResult {
+export interface AdapterWriteResult {
   path: string;
   lastModified: number;
-  created: number;
-  isNew: boolean;
+}
+
+export interface FileWriteResult extends AdapterWriteResult {
+  path: string;
+  lastModified: number;
+  created: number | null;
 }
 
 export interface WriteOptions {
@@ -172,7 +176,7 @@ export interface RealmAdapter {
 
   exists(path: LocalPath): Promise<boolean>;
 
-  write(path: LocalPath, contents: string): Promise<FileWriteResult>;
+  write(path: LocalPath, contents: string): Promise<AdapterWriteResult>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -536,8 +540,10 @@ export class Realm {
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
     await this.indexing();
-    let results: FileWriteResult[] = [];
     let urls: URL[] = [];
+    // Collect write results for all files we wrote
+    let results: { path: LocalPath; lastModified: number }[] = [];
+    let fileMetaRows: { path: LocalPath }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
@@ -545,7 +551,7 @@ export class Realm {
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+          if (invalidatedURLs.find((u) => hasExecutableExtension(u.href))) {
             this.#definitionsCache.invalidate();
           }
           invalidations = new Set([
@@ -556,6 +562,7 @@ export class Realm {
         },
       });
     };
+
     for (let [path, content] of files) {
       lastWriteType = currentWriteType ?? lastWriteType;
       currentWriteType = hasExecutableExtension(path)
@@ -594,13 +601,14 @@ export class Realm {
           throw e;
         }
       }
-      let { lastModified, created, isNew } = await this.#adapter.write(
-        path,
-        content,
-      );
-      results.push({ path, lastModified, created, isNew });
+      let { lastModified } = await this.#adapter.write(path, content);
+      results.push({ path, lastModified });
+      fileMetaRows.push({ path });
       urls.push(url);
     }
+
+    // persist file meta (created_at) to DB independent of index and retrieve created
+    let createdMap = await this.persistFileMeta(fileMetaRows);
     if (urls.length > 0) {
       await performIndex();
     }
@@ -610,7 +618,33 @@ export class Realm {
       invalidations: [...invalidations],
       clientRequestId,
     });
-    return results;
+    return results.map(({ path, lastModified }) => ({
+      path,
+      lastModified,
+      created: createdMap.get(path) ?? null,
+    }));
+  }
+
+  // persist created_at into realm_file_meta table using db adapter
+  private async persistFileMeta(
+    rows: { path: LocalPath }[],
+  ): Promise<Map<LocalPath, number>> {
+    if (!this.#dbAdapter || rows.length === 0) return new Map();
+    const createdMap = await persistFileMeta(
+      this.#dbAdapter,
+      this.url,
+      rows.map((r) => r.path),
+    );
+    // maintain LocalPath typing on keys
+    return new Map(
+      Array.from(createdMap.entries()).map(([p, c]) => [p as LocalPath, c]),
+    );
+  }
+
+  // remove file meta rows for deleted paths
+  private async removeFileMeta(paths: LocalPath[]): Promise<void> {
+    if (!this.#dbAdapter || paths.length === 0) return;
+    await removeFileMeta(this.#dbAdapter, this.url, paths);
   }
 
   validate(json: any): AtomicPayloadValidationError[] {
@@ -868,6 +902,8 @@ export class Realm {
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
+    // Remove file meta for this path
+    await this.removeFileMeta([path]);
     await this.#realmIndexUpdater.update([url], {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
@@ -898,6 +934,8 @@ export class Realm {
 
     await Promise.all(trackPromises);
     await Promise.all(removePromises);
+    // Remove file meta for all deleted paths
+    await this.removeFileMeta(paths);
     await this.#realmIndexUpdater.update(urls, {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
@@ -1304,9 +1342,9 @@ export class Realm {
         requestContext,
       });
     }
-    let headers = {
+    let createdFromDb = await this.getCreatedTime(ref.path);
+    let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
-      'x-created': formatRFC7231(ref.created * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
@@ -1314,6 +1352,9 @@ export class Realm {
       etag: String(ref.lastModified),
       'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
     };
+    if (createdFromDb != null) {
+      headers['x-created'] = formatRFC7231(createdFromDb * 1000);
+    }
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
@@ -1440,7 +1481,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { lastModified } = await this.write(
+    let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       {
@@ -1452,7 +1493,10 @@ export class Realm {
       body: null,
       init: {
         status: 204,
-        headers: { 'last-modified': formatRFC7231(lastModified * 1000) },
+        headers: {
+          'last-modified': formatRFC7231(lastModified * 1000),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
       },
       requestContext,
     });
@@ -1480,6 +1524,14 @@ export class Realm {
             requestContext,
           });
         }
+        // Build headers, adding x-created from DB when possible
+        let dbPath = this.paths.local(canonicalURL);
+        let createdAt = await this.getCreatedTime(dbPath);
+        let createdHeader: Record<string, string> =
+          createdAt != null
+            ? { 'x-created': formatRFC7231(createdAt * 1000) }
+            : {};
+
         return createResponse({
           body: source,
           init: {
@@ -1487,6 +1539,7 @@ export class Realm {
               ...(lastModified != null
                 ? { 'last-modified': formatRFC7231(lastModified * 1000) }
                 : {}),
+              ...createdHeader,
             },
           },
           requestContext,
@@ -1520,9 +1573,16 @@ export class Realm {
         });
       }
 
+      // Build headers, adding x-created from DB when possible
+      let createdAt = await this.getCreatedTime(handle.path);
+      let createdHeader: Record<string, string> =
+        createdAt != null
+          ? { 'x-created': formatRFC7231(createdAt * 1000) }
+          : {};
       return await this.serveLocalFile(request, handle, requestContext, {
         defaultHeaders: {
           'content-type': 'text/plain; charset=utf-8',
+          ...createdHeader,
         },
       });
     } finally {
@@ -1570,7 +1630,11 @@ export class Realm {
           }`,
         );
       }
-      return { canonicalURL: new URL(canonicalURL), lastModified, source };
+      return {
+        canonicalURL: new URL(canonicalURL),
+        lastModified,
+        source,
+      };
     }
     return undefined;
   }
@@ -1734,7 +1798,7 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
 
@@ -1769,6 +1833,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
@@ -1929,7 +1994,7 @@ export class Realm {
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1960,6 +2025,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
@@ -2028,12 +2094,18 @@ export class Realm {
         });
       }
 
+      // Prefer created_at from DB for instance JSON
+      let pathForDb = this.paths.local(url) + '.json';
+      let createdAt = await this.getCreatedTime(pathForDb);
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             ...lastModifiedHeader(card),
+            ...(createdAt != null
+              ? { 'x-created': formatRFC7231(createdAt * 1000) }
+              : {}),
           },
         },
         requestContext,
@@ -2061,6 +2133,12 @@ export class Realm {
       init: { status: 204 },
       requestContext,
     });
+  }
+
+  // Look up created_at for a given file path from realm_file_meta
+  private async getCreatedTime(path: LocalPath): Promise<number | undefined> {
+    if (!this.#dbAdapter) return undefined;
+    return getCreatedTime(this.#dbAdapter, this.url, path);
   }
 
   private async directoryEntries(
@@ -2120,10 +2198,14 @@ export class Realm {
         let innerPath = this.paths.local(
           new URL(`${this.paths.directoryURL(dir).href}${entry.name}`),
         );
+        let createdFromDb = await this.getCreatedTime(innerPath);
         meta = {
           kind: 'file',
           lastModified: (await this.#adapter.lastModified(innerPath)) ?? null,
-        };
+          ...(createdFromDb != null
+            ? { resourceCreatedAt: createdFromDb }
+            : {}),
+        } as FileMeta;
       } else {
         meta = { kind: 'directory' };
       }

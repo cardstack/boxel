@@ -1,5 +1,7 @@
 import Service from '@ember/service';
 
+import { tracked } from '@glimmer/tracking';
+
 import {
   type IndexResults,
   type IndexWriter,
@@ -13,6 +15,13 @@ import { type TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 // Tests inject an implementation of this service to help perform indexing
 // for the test-realm-adapter
 export default class LocalIndexer extends Service {
+  @tracked renderError: string | undefined;
+  @tracked prerenderStatus:
+    | 'ready'
+    | 'loading'
+    | 'error'
+    | 'unusable'
+    | undefined;
   setup(
     _fromScratch: (
       args: FromScratchArgsWithPermissions,
@@ -30,6 +39,12 @@ export default class LocalIndexer extends Service {
   }
   get prerenderer() {
     return {} as Prerenderer;
+  }
+  setPrerenderStatus(status: 'ready' | 'loading' | 'error' | 'unusable') {
+    this.prerenderStatus = status;
+  }
+  setRenderError(error: string) {
+    this.renderError = error;
   }
 }
 

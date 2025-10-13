@@ -2,6 +2,8 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
   type RealmPermissions,
+  type Realm,
+  type RealmAdapter,
   type RenderResponse,
 } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/index';
@@ -13,9 +15,138 @@ import {
   realmSecretSeed,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { baseCardRef } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
-  module('prerender', function (hooks) {
+  module('prerender - dynamic tests', function (hooks) {
+    let realmURL = 'http://127.0.0.1:4450/';
+    let testUserId = '@user1:localhost';
+    let permissions: RealmPermissions = {};
+    let prerenderer: Prerenderer;
+    let realmAdapter: RealmAdapter;
+    let realm: Realm;
+
+    hooks.before(async () => {
+      prerenderer = new Prerenderer({
+        secretSeed: realmSecretSeed,
+        maxPages: 2,
+      });
+    });
+
+    hooks.after(async () => {
+      await prerenderer.stop();
+    });
+
+    hooks.afterEach(async () => {
+      await prerenderer.disposeRealm(realmURL);
+    });
+
+    setupBaseRealmServer(hooks, matrixURL);
+
+    setupPermissionedRealms(hooks, {
+      realms: [
+        {
+          realmURL,
+          permissions: {
+            [testUserId]: ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'person.gts': `
+              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              export class Person extends CardDef {
+                static displayName = "Person";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            '1.json': {
+              data: {
+                attributes: {
+                  name: 'Maple',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms: setupRealms }) {
+        ({ realm, realmAdapter } = setupRealms[0]);
+        permissions = {
+          [realmURL]: ['read', 'write', 'realm-owner'],
+        };
+      },
+    });
+
+    test('reuses pooled page and picks up updated instance', async function (assert) {
+      const cardURL = `${realmURL}1`;
+
+      let first = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.false(first.pool.reused, 'first call not reused');
+      assert.strictEqual(
+        first.response.serialized?.data.attributes?.name,
+        'Maple',
+        'first render sees original value',
+      );
+
+      await realmAdapter.write(
+        '1.json',
+        JSON.stringify(
+          {
+            data: {
+              attributes: {
+                name: 'Juniper',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      await realm.realmIndexUpdater.fullIndex();
+
+      let second = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.true(second.pool.reused, 'second call reused pooled page');
+      assert.strictEqual(
+        second.pool.pageId,
+        first.pool.pageId,
+        'same page reused',
+      );
+      assert.strictEqual(
+        second.response.serialized?.data.attributes?.name,
+        'Juniper',
+        'second render picks up updated value',
+      );
+    });
+  });
+
+  module('prerender - static tests', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
     let realmURL3 = 'http://127.0.0.1:4449/';
@@ -278,8 +409,32 @@ module(basename(__filename), function () {
         assert.strictEqual(result.serialized?.data.attributes?.name, 'Maple');
       });
 
-      test('displayName', function (assert) {
-        assert.strictEqual(result.displayName, 'Cat');
+      test('displayNames', function (assert) {
+        assert.deepEqual(result.displayNames, ['Cat', 'Card']);
+      });
+
+      test('deps', function (assert) {
+        // spot check a few deps, as the whole list is overwhelming...
+        assert.ok(
+          result.deps?.includes(baseCardRef.module),
+          `${baseCardRef.module} is a dep`,
+        );
+        assert.ok(
+          result.deps?.includes(`${realmURL1}person`),
+          `${realmURL1}person is a dep`,
+        );
+        assert.ok(
+          result.deps?.includes(`${realmURL2}cat`),
+          `${realmURL2}cat is a dep`,
+        );
+        assert.ok(
+          result.deps?.find((d) =>
+            d.match(
+              /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+            ),
+          ),
+          `glimmer scoped css from ${baseCardRef.module} is a dep`,
+        );
       });
 
       test('types', function (assert) {
@@ -312,16 +467,20 @@ module(basename(__filename), function () {
         });
         let { error, ...restOfResult } = response;
 
-        assert.strictEqual(error?.id, testCardURL);
-        assert.strictEqual(error?.message, 'intentional failure during render');
-        assert.strictEqual(error?.status, 500);
-        assert.ok(error?.meta.stack, 'stack trace exists in error');
+        assert.strictEqual(error?.error.id, testCardURL);
+        assert.strictEqual(
+          error?.error.message,
+          'intentional failure during render',
+        );
+        assert.strictEqual(error?.error.status, 500);
+        assert.ok(error?.error.stack, 'stack trace exists in error');
 
         // TODO Perhaps if we add error handlers for the /render/html subroute
         // these all wont be empty, as this is triggering in the /render route
         // error handler and hence stomping over all the subroutes.
         assert.deepEqual(restOfResult, {
-          displayName: null,
+          displayNames: null,
+          deps: null,
           searchDoc: null,
           serialized: null,
           types: null,
@@ -345,9 +504,12 @@ module(basename(__filename), function () {
         let {
           response: { error },
         } = result;
-        assert.strictEqual(error?.id, testCardURL);
-        assert.strictEqual(error?.message, 'Render timed-out after 4000 ms');
-        assert.strictEqual(error?.status, 504);
+        assert.strictEqual(error?.error.id, testCardURL);
+        assert.strictEqual(
+          error?.error.message,
+          'Render timed-out after 4000 ms',
+        );
+        assert.strictEqual(error?.error.status, 504);
       });
 
       test('unusable triggers eviction and short-circuit', async function (assert) {
@@ -362,12 +524,12 @@ module(basename(__filename), function () {
 
         // We should see an error with evict semantics and short-circuited payloads
         assert.ok(unusable.response.error, 'error present for unusable');
-        assert.strictEqual(unusable.response.error?.id, unusableURL);
+        assert.strictEqual(unusable.response.error?.error.id, unusableURL);
         assert.strictEqual(
-          unusable.response.error?.message,
+          unusable.response.error?.error.message,
           'forced unusable for test',
         );
-        assert.strictEqual(unusable.response.error?.status, 500);
+        assert.strictEqual(unusable.response.error?.error.status, 500);
         assert.strictEqual(
           unusable.response.isolatedHTML,
           null,
@@ -392,14 +554,16 @@ module(basename(__filename), function () {
           {
             serialized: unusable.response.serialized,
             searchDoc: unusable.response.searchDoc,
-            displayName: unusable.response.displayName,
+            displayNames: unusable.response.displayNames,
             types: unusable.response.types,
+            deps: unusable.response.deps,
           },
           {
             serialized: null,
             searchDoc: null,
-            displayName: null,
+            displayNames: null,
             types: null,
+            deps: null,
           },
           'meta fields are null when short-circuited',
         );
@@ -438,7 +602,7 @@ module(basename(__filename), function () {
           opts: { timeoutMs: 1, simulateTimeoutMs: 5 },
         });
         assert.strictEqual(
-          timeoutRun.response.error?.title,
+          timeoutRun.response.error?.error.title,
           'Render timeout',
           'got timeout error',
         );

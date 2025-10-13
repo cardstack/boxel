@@ -606,6 +606,24 @@ export async function setupUser(
   );
 }
 
+export async function setupPermissions(
+  username: string,
+  realmURL: string,
+  realmServer: IsolatedRealmServer,
+) {
+  await realmServer.executeSQL(
+    `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+    VALUES (
+      '${realmURL}',
+      '${username}',
+      true,
+      true,
+      false
+    )
+  `,
+  );
+}
+
 export async function setupPayment(
   username: string,
   realmServer: IsolatedRealmServer,
