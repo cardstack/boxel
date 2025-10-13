@@ -346,45 +346,27 @@ export class RoomResource extends Resource<Args> {
   }
 
   get activeLLM(): string {
-    let result =
-      this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? this.defaultLLM;
-    console.log(
-      'Room resource activeLLM:',
-      result,
-      'is it just being activated?',
-      this.llmBeingActivated,
+    return (
+      this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? this.defaultLLM
     );
-    return result;
   }
 
   private get defaultLLM(): string {
     // Use the first model from the system card if available
     let systemCard = this.matrixService.systemCard;
-    console.log('Room resource systemCard:', systemCard);
-    console.log('modelConfigurations:', systemCard?.modelConfigurations);
-    console.log('first model:', systemCard?.modelConfigurations?.[0]);
-    console.log(
-      'first modelId:',
-      systemCard?.modelConfigurations?.[0]?.modelId,
-    );
     if (systemCard?.modelConfigurations?.[0]?.modelId) {
       let defaultModel = systemCard.modelConfigurations[0].modelId;
-      console.log('Using default LLM from system card:', defaultModel);
       return defaultModel;
     }
     // Fallback to hardcoded default
-    console.log('Using hardcoded default LLM:', DEFAULT_LLM);
     return DEFAULT_LLM;
   }
 
   @cached
   get usedLLMs(): string[] {
     let usedLLMs = new Set<string>();
-    console.log('Getting used llms?', this.events);
-    console.log('events from room state:', this.matrixRoom?.events);
     for (let event of this.events) {
       if (event.type === APP_BOXEL_ACTIVE_LLM) {
-        console.log('Found active LLM event:', event);
         let activeLLMEvent = event as ActiveLLMEvent;
         if (activeLLMEvent.content.model) {
           usedLLMs.add(activeLLMEvent.content.model);
