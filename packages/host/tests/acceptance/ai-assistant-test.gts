@@ -269,23 +269,23 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Create model configurations for testing
     let model1 = new ModelConfiguration({
-      cardInfo: new CardInfoField({ title: 'GPT-4 Turbo' }),
-      modelId: 'openai/gpt-4-turbo',
-      temperature: 0.7,
+      cardInfo: new CardInfoField({ title: 'OpenAI: GPT-5' }),
+      modelId: 'openai/gpt-5',
+      temperature: 0.1,
       toolsSupported: true,
     });
 
     let model2 = new ModelConfiguration({
-      cardInfo: new CardInfoField({ title: 'Claude 3.5 Haiku' }),
-      modelId: 'anthropic/claude-3.5-haiku',
-      temperature: 0.5,
+      cardInfo: new CardInfoField({ title: 'Anthropic: Claude Sonnet 4' }),
+      modelId: 'anthropic/claude-4-sonnet',
+      temperature: 0.0,
       toolsSupported: true,
     });
 
     let model3 = new ModelConfiguration({
-      cardInfo: new CardInfoField({ title: 'Claude 3.7 Sonnet' }),
+      cardInfo: new CardInfoField({ title: 'Anthropic: Claude Sonnet 3.7' }),
       modelId: 'anthropic/claude-3.7-sonnet',
-      temperature: 0.8,
+      temperature: 0.1,
       toolsSupported: true,
     });
 
