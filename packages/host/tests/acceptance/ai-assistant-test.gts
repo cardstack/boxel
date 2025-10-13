@@ -72,6 +72,7 @@ import { setupApplicationTest } from '../helpers/setup';
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
   await click('[data-test-attach-card-btn]');
+  await fillIn('[data-test-search-field]', cardId);
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
 }
