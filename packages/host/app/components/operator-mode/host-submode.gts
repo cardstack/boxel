@@ -44,16 +44,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @tracked isPublishingRealmPopoverOpen = false;
   @tracked isOpenSitePopoverOpen = false;
 
-  get currentCardId() {
-    return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
-  }
-
-  get cardIds() {
-    return this.operatorModeStateService.state.trail.map((card) =>
-      card.replace('.json', ''),
-    );
-  }
-
   @action
   openPublishRealmModal() {
     this.isPublishRealmModalOpen = true;
@@ -109,8 +99,14 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   getFullURL(baseURL: string) {
-    if (this.currentCardId) {
-      return baseURL + this.currentCardId.replace(this.realmURL, '');
+    if (this.operatorModeStateService.hostModePrimaryCard) {
+      return (
+        baseURL +
+        this.operatorModeStateService.hostModePrimaryCard.replace(
+          this.realmURL,
+          '',
+        )
+      );
     }
     return baseURL;
   }
@@ -123,15 +119,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     await this.realm.unpublish(this.realmURL, publishedRealmURL);
   });
-
-  removeCardFromTrail = (cardId: string) => {
-    let cardIndex = this.cardIds.indexOf(cardId);
-    if (cardIndex !== -1) {
-      let newTrail = [...this.cardIds];
-      newTrail.splice(cardIndex, 1);
-      this.operatorModeStateService.updateTrail(newTrail);
-    }
-  };
 
   @action
   handleOpenSiteButtonClick(event: MouseEvent) {
@@ -163,11 +150,13 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       return;
     }
 
-    let normalizedId = cardId.replace(/\.json$/, '');
-    let trailId = cardId.endsWith('.json') ? cardId : `${normalizedId}.json`;
-    let trail = this.operatorModeStateService.state.trail ?? [];
-    let updatedTrail = [...trail.filter((id) => id !== trailId), trailId];
-    this.operatorModeStateService.updateTrail(updatedTrail);
+    this.operatorModeStateService.addToHostModeStack(
+      cardId.replace(/\.json$/, ''),
+    );
+  };
+
+  private removeCardFromStack = (cardId: string) => {
+    this.operatorModeStateService.removeFromHostModeStack(cardId);
   };
 
   <template>
@@ -234,8 +223,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       </:topBar>
       <:default as |layout|>
         <HostModeContent
-          @cardIds={{this.cardIds}}
-          @removeCard={{this.removeCardFromTrail}}
+          @primaryCardId={{this.operatorModeStateService.hostModePrimaryCard}}
+          @stackItemIds={{this.operatorModeStateService.hostModeStack}}
+          @removeCardFromStack={{this.removeCardFromStack}}
           @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
           @viewCard={{this.viewCard}}
         />

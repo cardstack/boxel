@@ -19,11 +19,11 @@ interface Signature {
 export default class HostModeCard extends Component<Signature> {
   @cached
   get cardResource() {
-    if (!this.args.cardId) {
+    let cardId = this.args.cardId;
+    if (!cardId) {
       return undefined;
     }
-
-    return getCard(this, () => this.args.cardId);
+    return getCard(this, () => cardId);
   }
 
   get card() {
@@ -35,7 +35,7 @@ export default class HostModeCard extends Component<Signature> {
   }
 
   get isLoading() {
-    return Boolean(this.args.cardId) && !this.card && !this.isError;
+    return !this.card && !this.isError;
   }
 
   get cardError() {
@@ -51,7 +51,7 @@ export default class HostModeCard extends Component<Signature> {
   }
 
   get shouldShowEmptyMessage() {
-    return !this.args.cardId && !this.card && !this.isError && !this.isLoading;
+    return !this.card && !this.isError && !this.isLoading;
   }
 
   get emptyMessage() {

@@ -25,6 +25,7 @@ import {
 import { meta } from '@cardstack/runtime-common/constants';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
+
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import config from '@cardstack/host/config/environment';
@@ -130,16 +131,6 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     return 'host-mode-container';
   }
 
-  get cardIds() {
-    let ids = this.hostModeStateService.hostModeCardIds;
-
-    if (ids.length === 0 && this.card?.id) {
-      return [this.card.id];
-    }
-
-    return ids;
-  }
-
   private viewCard: ViewCardFn = (cardOrURL) => {
     let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
     if (!cardId) {
@@ -151,8 +142,8 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   };
 
   @action
-  closeCard(cardId: string) {
-    this.hostModeStateService.closeCard(cardId);
+  removeCardFromStack(cardId: string) {
+    this.hostModeStateService.removeCardFromStack(cardId);
   }
 
   @provide(CardContextName)
@@ -235,8 +226,9 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
           data-test-host-mode-container
         >
           <HostModeContent
-            @cardIds={{this.cardIds}}
-            @removeCard={{this.closeCard}}
+            @primaryCardId={{this.hostModeStateService.primaryCard}}
+            @stackItemIds={{this.hostModeStateService.stackItems}}
+            @removeCardFromStack={{this.removeCardFromStack}}
             @viewCard={{this.viewCard}}
             class='full-host-mode-content'
           />

@@ -1,16 +1,19 @@
-import { action } from '@ember/object';
-
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
-import { provide } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import { gt, not } from '@cardstack/boxel-ui/helpers';
 
-import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
+import {
+  CardContextName,
+  CardCrudFunctionsContextName,
+} from '@cardstack/runtime-common';
 
+import { createHostModeNavigationModifier } from '@cardstack/host/modifiers/create-host-mode-navigation-modifier';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import type {
   CreateCardFn,
@@ -28,53 +31,50 @@ import HostModeStack from './stack';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    cardIds: string[];
-    removeCard: (cardId: string) => void;
+    primaryCardId: string;
+    stackItemIds: string[];
+    removeCardFromStack: (cardId: string) => void;
     openInteractSubmode?: () => void;
     viewCard: ViewCardFn;
   };
 }
 
 export default class HostModeContent extends Component<Signature> {
-  get currentCard() {
-    return this.currentCardResource?.card;
+  @consume(CardContextName) private declare parentCardContext:
+    | CardContext
+    | undefined;
+
+  @cached
+  private get hostModeNavigationModifier() {
+    return createHostModeNavigationModifier(this.args.viewCard);
   }
 
-  get isError() {
-    return this.currentCardResource?.cardError;
+  get primaryCard() {
+    return this.primaryCardResource?.card;
   }
 
-  get isLoading() {
-    return this.currentCardId && !this.currentCard && !this.isError;
-  }
-
-  get currentCardResource() {
-    if (!this.currentCardId) {
+  get primaryCardResource() {
+    if (!this.args.primaryCardId) {
       return undefined;
     }
 
-    return getCard(this, () => this.currentCardId);
+    return getCard(this, () => this.args.primaryCardId);
   }
 
-  get currentCardId() {
-    return this.args.cardIds[0];
+  get cardIds() {
+    return [this.args.primaryCardId, ...this.args.stackItemIds];
   }
 
   get displayBreadcrumbs() {
-    return this.args.cardIds && this.args.cardIds.length > 1;
+    return this.args.stackItemIds.length > 0;
   }
 
   get isWideCard() {
-    if (!this.currentCard) {
+    if (!this.primaryCard) {
       return false;
     }
 
-    return (this.currentCard.constructor as typeof CardDef).prefersWideFormat;
-  }
-
-  @action
-  removeCard(cardId: string) {
-    this.args.removeCard(cardId);
+    return (this.primaryCard.constructor as typeof CardDef).prefersWideFormat;
   }
 
   private noopCreateCard: CreateCardFn = async () => undefined;
@@ -94,6 +94,20 @@ export default class HostModeContent extends Component<Signature> {
     };
   }
 
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): CardContext {
+    let parentContext = this.parentCardContext;
+    if (!parentContext) {
+      throw new Error('HostModeContent requires a CardContext');
+    }
+
+    return {
+      ...parentContext,
+      cardComponentModifier: this.hostModeNavigationModifier,
+    };
+  }
+
   <template>
     <div
       class='host-mode-content {{if this.isWideCard "is-wide"}}'
@@ -103,19 +117,22 @@ export default class HostModeContent extends Component<Signature> {
       {{#if this.displayBreadcrumbs}}
         <div class='breadcrumb-container'>
           <HostModeBreadcrumbs
-            @cardIds={{@cardIds}}
-            @close={{this.removeCard}}
+            @cardIds={{this.cardIds}}
+            @close={{@removeCardFromStack}}
           />
         </div>
       {{/if}}
       <HostModeCard
-        @cardId={{this.currentCardId}}
+        @cardId={{@primaryCardId}}
         @displayBoundaries={{not this.isWideCard}}
         @openInteractSubmode={{@openInteractSubmode}}
         class='current-card'
       />
-      {{#if (gt @cardIds.length 1)}}
-        <HostModeStack @cardIds={{@cardIds}} @close={{this.removeCard}} />
+      {{#if (gt @stackItemIds.length 0)}}
+        <HostModeStack
+          @stackItemIds={{@stackItemIds}}
+          @close={{@removeCardFromStack}}
+        />
       {{/if}}
     </div>
 
