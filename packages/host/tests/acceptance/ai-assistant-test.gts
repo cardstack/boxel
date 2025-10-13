@@ -27,7 +27,6 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   DEFAULT_LLM,
   DEFAULT_LLM_LIST,
-  DEFAULT_LLM_ID_TO_NAME,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -86,6 +85,19 @@ let countryDefinition = `import { field, contains, CardDef } from 'https://cards
 
 let matrixRoomId: string;
 let mockedFileContent = 'Hello, world!';
+const TEST_MODEL_NAMES: Record<string, string> = {
+  'openai/gpt-5': 'OpenAI: GPT-5',
+  'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
+  'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
+  'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
+  'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
+  'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
+};
+
+function modelNameFor(llmId: string): string {
+  return TEST_MODEL_NAMES[llmId] ?? llmId;
+}
+
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -271,7 +283,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Create model configurations for testing
     let openAiGpt5Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: DEFAULT_LLM_ID_TO_NAME['openai/gpt-5'],
+        title: modelNameFor('openai/gpt-5'),
       }),
       modelId: 'openai/gpt-5',
       temperature: 0.1,
@@ -280,7 +292,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let openAiGpt4oMiniModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: DEFAULT_LLM_ID_TO_NAME['openai/gpt-4o-mini'],
+        title: modelNameFor('openai/gpt-4o-mini'),
       }),
       modelId: 'openai/gpt-4o-mini',
       temperature: 0.6,
@@ -289,7 +301,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let anthropicClaudeSonnet4Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: DEFAULT_LLM_ID_TO_NAME['anthropic/claude-sonnet-4'],
+        title: modelNameFor('anthropic/claude-sonnet-4'),
       }),
       modelId: 'anthropic/claude-sonnet-4',
       temperature: 0.0,
@@ -298,7 +310,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let anthropicClaudeSonnet37Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: DEFAULT_LLM_ID_TO_NAME['anthropic/claude-3.7-sonnet'],
+        title: modelNameFor('anthropic/claude-3.7-sonnet'),
       }),
       modelId: 'anthropic/claude-3.7-sonnet',
       temperature: 0.1,
@@ -317,7 +329,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let deepseekModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: DEFAULT_LLM_ID_TO_NAME['deepseek/deepseek-chat-v3-0324'],
+        title: modelNameFor('deepseek/deepseek-chat-v3-0324'),
       }),
       modelId: 'deepseek/deepseek-chat-v3-0324',
       temperature: 0.2,
@@ -326,7 +338,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let geminiFlashModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: DEFAULT_LLM_ID_TO_NAME['google/gemini-2.5-flash'],
+        title: modelNameFor('google/gemini-2.5-flash'),
       }),
       modelId: 'google/gemini-2.5-flash',
       temperature: 0.4,
@@ -617,7 +629,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     // Default model should be the first one in the system card
-    let defaultModelName = DEFAULT_LLM_ID_TO_NAME['openai/gpt-5'];
+    let defaultModelName = modelNameFor('openai/gpt-5');
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
@@ -628,8 +640,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
-    let llmNameToChangeTo =
-      DEFAULT_LLM_ID_TO_NAME['anthropic/claude-3.7-sonnet'];
+    let llmNameToChangeTo = modelNameFor('anthropic/claude-3.7-sonnet');
 
     assert
       .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
@@ -644,7 +655,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
   test('defaults to anthropic/claude-sonnet-4 in code mode', async function (assert) {
     let defaultCodeLLMId = 'anthropic/claude-sonnet-4';
-    let defaultCodeLLMName = DEFAULT_LLM_ID_TO_NAME[defaultCodeLLMId];
+    let defaultCodeLLMName = modelNameFor(defaultCodeLLMId);
 
     await visitOperatorMode({
       stacks: [
@@ -693,8 +704,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       matrixService.systemCard?.modelConfigurations?.[0]?.modelId;
 
     assert.ok(firstSystemModelId, 'system card provides a first model');
-    let expectedName =
-      DEFAULT_LLM_ID_TO_NAME[firstSystemModelId!] ?? firstSystemModelId;
+    let expectedName = modelNameFor(firstSystemModelId!);
 
     assert
       .dom('[data-test-llm-select-selected]')
@@ -710,7 +720,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   });
 
   test('switching back to interact mode uses openai/gpt-5', async function (assert) {
-    let interactFallbackName = DEFAULT_LLM_ID_TO_NAME[DEFAULT_LLM];
+    let interactFallbackName = modelNameFor(DEFAULT_LLM);
 
     await visitOperatorMode({
       stacks: [
@@ -729,14 +739,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Initial interact mode defaults to first system card model
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(DEFAULT_LLM_ID_TO_NAME['openai/gpt-5']);
+      .hasText(modelNameFor('openai/gpt-5'));
 
     // Switch to Code mode and confirm coding default is applied
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(DEFAULT_LLM_ID_TO_NAME['anthropic/claude-sonnet-4']);
+      .hasText(modelNameFor('anthropic/claude-sonnet-4'));
 
     // Switch back to Interact mode and ensure we fall back to GPT-5
     await click('[data-test-submode-switcher] button');
@@ -780,16 +790,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(
-        DEFAULT_LLM_ID_TO_NAME['deepseek/deepseek-chat-v3-0324'],
-      );
+      .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
     await click('[data-test-llm-select-selected]');
     assert
       .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
       .exists();
     assert
       .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
-      .hasText(DEFAULT_LLM_ID_TO_NAME['deepseek/deepseek-chat-v3-0324']);
+      .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
     assert
       .dom('[data-test-llm-select-item="google/gemini-2.5-flash"]')
       .exists();
