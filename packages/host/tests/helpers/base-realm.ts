@@ -15,8 +15,8 @@ import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
-import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
 import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
+import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -148,15 +148,11 @@ async function initialize() {
     .Skill;
 
   ModelConfiguration = (
-    await loader.import<typeof SystemCardModule>(
-      `${baseRealm.url}system-card`,
-    )
+    await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
   ).ModelConfiguration;
 
   SystemCard = (
-    await loader.import<typeof SystemCardModule>(
-      `${baseRealm.url}system-card`,
-    )
+    await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
   ).SystemCard;
 
   let cardAPI = await loader.import<typeof CardAPIModule>(

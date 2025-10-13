@@ -46,7 +46,6 @@ import type {
   CodePatchResultEvent,
   ActiveLLMEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { Model } from 'https://cardstack.com/base/model';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
 

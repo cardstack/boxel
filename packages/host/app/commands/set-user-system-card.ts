@@ -23,9 +23,7 @@ export default class SetUserSystemCardCommand extends HostBaseCommand<
 
   requireInputFields = ['cardId'];
 
-  protected async run(
-    input: BaseCommandModule.CardIdCard,
-  ): Promise<undefined> {
+  protected async run(input: BaseCommandModule.CardIdCard): Promise<undefined> {
     if (!input.cardId) {
       throw new Error('cardId is required');
     }

@@ -26,7 +26,6 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_MESSAGE_MSGTYPE,
   DEFAULT_LLM,
-  DEFAULT_LLM_LIST,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -700,9 +699,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.ok(firstSystemModelId, 'system card provides a first model');
     let expectedName = modelNameFor(firstSystemModelId!);
 
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(expectedName);
+    assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
     assert.strictEqual(
       firstSystemModelId,

@@ -48,12 +48,9 @@ module('Integration | commands | set-user-system-card', function (hooks) {
 
   test('sets the system card account data', async function (assert) {
     let commandService = getService('command-service');
-    let command = new SetUserSystemCardCommand(
-      commandService.commandContext,
-    );
+    let command = new SetUserSystemCardCommand(commandService.commandContext);
 
-    let systemCardId =
-      'http://localhost:4201/catalog/SystemCard/default';
+    let systemCardId = 'http://localhost:4201/catalog/SystemCard/default';
 
     await command.execute({
       cardId: systemCardId,
