@@ -2175,7 +2175,7 @@ export class TextAreaField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @type='textarea'
-        @disabled={{not @canEdit}}
+        @readonly={{not @canEdit}}
       />
     </template>
   };
