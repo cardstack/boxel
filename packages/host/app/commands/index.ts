@@ -31,6 +31,7 @@ import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
 import * as PatchFieldsCommandModule from './patch-fields';
 import * as PopulateWithSampleDataCommandModule from './populate-with-sample-data';
+import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
@@ -248,6 +249,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/populate-with-sample-data',
     PopulateWithSampleDataCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/set-user-system-card',
+    SetUserSystemCardCommandModule,
+  );
 }
 
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
@@ -268,6 +273,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OpenWorkspaceCommandModule.default,
   PatchFieldsCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
+  SetUserSystemCardCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
   SaveCardCommandModule.default,
