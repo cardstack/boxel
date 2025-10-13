@@ -2,7 +2,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import {
   baseRealm,
@@ -2260,7 +2260,8 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
     );
   });
 
-  test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
+  // headless chrome doesn't support the `isUsed` field yet: CS-9539
+  skip(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -3646,7 +3647,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               title: 'Van Gogh',
-              cardInfo: { theme: null },
+              cardInfo: {},
             },
           ],
           cardInfo: { theme: null },
@@ -3794,7 +3795,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
                       id: hassanID,
                     },
                   ],
-                  cardInfo: { theme: null },
+                  cardInfo: {},
                 },
               ],
               cardInfo: { theme: null },
@@ -3936,11 +3937,21 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               title: 'Hassan',
               friends: [
                 {
+                  cardInfo: {
+                    theme: null,
+                  },
+                  firstName: 'Mango',
+                  friends: [
+                    {
+                      id: hassanID,
+                    },
+                  ],
                   id: mangoID,
+                  title: 'Mango',
                 },
                 { id: vanGoghID },
               ],
-              cardInfo: {},
+              cardInfo: { theme: null },
             },
           ],
           cardInfo: { theme: null },

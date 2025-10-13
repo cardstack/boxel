@@ -3,9 +3,11 @@ import {
   type RealmPermissions,
   type RenderResponse,
   type RenderError,
+  type RenderRouteOptions,
   uuidv4,
   logger,
   Deferred,
+  serializeRenderRouteOptions,
 } from '@cardstack/runtime-common';
 import puppeteer, {
   type Browser,
@@ -282,14 +284,14 @@ export class Prerenderer {
     userId,
     permissions,
     opts,
-    includesCodeChange = false,
+    renderOptions,
   }: {
     realm: string;
     url: string;
     userId: string;
     permissions: RealmPermissions;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
-    includesCodeChange?: boolean;
+    renderOptions?: RenderRouteOptions;
   }): Promise<{
     response: RenderResponse;
     timings: { launchMs: number; renderMs: number };
@@ -357,7 +359,9 @@ export class Prerenderer {
       let renderStart = Date.now();
       let error: RenderError | undefined;
       let shortCircuit = false;
-      let includesCodeChangeSegment = includesCodeChange ? 'true' : 'false';
+      let options = renderOptions ?? {};
+      let serializedOptions = serializeRenderRouteOptions(options);
+      let optionsSegment = encodeURIComponent(serializedOptions);
       const captureOptions: CaptureOptions = {
         expectedId: url.replace(/\.json$/i, ''),
         expectedNonce: String(this.#nonce),
@@ -374,13 +378,13 @@ export class Prerenderer {
               'render.html',
               url,
               String(this.#nonce),
-              includesCodeChangeSegment,
+              serializedOptions,
               'isolated',
               '0',
             );
           } else {
             await page.goto(
-              `${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${includesCodeChangeSegment}/html/isolated/0`,
+              `${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
             );
           }
           return await captureResult(page, 'innerHTML', captureOptions);

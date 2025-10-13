@@ -2,7 +2,11 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import { Server, createServer } from 'http';
 import * as Sentry from '@sentry/node';
-import { logger, type RealmPermissions } from '@cardstack/runtime-common';
+import {
+  logger,
+  type RealmPermissions,
+  type RenderRouteOptions,
+} from '@cardstack/runtime-common';
 import {
   ecsMetadata,
   fullRequestURL,
@@ -59,7 +63,12 @@ export function buildPrerenderApp(
       let userId = attrs.userId as string | undefined;
       let permissions = attrs.permissions as RealmPermissions | undefined;
       let realm = attrs.realm as string | undefined;
-      let includesCodeChange = Boolean(attrs.includesCodeChange);
+      let renderOptions: RenderRouteOptions =
+        attrs.renderOptions &&
+        typeof attrs.renderOptions === 'object' &&
+        !Array.isArray(attrs.renderOptions)
+          ? (attrs.renderOptions as RenderRouteOptions)
+          : {};
 
       if (
         !url ||
@@ -87,7 +96,7 @@ export function buildPrerenderApp(
         url,
         userId,
         permissions,
-        includesCodeChange,
+        renderOptions,
       });
       let totalMs = Date.now() - start;
       ctxt.status = 201;

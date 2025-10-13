@@ -15,10 +15,9 @@ export function createRemotePrerenderer(
     url,
     userId,
     permissions,
-    includesCodeChange,
+    renderOptions,
   }: Parameters<Prerenderer>[0]): Promise<RenderResponse> {
     let endpoint = new URL('prerender', prerenderURL);
-    let includesCodeChangeFlag = Boolean(includesCodeChange);
 
     let body = {
       data: {
@@ -28,7 +27,7 @@ export function createRemotePrerenderer(
           url,
           userId,
           permissions,
-          includesCodeChange: includesCodeChangeFlag,
+          renderOptions: renderOptions ?? {},
         },
       },
     };

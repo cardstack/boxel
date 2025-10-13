@@ -16,6 +16,8 @@ import {
   type RealmPermissions,
   type Format,
   type PrerenderMeta,
+  type RenderRouteOptions,
+  serializeRenderRouteOptions,
 } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
@@ -46,6 +48,16 @@ export default class CardPrerender extends Component {
   @service private declare fastboot: { isFastBoot: boolean };
   @service private declare localIndexer: LocalIndexer;
   #nonce = 0;
+  #shouldResetStoreForNextRender = true;
+
+  #renderBasePath(url: string, renderOptions?: RenderRouteOptions) {
+    let optionsSegment = encodeURIComponent(
+      serializeRenderRouteOptions(renderOptions ?? {}),
+    );
+    return `/render/${encodeURIComponent(url)}/${
+      this.#nonce
+    }/${optionsSegment}`;
+  }
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -74,13 +86,13 @@ export default class CardPrerender extends Component {
     realm,
     userId,
     permissions,
-    includesCodeChange,
+    renderOptions,
   }: {
     realm: string;
     url: string;
     userId: string;
     permissions: RealmPermissions;
-    includesCodeChange?: boolean;
+    renderOptions?: RenderRouteOptions;
   }): Promise<RenderResponse> {
     try {
       let results = await this.prerenderTask.perform({
@@ -88,7 +100,7 @@ export default class CardPrerender extends Component {
         realm,
         userId,
         permissions,
-        includesCodeChange,
+        renderOptions,
       });
       return results;
     } catch (e: any) {
@@ -105,18 +117,29 @@ export default class CardPrerender extends Component {
   private prerenderTask = enqueueTask(
     async ({
       url,
-      includesCodeChange = false,
+      renderOptions,
     }: {
       realm: string;
       url: string;
       userId: string;
       permissions: RealmPermissions;
-      includesCodeChange?: boolean;
+      renderOptions?: RenderRouteOptions;
     }): Promise<RenderResponse> => {
       this.#nonce++;
       this.localIndexer.renderError = undefined;
       this.localIndexer.prerenderStatus = 'loading';
-      this.store.resetCache();
+      let shouldResetStore = this.#consumeResetStoreForRender(
+        renderOptions?.resetStore === true,
+      );
+      let initialRenderOptions: RenderRouteOptions = {
+        ...(renderOptions ?? {}),
+      };
+      if (shouldResetStore) {
+        initialRenderOptions.resetStore = true;
+        this.store.resetCache();
+      } else {
+        delete initialRenderOptions.resetStore;
+      }
       let error: RenderError | undefined;
       let isolatedHTML: string | null = null;
       let meta: PrerenderMeta = {
@@ -131,36 +154,33 @@ export default class CardPrerender extends Component {
       let embeddedHTML: Record<string, string> | null = null;
       let fittedHTML: Record<string, string> | null = null;
       try {
-        let includesCodeChangeForRoute = includesCodeChange;
+        let subsequentRenderOptions = omitOneTimeOptions(initialRenderOptions);
         isolatedHTML = await this.renderHTML.perform(
           url,
           'isolated',
           0,
-          includesCodeChangeForRoute,
+          initialRenderOptions,
         );
-        // once we've reset the loader for this card, subsequent renders can remain false
-        includesCodeChangeForRoute = false;
-        meta = await this.renderMeta.perform(url, includesCodeChangeForRoute);
+        meta = await this.renderMeta.perform(url, subsequentRenderOptions);
         atomHTML = await this.renderHTML.perform(
           url,
           'atom',
           0,
-          includesCodeChangeForRoute,
+          subsequentRenderOptions,
         );
-        iconHTML = await this.renderIcon.perform(
-          url,
-          includesCodeChangeForRoute,
-        );
+        iconHTML = await this.renderIcon.perform(url, subsequentRenderOptions);
         if (meta?.types) {
           embeddedHTML = await this.renderAncestors.perform(
             url,
             'embedded',
             meta.types,
+            subsequentRenderOptions,
           );
           fittedHTML = await this.renderAncestors.perform(
             url,
             'fitted',
             meta.types,
+            subsequentRenderOptions,
           );
         }
       } catch (e: any) {
@@ -200,13 +220,13 @@ export default class CardPrerender extends Component {
       url: string,
       format: Format,
       ancestorLevel = 0,
-      includesCodeChange = false,
+      renderOptions?: RenderRouteOptions,
     ) => {
-      let includesCodeChangeSegment = includesCodeChange ? 'true' : 'false';
       let routeInfo = await this.router.recognizeAndLoad(
-        `/render/${encodeURIComponent(url)}/${
-          this.#nonce
-        }/${includesCodeChangeSegment}/html/${format}/${ancestorLevel}`,
+        `${this.#renderBasePath(
+          url,
+          renderOptions,
+        )}/html/${format}/${ancestorLevel}`,
       );
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
@@ -218,15 +238,23 @@ export default class CardPrerender extends Component {
         ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
         format,
       );
-      return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
+      if (typeof captured !== 'string') {
+        return null;
+      }
+      return this.processCapturedMarkup(captured);
     },
   );
 
   private renderAncestors = enqueueTask(
-    async (url: string, format: 'embedded' | 'fitted', types: string[]) => {
+    async (
+      url: string,
+      format: 'embedded' | 'fitted',
+      types: string[],
+      renderOptions?: RenderRouteOptions,
+    ) => {
       let ancestors: Record<string, string> = {};
       for (let i = 0; i < types.length; i++) {
-        let res = await this.renderHTML.perform(url, format, i);
+        let res = await this.renderHTML.perform(url, format, i, renderOptions);
         ancestors[types[i]] = res as string;
       }
       return ancestors;
@@ -234,12 +262,9 @@ export default class CardPrerender extends Component {
   );
 
   private renderMeta = enqueueTask(
-    async (url: string, includesCodeChange = false) => {
-      let includesCodeChangeSegment = includesCodeChange ? 'true' : 'false';
+    async (url: string, renderOptions?: RenderRouteOptions) => {
       let routeInfo = await this.router.recognizeAndLoad(
-        `/render/${encodeURIComponent(url)}/${
-          this.#nonce
-        }/${includesCodeChangeSegment}/meta`,
+        `${this.#renderBasePath(url, renderOptions)}/meta`,
       );
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
@@ -249,19 +274,19 @@ export default class CardPrerender extends Component {
   );
 
   private renderIcon = enqueueTask(
-    async (url: string, includesCodeChange = false) => {
-      let includesCodeChangeSegment = includesCodeChange ? 'true' : 'false';
+    async (url: string, renderOptions?: RenderRouteOptions) => {
       let routeInfo = await this.router.recognizeAndLoad(
-        `/render/${encodeURIComponent(url)}/${
-          this.#nonce
-        }/${includesCodeChangeSegment}/icon`,
+        `${this.#renderBasePath(url, renderOptions)}/icon`,
       );
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
       }
       let component = routeInfo.attributes.Component;
       let captured = this.renderService.renderCardComponent(component);
-      return typeof captured === 'string' ? cleanCapturedHTML(captured) : null;
+      if (typeof captured !== 'string') {
+        return null;
+      }
+      return this.processCapturedMarkup(captured);
     },
   );
 
@@ -426,12 +451,41 @@ export default class CardPrerender extends Component {
       };
     }
   }
+
+  #consumeResetStoreForRender(requestedReset = false): boolean {
+    if (requestedReset) {
+      this.#shouldResetStoreForNextRender = true;
+    }
+    if (!this.#shouldResetStoreForNextRender) {
+      return false;
+    }
+    this.#shouldResetStoreForNextRender = false;
+    return true;
+  }
+
+  private processCapturedMarkup(markup: string): string {
+    let cleaned = cleanCapturedHTML(markup);
+    let errorPayload = extractPrerenderError(cleaned);
+    if (errorPayload) {
+      this.localIndexer.renderError = errorPayload;
+      throw new Error(errorPayload);
+    }
+    return cleaned;
+  }
 }
 
 function getRunnerOpts(optsId: number): RunnerOpts {
   return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(
     optsId,
   );
+}
+
+function omitOneTimeOptions(options: RenderRouteOptions): RenderRouteOptions {
+  if (options.includesCodeChange === true || options.resetStore === true) {
+    let { includesCodeChange: _ic, resetStore: _rs, ...rest } = options;
+    return rest as RenderRouteOptions;
+  }
+  return options;
 }
 
 function cleanCapturedHTML(html: string): string {
@@ -443,4 +497,16 @@ function cleanCapturedHTML(html: string): string {
   let cleaned = html.replace(emberIdAttr, '');
   cleaned = cleaned.replace(emptyDataAttr, ' $1');
   return cleaned;
+}
+
+function extractPrerenderError(markup: string): string | undefined {
+  if (!markup.includes('data-prerender-error')) {
+    return undefined;
+  }
+  let start = markup.indexOf('{');
+  let end = markup.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) {
+    return markup.slice(start, end + 1).trim();
+  }
+  return undefined;
 }

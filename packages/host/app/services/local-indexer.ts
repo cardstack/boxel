@@ -16,12 +16,7 @@ import { type TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 // for the test-realm-adapter
 export default class LocalIndexer extends Service {
   @tracked renderError: string | undefined;
-  @tracked prerenderStatus:
-    | 'ready'
-    | 'loading'
-    | 'error'
-    | 'unusable'
-    | undefined;
+  @tracked prerenderStatus: 'ready' | 'loading' | 'unusable' | undefined;
   setup(
     _fromScratch: (
       args: FromScratchArgsWithPermissions,
@@ -40,7 +35,7 @@ export default class LocalIndexer extends Service {
   get prerenderer() {
     return {} as Prerenderer;
   }
-  setPrerenderStatus(status: 'ready' | 'loading' | 'error' | 'unusable') {
+  setPrerenderStatus(status: 'ready' | 'loading' | 'unusable') {
     this.prerenderStatus = status;
   }
   setRenderError(error: string) {

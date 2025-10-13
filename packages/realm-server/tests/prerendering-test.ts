@@ -311,6 +311,40 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'embedded-error.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              export class EmbeddedError extends CardDef {
+                @field name = contains(StringField);
+                static displayName = "Embedded Error";
+                static isolated = <template>
+  <pre data-prerender-error>
+  {
+    "type": "error",
+    "error": {
+      "id": "embedded-error",
+      "status": 500,
+      "title": "Embedded error",
+      "message": "error flagged from DOM",
+      "additionalErrors": null
+    }
+  }
+  </pre>
+</template>
+              }
+            `,
+            '4.json': {
+              data: {
+                attributes: {
+                  name: 'Embedded Error',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './embedded-error',
+                    name: 'EmbeddedError',
+                  },
+                },
+              },
+            },
           },
         },
         {
@@ -492,6 +526,24 @@ module(basename(__filename), function () {
           iconHTML: null,
           isolatedHTML: null,
         });
+      });
+
+      test('embedded error markup triggers render error', async function (assert) {
+        const testCardURL = `${realmURL2}4`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.ok(response.error, 'error captured');
+        assert.strictEqual(response.error?.error.id, 'embedded-error');
+        assert.strictEqual(
+          response.error?.error.message,
+          'error flagged from DOM',
+        );
+        assert.strictEqual(response.error?.error.title, 'Embedded error');
+        assert.strictEqual(response.error?.error.status, 500);
       });
 
       test('render timeout', async function (assert) {

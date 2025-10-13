@@ -15,6 +15,8 @@ import {
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
+  parseRenderRouteOptions,
+  serializeRenderRouteOptions,
 } from '@cardstack/runtime-common';
 import { serializableError } from '@cardstack/runtime-common/error';
 
@@ -29,6 +31,7 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
+import type RenderErrorStateService from '../services/render-error-state';
 import type StoreService from '../services/store';
 
 export type Model = { instance: CardDef; ready: boolean; nonce: string };
@@ -40,8 +43,12 @@ export default class RenderRoute extends Route<Model> {
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare private network: NetworkService;
+  @service declare renderErrorState: RenderErrorStateService;
 
   private currentTransition: Transition | undefined;
+  private lastStoreResetKey: string | undefined;
+  private renderBaseParams: [string, string, string] | undefined;
+  private lastSerializedError: string | undefined;
 
   errorHandler = (event: Event) => {
     windowErrorHandler({
@@ -74,6 +81,10 @@ export default class RenderRoute extends Route<Model> {
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
     window.removeEventListener('boxel-render-error', this.handleRenderError);
+    this.lastStoreResetKey = undefined;
+    this.renderBaseParams = undefined;
+    this.lastSerializedError = undefined;
+    this.renderErrorState.clear();
   }
 
   beforeModel() {
@@ -84,28 +95,34 @@ export default class RenderRoute extends Route<Model> {
   }
 
   async model(
-    {
-      id,
-      nonce,
-      includes_code_change,
-    }: { id: string; nonce: string; includes_code_change?: string },
+    { id, nonce, options }: { id: string; nonce: string; options?: string },
     transition: Transition,
   ) {
+    this.lastSerializedError = undefined;
+    this.renderErrorState.clear();
     this.currentTransition = transition;
-    this.#setupTransitionHelper(id, nonce, includes_code_change ?? 'false');
+    let parsedOptions = parseRenderRouteOptions(options);
+    let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
+    this.#setupTransitionHelper(id, nonce, canonicalOptions);
 
     // Opt in to reading the in-progress index, as opposed to the last completed
     // index. This matters for any related cards that we will be loading, not
     // for our own card, which we're going to load directly from source.
-    let shouldResetLoader = includes_code_change === 'true';
+    let shouldResetLoader = parsedOptions.includesCodeChange === true;
     if (shouldResetLoader) {
       this.loaderService.resetLoader({
         clearFetchCache: true,
-        reason: 'render-route includes_code_change',
+        reason: 'render-route includesCodeChange',
       });
     }
     this.loaderService.setIsIndexing(true);
-    this.store.resetCache();
+    if (parsedOptions.resetStore === true) {
+      let resetKey = `${id}:${nonce}`;
+      if (this.lastStoreResetKey !== resetKey) {
+        this.store.resetCache();
+        this.lastStoreResetKey = resetKey;
+      }
+    }
     // This is for host tests
     (globalThis as any).__renderInstance = undefined;
 
@@ -169,24 +186,25 @@ export default class RenderRoute extends Route<Model> {
   // Headless prerendering drives Ember via this hook, and it may repeatedly
   // transition between render subroutes while the parent render route is
   // already active. Ember already provides the contexts (id, nonce,
-  // includes_code_change) for nested routes, so blindly calling
+  // options) for nested routes, so blindly calling
   // transitionTo(...args) can end up with duplicate or stale arguments,
   // triggering "More context objects were passed" errors. This wrapper
   // normalizes the parameter list: if we get a full render transition we
   // pass the canonical base params; for render.* routes we strip any existing
   // base params (or establish them first if they changed) before handing off
   // to the router. Everything runs inside Ember's run loop via join().
-  #setupTransitionHelper(
-    id: string,
-    nonce: string,
-    includesCodeChange: string,
-  ) {
-    let baseParams: [string, string, string] = [id, nonce, includesCodeChange];
+  #setupTransitionHelper(id: string, nonce: string, options: string) {
+    let baseParams: [string, string, string] = [id, nonce, options];
+    this.renderBaseParams = baseParams;
     (globalThis as any).boxelTransitionTo = (
       routeName: Parameters<RouterService['transitionTo']>[0],
       ...params: any[]
     ) => {
       if (routeName === 'render') {
+        if (params.length >= 3) {
+          baseParams = params.slice(0, 3) as [string, string, string];
+        }
+        this.renderBaseParams = baseParams;
         join(() =>
           this.router.transitionTo(
             routeName as never,
@@ -206,21 +224,12 @@ export default class RenderRoute extends Route<Model> {
           normalized = normalized.slice(3);
         } else if (normalized.length >= 3) {
           let targetBase = normalized.slice(0, 3) as [string, string, string];
-          join(() =>
-            this.router.transitionTo(
-              'render' as never,
-              ...(targetBase as unknown as never[]),
-            ),
-          );
+          join(() => this.router.transitionTo('render', ...targetBase));
           baseParams = targetBase;
+          this.renderBaseParams = baseParams;
           normalized = normalized.slice(3);
         }
-        join(() =>
-          this.router.transitionTo(
-            routeName as never,
-            ...(normalized as unknown as never[]),
-          ),
-        );
+        join(() => this.router.transitionTo(routeName, ...normalized));
         return;
       }
       join(() =>
@@ -284,6 +293,33 @@ export default class RenderRoute extends Route<Model> {
         serializedError = JSON.stringify(errorPayload, null, 2);
       }
     }
-    this.router.transitionTo('render-error', serializedError);
+    if (serializedError === this.lastSerializedError) {
+      return;
+    }
+    this.lastSerializedError = serializedError;
+    // Store the serialized error so the child render.error route can read it
+    // even though this transition abort prevents its usual model hook from
+    // running.
+    this.renderErrorState.setReason(serializedError);
+    let baseParams = this.renderBaseParams;
+    if (baseParams) {
+      if (transition) {
+        // During the initial render transition Ember expects to finalize the
+        // parent route, so stick with intermediateTransitionTo to avoid
+        // queueing a second render transition with missing params.
+        this.intermediateTransitionTo('render.error', ...baseParams);
+      } else {
+        // Once the render route is already active we can safely let the router
+        // handle the subroute transition, but schedule it within the run loop to
+        // avoid the hangs we saw when using intermediateTransitionTo.
+        join(() => this.router.transitionTo('render.error', ...baseParams));
+      }
+      return;
+    }
+    if (transition) {
+      this.intermediateTransitionTo('render.error');
+    } else {
+      join(() => this.router.transitionTo('render.error'));
+    }
   };
 }

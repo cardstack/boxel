@@ -42,6 +42,7 @@ import {
   type StatusArgs,
   type Prerenderer,
   type RealmPermissions,
+  type RenderRouteOptions,
   RenderResponse,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -120,6 +121,7 @@ export class CurrentRun {
   };
   #hasCodeChangeForNextRender = false;
   #pendingLoaderReset = false;
+  #shouldResetStoreForNextRender = true;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
 
@@ -341,6 +343,14 @@ export class CurrentRun {
       reason: `${jobIdentity(this.#jobInfo)} pending-loader-reset`,
     });
     this.#pendingLoaderReset = false;
+  }
+
+  #consumeResetStoreForRender(): boolean {
+    if (!this.#shouldResetStoreForNextRender) {
+      return false;
+    }
+    this.#shouldResetStoreForNextRender = false;
+    return true;
   }
 
   static #sortInvalidations(urls: URL[]): URL[] {
@@ -728,12 +738,21 @@ export class CurrentRun {
       if ((globalThis as any).__useHeadlessChromePrerender?.()) {
         let renderResult: RenderResponse | undefined;
         try {
+          let includesCodeChange = this.#consumeHasCodeChangeForRender();
+          let shouldResetStore = this.#consumeResetStoreForRender();
+          let prerenderOptions: RenderRouteOptions | undefined =
+            includesCodeChange || shouldResetStore
+              ? {
+                  ...(shouldResetStore ? { resetStore: true } : {}),
+                  ...(includesCodeChange ? { includesCodeChange: true } : {}),
+                }
+              : undefined;
           renderResult = await this.#prerenderer({
             url: fileURL,
             realm: this.#realmURL.href,
             userId: this.#userId,
             permissions: this.#permissions,
-            includesCodeChange: this.#consumeHasCodeChangeForRender(),
+            renderOptions: prerenderOptions,
           });
 
           // we tack on data that can only be determined via access to underlying filesystem/DB

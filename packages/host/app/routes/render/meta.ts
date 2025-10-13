@@ -30,7 +30,7 @@ import type { Model as ParentModel } from '../render';
 
 export type Model = PrerenderMeta | RenderError | undefined;
 
-export default class RenderRoute extends Route<Model> {
+export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 

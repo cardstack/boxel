@@ -182,7 +182,7 @@ export async function captureResult(
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
   opts?: CaptureOptions,
 ): Promise<RenderCapture> {
-  const statuses: RenderStatus[] = ['ready', 'error', 'unusable'];
+  const statuses: RenderStatus[] = ['ready', 'unusable'];
   await page.waitForFunction(
     (
       statuses: string[],
@@ -308,18 +308,27 @@ export async function captureResult(
       let alive =
         (element.dataset.emberAlive as 'true' | 'false' | undefined) ??
         undefined;
-      if (finalStatus === 'error' || finalStatus === 'unusable') {
+      let errorElement = element.querySelector(
+        '[data-prerender-error]',
+      ) as HTMLElement | null;
+      if (finalStatus === 'unusable' || errorElement) {
         // Extract only the JSON payload (between the first '{' and the last '}')
-        let html = element.innerHTML ?? '';
-        let start = html.indexOf('{');
-        let end = html.lastIndexOf('}');
+        let raw =
+          errorElement?.textContent ??
+          errorElement?.innerHTML ??
+          element.innerHTML ??
+          '';
+        let start = raw.indexOf('{');
+        let end = raw.lastIndexOf('}');
         let json =
           start !== -1 && end !== -1 && end > start
-            ? html.slice(start, end + 1)
-            : html;
+            ? raw.slice(start, end + 1)
+            : raw;
+        let status: RenderStatus =
+          finalStatus === 'unusable' ? 'unusable' : 'error';
         return {
-          status: finalStatus,
-          value: json,
+          status,
+          value: json.trim(),
           alive,
           id: element.dataset.prerenderId ?? undefined,
           nonce: element.dataset.prerenderNonce ?? undefined,

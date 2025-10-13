@@ -572,7 +572,7 @@ module(basename(__filename), function () {
       }
     });
 
-    skip('can recover from rendering a card that has a template error', async function (assert) {
+    test('rendering a card that has a template error does not affect indexing other instances', async function (assert) {
       {
         let entry = await realm.realmIndexQueryEngine.cardDocument(
           new URL(`${testRealm}boom`),
