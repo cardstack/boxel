@@ -286,7 +286,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         title: modelNameFor('openai/gpt-5'),
       }),
       modelId: 'openai/gpt-5',
-      temperature: 0.1,
       toolsSupported: true,
     });
 
@@ -295,7 +294,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         title: modelNameFor('openai/gpt-4o-mini'),
       }),
       modelId: 'openai/gpt-4o-mini',
-      temperature: 0.6,
       toolsSupported: true,
     });
 
@@ -304,7 +302,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         title: modelNameFor('anthropic/claude-sonnet-4'),
       }),
       modelId: 'anthropic/claude-sonnet-4',
-      temperature: 0.0,
       toolsSupported: true,
     });
 
@@ -313,7 +310,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         title: modelNameFor('anthropic/claude-3.7-sonnet'),
       }),
       modelId: 'anthropic/claude-3.7-sonnet',
-      temperature: 0.1,
       toolsSupported: true,
     });
 
@@ -332,7 +328,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         title: modelNameFor('deepseek/deepseek-chat-v3-0324'),
       }),
       modelId: 'deepseek/deepseek-chat-v3-0324',
-      temperature: 0.2,
       toolsSupported: true,
     });
 
@@ -341,7 +336,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         title: modelNameFor('google/gemini-2.5-flash'),
       }),
       modelId: 'google/gemini-2.5-flash',
-      temperature: 0.4,
       toolsSupported: true,
     });
 

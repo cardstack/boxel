@@ -40,7 +40,7 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
   'anthropic/claude-opus-4.1': 'Anthropic: Claude Opus 4.1',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
-  'google/gemini-2.5-pro-preview': 'Google: Gemini 2.5 Pro Preview 06-05',
+  'google/gemini-2.5-pro': 'Google: Gemini 2.5 Pro',
   'google/gemini-2.5-flash-lite': 'Google: Gemini 2.5 Flash Lite',
   'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
   'meta-llama/llama-3.2-3b-instruct': 'Meta: Llama 3.2 3B Instruct',

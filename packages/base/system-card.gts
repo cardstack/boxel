@@ -1,6 +1,5 @@
 import { CardDef, field, contains, linksToMany } from './card-api';
 import BooleanField from './boolean';
-import NumberField from './number';
 import StringField from './string';
 import { getCardMenuItems } from '@cardstack/runtime-common';
 import { type GetCardMenuItemParams } from './card-menu-items';
@@ -13,10 +12,6 @@ export class ModelConfiguration extends CardDef {
 
   @field modelId = contains(StringField, {
     description: 'The openrouter identifier for the LLM model',
-  });
-
-  @field temperature = contains(NumberField, {
-    description: 'Temperature setting for model output randomness',
   });
 
   @field toolsSupported = contains(BooleanField, {
