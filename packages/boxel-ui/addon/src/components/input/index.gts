@@ -58,7 +58,6 @@ export interface Signature {
     autocomplete?: string;
     bottomTreatment?: InputBottomTreatment;
     disabled?: boolean;
-    readonly?: boolean;
     errorMessage?: string;
     helperText?: string;
     id?: string;
@@ -70,6 +69,7 @@ export interface Signature {
     onKeyPress?: (ev: KeyboardEvent) => Promise<void> | void;
     optional?: boolean;
     placeholder?: string;
+    readonly?: boolean;
     required?: boolean;
     size?: 'large' | 'default';
     state?: InputValidationState;
