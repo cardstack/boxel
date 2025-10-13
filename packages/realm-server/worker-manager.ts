@@ -54,6 +54,7 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
+  prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start worker manager')
   .options({
@@ -95,6 +96,11 @@ let {
     matrixURL: {
       description: 'The matrix homeserver for the realm server',
       demandOption: true,
+      type: 'string',
+    },
+    prerendererUrl: {
+      // TODO make this required when feature flag is removed
+      description: 'URL of the prerender server to invoke',
       type: 'string',
     },
   })
@@ -385,6 +391,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
       'worker',
       `--matrixURL='${matrixURL}'`,
       `--distURL='${distURL}'`,
+      `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,
       ...flattenDeep(
         urlMappings.map(([from, to]) => [

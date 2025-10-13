@@ -190,9 +190,12 @@ export async function fetchUserPermissions(
   );
 }
 
-export async function fetchPublicRealms(dbAdapter: DBAdapter) {
+export async function fetchCatalogRealms(dbAdapter: DBAdapter) {
   let results = (await query(dbAdapter, [
-    `SELECT realm_url FROM realm_user_permissions WHERE username = '*' AND read = true`,
+    `SELECT rup.realm_url
+     FROM realm_user_permissions rup
+     LEFT JOIN published_realms pr ON rup.realm_url = pr.published_realm_url
+     WHERE rup.username = '*' AND rup.read = true AND pr.published_realm_url IS NULL`,
   ])) as {
     realm_url: string;
   }[];

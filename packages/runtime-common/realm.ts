@@ -1573,9 +1573,16 @@ export class Realm {
         });
       }
 
+      // Build headers, adding x-created from DB when possible
+      let createdAt = await this.getCreatedTime(handle.path);
+      let createdHeader: Record<string, string> =
+        createdAt != null
+          ? { 'x-created': formatRFC7231(createdAt * 1000) }
+          : {};
       return await this.serveLocalFile(request, handle, requestContext, {
         defaultHeaders: {
           'content-type': 'text/plain; charset=utf-8',
+          ...createdHeader,
         },
       });
     } finally {
