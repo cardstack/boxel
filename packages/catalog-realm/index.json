@@ -19,15 +19,10 @@
       },
       "new.0": {
         "links": {
-          "self": "./AppListing/9516c0ef-47e0-4593-954d-3e6a0ed146bd"
-        }
-      },
-      "new.1": {
-        "links": {
           "self": "./AppListing/4b0be04c-68dd-456d-8faf-d8cbfcb2c464"
         }
       },
-      "new.2": {
+      "new.1": {
         "links": {
           "self": "./AppListing/1d17b731-7108-42db-b4fb-93643288553c"
         }
