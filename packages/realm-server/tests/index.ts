@@ -33,5 +33,5 @@ import './virtual-network-test';
 import './request-forward-test';
 import './publish-unpublish-realm-test';
 import './get-boxel-claimed-domain-test';
-import './claim-boxel-claimed-domain-test';
+import './claim-boxel-domain-test';
 import './delete-boxel-claimed-domain-test';
