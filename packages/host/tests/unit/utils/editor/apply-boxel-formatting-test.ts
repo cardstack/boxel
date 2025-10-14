@@ -101,4 +101,57 @@ module('Unit | Utils | editor | applyBoxelFormatting', function () {
 
     assert.deepEqual(emptyResult, { output: undefined, changed: false });
   });
+
+  test('bails out when editor content changes before applying formatting', async function (assert) {
+    assert.expect(3);
+
+    let lintCalled = false;
+    let modelValue = 'original-content';
+    let lintAndFix = async () => {
+      lintCalled = true;
+      modelValue = 'user-edited-content';
+      return { output: 'formatted-content' };
+    };
+
+    let model = {
+      getValue() {
+        return modelValue;
+      },
+      getFullModelRange() {
+        return {};
+      },
+      pushEditOperations() {
+        assert.ok(
+          false,
+          'pushEditOperations should not be called when content changed',
+        );
+      },
+    };
+
+    let editor = {
+      pushUndoStop() {
+        assert.ok(
+          false,
+          'pushUndoStop should not be called when content changed',
+        );
+      },
+    };
+
+    let result = await applyBoxelFormatting({
+      lintAndFix,
+      realm: 'https://example.com/',
+      filename: 'example.gts',
+      fileContent: 'original-content',
+      model,
+      editor,
+    });
+
+    assert.true(lintCalled, 'lint command invoked');
+    assert.deepEqual(result, { output: undefined, changed: false });
+    assert.strictEqual(
+      modelValue,
+      'user-edited-content',
+      'current editor value is preserved when content changed before formatting could apply',
+    );
+  });
 });
