@@ -12,6 +12,8 @@ export type BoxelButtonKind =
   | 'secondary'
   | 'muted'
   | 'destructive'
+  | 'destructive-secondary'
+  | 'destructive-text-only'
   | 'danger' // deprecated, same as 'destructive'
   | 'text-only'
   | 'primary-dark'
@@ -23,8 +25,10 @@ export const buttonKindOptions: BoxelButtonKind[] = [
   'primary',
   'secondary',
   'muted',
-  'destructive',
   'text-only',
+  'destructive',
+  'destructive-secondary',
+  'destructive-text-only',
   'primary-dark',
   'secondary-light',
   'secondary-dark',
@@ -281,16 +285,50 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       .kind-danger:not(:disabled):active {
         --boxel-button-color: var(--destructive, var(--boxel-danger-hover));
       }
+      .kind-destructive-secondary {
+        --boxel-button-text-color: var(--destructive, var(--boxel-danger));
+        --boxel-button-border: 1px solid var(--boxel-button-text-color);
+      }
+      .kind-destructive-secondary:not(:disabled):hover {
+        --boxel-button-text-color: var(
+          --destructive,
+          var(--boxel-danger-hover)
+        );
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--destructive) 10%,
+          transparent
+        );
+      }
+      .kind-destructive-text-only {
+        --boxel-button-text-color: var(--destructive, var(--boxel-danger));
+        border-color: transparent;
+      }
+      .kind-destructive-text-only:not(:disabled):hover {
+        --boxel-button-text-color: var(
+          --destructive,
+          var(--boxel-danger-hover)
+        );
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--boxel-danger, var(--destructive)) 10%,
+          transparent
+        );
+      }
 
       .kind-text-only {
         /* transparent background and border */
         --boxel-button-color: transparent;
         --boxel-button-text-color: inherit;
+        border-color: transparent;
       }
       .kind-text-only:not(:disabled):hover,
       .kind-text-only:not(:disabled):active {
-        --boxel-button-color: var(--accent, var(--boxel-200));
-        --boxel-button-text-color: var(--accent-foreground, var(--boxel-dark));
+        --boxel-button-color: var(
+          --accent,
+          color-mix(in oklab, currentColor 7%, transparent)
+        );
+        --boxel-button-text-color: var(--accent-foreground, currentColor);
       }
 
       .kind-primary-dark {
@@ -357,16 +395,16 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }
 
-      /* thinner base button */
       .size-small {
         --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
-        --boxel-button-min-height: 2rem;
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-min-height: 1.875rem;
         --boxel-button-min-width: 5rem;
       }
 
       .size-base {
         --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xl);
-        --boxel-button-min-height: 2rem;
+        --boxel-button-min-height: 1.875rem;
         --boxel-button-min-width: 5rem;
       }
 

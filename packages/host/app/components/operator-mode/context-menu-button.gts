@@ -7,10 +7,9 @@ import {
   Menu,
 } from '@cardstack/boxel-ui/components';
 import { menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  ThreeDotsHorizontal,
-  Warning as WarningIcon,
-} from '@cardstack/boxel-ui/icons';
+import { Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
+
+import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
 
 interface Signature {
   Args: {
@@ -28,7 +27,8 @@ const ContextMenuButton: TemplateOnlyComponent<Signature> = <template>
     <:trigger as |bindings|>
       <IconButton
         class='context-menu-trigger'
-        @icon={{ThreeDotsHorizontal}}
+        @icon={{DotsVertical}}
+        @size='small'
         aria-label='field options'
         {{bindings}}
         ...attributes
@@ -63,13 +63,8 @@ const ContextMenuButton: TemplateOnlyComponent<Signature> = <template>
       width: 13.5rem;
     }
 
-    .context-menu-trigger {
-      rotate: 90deg;
-      --boxel-icon-button-width: 20px;
-      --boxel-icon-button-height: 20px;
-    }
     .context-menu-trigger:hover {
-      --icon-color: var(--boxel-highlight);
+      color: var(--boxel-highlight-hover);
     }
 
     .context-menu-list {

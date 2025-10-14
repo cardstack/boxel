@@ -10,12 +10,17 @@ import { ALL_ICON_COMPONENTS } from '../../icons.gts';
 import IconPlus from '../../icons/icon-plus.gts';
 import type { Icon } from '../../icons/types.ts';
 import { type BoxelButtonKind, buttonKindOptions } from '../button/index.gts';
-import BoxelIconButton from './index.gts';
+import BoxelIconButton, {
+  type BoxelIconButtonSize,
+  boxelIconButtonSizeOptions,
+} from './index.gts';
 
 export default class IconButtonUsage extends Component {
-  variants = buttonKindOptions;
+  private variants = buttonKindOptions;
+  private sizeVariants = boxelIconButtonSizeOptions;
   @tracked private icon: Icon = IconPlus;
   @tracked private variant?: BoxelButtonKind;
+  @tracked private size?: BoxelIconButtonSize;
   @tracked private width?: string;
   @tracked private height?: string;
   @tracked private isLoading = false;
@@ -45,6 +50,7 @@ export default class IconButtonUsage extends Component {
             @icon={{this.icon}}
             @loading={{this.isLoading}}
             @variant={{this.variant}}
+            @size={{this.size}}
             @width={{this.width}}
             @height={{this.height}}
             @round={{this.isRound}}
@@ -69,6 +75,14 @@ export default class IconButtonUsage extends Component {
             @options={{this.variants}}
             @onInput={{fn (mut this.variant)}}
             @defaultValue='default'
+          />
+          <Args.String
+            @name='size'
+            @optional={{true}}
+            @value={{this.size}}
+            @options={{this.sizeVariants}}
+            @onInput={{fn (mut this.size)}}
+            @defaultValue='large'
           />
           <Args.Bool
             @name='loading'

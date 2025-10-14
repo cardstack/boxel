@@ -96,6 +96,7 @@ export default class FilePill extends Component<FilePillSignature> {
         {{#if @onRemove}}
           <IconButton
             class='remove-button'
+            @size='small'
             @icon={{IconX}}
             @height='10'
             @width='10'
@@ -141,14 +142,6 @@ export default class FilePill extends Component<FilePillSignature> {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-      }
-      .remove-button {
-        --boxel-icon-button-width: var(--boxel-icon-sm);
-        --boxel-icon-button-height: var(--boxel-icon-sm);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: var(--boxel-border-radius-xs);
       }
     </style>
   </template>
