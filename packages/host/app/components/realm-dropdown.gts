@@ -46,7 +46,6 @@ export default class RealmDropdown extends Component<Signature> {
         <Button
           class='realm-dropdown-trigger'
           @kind='secondary-light'
-          @size='small'
           @disabled={{@disabled}}
           {{bindings}}
           data-test-realm-dropdown-trigger
