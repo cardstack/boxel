@@ -4284,6 +4284,115 @@ posts/please-ignore-me.json
     );
   });
 
+  test('indexing resolves computed dependencies across realms without cycles', async function (assert) {
+    class Team extends CardDef {
+      static displayName = 'Team';
+      @field name = contains(StringField);
+      @field shortName = contains(StringField, {
+        computeVia: function (this: Team) {
+          return this.name ? this.name.slice(0, 2).toUpperCase() : undefined;
+        },
+      });
+    }
+
+    class SprintTask extends CardDef {
+      static displayName = 'Sprint Task';
+      @field name = contains(StringField);
+      @field team = linksTo(() => Team);
+      @field shortId = contains(StringField, {
+        computeVia: function (this: SprintTask) {
+          if (!this.id) {
+            return;
+          }
+          let idPart = this.id.split('/').pop();
+          if (!idPart) {
+            return;
+          }
+          let team = this.team;
+          if (!team) {
+            return;
+          }
+          return `${team.shortName}-${idPart.slice(0, 4).toUpperCase()}`;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <span data-test-short-id>{{@model.shortId}}</span>
+        </template>
+      };
+    }
+
+    let remoteRealmURL = 'https://remote.example/';
+    let teamId = `${remoteRealmURL}Team/alpha`;
+    let taskId = `${testRealmURL}SprintTask/task-1`;
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: remoteRealmURL,
+      contents: {
+        'task-cards.gts': { Team },
+        'Team/alpha.json': {
+          data: {
+            type: 'card',
+            id: teamId,
+            attributes: { name: 'Alpha Team' },
+            meta: {
+              adoptsFrom: {
+                module: '../task-cards',
+                name: 'Team',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'task-cards.gts': { Team, SprintTask },
+        'SprintTask/task-1.json': {
+          data: {
+            type: 'card',
+            id: taskId,
+            attributes: { name: 'Deliver release' },
+            relationships: {
+              team: {
+                links: {
+                  self: teamId,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../task-cards',
+                name: 'SprintTask',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let entry = await realm.realmIndexQueryEngine.instance(new URL(taskId));
+    assert.ok(entry, 'index returned entry');
+    if (entry?.type === 'instance') {
+      if (entry.instance.attributes) {
+        assert.strictEqual(
+          entry.instance.attributes.shortId,
+          'AL-TASK',
+          'computed shortId was indexed successfully',
+        );
+      } else {
+        assert.ok(false, 'expected indexed instance to include attributes');
+      }
+    } else {
+      let errorMessage =
+        entry?.type === 'error' ? entry.error.message : 'unknown result';
+      assert.ok(false, `expected instance entry but received ${errorMessage}`);
+    }
+  });
+
   test("incremental indexing doesn't process ignored files", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
