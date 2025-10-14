@@ -19,7 +19,7 @@ import { RealmServerTokenClaim } from '../utils/jwt';
 import { CreateRoutesArgs } from '../routes';
 import { validateSubdomain } from '../lib/user-subdomain-validation';
 
-interface ClaimBoxelClaimedDomainJSON {
+interface ClaimedBoxelDomainJSON {
   data: {
     type: 'claimed-site-hostname';
     attributes: {
@@ -29,7 +29,7 @@ interface ClaimBoxelClaimedDomainJSON {
   };
 }
 
-export default function handleClaimBoxelClaimedDomainRequest({
+export default function handleClaimBoxelDomainRequest({
   dbAdapter,
   domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -194,7 +194,7 @@ export default function handleClaimBoxelClaimedDomainRequest({
 
 function assertIsClaimBoxelClaimedDomainJSON(
   json: any,
-): asserts json is ClaimBoxelClaimedDomainJSON {
+): asserts json is ClaimedBoxelDomainJSON {
   if (typeof json !== 'object') {
     throw new Error(`json must be an object`);
   }
