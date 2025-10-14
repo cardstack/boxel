@@ -184,7 +184,6 @@ module('Acceptance | host submode', function (hooks) {
         submode: 'host',
         stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
       });
-      await this.pauseTest();
       await click('[data-test-switch-to-interact]');
 
       assert.dom('[data-test-submode-switcher]').hasText('Interact');

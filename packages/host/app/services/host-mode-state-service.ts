@@ -66,12 +66,8 @@ export default class HostModeStateService extends Service {
     return this.stackCardItems;
   }
 
-  get primaryCard() {
-    if (!this.primaryCardItem) {
-      let realmPath = this.realm.defaultReadableRealm.path;
-      this.setPrimaryCard(new URL('./index.json', realmPath).href);
-    }
-    return this.primaryCardItem!;
+  get primaryCard(): string | null {
+    return this.primaryCardItem ?? null;
   }
 
   setPrimaryCard(cardId: string | null) {

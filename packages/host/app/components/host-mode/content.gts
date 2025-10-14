@@ -25,7 +25,7 @@ import HostModeStack from './stack';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    primaryCardId: string;
+    primaryCardId: string | null;
     stackItemIds: string[];
     removeCardFromStack: (cardId: string) => void;
     openInteractSubmode?: () => void;
@@ -47,11 +47,13 @@ export default class HostModeContent extends Component<Signature> {
       return undefined;
     }
 
-    return getCard(this, () => this.args.primaryCardId);
+    return getCard(this, () => this.args.primaryCardId!);
   }
 
   get cardIds() {
-    return [this.args.primaryCardId, ...this.args.stackItemIds];
+    return [this.args.primaryCardId, ...this.args.stackItemIds].filter(
+      (cardId): cardId is string => Boolean(cardId),
+    );
   }
 
   get displayBreadcrumbs() {
