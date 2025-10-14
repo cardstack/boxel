@@ -400,6 +400,8 @@ jobs:
             "claim-boxel-domain-test.ts",
             "get-boxel-claimed-domain-test.ts",
             "delete-boxel-claimed-domain-test.ts",
+            "get-boxel-claimed-domain-test.ts",
+            "realm-auth-test.ts",
           ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
