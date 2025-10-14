@@ -1358,7 +1358,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test.only('can recover from a card error after error is removed from card source', async function (assert) {
+    test('can recover from a card error after error is removed from card source', async function (assert) {
       // introduce errors into 2 cards and observe that invalidation doesn't
       // blindly invalidate all cards are in an error state
       await realm.write(
