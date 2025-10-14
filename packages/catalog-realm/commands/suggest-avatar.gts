@@ -2,7 +2,7 @@ import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
-import { Command } from '@cardstack/runtime-common';
+import { Command, DEFAULT_CODING_LLM } from '@cardstack/runtime-common';
 
 class SuggestAvatarInput extends CardDef {
   @field name = contains(StringField, {
@@ -36,7 +36,7 @@ export class SuggestAvatar extends Command<
         openRoom: true,
         prompt: `Please suggest two example avatar prompts: one describing a visual style and one referencing a celebrity's look.`,
         skillCardIds: [skillCardId],
-        llmModel: 'anthropic/claude-sonnet-4',
+        llmModel: DEFAULT_CODING_LLM,
       });
 
       if (result.roomId) {
