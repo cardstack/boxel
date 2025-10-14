@@ -35,8 +35,13 @@ export async function applyBoxelFormatting({
 > {
   let result = await lintAndFix({ realm, filename, fileContent });
   let output = result?.output;
+  let currentContent = model.getValue();
 
-  if (output == null || output === model.getValue()) {
+  if (currentContent !== fileContent) {
+    return { output: undefined, changed: false };
+  }
+
+  if (output == null || output === currentContent) {
     return { output: output, changed: false };
   }
 
