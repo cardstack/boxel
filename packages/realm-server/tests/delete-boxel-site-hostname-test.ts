@@ -1,95 +1,122 @@
 import { module, test } from 'qunit';
-import { basename } from 'path';
+import { basename, join } from 'path';
 import { PgAdapter } from '@cardstack/postgres';
+import { query, insert, asExpressions, User } from '@cardstack/runtime-common';
 import {
-  query,
-  insert,
-  asExpressions,
-  User,
+  setupBaseRealmServer,
+  setupDB,
   insertUser,
-} from '@cardstack/runtime-common';
-import { prepareTestDB } from './helpers';
-import handleDeleteBoxelSiteHostnameRequest from '../handlers/handle-delete-boxel-site-hostname';
-import Koa from 'koa';
-import { RealmServerTokenClaim } from '../utils/jwt';
-import { Readable } from 'stream';
+  runTestRealmServer,
+  createVirtualNetwork,
+  matrixURL,
+  closeServer,
+} from './helpers';
+import {
+  RealmServerTokenClaim,
+  createJWT as createRealmServerJWT,
+} from '../utils/jwt';
+import { realmSecretSeed } from './helpers';
+import supertest, { SuperTest, Test } from 'supertest';
+import { Server } from 'http';
+import { dirSync, type DirResult } from 'tmp';
+import { copySync, ensureDirSync } from 'fs-extra';
+
+const testRealmURL = new URL('http://127.0.0.1:4447/test/');
 
 module(basename(__filename), function () {
   module('delete boxel site hostname endpoint', function (hooks) {
+    let testRealmServer: Server;
+    let request: SuperTest<Test>;
+    let dir: DirResult;
     let dbAdapter: PgAdapter;
-    let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
     let user: User;
     let otherUser: User;
     let boxelSiteDomain = 'boxel.site';
     let defaultToken: RealmServerTokenClaim;
 
+    setupBaseRealmServer(hooks, matrixURL);
+
     hooks.beforeEach(async function () {
-      prepareTestDB();
-      dbAdapter = new PgAdapter({ autoMigrate: true });
-      handler = handleDeleteBoxelSiteHostnameRequest({
-        dbAdapter,
-        domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
-      } as any);
-
-      user = await insertUser(dbAdapter, 'matrix-user-id', 'test-user');
-      otherUser = await insertUser(
-        dbAdapter,
-        'other-matrix-user-id',
-        'other-user',
-      );
-      defaultToken = {
-        user: 'matrix-user-id',
-        sessionRoom: 'test-session',
-      };
+      dir = dirSync();
     });
 
-    hooks.afterEach(async function () {
-      await dbAdapter.close();
+    setupDB(hooks, {
+      beforeEach: async (_dbAdapter, publisher, runner) => {
+        dbAdapter = _dbAdapter;
+        let testRealmDir = join(dir.name, 'realm_server_5', 'test');
+        ensureDirSync(testRealmDir);
+        copySync(join(__dirname, 'cards'), testRealmDir);
+
+        testRealmServer = (
+          await runTestRealmServer({
+            virtualNetwork: createVirtualNetwork(),
+            testRealmDir,
+            realmsRootPath: join(dir.name, 'realm_server_5'),
+            realmURL: testRealmURL,
+            dbAdapter,
+            publisher,
+            runner,
+            matrixURL,
+            domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
+          })
+        ).testRealmHttpServer;
+        request = supertest(testRealmServer);
+
+        user = await insertUser(
+          dbAdapter,
+          'matrix-user-id',
+          'test-user',
+          'test-user@example.com',
+        );
+        otherUser = await insertUser(
+          dbAdapter,
+          'other-matrix-user-id',
+          'other-user',
+          'other-user@example.com',
+        );
+        defaultToken = {
+          user: 'matrix-user-id',
+          sessionRoom: 'test-session',
+        };
+      },
+      afterEach: async () => {
+        await closeServer(testRealmServer);
+      },
     });
 
-    async function callHandler(
+    async function makeDeleteRequest(
       token: RealmServerTokenClaim | null,
       hostname: string,
     ) {
-      const ctx: any = {
-        state: { token },
-        status: undefined,
-        body: undefined,
-        method: 'DELETE',
-        params: { hostname },
-        req: Object.assign(Readable.from(['']), {
-          headers: {
-            host: 'localhost:4200',
-          },
-          url: `/_boxel-site-hostname/${hostname}`,
-          method: 'DELETE',
-        }),
-        set: () => {},
-        res: {
-          getHeaders: () => ({}),
-          end: () => {},
-        },
-      };
+      let requestBuilder = request
+        .delete(`/_boxel-site-hostname/${hostname}`)
+        .set('Accept', 'application/json');
 
-      await handler(ctx, async () => {});
-      return ctx;
+      if (token) {
+        const jwt = createRealmServerJWT(token, realmSecretSeed);
+        requestBuilder = requestBuilder.set('Authorization', `Bearer ${jwt}`);
+      }
+
+      return await requestBuilder;
     }
 
-    function assertErrorIncludes(ctx: any, message: string) {
-      const body = JSON.parse(ctx.body);
-      return body.errors && body.errors[0].includes(message);
+    function assertErrorIncludes(response: any, message: string) {
+      return response.body.errors && response.body.errors[0].includes(message);
     }
 
     test('should return 422 when hostname does not exist', async function (assert) {
-      const ctx = await callHandler(defaultToken, 'nonexistent.boxel.site');
+      const response = await makeDeleteRequest(
+        defaultToken,
+        'nonexistent.boxel.site',
+      );
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         422,
         'Should return 422 for nonexistent hostname',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'No active hostname claim found'),
+        assertErrorIncludes(response, 'No active hostname claim found'),
         'Should have error message about no claim found',
       );
     });
@@ -111,15 +138,15 @@ module(basename(__filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const ctx = await callHandler(defaultToken, hostname);
+      const response = await makeDeleteRequest(defaultToken, hostname);
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         422,
         'Should return 422 for already removed hostname',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'No active hostname claim found'),
+        assertErrorIncludes(response, 'No active hostname claim found'),
         'Should have error message about no claim found',
       );
     });
@@ -140,16 +167,16 @@ module(basename(__filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const ctx = await callHandler(defaultToken, hostname);
+      const response = await makeDeleteRequest(defaultToken, hostname);
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         422,
         'Should return 422 when user does not own hostname',
       );
       assert.ok(
         assertErrorIncludes(
-          ctx,
+          response,
           'You do not have permission to delete this hostname claim',
         ),
         'Should have error message about no permission',
@@ -172,16 +199,16 @@ module(basename(__filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const ctx = await callHandler(defaultToken, hostname);
+      const response = await makeDeleteRequest(defaultToken, hostname);
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         204,
         'Should return 204 for successful deletion',
       );
       assert.strictEqual(
-        ctx.body,
-        undefined,
+        response.text,
+        '',
         'Should have no response body for 204',
       );
 
@@ -224,7 +251,7 @@ module(basename(__filename), function () {
       );
 
       const beforeDelete = Math.floor(Date.now() / 1000);
-      await callHandler(defaultToken, hostname);
+      await makeDeleteRequest(defaultToken, hostname);
       const afterDelete = Math.floor(Date.now() / 1000);
 
       // Verify the removed_at timestamp is recent
@@ -259,14 +286,22 @@ module(basename(__filename), function () {
       );
 
       // First delete should succeed
-      const ctx1 = await callHandler(defaultToken, hostname);
-      assert.strictEqual(ctx1.status, 204, 'First delete should return 204');
+      const response1 = await makeDeleteRequest(defaultToken, hostname);
+      assert.strictEqual(
+        response1.status,
+        204,
+        'First delete should return 204',
+      );
 
       // Second delete should fail with 422
-      const ctx2 = await callHandler(defaultToken, hostname);
-      assert.strictEqual(ctx2.status, 422, 'Second delete should return 422');
+      const response2 = await makeDeleteRequest(defaultToken, hostname);
+      assert.strictEqual(
+        response2.status,
+        422,
+        'Second delete should return 422',
+      );
       assert.ok(
-        assertErrorIncludes(ctx2, 'No active hostname claim found'),
+        assertErrorIncludes(response2, 'No active hostname claim found'),
         'Should have error message about no claim found',
       );
     });
