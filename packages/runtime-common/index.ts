@@ -142,7 +142,6 @@ export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
 export * from './formats';
-export * from './db-types';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
@@ -159,8 +158,10 @@ export * from './render-route-options';
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
 
-export * from './realm-permission-queries';
-export * from './user-queries';
+export * from './db-queries/db-types';
+export * from './db-queries/realm-permission-queries';
+export * from './db-queries/session-room-queries';
+export * from './db-queries/user-queries';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =

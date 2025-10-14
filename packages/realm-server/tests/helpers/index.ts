@@ -25,16 +25,18 @@ import {
   unixTime,
   uuidv4,
   RealmPaths,
-  type MatrixConfig,
-  type QueuePublisher,
-  type QueueRunner,
-  type IndexRunner,
-  type Definition,
   User,
   Subscription,
   Plan,
   RealmAdapter,
   PUBLISHED_DIRECTORY_NAME,
+  clearSessionRooms,
+  upsertSessionRoom,
+  type MatrixConfig,
+  type QueuePublisher,
+  type QueueRunner,
+  type IndexRunner,
+  type Definition,
   type Prerenderer,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
@@ -151,7 +153,7 @@ export function prepareTestDB(): void {
 }
 
 export async function closeServer(server: Server) {
-  await new Promise<void>((r) => server.close(() => r()));
+  await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
 }
 
 async function startTestPrerenderServer(): Promise<string> {
@@ -240,6 +242,9 @@ export function setupDB(
   const runAfterHook = async () => {
     await publisher?.destroy();
     await runner?.destroy();
+    if (dbAdapter) {
+      await clearSessionRooms(dbAdapter);
+    }
     await dbAdapter?.close();
     await stopTestPrerenderServer();
     delete (globalThis as any).__useHeadlessChromePrerender;
@@ -724,6 +729,7 @@ export function setupMatrixRoom(
     testRealmHttpServer: Server;
     request: SuperTest<Test>;
     dir: DirResult;
+    dbAdapter: PgAdapter;
   },
 ) {
   let matrixClient = new MatrixClient({
@@ -738,8 +744,9 @@ export function setupMatrixRoom(
     await matrixClient.login();
     let userId = matrixClient.getUserId()!;
 
-    let response = await getRealmSetup()
-      .request.post('/_server-session')
+    let realmSetup = getRealmSetup();
+    let response = await realmSetup.request
+      .post('/_server-session')
       .send(JSON.stringify({ user: userId }))
       .set('Accept', 'application/json')
       .set('Content-Type', 'application/json');
@@ -757,17 +764,20 @@ export function setupMatrixRoom(
       msgtype: 'm.text',
     });
 
-    response = await getRealmSetup()
-      .request.post('/_server-session')
+    response = await realmSetup.request
+      .post('/_server-session')
       .send(JSON.stringify({ user: userId, challenge: json.challenge }))
       .set('Accept', 'application/json')
       .set('Content-Type', 'application/json');
 
     testAuthRoomId = json.room;
 
-    await matrixClient.setAccountData('boxel.session-rooms', {
-      [userId]: json.room,
-    });
+    await upsertSessionRoom(
+      realmSetup.dbAdapter,
+      realmSetup.testRealm.url,
+      userId,
+      json.room,
+    );
   });
 
   return {
@@ -917,6 +927,9 @@ export function setupPermissionedRealm(
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
     testRealmServer.testRealm.unsubscribe();
+    if (!testRealmServer.matrixClient.isLoggedIn()) {
+      await testRealmServer.matrixClient.login();
+    }
     await closeServer(testRealmServer.testRealmHttpServer);
     resetCatalogRealms();
   });

@@ -39,7 +39,7 @@
           "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
         }
       },
-     "specs.1": {
+      "specs.1": {
         "links": {
           "self": "../Spec/fa98792f-48a5-43be-aac1-b5500c21d9ea"
         }
@@ -122,36 +122,6 @@
       "examples.0": {
         "links": {
           "self": "../time-machine/TimeMachineImageGenerator/1ba331d0-a3d0-4f0c-9b21-23b076419732"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../time-machine/PolaroidImage/6e9ab8a0-ac28-4a32-83ee-c44dc949129a"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../time-machine/PolaroidImage/ac28ea32-83ee-444d-8949-129a76a821e7"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../time-machine/PolaroidImage/b4e7865b-50ef-4db3-a993-f8dfe27f3b96"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../time-machine/PolaroidImage/b8a0ac28-ea32-43ee-844d-c949129a76a8"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../time-machine/PolaroidImage/c75af807-b8a4-44fa-bc6c-6e9ab8a0ac28"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../time-machine/PolaroidImage/f8dfe27f-3b96-475a-b807-b8a474fabc6c"
         }
       },
       "categories.0": {
