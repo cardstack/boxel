@@ -442,7 +442,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         },
         'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
         'ModelConfiguration/gpt-5.json': openAiGpt5Model,
-        'ModelConfiguration/claude-sonnet-4.json': anthropicClaudeSonnet4Model,
+        'ModelConfiguration/claude-sonnet-4.5.json':
+          anthropicClaudeSonnet45Model,
         'ModelConfiguration/claude-sonnet-3.7.json':
           anthropicClaudeSonnet37Model,
         'SystemCard/default.json': defaultSystemCard,
@@ -737,7 +738,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('anthropic/claude-sonnet-4'));
+      .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
 
     // Switch back to Interact mode and ensure we fall back to GPT-5
     await click('[data-test-submode-switcher] button');
