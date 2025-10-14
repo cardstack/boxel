@@ -227,7 +227,10 @@ export async function captureResult(
       }
       for (let element of elements) {
         let status = element.dataset.prerenderStatus ?? '';
-        if (!statuses.includes(status)) {
+        let hasError =
+          status === 'loading' &&
+          element.querySelector('[data-prerender-error]') !== null;
+        if (!statuses.includes(status) && !hasError) {
           continue;
         }
         if (targetId && element.dataset.prerenderId !== targetId) {
@@ -239,9 +242,18 @@ export async function captureResult(
         return true;
       }
       if (!expectingRender) {
-        return elements.some((element) =>
-          statuses.includes(element.dataset.prerenderStatus ?? ''),
-        );
+        return elements.some((element) => {
+          let status = element.dataset.prerenderStatus ?? '';
+          if (statuses.includes(status)) {
+            return true;
+          }
+          if (status === 'loading') {
+            return (
+              element.querySelector('[data-prerender-error]') !== null
+            );
+          }
+          return false;
+        });
       }
       return false;
     },
@@ -290,7 +302,10 @@ export async function captureResult(
       let element =
         elements.find((candidate) => {
           let status = candidate.dataset.prerenderStatus ?? '';
-          if (!statuses.includes(status)) {
+          let hasError =
+            status === 'loading' &&
+            candidate.querySelector('[data-prerender-error]') !== null;
+          if (!statuses.includes(status) && !hasError) {
             return false;
           }
           if (targetId && candidate.dataset.prerenderId !== targetId) {
@@ -301,19 +316,31 @@ export async function captureResult(
           }
           return true;
         }) ??
-        elements.find((candidate) =>
-          statuses.includes(candidate.dataset.prerenderStatus ?? ''),
-        );
+        elements.find((candidate) => {
+          let status = candidate.dataset.prerenderStatus ?? '';
+          if (statuses.includes(status)) {
+            return true;
+          }
+          if (status === 'loading') {
+            return (
+              candidate.querySelector('[data-prerender-error]') !== null
+            );
+          }
+          return false;
+        });
       if (!element) {
         throw new Error('Unable to locate prerender result element');
       }
-      let finalStatus = element.dataset.prerenderStatus as RenderStatus;
+      let statusAttr = element.dataset.prerenderStatus ?? '';
       let alive =
         (element.dataset.emberAlive as 'true' | 'false' | undefined) ??
         undefined;
       let errorElement = element.querySelector(
         '[data-prerender-error]',
       ) as HTMLElement | null;
+      let finalStatus: RenderStatus = statuses.includes(statusAttr)
+        ? (statusAttr as RenderStatus)
+        : 'error';
       if (finalStatus === 'unusable' || errorElement) {
         // Extract only the JSON payload (between the first '{' and the last '}')
         let raw =
