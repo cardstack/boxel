@@ -1,6 +1,7 @@
 import type Owner from '@ember/owner';
 
 import {
+  DBAdapter,
   Loader,
   LocalPath,
   RealmAdapter,
@@ -108,7 +109,9 @@ export class TestRealmAdapter implements RealmAdapter {
 
   async broadcastRealmEvent(
     event: RealmEventContent,
+    realmUrl: string,
     matrixClient: MatrixClient,
+    _dbAdapter: DBAdapter,
   ) {
     if (!this.owner) {
       return;
@@ -118,8 +121,8 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let realmMatrixUsername = matrixClient.username;
 
-    let targetRoomIds = getRoomIds().filter((rid) =>
-      rid.replace('test-session-room-realm-', '').startsWith(this.#paths.url),
+    let targetRoomIds = getRoomIds().filter((rid: string) =>
+      rid.replace('test-session-room-realm-', '').startsWith(realmUrl),
     );
 
     for (let roomId of targetRoomIds) {
