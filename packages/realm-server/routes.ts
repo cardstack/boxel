@@ -30,7 +30,7 @@ import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
-import { handleCheckDomainAvailabilityRequest } from './handlers/handle-check-domain-availability';
+import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability';
 import handleRealmAuth from './handlers/handle-realm-auth';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain';
 import handleClaimBoxelClaimedDomainRequest from './handlers/handle-claim-boxel-claimed-domain';
@@ -152,9 +152,9 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.get(
-    '/_check-domain-availability',
+    '/_check-boxel-domain-availability',
     jwtMiddleware(args.realmSecretSeed),
-    handleCheckDomainAvailabilityRequest(args),
+    handleCheckBoxelDomainAvailabilityRequest(args),
   );
   router.post(
     '/_realm-auth',
@@ -166,13 +166,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleGetBoxelClaimedDomainRequest(args),
   );
-
   router.post(
     '/_boxel-claimed-domains',
     jwtMiddleware(args.realmSecretSeed),
     handleClaimBoxelClaimedDomainRequest(args),
   );
-
   router.delete(
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),

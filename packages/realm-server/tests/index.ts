@@ -26,7 +26,7 @@ import './realm-endpoints/user-test';
 import './realm-endpoints/definition-test';
 import './search-prerendered-test';
 import './server-endpoints-test';
-import './domain-availability-test';
+import './boxel-domain-availability-test';
 import './transpile-test';
 import './types-endpoint-test';
 import './virtual-network-test';
