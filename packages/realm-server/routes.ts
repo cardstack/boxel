@@ -30,7 +30,7 @@ import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
-import { handleCheckSiteNameAvailabilityRequest } from './handlers/handle-check-site-name-availability';
+import { handleCheckDomainAvailabilityRequest } from './handlers/handle-check-domain-availability';
 import handleRealmAuth from './handlers/handle-realm-auth';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain';
 import handleClaimBoxelClaimedDomainRequest from './handlers/handle-claim-boxel-claimed-domain';
@@ -152,9 +152,9 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.get(
-    '/_check-site-name-availability',
+    '/_check-domain-availability',
     jwtMiddleware(args.realmSecretSeed),
-    handleCheckSiteNameAvailabilityRequest(args),
+    handleCheckDomainAvailabilityRequest(args),
   );
   router.post(
     '/_realm-auth',

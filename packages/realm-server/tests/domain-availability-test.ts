@@ -9,11 +9,11 @@ import {
   insertUser,
 } from '@cardstack/runtime-common';
 import { prepareTestDB } from './helpers';
-import { handleCheckSiteNameAvailabilityRequest } from '../handlers/handle-check-site-name-availability';
+import { handleCheckDomainAvailabilityRequest } from '../handlers/handle-check-domain-availability';
 import Koa from 'koa';
 
 module(basename(__filename), function () {
-  module('site name availability endpoint', function (hooks) {
+  module.only('domain availability endpoint', function (hooks) {
     let dbAdapter: PgAdapter;
     let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
     let user: User;
@@ -23,7 +23,7 @@ module(basename(__filename), function () {
     hooks.beforeEach(async function () {
       prepareTestDB();
       dbAdapter = new PgAdapter({ autoMigrate: true });
-      handler = handleCheckSiteNameAvailabilityRequest({
+      handler = handleCheckDomainAvailabilityRequest({
         dbAdapter,
         domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
       } as any);
@@ -41,7 +41,7 @@ module(basename(__filename), function () {
         body: undefined,
         req: {
           headers: { host: 'localhost:4200' },
-          url: '/check-site-name-availability',
+          url: '/check-domain-availability',
         },
         set: () => {},
       };
