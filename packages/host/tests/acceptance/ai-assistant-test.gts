@@ -2578,6 +2578,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Can you help me understand this structure?',
     );
     await click('[data-test-send-message-btn]');
+    await waitFor(`[data-room-settled]`);
 
     // Verify messages were sent with attachments
     assertMessages(assert, [
