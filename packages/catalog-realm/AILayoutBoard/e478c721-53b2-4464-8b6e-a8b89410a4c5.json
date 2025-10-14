@@ -1,0 +1,111 @@
+{
+  "data": {
+    "meta": {
+      "fields": {
+        "allItems": [
+          {
+            "adoptsFrom": {
+              "name": "ImageNode",
+              "module": "../ai-layout-board/fields/board-item"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "name": "CountdownTimer",
+              "module": "../ai-layout-board/fields/board-item"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "name": "ExternalCard",
+              "module": "../ai-layout-board/fields/board-item"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "name": "AILayoutBoard",
+        "module": "../ai-layout-board/ai-layout-board"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": [],
+      "title": null,
+      "images": [
+        {
+          "imageUrl": "https://picsum.photos/300/200",
+          "caption": "New Image",
+          "position": {
+            "x": -787.9890549394571,
+            "y": -175.99981916324006,
+            "width": 381,
+            "autoHeight": 303,
+            "customHeight": 415,
+            "layer": 1,
+            "format": "isolated"
+          }
+        }
+      ],
+      "timers": [
+        {
+          "targetDate": "2025-10-15T03:14:17.642Z",
+          "title": "New Timer",
+          "position": {
+            "x": -376.23199676509273,
+            "y": -169.96988938167203,
+            "width": 308.48991663227355,
+            "autoHeight": 166,
+            "customHeight": 166,
+            "layer": 1,
+            "format": "isolated"
+          }
+        }
+      ],
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "gridSize": 10,
+      "transformK": 1,
+      "transformX": 1088,
+      "transformY": 317,
+      "canvasWidth": 1000,
+      "description": null,
+      "canvasHeight": 800,
+      "externalCards": [
+        {
+          "caption": "Advanced Space Exploration Challenge - Astronomy & Astrophysics",
+          "position": {
+            "x": -370.7444517691428,
+            "y": 54.49647397396225,
+            "width": 400,
+            "autoHeight": 207,
+            "customHeight": 0,
+            "layer": 1,
+            "format": "embedded"
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "allItems.2.externalCard": {
+        "links": {
+          "self": "../GameQuizCard/advanced-space-exploration"
+        }
+      },
+      "externalCards.0.externalCard": {
+        "links": {
+          "self": "../GameQuizCard/advanced-space-exploration"
+        }
+      }
+    }
+  }
+}
