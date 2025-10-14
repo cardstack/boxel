@@ -2260,7 +2260,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
     );
   });
 
-  // headless chrome doesn't support the `isUsed` field yet: CS-9539
+  // TODO: headless chrome doesn't support the `isUsed` field yet: CS-9539
   skip(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,

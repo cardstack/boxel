@@ -177,6 +177,9 @@ export async function renderAncestors(
   return ancestors;
 }
 
+// TODO i think comparing the id and nonce between the URL and DOM is overkill.
+// at one point the AI was getting paranoid about the URL and DOM being out of
+// sync. let's remove that logic its just bloat...
 export async function captureResult(
   page: Page,
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
