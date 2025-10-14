@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelName": "Contemporary Sofa Chair",
+      "modelUrl": "https://files.catbox.moe/jadpiz.glb",
+      "description": "A contemporary sofa chair with modern upholstery and clean lines. Features comfortable cushioning and stylish design, perfect for living rooms, lounges, and contemporary home decor.",
+      "settings": {
+        "autoRotate": true,
+        "rotationSpeed": 1.2,
+        "cameraDistance": 5,
+        "enableControls": true,
+        "showWireframe": false,
+        "exposure": 1.1
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gltf-viewer",
+        "name": "GltfViewer"
+      }
+    }
+  }
+}
