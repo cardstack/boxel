@@ -35,11 +35,7 @@ export default class HostModeCard extends Component<Signature> {
   }
 
   get isLoading() {
-    if (!this.args.cardId) {
-      return false;
-    }
-
-    return !this.card && !this.isError;
+    return Boolean(this.args.cardId) && !this.card && !this.isError;
   }
 
   get cardError() {
@@ -55,7 +51,7 @@ export default class HostModeCard extends Component<Signature> {
   }
 
   get shouldShowEmptyMessage() {
-    return !this.card && !this.isError && !this.isLoading;
+    return !this.args.cardId && !this.card && !this.isError && !this.isLoading;
   }
 
   get emptyMessage() {

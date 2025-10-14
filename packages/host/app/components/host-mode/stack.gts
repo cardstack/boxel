@@ -5,7 +5,7 @@ import HostModeStackItem from './stack-item';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    stackItemIds: string[];
+    stackItemCardIds: string[];
     close?: (cardId: string) => void;
   };
 }
@@ -13,11 +13,11 @@ interface Signature {
 const HostModeStack: TemplateOnlyComponent<Signature> = <template>
   <div class='host-mode-stack' ...attributes>
     <div class='inner'>
-      {{#each @stackItemIds key='cardId' as |cardId index|}}
+      {{#each @stackItemCardIds key='cardId' as |cardId index|}}
         <HostModeStackItem
           @cardId={{cardId}}
           @index={{index}}
-          @stackItemIds={{@stackItemIds}}
+          @stackItemCardIds={{@stackItemCardIds}}
           @close={{@close}}
         />
       {{/each}}

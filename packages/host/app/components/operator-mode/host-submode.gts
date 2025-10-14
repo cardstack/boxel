@@ -224,7 +224,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       <:default as |layout|>
         <HostModeContent
           @primaryCardId={{this.operatorModeStateService.hostModePrimaryCard}}
-          @stackItemIds={{this.operatorModeStateService.hostModeStack}}
+          @stackItemCardIds={{this.operatorModeStateService.hostModeStack}}
           @removeCardFromStack={{this.removeCardFromStack}}
           @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
           @viewCard={{this.viewCard}}

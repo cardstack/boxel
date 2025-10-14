@@ -2087,10 +2087,10 @@ export type BaseDefComponent = ComponentLike<{
     context?: CardContext;
     canEdit?: boolean;
     typeConstraint?: ResolvedCodeRef;
-    createCard?: CreateCardFn;
-    viewCard?: ViewCardFn;
-    editCard?: EditCardFn;
-    saveCard?: SaveCardFn;
+    createCard: CreateCardFn;
+    viewCard: ViewCardFn;
+    editCard: EditCardFn;
+    saveCard: SaveCardFn;
   };
 }>;
 

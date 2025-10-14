@@ -1,17 +1,14 @@
 import Component from '@glimmer/component';
 
-import { consume, provide } from 'ember-provide-consume-context';
+import { provide } from 'ember-provide-consume-context';
 
 import { gt, not } from '@cardstack/boxel-ui/helpers';
 
-import {
-  CardContextName,
-  CardCrudFunctionsContextName,
-} from '@cardstack/runtime-common';
+import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type {
   ViewCardFn,
@@ -26,7 +23,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     primaryCardId: string | null;
-    stackItemIds: string[];
+    stackItemCardIds: string[];
     removeCardFromStack: (cardId: string) => void;
     openInteractSubmode?: () => void;
     viewCard: ViewCardFn;
@@ -34,10 +31,6 @@ interface Signature {
 }
 
 export default class HostModeContent extends Component<Signature> {
-  @consume(CardContextName) private declare parentCardContext:
-    | CardContext
-    | undefined;
-
   get primaryCard() {
     return this.primaryCardResource?.card;
   }
@@ -51,13 +44,13 @@ export default class HostModeContent extends Component<Signature> {
   }
 
   get cardIds() {
-    return [this.args.primaryCardId, ...this.args.stackItemIds].filter(
+    return [this.args.primaryCardId, ...this.args.stackItemCardIds].filter(
       (cardId): cardId is string => Boolean(cardId),
     );
   }
 
   get displayBreadcrumbs() {
-    return this.args.stackItemIds.length > 0;
+    return this.args.stackItemCardIds.length > 0;
   }
 
   get isWideCard() {
@@ -96,9 +89,9 @@ export default class HostModeContent extends Component<Signature> {
         @openInteractSubmode={{@openInteractSubmode}}
         class='current-card'
       />
-      {{#if (gt @stackItemIds.length 0)}}
+      {{#if (gt @stackItemCardIds.length 0)}}
         <HostModeStack
-          @stackItemIds={{@stackItemIds}}
+          @stackItemCardIds={{@stackItemCardIds}}
           @close={{@removeCardFromStack}}
         />
       {{/if}}

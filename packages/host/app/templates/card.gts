@@ -227,7 +227,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         >
           <HostModeContent
             @primaryCardId={{this.hostModeStateService.primaryCard}}
-            @stackItemIds={{this.hostModeStateService.stackItems}}
+            @stackItemCardIds={{this.hostModeStateService.stackItems}}
             @removeCardFromStack={{this.removeCardFromStack}}
             @viewCard={{this.viewCard}}
             class='full-host-mode-content'
