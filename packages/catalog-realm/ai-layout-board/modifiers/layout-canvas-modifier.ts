@@ -27,6 +27,33 @@ export default class LayoutCanvasModifier extends Modifier<{
     super(owner, args);
   }
 
+  private cleanupOverlay(overlay: HTMLElement) {
+    const intervalId = overlay.dataset.measureInterval;
+    if (intervalId) {
+      clearInterval(Number(intervalId));
+      delete overlay.dataset.measureInterval;
+    }
+  }
+
+  private teardownNodes() {
+    this.nodeElements.forEach((overlay) => {
+      this.cleanupOverlay(overlay);
+      overlay.remove();
+    });
+    this.nodeElements.clear();
+
+    if (this.panZoomPane) {
+      this.panZoomPane
+        .querySelectorAll('.layout-item-wrapper')
+        .forEach((node) => {
+          if (node instanceof HTMLElement) {
+            this.cleanupOverlay(node);
+          }
+          node.remove();
+        });
+    }
+  }
+
   setupCanvas(element: HTMLElement) {
     // ⁴ Setup canvas with native DOM events - borrowed from Flow2D
     this.panZoomPane = element.querySelector('.pan-zoom-pane');
@@ -187,13 +214,11 @@ export default class LayoutCanvasModifier extends Modifier<{
     // ¹⁰ Setup node drag behavior - simplified approach
     const { itemData, onItemDrag, onItemSelect, selectedItemId } =
       this.args?.named || {};
-    if (!itemData || !Array.isArray(itemData) || !this.panZoomPane) return;
-
+    if (!this.panZoomPane) return;
     // Clear existing nodes
-    this.panZoomPane
-      .querySelectorAll('.layout-item-wrapper')
-      .forEach((node) => node.remove());
-    this.nodeElements.clear();
+    this.teardownNodes();
+
+    if (!itemData || !Array.isArray(itemData)) return;
 
     // Create drag overlay elements for each item
     itemData.forEach((item: any) => {
@@ -1089,11 +1114,6 @@ export default class LayoutCanvasModifier extends Modifier<{
     document.removeEventListener('mouseup', this.handleMouseUp);
 
     // Clear all measurement intervals
-    this.nodeElements.forEach((node) => {
-      const intervalId = node.dataset.measureInterval;
-      if (intervalId) {
-        clearInterval(parseInt(intervalId));
-      }
-    });
+    this.teardownNodes();
   }
 }

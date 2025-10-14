@@ -1279,7 +1279,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
       .layout-viewport {
         width: 100%;
         height: 100%;
-        min-height: 100cqh;
+        min-height: 700px;
         position: relative;
         overflow: hidden;
         background: #f8fafc;
