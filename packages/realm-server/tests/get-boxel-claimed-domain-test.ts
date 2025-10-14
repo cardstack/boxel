@@ -24,7 +24,7 @@ import { copySync, ensureDirSync } from 'fs-extra';
 const testRealmURL = new URL('http://127.0.0.1:0/test/');
 
 module(basename(__filename), function () {
-  module.only('get boxel claimed domain endpoint', function (hooks) {
+  module('get boxel claimed domain endpoint', function (hooks) {
     setupBaseRealmServer(hooks, matrixURL);
 
     let testRealmServer: Server;
