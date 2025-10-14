@@ -14,9 +14,6 @@ import {
   type QueueRunner,
   DEFAULT_PERMISSIONS,
   VirtualNetwork,
-  query,
-  insert,
-  asExpressions,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
