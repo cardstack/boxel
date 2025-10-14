@@ -31,23 +31,26 @@ export default function handleDeleteBoxelSiteHostnameRequest({
         return;
       }
 
-      const hostname = ctxt.params.hostname as string | undefined;
-      if (!hostname) {
-        await sendResponseForUnprocessableEntity(ctxt, 'hostname is required');
+      const claimedDomainId = ctxt.params.claimedDomainId as string | undefined;
+      if (!claimedDomainId) {
+        await sendResponseForUnprocessableEntity(
+          ctxt,
+          'claimedDomainId is required',
+        );
         return;
       }
 
-      // Check if the user owns this hostname claim
+      // Check if the user owns this claim
       const claims = await query(dbAdapter, [
-        `SELECT id, user_id FROM claimed_domains_for_sites WHERE hostname = `,
-        param(hostname),
+        `SELECT id, user_id FROM claimed_domains_for_sites WHERE id = `,
+        param(claimedDomainId),
         ` AND removed_at IS NULL`,
       ]);
 
       if (claims.length === 0) {
         await sendResponseForUnprocessableEntity(
           ctxt,
-          'No active hostname claim found for this hostname',
+          'No active hostname claim found for this claimed domain ID',
         );
         return;
       }

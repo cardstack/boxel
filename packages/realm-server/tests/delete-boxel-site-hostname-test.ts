@@ -1,9 +1,14 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
 import { PgAdapter } from '@cardstack/postgres';
-import { query, insert, asExpressions, User } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
+  query,
+  insert,
+  asExpressions,
+  User,
+  uuidv4,
+} from '@cardstack/runtime-common';
+import {
   setupDB,
   insertUser,
   runTestRealmServer,
@@ -21,7 +26,7 @@ import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 
-const testRealmURL = new URL('http://127.0.0.1:4447/test/');
+const testRealmURL = new URL('http://127.0.0.1:0/test/'); // Use port 0 for dynamic allocation
 
 module(basename(__filename), function () {
   module('delete boxel site hostname endpoint', function (hooks) {
@@ -33,8 +38,6 @@ module(basename(__filename), function () {
     let otherUser: User;
     let boxelSiteDomain = 'boxel.site';
     let defaultToken: RealmServerTokenClaim;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();
@@ -86,10 +89,10 @@ module(basename(__filename), function () {
 
     async function makeDeleteRequest(
       token: RealmServerTokenClaim | null,
-      hostname: string,
+      claimedDomainId: string,
     ) {
       let requestBuilder = request
-        .delete(`/_boxel-site-hostname/${hostname}`)
+        .delete(`/_boxel-site-hostname/${claimedDomainId}`)
         .set('Accept', 'application/json');
 
       if (token) {
@@ -104,75 +107,100 @@ module(basename(__filename), function () {
       return response.body.errors && response.body.errors[0].includes(message);
     }
 
-    test('should return 422 when hostname does not exist', async function (assert) {
-      const response = await makeDeleteRequest(
-        defaultToken,
-        'nonexistent.boxel.site',
-      );
-
-      assert.strictEqual(
-        response.status,
-        422,
-        'Should return 422 for nonexistent hostname',
-      );
-      assert.ok(
-        assertErrorIncludes(response, 'No active hostname claim found'),
-        'Should have error message about no claim found',
-      );
-    });
-
-    test('should return 422 when hostname was already removed', async function (assert) {
-      const hostname = 'removed-site.boxel.site';
-      const sourceRealmURL = 'https://test-realm.com';
-
-      // Insert a removed claim
-      let { valueExpressions, nameExpressions } = asExpressions({
-        user_id: user.id,
-        source_realm_url: sourceRealmURL,
-        hostname: hostname,
-        claimed_at: Math.floor(Date.now() / 1000) - 86400,
-        removed_at: Math.floor(Date.now() / 1000) - 3600,
-      });
-      await query(
-        dbAdapter,
-        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
-      );
-
-      const response = await makeDeleteRequest(defaultToken, hostname);
-
-      assert.strictEqual(
-        response.status,
-        422,
-        'Should return 422 for already removed hostname',
-      );
-      assert.ok(
-        assertErrorIncludes(response, 'No active hostname claim found'),
-        'Should have error message about no claim found',
-      );
-    });
-
-    test('should return 422 when user does not own the hostname', async function (assert) {
-      const hostname = 'other-user-site.boxel.site';
-      const sourceRealmURL = 'https://test-realm.com';
-
-      // Insert a claim for the other user
-      let { valueExpressions, nameExpressions } = asExpressions({
-        user_id: otherUser.id,
+    async function createClaim(
+      userId: string,
+      hostname: string,
+      sourceRealmURL: string,
+      removedAt?: number,
+    ): Promise<string> {
+      let claimData: any = {
+        user_id: userId,
         source_realm_url: sourceRealmURL,
         hostname: hostname,
         claimed_at: Math.floor(Date.now() / 1000),
-      });
-      await query(
+      };
+
+      if (removedAt) {
+        claimData.removed_at = removedAt;
+      }
+
+      let { valueExpressions, nameExpressions } = asExpressions(claimData);
+      const result = await query(
         dbAdapter,
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
+      const claimedDomainId = result[0]?.id;
+      if (!claimedDomainId) {
+        throw new Error('Failed to create claim - no ID returned');
+      }
+      return claimedDomainId as string;
+    }
 
-      const response = await makeDeleteRequest(defaultToken, hostname);
+    test('should return 422 when claimed domain ID does not exist', async function (assert) {
+      const response = await makeDeleteRequest(
+        defaultToken,
+        uuidv4(), // Use a valid UUID format
+      );
 
       assert.strictEqual(
         response.status,
         422,
-        'Should return 422 when user does not own hostname',
+        'Should return 422 for nonexistent claimed domain ID',
+      );
+      assert.ok(
+        assertErrorIncludes(
+          response,
+          'No active hostname claim found for this claimed domain ID',
+        ),
+        'Should have error message about no claim found',
+      );
+    });
+
+    test('should return 422 when claim was already removed', async function (assert) {
+      const hostname = 'removed-site.boxel.site';
+      const sourceRealmURL = 'https://test-realm.com';
+
+      // Create a removed claim
+      const claimedDomainId = await createClaim(
+        user.id,
+        hostname,
+        sourceRealmURL,
+        Math.floor(Date.now() / 1000) - 3600, // removed 1 hour ago
+      );
+
+      const response = await makeDeleteRequest(defaultToken, claimedDomainId);
+
+      assert.strictEqual(
+        response.status,
+        422,
+        'Should return 422 for already removed claim',
+      );
+      assert.ok(
+        assertErrorIncludes(
+          response,
+          'No active hostname claim found for this claimed domain ID',
+        ),
+        'Should have error message about no claim found',
+      );
+    });
+
+    test('should return 422 when user does not own the claim', async function (assert) {
+      const hostname = 'other-user-site.boxel.site';
+      const sourceRealmURL = 'https://test-realm.com';
+
+      // Create a claim for the other user
+      const claimedDomainId = await createClaim(
+        otherUser.id,
+        hostname,
+        sourceRealmURL,
+      );
+
+      const response = await makeDeleteRequest(defaultToken, claimedDomainId);
+
+      assert.strictEqual(
+        response.status,
+        422,
+        'Should return 422 when user does not own claim',
       );
       assert.ok(
         assertErrorIncludes(
@@ -187,19 +215,14 @@ module(basename(__filename), function () {
       const hostname = 'my-site.boxel.site';
       const sourceRealmURL = 'https://test-realm.com';
 
-      // Insert a claim for the user
-      let { valueExpressions, nameExpressions } = asExpressions({
-        user_id: user.id,
-        source_realm_url: sourceRealmURL,
-        hostname: hostname,
-        claimed_at: Math.floor(Date.now() / 1000),
-      });
-      await query(
-        dbAdapter,
-        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+      // Create a claim for the user
+      const claimedDomainId = await createClaim(
+        user.id,
+        hostname,
+        sourceRealmURL,
       );
 
-      const response = await makeDeleteRequest(defaultToken, hostname);
+      const response = await makeDeleteRequest(defaultToken, claimedDomainId);
 
       assert.strictEqual(
         response.status,
@@ -214,7 +237,7 @@ module(basename(__filename), function () {
 
       // Verify the claim was soft-deleted in the database
       const claims = await query(dbAdapter, [
-        `SELECT * FROM claimed_domains_for_sites WHERE hostname = '${hostname}'`,
+        `SELECT * FROM claimed_domains_for_sites WHERE id = '${claimedDomainId}'`,
       ]);
       assert.strictEqual(
         claims.length,
@@ -238,25 +261,20 @@ module(basename(__filename), function () {
       const hostname = 'timestamp-test.boxel.site';
       const sourceRealmURL = 'https://test-realm.com';
 
-      // Insert a claim for the user
-      let { valueExpressions, nameExpressions } = asExpressions({
-        user_id: user.id,
-        source_realm_url: sourceRealmURL,
-        hostname: hostname,
-        claimed_at: Math.floor(Date.now() / 1000),
-      });
-      await query(
-        dbAdapter,
-        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+      // Create a claim for the user
+      const claimedDomainId = await createClaim(
+        user.id,
+        hostname,
+        sourceRealmURL,
       );
 
       const beforeDelete = Math.floor(Date.now() / 1000);
-      await makeDeleteRequest(defaultToken, hostname);
+      await makeDeleteRequest(defaultToken, claimedDomainId);
       const afterDelete = Math.floor(Date.now() / 1000);
 
       // Verify the removed_at timestamp is recent
       const claims = await query(dbAdapter, [
-        `SELECT * FROM claimed_domains_for_sites WHERE hostname = '${hostname}'`,
+        `SELECT * FROM claimed_domains_for_sites WHERE id = '${claimedDomainId}'`,
       ]);
       const removedAt = Number(claims[0].removed_at);
       assert.ok(
@@ -269,24 +287,19 @@ module(basename(__filename), function () {
       );
     });
 
-    test('should not be able to delete the same hostname twice', async function (assert) {
+    test('should not be able to delete the same claim twice', async function (assert) {
       const hostname = 'double-delete.boxel.site';
       const sourceRealmURL = 'https://test-realm.com';
 
-      // Insert a claim for the user
-      let { valueExpressions, nameExpressions } = asExpressions({
-        user_id: user.id,
-        source_realm_url: sourceRealmURL,
-        hostname: hostname,
-        claimed_at: Math.floor(Date.now() / 1000),
-      });
-      await query(
-        dbAdapter,
-        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+      // Create a claim for the user
+      const claimedDomainId = await createClaim(
+        user.id,
+        hostname,
+        sourceRealmURL,
       );
 
       // First delete should succeed
-      const response1 = await makeDeleteRequest(defaultToken, hostname);
+      const response1 = await makeDeleteRequest(defaultToken, claimedDomainId);
       assert.strictEqual(
         response1.status,
         204,
@@ -294,14 +307,17 @@ module(basename(__filename), function () {
       );
 
       // Second delete should fail with 422
-      const response2 = await makeDeleteRequest(defaultToken, hostname);
+      const response2 = await makeDeleteRequest(defaultToken, claimedDomainId);
       assert.strictEqual(
         response2.status,
         422,
         'Second delete should return 422',
       );
       assert.ok(
-        assertErrorIncludes(response2, 'No active hostname claim found'),
+        assertErrorIncludes(
+          response2,
+          'No active hostname claim found for this claimed domain ID',
+        ),
         'Should have error message about no claim found',
       );
     });

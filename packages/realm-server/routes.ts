@@ -174,7 +174,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
 
   router.delete(
-    '/_boxel-site-hostname/:hostname',
+    '/_boxel-site-hostname/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelSiteHostnameRequest(args),
   );
