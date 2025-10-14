@@ -49,6 +49,9 @@ const log = logger('renderer');
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
 
+type NotLoadedWithDependency = NotLoaded & {
+  dependencyFieldName?: string;
+};
 export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
   #fetch: typeof globalThis.fetch;
@@ -161,6 +164,7 @@ export default class RenderService extends Service {
           await this.resolveField({
             card: errorInstance,
             fieldName,
+            notLoaded: notLoaded as NotLoadedWithDependency,
             store,
             visit,
             realmPath,
@@ -208,25 +212,30 @@ export default class RenderService extends Service {
 
   // TODO delete me
   private async resolveField(
-    params: Omit<RenderCardParams, 'format'> & { fieldName: string },
+    params: Omit<RenderCardParams, 'format'> & {
+      fieldName: string;
+      notLoaded: NotLoadedWithDependency;
+    },
   ): Promise<void> {
-    let { card, visit, store, realmPath, fieldName } = params;
+    let { card, visit, store, realmPath, fieldName, notLoaded } = params;
     let api = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
     try {
-      await api.getIfReady(card, fieldName as keyof CardDef);
+      let fieldToResolve = (notLoaded.dependencyFieldName ??
+        fieldName) as keyof CardDef;
+      await api.getIfReady(card, fieldToResolve);
     } catch (error: any) {
       let errors = Array.isArray(error) ? error : [error];
       for (let err of errors) {
-        let notLoaded = err.additionalErrors?.find((e: any) =>
+        let unresolved = err.additionalErrors?.find((e: any) =>
           isNotLoadedError(e),
-        ) as NotLoaded | undefined;
-        if (isCardError(err) && err.status !== 500 && notLoaded) {
+        ) as NotLoadedWithDependency | undefined;
+        if (isCardError(err) && err.status !== 500 && unresolved) {
           let links =
-            typeof notLoaded.reference === 'string'
-              ? [notLoaded.reference]
-              : notLoaded.reference;
+            typeof unresolved.reference === 'string'
+              ? [unresolved.reference]
+              : unresolved.reference;
           for (let link of links) {
             if (store.errors.has(link)) {
               throw err; // the linked card was already found to be in an error state

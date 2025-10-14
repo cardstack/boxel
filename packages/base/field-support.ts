@@ -22,6 +22,10 @@ import { initSharedState } from './shared-state';
 import { flatMap } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 
+type NotLoadedWithDependency = NotLoaded & {
+  dependencyFieldName?: string;
+};
+
 export interface NotLoadedValue {
   type: 'not-loaded';
   reference: string;
@@ -63,7 +67,15 @@ export function getter<CardT extends BaseDefConstructor>(
     } catch (e) {
       if (isNotLoadedError(e)) {
         // Re-throw NotLoaded errors with the computed field's name instead of the dependency field's name
-        throw new NotLoaded(instance, e.reference, field.name);
+        let dependencyFieldName =
+          (e as NotLoadedWithDependency).dependencyFieldName ?? e.fieldName;
+        let notLoaded = new NotLoaded(
+          instance,
+          e.reference,
+          field.name,
+        ) as NotLoadedWithDependency;
+        notLoaded.dependencyFieldName = dependencyFieldName;
+        throw notLoaded;
       }
       throw e;
     }
