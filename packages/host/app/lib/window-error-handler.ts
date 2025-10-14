@@ -25,13 +25,6 @@ export function windowErrorHandler({
     'reason' in event
       ? (event as any).reason
       : (event as CustomEvent).detail?.reason;
-  if (
-    !reason &&
-    'error' in (event as ErrorEvent) &&
-    (event as ErrorEvent).error
-  ) {
-    reason = (event as ErrorEvent).error;
-  }
   if (!reason && 'message' in event && (event as ErrorEvent).message) {
     reason = {
       message: (event as ErrorEvent).message,
