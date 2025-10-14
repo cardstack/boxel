@@ -248,9 +248,7 @@ export async function captureResult(
             return true;
           }
           if (status === 'loading') {
-            return (
-              element.querySelector('[data-prerender-error]') !== null
-            );
+            return element.querySelector('[data-prerender-error]') !== null;
           }
           return false;
         });
@@ -322,9 +320,7 @@ export async function captureResult(
             return true;
           }
           if (status === 'loading') {
-            return (
-              candidate.querySelector('[data-prerender-error]') !== null
-            );
+            return candidate.querySelector('[data-prerender-error]') !== null;
           }
           return false;
         });
