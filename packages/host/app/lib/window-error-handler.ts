@@ -8,19 +8,15 @@ import {
 } from '@cardstack/runtime-common';
 import { serializableError } from '@cardstack/runtime-common/error';
 
-export function renderErrorHandler({
+export function windowErrorHandler({
   event,
-  setPrerenderStatus,
+  setStatusToUnusable,
   setError,
-  healthCheck,
   currentURL,
 }: {
   event: Event;
-  setPrerenderStatus: (
-    status: 'ready' | 'loading' | 'error' | 'unusable',
-  ) => void;
+  setStatusToUnusable: () => void;
   setError: (error: string) => void;
-  healthCheck?: (timeout?: number) => Promise<boolean>;
   currentURL?: string | null;
 }) {
   let [_a, _b, encodedId] = (currentURL ?? '').split('/');
@@ -29,6 +25,12 @@ export function renderErrorHandler({
     'reason' in event
       ? (event as any).reason
       : (event as CustomEvent).detail?.reason;
+  if (!reason && 'message' in event && (event as ErrorEvent).message) {
+    reason = {
+      message: (event as ErrorEvent).message,
+      status: 500,
+    };
+  }
   // Coerce stringified JSON into objects so our type guards work
   if (typeof reason === 'string') {
     try {
@@ -79,22 +81,7 @@ export function renderErrorHandler({
   }
 
   setError(JSON.stringify(errorPayload));
-  if (healthCheck) {
-    // Defer setting prerender status until we know Ember health
-    void healthCheck()
-      .then((alive) => {
-        // this is never run during in-browser indexed, so this is safe to use
-        let element: HTMLElement = document.querySelector('[data-prerender]')!;
-        element.dataset.emberAlive = alive ? 'true' : 'false';
-        setPrerenderStatus(alive ? 'error' : 'unusable');
-      })
-      .catch(() => {
-        setPrerenderStatus('unusable');
-      });
-  } else {
-    setPrerenderStatus('error');
-  }
-
+  setStatusToUnusable();
   event.preventDefault?.();
 }
 

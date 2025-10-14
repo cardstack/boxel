@@ -8,6 +8,7 @@ import './card-dependencies-endpoint-test';
 import './card-endpoints-test';
 import './card-source-endpoints-test';
 import './file-watcher-events-test';
+import './headless-chrome-indexing-test';
 import './indexing-test';
 import './module-syntax-test';
 import './permissions/permission-checker-test';

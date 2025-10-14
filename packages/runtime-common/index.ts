@@ -1,5 +1,6 @@
 import { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
+import type { RenderRouteOptions } from './render-route-options';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
@@ -51,6 +52,7 @@ export type Prerenderer = (args: {
   url: string;
   userId: string;
   permissions: RealmPermissions;
+  renderOptions?: RenderRouteOptions;
 }) => Promise<RenderResponse>;
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -151,6 +153,7 @@ export {
 } from './helpers/card-type-display-name';
 export * from './helpers/ensure-extension';
 export * from './url';
+export * from './render-route-options';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';

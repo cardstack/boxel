@@ -42,6 +42,7 @@ import {
   type StatusArgs,
   type Prerenderer,
   type RealmPermissions,
+  type RenderRouteOptions,
   RenderResponse,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -118,6 +119,9 @@ export class CurrentRun {
     definitionErrors: 0,
     totalIndexEntries: 0,
   };
+  #hasCodeChangeForNextRender = false;
+  #pendingLoaderReset = false;
+  #shouldResetStoreForNextRender = true;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
 
@@ -188,6 +192,7 @@ export class CurrentRun {
 
     await current.whileIndexing(async () => {
       let visitStart = Date.now();
+      invalidations = CurrentRun.#sortInvalidations(invalidations);
       for (let invalidation of invalidations) {
         await current.tryToVisit(invalidation);
       }
@@ -222,7 +227,7 @@ export class CurrentRun {
       urls,
       operation,
     }: {
-      urls: URL[]; // TODO string[]
+      urls: URL[];
       operation: 'update' | 'delete';
     },
   ): Promise<IndexResults> {
@@ -236,9 +241,19 @@ export class CurrentRun {
       current.#jobInfo,
     );
     await current.batch.invalidate(urls);
-    let invalidations = current.batch.invalidations.map(
-      (href) => new URL(href),
+    let invalidations = CurrentRun.#sortInvalidations(
+      current.batch.invalidations.map((href) => new URL(href)),
     );
+    if (
+      !current.#hasCodeChangeForNextRender &&
+      invalidations.some((url) => hasExecutableExtension(url.href))
+    ) {
+      current.#hasCodeChangeForNextRender = true;
+      current.#pendingLoaderReset = true;
+      log.debug(
+        `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
+      );
+    }
 
     let hrefs = urls.map((u) => u.href);
     await current.whileIndexing(async () => {
@@ -267,6 +282,12 @@ export class CurrentRun {
   }
 
   private async tryToVisit(url: URL) {
+    if (this.#pendingLoaderReset) {
+      log.debug(
+        `${jobIdentity(this.#jobInfo)} consuming loader reset before visiting ${url.href}`,
+      );
+    }
+    this.#consumePendingLoaderReset();
     try {
       await this.visitFile(url);
     } catch (err: any) {
@@ -299,6 +320,52 @@ export class CurrentRun {
 
   get realmURL() {
     return this.#realmURL;
+  }
+
+  get hasCodeChange(): boolean {
+    return this.#hasCodeChangeForNextRender;
+  }
+
+  #consumeHasCodeChangeForRender(): boolean {
+    if (!this.#hasCodeChangeForNextRender) {
+      return false;
+    }
+    this.#hasCodeChangeForNextRender = false;
+    return true;
+  }
+
+  #consumePendingLoaderReset() {
+    if (!this.#pendingLoaderReset) {
+      return;
+    }
+    this.loaderService.resetLoader({
+      clearFetchCache: true,
+      reason: `${jobIdentity(this.#jobInfo)} pending-loader-reset`,
+    });
+    this.#pendingLoaderReset = false;
+  }
+
+  #consumeResetStoreForRender(): boolean {
+    if (!this.#shouldResetStoreForNextRender) {
+      return false;
+    }
+    this.#shouldResetStoreForNextRender = false;
+    return true;
+  }
+
+  static #sortInvalidations(urls: URL[]): URL[] {
+    if ((globalThis as any).__useHeadlessChromePrerender?.()) {
+      return urls.sort((a, b) => {
+        let aExec = hasExecutableExtension(a.href);
+        let bExec = hasExecutableExtension(b.href);
+        if (aExec === bExec) {
+          return a.href.localeCompare(b.href);
+        }
+        return aExec ? -1 : 1;
+      });
+    } else {
+      return urls;
+    }
   }
 
   @cached
@@ -671,14 +738,25 @@ export class CurrentRun {
       deferred = new Deferred<void>();
       this.#indexingInstances.set(fileURL, deferred.promise);
       let uncaughtError: Error | undefined;
-      if ((globalThis as any).__useHeadlessChromePrerender) {
+      // in browser context this is a function
+      if ((globalThis as any).__useHeadlessChromePrerender?.()) {
         let renderResult: RenderResponse | undefined;
         try {
+          let includesCodeChange = this.#consumeHasCodeChangeForRender();
+          let shouldResetStore = this.#consumeResetStoreForRender();
+          let prerenderOptions: RenderRouteOptions | undefined =
+            includesCodeChange || shouldResetStore
+              ? {
+                  ...(shouldResetStore ? { resetStore: true } : {}),
+                  ...(includesCodeChange ? { includesCodeChange: true } : {}),
+                }
+              : undefined;
           renderResult = await this.#prerenderer({
             url: fileURL,
             realm: this.#realmURL.href,
             userId: this.#userId,
             permissions: this.#permissions,
+            renderOptions: prerenderOptions,
           });
 
           // we tack on data that can only be determined via access to underlying filesystem/DB
