@@ -197,7 +197,7 @@ export function createPrerenderHttpServer(options?: {
   silent?: boolean;
 }): Server {
   let secretSeed = options?.secretSeed ?? process.env.REALM_SECRET_SEED ?? '';
-  let silent = options?.silent ?? process.env.PRERENDER_SILENT === 'true';
+  let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
   let { app, prerenderer } = buildPrerenderApp(secretSeed, {
     maxPages: options?.maxPages,
     silent,

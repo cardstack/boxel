@@ -285,14 +285,7 @@ module(basename(__filename), function () {
                 static displayName = "Unusable Error";
                 static isolated = class extends Component {
                   get trigger() {
-                    let error = new Error('forced unusable for test');
-                    window.dispatchEvent(new CustomEvent('boxel-render-error', { detail: { reason: error } }));
-                    // Synchronously block ~1s to ensure the EmberHealthService detects that Ember is not responsive
-                    let start = performance.now();
-                    while (performance.now() - start < 1000) {
-                      // busy wait
-                    }
-                    return '';
+                    throw new Error('forced unusable for test');
                   }
                   <template>{{this.trigger}}</template>
                 }

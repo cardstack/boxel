@@ -62,7 +62,7 @@ export class Prerenderer {
   }) {
     this.#secretSeed = options.secretSeed;
     this.#maxPages = options.maxPages ?? 4;
-    this.#silent = options.silent ?? false;
+    this.#silent = options.silent || process.env.PRERENDER_SILENT === 'true';
   }
 
   #incEvictionMetric(realm: string, reason: 'unusable' | 'timeout') {

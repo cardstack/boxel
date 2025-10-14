@@ -227,7 +227,7 @@ export class CurrentRun {
       urls,
       operation,
     }: {
-      urls: URL[]; // TODO string[]
+      urls: URL[];
       operation: 'update' | 'delete';
     },
   ): Promise<IndexResults> {
@@ -244,9 +244,6 @@ export class CurrentRun {
     let invalidations = CurrentRun.#sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
     );
-    // let invalidations = current.batch.invalidations.map(
-    //   (href) => new URL(href),
-    // );
     if (
       !current.#hasCodeChangeForNextRender &&
       invalidations.some((url) => hasExecutableExtension(url.href))
