@@ -244,6 +244,9 @@ export class CurrentRun {
     let invalidations = CurrentRun.#sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
     );
+    // let invalidations = current.batch.invalidations.map(
+    //   (href) => new URL(href),
+    // );
     if (
       !current.#hasCodeChangeForNextRender &&
       invalidations.some((url) => hasExecutableExtension(url.href))
@@ -354,14 +357,18 @@ export class CurrentRun {
   }
 
   static #sortInvalidations(urls: URL[]): URL[] {
-    return urls.sort((a, b) => {
-      let aExec = hasExecutableExtension(a.href);
-      let bExec = hasExecutableExtension(b.href);
-      if (aExec === bExec) {
-        return a.href.localeCompare(b.href);
-      }
-      return aExec ? -1 : 1;
-    });
+    if ((globalThis as any).__useHeadlessChromePrerender?.()) {
+      return urls.sort((a, b) => {
+        let aExec = hasExecutableExtension(a.href);
+        let bExec = hasExecutableExtension(b.href);
+        if (aExec === bExec) {
+          return a.href.localeCompare(b.href);
+        }
+        return aExec ? -1 : 1;
+      });
+    } else {
+      return urls;
+    }
   }
 
   @cached
