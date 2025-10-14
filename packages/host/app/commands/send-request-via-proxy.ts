@@ -34,6 +34,7 @@ export default class SendRequestViaProxyCommand extends HostBaseCommand<
         method: input.method,
         requestBody: input.requestBody,
         headers: input.headers,
+        multipart: input.multipart,
       });
 
       return new SendRequestViaProxyResult({
