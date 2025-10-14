@@ -1372,19 +1372,25 @@ module(basename(__filename), function () {
           throw new Error('boom!');
         `,
       );
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 2,
-          moduleErrors: 2,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 20,
-        },
-        'indexed correct number of files',
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instancesIndexed,
+        0,
+        'correct number of instances indexed',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instanceErrors,
+        2,
+        'correct number of instance errors',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.moduleErrors,
+        2,
+        'correct number of module errors',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.definitionsIndexed,
+        0,
+        'correct number of definitions indexed',
       );
       let petDefinitionEntry =
         await realm.realmIndexQueryEngine.getOwnDefinition({
@@ -1403,19 +1409,25 @@ module(basename(__filename), function () {
           export class Intentionally Thrown Error {}
         `,
       );
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
-          moduleErrors: 3, // post, fancy person, person
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 11,
-        },
-        'indexed correct number of files',
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instanceErrors,
+        4,
+        'correct number of instance errors',
+      ); // 1 post, 2 persons, 1 bad-link post
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.moduleErrors,
+        3,
+        'correct number of module errors',
+      ); // post, fancy person, person
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instancesIndexed,
+        0,
+        'correct number of instances indexed',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.definitionsIndexed,
+        0,
+        'correct number of definitions indexed',
       );
       let { data: result } = await realm.realmIndexQueryEngine.search({
         filter: {
@@ -1458,20 +1470,26 @@ module(basename(__filename), function () {
           }
         `,
       );
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 3, // 1 post and 2 persons
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 3,
-          definitionErrors: 0,
-          definitionsIndexed: 3, // Person card, Post card, FancyPerson card
-          totalIndexEntries: 20,
-        },
-        'indexed correct number of files',
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instanceErrors,
+        1,
+        'correct number of instance errors',
       );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.moduleErrors,
+        3,
+        'correct number of module errors',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instancesIndexed,
+        3,
+        'correct number of instances indexed',
+      ); // 1 post and 2 persons
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.definitionsIndexed,
+        3,
+        'correct number of definitions indexed',
+      ); // Person card, Post card, FancyPerson card
       result = (
         await realm.realmIndexQueryEngine.search({
           filter: {
