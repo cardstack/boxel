@@ -1683,18 +1683,18 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
         });
 
-        test('GET /_boxel-site-hostname without JWT returns 401', async function (assert) {
+        test('GET /_boxel-claimed-domains without JWT returns 401', async function (assert) {
           let response = await request2
-            .get('/_boxel-site-hostname')
+            .get('/_boxel-claimed-domains')
             .query({ source_realm_url: 'https://test-realm.com' })
             .set('Accept', 'application/json');
 
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
         });
 
-        test('GET /_boxel-site-hostname with invalid JWT returns 401', async function (assert) {
+        test('GET /_boxel-claimed-domains with invalid JWT returns 401', async function (assert) {
           let response = await request2
-            .get('/_boxel-site-hostname')
+            .get('/_boxel-claimed-domains')
             .query({ source_realm_url: 'https://test-realm.com' })
             .set('Accept', 'application/json')
             .set('Authorization', 'Bearer invalid-jwt');
@@ -1702,14 +1702,14 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
         });
 
-        test('GET /_boxel-site-hostname without source_realm_url returns 400', async function (assert) {
+        test('GET /_boxel-claimed-domains without source_realm_url returns 400', async function (assert) {
           let ownerUserId = '@mango:localhost';
 
           // Create user in database
           await insertUser(dbAdapter, ownerUserId, '', '');
 
           let response = await request2
-            .get('/_boxel-site-hostname')
+            .get('/_boxel-claimed-domains')
             .set('Accept', 'application/json')
             .set(
               'Authorization',
@@ -1722,7 +1722,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 400, 'HTTP 400 status');
         });
 
-        test('GET /_boxel-site-hostname with valid JWT returns 200 when claim exists', async function (assert) {
+        test('GET /_boxel-claimed-domains with valid JWT returns 200 when claim exists', async function (assert) {
           let ownerUserId = '@mango:localhost';
           let sourceRealmURL = 'https://test-realm.com';
           let hostname = 'my-site.localhost';
@@ -1747,7 +1747,7 @@ module(basename(__filename), function () {
           );
 
           let response = await request2
-            .get('/_boxel-site-hostname')
+            .get('/_boxel-claimed-domains')
             .query({ source_realm_url: sourceRealmURL })
             .set('Accept', 'application/json')
             .set(
@@ -1776,9 +1776,9 @@ module(basename(__filename), function () {
           );
         });
 
-        test('POST /_boxel-site-hostname without JWT returns 401', async function (assert) {
+        test('POST /_boxel-claimed-domains without JWT returns 401', async function (assert) {
           let response = await request2
-            .post('/_boxel-site-hostname')
+            .post('/_boxel-claimed-domains')
             .set('Accept', 'application/json')
             .send({
               data: {
@@ -1793,9 +1793,9 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
         });
 
-        test('POST /_boxel-site-hostname with invalid JWT returns 401', async function (assert) {
+        test('POST /_boxel-claimed-domains with invalid JWT returns 401', async function (assert) {
           let response = await request2
-            .post('/_boxel-site-hostname')
+            .post('/_boxel-claimed-domains')
             .set('Accept', 'application/json')
             .set('Authorization', 'Bearer invalid-jwt')
             .send({
@@ -1811,14 +1811,14 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
         });
 
-        test('POST /_boxel-site-hostname with valid JWT returns 201', async function (assert) {
+        test('POST /_boxel-claimed-domains with valid JWT returns 201', async function (assert) {
           let ownerUserId = '@mango:localhost';
 
           // Create user in database
           await insertUser(dbAdapter, ownerUserId, '', '');
 
           let response = await request2
-            .post('/_boxel-site-hostname')
+            .post('/_boxel-claimed-domains')
             .set('Accept', 'application/json')
             .set(
               'Authorization',

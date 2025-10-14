@@ -15,6 +15,7 @@ import {
   createVirtualNetwork,
   matrixURL,
   closeServer,
+  setupBaseRealmServer,
 } from './helpers';
 import {
   RealmServerTokenClaim,
@@ -29,7 +30,9 @@ import { copySync, ensureDirSync } from 'fs-extra';
 const testRealmURL = new URL('http://127.0.0.1:0/test/');
 
 module(basename(__filename), function () {
-  module('delete boxel site hostname endpoint', function (hooks) {
+  module.only('delete boxel claimed domain endpoint', function (hooks) {
+    setupBaseRealmServer(hooks, matrixURL);
+
     let testRealmServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
@@ -92,7 +95,7 @@ module(basename(__filename), function () {
       claimedDomainId: string,
     ) {
       let requestBuilder = request
-        .delete(`/_boxel-site-hostname/${claimedDomainId}`)
+        .delete(`/_boxel-claimed-domains/${claimedDomainId}`)
         .set('Accept', 'application/json');
 
       if (token) {

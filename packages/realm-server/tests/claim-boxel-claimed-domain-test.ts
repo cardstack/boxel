@@ -9,13 +9,13 @@ import {
   insertUser,
 } from '@cardstack/runtime-common';
 import { prepareTestDB } from './helpers';
-import handleClaimBoxelSiteHostnameRequest from '../handlers/handle-claim-boxel-site-hostname';
+import handleClaimBoxelClaimedDomainRequest from '../handlers/handle-claim-boxel-claimed-domain';
 import Koa from 'koa';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { Readable } from 'stream';
 
 module(basename(__filename), function () {
-  module('claim boxel site hostname endpoint', function (hooks) {
+  module('claim boxel claimed domain endpoint', function (hooks) {
     let dbAdapter: PgAdapter;
     let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
     let user: User;
@@ -25,7 +25,7 @@ module(basename(__filename), function () {
     hooks.beforeEach(async function () {
       prepareTestDB();
       dbAdapter = new PgAdapter({ autoMigrate: true });
-      handler = handleClaimBoxelSiteHostnameRequest({
+      handler = handleClaimBoxelClaimedDomainRequest({
         dbAdapter,
         domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
       } as any);
@@ -68,7 +68,7 @@ module(basename(__filename), function () {
             host: 'localhost:4200',
             'content-length': bodyText.length.toString(),
           },
-          url: '/_boxel-site-hostname',
+          url: '/_boxel-claimed-domains',
           method: 'POST',
         }),
         request: {
@@ -100,7 +100,7 @@ module(basename(__filename), function () {
             host: 'localhost:4200',
             'content-length': invalidJSON.length.toString(),
           },
-          url: '/_boxel-site-hostname',
+          url: '/_boxel-claimed-domains',
           method: 'POST',
         }),
         request: {

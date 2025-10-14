@@ -10,7 +10,7 @@ import {
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { CreateRoutesArgs } from '../routes';
 
-export default function handleDeleteBoxelSiteHostnameRequest({
+export default function handleDeleteBoxelClaimedDomainRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
@@ -19,7 +19,7 @@ export default function handleDeleteBoxelSiteHostnameRequest({
       if (!token) {
         await sendResponseForSystemError(
           ctxt,
-          'token is required to delete site hostname',
+          'token is required to delete claimed domain',
         );
         return;
       }
@@ -88,7 +88,7 @@ export default function handleDeleteBoxelSiteHostnameRequest({
         }),
       );
     } catch (error) {
-      console.error('Error deleting site hostname:', error);
+      console.error('Error deleting claimed domain:', error);
       await sendResponseForSystemError(ctxt, 'Internal server error');
     }
   };

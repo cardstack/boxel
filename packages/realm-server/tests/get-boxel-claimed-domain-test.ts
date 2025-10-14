@@ -9,13 +9,13 @@ import {
   insertUser,
 } from '@cardstack/runtime-common';
 import { prepareTestDB } from './helpers';
-import handleGetBoxelSiteHostnameRequest from '../handlers/handle-get-boxel-site-hostname';
+import handleGetBoxelClaimedDomainRequest from '../handlers/handle-get-boxel-claimed-domain';
 import Koa from 'koa';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { Readable } from 'stream';
 
 module(basename(__filename), function () {
-  module('get boxel site hostname endpoint', function (hooks) {
+  module('get boxel claimed domain endpoint', function (hooks) {
     let dbAdapter: PgAdapter;
     let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
     let user: User;
@@ -25,7 +25,7 @@ module(basename(__filename), function () {
     hooks.beforeEach(async function () {
       prepareTestDB();
       dbAdapter = new PgAdapter({ autoMigrate: true });
-      handler = handleGetBoxelSiteHostnameRequest({
+      handler = handleGetBoxelClaimedDomainRequest({
         dbAdapter,
         domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
       } as any);
@@ -55,7 +55,7 @@ module(basename(__filename), function () {
           headers: {
             host: 'localhost:4200',
           },
-          url: '/_boxel-site-hostname',
+          url: '/_boxel-claimed-domains',
           method: 'GET',
         }),
         set: () => {},

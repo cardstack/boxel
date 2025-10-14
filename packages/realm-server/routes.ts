@@ -32,9 +32,9 @@ import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
 import { handleCheckSiteNameAvailabilityRequest } from './handlers/handle-check-site-name-availability';
 import handleRealmAuth from './handlers/handle-realm-auth';
-import handleGetBoxelSiteHostnameRequest from './handlers/handle-get-boxel-site-hostname';
-import handleClaimBoxelSiteHostnameRequest from './handlers/handle-claim-boxel-site-hostname';
-import handleDeleteBoxelSiteHostnameRequest from './handlers/handle-delete-boxel-site-hostname';
+import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain';
+import handleClaimBoxelClaimedDomainRequest from './handlers/handle-claim-boxel-claimed-domain';
+import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -162,21 +162,21 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleRealmAuth(args),
   );
   router.get(
-    '/_boxel-site-hostname',
+    '/_boxel-claimed-domains',
     jwtMiddleware(args.realmSecretSeed),
-    handleGetBoxelSiteHostnameRequest(args),
+    handleGetBoxelClaimedDomainRequest(args),
   );
 
   router.post(
-    '/_boxel-site-hostname',
+    '/_boxel-claimed-domains',
     jwtMiddleware(args.realmSecretSeed),
-    handleClaimBoxelSiteHostnameRequest(args),
+    handleClaimBoxelClaimedDomainRequest(args),
   );
 
   router.delete(
-    '/_boxel-site-hostname/:claimedDomainId',
+    '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
-    handleDeleteBoxelSiteHostnameRequest(args),
+    handleDeleteBoxelClaimedDomainRequest(args),
   );
 
   return router.routes();
