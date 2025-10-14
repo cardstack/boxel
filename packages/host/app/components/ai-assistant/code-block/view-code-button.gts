@@ -29,7 +29,7 @@ const ViewCodeButton: TemplateOnlyComponent<Signature> = <template>
         <IconButton
           class='view-info-button'
           @size='medium'
-          @variant='secondary-dark'
+          @kind='secondary-dark'
           @round={{true}}
           {{on 'click' @toggleViewCode}}
           aria-label='View Info'

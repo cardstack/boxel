@@ -6,17 +6,18 @@ import { task } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 
 import Copy from '../../icons/copy.gts';
-import IconButton from '../icon-button/index.gts';
-import Tooltip from '../tooltip/index.gts';
 import { type BoxelButtonKind } from '../button/index.gts';
+import IconButton, { type BoxelIconButtonSize } from '../icon-button/index.gts';
+import Tooltip from '../tooltip/index.gts';
 
 interface Signature {
   Args: {
     ariaLabel?: string;
     height?: string;
+    kind?: BoxelButtonKind;
+    size?: BoxelIconButtonSize;
     textToCopy: string;
     width?: string;
-    variant?: BoxelButtonKind;
   };
   Element: HTMLElement;
 }
@@ -42,8 +43,8 @@ export default class CopyButton extends Component<Signature> {
       <:trigger>
         <IconButton
           @icon={{Copy}}
-          @size='medium'
-          @variant={{if @variant @variant 'text-only'}}
+          @size={{if @size @size 'medium'}}
+          @kind={{if @kind @kind 'text-only'}}
           @width={{@width}}
           @height={{@height}}
           {{on 'click' this.copyToClipboard}}

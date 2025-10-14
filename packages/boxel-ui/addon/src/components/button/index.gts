@@ -9,6 +9,7 @@ import LoadingIndicator from '../loading-indicator/index.gts';
 export type BoxelButtonKind =
   | 'default'
   | 'primary'
+  | 'primary-text-only'
   | 'secondary'
   | 'muted'
   | 'destructive'
@@ -23,6 +24,7 @@ export type BoxelButtonKind =
 export const buttonKindOptions: BoxelButtonKind[] = [
   'default',
   'primary',
+  'primary-text-only',
   'secondary',
   'muted',
   'text-only',
@@ -301,6 +303,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         );
       }
       .kind-destructive-text-only {
+        --boxel-button-color: transparent;
         --boxel-button-text-color: var(--destructive, var(--boxel-danger));
         border-color: transparent;
       }
@@ -314,6 +317,16 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
           var(--boxel-danger, var(--destructive)) 10%,
           transparent
         );
+      }
+
+      .kind-primary-text-only {
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: var(--primary, var(--boxel-highlight));
+        border-color: transparent;
+      }
+      .kind-primary-text-only:not(:disabled):hover {
+        --boxel-button-text-color: var(--primary-foreground, var(--boxel-dark));
+        --boxel-button-color: var(--primary, var(--boxel-highlight));
       }
 
       .kind-text-only {

@@ -235,7 +235,7 @@ export default class SearchSheet extends Component<Signature> {
           @width='18'
           @height='24'
           @round={{true}}
-          @variant='primary-dark'
+          @kind='primary-dark'
           {{on 'click' @onFocus}}
           data-test-open-search-field
         />

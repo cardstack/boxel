@@ -1,33 +1,37 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import LoadingIcon from '@cardstack/boxel-icons/loader';
+
 import cn from '../../helpers/cn.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
-import LoadingIcon from '../../icons/loading-indicator.gts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelButton, { type BoxelButtonKind } from '../button/index.gts';
 
 export type BoxelIconButtonSize = 'small' | 'medium' | 'large';
 export const boxelIconButtonSizeOptions = ['small', 'medium', 'large'];
 
-export interface Signature {
-  Args: {
-    class?: string;
-    disabled?: boolean;
-    height?: string;
-    icon?: Icon;
-    loading?: boolean;
-    round?: boolean;
-    variant?: BoxelButtonKind;
-    width?: string;
-    size?: BoxelIconButtonSize;
-  };
+export interface IconButtonArgs {
+  class?: string;
+  disabled?: boolean;
+  height?: string;
+  icon?: Icon;
+  kind?: BoxelButtonKind;
+  loading?: boolean;
+  round?: boolean;
+  size?: BoxelIconButtonSize;
+  width?: string;
+}
+
+export interface BoxelIconButtonSignature {
+  Args: IconButtonArgs;
   Blocks: {
     default: [];
+    tooltipContent?: [];
   };
   Element: HTMLButtonElement | HTMLAnchorElement;
 }
 
-const IconButton: TemplateOnlyComponent<Signature> = <template>
+const IconButton: TemplateOnlyComponent<BoxelIconButtonSignature> = <template>
   <BoxelButton
     class={{cn
       'boxel-icon-button'
@@ -38,7 +42,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
       boxel-icon-button--large=(eq @size 'large')
     }}
     @class={{@class}}
-    @kind={{@variant}}
+    @kind={{@kind}}
     @size='auto'
     @disabled={{@disabled}}
     aria-label={{if @loading 'loading'}}
@@ -47,15 +51,15 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
     {{#if @loading}}
       <LoadingIcon
         class='loading-icon'
-        width={{if @width @width '14px'}}
-        height={{if @height @height '14px'}}
+        width={{if @width @width '16px'}}
+        height={{if @height @height '16px'}}
         role='presentation'
         aria-hidden='true'
       />
     {{else if @icon}}
       <@icon
-        width={{if @width @width '14px'}}
-        height={{if @height @height '14px'}}
+        width={{if @width @width '16px'}}
+        height={{if @height @height '16px'}}
         class='svg-icon'
       />
     {{/if}}
@@ -88,6 +92,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
         overflow: hidden;
       }
       .boxel-icon-button--small {
+        padding: 2px;
         width: var(--boxel-icon-sm);
         height: var(--boxel-icon-sm);
         border-radius: var(--boxel-border-radius-xs);

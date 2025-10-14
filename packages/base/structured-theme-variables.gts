@@ -47,8 +47,7 @@ class Embedded extends Component<typeof ThemeVarField> {
           <CopyButton
             class='copy-button'
             @textToCopy={{field.cssVariableName}}
-            @width='16px'
-            @height='16px'
+            @kind='default'
             @ariaLabel='Copy CSS variable name'
           />
         </div>
@@ -58,9 +57,7 @@ class Embedded extends Component<typeof ThemeVarField> {
             <CopyButton
               class='copy-button'
               @textToCopy={{field.value}}
-              @variant='default'
-              @width='16px'
-              @height='16px'
+              @kind='default'
               @ariaLabel='Copy CSS variable value'
             />
           {{else}}

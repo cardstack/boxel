@@ -19,8 +19,8 @@ export default class IconButtonUsage extends Component {
   private variants = buttonKindOptions;
   private sizeVariants = boxelIconButtonSizeOptions;
   @tracked private icon: Icon = IconPlus;
-  @tracked private variant?: BoxelButtonKind;
-  @tracked private size?: BoxelIconButtonSize;
+  @tracked private kind?: BoxelButtonKind;
+  @tracked private size?: BoxelIconButtonSize = 'large';
   @tracked private width?: string;
   @tracked private height?: string;
   @tracked private isLoading = false;
@@ -43,13 +43,13 @@ export default class IconButtonUsage extends Component {
   }
 
   <template>
-    <div class={{cn dark-background=(eq this.variant 'secondary-dark')}}>
+    <div class={{cn dark-background=(eq this.kind 'secondary-dark')}}>
       <FreestyleUsage @name='IconButton'>
         <:example>
           <BoxelIconButton
             @icon={{this.icon}}
             @loading={{this.isLoading}}
-            @variant={{this.variant}}
+            @kind={{this.kind}}
             @size={{this.size}}
             @width={{this.width}}
             @height={{this.height}}
@@ -69,11 +69,11 @@ export default class IconButtonUsage extends Component {
             @onChange={{fn (mut this.icon)}}
           />
           <Args.String
-            @name='variant'
+            @name='kind'
             @optional={{true}}
-            @value={{this.variant}}
+            @value={{this.kind}}
             @options={{this.variants}}
-            @onInput={{fn (mut this.variant)}}
+            @onInput={{fn (mut this.kind)}}
             @defaultValue='default'
           />
           <Args.String
@@ -186,7 +186,7 @@ export default class IconButtonUsage extends Component {
               >
                 <BoxelIconButton
                   @icon={{icon}}
-                  @variant={{this.variant}}
+                  @kind={{this.kind}}
                   @width={{this.width}}
                   @height={{this.height}}
                   @round={{this.isRound}}
