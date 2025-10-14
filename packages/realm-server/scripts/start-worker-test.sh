@@ -11,6 +11,7 @@ NODE_ENV=test \
   PGPORT=5435 \
   PGDATABASE=boxel_test \
   NODE_NO_WARNINGS=1 \
+  NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
