@@ -556,8 +556,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.strictEqual(roomState.model, llmIdToChangeTo);
   });
 
-  test('defaults to anthropic/claude-sonnet-4 in code mode', async function (assert) {
-    let defaultCodeLLMId = 'anthropic/claude-sonnet-4';
+  test('defaults to anthropic/claude-sonnet-4.5 in code mode', async function (assert) {
+    let defaultCodeLLMId = 'anthropic/claude-sonnet-4.5';
     let defaultCodeLLMName = DEFAULT_LLM_ID_TO_NAME[defaultCodeLLMId];
 
     await visitOperatorMode({

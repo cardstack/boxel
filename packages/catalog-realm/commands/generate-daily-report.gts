@@ -7,7 +7,11 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import DateField from 'https://cardstack.com/base/date';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
-import { Command, isResolvedCodeRef } from '@cardstack/runtime-common';
+import {
+  Command,
+  isResolvedCodeRef,
+  DEFAULT_CODING_LLM,
+} from '@cardstack/runtime-common';
 import { SearchCardsByQueryCommand } from '@cardstack/boxel-host/commands/search-cards';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import { DailyReport } from '../daily-report-dashboard/daily-report';
@@ -100,7 +104,7 @@ export class GenerateDailyReport extends Command<
         prompt,
         attachedCards: [policyManual, dailyReportCard, ...foundCards],
         openRoom: true,
-        llmModel: 'anthropic/claude-sonnet-4',
+        llmModel: DEFAULT_CODING_LLM,
         llmMode: 'act',
         skillCardIds: [skillCardId],
       });
