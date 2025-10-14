@@ -3,9 +3,12 @@ import Koa from 'koa';
 import { type CreateRoutesArgs } from '../routes';
 import {
   SupportedMimeType,
-  fetchSessionRoom,
   fetchUserPermissions,
 } from '@cardstack/runtime-common';
+import {
+  fetchSessionRoom,
+  upsertSessionRoom,
+} from '@cardstack/runtime-common/db-queries/session-room-queries';
 import { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { createJWT } from '../jwt';
@@ -13,6 +16,7 @@ import { sendResponseForError, setContextResponse } from '../middleware';
 
 export default function handleRealmAuth({
   dbAdapter,
+  matrixClient,
   realmSecretSeed,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
@@ -42,12 +46,18 @@ export default function handleRealmAuth({
         realm,
         user.matrixUserId,
       );
+
+      if (!sessionRoom) {
+        sessionRoom = await matrixClient.createDM(matrixUserId);
+        await matrixClient.joinRoom(sessionRoom);
+        await upsertSessionRoom(dbAdapter, realm, matrixUserId, sessionRoom);
+      }
       sessions[realm] = createJWT(
         {
           user: matrixUserId,
           realm: realm,
           permissions,
-          sessionRoom: sessionRoom!,
+          sessionRoom,
         },
         '7d',
         realmSecretSeed,
