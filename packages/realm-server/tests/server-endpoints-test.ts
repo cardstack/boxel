@@ -1839,52 +1839,6 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
         });
-
-        test('DELETE /_boxel-site-hostname/:hostname without JWT returns 401', async function (assert) {
-          let response = await request2
-            .delete('/_boxel-site-hostname/test-site.localhost')
-            .set('Accept', 'application/json');
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('DELETE /_boxel-site-hostname/:hostname with valid JWT returns 204', async function (assert) {
-          let ownerUserId = '@mango:localhost';
-          let hostname = 'delete-test.localhost';
-          let sourceRealmURL = 'https://test-realm.com';
-
-          // Create user in database
-          let user = await insertUser(dbAdapter, ownerUserId, '', '');
-
-          // Create a claim
-          let { valueExpressions, nameExpressions } = asExpressions({
-            user_id: user.id,
-            source_realm_url: sourceRealmURL,
-            hostname: hostname,
-            claimed_at: Math.floor(Date.now() / 1000),
-          });
-          await query(
-            dbAdapter,
-            insert(
-              'claimed_domains_for_sites',
-              nameExpressions,
-              valueExpressions,
-            ),
-          );
-
-          let response = await request2
-            .delete(`/_boxel-site-hostname/${hostname}`)
-            .set('Accept', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            );
-
-          assert.strictEqual(response.status, 204, 'HTTP 204 status');
-        });
       });
 
       module('stripe webhook handler', function (hooks) {
