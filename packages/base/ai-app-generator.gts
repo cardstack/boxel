@@ -7,7 +7,7 @@ import {
   FieldDef,
 } from './card-api';
 import StringField from './string';
-import { Button as BoxelButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton, BoxelInput } from '@cardstack/boxel-ui/components';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
@@ -38,6 +38,9 @@ export class AiAppGenerator extends CardDef {
     };
 
     executeAskAi = () => {
+      if (this.askAi.isRunning) {
+        return;
+      }
       this.askAi.perform();
     };
 
@@ -67,28 +70,29 @@ export class AiAppGenerator extends CardDef {
             />
           </div>
           <div class='title-section'>
-            <h1 class='title'>AI App<br />Generator</h1>
-            <p class='description'>Design your own app UI by<br />describing
-              what you want to build</p>
+            <h1 class='title'>AI App Generator</h1>
+            <p class='description'>Design your own app UI by describing what you
+              want to build</p>
           </div>
         </div>
 
         <div class='main-content'>
           <div class='input-section'>
             <div class='prompt-input'>
-              <textarea
+              <BoxelInput
+                @type='textarea'
                 id='prompt-textarea'
                 class='prompt-textarea'
-                value={{@model.promptValue}}
-              ></textarea>
+                @value={{@model.promptValue}}
+              />
             </div>
             <div class='create-button-container'>
               <BoxelButton
                 class='create-button'
                 @kind='primary'
-                @size='base'
+                @size='tall'
                 {{on 'click' this.executeAskAi}}
-                disabled={{this.askAi.isRunning}}
+                @loading={{this.askAi.isRunning}}
                 data-test-create-this-for-me
               >
                 {{if this.askAi.isRunning 'Creating...' 'Create this for me'}}
@@ -100,8 +104,9 @@ export class AiAppGenerator extends CardDef {
             <div class='suggestions-row'>
               {{#each @model.suggestions as |suggestion|}}
                 <BoxelButton
+                  class='suggestion-button'
                   @kind='secondary'
-                  @size='small'
+                  @size='extra-small'
                   title={{suggestion.title}}
                   {{on 'click' (fn this.setPromptValue suggestion.description)}}
                 >
@@ -116,9 +121,11 @@ export class AiAppGenerator extends CardDef {
       <style scoped>
         .ai-app-generator-card {
           display: flex;
-          background-color: #272330;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xxl) var(--boxel-sp);
+          background-color: var(--boxel-700);
+          padding: var(--boxel-sp);
           overflow: hidden;
-          padding: 20px;
         }
 
         /* Left Panel (Sidebar) */
@@ -127,10 +134,7 @@ export class AiAppGenerator extends CardDef {
           display: flex;
           flex-direction: column;
           justify-content: flex-start;
-        }
-
-        .logo {
-          margin-bottom: var(--boxel-sp-xxl);
+          gap: var(--boxel-sp-xxl);
         }
 
         .logo-icon {
@@ -141,22 +145,24 @@ export class AiAppGenerator extends CardDef {
           width: 50px;
         }
 
-        .title-section {
-          text-align: center;
-        }
-
         .title {
           color: var(--boxel-light);
-          font: normal var(--boxel-font-xl);
-          text-align: left;
+          font-weight: var(--boxel-font-weight-normal);
+          font-size: var(--boxel-font-size-xl);
+          line-height: var(--boxel-lineheight-xl);
+          text-wrap: balance;
           margin: 0 0 var(--boxel-sp-sm) 0;
+          max-width: 12.5rem;
         }
 
         .description {
           color: var(--boxel-light);
-          font: normal var(--boxel-font-sm);
-          text-align: left;
+          font-size: var(--boxel-font-size);
+          letter-spacing: var(--boxel-lsp-xs);
+          line-height: var(--boxel-lineheight-160);
+          text-wrap: balance;
           margin: 0;
+          max-width: 20rem;
         }
 
         /* Right Panel (Main Content) */
@@ -164,19 +170,20 @@ export class AiAppGenerator extends CardDef {
           flex: 2;
           display: flex;
           flex-direction: column;
-          border-radius: 16px;
+          border-radius: var(--boxel-border-radius-xl);
+          min-width: 60%;
+          overflow: hidden;
         }
 
         /* Top Section with Input */
         .input-section {
           flex: 1;
           background-color: white;
-          padding: 20px;
+          padding: var(--boxel-sp);
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          border-top-right-radius: 16px;
-          border-top-left-radius: 16px;
+          gap: var(--boxel-sp);
         }
 
         .prompt-input {
@@ -188,13 +195,9 @@ export class AiAppGenerator extends CardDef {
           height: 100%;
           border: none;
           outline: none;
-          font-size: 16px;
+          font-size: var(--boxel-font-size);
           line-height: 1.6;
-          color: #333;
-          background: transparent;
           resize: none;
-          font-family:
-            -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           padding: 0;
         }
 
@@ -207,22 +210,21 @@ export class AiAppGenerator extends CardDef {
           width: fit-content;
         }
 
-        .prompt-textarea::placeholder {
-          color: #666;
-        }
-
         /* Bottom Section with Suggestions */
         .suggestions-section {
-          background-color: #4f4b57;
-          padding: 20px;
-          border-bottom-right-radius: 16px;
-          border-bottom-left-radius: 16px;
+          background-color: var(--ai-assistant-menu-background);
+          padding: var(--boxel-sp);
         }
 
         .suggestions-row {
           display: flex;
-          gap: 12px;
+          gap: var(--boxel-sp-sm);
           flex-wrap: wrap;
+        }
+
+        .suggestion-button {
+          font-weight: var(--boxel-font-weight-medium);
+          border-radius: var(--boxel-border-radius);
         }
       </style>
     </template>

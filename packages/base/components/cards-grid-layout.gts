@@ -182,9 +182,7 @@ export default class CardsGridLayout extends Component<Signature> {
                   class='highlights-card-container'
                   data-test-highlights-card-container='welcome-to-boxel'
                 >
-                  <div class='highlights-card-container'>
-                    <this.getWelcomeToBoxelCard @format='embedded' />
-                  </div>
+                  <this.getWelcomeToBoxelCard @format='embedded' />
                 </div>
               </div>
             {{/if}}
@@ -198,7 +196,11 @@ export default class CardsGridLayout extends Component<Signature> {
                   class='section-header'
                   data-test-section-header='join-the-community'
                 >JOIN THE COMMUNITY</h3>
-                <this.getCommunityCards @format='embedded' />
+                <div
+                  class='highlights-card-container community-cards-container'
+                >
+                  <this.getCommunityCards @format='embedded' />
+                </div>
               </div>
             {{/if}}
           </div>
@@ -338,7 +340,14 @@ export default class CardsGridLayout extends Component<Signature> {
       }
 
       .highlights-card-container {
+        --boxel-sp: 1.25rem;
         width: 100%;
+        max-width: 100rem;
+        border-radius: var(--boxel-border-radius-3xl);
+        overflow: hidden;
+      }
+      .community-cards-container {
+        background-color: var(--boxel-light-100);
       }
     </style>
   </template>
