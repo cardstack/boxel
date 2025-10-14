@@ -26,7 +26,7 @@ import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 
-const testRealmURL = new URL('http://127.0.0.1:0/test/'); // Use port 0 for dynamic allocation
+const testRealmURL = new URL('http://127.0.0.1:0/test/');
 
 module(basename(__filename), function () {
   module('delete boxel site hostname endpoint', function (hooks) {
@@ -137,10 +137,7 @@ module(basename(__filename), function () {
     }
 
     test('should return 422 when claimed domain ID does not exist', async function (assert) {
-      const response = await makeDeleteRequest(
-        defaultToken,
-        uuidv4(), // Use a valid UUID format
-      );
+      const response = await makeDeleteRequest(defaultToken, uuidv4());
 
       assert.strictEqual(
         response.status,
