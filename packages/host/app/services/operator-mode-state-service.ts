@@ -417,7 +417,7 @@ export default class OperatorModeStateService extends Service {
       let realmPath =
         this.getRealmFromLastStackItem() ||
         this.realm.defaultReadableRealm.path;
-      this.setHostModePrimaryCard(new URL('./index.json', realmPath).href);
+      return new URL('./index.json', realmPath).href;
     }
 
     return this._state.hostModePrimaryCard!;

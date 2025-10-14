@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-import { cached } from '@glimmer/tracking';
 
 import { consume, provide } from 'ember-provide-consume-context';
 
@@ -10,7 +9,6 @@ import {
   CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
 
-import { createHostModeNavigationModifier } from '@cardstack/host/modifiers/create-host-mode-navigation-modifier';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -39,11 +37,6 @@ export default class HostModeContent extends Component<Signature> {
   @consume(CardContextName) private declare parentCardContext:
     | CardContext
     | undefined;
-
-  @cached
-  private get hostModeNavigationModifier() {
-    return createHostModeNavigationModifier(this.args.viewCard);
-  }
 
   get primaryCard() {
     return this.primaryCardResource?.card;
@@ -75,23 +68,9 @@ export default class HostModeContent extends Component<Signature> {
 
   @provide(CardCrudFunctionsContextName)
   // @ts-ignore "cardCrudFunctions" is declared but not used
-  private get cardCrudFunctions(): CardCrudFunctions {
+  private get cardCrudFunctions(): Optional<CardCrudFunctions> {
     return {
       viewCard: this.args.viewCard,
-    };
-  }
-
-  @provide(CardContextName)
-  // @ts-ignore "context" is declared but not used
-  private get context(): CardContext {
-    let parentContext = this.parentCardContext;
-    if (!parentContext) {
-      throw new Error('HostModeContent requires a CardContext');
-    }
-
-    return {
-      ...parentContext,
-      cardComponentModifier: this.hostModeNavigationModifier,
     };
   }
 

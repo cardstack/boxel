@@ -1,6 +1,7 @@
 export const viewCardDemoCardSource = `
   import { action } from '@ember/object';
   import { on } from '@ember/modifier';
+  import { tracked } from '@glimmer/tracking';
   import {
     CardDef,
     field,
@@ -8,6 +9,7 @@ export const viewCardDemoCardSource = `
     Component,
   } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
+  import { fn } from '@ember/helper'
 
   export class ViewCardDemo extends CardDef {
     static displayName = 'View Card Demo';
@@ -16,6 +18,41 @@ export const viewCardDemoCardSource = `
     @field targetCardURL = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
+      tabs = [
+        {
+          id: 'overview',
+          label: 'Overview',
+          description:
+            'This tab summarizes the key information that the card is showing.',
+        },
+        {
+          id: 'details',
+          label: 'Details',
+          description:
+            'Additional details about this card that help confirm interactive state.',
+        },
+        {
+          id: 'history',
+          label: 'History',
+          description:
+            'Historical context to make it easier to confirm tab state persists.',
+        },
+      ];
+
+      @tracked activeTabId = 'overview';
+
+      get activeTab() {
+        return this.tabs.find((tab) => tab.id === this.activeTabId) ?? this.tabs[0];
+      }
+
+      isSelected = (tabId: string) => {
+        return this.activeTabId === tabId;
+      }
+
+      @action selectTab(tabId: string) {
+        this.activeTabId = tabId;
+      }
+
       @action openTarget() {
         let viewCard = this.args.viewCard;
         let target = this.args.model.targetCardURL;
@@ -36,6 +73,37 @@ export const viewCardDemoCardSource = `
           <header>
             <h2 data-test-view-card-demo-title>{{@model.title}}</h2>
           </header>
+          <div
+            role="tablist"
+            aria-label="View card demo tabs"
+            class="tablist"
+            data-test-view-card-demo-tablist
+          >
+            {{#each this.tabs as |tab|}}
+              <button
+                type="button"
+                role="tab"
+                aria-selected='{{if (this.isSelected tab.id) 'true' 'false'}}'
+                class='{{if (this.isSelected tab.id) "is-active"}}'
+                {{on "click" (fn this.selectTab tab.id)}}
+                id="tab-{{tab.id}}"
+                data-test-view-card-demo-tab={{tab.id}}
+              >
+                {{tab.label}}
+              </button>
+            {{/each}}
+          </div>
+          <section
+            role="tabpanel"
+            tabindex="0"
+            aria-labelledby="tab-{{this.activeTab.id}}"
+            class="tabpanel"
+            data-test-view-card-demo-active-tab={{this.activeTab.id}}
+          >
+            <p data-test-view-card-demo-tab-content>
+              {{this.activeTab.description}}
+            </p>
+          </section>
           <p data-test-view-card-demo-target>{{@model.targetCardURL}}</p>
           <button
             type="button"

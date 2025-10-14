@@ -117,8 +117,38 @@ module('Acceptance | host submode', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'View Person One',
-            targetCardURL: `${testRealmURL}Person/1.json`,
+            title: 'Primary View Demo',
+            targetCardURL: `${testRealmURL}ViewCardDemo/2.json`,
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../view-card-demo',
+              name: 'ViewCardDemo',
+            },
+          },
+        },
+      },
+      'ViewCardDemo/2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Secondary View Demo',
+            targetCardURL: `${testRealmURL}ViewCardDemo/3.json`,
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../view-card-demo',
+              name: 'ViewCardDemo',
+            },
+          },
+        },
+      },
+      'ViewCardDemo/3.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Tertiary View Demo',
+            targetCardURL: `${testRealmURL}ViewCardDemo/1.json`,
           },
           meta: {
             adoptsFrom: {
@@ -154,7 +184,7 @@ module('Acceptance | host submode', function (hooks) {
         submode: 'host',
         stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
       });
-
+      await this.pauseTest();
       await click('[data-test-switch-to-interact]');
 
       assert.dom('[data-test-submode-switcher]').hasText('Interact');
@@ -252,7 +282,7 @@ module('Acceptance | host submode', function (hooks) {
     });
 
     test('viewCard stacks the linked card in host submode', async function (assert) {
-      let targetStackId = `${testRealmURL}Person/1`;
+      let targetStackId = `${testRealmURL}ViewCardDemo/2`;
 
       await visitOperatorMode({
         submode: 'host',
@@ -263,12 +293,88 @@ module('Acceptance | host submode', function (hooks) {
         .dom(`[data-test-host-mode-stack-item="${targetStackId}"]`)
         .doesNotExist();
 
+      await waitFor('[data-test-view-card-demo-button]');
       await click('[data-test-view-card-demo-button]');
       await waitFor(`[data-test-host-mode-stack-item="${targetStackId}"]`);
 
       assert
         .dom(`[data-test-host-mode-stack-item="${targetStackId}"]`)
         .exists();
+    });
+
+    test('viewCard tabs maintain state after stacking and closing cards', async function (assert) {
+      let primaryCardId = `${testRealmURL}ViewCardDemo/1`;
+      let firstStackCardId = `${testRealmURL}ViewCardDemo/2`;
+      let secondStackCardId = `${testRealmURL}ViewCardDemo/3`;
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${primaryCardId}.json`],
+      });
+
+      let primaryCardSelector = `[data-test-host-mode-card="${primaryCardId}"]`;
+      await waitFor(
+        `${primaryCardSelector} [data-test-view-card-demo-active-tab]`,
+      );
+      await waitFor(`${primaryCardSelector} [data-test-view-card-demo-button]`);
+      assert
+        .dom(`${primaryCardSelector} [data-test-view-card-demo-active-tab]`)
+        .hasAttribute('data-test-view-card-demo-active-tab', 'overview');
+
+      await click(
+        `${primaryCardSelector} [data-test-view-card-demo-tab="details"]`,
+      );
+
+      assert
+        .dom(`${primaryCardSelector} [data-test-view-card-demo-active-tab]`)
+        .hasAttribute('data-test-view-card-demo-active-tab', 'details');
+
+      await click(`${primaryCardSelector} [data-test-view-card-demo-button]`);
+
+      let firstStackSelector = `[data-test-host-mode-stack-item="${firstStackCardId}"]`;
+      await waitFor(
+        `${firstStackSelector} [data-test-view-card-demo-active-tab]`,
+      );
+      await waitFor(`${firstStackSelector} [data-test-view-card-demo-button]`);
+      await waitFor(firstStackSelector);
+
+      assert
+        .dom(`${firstStackSelector} [data-test-view-card-demo-active-tab]`)
+        .hasAttribute('data-test-view-card-demo-active-tab', 'overview');
+
+      await click(
+        `${firstStackSelector} [data-test-view-card-demo-tab="history"]`,
+      );
+
+      assert
+        .dom(`${firstStackSelector} [data-test-view-card-demo-active-tab]`)
+        .hasAttribute('data-test-view-card-demo-active-tab', 'history');
+
+      await click(`${firstStackSelector} [data-test-view-card-demo-button]`);
+
+      let secondStackSelector = `[data-test-host-mode-stack-item="${secondStackCardId}"]`;
+      await waitFor(`${secondStackSelector} [data-test-view-card-demo-button]`);
+      await waitFor(secondStackSelector);
+
+      await click(`[data-test-host-mode-breadcrumb="${firstStackCardId}"]`);
+
+      await waitUntil(() => {
+        return !document.querySelector(secondStackSelector);
+      });
+
+      assert
+        .dom(`${firstStackSelector} [data-test-view-card-demo-active-tab]`)
+        .hasAttribute('data-test-view-card-demo-active-tab', 'history');
+
+      await click(`[data-test-host-mode-breadcrumb="${primaryCardId}"]`);
+
+      await waitUntil(() => {
+        return !document.querySelector(firstStackSelector);
+      });
+
+      assert
+        .dom(`${primaryCardSelector} [data-test-view-card-demo-active-tab]`)
+        .hasAttribute('data-test-view-card-demo-active-tab', 'details');
     });
 
     test('breadcrumbs can close stacked cards', async function (assert) {

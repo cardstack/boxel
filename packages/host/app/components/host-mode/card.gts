@@ -19,11 +19,11 @@ interface Signature {
 export default class HostModeCard extends Component<Signature> {
   @cached
   get cardResource() {
-    let cardId = this.args.cardId;
-    if (!cardId) {
+    if (!this.args.cardId) {
       return undefined;
     }
-    return getCard(this, () => cardId);
+
+    return getCard(this, () => this.args.cardId);
   }
 
   get card() {
