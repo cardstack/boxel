@@ -100,7 +100,7 @@ export default class Room {
     let event = this._roomState?.events
       .get(APP_BOXEL_ACTIVE_LLM)
       ?.get('')?.event;
-    return (event as ActiveLLMEvent)?.content.model ?? 'none';
+    return (event as ActiveLLMEvent)?.content.model;
   }
 
   get activeLLMMode(): LLMMode {
