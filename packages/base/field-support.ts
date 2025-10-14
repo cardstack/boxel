@@ -24,6 +24,7 @@ import { TrackedWeakMap } from 'tracked-built-ins';
 
 type NotLoadedWithDependency = NotLoaded & {
   dependencyFieldName?: string;
+  dependencyInstance?: BaseDef;
 };
 
 export interface NotLoadedValue {
@@ -69,12 +70,22 @@ export function getter<CardT extends BaseDefConstructor>(
         // Re-throw NotLoaded errors with the computed field's name instead of the dependency field's name
         let dependencyFieldName =
           (e as NotLoadedWithDependency).dependencyFieldName ?? e.fieldName;
+        let dependencyInstance =
+          (e as NotLoadedWithDependency).dependencyInstance ??
+          (typeof e.instance === 'object' &&
+          e.instance !== null &&
+          isBaseInstance in e.instance
+            ? (e.instance as BaseDef)
+            : undefined);
         let notLoaded = new NotLoaded(
           instance,
           e.reference,
           field.name,
         ) as NotLoadedWithDependency;
         notLoaded.dependencyFieldName = dependencyFieldName;
+        if (dependencyInstance) {
+          notLoaded.dependencyInstance = dependencyInstance;
+        }
         throw notLoaded;
       }
       throw e;

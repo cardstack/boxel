@@ -30,6 +30,7 @@ import {
 import config from '@cardstack/host/config/environment';
 
 import type {
+  BaseDef,
   CardDef,
   Format,
   CardStore,
@@ -51,6 +52,7 @@ const { environment } = config;
 
 type NotLoadedWithDependency = NotLoaded & {
   dependencyFieldName?: string;
+  dependencyInstance?: BaseDef;
 };
 export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
@@ -222,9 +224,10 @@ export default class RenderService extends Service {
       `${baseRealm.url}card-api`,
     );
     try {
-      let fieldToResolve = (notLoaded.dependencyFieldName ??
-        fieldName) as keyof CardDef;
-      await api.getIfReady(card, fieldToResolve);
+      let instanceToResolve =
+        (notLoaded.dependencyInstance as BaseDef | undefined) ?? card;
+      let fieldToResolve = notLoaded.dependencyFieldName ?? fieldName;
+      await api.getIfReady(instanceToResolve as any, fieldToResolve as any);
     } catch (error: any) {
       let errors = Array.isArray(error) ? error : [error];
       for (let err of errors) {
@@ -244,9 +247,11 @@ export default class RenderService extends Service {
             if (realmPath.inRealm(linkURL)) {
               await visit(linkURL, store);
             } else {
-              // in this case the instance we are linked to is a missing instance
-              // in an external realm.
-              throw err;
+              let doc = await store.loadDocument(linkURL.href);
+              if (isCardError(doc)) {
+                store.errors.add(link);
+                throw doc;
+              }
             }
           }
         } else {
