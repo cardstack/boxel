@@ -96,6 +96,7 @@ module(basename(__filename), function () {
       });
 
       assert.false(first.pool.reused, 'first call not reused');
+      assert.false(first.pool.evicted, 'first call not evicted');
       assert.strictEqual(
         first.response.serialized?.data.attributes?.name,
         'Maple',
@@ -133,6 +134,7 @@ module(basename(__filename), function () {
       });
 
       assert.true(second.pool.reused, 'second call reused pooled page');
+      assert.false(second.pool.evicted, 'second call not evicted');
       assert.strictEqual(
         second.pool.pageId,
         first.pool.pageId,
@@ -283,14 +285,7 @@ module(basename(__filename), function () {
                 static displayName = "Unusable Error";
                 static isolated = class extends Component {
                   get trigger() {
-                    let error = new Error('forced unusable for test');
-                    window.dispatchEvent(new CustomEvent('boxel-render-error', { detail: { reason: error } }));
-                    // Synchronously block ~1s to ensure the EmberHealthService detects that Ember is not responsive
-                    let start = performance.now();
-                    while (performance.now() - start < 1000) {
-                      // busy wait
-                    }
-                    return '';
+                    throw new Error('forced unusable for test');
                   }
                   <template>{{this.trigger}}</template>
                 }
@@ -305,6 +300,40 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './unusable-error',
                     name: 'UnusableError',
+                  },
+                },
+              },
+            },
+            'embedded-error.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              export class EmbeddedError extends CardDef {
+                @field name = contains(StringField);
+                static displayName = "Embedded Error";
+                static isolated = <template>
+  <pre data-prerender-error>
+  {
+    "type": "error",
+    "error": {
+      "id": "embedded-error",
+      "status": 500,
+      "title": "Embedded error",
+      "message": "error flagged from DOM",
+      "additionalErrors": null
+    }
+  }
+  </pre>
+</template>
+              }
+            `,
+            '4.json': {
+              data: {
+                attributes: {
+                  name: 'Embedded Error',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './embedded-error',
+                    name: 'EmbeddedError',
                   },
                 },
               },
@@ -492,6 +521,24 @@ module(basename(__filename), function () {
         });
       });
 
+      test('embedded error markup triggers render error', async function (assert) {
+        const testCardURL = `${realmURL2}4`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.ok(response.error, 'error captured');
+        assert.strictEqual(response.error?.error.id, 'embedded-error');
+        assert.strictEqual(
+          response.error?.error.message,
+          'error flagged from DOM',
+        );
+        assert.strictEqual(response.error?.error.title, 'Embedded error');
+        assert.strictEqual(response.error?.error.status, 500);
+      });
+
       test('render timeout', async function (assert) {
         const testCardURL = `${realmURL2}1`;
         let result = await prerenderer.prerenderCard({
@@ -567,6 +614,12 @@ module(basename(__filename), function () {
           },
           'meta fields are null when short-circuited',
         );
+        assert.true(unusable.pool.evicted, 'pool notes eviction for unusable');
+        assert.notStrictEqual(
+          unusable.pool.pageId,
+          'unknown',
+          'evicted unusable run retains page identifier',
+        );
 
         // After unusable, the realm should be evicted; a subsequent render should not reuse
         const healthyURL = `${realmURL2}1`;
@@ -577,6 +630,7 @@ module(basename(__filename), function () {
           permissions,
         });
         assert.false(next.pool.reused, 'did not reuse after unusable eviction');
+        assert.false(next.pool.evicted, 'subsequent render not evicted');
       });
     });
 
@@ -606,6 +660,12 @@ module(basename(__filename), function () {
           'Render timeout',
           'got timeout error',
         );
+        assert.true(timeoutRun.pool.evicted, 'timeout eviction reflected');
+        assert.notStrictEqual(
+          timeoutRun.pool.pageId,
+          'unknown',
+          'timeout eviction retains page identifier',
+        );
 
         // A subsequent render should not reuse the previously pooled page
         let afterTimeout = await prerenderer.prerenderCard({
@@ -618,6 +678,7 @@ module(basename(__filename), function () {
           afterTimeout.pool.reused,
           'did not reuse after timeout eviction',
         );
+        assert.false(afterTimeout.pool.evicted, 'no eviction on new render');
       });
 
       test('reuses the same page within a realm', async function (assert) {

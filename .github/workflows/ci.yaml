@@ -372,6 +372,7 @@ jobs:
             "card-endpoints-test.ts",
             "card-source-endpoints-test.ts",
             "file-watcher-events-test.ts",
+            "headless-chrome-indexing-test.ts",
             "indexing-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
@@ -399,6 +400,7 @@ jobs:
             "request-forward-test.ts",
             "publish-unpublish-realm-test.ts",
             "get-boxel-site-hostname-test.ts",
+            "realm-auth-test.ts"
           ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
