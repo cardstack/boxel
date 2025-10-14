@@ -6,13 +6,11 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   type Permissions,
-  RealmPaths,
   baseRealm,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import { CardStoreWithErrors } from '@cardstack/host/services/render-service';
-import type RenderService from '@cardstack/host/services/render-service';
 
 import type * as CardAPIModule from 'https://cardstack.com/base/card-api';
 
@@ -702,6 +700,9 @@ module('Integration | computeds', function (hooks) {
           if (!team) {
             return;
           }
+          if (!team.shortName) {
+            return;
+          }
           return `${team.shortName}-${idPart.slice(0, 4).toUpperCase()}`;
         },
       });
@@ -715,39 +716,31 @@ module('Integration | computeds', function (hooks) {
     let restoreLazilyLoadLinks = (globalThis as any).__lazilyLoadLinks;
     (globalThis as any).__lazilyLoadLinks = true;
 
-    let network = getService('network');
-    let moduleURL = `${testRealmURL}task-cards`;
+    let moduleURL = '../task-cards';
     let remoteRealmURL = 'https://remote.example/';
     let teamId = `${remoteRealmURL}Team/alpha`;
     let taskId = `${testRealmURL}SprintTask/task-1`;
 
-    let remoteTeamDoc = {
-      data: {
-        type: 'card',
-        id: teamId,
-        attributes: { name: 'Alpha Team' },
-        meta: {
-          adoptsFrom: {
-            module: moduleURL,
-            name: 'Team',
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: remoteRealmURL,
+      contents: {
+        'task-cards.gts': { Team, SprintTask },
+        'Team/alpha.json': {
+          data: {
+            type: 'card',
+            id: teamId,
+            attributes: { name: 'Alpha Team' },
+            meta: {
+              adoptsFrom: {
+                module: '../task-cards',
+                name: 'Team',
+              },
+            },
           },
         },
       },
-    };
-
-    let remoteHandler = async (request: Request) => {
-      if (request.url === `${teamId}.json` || request.url === teamId) {
-        return new Response(JSON.stringify(remoteTeamDoc), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/vnd.api+json',
-          },
-        });
-      }
-      return null;
-    };
-
-    network.mount(remoteHandler, { prepend: true });
+    });
 
     try {
       let { realm } = await setupIntegrationTestRealm({
@@ -800,27 +793,16 @@ module('Integration | computeds', function (hooks) {
           { store },
         );
 
-        let renderService = getService('render-service') as RenderService;
-        let realmPath = new RealmPaths(new URL(testRealmURL));
-        let html = await renderService.renderCard({
-          card: sprintTask,
-          format: 'isolated',
-          visit: async () => {},
-          store,
-          realmPath,
-        });
-
+        let root = await renderCard(loader, sprintTask, 'isolated');
         await store.loaded();
 
-        assert.true(
-          html.includes('AL-TASK'),
-          'render includes computed shortId after resolving linked dependency',
-        );
+        assert
+          .dom('[data-test-short-id]', root)
+          .hasText('AL-TASK', 'computed shortId resolves after loading link');
       } else {
         assert.ok(false, 'expected card document to be available');
       }
     } finally {
-      network.virtualNetwork.unmount(remoteHandler);
       if (restoreLazilyLoadLinks === undefined) {
         delete (globalThis as any).__lazilyLoadLinks;
       } else {
