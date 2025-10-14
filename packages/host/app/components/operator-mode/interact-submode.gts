@@ -192,15 +192,25 @@ export default class InteractSubmode extends Component {
 
   private viewCard = (
     stackIndex: number,
-    cardOrURL: CardDef | URL,
+    cardOrURL: CardDef | URL | string,
     format: Format = 'isolated',
     opts?: { openCardInRightMostStack?: boolean },
   ): void => {
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
     }
+    if (format instanceof Event) {
+      // common when invoked from template {{on}} modifier
+      format = 'isolated';
+    }
+    let cardId =
+      typeof cardOrURL === 'string'
+        ? cardOrURL
+        : cardOrURL instanceof URL
+        ? cardOrURL.href
+        : cardOrURL.id;
     let newItem = new StackItem({
-      id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
+      id: cardId,
       format,
       stackIndex,
     });
