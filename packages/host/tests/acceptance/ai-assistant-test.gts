@@ -87,7 +87,7 @@ let mockedFileContent = 'Hello, world!';
 const TEST_MODEL_NAMES: Record<string, string> = {
   'openai/gpt-5': 'OpenAI: GPT-5',
   'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
-  'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
+  'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
   'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
   'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
@@ -296,11 +296,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       toolsSupported: true,
     });
 
-    let anthropicClaudeSonnet4Model = new ModelConfiguration({
+    let anthropicClaudeSonnet45Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('anthropic/claude-sonnet-4'),
+        title: modelNameFor('anthropic/claude-sonnet-4.5'),
       }),
-      modelId: 'anthropic/claude-sonnet-4',
+      modelId: 'anthropic/claude-sonnet-4.5',
       toolsSupported: true,
     });
 
@@ -317,7 +317,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       modelConfigurations: [
         openAiGpt5Model,
         openAiGpt4oMiniModel,
-        anthropicClaudeSonnet4Model,
+        anthropicClaudeSonnet45Model,
         anthropicClaudeSonnet37Model,
       ],
     });
@@ -646,8 +646,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.strictEqual(roomState.model, llmIdToChangeTo);
   });
 
-  test('defaults to anthropic/claude-sonnet-4 in code mode', async function (assert) {
-    let defaultCodeLLMId = 'anthropic/claude-sonnet-4';
+  test('defaults to anthropic/claude-sonnet-4.5 in code mode', async function (assert) {
+    let defaultCodeLLMId = 'anthropic/claude-sonnet-4.5';
     let defaultCodeLLMName = modelNameFor(defaultCodeLLMId);
 
     await visitOperatorMode({
@@ -2742,6 +2742,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Can you help me understand this structure?',
     );
     await click('[data-test-send-message-btn]');
+    await waitFor(`[data-room-settled]`);
 
     // Verify messages were sent with attachments
     assertMessages(assert, [

@@ -5,6 +5,10 @@ import {
   SupportedMimeType,
   fetchUserPermissions,
 } from '@cardstack/runtime-common';
+import {
+  fetchSessionRoom,
+  upsertSessionRoom,
+} from '@cardstack/runtime-common/db-queries/session-room-queries';
 import { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { createJWT } from '../jwt';
@@ -12,8 +16,8 @@ import { sendResponseForError, setContextResponse } from '../middleware';
 
 export default function handleRealmAuth({
   dbAdapter,
-  realmSecretSeed,
   matrixClient,
+  realmSecretSeed,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -30,13 +34,6 @@ export default function handleRealmAuth({
       return;
     }
 
-    let dmRooms =
-      (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-
-    let sessionRoomId = dmRooms[user.matrixUserId];
-
     let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
       userId: matrixUserId,
       onlyOwnRealms: false,
@@ -44,12 +41,23 @@ export default function handleRealmAuth({
 
     let sessions: { [realm: string]: string } = {};
     for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
+      let sessionRoom = await fetchSessionRoom(
+        dbAdapter,
+        realm,
+        user.matrixUserId,
+      );
+
+      if (!sessionRoom) {
+        sessionRoom = await matrixClient.createDM(matrixUserId);
+        await matrixClient.joinRoom(sessionRoom);
+        await upsertSessionRoom(dbAdapter, realm, matrixUserId, sessionRoom);
+      }
       sessions[realm] = createJWT(
         {
           user: matrixUserId,
           realm: realm,
           permissions,
-          sessionRoom: sessionRoomId,
+          sessionRoom,
         },
         '7d',
         realmSecretSeed,

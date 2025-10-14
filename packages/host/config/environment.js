@@ -62,7 +62,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
-    ENV.DEFAULT_SYSTEM_CARD_ID =
+    ENV.defaultSystemCardId =
       process.env.DEFAULT_SYSTEM_CARD_ID ??
       'http://localhost:4201/catalog/SystemCard/default';
   }

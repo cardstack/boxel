@@ -10,6 +10,7 @@ import {
   FetcherMiddlewareHandler,
   authorizationMiddleware,
   clearFetchCache,
+  logger,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -19,6 +20,8 @@ import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmInfoService from './realm-info-service';
 import type ResetService from './reset';
+
+const log = logger('loader-service');
 
 export default class LoaderService extends Service {
   @service declare private fastboot: { isFastBoot: boolean };
@@ -46,7 +49,7 @@ export default class LoaderService extends Service {
     clearFetchCache();
   }
 
-  public resetLoader() {
+  public resetLoader(options?: { clearFetchCache?: boolean; reason?: string }) {
     // This method is called in both the FileResource and in RealmSubscription,
     // oftentimes for the same update. It is very difficult to coordinate
     // between these two, as a CardResource is not always present (e.g. schema
@@ -54,14 +57,25 @@ export default class LoaderService extends Service {
     // unnecessary screen flashes) we add a simple leading edge debounce.
     if (this.resetTime == null || Date.now() - this.resetTime > 250) {
       this.resetTime = Date.now();
-      // importantly we do _not_ want to clear the fetch cache between loader
-      // resets so that we can take advantage of HTTP caching when rebuilding
-      // the loader state
+      let reasonSuffix = options?.reason ? ` (${options.reason})` : '';
+      let clearFlag = options?.clearFetchCache ? ' [clearFetchCache]' : '';
+      log.debug(`resetting loader${reasonSuffix}${clearFlag}`);
+      if (options?.clearFetchCache) {
+        clearFetchCache();
+        this.loader = this.makeInstance();
+        return;
+      }
+      // by default we keep the fetch cache so we can take advantage of HTTP
+      // caching when rebuilding the loader state
       if (this.loader) {
         this.loader = Loader.cloneLoader(this.loader);
       } else {
         this.loader = this.makeInstance();
       }
+    } else if (options?.reason) {
+      log.debug(
+        `skipping loader reset due to debounce window (${options.reason})`,
+      );
     }
   }
 

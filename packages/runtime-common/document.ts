@@ -27,10 +27,12 @@ export async function loadDocument(
       },
     });
   } catch (err: any) {
-    let cardError = new CardError(
-      `unable to fetch ${url}: ${err.message}`,
-      err,
-    );
+    let message = err?.message ?? String(err ?? '');
+    // Normalize browser vs Node fetch error wording for consistency in tests
+    if (/^Failed to fetch$/i.test(message)) {
+      message = 'fetch failed';
+    }
+    let cardError = new CardError(`unable to fetch ${url}: ${message}`, err);
     cardError.deps = [url];
     return cardError;
   }

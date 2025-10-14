@@ -1,4 +1,5 @@
 import Route from '@ember/routing/route';
+import Transition from '@ember/routing/transition';
 
 import { service } from '@ember/service';
 
@@ -27,13 +28,13 @@ import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 
 import type { Model as ParentModel } from '../render';
 
-export type Model = PrerenderMeta | RenderError;
+export type Model = PrerenderMeta | RenderError | undefined;
 
-export default class RenderRoute extends Route<Model> {
+export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
-  async model() {
+  async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
     let parentModel = this.modelFor('render') as ParentModel;
     let instance: CardDef;
@@ -46,17 +47,9 @@ export default class RenderRoute extends Route<Model> {
     }
 
     if (!instance) {
-      let { id } = this.paramsFor('render') as { id?: string };
-      return {
-        type: 'error',
-        error: {
-          message: 'Card instance is undefined',
-          title: 'Card instance unavailable',
-          status: 500,
-          id: id ?? null,
-          additionalErrors: null,
-        },
-      } as RenderError;
+      // the lack of an instance is dealt with in the parent route
+      transition.abort();
+      return;
     }
 
     let serialized = api.serializeCard(instance, {
