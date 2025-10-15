@@ -9,6 +9,7 @@ import { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { createJWT } from '../jwt';
 import { sendResponseForError, setContextResponse } from '../middleware';
+import * as Sentry from '@sentry/node';
 
 export default function handleRealmAuth({
   dbAdapter,
@@ -47,17 +48,30 @@ export default function handleRealmAuth({
         );
         continue;
       }
-      let sessionRoom = await realm.ensureSessionRoom(matrixUserId);
-      sessions[realmUrl] = createJWT(
-        {
-          user: matrixUserId,
-          realm: realmUrl,
-          permissions,
-          sessionRoom,
-        },
-        '7d',
-        realmSecretSeed,
-      );
+
+      try {
+        let sessionRoom = await realm.ensureSessionRoom(matrixUserId);
+        sessions[realmUrl] = createJWT(
+          {
+            user: matrixUserId,
+            realm: realmUrl,
+            permissions,
+            sessionRoom,
+          },
+          '7d',
+          realmSecretSeed,
+        );
+      } catch (error) {
+        Sentry.withScope((scope) => {
+          scope.setExtra('realmUrl', realmUrl);
+          scope.setExtra('matrixUserId', matrixUserId);
+          scope.setExtra('permissionsForAllRealms', permissionsForAllRealms);
+
+          Sentry.captureException(error);
+        });
+
+        continue;
+      }
     }
 
     await setContextResponse(
