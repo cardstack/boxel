@@ -1,90 +1,117 @@
 import { module, test } from 'qunit';
-import { basename } from 'path';
+import { basename, join } from 'path';
 import { PgAdapter } from '@cardstack/postgres';
+import { query, insert, asExpressions, User } from '@cardstack/runtime-common';
 import {
-  query,
-  insert,
-  asExpressions,
-  User,
+  setupDB,
   insertUser,
-} from '@cardstack/runtime-common';
-import { prepareTestDB } from './helpers';
-import handleGetBoxelSiteHostnameRequest from '../handlers/handle-get-boxel-site-hostname';
-import Koa from 'koa';
-import { RealmServerTokenClaim } from '../utils/jwt';
-import { Readable } from 'stream';
+  runTestRealmServer,
+  createVirtualNetwork,
+  matrixURL,
+  closeServer,
+  setupBaseRealmServer,
+  realmSecretSeed,
+} from './helpers';
+import {
+  RealmServerTokenClaim,
+  createJWT as createRealmServerJWT,
+} from '../utils/jwt';
+import supertest, { SuperTest, Test } from 'supertest';
+import { Server } from 'http';
+import { dirSync, type DirResult } from 'tmp';
+import { copySync, ensureDirSync } from 'fs-extra';
+
+const testRealmURL = new URL('http://127.0.0.1:0/test/');
 
 module(basename(__filename), function () {
-  module('get boxel site hostname endpoint', function (hooks) {
+  module('get boxel claimed domain endpoint', function (hooks) {
+    setupBaseRealmServer(hooks, matrixURL);
+
+    let testRealmServer: Server;
+    let request: SuperTest<Test>;
+    let dir: DirResult;
     let dbAdapter: PgAdapter;
-    let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
     let user: User;
     let boxelSiteDomain = 'boxel.site';
     let defaultToken: RealmServerTokenClaim;
 
     hooks.beforeEach(async function () {
-      prepareTestDB();
-      dbAdapter = new PgAdapter({ autoMigrate: true });
-      handler = handleGetBoxelSiteHostnameRequest({
-        dbAdapter,
-        domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
-      } as any);
-
-      user = await insertUser(dbAdapter, 'matrix-user-id', 'test-user');
-      defaultToken = {
-        user: 'matrix-user-id',
-        sessionRoom: 'test-session',
-      };
+      dir = dirSync();
     });
 
-    hooks.afterEach(async function () {
-      await dbAdapter.close();
+    setupDB(hooks, {
+      beforeEach: async (_dbAdapter, publisher, runner) => {
+        dbAdapter = _dbAdapter;
+        let testRealmDir = join(dir.name, 'realm_server_5', 'test');
+        ensureDirSync(testRealmDir);
+        copySync(join(__dirname, 'cards'), testRealmDir);
+
+        testRealmServer = (
+          await runTestRealmServer({
+            virtualNetwork: createVirtualNetwork(),
+            testRealmDir,
+            realmsRootPath: join(dir.name, 'realm_server_5'),
+            realmURL: testRealmURL,
+            dbAdapter,
+            publisher,
+            runner,
+            matrixURL,
+            domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
+          })
+        ).testRealmHttpServer;
+        request = supertest(testRealmServer);
+
+        user = await insertUser(
+          dbAdapter,
+          'matrix-user-id',
+          'test-user',
+          'test-user@example.com',
+        );
+        defaultToken = {
+          user: 'matrix-user-id',
+          sessionRoom: 'test-session',
+        };
+      },
+      afterEach: async () => {
+        await closeServer(testRealmServer);
+      },
     });
 
-    async function callHandler(
+    async function makeGetRequest(
       token: RealmServerTokenClaim | null,
       queryParams?: Record<string, string>,
     ) {
-      const ctx: any = {
-        state: { token },
-        status: undefined,
-        body: undefined,
-        method: 'GET',
-        query: queryParams || {},
-        req: Object.assign(Readable.from(['']), {
-          headers: {
-            host: 'localhost:4200',
-          },
-          url: '/_boxel-site-hostname',
-          method: 'GET',
-        }),
-        set: () => {},
-        res: {
-          getHeaders: () => ({}),
-          end: () => {},
-        },
-      };
+      let requestBuilder = request
+        .get('/_boxel-claimed-domains')
+        .set('Accept', 'application/json');
 
-      await handler(ctx, async () => {});
-      return ctx;
+      if (token) {
+        const jwt = createRealmServerJWT(token, realmSecretSeed);
+        requestBuilder = requestBuilder.set('Authorization', `Bearer ${jwt}`);
+      }
+
+      if (queryParams) {
+        requestBuilder = requestBuilder.query(queryParams);
+      }
+
+      return await requestBuilder;
     }
 
-    function assertErrorIncludes(ctx: any, message: string) {
-      const body = JSON.parse(ctx.body);
-      return body.errors && body.errors[0].includes(message);
+    function assertErrorIncludes(response: any, message: string) {
+      return response.body.errors && response.body.errors[0].includes(message);
     }
 
     test('should return 400 when source_realm_url is missing', async function (assert) {
-      const ctx = await callHandler(defaultToken, {});
+      const response = await makeGetRequest(defaultToken, {});
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         400,
         'Should return 400 for missing source_realm_url',
       );
       assert.ok(
         assertErrorIncludes(
-          ctx,
+          response,
           'source_realm_url query parameter is required',
         ),
         'Should have error message about missing source_realm_url',
@@ -92,17 +119,17 @@ module(basename(__filename), function () {
     });
 
     test('should return 404 when no claim exists for the realm', async function (assert) {
-      const ctx = await callHandler(defaultToken, {
+      const response = await makeGetRequest(defaultToken, {
         source_realm_url: 'https://nonexistent-realm.com',
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         404,
         'Should return 404 for nonexistent claim',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'No hostname claim found for this realm'),
+        assertErrorIncludes(response, 'No hostname claim found for this realm'),
         'Should have error message about no claim found',
       );
     });
@@ -123,37 +150,36 @@ module(basename(__filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const ctx = await callHandler(defaultToken, {
+      const response = await makeGetRequest(defaultToken, {
         source_realm_url: sourceRealmURL,
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         200,
         'Should return 200 for successful get',
       );
 
-      // Parse and check JSON-API response body
-      const responseBody = JSON.parse(ctx.body);
-      assert.ok(responseBody.data, 'Should have data object');
+      // Check JSON-API response body
+      assert.ok(response.body.data, 'Should have data object');
       assert.strictEqual(
-        responseBody.data.type,
+        response.body.data.type,
         'claimed-site-hostname',
         'Should have correct type',
       );
-      assert.ok(responseBody.data.id, 'Should have an ID');
+      assert.ok(response.body.data.id, 'Should have an ID');
       assert.strictEqual(
-        responseBody.data.attributes.hostname,
+        response.body.data.attributes.hostname,
         hostname,
         'Should return correct hostname',
       );
       assert.strictEqual(
-        responseBody.data.attributes.subdomain,
+        response.body.data.attributes.subdomain,
         'my-site',
         'Should return correct subdomain',
       );
       assert.strictEqual(
-        responseBody.data.attributes.sourceRealmURL,
+        response.body.data.attributes.sourceRealmURL,
         sourceRealmURL,
         'Should return source realm URL',
       );
@@ -176,17 +202,17 @@ module(basename(__filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const ctx = await callHandler(defaultToken, {
+      const response = await makeGetRequest(defaultToken, {
         source_realm_url: sourceRealmURL,
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         404,
         'Should return 404 for removed claim',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'No hostname claim found for this realm'),
+        assertErrorIncludes(response, 'No hostname claim found for this realm'),
         'Should have error message about no claim found',
       );
     });
@@ -200,6 +226,7 @@ module(basename(__filename), function () {
         dbAdapter,
         'other-matrix-user-id',
         'other-user',
+        'other-user@example.com',
       );
 
       // Insert a claim for the other user
@@ -215,17 +242,17 @@ module(basename(__filename), function () {
       );
 
       // Try to get the claim as the default user
-      const ctx = await callHandler(defaultToken, {
+      const response = await makeGetRequest(defaultToken, {
         source_realm_url: sourceRealmURL,
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         404,
         'Should return 404 for other user claim',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'No hostname claim found for this realm'),
+        assertErrorIncludes(response, 'No hostname claim found for this realm'),
         'Should have error message about no claim found',
       );
     });

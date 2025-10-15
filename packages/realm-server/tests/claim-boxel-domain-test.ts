@@ -1,219 +1,219 @@
 import { module, test } from 'qunit';
-import { basename } from 'path';
+import { basename, join } from 'path';
 import { PgAdapter } from '@cardstack/postgres';
+import { query, insert, asExpressions, User } from '@cardstack/runtime-common';
 import {
-  query,
-  insert,
-  asExpressions,
-  User,
+  setupDB,
   insertUser,
-} from '@cardstack/runtime-common';
-import { prepareTestDB } from './helpers';
-import handleClaimBoxelSiteHostnameRequest from '../handlers/handle-claim-boxel-site-hostname';
-import Koa from 'koa';
-import { RealmServerTokenClaim } from '../utils/jwt';
-import { Readable } from 'stream';
+  runTestRealmServer,
+  createVirtualNetwork,
+  matrixURL,
+  closeServer,
+  setupBaseRealmServer,
+  realmSecretSeed,
+} from './helpers';
+import {
+  RealmServerTokenClaim,
+  createJWT as createRealmServerJWT,
+} from '../utils/jwt';
+import supertest, { SuperTest, Test } from 'supertest';
+import { Server } from 'http';
+import { dirSync, type DirResult } from 'tmp';
+import { copySync, ensureDirSync } from 'fs-extra';
+
+const testRealmURL = new URL('http://127.0.0.1:0/test/');
 
 module(basename(__filename), function () {
-  module('claim boxel site hostname endpoint', function (hooks) {
+  module('claim boxel claimed domain endpoint', function (hooks) {
+    setupBaseRealmServer(hooks, matrixURL);
+
+    let testRealmServer: Server;
+    let request: SuperTest<Test>;
+    let dir: DirResult;
     let dbAdapter: PgAdapter;
-    let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
     let user: User;
     let boxelSiteDomain = 'boxel.site';
     let defaultToken: RealmServerTokenClaim;
 
     hooks.beforeEach(async function () {
-      prepareTestDB();
-      dbAdapter = new PgAdapter({ autoMigrate: true });
-      handler = handleClaimBoxelSiteHostnameRequest({
-        dbAdapter,
-        domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
-      } as any);
-
-      // Clean up any existing claims to ensure clean state
-      await query(dbAdapter, ['DELETE FROM claimed_domains_for_sites']);
-
-      user = await insertUser(dbAdapter, 'matrix-user-id', 'test-user');
-      defaultToken = {
-        user: 'matrix-user-id',
-        sessionRoom: 'test-session',
-      };
+      dir = dirSync();
     });
 
-    hooks.afterEach(async function () {
-      await dbAdapter.close();
+    setupDB(hooks, {
+      beforeEach: async (_dbAdapter, publisher, runner) => {
+        dbAdapter = _dbAdapter;
+        let testRealmDir = join(dir.name, 'realm_server_5', 'test');
+        ensureDirSync(testRealmDir);
+        copySync(join(__dirname, 'cards'), testRealmDir);
+
+        testRealmServer = (
+          await runTestRealmServer({
+            virtualNetwork: createVirtualNetwork(),
+            testRealmDir,
+            realmsRootPath: join(dir.name, 'realm_server_5'),
+            realmURL: testRealmURL,
+            dbAdapter,
+            publisher,
+            runner,
+            matrixURL,
+            domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
+          })
+        ).testRealmHttpServer;
+        request = supertest(testRealmServer);
+
+        user = await insertUser(
+          dbAdapter,
+          'matrix-user-id',
+          'test-user',
+          'test-user@example.com',
+        );
+        defaultToken = {
+          user: 'matrix-user-id',
+          sessionRoom: 'test-session',
+        };
+      },
+      afterEach: async () => {
+        await closeServer(testRealmServer);
+      },
     });
 
-    async function callHandler(
+    async function makePostRequest(
       token: RealmServerTokenClaim | null,
-      attributes?: any,
+      body?: any,
     ) {
-      const jsonApiBody = attributes
-        ? {
-            data: {
-              type: 'claimed-site-hostname',
-              attributes,
-            },
-          }
-        : {};
-      const bodyText = JSON.stringify(jsonApiBody);
-      const stream = Readable.from([bodyText]);
-      const ctx: any = {
-        state: { token },
-        status: undefined,
-        body: undefined,
-        method: 'POST',
-        req: Object.assign(stream, {
-          headers: {
-            host: 'localhost:4200',
-            'content-length': bodyText.length.toString(),
-          },
-          url: '/_boxel-site-hostname',
-          method: 'POST',
-        }),
-        request: {
-          text: async () => bodyText,
-        },
-        set: () => {},
-        res: {
-          getHeaders: () => ({}),
-          end: () => {},
-        },
-      };
+      let requestBuilder = request
+        .post('/_boxel-claimed-domains')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json');
 
-      await handler(ctx, async () => {});
-      return ctx;
+      if (token) {
+        const jwt = createRealmServerJWT(token, realmSecretSeed);
+        requestBuilder = requestBuilder.set('Authorization', `Bearer ${jwt}`);
+      }
+
+      if (body !== undefined) {
+        requestBuilder = requestBuilder.send(body);
+      }
+
+      return await requestBuilder;
     }
 
-    async function callHandlerWithInvalidJSON(
-      token: RealmServerTokenClaim | null,
-      invalidJSON: string,
-    ) {
-      const stream = Readable.from([invalidJSON]);
-      const ctx: any = {
-        state: { token },
-        status: undefined,
-        body: undefined,
-        method: 'POST',
-        req: Object.assign(stream, {
-          headers: {
-            host: 'localhost:4200',
-            'content-length': invalidJSON.length.toString(),
-          },
-          url: '/_boxel-site-hostname',
-          method: 'POST',
-        }),
-        request: {
-          text: async () => invalidJSON,
-        },
-        set: () => {},
-        res: {
-          getHeaders: () => ({}),
-          end: () => {},
-        },
-      };
-
-      await handler(ctx, async () => {});
-      return ctx;
-    }
-
-    function assertErrorIncludes(ctx: any, message: string) {
-      const body = JSON.parse(ctx.body);
-      return body.errors && body.errors[0].includes(message);
+    function assertErrorIncludes(response: any, message: string) {
+      return response.body.errors && response.body.errors[0].includes(message);
     }
 
     test('should return 400 when body is not valid JSON', async function (assert) {
-      const ctx = await callHandlerWithInvalidJSON(
-        defaultToken,
-        'invalid json{',
-      );
+      const response = await makePostRequest(defaultToken, 'invalid json{');
 
-      assert.strictEqual(ctx.status, 400, 'Should return 400 for invalid JSON');
+      assert.strictEqual(
+        response.status,
+        400,
+        'Should return 400 for invalid JSON',
+      );
       assert.ok(
-        assertErrorIncludes(ctx, 'Request body is not valid JSON'),
+        assertErrorIncludes(response, 'Request body is not valid JSON'),
         'Should have error message about invalid JSON',
       );
     });
 
     test('should return 400 for invalid JSON-API format', async function (assert) {
-      const ctx = await callHandlerWithInvalidJSON(
-        defaultToken,
-        JSON.stringify({ hostname: 'test.boxel.site' }),
-      );
+      const response = await makePostRequest(defaultToken, {
+        hostname: 'test.boxel.site',
+      });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         400,
         'Should return 400 for invalid JSON-API',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'json is missing "data" object'),
+        assertErrorIncludes(response, 'json is missing "data" object'),
         'Should have error message about missing data object',
       );
     });
 
     test('should return 400 when source_realm_url is missing', async function (assert) {
-      const ctx = await callHandler(defaultToken, {
-        hostname: 'test.boxel.site',
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-site-hostname',
+          attributes: {
+            hostname: 'test.boxel.site',
+          },
+        },
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         400,
         'Should return 400 for missing source_realm_url',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'source_realm_url is required'),
+        assertErrorIncludes(response, 'source_realm_url is required'),
         'Should have error message about missing source_realm_url',
       );
     });
 
     test('should return 400 when hostname is missing', async function (assert) {
-      const ctx = await callHandler(defaultToken, {
-        source_realm_url: 'https://test-realm.com',
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-site-hostname',
+          attributes: {
+            source_realm_url: 'https://test-realm.com',
+          },
+        },
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         400,
         'Should return 400 for missing hostname',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'hostname is required'),
+        assertErrorIncludes(response, 'hostname is required'),
         'Should have error message about missing hostname',
       );
     });
 
     test('should return 422 when hostname is just the domain without subdomain', async function (assert) {
-      const ctx = await callHandler(defaultToken, {
-        source_realm_url: 'https://test-realm.com',
-        hostname: boxelSiteDomain,
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-site-hostname',
+          attributes: {
+            source_realm_url: 'https://test-realm.com',
+            hostname: boxelSiteDomain,
+          },
+        },
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         422,
         'Should return 422 for hostname without subdomain',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'Hostname must include a subdomain'),
+        assertErrorIncludes(response, 'Hostname must include a subdomain'),
         'Should have error message about missing subdomain',
       );
     });
 
     test('should return 422 when hostname does not end with the correct domain', async function (assert) {
-      const ctx = await callHandler(defaultToken, {
-        source_realm_url: 'https://test-realm.com',
-        hostname: 'something.not-boxel.site',
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-site-hostname',
+          attributes: {
+            source_realm_url: 'https://test-realm.com',
+            hostname: 'something.not-boxel.site',
+          },
+        },
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         422,
         'Should return 422 for incorrect domain',
       );
       assert.ok(
-        assertErrorIncludes(ctx, `Hostname must end with .boxel.site`),
+        assertErrorIncludes(response, `Hostname must end with .boxel.site`),
         'Should have error message about incorrect domain',
       );
     });
@@ -236,18 +236,23 @@ module(basename(__filename), function () {
       ];
 
       for (const subdomain of invalidSubdomains) {
-        const ctx = await callHandler(defaultToken, {
-          source_realm_url: 'https://test-realm.com',
-          hostname: `${subdomain}.${boxelSiteDomain}`,
+        const response = await makePostRequest(defaultToken, {
+          data: {
+            type: 'claimed-site-hostname',
+            attributes: {
+              source_realm_url: 'https://test-realm.com',
+              hostname: `${subdomain}.${boxelSiteDomain}`,
+            },
+          },
         });
 
         assert.strictEqual(
-          ctx.status,
+          response.status,
           422,
           `Should return 422 for invalid subdomain: ${subdomain}`,
         );
         assert.ok(
-          ctx.body,
+          response.body,
           `Should have error message for subdomain: ${subdomain}`,
         );
       }
@@ -267,18 +272,23 @@ module(basename(__filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const ctx = await callHandler(defaultToken, {
-        source_realm_url: 'https://test-realm.com',
-        hostname: hostname,
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-site-hostname',
+          attributes: {
+            source_realm_url: 'https://test-realm.com',
+            hostname: hostname,
+          },
+        },
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         422,
         'Should return 422 for already claimed hostname',
       );
       assert.ok(
-        assertErrorIncludes(ctx, 'Hostname is already claimed'),
+        assertErrorIncludes(response, 'Hostname is already claimed'),
         'Should have error message about hostname already claimed',
       );
     });
@@ -287,38 +297,42 @@ module(basename(__filename), function () {
       const hostname = 'my-site.boxel.site';
       const sourceRealmURL = 'https://test-realm.com';
 
-      const ctx = await callHandler(defaultToken, {
-        source_realm_url: sourceRealmURL,
-        hostname: hostname,
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-site-hostname',
+          attributes: {
+            source_realm_url: sourceRealmURL,
+            hostname: hostname,
+          },
+        },
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         201,
         'Should return 201 for successful claim',
       );
 
-      // Parse and check JSON-API response body
-      const responseBody = JSON.parse(ctx.body);
-      assert.ok(responseBody.data, 'Should have data object');
+      // Check JSON-API response body
+      assert.ok(response.body.data, 'Should have data object');
       assert.strictEqual(
-        responseBody.data.type,
+        response.body.data.type,
         'claimed-site-hostname',
         'Should have correct type',
       );
-      assert.ok(responseBody.data.id, 'Should have an ID');
+      assert.ok(response.body.data.id, 'Should have an ID');
       assert.strictEqual(
-        responseBody.data.attributes.hostname,
+        response.body.data.attributes.hostname,
         hostname,
         'Should return normalized hostname',
       );
       assert.strictEqual(
-        responseBody.data.attributes.subdomain,
+        response.body.data.attributes.subdomain,
         'my-site',
         'Should return correct subdomain',
       );
       assert.strictEqual(
-        responseBody.data.attributes.sourceRealmURL,
+        response.body.data.attributes.sourceRealmURL,
         sourceRealmURL,
         'Should return source realm URL',
       );
@@ -359,13 +373,18 @@ module(basename(__filename), function () {
       );
 
       const sourceRealmURL = 'https://new-realm.com';
-      const ctx = await callHandler(defaultToken, {
-        source_realm_url: sourceRealmURL,
-        hostname: hostname,
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-site-hostname',
+          attributes: {
+            source_realm_url: sourceRealmURL,
+            hostname: hostname,
+          },
+        },
       });
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         201,
         'Should return 201 for successful claim of previously removed hostname',
       );
