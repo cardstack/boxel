@@ -16,7 +16,10 @@ import {
   SupportedMimeType,
   Deferred,
 } from '@cardstack/runtime-common';
-import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
+import {
+  joinDMRoom,
+  RealmAuthClient,
+} from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -248,7 +251,24 @@ export default class RealmServerService extends Service {
     };
 
     for (let [realmURL, token] of Object.entries(tokens)) {
+      await this.ensureJoinToSessionRoom(token);
       this.realm.getOrCreateRealmResource(realmURL, token);
+    }
+  }
+
+  private async ensureJoinToSessionRoom(token: string) {
+    let joinedRoomSet = new Set<string>();
+    if (!this.client) {
+      throw new Error(`Cannot check joined rooms without matrix client`);
+    }
+
+    let { joined_rooms } = await this.client.getJoinedRooms();
+    joinedRoomSet = new Set(joined_rooms ?? []);
+
+    let { sessionRoom } = claimsFromRawToken(token);
+    if (!joinedRoomSet.has(sessionRoom)) {
+      await joinDMRoom(this.client, sessionRoom);
+      joinedRoomSet.add(sessionRoom);
     }
   }
 
