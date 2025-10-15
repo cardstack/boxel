@@ -29,12 +29,9 @@ module('Unit | generate-css-variables', function () {
     assert.strictEqual(
       result,
       [
-        [
-          ':root {',
-          '  --primary: #336699;',
-          '  --radius: 20px;',
-          '}',
-        ].join('\n'),
+        [':root {', '  --primary: #336699;', '  --radius: 20px;', '}'].join(
+          '\n',
+        ),
         ['.dark {', '  --background: #333;', '  --foreground: #fff;', '}'].join(
           '\n',
         ),
