@@ -6,7 +6,6 @@ import {
   containsMany,
   Component,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import {
   eq,
@@ -16,7 +15,6 @@ import {
   subtract,
   add,
   multiply,
-  or,
 } from '@cardstack/boxel-ui/helpers';
 import { concat, fn, get } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
@@ -42,7 +40,6 @@ import LayoutCanvasModifier from './modifiers/layout-canvas-modifier'; // ¹²�
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 
 class Isolated extends Component<typeof AILayoutBoard> {
-  @tracked transform = { x: 0, y: 0, k: 1 };
   @tracked viewMode: 'canvas' | 'list' = 'canvas'; // ¹⁶ Toggle between canvas and list views
   @tracked showToolPalette = false; // ⁸⁸ Track tool palette visibility
   @tracked selectedItemId: string | null = null; // ¹⁴⁴ Track selected item for deletion
@@ -51,34 +48,11 @@ class Isolated extends Component<typeof AILayoutBoard> {
   private _cachedItemData: any[] | null = null;
   private _lastAllItemsHash: string | null = null;
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.initializeSampleData();
-    this.initializeTransformState();
-  }
-
-  initializeSampleData() {
-    // ⁹³ Initialize empty board with default canvas settings - defer to avoid circular dependency
-    setTimeout(() => {
-      if (!this.args.model.canvasWidth) {
-        this.args.model.canvasWidth = 1000;
-      }
-      if (!this.args.model.canvasHeight) {
-        this.args.model.canvasHeight = 800;
-      }
-      if (!this.args.model.gridSize) {
-        this.args.model.gridSize = 20;
-      }
-    }, 0);
-  }
-
-  initializeTransformState() {
-    // ¹⁸¹ Initialize transform state from model or use defaults
+  get transform() {
     const x = this.args.model.transformX ?? 0;
     const y = this.args.model.transformY ?? 0;
     const k = this.args.model.transformK ?? 1;
-
-    this.transform = { x, y, k };
+    return { x, y, k };
   }
 
   get itemData() {
@@ -687,6 +661,15 @@ class Isolated extends Component<typeof AILayoutBoard> {
           {{! template-lint-disable no-invalid-interactive }}
           <div
             class='layout-viewport'
+            style={{htmlSafe
+              (concat
+                'width: '
+                (if @model.canvasWidth @model.canvasWidth 1920)
+                'px; height: '
+                (if @model.canvasHeight @model.canvasHeight 800)
+                'px;'
+              )
+            }}
             {{on 'click' this.clearSelection}}
             {{LayoutCanvasModifier
               onTransform=this.handleTransform
@@ -1279,8 +1262,6 @@ class Isolated extends Component<typeof AILayoutBoard> {
       .layout-viewport {
         width: 100%;
         height: 100%;
-        min-height: 700px;
-        position: relative;
         overflow: hidden;
         background: #f8fafc;
         cursor: grab;
@@ -1599,7 +1580,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
         box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         transition: all 0.2s ease;
         position: relative;
-        z-index: 101;
+        z-index: 1001;
       }
 
       .tool-palette-trigger:hover {
@@ -2128,11 +2109,7 @@ class Fitted extends Component<typeof AILayoutBoard> {
             <div class='card-stats'>
               <div class='stat-row'>
                 <span>Items: {{this.allItemsLength}}</span>
-                <span>Canvas:
-                  {{or @model.canvasWidth 1000}}×{{or
-                    @model.canvasHeight
-                    800
-                  }}</span>
+                <span>{{@model.canvasWidth}}×{{@model.canvasHeight}}</span>
               </div>
             </div>
           </div>
@@ -2454,8 +2431,6 @@ export class AILayoutBoard extends CardDef {
   static icon = LayoutIcon; // ⁷⁴ Added layout grid icon
   static prefersWideFormat = true;
 
-  @field title = contains(StringField);
-  @field description = contains(StringField);
   @field images = containsMany(ImageNode);
   @field notes = containsMany(PostitNote);
   @field timers = containsMany(CountdownTimer);

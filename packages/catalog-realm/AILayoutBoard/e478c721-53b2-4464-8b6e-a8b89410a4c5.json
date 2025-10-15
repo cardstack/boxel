@@ -31,14 +31,13 @@
     "type": "card",
     "attributes": {
       "notes": [],
-      "title": null,
       "images": [
         {
           "imageUrl": "https://picsum.photos/300/200",
           "caption": "New Image",
           "position": {
-            "x": -787.9890549394571,
-            "y": -175.99981916324006,
+            "x": -809.9890549394571,
+            "y": -167,
             "width": 381,
             "autoHeight": 303,
             "customHeight": 415,
@@ -70,11 +69,10 @@
       },
       "gridSize": 10,
       "transformK": 1,
-      "transformX": 1088,
-      "transformY": 317,
-      "canvasWidth": 1000,
-      "description": null,
-      "canvasHeight": 800,
+      "transformX": 857,
+      "transformY": 279,
+      "canvasWidth": 1920,
+      "canvasHeight": 700,
       "externalCards": [
         {
           "caption": "Advanced Space Exploration Challenge - Astronomy & Astrophysics",
@@ -82,7 +80,7 @@
             "x": -370.7444517691428,
             "y": 54.49647397396225,
             "width": 400,
-            "autoHeight": 207,
+            "autoHeight": 206,
             "customHeight": 0,
             "layer": 1,
             "format": "embedded"
