@@ -239,8 +239,12 @@ export class NodeAdapter implements RealmAdapter {
       );
       return;
     }
-
-    await matrixClient.login();
+    try {
+      await matrixClient.login();
+    } catch (e) {
+      realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
+      return;
+    }
 
     let dmRooms;
 
