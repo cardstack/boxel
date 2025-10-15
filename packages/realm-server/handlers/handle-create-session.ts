@@ -44,10 +44,24 @@ export default function handleCreateSessionRequest({
       },
       createJWT: async (user: string, sessionRoom: string) =>
         createJWT({ user, sessionRoom }, realmSecretSeed),
-      getSessionRoom: async (userId: string) =>
-        fetchSessionRoom(dbAdapter, REALM_SERVER_REALM, userId),
-      setSessionRoom: (userId: string, roomId: string) =>
-        upsertSessionRoom(dbAdapter, REALM_SERVER_REALM, userId, roomId),
+      ensureSessionRoom: async (userId: string) => {
+        let sessionRoom = await fetchSessionRoom(
+          dbAdapter,
+          REALM_SERVER_REALM,
+          userId,
+        );
+
+        if (!sessionRoom) {
+          sessionRoom = await matrixClient.createDM(userId);
+          await upsertSessionRoom(
+            dbAdapter,
+            REALM_SERVER_REALM,
+            userId,
+            sessionRoom,
+          );
+        }
+        return sessionRoom;
+      },
     } as Utils,
   );
 
