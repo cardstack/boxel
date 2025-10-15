@@ -295,7 +295,13 @@ export class Prerenderer {
   }): Promise<{
     response: RenderResponse;
     timings: { launchMs: number; renderMs: number };
-    pool: { pageId: string; realm: string; reused: boolean; evicted: boolean };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
   }> {
     this.#nonce++;
     log.info(
@@ -325,6 +331,12 @@ export class Prerenderer {
         realm,
         reused,
         evicted: false,
+        timedOut: false,
+      };
+      const markTimeout = (err?: RenderError) => {
+        if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+          poolInfo.timedOut = true;
+        }
       };
 
       let sessions: { [realm: string]: string } = {};
@@ -394,6 +406,7 @@ export class Prerenderer {
       let isolatedHTML: string | null = null;
       if (isRenderError(result)) {
         error = result;
+        markTimeout(error);
         let evicted = await this.#maybeEvict(
           realm,
           'isolated render',
@@ -412,6 +425,7 @@ export class Prerenderer {
           if (!error && capErr) {
             error = capErr;
           }
+          markTimeout(capErr);
           let evicted = await this.#maybeEvict(
             realm,
             'isolated render',
@@ -464,6 +478,7 @@ export class Prerenderer {
       // fields for each rendering context.
       let meta: PrerenderMeta;
       if (isRenderError(metaMaybeError)) {
+        markTimeout(metaMaybeError as RenderError);
         if (
           await this.#maybeEvict(
             realm,
@@ -475,6 +490,7 @@ export class Prerenderer {
           shortCircuit = true;
         }
         error = error ?? (metaMaybeError as RenderError);
+        markTimeout(error);
         meta = {
           serialized: null,
           searchDoc: null,
@@ -537,6 +553,7 @@ export class Prerenderer {
             step.assign(res.value);
           } else {
             error = error ?? res.error;
+            markTimeout(res.error);
             if (res.evicted) {
               poolInfo.evicted = true;
               shortCircuit = true;

@@ -218,20 +218,21 @@ export async function capturePrerenderResult(
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
   expectedStatus: 'ready' | 'error' = 'ready',
 ): Promise<{ status: 'ready' | 'error'; value: string }> {
-  if (expectedStatus === 'error') {
-    await waitUntil(() => {
-      let el = document.querySelector('[data-prerender]') as HTMLElement | null;
-      if (!el) {
-        return false;
-      }
-      return (
-        el.dataset.prerenderStatus === 'unusable' ||
-        !!el.querySelector('[data-prerender-error]')
-      );
-    });
-  } else {
-    await waitFor(`[data-prerender-status="${expectedStatus}"]`);
-  }
+  await waitUntil(() => {
+    let el = document.querySelector('[data-prerender]') as HTMLElement | null;
+    if (!el) {
+      return false;
+    }
+    let status = el.dataset.prerenderStatus ?? '';
+    let hasError = !!el.querySelector('[data-prerender-error]');
+    if (expectedStatus === 'error') {
+      return status === 'unusable' || hasError;
+    }
+    if (hasError) {
+      return true;
+    }
+    return status === expectedStatus;
+  });
   let element = document.querySelector('[data-prerender]') as HTMLElement;
   let errorElement = element.querySelector(
     '[data-prerender-error]',

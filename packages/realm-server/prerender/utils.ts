@@ -197,7 +197,10 @@ export async function captureResult(
         document.querySelectorAll('[data-prerender]'),
       ) as HTMLElement[];
       if (!elements.length) {
-        return false;
+        let errorElement = document.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        return Boolean(errorElement);
       }
       let path = window.location.pathname;
       let expectingRender = path.includes('/render/');
@@ -234,10 +237,18 @@ export async function captureResult(
         if (!statuses.includes(status) && !hasError) {
           continue;
         }
-        if (targetId && element.dataset.prerenderId !== targetId) {
+        if (
+          targetId &&
+          element.dataset.prerenderId &&
+          element.dataset.prerenderId !== targetId
+        ) {
           continue;
         }
-        if (targetNonce && element.dataset.prerenderNonce !== targetNonce) {
+        if (
+          targetNonce &&
+          element.dataset.prerenderNonce &&
+          element.dataset.prerenderNonce !== targetNonce
+        ) {
           continue;
         }
         return true;
@@ -307,10 +318,18 @@ export async function captureResult(
           if (!statuses.includes(status) && !hasError) {
             return false;
           }
-          if (targetId && candidate.dataset.prerenderId !== targetId) {
+          if (
+            targetId &&
+            candidate.dataset.prerenderId &&
+            candidate.dataset.prerenderId !== targetId
+          ) {
             return false;
           }
-          if (targetNonce && candidate.dataset.prerenderNonce !== targetNonce) {
+          if (
+            targetNonce &&
+            candidate.dataset.prerenderNonce &&
+            candidate.dataset.prerenderNonce !== targetNonce
+          ) {
             return false;
           }
           return true;
@@ -325,14 +344,35 @@ export async function captureResult(
           }
           return false;
         });
+      let strayErrorElement: HTMLElement | null = null;
       if (!element) {
+        strayErrorElement = document.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+      }
+      if (!element && !strayErrorElement) {
         throw new Error('Unable to locate prerender result element');
       }
-      let statusAttr = element.dataset.prerenderStatus ?? '';
+      if (!element && strayErrorElement) {
+        let raw =
+          strayErrorElement.textContent ?? strayErrorElement.innerHTML ?? '';
+        let start = raw.indexOf('{');
+        let end = raw.lastIndexOf('}');
+        let json =
+          start !== -1 && end !== -1 && end > start
+            ? raw.slice(start, end + 1)
+            : raw;
+        return {
+          status: 'error',
+          value: json.trim(),
+        } as RenderCapture;
+      }
+      let resolvedElement = element as HTMLElement;
+      let statusAttr = resolvedElement.dataset.prerenderStatus ?? '';
       let alive =
-        (element.dataset.emberAlive as 'true' | 'false' | undefined) ??
+        (resolvedElement.dataset.emberAlive as 'true' | 'false' | undefined) ??
         undefined;
-      let errorElement = element.querySelector(
+      let errorElement = resolvedElement.querySelector(
         '[data-prerender-error]',
       ) as HTMLElement | null;
       let finalStatus: RenderStatus = statuses.includes(statusAttr)
@@ -343,7 +383,7 @@ export async function captureResult(
         let raw =
           errorElement?.textContent ??
           errorElement?.innerHTML ??
-          element.innerHTML ??
+          resolvedElement.innerHTML ??
           '';
         let start = raw.indexOf('{');
         let end = raw.lastIndexOf('}');
@@ -357,11 +397,11 @@ export async function captureResult(
           status,
           value: json.trim(),
           alive,
-          id: element.dataset.prerenderId ?? undefined,
-          nonce: element.dataset.prerenderNonce ?? undefined,
+          id: resolvedElement.dataset.prerenderId ?? undefined,
+          nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
         } as RenderCapture;
       } else {
-        const firstChild = element.children[0] as HTMLElement & {
+        const firstChild = resolvedElement.children[0] as HTMLElement & {
           textContent: string;
           innerHTML: string;
           outerHTML: string;
@@ -370,8 +410,8 @@ export async function captureResult(
           status: finalStatus,
           value: (firstChild as any)[capture]!,
           alive,
-          id: element.dataset.prerenderId ?? undefined,
-          nonce: element.dataset.prerenderNonce ?? undefined,
+          id: resolvedElement.dataset.prerenderId ?? undefined,
+          nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
         } as RenderCapture;
       }
     },

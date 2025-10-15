@@ -467,6 +467,9 @@ export default class CardPrerender extends Component {
     let cleaned = cleanCapturedHTML(markup);
     let errorPayload = extractPrerenderError(cleaned);
     if (errorPayload) {
+      if (this.localIndexer.prerenderStatus === 'loading') {
+        this.localIndexer.prerenderStatus = 'unusable';
+      }
       this.localIndexer.renderError = errorPayload;
       throw new Error(errorPayload);
     }
