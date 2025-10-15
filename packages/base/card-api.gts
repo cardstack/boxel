@@ -2175,7 +2175,7 @@ export class TextAreaField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @type='textarea'
-        @disabled={{not @canEdit}}
+        @readonly={{not @canEdit}}
       />
     </template>
   };
@@ -2596,9 +2596,11 @@ function lazilyLoadLink(
         } else {
           (instance as any)[field.name] = fieldValue;
         }
-        deferred.fulfill();
       } catch (e) {
-        deferred.reject(e);
+        // we replace the node-loaded value with a null
+        // TODO in the future consider recording some link meta that this reference is actually missing
+        (instance as any)[field.name] = null;
+
         // We use a custom event for render errors--otherwise QUnit will report a "global error"
         // when we use a promise rejection to signal to the prerender that there was an error
         // even though everything is working as designed. QUnit is very noisy about these errors...
@@ -2607,6 +2609,7 @@ function lazilyLoadLink(
         });
         globalThis.dispatchEvent(event);
       } finally {
+        deferred.fulfill();
         inflightLoads.delete(key);
         if (inflightLoads.size === 0) {
           inflightLinkLoads.delete(instance);
@@ -3384,7 +3387,8 @@ function myLoader(): Loader {
 
 class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
-  #inFlight: Promise<unknown>[] = [];
+  #inFlight: Set<Promise<unknown>> = new Set();
+  #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
   get(id: string) {
     id = id.replace(/\.json$/, '');
@@ -3400,12 +3404,36 @@ class FallbackCardStore implements CardStore {
   }
   makeTracked(_id: string) {}
   trackLoad(load: Promise<unknown>) {
-    this.#inFlight.push(load);
+    if (this.#inFlight.has(load)) {
+      return;
+    }
+    this.#inFlight.add(load);
+    this.#loadGeneration++;
+    load.finally(() => {
+      this.#inFlight.delete(load);
+    });
   }
   async loaded() {
-    await Promise.allSettled(this.#inFlight);
+    let observedGeneration = this.#loadGeneration;
+    while (true) {
+      if (this.#inFlight.size === 0) {
+        await Promise.resolve();
+      } else {
+        let pendingLoads = Array.from(this.#inFlight);
+        await Promise.allSettled(pendingLoads);
+      }
+      if (
+        this.#inFlight.size === 0 &&
+        this.#loadGeneration === observedGeneration
+      ) {
+        return;
+      }
+      observedGeneration = this.#loadGeneration;
+    }
   }
   async loadDocument(url: string) {
-    return await loadDocument(fetch, url);
+    let promise = loadDocument(fetch, url);
+    this.trackLoad(promise);
+    return await promise;
   }
 }

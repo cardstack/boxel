@@ -13,7 +13,7 @@ export interface Model {
   Component: CardOrFieldTypeIcon;
 }
 
-export default class RenderRoute extends Route<Model> {
+export default class RenderIconRoute extends Route<Model> {
   async model() {
     let parentModel = this.modelFor('render') as ParentModel;
     let instance: CardDef;

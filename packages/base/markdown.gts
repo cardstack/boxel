@@ -230,7 +230,7 @@ export default class MarkdownField extends StringField {
         @type='textarea'
         @value={{@model}}
         @onInput={{@set}}
-        @disabled={{not @canEdit}}
+        @readonly={{not @canEdit}}
       />
     </template>
   };

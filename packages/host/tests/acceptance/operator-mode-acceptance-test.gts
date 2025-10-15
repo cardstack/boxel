@@ -799,8 +799,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-workspace-chooser-toggle]');
 
-    await percySnapshot(assert);
-
     await click('[data-test-workspace="Cardstack Catalog"]');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');

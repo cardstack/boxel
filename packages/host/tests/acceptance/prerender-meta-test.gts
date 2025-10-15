@@ -4,7 +4,11 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, type PrerenderMeta } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type PrerenderMeta,
+  type RenderRouteOptions,
+} from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -24,6 +28,14 @@ module('Acceptance | prerender | meta', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
   });
+
+  const DEFAULT_RENDER_OPTIONS_SEGMENT = encodeURIComponent(
+    JSON.stringify({ resetStore: true } as RenderRouteOptions),
+  );
+  const renderPath = (url: string, suffix: string, nonce = 0) =>
+    `/render/${encodeURIComponent(
+      url,
+    )}/${nonce}/${DEFAULT_RENDER_OPTIONS_SEGMENT}${suffix}`;
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
@@ -230,7 +242,7 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   test('can generate serialized instance', async function (assert) {
     let url = `${testRealmURL}Person/hassan.json`;
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     assert.deepEqual(
@@ -284,7 +296,7 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   test('can generate display name', async function (assert) {
     let url = `${testRealmURL}Pet/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     assert.deepEqual(
@@ -296,7 +308,7 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   test('can generate deps', async function (assert) {
     let url = `${testRealmURL}Pet/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     // note that we cannot derive deps for shimmed modules (better tests for this are on the server)
@@ -309,7 +321,7 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   test('can generate type hierarchy', async function (assert) {
     let url = `${testRealmURL}Pet/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     assert.deepEqual(
@@ -325,7 +337,7 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   test('can generate search doc that includes contains field', async function (assert) {
     let url = `${testRealmURL}Pet/mango.json`;
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     assert.deepEqual(
@@ -343,7 +355,7 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   test('can generate search doc that includes containsMany field', async function (assert) {
     let url = `${testRealmURL}Pet/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     assert.deepEqual(
@@ -364,8 +376,8 @@ module('Acceptance | prerender | meta', function (hooks) {
   test('can generate search doc that includes linksTo field', async function (assert) {
     let url = `${testRealmURL}Person/jade.json`;
     // note that you need to visit the html route first which will pull on all the linked fields
-    await visit(`/render/${encodeURIComponent(url)}/0/html/isolated/0`);
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/html/isolated/0'));
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     assert.deepEqual(
@@ -407,8 +419,8 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   test('can generate search doc that includes linksToMany field', async function (assert) {
     let url = `${testRealmURL}Person/hassan.json`;
-    await visit(`/render/${encodeURIComponent(url)}/0/html/isolated/0`);
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/html/isolated/0'));
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     assert.deepEqual(
@@ -458,8 +470,8 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   test('can generate search doc that includes compound field', async function (assert) {
     let url = `${testRealmURL}Pet/molly.json`;
-    await visit(`/render/${encodeURIComponent(url)}/0/html/isolated/0`);
-    await visit(`/render/${encodeURIComponent(url)}/0/meta`);
+    await visit(renderPath(url, '/html/isolated/0'));
+    await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
     assert.deepEqual(
