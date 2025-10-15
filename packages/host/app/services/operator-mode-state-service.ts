@@ -73,7 +73,8 @@ export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
-  trail: string[];
+  hostModePrimaryCard: string | null;
+  hostModeStack: string[];
   aiAssistantOpen: boolean;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
@@ -122,7 +123,8 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray<Stack>([]),
     submode: Submodes.Interact,
     codePath: null,
-    trail: [],
+    hostModePrimaryCard: null,
+    hostModeStack: [],
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: true,
     newFileDropdownOpen: false,
@@ -176,7 +178,8 @@ export default class OperatorModeStateService extends Service {
       stacks: this._state.stacks,
       submode: this._state.submode,
       codePath: this._state.codePath,
-      trail: this._state.trail,
+      hostModeStack: this._state.hostModeStack,
+      hostModePrimaryCard: this._state.hostModePrimaryCard,
       fileView: this._state.fileView,
       openDirs: this._state.openDirs,
       codeSelection: this._state.codeSelection,
@@ -217,7 +220,8 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: Submodes.Interact,
       codePath: null,
-      trail: [],
+      hostModePrimaryCard: null,
+      hostModeStack: new TrackedArray([]),
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
@@ -381,40 +385,36 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
-  updateTrail(trail: string[]) {
-    this._state.trail = trail;
+  addToHostModeStack(cardId: string) {
+    this._state.hostModeStack.push(cardId);
     this.schedulePersist();
   }
 
-  get currentTrailItem() {
-    if (this._state.trail.length === 0) {
-      // Try to get realm from last stack item, fallback to default readable realm
-      let realmPath =
-        this.getRealmFromLastStackItem() ||
-        this.realm.defaultReadableRealm.path;
-      return new URL('./index.json', realmPath).href;
+  removeFromHostModeStack(cardId: string) {
+    let index = this._state.hostModeStack.findIndex((item) => item === cardId);
+    if (index !== -1) {
+      this._state.hostModeStack.splice(index, 1);
+      this.schedulePersist();
     }
-
-    return this._state.trail[this._state.trail.length - 1];
   }
 
-  private getRealmFromLastStackItem(): string | null {
-    // Get the last stack item from the rightmost stack
-    let rightMostStack = this.rightMostStack();
-    if (rightMostStack && rightMostStack.length > 0) {
-      let lastStackItem = rightMostStack[rightMostStack.length - 1];
-      if (lastStackItem?.id) {
-        try {
-          let realm = this.realm.url(lastStackItem.id);
-          if (realm) {
-            return realm;
-          }
-        } catch (error) {
-          // If we can't determine the realm from the stack item, continue to fallback
-        }
-      }
+  get hostModeStack(): string[] {
+    return this._state.hostModeStack;
+  }
+
+  setHostModePrimaryCard(cardId?: string) {
+    if (cardId && !isLocalId(cardId)) {
+      this._state.hostModePrimaryCard = cardId.replace(/\.json$/, '');
+    } else if (!cardId) {
+      this._state.hostModePrimaryCard = null;
     }
-    return null;
+    // reset stack when primary card is changed
+    this._state.hostModeStack.splice(0, this._state.hostModeStack.length);
+    this.schedulePersist();
+  }
+
+  get hostModePrimaryCard(): string | null {
+    return this._state.hostModePrimaryCard ?? null;
   }
 
   private getRealmURLFromItemId(itemId: string): string {
@@ -773,11 +773,15 @@ export default class OperatorModeStateService extends Service {
   // clicking on "Create New" in linked card editor. Here we want to draw a boundary
   // between navigable states in the query parameter
   rawStateWithSavedCardsOnly() {
+    let trail = [
+      this._state.hostModePrimaryCard,
+      ...this._state.hostModeStack.map((item) => item),
+    ].filter(Boolean) as string[];
     let state: SerializedState = {
       stacks: [],
       submode: this._state.submode,
       codePath: this._state.codePath?.toString(),
-      trail: this._state.trail,
+      trail,
       fileView: this._state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this._state.openDirs.entries()),
       codeSelection: this._state.codeSelection,
@@ -846,7 +850,12 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
-      trail: rawState.trail ?? [],
+      hostModePrimaryCard: rawState.trail?.[0]?.replace(/\.json$/, '') ?? null,
+      hostModeStack: new TrackedArray(
+        rawState.trail
+          ?.slice(1, rawState.trail?.length)
+          .map((item) => item.replace(/\.json$/, '')) ?? [],
+      ),
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection,
@@ -964,13 +973,12 @@ export default class OperatorModeStateService extends Service {
       }
     }
 
-    // For host mode, determine realm from trail using availableRealmIndexCardIds
+    // For host mode, determine realm from hostModePrimaryCard using availableRealmIndexCardIds
     if (submode === Submodes.Host) {
-      // Check if current trail item is an available realm index card
-      let currentTrailItem = this.currentTrailItem;
-      // If trail item is not an index card, try to find the realm from the card's realm
-      if (currentTrailItem) {
-        let cardId = currentTrailItem.replace('.json', '');
+      // Check if hostModePrimaryCard is an available realm index card
+      // If hostModePrimaryCard is not an index card, try to find the realm from the card's realm
+      if (this._state.hostModePrimaryCard) {
+        let cardId = this._state.hostModePrimaryCard.replace(/\.json$/, '');
         let realm = this.realm.url(cardId);
         if (realm) {
           return new URL(realm);

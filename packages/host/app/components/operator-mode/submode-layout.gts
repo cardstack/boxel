@@ -198,36 +198,38 @@ export default class SubmodeLayout extends Component<Signature> {
 
             if (card && this.isCardInstance(card)) {
               // Current code path is a card instance, use it directly
-              this.operatorModeStateService.updateTrail([codePathString]);
+              this.operatorModeStateService.setHostModePrimaryCard(
+                codePathString,
+              );
             } else {
               // Current code path is a card definition, try to get card ID from playground panel
               let playgroundSelection =
                 this.operatorModeStateService.playgroundPanelSelection;
               if (playgroundSelection?.cardId) {
-                this.operatorModeStateService.updateTrail([
+                this.operatorModeStateService.setHostModePrimaryCard(
                   playgroundSelection.cardId + '.json',
-                ]);
+                );
               } else {
                 // Try to find any card instance related to this definition
                 let relatedCardId =
                   await this.findRelatedCardInstance(codePathString);
                 if (relatedCardId) {
-                  this.operatorModeStateService.updateTrail([
+                  this.operatorModeStateService.setHostModePrimaryCard(
                     relatedCardId + '.json',
-                  ]);
+                  );
                 } else {
-                  this.operatorModeStateService.updateTrail([]);
+                  this.operatorModeStateService.setHostModePrimaryCard();
                 }
               }
             }
           } else {
-            this.operatorModeStateService.updateTrail([]);
+            this.operatorModeStateService.setHostModePrimaryCard();
           }
         } else if (currentSubmode === Submodes.Interact) {
-          this.operatorModeStateService.updateTrail(
+          this.operatorModeStateService.setHostModePrimaryCard(
             this.lastCardIdInRightMostStack
-              ? [this.lastCardIdInRightMostStack + '.json']
-              : [],
+              ? this.lastCardIdInRightMostStack + '.json'
+              : undefined,
           );
         }
 

@@ -6,6 +6,10 @@ import { tracked } from '@glimmer/tracking';
 
 import stringify from 'safe-stable-stringify';
 
+import { TrackedArray } from 'tracked-built-ins';
+
+import RealmService from './realm';
+
 interface InitializeOptions {
   primaryCardId: string | null;
   stack: string[];
@@ -16,6 +20,7 @@ type SerializedStack = string[];
 
 export default class HostModeStateService extends Service {
   @service declare router: RouterService;
+  @service declare realm: RealmService;
 
   // The primary card comes from the main path segment of the URL.
   // The stack cards come from the `hostModeStack` query param.
@@ -23,20 +28,10 @@ export default class HostModeStateService extends Service {
   // URL: https://user.example.com/cards/123.json?hostModeStack=https%3A%2F%2Fuser.example.com%2Fcards%2F456.json,https%3A%2F%2Fuser.example.com%2Fcards%2F789.json
   // Primary card ID: https://user.example.com/cards/123
   // Stack card IDs: [https://user.example.com/cards/456, https://user.example.com/cards/789]
-  @tracked private primaryCardId: string | null = null;
-  @tracked private stackCardIds: string[] = [];
+  @tracked private primaryCardItem: string | null = null;
+  private stackCardItems: TrackedArray<string> = new TrackedArray();
   private currentRoutePath: string | null = null;
   private isStateInitialized = false;
-
-  initialize({ primaryCardId, stack, routePath }: InitializeOptions) {
-    this.isStateInitialized = false;
-    this.primaryCardId = primaryCardId
-      ? primaryCardId.replace(/\.json$/, '')
-      : null;
-    this.stackCardIds = this.normalizeIds(stack);
-    this.currentRoutePath = routePath;
-    this.isStateInitialized = true;
-  }
 
   restore({
     primaryCardId,
@@ -56,66 +51,55 @@ export default class HostModeStateService extends Service {
     });
   }
 
-  updateRoutePath(routePath: string) {
-    this.currentRoutePath = routePath;
-  }
-
-  get hostModeCardIds() {
-    if (!this.primaryCardId) {
-      return [] as string[];
+  private initialize({ primaryCardId, stack, routePath }: InitializeOptions) {
+    if (this.isStateInitialized) {
+      return;
     }
-
-    return [this.primaryCardId, ...this.stackCardIds];
+    this.isStateInitialized = false;
+    this.primaryCardItem = primaryCardId ?? null;
+    this.stackCardItems.push(...stack);
+    this.currentRoutePath = routePath;
+    this.isStateInitialized = true;
   }
 
-  get currentCardId() {
-    return this.hostModeCardIds[0];
+  get stackItems() {
+    return this.stackCardItems;
+  }
+
+  get primaryCard(): string | null {
+    return this.primaryCardItem ?? null;
   }
 
   setPrimaryCard(cardId: string | null) {
-    this.primaryCardId = cardId;
-    this.schedulePersist();
-  }
+    if (!this.isStateInitialized) {
+      return;
+    }
 
-  setStack(cardIds: string[]) {
-    this.stackCardIds = this.normalizeIds(cardIds);
+    this.primaryCardItem = cardId ?? null;
     this.schedulePersist();
   }
 
   pushCard(cardId: string) {
-    if (!cardId) {
-      return;
-    }
-    if (cardId === this.primaryCardId || this.stackCardIds.includes(cardId)) {
-      return;
-    }
-
-    this.stackCardIds = [...this.stackCardIds, cardId];
+    this.stackCardItems.push(cardId);
     this.schedulePersist();
   }
 
-  closeCard(cardId: string) {
-    let updatedStack = this.stackCardIds.filter((id) => id !== cardId);
+  removeCardFromStack(cardId: string) {
+    let index = this.stackCardItems.findIndex((item) => item === cardId);
 
-    if (updatedStack.length === this.stackCardIds.length) {
-      // Attempting to close primary card or card that is not stacked; ignore.
-      return;
+    if (index !== -1) {
+      this.stackCardItems.splice(index, 1);
+      this.schedulePersist();
     }
-
-    this.stackCardIds = updatedStack;
-    this.schedulePersist();
   }
 
-  deserialize(serialized: string | undefined | null): string[] {
+  private deserialize(serialized: string | undefined | null): string[] {
     if (!serialized) {
       return [];
     }
 
     try {
-      let parsed = JSON.parse(serialized) as SerializedStack;
-      if (Array.isArray(parsed)) {
-        return this.normalizeIds(parsed.filter((id) => typeof id === 'string'));
-      }
+      return JSON.parse(serialized) as SerializedStack;
     } catch (error) {
       // Ignore malformed data and reset stack
     }
@@ -124,18 +108,11 @@ export default class HostModeStateService extends Service {
   }
 
   serialize(): string | undefined {
-    if (this.stackCardIds.length === 0) {
+    if (this.stackCardItems.length === 0) {
       return undefined;
     }
 
-    return stringify(this.stackCardIds) ?? undefined;
-  }
-
-  private normalizeIds(ids: string[]) {
-    return ids
-      .filter(Boolean)
-      .map((id) => id.replace(/\.json$/, ''))
-      .filter((id, index, arr) => arr.indexOf(id) === index);
+    return stringify(this.stackCardItems) ?? undefined;
   }
 
   private schedulePersist() {

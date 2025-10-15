@@ -25,6 +25,7 @@ import {
 import { meta } from '@cardstack/runtime-common/constants';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
+
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import config from '@cardstack/host/config/environment';
@@ -40,7 +41,11 @@ import HostModeStateService from '@cardstack/host/services/host-mode-state-servi
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 
 export interface HostModeComponentSignature {
   Args: {
@@ -126,19 +131,19 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     return 'host-mode-container';
   }
 
-  get cardIds() {
-    let ids = this.hostModeStateService.hostModeCardIds;
-
-    if (ids.length === 0 && this.card?.id) {
-      return [this.card.id];
+  private viewCard: ViewCardFn = (cardOrURL) => {
+    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    if (!cardId) {
+      return;
     }
 
-    return ids;
-  }
+    let normalizedId = cardId.replace(/\.json$/, '');
+    this.hostModeStateService.pushCard(normalizedId);
+  };
 
   @action
-  closeCard(cardId: string) {
-    this.hostModeStateService.closeCard(cardId);
+  removeCardFromStack(cardId: string) {
+    this.hostModeStateService.removeCardFromStack(cardId);
   }
 
   @provide(CardContextName)
@@ -221,8 +226,10 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
           data-test-host-mode-container
         >
           <HostModeContent
-            @cardIds={{this.cardIds}}
-            @removeCard={{this.closeCard}}
+            @primaryCardId={{this.hostModeStateService.primaryCard}}
+            @stackItemCardIds={{this.hostModeStateService.stackItems}}
+            @removeCardFromStack={{this.removeCardFromStack}}
+            @viewCard={{this.viewCard}}
             class='full-host-mode-content'
           />
         </section>
