@@ -21,16 +21,33 @@ export default class LayoutCanvasModifier extends Modifier<{
   private dragStartPos = { x: 0, y: 0 };
   private lastPanPos = { x: 0, y: 0 };
   private currentTransform = { x: 0, y: 0, k: 1 };
-  private nodeElements: Map<string, HTMLElement> = new Map();
+  private nodeElements = new Map<string, HTMLElement>();
+  private overlayMeasureIntervals = new Map<
+    HTMLElement,
+    ReturnType<typeof setInterval>
+  >();
 
   constructor(owner: any, args: any) {
     super(owner, args);
   }
 
   private cleanupOverlay(overlay: HTMLElement) {
-    const intervalId = overlay.dataset.measureInterval;
-    if (intervalId) {
-      clearInterval(Number(intervalId));
+    const storedInterval = this.overlayMeasureIntervals.get(overlay);
+    const intervalId =
+      storedInterval ??
+      (overlay.dataset.measureInterval
+        ? Number(overlay.dataset.measureInterval)
+        : undefined);
+
+    if (intervalId !== undefined) {
+      window.clearInterval(intervalId as number);
+    }
+
+    if (storedInterval !== undefined) {
+      this.overlayMeasureIntervals.delete(overlay);
+    }
+
+    if (overlay.dataset.measureInterval) {
       delete overlay.dataset.measureInterval;
     }
   }
@@ -41,6 +58,7 @@ export default class LayoutCanvasModifier extends Modifier<{
       overlay.remove();
     });
     this.nodeElements.clear();
+    this.overlayMeasureIntervals.clear();
 
     if (this.panZoomPane) {
       this.panZoomPane
@@ -240,6 +258,13 @@ export default class LayoutCanvasModifier extends Modifier<{
     selectedItemId?: string | null,
   ) {
     // ¹¹ Create drag overlay for layout items
+    const existingOverlay = this.nodeElements.get(itemData.id);
+    if (existingOverlay) {
+      this.cleanupOverlay(existingOverlay);
+      existingOverlay.remove();
+      this.nodeElements.delete(itemData.id);
+    }
+
     const overlay = document.createElement('div');
     overlay.className = 'layout-item-wrapper';
     overlay.dataset.itemId = itemData.id; // Add ID for height measurement
@@ -621,6 +646,7 @@ export default class LayoutCanvasModifier extends Modifier<{
       setTimeout(measureContentHeight, 500);
       // Also measure periodically to catch async content changes
       const measureInterval = setInterval(measureContentHeight, 2000);
+      this.overlayMeasureIntervals.set(overlay, measureInterval);
       overlay.dataset.measureInterval = measureInterval.toString();
     }
 

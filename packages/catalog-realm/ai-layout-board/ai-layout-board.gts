@@ -6,6 +6,7 @@ import {
   containsMany,
   Component,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import {
   eq,
@@ -40,6 +41,11 @@ import LayoutCanvasModifier from './modifiers/layout-canvas-modifier'; // ¹²�
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 
 class Isolated extends Component<typeof AILayoutBoard> {
+  @tracked transform = {
+    x: this.args.model.transformX ?? 0,
+    y: this.args.model.transformY ?? 0,
+    k: this.args.model.transformK ?? 1,
+  };
   @tracked viewMode: 'canvas' | 'list' = 'canvas'; // ¹⁶ Toggle between canvas and list views
   @tracked showToolPalette = false; // ⁸⁸ Track tool palette visibility
   @tracked selectedItemId: string | null = null; // ¹⁴⁴ Track selected item for deletion
@@ -47,13 +53,6 @@ class Isolated extends Component<typeof AILayoutBoard> {
   // ¹⁸⁹ Cache for itemData to prevent unnecessary re-creation
   private _cachedItemData: any[] | null = null;
   private _lastAllItemsHash: string | null = null;
-
-  get transform() {
-    const x = this.args.model.transformX ?? 0;
-    const y = this.args.model.transformY ?? 0;
-    const k = this.args.model.transformK ?? 1;
-    return { x, y, k };
-  }
 
   get itemData() {
     // ¹⁸ Convert allItems to data format for canvas interactions with caching
@@ -663,9 +662,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
             class='layout-viewport'
             style={{htmlSafe
               (concat
-                'width: '
-                (if @model.canvasWidth @model.canvasWidth 1920)
-                'px; height: '
+                'height: '
                 (if @model.canvasHeight @model.canvasHeight 800)
                 'px;'
               )
@@ -2437,7 +2434,11 @@ export class AILayoutBoard extends CardDef {
   @field externalCards = containsMany(ExternalCard); // ⁵⁹ External cards field
 
   // ¹⁴ Canvas settings
-  @field canvasWidth = contains(NumberField);
+  @field canvasWidth = contains(StringField, {
+    computeVia: function (this: AILayoutBoard) {
+      return '100%';
+    },
+  }); // This is needed be 100% accurate for the canvas width
   @field canvasHeight = contains(NumberField);
   @field gridSize = contains(NumberField);
 

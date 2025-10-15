@@ -39,7 +39,7 @@
             "x": -809.9890549394571,
             "y": -167,
             "width": 381,
-            "autoHeight": 303,
+            "autoHeight": 392,
             "customHeight": 415,
             "layer": 1,
             "format": "isolated"
@@ -54,7 +54,7 @@
             "x": -376.23199676509273,
             "y": -169.96988938167203,
             "width": 308.48991663227355,
-            "autoHeight": 166,
+            "autoHeight": 215,
             "customHeight": 166,
             "layer": 1,
             "format": "isolated"
@@ -68,11 +68,10 @@
         "thumbnailURL": null
       },
       "gridSize": 10,
-      "transformK": 1,
-      "transformX": 857,
-      "transformY": 279,
-      "canvasWidth": 1920,
-      "canvasHeight": 700,
+      "transformK": 1.2927858652143038,
+      "transformX": 1324.6606820211937,
+      "transformY": 284.3739637653796,
+      "canvasHeight": 800,
       "externalCards": [
         {
           "caption": "Advanced Space Exploration Challenge - Astronomy & Astrophysics",
@@ -80,7 +79,7 @@
             "x": -370.7444517691428,
             "y": 54.49647397396225,
             "width": 400,
-            "autoHeight": 206,
+            "autoHeight": 266,
             "customHeight": 0,
             "layer": 1,
             "format": "embedded"
