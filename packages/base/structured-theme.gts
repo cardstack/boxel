@@ -6,8 +6,14 @@ import {
   BoxelButton,
   BoxelContainer,
   GridContainer,
+  BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { generateCssVariables } from '@cardstack/boxel-ui/helpers';
+import {
+  buildCssGroups,
+  generateCssVariables,
+  parseCssGroups,
+  type CssRuleMap,
+} from '@cardstack/boxel-ui/helpers';
 
 import {
   field,
@@ -19,18 +25,35 @@ import {
 } from './card-api';
 import ThemeVarField from './structured-theme-variables';
 
-const formatCssFields = (vars: ThemeVarField) => {
-  const items = vars?.cssVariableFields?.map((f) => ({
-    property: f.cssVariableName,
-    value: f.value,
-  }));
-  return items;
+// Applies parsed CSS rules back onto the card fields for editing.
+const applyCssRulesToField = (
+  field: ThemeVarField | undefined,
+  rules: CssRuleMap | undefined,
+) => {
+  if (!field || !rules?.size) {
+    return;
+  }
+  const cssFields = field.cssVariableFields;
+  if (!cssFields?.length) {
+    return;
+  }
+  const lookup = new Map<string, string>(
+    cssFields.map((f) => [f.cssVariableName, f.fieldName]),
+  );
+  for (let [property, value] of rules.entries()) {
+    const fieldName = lookup.get(property);
+    if (!fieldName) {
+      continue;
+    }
+    (field as any)[fieldName] = value;
+  }
 };
 
 class Isolated extends Component<typeof StructuredTheme> {
   @tracked isGeneratedCSSVisible = true;
   @tracked isRootVariablesVisible = true;
   @tracked isDarkVariablesVisible = true;
+  @tracked isCssTextareaVisible = true;
 
   @action toggleGeneratedCSSVisibility() {
     this.isGeneratedCSSVisible = !this.isGeneratedCSSVisible;
@@ -44,6 +67,25 @@ class Isolated extends Component<typeof StructuredTheme> {
     this.isDarkVariablesVisible = !this.isDarkVariablesVisible;
   }
 
+  @action toggleCssTextareaVisibility() {
+    this.isCssTextareaVisible = !this.isCssTextareaVisible;
+  }
+
+  @action parseCss(content: string) {
+    if (!content) {
+      return;
+    }
+    const groups = parseCssGroups(content);
+    if (!groups?.size) {
+      return;
+    }
+    applyCssRulesToField(this.args.model?.rootVariables, groups.get(':root'));
+    applyCssRulesToField(
+      this.args.model?.darkModeVariables,
+      groups.get('.dark'),
+    );
+  }
+
   <template>
     <GridContainer @tag='article' class='structured-theme-card'>
       <BoxelContainer @tag='header' @display='flex' class='theme-header'>
@@ -52,6 +94,27 @@ class Isolated extends Component<typeof StructuredTheme> {
           <@fields.description />
         </p>
       </BoxelContainer>
+
+      <GridContainer @tag='section' class='content-section'>
+        <GridContainer @tag='header' class='section-header'>
+          <h2>CSS Variables</h2>
+          <BoxelButton
+            @kind='text-only'
+            @size='extra-small'
+            class='section-toggle'
+            aria-expanded={{this.isCssTextareaVisible}}
+            aria-controls='css-variables-content'
+            {{on 'click' this.toggleCssTextareaVisibility}}
+          >
+            {{if this.isCssTextareaVisible 'Hide' 'Show'}}
+          </BoxelButton>
+        </GridContainer>
+        {{#if this.isCssTextareaVisible}}
+          <div id='css-variables-content' class='section-body'>
+            <BoxelInput @type='textarea' @onInput={{this.parseCss}} />
+          </div>
+        {{/if}}
+      </GridContainer>
 
       <GridContainer @tag='section' class='content-section'>
         <GridContainer @tag='header' class='section-header'>
@@ -233,13 +296,15 @@ export default class StructuredTheme extends Theme {
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
     computeVia: function (this: StructuredTheme) {
-      if (!generateCssVariables) {
+      if (!generateCssVariables || !buildCssGroups) {
         return;
       }
-      return generateCssVariables([
-        { blockname: ':root', vars: formatCssFields(this.rootVariables) },
-        { blockname: '.dark', vars: formatCssFields(this.darkModeVariables) },
-      ]);
+      return generateCssVariables(
+        buildCssGroups([
+          { selector: ':root', rules: this.rootVariables?.cssRuleMap },
+          { selector: '.dark', rules: this.darkModeVariables?.cssRuleMap },
+        ]),
+      );
     },
   });
 
