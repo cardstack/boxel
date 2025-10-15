@@ -25,7 +25,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  SYSTEM_CARD_FIXTURE_CONTENTS,
   testModuleRealm,
   cardInfo,
 } from '../helpers';
@@ -93,7 +92,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'empty.json': {
           data: {
             meta: {
@@ -145,7 +143,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'test1.json': {
           data: {
             meta: {
@@ -253,7 +250,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/mango.json': {
           data: {
             id: `${testRealmURL}Pet/mango`,
@@ -365,7 +361,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/mango.json': {
           data: {
             id: `${testRealmURL}Pet/mango`,
@@ -496,7 +491,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Person/owner.json': {
           data: {
             id: `${testRealmURL}Person/owner`,
@@ -586,7 +580,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Person/owner.json': {
           data: {
             id: `${testRealmURL}Person/owner`,
@@ -678,7 +671,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'person-spec.json': {
           data: {
@@ -779,7 +771,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'person-spec.json': {
           data: {
@@ -990,7 +981,6 @@ module(`Integration | realm indexing`, function (hooks) {
       let { realm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'person.gts': { Person },
           'boom.gts': { Boom },
           'vangogh.json': {
@@ -1141,7 +1131,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'boom-person.gts': { BoomPerson },
         'boom.gts': { Boom },
         'person.gts': { Person },
@@ -1270,7 +1259,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'boom-person2.gts': { BoomPerson2 },
         'custom-boom.gts': { CustomBoom },
         'person.gts': { Person },
@@ -1377,7 +1365,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'vangogh.json': {
           data: {
@@ -1437,7 +1424,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'fancy-person.gts': { FancyPerson },
         'germaine.json': {
@@ -1574,7 +1560,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'fancy-person.gts': { FancyPerson },
         'germaine.json': {
@@ -1709,7 +1694,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person-card.gts': { Person },
         'appointment.gts': { Appointment },
         'pet-card.gts': { PetCard },
@@ -1780,7 +1764,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Vendor/vendor1.json': {
           data: {
             id: `${testRealmURL}Vendor/vendor1`,
@@ -1999,7 +1982,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Boom/boom.json': {
           data: {
             id: `${testRealmURL}Boom/boom`,
@@ -2061,7 +2043,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/mango.json': {
           data: {
             attributes: { firstName: 'Mango' },
@@ -2123,7 +2104,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Publication/pacific.json': {
           data: {
             id: `${testRealmURL}Publication/pacific`,
@@ -2269,7 +2249,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'booking.gts': { Booking },
         'person.gts': { Person },
         'post.gts': { Post },
@@ -2322,7 +2301,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/vanGogh.json': {
           data: {
             attributes: { firstName: 'Van Gogh' },
@@ -2526,7 +2504,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'PetPerson/burcu.json': {
           data: {
             attributes: { firstName: 'Burcu' },
@@ -2621,7 +2598,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/vanGogh.json': {
           data: {
             attributes: { firstName: 'Van Gogh' },
@@ -2750,7 +2726,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Friend/hassan.json': {
           data: {
             id: `${testRealmURL}Friend/hassan`,
@@ -2911,7 +2886,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Friend/hassan.json': {
           data: {
             id: `${testRealmURL}Friend/hassan`,
@@ -3214,7 +3188,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Friend/hassan.json': {
           data: {
             id: `${testRealmURL}Friend/hassan`,
@@ -3328,7 +3301,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Friends/vanGogh.json': {
           data: {
             attributes: { firstName: 'Van Gogh' },
@@ -3505,10 +3477,10 @@ module(`Integration | realm indexing`, function (hooks) {
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               title: 'Van Gogh',
-              cardInfo: { theme: null },
+              cardInfo: { theme: null, ...cardInfo },
             },
           ],
-          cardInfo: { theme: null },
+          cardInfo: { theme: null, ...cardInfo },
         },
         'hassan searchData is correct',
       );
@@ -3805,7 +3777,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person-1.json': {
           data: {
             attributes: {
@@ -3908,7 +3879,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'spec-1.json': {
           data: {
             attributes: {
@@ -4040,7 +4010,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'ignore-me-1.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },
@@ -4119,7 +4088,6 @@ posts/please-ignore-me.json
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         '.realm.json': `{ name: 'Example Workspace' }`,
         'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
       },
@@ -4142,7 +4110,6 @@ posts/please-ignore-me.json
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'posts/ignore-me.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },

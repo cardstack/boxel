@@ -15,7 +15,6 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
-  SYSTEM_CARD_FIXTURE_CONTENTS,
   testModuleRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -24,6 +23,7 @@ import { setupRenderingTest } from '../helpers/setup';
 const paths = new RealmPaths(new URL(testRealmURL));
 
 let loader: Loader;
+
 
 module(`Integration | realm querying`, function (hooks) {
   setupRenderingTest(hooks);
@@ -579,7 +579,6 @@ module(`Integration | realm querying`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         ...sampleCards,
       },
     });
