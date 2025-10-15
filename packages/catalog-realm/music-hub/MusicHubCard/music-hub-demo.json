@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "MusicHubCard",
-        "module": "../music-hub/music-hub"
+        "module": "../music-hub"
       }
     },
     "type": "card",
@@ -31,11 +31,6 @@
       "creativeTool": {
         "links": {
           "self": "../../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": null
         }
       },
       "featuredSongs.0": {

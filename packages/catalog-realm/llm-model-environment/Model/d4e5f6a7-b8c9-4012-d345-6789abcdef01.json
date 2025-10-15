@@ -9,7 +9,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../llm-model-environment",
+        "module": "../model",
         "name": "Model"
       }
     }

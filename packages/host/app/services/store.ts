@@ -140,6 +140,18 @@ export default class StoreService extends Service implements StoreInterface {
     this.ready = this.setup();
   }
 
+  resetCache() {
+    storeLogger.debug('resetting store cache');
+    this.referenceCount = new Map();
+    this.autoSaveStates = new TrackedMap();
+    this.newReferencePromises = [];
+    this.inflightGetCards = new Map();
+    this.inflightCardMutations = new Map();
+    this.autoSaveQueues = new Map();
+    this.autoSavePromises = new Map();
+    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+  }
+
   dropReference(id: string | undefined) {
     if (!id) {
       return;

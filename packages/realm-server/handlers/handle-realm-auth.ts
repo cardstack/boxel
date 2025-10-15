@@ -13,9 +13,10 @@ import { sendResponseForError, setContextResponse } from '../middleware';
 export default function handleRealmAuth({
   dbAdapter,
   realmSecretSeed,
-  matrixClient,
+  realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    let allRealms = realms;
     let token = ctxt.state.token as RealmServerTokenClaim;
     let { user: matrixUserId } = token;
     let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
@@ -30,26 +31,29 @@ export default function handleRealmAuth({
       return;
     }
 
-    let dmRooms =
-      (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-
-    let sessionRoomId = dmRooms[user.matrixUserId];
-
     let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
       userId: matrixUserId,
       onlyOwnRealms: false,
     });
 
     let sessions: { [realm: string]: string } = {};
-    for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
-      sessions[realm] = createJWT(
+    for (let [realmUrl, permissions] of Object.entries(
+      permissionsForAllRealms,
+    )) {
+      let realm = allRealms.find((r) => r.url === realmUrl);
+      if (!realm) {
+        console.error(
+          `Permissions found pointing to unknown realm ${realmUrl}`,
+        );
+        continue;
+      }
+      let sessionRoom = await realm.ensureSessionRoom(matrixUserId);
+      sessions[realmUrl] = createJWT(
         {
           user: matrixUserId,
-          realm: realm,
+          realm: realmUrl,
           permissions,
-          sessionRoom: sessionRoomId,
+          sessionRoom,
         },
         '7d',
         realmSecretSeed,
