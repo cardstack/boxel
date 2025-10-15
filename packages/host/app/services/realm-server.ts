@@ -250,25 +250,26 @@ export default class RealmServerService extends Service {
       [realmURL: string]: string;
     };
 
+    await this.ensureJoinedSessionRoom(tokens);
     for (let [realmURL, token] of Object.entries(tokens)) {
-      await this.ensureJoinToSessionRoom(token);
       this.realm.getOrCreateRealmResource(realmURL, token);
     }
   }
 
-  private async ensureJoinToSessionRoom(token: string) {
-    let joinedRoomSet = new Set<string>();
+  private async ensureJoinedSessionRoom(tokens: {
+    [realmUrl: string]: string;
+  }) {
     if (!this.client) {
       throw new Error(`Cannot check joined rooms without matrix client`);
     }
-
     let { joined_rooms } = await this.client.getJoinedRooms();
-    joinedRoomSet = new Set(joined_rooms ?? []);
-
-    let { sessionRoom } = claimsFromRawToken(token);
-    if (!joinedRoomSet.has(sessionRoom)) {
-      await joinDMRoom(this.client, sessionRoom);
-      joinedRoomSet.add(sessionRoom);
+    let joinedRoomSet = new Set(joined_rooms ?? []);
+    for (let [_realmURL, token] of Object.entries(tokens)) {
+      let { sessionRoom } = claimsFromRawToken(token);
+      if (!joinedRoomSet.has(sessionRoom)) {
+        await joinDMRoom(this.client, sessionRoom);
+        joinedRoomSet.add(sessionRoom);
+      }
     }
   }
 
