@@ -348,6 +348,11 @@ export function getContainsManyComponent({
           .containsMany-field.atom-format > .containsMany-item {
             display: inline;
           }
+          .containsMany-field.embedded-format
+            > .containsMany-item
+            + .containsMany-item {
+            margin-top: var(--boxel-sp);
+          }
         }
       </style>
     </template>

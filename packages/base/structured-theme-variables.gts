@@ -58,7 +58,10 @@ class Embedded extends Component<typeof ThemeVarField> {
         </div>
         <div class='code-preview'>
           {{#if field.value}}
-            <span class='css-value'><field.component /></span>
+            <span
+              class='css-value'
+              data-test-var-value={{field.fieldName}}
+            ><field.component /></span>
             <CopyButton
               class='copy-button'
               @textToCopy={{field.value}}

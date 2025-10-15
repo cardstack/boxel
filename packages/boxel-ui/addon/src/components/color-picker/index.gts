@@ -33,6 +33,7 @@ export default class ColorPicker extends Component<Signature> {
           @value={{@color}}
           @onInput={{@onChange}}
           @disabled={{@disabled}}
+          data-test-color-input
         />
       </label>
 
@@ -42,6 +43,7 @@ export default class ColorPicker extends Component<Signature> {
         @onInput={{@onChange}}
         @disabled={{@disabled}}
         @placeholder={{@placeholder}}
+        data-test-color-text-input
       />
 
       {{#if @color}}
@@ -53,6 +55,7 @@ export default class ColorPicker extends Component<Signature> {
             @height='16px'
             {{on 'click' this.remove}}
             aria-label='Unset color'
+            data-test-remove-color
           />
         {{/unless}}
       {{/if}}
