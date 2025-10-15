@@ -247,34 +247,35 @@ export default class RealmServerService extends Service {
       [realmURL: string]: string;
     };
 
+    for (let [realmURL, token] of Object.entries(tokens)) {
+      await this.ensureJoinToSessionRoom(token);
+      this.realm.getOrCreateRealmResource(realmURL, token);
+    }
+  }
+
+  private async ensureJoinToSessionRoom(token: string) {
     let joinedRoomSet = new Set<string>();
     if (!this.client) {
-      throw new Error(
-        `Cannot authenticate to all realms without matrix client`,
-      );
+      throw new Error(`Cannot check joined rooms without matrix client`);
     }
 
     let { joined_rooms } = await this.client.getJoinedRooms();
     joinedRoomSet = new Set(joined_rooms ?? []);
 
-    for (let [realmURL, token] of Object.entries(tokens)) {
-      let { sessionRoom } = claimsFromRawToken(token);
-      if (!joinedRoomSet.has(sessionRoom)) {
-        await this.client.joinRoom(sessionRoom);
-        joinedRoomSet.add(sessionRoom);
-      }
-      let directRooms = await this.client.getAccountDataFromServer('m.direct');
-      let userId = this.client.getUserId();
-      if (
-        userId &&
-        (!directRooms?.[userId] || !directRooms[userId].includes(sessionRoom))
-      ) {
-        await this.client.setAccountData('m.direct', {
-          [userId]: [...(directRooms?.[userId] ?? []), sessionRoom],
-        });
-      }
-
-      this.realm.getOrCreateRealmResource(realmURL, token);
+    let { sessionRoom } = claimsFromRawToken(token);
+    if (!joinedRoomSet.has(sessionRoom)) {
+      await this.client.joinRoom(sessionRoom);
+      joinedRoomSet.add(sessionRoom);
+    }
+    let directRooms = await this.client.getAccountDataFromServer('m.direct');
+    let userId = this.client.getUserId();
+    if (
+      userId &&
+      (!directRooms?.[userId] || !directRooms[userId].includes(sessionRoom))
+    ) {
+      await this.client.setAccountData('m.direct', {
+        [userId]: [...(directRooms?.[userId] ?? []), sessionRoom],
+      });
     }
   }
 
