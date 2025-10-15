@@ -109,7 +109,7 @@ export function buildPrerenderApp(
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'prerendered %s total=%dms launch=%dms render=%dms pool: pageId=%s realm=%s%s',
+        'prerendered %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
         url,
         totalMs,
         timings.launchMs,
