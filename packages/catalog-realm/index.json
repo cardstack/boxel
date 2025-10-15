@@ -18,12 +18,12 @@
     "relationships": {
       "new.0": {
         "links": {
-          "self": "./AppListing/4b0be04c-68dd-456d-8faf-d8cbfcb2c464"
+          "self": "./CardListing/454c33bd-bc8a-4bda-bd32-321bd541548a"
         }
       },
       "new.1": {
         "links": {
-          "self": "./AppListing/1d17b731-7108-42db-b4fb-93643288553c"
+          "self": "./CardListing/046941a0-aac1-4eca-aede-6a59eac4fc9e"
         }
       },
       "new.2": {
@@ -38,22 +38,22 @@
       },
       "new.4": {
         "links": {
-          "self": "./AppListing/707a0c91-4c88-45d9-a28e-1195c8834b66"
+          "self": "./CardListing/2d838726-ed2c-437d-a171-eade2544ca66"
         }
       },
       "new.5": {
         "links": {
-          "self": "./CardListing/046941a0-aac1-4eca-aede-6a59eac4fc9e"
+          "self": "./CardListing/e1f6cb25-0749-485a-9eee-4b6897cb3d41"
         }
       },
       "new.6": {
         "links": {
-          "self": "./CardListing/454c33bd-bc8a-4bda-bd32-321bd541548a"
+          "self": "./AppListing/4b0be04c-68dd-456d-8faf-d8cbfcb2c464"
         }
       },
       "new.7": {
         "links": {
-          "self": "./CardListing/f0277f2a-26af-4e25-8222-6d6492bc08f6"
+          "self": "./AppListing/1d17b731-7108-42db-b4fb-93643288553c"
         }
       },
       "featured.0": {
