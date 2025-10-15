@@ -15,6 +15,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -103,6 +104,7 @@ module('Acceptance | prerender | meta', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
         'cat.gts': { Cat },

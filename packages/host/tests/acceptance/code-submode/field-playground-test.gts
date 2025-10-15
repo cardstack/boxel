@@ -10,6 +10,7 @@ import {
   assertMessages,
   percySnapshot,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAuthEndpoints,
   setupLocalIndexing,
   setupUserSubscription,
@@ -231,6 +232,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'author.gts': authorCard,
           'blog-post.gts': blogPostCard,
           'pet.gts': petCard,
@@ -1082,6 +1084,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: personalRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'author.gts': authorCard,
           '.realm.json': {
             name: `Test User's Workspace`,
@@ -1095,6 +1098,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: additionalRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'author.gts': authorCard,
           'pet.gts': petCard,
           'Spec/toy.json': {

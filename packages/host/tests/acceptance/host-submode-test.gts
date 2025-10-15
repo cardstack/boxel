@@ -11,6 +11,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   testRealmInfo,
 } from '../helpers';
@@ -57,6 +58,7 @@ module('Acceptance | host submode', function (hooks) {
 
   hooks.beforeEach(function () {
     realmContents = {
+      ...SYSTEM_CARD_FIXTURE_CONTENTS,
       'index.json': new CardsGrid(),
       '.realm.json': {
         name: 'Test Workspace B',

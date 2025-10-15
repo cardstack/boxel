@@ -24,6 +24,7 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -59,7 +60,7 @@ module('Integration | message service subscription', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
-      contents: {},
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS },
     });
   });
 

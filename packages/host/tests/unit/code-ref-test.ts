@@ -13,9 +13,19 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  withSystemCardFixture,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+function setupRealmWithSystemCard(
+  options: Parameters<typeof setupIntegrationTestRealm>[0],
+) {
+  return setupRealmWithSystemCard({
+    ...options,
+    contents: withSystemCardFixture(options.contents ?? {}),
+  });
+}
 
 module('code-ref', function (hooks) {
   setupRenderingTest(hooks);
@@ -27,7 +37,7 @@ module('code-ref', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
 
-    await setupIntegrationTestRealm({
+    await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'person.gts': `

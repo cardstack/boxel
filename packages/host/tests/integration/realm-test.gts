@@ -25,6 +25,7 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  withSystemCardFixture,
   testModuleRealm,
   cardInfo,
   getFileCreatedAt,
@@ -42,6 +43,15 @@ import {
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+function setupRealmWithSystemCard(
+  options: Parameters<typeof setupIntegrationTestRealm>[0],
+) {
+  return setupRealmWithSystemCard({
+    ...options,
+    contents: withSystemCardFixture(options.contents ?? {}),
+  });
+}
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -72,7 +82,7 @@ module('Integration | realm', function (hooks) {
   }
 
   test('realm can serve GET card requests', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/empty.json': {
@@ -134,7 +144,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve GET card requests with linksTo relationships', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/owner.json': {
@@ -276,7 +286,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve GET card requests with linksTo relationships to other realms', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/mango.json': {
@@ -401,7 +411,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/empty.json': {
@@ -458,7 +468,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve create card requests', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {},
     });
@@ -532,7 +542,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm cannot create card request which is NOT directory', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {},
     });
@@ -568,7 +578,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm allows create card requests into directories of the realm', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {},
     });
@@ -647,7 +657,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve POST requests that include linksTo fields', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/owner.json': {
@@ -824,7 +834,7 @@ module('Integration | realm', function (hooks) {
     class Driver extends CardDef {
       @field card = contains(Person);
     }
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
@@ -881,7 +891,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve patch card requests', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/card.json': {
@@ -1023,7 +1033,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can remove item from containsMany field via PATCH request', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'ski-trip.json': {
@@ -1169,7 +1179,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can remove item from linksToMany field via PATCH request', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
@@ -1396,7 +1406,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can add an item to linksToMany relationships via PATCH request', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
@@ -1539,7 +1549,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can add items to null linksToMany relationship via PATCH request', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
@@ -1675,7 +1685,7 @@ module('Integration | realm', function (hooks) {
       @field inners = containsMany(Inner);
     }
 
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'outer.gts': {
@@ -1772,7 +1782,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can remove all items to in a linksToMany relationship via PATCH request', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
@@ -1880,7 +1890,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve PATCH requests to linksTo field in a card that also has a linksToMany field', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
@@ -2012,7 +2022,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve PATCH requests to both linksTo and linksToMany fields', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
@@ -2158,7 +2168,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve PATCH requests that include linksTo fields', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/hassan.json': {
@@ -2372,7 +2382,7 @@ module('Integration | realm', function (hooks) {
       @field model = contains(StringField);
       @field year = contains(StringField);
     }
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
@@ -2540,7 +2550,7 @@ module('Integration | realm', function (hooks) {
       @field model = contains(StringField);
       @field year = contains(StringField);
     }
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -2626,7 +2636,7 @@ module('Integration | realm', function (hooks) {
     class Driver extends CardDef {
       @field card = contains(Person);
     }
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
@@ -2707,7 +2717,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve delete card requests', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'cards/1.json': {
@@ -2791,7 +2801,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve card source file', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
@@ -2815,7 +2825,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm provide redirect for card source', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
@@ -2838,7 +2848,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm returns 404 when no card source can be found', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {},
     });
@@ -2854,7 +2864,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve card source post request', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {},
     });
@@ -2906,7 +2916,7 @@ module('Integration | realm', function (hooks) {
       @field lastName = contains(StringField);
     }
 
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -2949,7 +2959,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
@@ -2969,7 +2979,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve compiled js file when requested with file extension ', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
@@ -2996,7 +3006,7 @@ module('Integration | realm', function (hooks) {
         </body>
       </html>
     `.trim();
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/index.html': html,
@@ -3012,7 +3022,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve search requests', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/empty.json': {
@@ -3050,7 +3060,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve search requests whose results have linksTo fields', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/mariko.json': {
@@ -3301,7 +3311,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve directory requests', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'dir/empty.json': {
@@ -3369,7 +3379,7 @@ module('Integration | realm', function (hooks) {
       export class Post extends CardDef {}
     `;
 
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'sample-post.json': '',
@@ -3435,7 +3445,7 @@ posts/ignore-me.gts
   });
 
   test('realm can serve info requests by reading .realm.json', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         '.realm.json': `{
@@ -3477,7 +3487,7 @@ posts/ignore-me.gts
   });
 
   test('realm can serve info requests if .realm.json is missing', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {},
     });
@@ -3504,7 +3514,7 @@ posts/ignore-me.gts
   });
 
   test('realm can serve info requests if .realm.json is malformed', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         '.realm.json': `Some example content that is not valid json`,
@@ -3533,7 +3543,7 @@ posts/ignore-me.gts
   });
 
   test('realm does not crash when indexing a broken instance', async function (assert) {
-    await setupIntegrationTestRealm({
+    await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: {
         'FieldDef/1.json': {

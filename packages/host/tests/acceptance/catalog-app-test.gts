@@ -24,6 +24,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   verifySubmode,
   toggleFileTree,
@@ -180,6 +181,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       realmURL: mockCatalogURL,
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'author/author.gts': authorCardSource,
         'blog-post/blog-post.gts': blogPostCardSource,
         'fields/contact-link.gts': contactLinkFieldSource,
@@ -658,6 +660,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       mockMatrixUtils,
       realmURL: testDestinationRealmURL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': {
           data: {
             type: 'card',
@@ -1307,6 +1310,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             realmURL: mockCatalogURL,
             mockMatrixUtils,
             contents: {
+              ...SYSTEM_CARD_FIXTURE_CONTENTS,
               'Category/category-with-null-sphere.json': {
                 data: {
                   type: 'card',

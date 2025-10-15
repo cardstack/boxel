@@ -47,6 +47,7 @@ import {
   setupOnSave,
   setupCardLogs,
   setupIntegrationTestRealm,
+  withSystemCardFixture,
   type TestContextWithSave,
   withSlowSave,
 } from '../helpers';
@@ -65,6 +66,15 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
+
+function setupRealmWithSystemCard(
+  options: Parameters<typeof setupIntegrationTestRealm>[0],
+) {
+  return setupRealmWithSystemCard({
+    ...options,
+    contents: withSystemCardFixture(options.contents ?? {}),
+  });
+}
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
@@ -151,7 +161,7 @@ module('Integration | Store', function (hooks) {
     realmService = getService('realm');
 
     ({ adapter: testRealmAdapter, realm: testRealm } =
-      await setupIntegrationTestRealm({
+      await setupRealmWithSystemCard({
         mockMatrixUtils,
         contents: {
           'person.gts': { Person },

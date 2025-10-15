@@ -16,6 +16,8 @@ import {
   cleanWhiteSpace,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
+  withSystemCardFixture,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -61,7 +63,7 @@ module('Integration | card-prerender', function (hooks) {
 
     ({ realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
-      contents: {
+      contents: withSystemCardFixture({
         'pet.gts': { Pet },
         'Pet/mango.json': {
           data: {
@@ -175,7 +177,7 @@ module('Integration | card-prerender', function (hooks) {
             },
           },
         },
-      },
+      }),
     }));
   });
 

@@ -40,6 +40,7 @@ import {
   setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   assertMessages,
   setupRealmServerEndpoints,
@@ -345,6 +346,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
         'country.gts': countryDefinition,

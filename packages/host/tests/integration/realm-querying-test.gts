@@ -15,10 +15,20 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
+  withSystemCardFixture,
   testModuleRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+function setupRealmWithSystemCard(
+  options: Parameters<typeof setupIntegrationTestRealm>[0],
+) {
+  return setupRealmWithSystemCard({
+    ...options,
+    contents: withSystemCardFixture(options.contents ?? {}),
+  });
+}
 
 const paths = new RealmPaths(new URL(testRealmURL));
 
@@ -575,7 +585,7 @@ module(`Integration | realm querying`, function (hooks) {
   let queryEngine: RealmIndexQueryEngine;
 
   hooks.beforeEach(async function () {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm } = await setupRealmWithSystemCard({
       mockMatrixUtils,
       contents: sampleCards,
     });

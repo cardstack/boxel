@@ -8,6 +8,7 @@ import {
   setupUserSubscription,
   setupAuthEndpoints,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   testRealmURL,
 } from '../helpers';
@@ -104,6 +105,7 @@ module('Acceptance | theme-card-test', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         '.realm.json': {
           name: 'Theme Playground',
         },

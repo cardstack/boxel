@@ -33,6 +33,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setupOnSave,
   visitOperatorMode,
   setupAuthEndpoints,
@@ -427,12 +428,13 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     // from the global loader
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
-      contents: realmAFiles,
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
       realmURL: testRealmURL2,
     });
     ({ adapter } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
         'person.gts': personCardSource,

@@ -10,6 +10,7 @@ import {
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -223,6 +224,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
           ...testRealmFiles,
         },
@@ -231,6 +233,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
         mockMatrixUtils,
         realmURL: userRealm,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
           ...userRealmFiles,
         },

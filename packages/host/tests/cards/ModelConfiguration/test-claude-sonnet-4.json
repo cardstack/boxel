@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "title": "Anthropic: Claude Sonnet 4",
+        "description": "Test fixture model configuration referencing Claude Sonnet 4.",
+        "thumbnailURL": null,
+        "notes": null
+      },
+      "modelId": "anthropic/claude-sonnet-4",
+      "toolsSupported": true
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/system-card",
+        "name": "ModelConfiguration"
+      }
+    }
+  }
+}

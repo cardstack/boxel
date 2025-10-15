@@ -67,6 +67,11 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
+import testSystemCard from '../cards/SystemCard/default.json';
+import testGptModel from '../cards/ModelConfiguration/test-gpt.json';
+import testClaudeSonnet4 from '../cards/ModelConfiguration/test-claude-sonnet-4.json';
+import testClaude37Sonnet from '../cards/ModelConfiguration/test-claude-37-sonnet.json';
+
 export {
   visitOperatorMode,
   testHostModeRealmURL,
@@ -363,7 +368,6 @@ export function setupOnSave(hooks: NestedHooks) {
     this.unregisterOnSave = store._unregisterSaveSubscriber.bind(store);
   });
 }
-
 let runnerOptsMgr = new RunnerOptionsManager();
 
 interface RealmContents {
@@ -375,8 +379,19 @@ interface RealmContents {
     | Record<string, unknown>
     | string;
 }
+
+export const SYSTEM_CARD_FIXTURE_CONTENTS = {
+  'ModelConfiguration/test-gpt.json': testGptModel,
+  'ModelConfiguration/test-claude-sonnet-4.json': testClaudeSonnet4,
+  'ModelConfiguration/test-claude-37-sonnet.json': testClaude37Sonnet,
+  'SystemCard/default.json': testSystemCard,
+} as RealmContents;
+
+export function withSystemCardFixture(contents: RealmContents = {}): RealmContents {
+  return { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...contents };
+}
 export async function setupAcceptanceTestRealm({
-  contents,
+  contents = {},
   realmURL,
   permissions,
   mockMatrixUtils,
@@ -397,7 +412,7 @@ export async function setupAcceptanceTestRealm({
 }
 
 export async function setupIntegrationTestRealm({
-  contents,
+  contents = {},
   realmURL,
   permissions,
   mockMatrixUtils,

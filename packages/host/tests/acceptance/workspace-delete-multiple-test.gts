@@ -11,6 +11,7 @@ import {
   testRealmURL,
   setupAuthEndpoints,
   setupUserSubscription,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
@@ -70,6 +71,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
         'pet.gts': { Pet },
         'Pet/1.json': new Pet({

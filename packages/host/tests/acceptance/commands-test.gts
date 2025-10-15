@@ -52,6 +52,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -357,6 +358,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person, Meeting },
         'pet.gts': { Pet },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
