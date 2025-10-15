@@ -233,18 +233,14 @@ export class NodeAdapter implements RealmAdapter {
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
 
-    if (!matrixClient.isLoggedIn()) {
-      realmEventsLog.debug(
-        `Not logged in (${matrixClient.username}, skipping server event`,
-      );
-      return;
-    }
     if (dbAdapter.isClosed) {
       realmEventsLog.warn(
         `Database adapter is closed, skipping sending realm event`,
       );
       return;
     }
+
+    await matrixClient.login();
 
     let dmRooms;
 
