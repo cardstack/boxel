@@ -10,7 +10,9 @@
     "attributes": {
       "name": "Chart",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/chart-listing/screenshot_01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/chart-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/chart-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/chart-listing/screenshot_03.png"
       ],
       "summary": "This code defines a set of components and logic for visualizing spreadsheet data as various charts such as bar, pie, or line charts, enabling data analysis and presentation within a graphical interface. It processes CSV data, analyzes columns for categorization, and renders chart visualizations with configurable options.",
       "cardInfo": {
