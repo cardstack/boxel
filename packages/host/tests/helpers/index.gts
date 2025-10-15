@@ -67,11 +67,6 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
-import testSystemCard from '../cards/SystemCard/default.json';
-import testGptModel from '../cards/ModelConfiguration/test-gpt.json';
-import testClaudeSonnet4 from '../cards/ModelConfiguration/test-claude-sonnet-4.json';
-import testClaude37Sonnet from '../cards/ModelConfiguration/test-claude-37-sonnet.json';
-
 export {
   visitOperatorMode,
   testHostModeRealmURL,
@@ -380,16 +375,123 @@ interface RealmContents {
     | string;
 }
 
-export const SYSTEM_CARD_FIXTURE_CONTENTS = {
-  'ModelConfiguration/test-gpt.json': testGptModel,
-  'ModelConfiguration/test-claude-sonnet-4.json': testClaudeSonnet4,
-  'ModelConfiguration/test-claude-37-sonnet.json': testClaude37Sonnet,
-  'SystemCard/default.json': testSystemCard,
-} as RealmContents;
-
-export function withSystemCardFixture(contents: RealmContents = {}): RealmContents {
-  return { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...contents };
-}
+export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
+  'ModelConfiguration/test-gpt.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'OpenAI: GPT-5',
+          description: 'Test fixture model configuration referencing GPT-5.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'openai/gpt-5',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'ModelConfiguration/test-claude-sonnet-4.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Anthropic: Claude Sonnet 4',
+          description:
+            'Test fixture model configuration referencing Claude Sonnet 4.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-sonnet-4',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'ModelConfiguration/test-claude-37-sonnet.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Anthropic: Claude 3.7 Sonnet',
+          description:
+            'Test fixture model configuration referencing Claude 3.7 Sonnet.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-3.7-sonnet',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'SystemCard/default.json': {
+    data: {
+      type: 'card',
+      attributes: {},
+      relationships: {
+        'modelConfigurations.0': {
+          links: {
+            self: '../ModelConfiguration/test-gpt',
+          },
+        },
+        'modelConfigurations.1': {
+          links: {
+            self: '../ModelConfiguration/test-claude-sonnet-4',
+          },
+        },
+        'modelConfigurations.2': {
+          links: {
+            self: '../ModelConfiguration/test-claude-37-sonnet',
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'SystemCard',
+        },
+      },
+    },
+  },
+};
 export async function setupAcceptanceTestRealm({
   contents = {},
   realmURL,

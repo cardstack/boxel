@@ -25,7 +25,7 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  withSystemCardFixture,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   testModuleRealm,
   cardInfo,
 } from '../helpers';
@@ -45,15 +45,6 @@ import {
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
-
-function setupRealmWithSystemCard(
-  options: Parameters<typeof setupIntegrationTestRealm>[0],
-) {
-  return setupRealmWithSystemCard({
-    ...options,
-    contents: withSystemCardFixture(options.contents ?? {}),
-  });
-}
 
 let loader: Loader;
 
@@ -99,9 +90,10 @@ module(`Integration | realm indexing`, function (hooks) {
   }
 
   test('full indexing discovers card instances', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'empty.json': {
           data: {
             meta: {
@@ -150,9 +142,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('full indexing skips over unchanged items in index', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'test1.json': {
           data: {
             meta: {
@@ -257,9 +250,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can recover from indexing a card with a broken link', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/mango.json': {
           data: {
             id: `${testRealmURL}Pet/mango`,
@@ -368,9 +362,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can query the "production" index while performing indexing operations', async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/mango.json': {
           data: {
             id: `${testRealmURL}Pet/mango`,
@@ -498,9 +493,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index card with linkTo field', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Person/owner.json': {
           data: {
             id: `${testRealmURL}Person/owner`,
@@ -587,9 +583,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index card with a relative linkTo field', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Person/owner.json': {
           data: {
             id: `${testRealmURL}Person/owner`,
@@ -678,9 +675,10 @@ module(`Integration | realm indexing`, function (hooks) {
       @field firstName = contains(StringField);
     }
 
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'person-spec.json': {
           data: {
@@ -778,9 +776,10 @@ module(`Integration | realm indexing`, function (hooks) {
       @field firstName = contains(StringField);
     }
 
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'person-spec.json': {
           data: {
@@ -988,9 +987,10 @@ module(`Integration | realm indexing`, function (hooks) {
         };
       }
 
-      let { realm } = await setupRealmWithSystemCard({
+      let { realm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'person.gts': { Person },
           'boom.gts': { Boom },
           'vangogh.json': {
@@ -1138,9 +1138,10 @@ module(`Integration | realm indexing`, function (hooks) {
         </template>
       };
     }
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'boom-person.gts': { BoomPerson },
         'boom.gts': { Boom },
         'person.gts': { Person },
@@ -1266,9 +1267,10 @@ module(`Integration | realm indexing`, function (hooks) {
       };
     }
 
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'boom-person2.gts': { BoomPerson2 },
         'custom-boom.gts': { CustomBoom },
         'person.gts': { Person },
@@ -1372,9 +1374,10 @@ module(`Integration | realm indexing`, function (hooks) {
         </template>
       };
     }
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'vangogh.json': {
           data: {
@@ -1431,9 +1434,10 @@ module(`Integration | realm indexing`, function (hooks) {
       };
     }
 
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'fancy-person.gts': { FancyPerson },
         'germaine.json': {
@@ -1567,9 +1571,10 @@ module(`Integration | realm indexing`, function (hooks) {
       };
     }
 
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'fancy-person.gts': { FancyPerson },
         'germaine.json': {
@@ -1701,9 +1706,10 @@ module(`Integration | realm indexing`, function (hooks) {
       @field thumbnailURL = contains(StringField);
     }
 
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person-card.gts': { Person },
         'appointment.gts': { Appointment },
         'pet-card.gts': { PetCard },
@@ -1771,9 +1777,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Vendor/vendor1.json': {
           data: {
             id: `${testRealmURL}Vendor/vendor1`,
@@ -1989,9 +1996,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can tolerate a card whose computed throws an exception', async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Boom/boom.json': {
           data: {
             id: `${testRealmURL}Boom/boom`,
@@ -2050,9 +2058,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test(`search doc includes 'contains' and used 'linksTo' fields, including contained computed fields`, async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/mango.json': {
           data: {
             attributes: { firstName: 'Mango' },
@@ -2111,9 +2120,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Publication/pacific.json': {
           data: {
             id: `${testRealmURL}Publication/pacific`,
@@ -2256,9 +2266,10 @@ module(`Integration | realm indexing`, function (hooks) {
       });
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'booking.gts': { Booking },
         'person.gts': { Person },
         'post.gts': { Post },
@@ -2308,9 +2319,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index a card with linksToMany field', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/vanGogh.json': {
           data: {
             attributes: { firstName: 'Van Gogh' },
@@ -2511,9 +2523,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index a card with empty linksToMany field value', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'PetPerson/burcu.json': {
           data: {
             attributes: { firstName: 'Burcu' },
@@ -2605,9 +2618,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index a card that contains a field with a linksToMany field', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Pet/vanGogh.json': {
           data: {
             attributes: { firstName: 'Van Gogh' },
@@ -2733,9 +2747,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index a card that has nested linksTo fields', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Friend/hassan.json': {
           data: {
             id: `${testRealmURL}Friend/hassan`,
@@ -2893,9 +2908,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index a field with a cycle in the linksTo field', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Friend/hassan.json': {
           data: {
             id: `${testRealmURL}Friend/hassan`,
@@ -3195,9 +3211,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can index a card that has a linksTo relationship to itself', async function (assert) {
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Friend/hassan.json': {
           data: {
             id: `${testRealmURL}Friend/hassan`,
@@ -3308,9 +3325,10 @@ module(`Integration | realm indexing`, function (hooks) {
       module: `${testModuleRealm}friends`,
       name: 'Friends',
     };
-    let { realm, adapter } = await setupRealmWithSystemCard({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'Friends/vanGogh.json': {
           data: {
             attributes: { firstName: 'Van Gogh' },
@@ -3784,9 +3802,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test("indexing identifies an instance's card references", async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person-1.json': {
           data: {
             attributes: {
@@ -3886,9 +3905,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test("indexing identifies an instance's polymorphic contained references", async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'spec-1.json': {
           data: {
             attributes: {
@@ -4017,9 +4037,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('search index does not contain entries that match patterns in ignore files', async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'ignore-me-1.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },
@@ -4095,9 +4116,10 @@ posts/please-ignore-me.json
   });
 
   test('search index ignores .realm.json file', async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         '.realm.json': `{ name: 'Example Workspace' }`,
         'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
       },
@@ -4117,9 +4139,10 @@ posts/please-ignore-me.json
   });
 
   test("incremental indexing doesn't process ignored files", async function (assert) {
-    let { realm } = await setupRealmWithSystemCard({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'posts/ignore-me.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },

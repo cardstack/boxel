@@ -11,19 +11,10 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  withSystemCardFixture,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
-
-function setupRealmWithSystemCard(
-  options: Parameters<typeof setupIntegrationTestRealm>[0],
-) {
-  return setupRealmWithSystemCard({
-    ...options,
-    contents: withSystemCardFixture(options.contents ?? {}),
-  });
-}
 
 module('Unit | loader', function (hooks) {
   setupRenderingTest(hooks);
@@ -35,9 +26,10 @@ module('Unit | loader', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
 
-    await setupRealmWithSystemCard({
+    await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'a.js': `
           import { b } from './b';
           export function a() {
