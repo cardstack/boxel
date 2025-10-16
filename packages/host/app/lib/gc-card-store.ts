@@ -15,9 +15,6 @@ import {
 import type { CardDef, CardStore } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-const ELIGIBLE_FOR_GC = true;
-const NOT_ELIGIBLE_FOR_GC = false;
-
 export type ReferenceCount = Map<string, number>;
 
 type LocalId = string;
@@ -239,9 +236,11 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   sweep(api: typeof CardAPI) {
-    let consumptionGraph = this.makeConsumptionGraph(api);
-    let cache = new Map<string, boolean>();
+    let dependencyGraph = this.makeDependencyGraph(api);
+    let reachable = new Set<string>();
     let visited = new WeakSet<CardDef>();
+    let rootLocalIds: string[] = [];
+
     for (let instance of this.#cards.values()) {
       if (!instance) {
         continue;
@@ -250,29 +249,59 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         continue;
       }
       visited.add(instance);
-      if (
-        this.isEligibleForGC(instance[localIdSymbol], consumptionGraph, cache)
-      ) {
-        if (this.#gcCandidates.has(instance[localIdSymbol])) {
+      let localId = instance[localIdSymbol];
+      if (this.hasReferences(localId)) {
+        rootLocalIds.push(localId);
+      }
+    }
+
+    let stack = [...rootLocalIds];
+    while (stack.length > 0) {
+      let current = stack.pop()!;
+      if (reachable.has(current)) {
+        continue;
+      }
+      reachable.add(current);
+      let dependencies = dependencyGraph.get(current);
+      if (!dependencies) {
+        continue;
+      }
+      for (let dep of dependencies) {
+        stack.push(dep);
+      }
+    }
+
+    visited = new WeakSet<CardDef>();
+    for (let instance of this.#cards.values()) {
+      if (!instance) {
+        continue;
+      }
+      if (visited.has(instance)) {
+        continue;
+      }
+      visited.add(instance);
+      let localId = instance[localIdSymbol];
+      if (!reachable.has(localId)) {
+        if (this.#gcCandidates.has(localId)) {
           console.log(
-            `garbage collecting instance ${instance[localIdSymbol]} (remote id: ${instance.id}) from store`,
+            `garbage collecting instance ${localId} (remote id: ${instance.id}) from store`,
           );
           // brand the instance to make it easier for debugging
           (instance as unknown as any)[
             Symbol.for('__instance_detached_from_store')
           ] = true;
-          this.delete(instance[localIdSymbol]);
+          this.delete(localId);
           if (instance.id) {
             this.delete(instance.id);
           }
         } else {
           console.debug(
-            `instance [local id:${instance[localIdSymbol]} remote id: ${instance.id}] is now eligible for garbage collection`,
+            `instance [local id:${localId} remote id: ${instance.id}] is now eligible for garbage collection`,
           );
-          this.#gcCandidates.add(instance[localIdSymbol]);
+          this.#gcCandidates.add(localId);
         }
       } else {
-        this.#gcCandidates.delete(instance[localIdSymbol]);
+        this.#gcCandidates.delete(localId);
       }
     }
   }
@@ -437,38 +466,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
   }
 
-  private isEligibleForGC(
-    localId: string,
-    consumptionGraph: InstanceGraph,
-    cache: Map<LocalId, boolean>,
-  ): boolean {
-    let remoteIds = this.#idResolver.getRemoteIds(localId);
-    let cached = cache.get(localId);
-    if (cached !== undefined) {
-      return cached;
+  private hasReferences(localId: string): boolean {
+    let referenceCount = this.#referenceCount.get(localId) ?? 0;
+    for (let remoteId of this.#idResolver.getRemoteIds(localId)) {
+      referenceCount += this.#referenceCount.get(remoteId) ?? 0;
     }
-
-    let referenceCount =
-      remoteIds.reduce(
-        (sum, id) => sum + (this.#referenceCount.get(id) ?? 0),
-        0,
-      ) + (localId ? (this.#referenceCount.get(localId) ?? 0) : 0);
-    if (referenceCount > 0) {
-      cache.set(localId, NOT_ELIGIBLE_FOR_GC);
-      return NOT_ELIGIBLE_FOR_GC;
-    }
-    let consumers = consumptionGraph.get(localId);
-    if (!consumers || consumers.size === 0) {
-      cache.set(localId, ELIGIBLE_FOR_GC);
-      return ELIGIBLE_FOR_GC;
-    }
-
-    // you are eligible for GC if all your consumers are also eligible for GC
-    let result = [...consumers]
-      .map((c) => this.isEligibleForGC(c, consumptionGraph, cache))
-      .every((result) => result);
-    cache.set(localId, result);
-    return result;
+    return referenceCount > 0;
   }
 
   private makeConsumptionGraph(api: typeof CardAPI): InstanceGraph {

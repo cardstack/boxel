@@ -533,6 +533,52 @@ module('Unit | identity-context garbage collection', function (hooks) {
     assert.deepEqual(store.gcCandidates, [], 'the GC candidates are correct');
   });
 
+  test('garbage collects instances that only consume each other', async function (assert) {
+    let {
+      referenceCount,
+      store,
+      instances: { hassan },
+    } = await setupTest();
+
+    referenceCount.clear();
+    store.reset();
+
+    let Person = hassan.constructor as typeof CardInstance;
+    let alpha = new Person({ name: 'Alpha' });
+    let beta = new Person({ name: 'Beta' });
+    (alpha as any).bestFriend = beta;
+    (beta as any).bestFriend = alpha;
+
+    store.set(alpha[localId], alpha);
+    store.set(beta[localId], beta);
+
+    store.sweep(api);
+
+    assert.deepEqual(
+      [...store.gcCandidates].sort(),
+      [alpha[localId], beta[localId]].sort(),
+      'cyclic instances become GC candidates after initial sweep',
+    );
+
+    store.sweep(api);
+
+    assert.strictEqual(
+      store.get(alpha[localId]),
+      undefined,
+      'alpha instance is collected',
+    );
+    assert.strictEqual(
+      store.get(beta[localId]),
+      undefined,
+      'beta instance is collected',
+    );
+    assert.deepEqual(
+      store.gcCandidates,
+      [],
+      'no GC candidates remain after collecting the cycle',
+    );
+  });
+
   test('resetting the identity map clears all instances but not card errors', async function (assert) {
     let {
       store,

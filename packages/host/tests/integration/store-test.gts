@@ -377,8 +377,8 @@ module('Integration | Store', function (hooks) {
   test('garbage collects cards that only consume each other', async function (assert) {
     let alpha = new PersonDef({ name: 'Alpha' });
     let beta = new PersonDef({ name: 'Beta' });
-    alpha.bestFriend = beta;
-    beta.bestFriend = alpha;
+    (alpha as any).bestFriend = beta;
+    (beta as any).bestFriend = alpha;
 
     await storeService.add(alpha, { doNotPersist: true });
     await storeService.add(beta, { doNotPersist: true });
