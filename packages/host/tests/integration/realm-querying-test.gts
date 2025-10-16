@@ -21,7 +21,9 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 const paths = new RealmPaths(new URL(testRealmURL));
+
 let loader: Loader;
+
 module(`Integration | realm querying`, function (hooks) {
   setupRenderingTest(hooks);
 
