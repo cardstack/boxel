@@ -59,7 +59,7 @@ module('Integration | message service subscription', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
-      {},
+      contents: {},
     });
   });
 
