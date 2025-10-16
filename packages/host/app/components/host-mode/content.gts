@@ -1,3 +1,4 @@
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { provide } from 'ember-provide-consume-context';
@@ -5,6 +6,7 @@ import { provide } from 'ember-provide-consume-context';
 import { gt, not } from '@cardstack/boxel-ui/helpers';
 
 import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
+import { meta } from '@cardstack/runtime-common/constants';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -61,6 +63,20 @@ export default class HostModeContent extends Component<Signature> {
     return (this.primaryCard.constructor as typeof CardDef).prefersWideFormat;
   }
 
+  get backgroundImageStyle() {
+    if (!this.primaryCard || this.isWideCard) {
+      return htmlSafe('');
+    }
+
+    let backgroundImageUrl = this.primaryCard?.[meta]?.realmInfo?.backgroundURL;
+
+    if (backgroundImageUrl) {
+      return htmlSafe(`background-image: url(${backgroundImageUrl});`);
+    }
+
+    return htmlSafe('');
+  }
+
   @provide(CardCrudFunctionsContextName)
   // @ts-ignore "cardCrudFunctions" is declared but not used
   private get cardCrudFunctions(): Optional<CardCrudFunctions> {
@@ -73,6 +89,7 @@ export default class HostModeContent extends Component<Signature> {
     <div
       class='host-mode-content {{if this.isWideCard "is-wide"}}'
       data-test-host-mode-content
+      style={{this.backgroundImageStyle}}
       ...attributes
     >
       {{#if this.displayBreadcrumbs}}
@@ -103,11 +120,15 @@ export default class HostModeContent extends Component<Signature> {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        flex: 1;
+        width: 100%;
+        max-height: 100vh;
         overflow: hidden;
         padding: var(--boxel-sp);
         position: relative;
         background-color: #686283;
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
       }
 
       .breadcrumb-container {
@@ -122,6 +143,14 @@ export default class HostModeContent extends Component<Signature> {
         --host-mode-card-width: 100%;
         --host-mode-card-padding: 0;
         --host-mode-card-border-radius: 0;
+      }
+
+      .current-card {
+        flex: 1;
+        max-height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: stretch;
       }
 
       .host-mode-content.is-wide .breadcrumb-container {

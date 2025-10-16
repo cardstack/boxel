@@ -228,6 +228,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
           @removeCardFromStack={{this.removeCardFromStack}}
           @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
           @viewCard={{this.viewCard}}
+          class='host-submode-content'
         />
       </:default>
     </SubmodeLayout>
@@ -274,6 +275,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
           var(--operator-mode-left-column) + var(--submode-switcher-width) +
             var(--operator-mode-spacing)
         );
+      }
+
+      .host-submode-content {
+        flex: 1;
       }
 
       .publish-realm-button-container {

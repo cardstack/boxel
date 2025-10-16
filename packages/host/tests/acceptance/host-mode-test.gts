@@ -217,7 +217,7 @@ module('Acceptance | host mode tests', function (hooks) {
   test('visiting a default width card in host mode', async function (assert) {
     await visit('/test/Pet/mango.json');
 
-    assert.dom('[data-test-host-mode-container]').hasStyle({
+    assert.dom('[data-test-host-mode-content]').hasStyle({
       'background-image':
         'url("https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg")',
     });
@@ -225,7 +225,7 @@ module('Acceptance | host mode tests', function (hooks) {
     assert
       .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
       .exists();
-    assert.dom('[data-test-host-mode-container]').hasNoClass('is-wide');
+    assert.dom('[data-test-host-mode-content]').hasNoClass('is-wide');
     assert.strictEqual(getPageTitle(), 'Mango');
 
     await percySnapshot(assert);
@@ -238,7 +238,7 @@ module('Acceptance | host mode tests', function (hooks) {
       .dom(`[data-test-host-mode-card="${testHostModeRealmURL}index"]`)
       .exists();
     assert.strictEqual(getPageTitle(), 'Test Workspace B');
-    assert.dom('[data-test-host-mode-container]').hasClass('is-wide');
+    assert.dom('[data-test-host-mode-content]').hasClass('is-wide');
 
     await percySnapshot(assert);
   });
