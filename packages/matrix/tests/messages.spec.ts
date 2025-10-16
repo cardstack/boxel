@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { Credentials, putEvent, SynapseInstance } from '../docker/synapse';
+import { Credentials, putEvent } from '../docker/synapse';
 import {
   login,
   logout,
@@ -145,10 +145,7 @@ test.describe('Room messages', () => {
   });
 
   test(`it can create a room specific pending message`, async ({ page }) => {
-    const { username } = await createSubscribedUserAndLogin(
-      page,
-      'pending-message',
-    );
+    await createSubscribedUserAndLogin(page, 'pending-message');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Hello');
     let room2 = await createRoom(page);
