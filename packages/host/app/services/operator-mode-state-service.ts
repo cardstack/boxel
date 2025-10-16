@@ -701,13 +701,15 @@ export default class OperatorModeStateService extends Service {
     let localPath = this.codePathRelativeToRealm;
 
     if (localPath) {
-      let containingDirectory = localPath.split('/').slice(0, -1).join('/');
+      let segments = localPath.split('/').slice(0, -1).filter(Boolean);
+      let accumulator: string[] = [];
 
-      if (containingDirectory) {
-        containingDirectory += '/';
+      for (let segment of segments) {
+        accumulator.push(segment);
+        let dirPath = `${accumulator.join('/')}/`;
 
-        if (!this.currentRealmOpenDirs.includes(containingDirectory)) {
-          this.toggleOpenDir(containingDirectory);
+        if (!this.currentRealmOpenDirs.includes(dirPath)) {
+          this.toggleOpenDir(dirPath);
         }
       }
     }
@@ -903,30 +905,23 @@ export default class OperatorModeStateService extends Service {
       return;
     }
 
+    let dirPath = this.normalizeDirPath(entryPath);
     let dirs = this.currentRealmOpenDirs.slice();
-    for (let i = 0; i < dirs.length; i++) {
-      if (dirs[i].startsWith(entryPath)) {
-        let localParts = entryPath.split('/').filter((p) => p.trim() != '');
-        localParts.pop();
-        if (localParts.length) {
-          dirs[i] = localParts.join('/') + '/';
-        } else {
-          dirs.splice(i, 1);
-        }
-        this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
-        return;
-      } else if (entryPath.startsWith(dirs[i])) {
-        dirs[i] = entryPath;
-        this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
-        return;
-      }
+    let index = dirs.indexOf(dirPath);
+
+    if (index !== -1) {
+      dirs.splice(index, 1);
+    } else {
+      dirs.push(dirPath);
     }
-    this.openDirs.set(
-      this.realmURL.href,
-      new TrackedArray([...dirs, entryPath]),
-    );
+
+    this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
     this.schedulePersist();
   };
+
+  private normalizeDirPath(entryPath: string): string {
+    return entryPath.endsWith('/') ? entryPath : `${entryPath}/`;
+  }
 
   private get readyFile() {
     if (isReady(this.openFile.current)) {

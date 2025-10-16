@@ -154,27 +154,15 @@ export default class Directory extends Component<Args> {
 
   @action
   private selectDirectory(entryPath: LocalPath) {
-    // Ensure entryPath ends with '/' for directories
-    const dirPath = entryPath.endsWith('/') ? entryPath : `${entryPath}/`;
+    const dirPath = this.normalizeDirPath(entryPath);
 
-    for (let i = 0; i < this.openDirs.length; i++) {
-      if (this.openDirs[i].startsWith(dirPath)) {
-        let localParts = dirPath.split('/').filter((p) => p.trim() != '');
-        localParts.pop();
-        if (localParts.length) {
-          this.openDirs[i] = localParts.join('/') + '/';
-        } else {
-          this.openDirs.splice(i, 1);
-        }
-        this.args.onDirectorySelected?.(dirPath);
-        return;
-      } else if (dirPath.startsWith(this.openDirs[i])) {
-        this.openDirs[i] = dirPath;
-        this.args.onDirectorySelected?.(dirPath);
-        return;
-      }
+    let index = this.openDirs.indexOf(dirPath);
+    if (index !== -1) {
+      this.openDirs.splice(index, 1);
+    } else {
+      this.openDirs.push(dirPath);
     }
-    this.openDirs.push(dirPath);
+
     this.args.onDirectorySelected?.(dirPath);
   }
 
@@ -187,8 +175,13 @@ export default class Directory extends Component<Args> {
 
   @action
   private isOpenDirectory(entryPath: LocalPath) {
-    return this.args.openDirs
-      ? this.args.openDirs.find((item) => item.startsWith(entryPath))
-      : this.openDirs.find((item) => item.startsWith(entryPath));
+    let dirPath = this.normalizeDirPath(entryPath);
+    let openDirs = this.args.openDirs ?? this.openDirs;
+
+    return openDirs.includes(dirPath);
+  }
+
+  private normalizeDirPath(entryPath: LocalPath): LocalPath {
+    return entryPath.endsWith('/') ? entryPath : `${entryPath}/`;
   }
 }
