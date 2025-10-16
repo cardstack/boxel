@@ -1646,39 +1646,6 @@ module(basename(__filename), function () {
             data: [],
           });
         });
-
-        test('GET /_check-site-name-availability without JWT returns 401', async function (assert) {
-          let response = await request2
-            .get('/_check-site-name-availability?subdomain=test-site')
-            .set('Accept', 'application/json');
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('GET /_check-site-name-availability with invalid JWT returns 401', async function (assert) {
-          let response = await request2
-            .get('/_check-site-name-availability?subdomain=test-site')
-            .set('Accept', 'application/json')
-            .set('Authorization', 'Bearer invalid-jwt');
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('GET /_check-site-name-availability with valid JWT returns 200', async function (assert) {
-          let ownerUserId = '@mango:localhost';
-          let response = await request2
-            .get('/_check-site-name-availability?subdomain=valid-site')
-            .set('Accept', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            );
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        });
       });
 
       module('stripe webhook handler', function (hooks) {

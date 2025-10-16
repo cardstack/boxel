@@ -1,0 +1,103 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Chart",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/chart-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/chart-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/chart-listing/screenshot_03.png"
+      ],
+      "summary": "This code defines a set of components and logic for visualizing spreadsheet data as various charts such as bar, pie, or line charts, enabling data analysis and presentation within a graphical interface. It processes CSV data, analyzes columns for categorization, and renders chart visualizations with configurable options.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chart-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/4256c434-b2ec-44de-af38-8839bf9ac7f4"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/1f4256c4-34b2-4cd4-9eaf-388839bf9ac7"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/7c1f4256-c434-42ec-94de-af388839bf9a"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../spreadsheet-chart/SpreadsheetChart/68d61f4b-eae4-4352-aeba-471a17565f8c"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../spreadsheet-chart/SpreadsheetChart/cc5adf7b-f805-4aa8-bb87-b6b7962a91fb"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../spreadsheet-chart/SpreadsheetChart/25348ada-7d93-466d-918a-a71b741c9397"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../spreadsheet/Spreadsheet/9a9c0aae-c998-46c2-a14c-c59c974a06b2"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../spreadsheet/Spreadsheet/df7bf805-6aa8-4b87-b6b7-962a91fbae44"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../spreadsheet/Spreadsheet/f629aeaf-f9e0-42cb-b8ba-facd94d7eff9"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/content-creation"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

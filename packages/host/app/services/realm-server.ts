@@ -16,7 +16,10 @@ import {
   SupportedMimeType,
   Deferred,
 } from '@cardstack/runtime-common';
-import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
+import {
+  joinDMRoom,
+  RealmAuthClient,
+} from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -254,8 +257,26 @@ export default class RealmServerService extends Service {
       [realmURL: string]: string;
     };
 
+    await this.ensureJoinedSessionRoom(tokens);
     for (let [realmURL, token] of Object.entries(tokens)) {
       this.realm.getOrCreateRealmResource(realmURL, token);
+    }
+  }
+
+  private async ensureJoinedSessionRoom(tokens: {
+    [realmUrl: string]: string;
+  }) {
+    if (!this.client) {
+      throw new Error(`Cannot check joined rooms without matrix client`);
+    }
+    let { joined_rooms } = await this.client.getJoinedRooms();
+    let joinedRoomSet = new Set(joined_rooms ?? []);
+    for (let [_realmURL, token] of Object.entries(tokens)) {
+      let { sessionRoom } = claimsFromRawToken(token);
+      if (!joinedRoomSet.has(sessionRoom)) {
+        await joinDMRoom(this.client, sessionRoom);
+        joinedRoomSet.add(sessionRoom);
+      }
     }
   }
 
@@ -450,11 +471,13 @@ export default class RealmServerService extends Service {
     return response;
   }
 
+  // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
   async requestForward(args: {
     url: string;
     method: string;
     requestBody: string;
     headers?: Record<string, string>;
+    multipart?: boolean;
   }) {
     await this.login();
 

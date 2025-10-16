@@ -7,6 +7,8 @@ import {
   unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
+  fetchAllSessionRooms,
+  DBAdapter,
 } from '@cardstack/runtime-common';
 import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { LocalPath } from '@cardstack/runtime-common/paths';
@@ -225,24 +227,29 @@ export class NodeAdapter implements RealmAdapter {
 
   async broadcastRealmEvent(
     event: RealmEventContent,
+    realmUrl: string,
     matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
 
-    if (!matrixClient.isLoggedIn()) {
-      realmEventsLog.debug(
-        `Not logged in (${matrixClient.username}, skipping server event`,
+    if (dbAdapter.isClosed) {
+      realmEventsLog.warn(
+        `Database adapter is closed, skipping sending realm event`,
       );
+      return;
+    }
+    try {
+      await matrixClient.login();
+    } catch (e) {
+      realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
       return;
     }
 
     let dmRooms;
 
     try {
-      dmRooms =
-        (await matrixClient.getAccountDataFromServer<Record<string, string>>(
-          'boxel.session-rooms',
-        )) ?? {};
+      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);
     } catch (e) {
       realmEventsLog.error('Error getting account data', e);
       return;

@@ -50,7 +50,10 @@ export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
   }
 
   get currentCardId() {
-    return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
+    return this.operatorModeStateService.hostModePrimaryCard?.replace(
+      '.json',
+      '',
+    );
   }
 
   @action

@@ -218,14 +218,41 @@ export async function capturePrerenderResult(
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
   expectedStatus: 'ready' | 'error' = 'ready',
 ): Promise<{ status: 'ready' | 'error'; value: string }> {
-  await waitFor(`[data-prerender-status="${expectedStatus}"]`);
-  let element = document.querySelector('[data-prerender]') as HTMLElement;
-  let status = element.dataset.prerenderStatus as 'ready' | 'error';
-  if (status === 'error') {
-    // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
-    return { status, value: element.innerHTML!.replace(/}[^}]*$/, '}') };
+  if (expectedStatus === 'error') {
+    await waitUntil(() => {
+      let el = document.querySelector('[data-prerender]') as HTMLElement | null;
+      if (!el) {
+        return false;
+      }
+      return (
+        el.dataset.prerenderStatus === 'unusable' ||
+        !!el.querySelector('[data-prerender-error]')
+      );
+    });
   } else {
-    return { status, value: element.children[0][capture]! };
+    await waitFor(`[data-prerender-status="${expectedStatus}"]`);
+  }
+  let element = document.querySelector('[data-prerender]') as HTMLElement;
+  let errorElement = element.querySelector(
+    '[data-prerender-error]',
+  ) as HTMLElement | null;
+  if (errorElement) {
+    let text = (
+      errorElement.textContent ??
+      errorElement.innerHTML ??
+      ''
+    ).trim();
+    return { status: 'error', value: text };
+  }
+  let status = element.dataset.prerenderStatus as 'ready' | 'unusable';
+  if (status === 'unusable') {
+    // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
+    return {
+      status: 'error',
+      value: element.innerHTML!.replace(/}[^}]*$/, '}'),
+    };
+  } else {
+    return { status: 'ready', value: element.children[0][capture]! };
   }
 }
 
@@ -242,12 +269,7 @@ async function makeRenderer() {
 
 class MockLocalIndexer extends Service {
   @tracked renderError: string | undefined;
-  @tracked prerenderStatus:
-    | 'ready'
-    | 'loading'
-    | 'error'
-    | 'unusable'
-    | undefined;
+  @tracked prerenderStatus: 'ready' | 'loading' | 'unusable' | undefined;
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
   #indexWriter: IndexWriter | undefined;
@@ -306,7 +328,7 @@ class MockLocalIndexer extends Service {
     }
     return this.#prerenderer;
   }
-  setPrerenderStatus(status: 'ready' | 'loading' | 'error' | 'unusable') {
+  setPrerenderStatus(status: 'ready' | 'loading' | 'unusable') {
     this.prerenderStatus = status;
   }
   setRenderError(error: string) {

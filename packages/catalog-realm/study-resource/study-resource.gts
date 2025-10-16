@@ -582,57 +582,6 @@ export class StudyResource extends CardDef {
     return '#6b7280'; // gray
   }
 
-  // ²²⁵ Status icon SVG components
-  get statusIconSVG() {
-    switch (this.completionStatus) {
-      case 'completed':
-        return `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M20 6L9 17l-5-5"/>
-          </svg>
-        `;
-      case 'in_progress':
-        return `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12,6 12,12 16,14"/>
-          </svg>
-        `;
-      default:
-        return `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-          </svg>
-        `;
-    }
-  }
-
-  // Keep text fallback for simple contexts
-  get statusIcon() {
-    switch (this.completionStatus) {
-      case 'completed':
-        return '✓';
-      case 'in_progress':
-        return '⏳';
-      default:
-        return '○';
-    }
-  }
-
-  // Format status text for display
-  get formatStatusText() {
-    switch (this.completionStatus) {
-      case 'in_progress':
-        return 'In Progress';
-      case 'not_started':
-        return 'Not Started';
-      case 'completed':
-        return 'Completed';
-      default:
-        return this.completionStatus || 'Unknown';
-    }
-  }
-
   static isolated = StudyResourceIsolated;
 
   static embedded = class Embedded extends Component<typeof StudyResource> {
@@ -958,9 +907,21 @@ export class StudyResource extends CardDef {
         <div class='badge-format'>
           <div class='resource-badge'>
             <div class='badge-icon status-{{@model.completionStatus}}'>
-              {{#if @model.statusIconSVG}}{{htmlSafe
-                  @model.statusIconSVG
-                }}{{/if}}
+              <svg
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                {{#if (eq @model.completionStatus 'completed')}}
+                  <path d='M20 6L9 17l-5-5' />
+                {{else if (eq @model.completionStatus 'in_progress')}}
+                  <circle cx='12' cy='12' r='10' />
+                  <polyline points='12,6 12,12 16,14' />
+                {{else}}
+                  <circle cx='12' cy='12' r='10' />
+                {{/if}}
+              </svg>
             </div>
             <div class='badge-content'>
               <div class='badge-title'>{{if
@@ -993,9 +954,21 @@ export class StudyResource extends CardDef {
             </div>
             <div class='strip-right'>
               <div class='strip-status {{@model.completionStatus}}'>
-                {{#if @model.statusIconSVG}}{{htmlSafe
-                    @model.statusIconSVG
-                  }}{{/if}}
+                <svg
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  {{#if (eq @model.completionStatus 'completed')}}
+                    <path d='M20 6L9 17l-5-5' />
+                  {{else if (eq @model.completionStatus 'in_progress')}}
+                    <circle cx='12' cy='12' r='10' />
+                    <polyline points='12,6 12,12 16,14' />
+                  {{else}}
+                    <circle cx='12' cy='12' r='10' />
+                  {{/if}}
+                </svg>
               </div>
               {{#if @model.estimatedTime}}
                 <div class='strip-time'>{{@model.estimatedTime}}m</div>
@@ -1013,9 +986,21 @@ export class StudyResource extends CardDef {
                   'Resource'
                 }}</h4>
               <div class='tile-status {{@model.completionStatus}}'>
-                {{#if @model.statusIconSVG}}{{htmlSafe
-                    @model.statusIconSVG
-                  }}{{/if}}
+                <svg
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  {{#if (eq @model.completionStatus 'completed')}}
+                    <path d='M20 6L9 17l-5-5' />
+                  {{else if (eq @model.completionStatus 'in_progress')}}
+                    <circle cx='12' cy='12' r='10' />
+                    <polyline points='12,6 12,12 16,14' />
+                  {{else}}
+                    <circle cx='12' cy='12' r='10' />
+                  {{/if}}
+                </svg>
               </div>
             </div>
 
@@ -1081,9 +1066,21 @@ export class StudyResource extends CardDef {
                 </div>
               </div>
               <div class='card-status {{@model.completionStatus}}'>
-                {{#if @model.statusIconSVG}}{{htmlSafe
-                    @model.statusIconSVG
-                  }}{{/if}}
+                <svg
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  {{#if (eq @model.completionStatus 'completed')}}
+                    <path d='M20 6L9 17l-5-5' />
+                  {{else if (eq @model.completionStatus 'in_progress')}}
+                    <circle cx='12' cy='12' r='10' />
+                    <polyline points='12,6 12,12 16,14' />
+                  {{else}}
+                    <circle cx='12' cy='12' r='10' />
+                  {{/if}}
+                </svg>
               </div>
             </div>
 

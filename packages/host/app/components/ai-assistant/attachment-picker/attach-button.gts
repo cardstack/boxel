@@ -82,7 +82,7 @@ export default class AttachButton extends Component<Signature> {
         ) {
         border-radius: 10px;
         width: 179px;
-        padding: 10px;
+        padding: 0;
         position: absolute;
         z-index: var(--boxel-layer-modal-urgent);
         min-width: 140px;

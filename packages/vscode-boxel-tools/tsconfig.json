@@ -17,7 +17,7 @@
         "node_modules/babel-plugin-ember-template-compilation/*"
       ]
     },
-    "types": ["@cardstack/local-types","@cardstack/local-types/matrix-js-sdk"]
+    "types": ["@cardstack/local-types"]
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]

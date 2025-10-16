@@ -9,11 +9,11 @@ export default class Router extends EmberRouter {
 Router.map(function () {
   this.route('host-freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
-  this.route('render-error', { path: '/render-error/:reason' });
-  this.route('render', { path: '/render/:id/:nonce' }, function () {
+  this.route('render', { path: '/render/:id/:nonce/:options' }, function () {
     this.route('html', { path: '/html/:format/:ancestor_level' });
     this.route('icon');
     this.route('meta');
+    this.route('error');
   });
   this.route('connect', { path: '/connect/:origin' });
   this.route('card', { path: '/*path' });

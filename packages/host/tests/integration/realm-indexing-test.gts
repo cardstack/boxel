@@ -66,6 +66,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
+    delete (globalThis as any).__useHeadlessChromePrerender;
   });
 
   setupLocalIndexing(hooks);

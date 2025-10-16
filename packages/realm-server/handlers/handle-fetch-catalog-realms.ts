@@ -1,6 +1,6 @@
 import Koa from 'koa';
 import {
-  fetchPublicRealms,
+  fetchCatalogRealms,
   logger,
   RealmInfo,
   SupportedMimeType,
@@ -22,10 +22,10 @@ export default function handleFetchCatalogRealmsRequest({
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!catalogRealms) {
-      let publicRealms = await fetchPublicRealms(dbAdapter);
+      let catalogRealmURLs = await fetchCatalogRealms(dbAdapter);
       catalogRealms = (
         await Promise.all(
-          publicRealms.map(async ({ realm_url: realmURL }) => {
+          catalogRealmURLs.map(async ({ realm_url: realmURL }) => {
             let realmInfoResponse = await virtualNetwork.handle(
               new Request(`${realmURL}_info`, {
                 headers: {

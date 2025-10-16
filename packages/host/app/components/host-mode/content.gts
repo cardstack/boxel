@@ -1,12 +1,21 @@
-import { action } from '@ember/object';
-
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { provide } from 'ember-provide-consume-context';
+
 import { gt, not } from '@cardstack/boxel-ui/helpers';
+
+import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
+import { meta } from '@cardstack/runtime-common/constants';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type {
+  ViewCardFn,
+  CardCrudFunctions,
+} from 'https://cardstack.com/base/card-api';
 
 import HostModeBreadcrumbs from './breadcrumbs';
 import HostModeCard from './card';
@@ -15,78 +24,93 @@ import HostModeStack from './stack';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    cardIds: string[];
-    removeCard?: (cardId: string) => void;
+    primaryCardId: string | null;
+    stackItemCardIds: string[];
+    removeCardFromStack: (cardId: string) => void;
     openInteractSubmode?: () => void;
+    viewCard: ViewCardFn;
   };
 }
 
 export default class HostModeContent extends Component<Signature> {
-  get currentCard() {
-    return this.currentCardResource?.card;
+  get primaryCard() {
+    return this.primaryCardResource?.card;
   }
 
-  get isError() {
-    return this.currentCardResource?.cardError;
-  }
-
-  get isLoading() {
-    return this.currentCardId && !this.currentCard && !this.isError;
-  }
-
-  get currentCardResource() {
-    if (!this.currentCardId) {
+  get primaryCardResource() {
+    if (!this.args.primaryCardId) {
       return undefined;
     }
 
-    return getCard(this, () => this.currentCardId);
+    return getCard(this, () => this.args.primaryCardId!);
   }
 
-  get currentCardId() {
-    return this.args.cardIds[0];
+  get cardIds() {
+    return [this.args.primaryCardId, ...this.args.stackItemCardIds].filter(
+      (cardId): cardId is string => Boolean(cardId),
+    );
   }
 
   get displayBreadcrumbs() {
-    return this.args.cardIds && this.args.cardIds.length > 1;
+    return this.args.stackItemCardIds.length > 0;
   }
 
   get isWideCard() {
-    if (!this.currentCard) {
+    if (!this.primaryCard) {
       return false;
     }
 
-    return (this.currentCard.constructor as typeof CardDef).prefersWideFormat;
+    return (this.primaryCard.constructor as typeof CardDef).prefersWideFormat;
   }
 
-  @action
-  removeCard(cardId: string) {
-    if (this.args.removeCard) {
-      this.args.removeCard(cardId);
+  get backgroundImageStyle() {
+    if (!this.primaryCard || this.isWideCard) {
+      return htmlSafe('');
     }
+
+    let backgroundImageUrl = this.primaryCard?.[meta]?.realmInfo?.backgroundURL;
+
+    if (backgroundImageUrl) {
+      return htmlSafe(`background-image: url(${backgroundImageUrl});`);
+    }
+
+    return htmlSafe('');
+  }
+
+  @provide(CardCrudFunctionsContextName)
+  // @ts-ignore "cardCrudFunctions" is declared but not used
+  private get cardCrudFunctions(): Optional<CardCrudFunctions> {
+    return {
+      viewCard: this.args.viewCard,
+    };
   }
 
   <template>
     <div
       class='host-mode-content {{if this.isWideCard "is-wide"}}'
       data-test-host-mode-content
+      style={{this.backgroundImageStyle}}
       ...attributes
     >
       {{#if this.displayBreadcrumbs}}
         <div class='breadcrumb-container'>
           <HostModeBreadcrumbs
-            @cardIds={{@cardIds}}
-            @close={{this.removeCard}}
+            @cardIds={{this.cardIds}}
+            @close={{@removeCardFromStack}}
           />
         </div>
       {{/if}}
       <HostModeCard
-        @cardId={{this.currentCardId}}
+        @cardId={{@primaryCardId}}
         @displayBoundaries={{not this.isWideCard}}
         @openInteractSubmode={{@openInteractSubmode}}
         class='current-card'
       />
-      {{#if (gt @cardIds.length 1)}}
-        <HostModeStack @cardIds={{@cardIds}} @close={{this.removeCard}} />
+      {{#if (gt @stackItemCardIds.length 0)}}
+        <HostModeStack
+          @stackItemCardIds={{@stackItemCardIds}}
+          @close={{@removeCardFromStack}}
+        />
       {{/if}}
     </div>
 
@@ -96,11 +120,15 @@ export default class HostModeContent extends Component<Signature> {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        flex: 1;
+        width: 100%;
+        max-height: 100vh;
         overflow: hidden;
         padding: var(--boxel-sp);
         position: relative;
         background-color: #686283;
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
       }
 
       .breadcrumb-container {
@@ -115,6 +143,14 @@ export default class HostModeContent extends Component<Signature> {
         --host-mode-card-width: 100%;
         --host-mode-card-padding: 0;
         --host-mode-card-border-radius: 0;
+      }
+
+      .current-card {
+        flex: 1;
+        max-height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: stretch;
       }
 
       .host-mode-content.is-wide .breadcrumb-container {

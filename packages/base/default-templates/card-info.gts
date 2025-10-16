@@ -157,13 +157,6 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
             <@fields.description @format='embedded' />
           </FieldContainer>
           <FieldContainer
-            @label='Hosted URL'
-            @icon={{LinkIcon}}
-            data-test-edit-preview='cardHostedURL'
-          >
-            {{! TODO }}
-          </FieldContainer>
-          <FieldContainer
             @label='Thumbnail URL'
             @icon={{LinkIcon}}
             data-test-edit-preview='cardThumbnailURL'

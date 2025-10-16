@@ -56,7 +56,9 @@ export async function registerUser({
     },
   );
   if (!registerResponse.ok) {
-    throw new Error(`could not register matrix user '${username}'`);
+    throw new Error(
+      `could not register matrix user '${username}': ${await registerResponse.text()}`,
+    );
   }
   let {
     access_token: accessToken,

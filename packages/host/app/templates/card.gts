@@ -2,7 +2,6 @@ import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
 import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
 
@@ -22,9 +21,9 @@ import {
   CardContextName,
   CommandContextName,
 } from '@cardstack/runtime-common';
-import { meta } from '@cardstack/runtime-common/constants';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
+
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import config from '@cardstack/host/config/environment';
@@ -40,7 +39,11 @@ import HostModeStateService from '@cardstack/host/services/host-mode-state-servi
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 
 export interface HostModeComponentSignature {
   Args: {
@@ -101,44 +104,19 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
     return this.card?.title ?? '';
   }
 
-  get backgroundImageStyle() {
-    let backgroundImageUrl = this.card?.[meta]?.realmInfo?.backgroundURL;
-
-    if (backgroundImageUrl) {
-      return htmlSafe(`background-image: url(${backgroundImageUrl});`);
-    }
-    return htmlSafe('');
-  }
-
-  get hostModeContainerClass() {
-    if (this.isError) {
-      return 'host-mode-container';
+  private viewCard: ViewCardFn = (cardOrURL) => {
+    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    if (!cardId) {
+      return;
     }
 
-    // Check if the card prefers wide format
-    if (
-      this.card &&
-      (this.card.constructor as typeof CardDef).prefersWideFormat
-    ) {
-      return 'host-mode-container is-wide';
-    }
-
-    return 'host-mode-container';
-  }
-
-  get cardIds() {
-    let ids = this.hostModeStateService.hostModeCardIds;
-
-    if (ids.length === 0 && this.card?.id) {
-      return [this.card.id];
-    }
-
-    return ids;
-  }
+    let normalizedId = cardId.replace(/\.json$/, '');
+    this.hostModeStateService.pushCard(normalizedId);
+  };
 
   @action
-  closeCard(cardId: string) {
-    this.hostModeStateService.closeCard(cardId);
+  removeCardFromStack(cardId: string) {
+    this.hostModeStateService.removeCardFromStack(cardId);
   }
 
   @provide(CardContextName)
@@ -213,44 +191,18 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         {{@model.id}}
       </div>
     {{else}}
-
-      <div class='host-wrapper'>
-        <section
-          class={{this.hostModeContainerClass}}
-          style={{this.backgroundImageStyle}}
-          data-test-host-mode-container
-        >
-          <HostModeContent
-            @cardIds={{this.cardIds}}
-            @removeCard={{this.closeCard}}
-            class='full-host-mode-content'
-          />
-        </section>
-      </div>
+      <HostModeContent
+        @primaryCardId={{this.hostModeStateService.primaryCard}}
+        @stackItemCardIds={{this.hostModeStateService.stackItems}}
+        @removeCardFromStack={{this.removeCardFromStack}}
+        @viewCard={{this.viewCard}}
+        class='host-mode-content'
+      />
     {{/if}}
 
     <style scoped>
-      .host-wrapper {
-        position: relative;
-        min-height: 100vh;
-      }
-
-      .host-mode-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100%;
-        background-position: center;
-        background-size: cover;
-        padding: var(--boxel-sp);
-      }
-
-      .host-mode-container.is-wide {
-        padding: 0;
-      }
-
-      .full-host-mode-content {
-        min-height: 100vh;
+      .host-mode-content {
+        height: 100%;
       }
     </style>
   </template>

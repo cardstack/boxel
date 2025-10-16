@@ -376,6 +376,7 @@ function makeMockPrerender(): {
           pageId: 'p',
           realm: body?.data?.attributes?.realm,
           reused: false,
+          evicted: false,
         },
       },
     });

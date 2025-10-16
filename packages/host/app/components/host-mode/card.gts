@@ -10,7 +10,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    cardId: string;
+    cardId: string | null;
     displayBoundaries?: boolean;
     openInteractSubmode?: () => void;
   };
@@ -23,7 +23,7 @@ export default class HostModeCard extends Component<Signature> {
       return undefined;
     }
 
-    return getCard(this, () => this.args.cardId);
+    return getCard(this, () => this.args.cardId!);
   }
 
   get card() {

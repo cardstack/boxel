@@ -2,7 +2,11 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import { Server, createServer } from 'http';
 import * as Sentry from '@sentry/node';
-import { logger, type RealmPermissions } from '@cardstack/runtime-common';
+import {
+  logger,
+  type RealmPermissions,
+  type RenderRouteOptions,
+} from '@cardstack/runtime-common';
 import {
   ecsMetadata,
   fullRequestURL,
@@ -13,14 +17,19 @@ import { Prerenderer } from './index';
 
 let log = logger('prerender-server');
 
-export function buildPrerenderApp(secretSeed: string): {
+export function buildPrerenderApp(
+  secretSeed: string,
+  options?: { maxPages?: number; silent?: boolean },
+): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
 } {
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
-  let maxPages = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
-  let prerenderer = new Prerenderer({ secretSeed, maxPages });
+  let maxPages =
+    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+  let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
+  let prerenderer = new Prerenderer({ secretSeed, maxPages, silent });
 
   router.head('/', livenessCheck);
   router.get('/', async (ctxt: Koa.Context) => {
@@ -54,6 +63,12 @@ export function buildPrerenderApp(secretSeed: string): {
       let userId = attrs.userId as string | undefined;
       let permissions = attrs.permissions as RealmPermissions | undefined;
       let realm = attrs.realm as string | undefined;
+      let renderOptions: RenderRouteOptions =
+        attrs.renderOptions &&
+        typeof attrs.renderOptions === 'object' &&
+        !Array.isArray(attrs.renderOptions)
+          ? (attrs.renderOptions as RenderRouteOptions)
+          : {};
 
       if (
         !url ||
@@ -81,6 +96,7 @@ export function buildPrerenderApp(secretSeed: string): {
         url,
         userId,
         permissions,
+        renderOptions,
       });
       let totalMs = Date.now() - start;
       ctxt.status = 201;
@@ -171,9 +187,15 @@ async function registerWithManager() {
 
 export function createPrerenderHttpServer(options?: {
   secretSeed?: string;
+  maxPages?: number;
+  silent?: boolean;
 }): Server {
   let secretSeed = options?.secretSeed ?? process.env.REALM_SECRET_SEED ?? '';
-  let { app, prerenderer } = buildPrerenderApp(secretSeed);
+  let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
+  let { app, prerenderer } = buildPrerenderApp(secretSeed, {
+    maxPages: options?.maxPages,
+    silent,
+  });
   let server = createServer(app.callback());
   server.on('close', async () => {
     try {

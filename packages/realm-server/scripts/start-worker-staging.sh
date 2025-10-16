@@ -1,6 +1,7 @@
 #! /bin/sh
 
 NODE_NO_WARNINGS=1 \
+  NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
@@ -21,4 +22,3 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://realms-staging.stack.cards/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
   
-

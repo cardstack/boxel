@@ -1,60 +1,59 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Catalog",
+        "module": "./catalog-app/catalog"
+      }
+    },
     "type": "card",
     "attributes": {
-      "title": "Catalog App",
-      "description": null,
-      "thumbnailURL": null
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
-      "startHere.0": {
-        "links": {
-          "self": "./CardListing/ab800371-b455-4a23-85f4-42fd0b786abb"
-        }
-      },
-      "startHere.1": {
-        "links": {
-          "self": "./AppListing/95cbe2c7-9b60-4afd-8a3c-1382b610e316"
-        }
-      },
       "new.0": {
         "links": {
-          "self": "./AppListing/9516c0ef-47e0-4593-954d-3e6a0ed146bd"
+          "self": "./CardListing/454c33bd-bc8a-4bda-bd32-321bd541548a"
         }
       },
       "new.1": {
         "links": {
-          "self": "./AppListing/4b0be04c-68dd-456d-8faf-d8cbfcb2c464"
+          "self": "./CardListing/046941a0-aac1-4eca-aede-6a59eac4fc9e"
         }
       },
       "new.2": {
         "links": {
-          "self": "./AppListing/1d17b731-7108-42db-b4fb-93643288553c"
+          "self": "./AppListing/d8f33037-cda5-4ca6-9b60-a65929dcac42"
         }
       },
       "new.3": {
         "links": {
-          "self": "./AppListing/ebdeb810-0a48-4bf7-82a1-4fff9ba33966"
+          "self": "./CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9"
         }
       },
       "new.4": {
         "links": {
-          "self": "./CardListing/d8de30ed-90bb-4337-826a-83e20973bf50"
+          "self": "./CardListing/2d838726-ed2c-437d-a171-eade2544ca66"
         }
       },
       "new.5": {
         "links": {
-          "self": "./AppListing/d8f33037-cda5-4ca6-9b60-a65929dcac42"
+          "self": "./CardListing/e1f6cb25-0749-485a-9eee-4b6897cb3d41"
         }
       },
       "new.6": {
         "links": {
-          "self": "./CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9"
+          "self": "./AppListing/4b0be04c-68dd-456d-8faf-d8cbfcb2c464"
         }
       },
       "new.7": {
         "links": {
-          "self": "./CardListing/a51b73a3-08c5-4dfd-b22a-8e66a0285801"
+          "self": "./AppListing/1d17b731-7108-42db-b4fb-93643288553c"
         }
       },
       "featured.0": {
@@ -64,14 +63,23 @@
       },
       "featured.1": {
         "links": {
-          "self": "./CardListing/10ff8743-4b8c-403e-95a6-90c36cbb98ca"
+          "self": "./CardListing/ef22ef9b-d7f6-4593-8bec-e2cc283103ec"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "./catalog-app/catalog",
-        "name": "Catalog"
+      },
+      "startHere.0": {
+        "links": {
+          "self": "./CardListing/ab800371-b455-4a23-85f4-42fd0b786abb"
+        }
+      },
+      "startHere.1": {
+        "links": {
+          "self": "./CardListing/f0c0ad91-0194-46b9-a971-9e60d637a51a"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

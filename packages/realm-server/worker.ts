@@ -97,6 +97,7 @@ let {
 log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
 let prerenderer: Prerenderer;
 if (process.env.USE_HEADLESS_CHROME_INDEXING && prerendererUrl) {
+  // in node context this is a boolean
   (globalThis as any).__useHeadlessChromePrerender = true;
   log.info(`Using prerender server ${prerendererUrl}`);
   prerenderer = createRemotePrerenderer(prerendererUrl);

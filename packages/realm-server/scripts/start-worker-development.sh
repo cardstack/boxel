@@ -9,6 +9,7 @@ wait_for_prerender "$PRERENDER_URL"
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
+  NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   PGPORT=5435 \
   PGDATABASE=boxel \
   LOG_LEVELS='*=info' \

@@ -21,7 +21,7 @@ async function handleStreamingRequest(
   url: string,
   method: string,
   headers: Record<string, string>,
-  requestBody: any,
+  requestBody: BodyInit | undefined,
   endpointConfig: any,
   dbAdapter: DBAdapter,
   matrixUserId: string,
@@ -29,11 +29,15 @@ async function handleStreamingRequest(
   try {
     setupSSEHeaders(ctxt);
 
-    const externalResponse = await fetch(url, {
+    const fetchInit: RequestInit = {
       method,
       headers,
-      body: JSON.stringify(requestBody),
-    });
+    };
+    if (requestBody !== undefined) {
+      fetchInit.body = requestBody;
+    }
+
+    const externalResponse = await fetch(url, fetchInit);
 
     ctxt.res.write(': connected\n\n');
 
@@ -162,12 +166,105 @@ function extractSSELines(buffer: string): string[] {
   return lines;
 }
 
+interface MultipartFileField {
+  filename: string;
+  content: string;
+  contentType?: string;
+}
+
+function isMultipartFileField(value: unknown): value is MultipartFileField {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'filename' in value &&
+    'content' in value &&
+    typeof (value as { filename: unknown }).filename === 'string' &&
+    typeof (value as { content: unknown }).content === 'string'
+  );
+}
+
+function jsonToMultipartFormData(jsonData: Record<string, unknown>): {
+  body: BodyInit;
+  boundary: string;
+} {
+  const boundary = `----WebKitFormBoundary${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  const parts: Uint8Array[] = [];
+  const encoder = new TextEncoder();
+
+  const pushString = (value: string) => {
+    parts.push(encoder.encode(value));
+  };
+
+  for (const [key, value] of Object.entries(jsonData)) {
+    pushString(`--${boundary}\r\n`);
+
+    if (isMultipartFileField(value)) {
+      const fileField = value;
+      const contentType = fileField.contentType || 'application/octet-stream';
+      pushString(
+        `Content-Disposition: form-data; name="${key}"; filename="${fileField.filename}"\r\n`,
+      );
+      pushString(`Content-Type: ${contentType}\r\n\r\n`);
+      parts.push(Buffer.from(fileField.content, 'base64'));
+      pushString('\r\n');
+      continue;
+    }
+
+    const normalisedValue =
+      value === null || value === undefined
+        ? ''
+        : typeof value === 'object'
+          ? JSON.stringify(value)
+          : String(value);
+
+    pushString(`Content-Disposition: form-data; name="${key}"\r\n\r\n`);
+    pushString(normalisedValue);
+    pushString('\r\n');
+  }
+
+  pushString(`--${boundary}--\r\n`);
+
+  const totalLength = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  const body = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const part of parts) {
+    body.set(part, offset);
+    offset += part.byteLength;
+  }
+
+  return {
+    body,
+    boundary,
+  };
+}
+
+function hasContentTypeHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some(
+    (header) => header.toLowerCase() === 'content-type',
+  );
+}
+
+function setContentTypeHeader(
+  headers: Record<string, string>,
+  value: string,
+): void {
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'content-type') {
+      delete headers[key];
+    }
+  }
+  headers['Content-Type'] = value;
+}
+
 interface RequestForwardBody {
   url: string;
   method: string;
   requestBody: string;
   headers?: Record<string, string>;
   stream?: boolean;
+  multipart?: boolean;
 }
 
 export default function handleRequestForward({
@@ -250,10 +347,10 @@ export default function handleRequestForward({
       }
 
       // 5. Forward request to external endpoint
-      let requestBody;
+      let parsedRequestBody: unknown;
       if (json.requestBody) {
         try {
-          requestBody = JSON.parse(json.requestBody);
+          parsedRequestBody = JSON.parse(json.requestBody);
         } catch (e) {
           await sendResponseForBadRequest(
             ctxt,
@@ -266,8 +363,7 @@ export default function handleRequestForward({
       // Build headers and URL based on authentication method
       let finalUrl = json.url;
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...json.headers,
+        ...(json.headers ?? {}),
       };
 
       // Add authentication based on the configured method
@@ -276,9 +372,60 @@ export default function handleRequestForward({
         const url = new URL(json.url);
         url.searchParams.set(paramName, destinationConfig.apiKey);
         finalUrl = url.toString();
+      } else if (
+        destinationConfig.authMethod === 'header' &&
+        destinationConfig.authParameterName
+      ) {
+        headers[destinationConfig.authParameterName] =
+          `Bearer ${destinationConfig.apiKey}`;
       } else {
         // Default to header authentication
         headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
+      }
+
+      let finalBody: BodyInit | undefined;
+      if (json.multipart) {
+        const multipartPayload = (parsedRequestBody ?? {}) as Record<
+          string,
+          unknown
+        >;
+        if (
+          typeof multipartPayload !== 'object' ||
+          multipartPayload === null ||
+          Array.isArray(multipartPayload)
+        ) {
+          await sendResponseForBadRequest(
+            ctxt,
+            'requestBody must be a JSON object when multipart is true',
+          );
+          return;
+        }
+
+        try {
+          const { body, boundary } = jsonToMultipartFormData(multipartPayload);
+          finalBody = body;
+          setContentTypeHeader(
+            headers,
+            `multipart/form-data; boundary=${boundary}`,
+          );
+        } catch (error) {
+          log.error(
+            'Error converting request body to multipart form-data:',
+            error,
+          );
+          await sendResponseForBadRequest(
+            ctxt,
+            'Failed to convert request body to multipart form-data',
+          );
+          return;
+        }
+      } else if (parsedRequestBody !== undefined) {
+        finalBody = JSON.stringify(parsedRequestBody);
+        if (!hasContentTypeHeader(headers)) {
+          setContentTypeHeader(headers, 'application/json');
+        }
+      } else if (!hasContentTypeHeader(headers)) {
+        setContentTypeHeader(headers, 'application/json');
       }
 
       // Handle streaming requests
@@ -296,7 +443,7 @@ export default function handleRequestForward({
           finalUrl,
           json.method,
           headers,
-          requestBody,
+          finalBody,
           destinationConfig,
           dbAdapter,
           matrixUserId,
@@ -311,11 +458,17 @@ export default function handleRequestForward({
       };
 
       // Only add body for non-GET requests or when requestBody is provided
-      if (json.method !== 'GET' && requestBody !== undefined) {
-        fetchOptions.body = JSON.stringify(requestBody);
+      if (json.method !== 'GET' && finalBody !== undefined) {
+        fetchOptions.body = finalBody;
       }
 
-      const externalResponse = await fetch(finalUrl, fetchOptions);
+      // FIXME undici or something is swallowing the errors, making them useless:
+      /*
+        Error in request forward handler: TypeError: fetch failed
+          at node:internal/deps/undici/undici:13510:13
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+      */
+      const externalResponse = await globalThis.fetch(finalUrl, fetchOptions);
 
       const responseData = await externalResponse.json();
 

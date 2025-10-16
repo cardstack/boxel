@@ -33,11 +33,6 @@
           "self": "../../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
         }
       },
-      "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
-      },
       "featuredSongs.0": {
         "links": {
           "self": "../../song/SongCard/funky-suspense"

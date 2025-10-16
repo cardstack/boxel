@@ -100,7 +100,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   module('cards are read-only', function (_hooks) {
-    test('input fields are disabled', async function (assert) {
+    test('input fields are disabled or readonly', async function (assert) {
       class Person extends CardDef {
         @field string = contains(StringField);
         @field number = contains(NumberField);
@@ -141,10 +141,10 @@ module('Integration | card-basics', function (hooks) {
         .hasAttribute('disabled');
       assert
         .dom('[data-test-field="markdown"] textarea')
-        .hasAttribute('disabled');
+        .hasAttribute('readonly');
       assert
         .dom('[data-test-field="textArea"] textarea')
-        .hasAttribute('disabled');
+        .hasAttribute('readonly');
     });
 
     test('linksToMany field with computeVia is not editable in edit format', async function (assert) {
@@ -1819,9 +1819,6 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-edit-preview="cardDescription"]')
         .containsText(description);
-      assert
-        .dom('[data-test-edit-preview="cardHostedURL"]')
-        .hasText('Hosted URL');
       assert
         .dom('[data-test-edit-preview="cardThumbnailURL"]')
         .hasText('Thumbnail URL');

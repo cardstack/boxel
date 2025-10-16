@@ -20,7 +20,7 @@ export interface Model {
   Component: BoxComponent;
 }
 
-export default class RenderRoute extends Route<Model> {
+export default class RenderHtmlRoute extends Route<Model> {
   @service declare router: RouterService;
 
   async model({

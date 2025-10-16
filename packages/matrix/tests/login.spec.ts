@@ -1,9 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { registerUser } from '../docker/synapse';
 import {
+  registerUser,
   synapseStart,
   synapseStop,
+  getJoinedRooms,
+  getAccountData,
   type SynapseInstance,
+  type Credentials,
 } from '../docker/synapse';
 import {
   appURL,
@@ -28,6 +31,7 @@ const REALM_SECRET_SEED = "shhh! it's a secret";
 test.describe('Login', () => {
   let synapse: SynapseInstance;
   let realmServer: IsolatedRealmServer;
+  let userCredentials: Credentials;
 
   test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
@@ -36,7 +40,7 @@ test.describe('Login', () => {
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
+    userCredentials = await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page, appURL);
     await setupUserSubscribed('@user1:localhost', realmServer);
     await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
@@ -224,6 +228,44 @@ test.describe('Login', () => {
     // reload to page to show that the access token persists
     await page.reload();
     await assertLoggedIn(page);
+  });
+
+  test('login joins the session rooms for all realm tokens', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass', { url: appURL });
+    await assertLoggedIn(page);
+    await page.waitForSelector('[data-test-stack-item-content]');
+
+    let boxelSession = await page.evaluate(async () => {
+      await new Promise((res) => setTimeout(res, 1500));
+      return window.localStorage.getItem('boxel-session');
+    });
+
+    expect(boxelSession).toBeTruthy();
+
+    let tokens = Object.values(
+      JSON.parse(boxelSession!) as { [realmURL: string]: string },
+    ).filter((token): token is string => Boolean(token));
+
+    expect(tokens.length).toBeGreaterThan(0);
+
+    let joinedRooms = await getJoinedRooms(userCredentials.accessToken);
+    let directAccountData = await getAccountData<{ [userId: string]: string[] }>(
+      userCredentials.userId,
+      userCredentials.accessToken,
+      'm.direct',
+    );
+
+    for (let token of tokens) {
+      let claims = jwt.verify(token, REALM_SECRET_SEED) as {
+        sessionRoom: string;
+      };
+      expect(joinedRooms).toContain(claims.sessionRoom);
+      expect(
+        directAccountData?.[userCredentials.userId] ?? [],
+      ).toContain(claims.sessionRoom);
+    }
   });
 
   test('it can login to workspace chooser page', async ({ page }) => {

@@ -15,6 +15,8 @@ import {
   DEFAULT_PERMISSIONS,
   PUBLISHED_DIRECTORY_NAME,
   RealmInfo,
+  fetchSessionRoom,
+  REALM_SERVER_REALM,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -218,7 +220,16 @@ export class RealmServer {
 
   async start() {
     let loadedRealms = await this.loadRealms();
-    this.realms.push(...loadedRealms);
+    for (let loadedRealm of loadedRealms) {
+      const existingIndex = this.realms.findIndex(
+        (r) => r.url === loadedRealm.url,
+      );
+      if (existingIndex === -1) {
+        this.realms.push(loadedRealm);
+      } else {
+        this.realms[existingIndex] = loadedRealm;
+      }
+    }
 
     // ideally we'd like to use a Promise.all to start these and the ordering
     // will just fall out naturally from cross realm invalidation. Until we have
@@ -514,6 +525,11 @@ export class RealmServer {
             )}/${owner}/${realmName}/`,
             this.serverURL,
           ).href;
+          let existingRealm = this.realms.find((realm) => realm.url === url);
+          if (existingRealm) {
+            realms.push(existingRealm);
+            continue;
+          }
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = `realm/${owner}_${realmName}`;
           let realm = new Realm({
@@ -633,6 +649,14 @@ export class RealmServer {
             continue;
           }
 
+          let existingRealm = this.realms.find(
+            (realm) => realm.url === publishedRealmUrl,
+          );
+          if (existingRealm) {
+            realms.push(existingRealm);
+            continue;
+          }
+
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = publishedRealmRow.owner_username;
 
@@ -689,18 +713,18 @@ export class RealmServer {
     eventType: string,
     data?: Record<string, any>,
   ) => {
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let roomId = dmRooms[user];
+    let roomId = await fetchSessionRoom(
+      this.dbAdapter,
+      REALM_SERVER_REALM,
+      user,
+    );
     if (!roomId) {
       console.error(
         `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
       );
     }
 
-    await this.matrixClient.sendEvent(roomId, 'm.room.message', {
+    await this.matrixClient.sendEvent(roomId!, 'm.room.message', {
       body: JSON.stringify({ eventType, data }),
       msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
     });
