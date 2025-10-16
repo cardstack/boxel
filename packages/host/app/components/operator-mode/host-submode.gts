@@ -16,8 +16,9 @@ import window from 'ember-window-mock';
 import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
-import OpenSitePopover from '@cardstack/host/components/operator-mode/open-site-popover';
-import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
+import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
+import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
+import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -27,7 +28,6 @@ import type { ViewCardFn } from 'https://cardstack.com/base/card-api';
 
 import HostModeContent from '../host-mode/content';
 
-import PublishRealmModal from './publish-realm-modal';
 import SubmodeLayout from './submode-layout';
 
 interface HostSubmodeSignature {
