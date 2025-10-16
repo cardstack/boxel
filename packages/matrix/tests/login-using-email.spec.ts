@@ -8,9 +8,6 @@ import {
   assertLoggedIn,
   createSubscribedUser,
 } from '../helpers';
-import { createRegistrationToken } from '../docker/synapse';
-
-const REGISTRATION_TOKEN = 'abc123';
 
 test.describe('Login using email', () => {
   let user: {
@@ -27,7 +24,6 @@ test.describe('Login using email', () => {
     await clearLocalStorage(page, appURL);
     await gotoRegistration(page, appURL);
     user = await createSubscribedUser('email-login');
-    await createRegistrationToken(adminAccessToken, REGISTRATION_TOKEN);
     userEmail = `${user.username}@example.com`;
     await updateUser(adminAccessToken, user.credentials.userId, {
       emailAddresses: [userEmail],
