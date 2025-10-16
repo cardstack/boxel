@@ -42,34 +42,6 @@ jobs:
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
-            boxel:
-              - *shared
-              - '.github/workflows/build-host.yml'
-              - '.github/workflows/deploy-host.yml'
-              - '.github/workflows/manual-deploy.yml'
-              - 'packages/ai-bot/**'
-              - 'packages/base/**'
-              - 'packages/boxel-icons/**'
-              - 'packages/boxel-ui/**'
-              - 'packages/host/**'
-              - 'packages/realm-server/**'
-              - 'packages/catalog-realm/**'
-            ai-bot:
-              - *shared
-              - '.github/workflows/pr-ai-bot.yml'
-              - 'packages/ai-bot/**'
-              - 'packages/billing/**'
-              - 'packages/postgres/**'
-            boxel-icons:
-              - *shared
-              - 'packages/boxel-icons/**'
-            boxel-motion:
-              - *shared
-              - 'packages/boxel-motion/**'
-            boxel-ui:
-              - *shared
-              - 'packages/boxel-icons/**'
-              - 'packages/boxel-ui/**'
             matrix:
               - *shared
               - 'packages/base/**'
@@ -78,20 +50,6 @@ jobs:
               - 'packages/host/**'
               - 'packages/matrix/**'
               - 'packages/realm-server/**'
-            realm-server:
-              - *shared
-              - 'packages/billing/**'
-              - 'packages/boxel-icons/**'
-              - 'packages/boxel-ui/**'
-              - 'packages/eslint-plugin-boxel/**'
-              - 'packages/postgres/**'
-              - 'packages/realm-server/**'
-            vscode-boxel-tools:
-              - *shared
-              - 'packages/vscode-boxel-tools/**'
-            workspace-sync-cli:
-              - *shared
-              - 'packages/workspace-sync-cli/**'
       - name: Force run all jobs on ci-bisect branches
         id: force-run-all
         shell: bash
@@ -212,8 +170,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-        shardTotal: [12]
+        shardIndex: [1, 2, 3, 4]
+        shardTotal: [4]
     concurrency:
       group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
