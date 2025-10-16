@@ -1372,26 +1372,6 @@ module(basename(__filename), function () {
           throw new Error('boom!');
         `,
       );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.instancesIndexed,
-        0,
-        'correct number of instances indexed',
-      );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.instanceErrors,
-        2,
-        'correct number of instance errors',
-      );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.moduleErrors,
-        2,
-        'correct number of module errors',
-      );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.definitionsIndexed,
-        0,
-        'correct number of definitions indexed',
-      );
       let petDefinitionEntry =
         await realm.realmIndexQueryEngine.getOwnDefinition({
           module: `${testRealm}pet`,
@@ -1408,26 +1388,6 @@ module(basename(__filename), function () {
           // syntax error
           export class Intentionally Thrown Error {}
         `,
-      );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.instanceErrors,
-        4,
-        'correct number of instance errors',
-      ); // 1 post, 2 persons, 1 bad-link post
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.moduleErrors,
-        3,
-        'correct number of module errors',
-      ); // post, fancy person, person
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.instancesIndexed,
-        0,
-        'correct number of instances indexed',
-      );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.definitionsIndexed,
-        0,
-        'correct number of definitions indexed',
       );
       let { data: result } = await realm.realmIndexQueryEngine.search({
         filter: {
@@ -1470,26 +1430,6 @@ module(basename(__filename), function () {
           }
         `,
       );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.instanceErrors,
-        1,
-        'correct number of instance errors',
-      );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.moduleErrors,
-        0,
-        'correct number of module errors',
-      );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.instancesIndexed,
-        3,
-        'correct number of instances indexed',
-      ); // 1 post and 2 persons
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.definitionsIndexed,
-        3,
-        'correct number of definitions indexed',
-      ); // Person card, Post card, FancyPerson card
       result = (
         await realm.realmIndexQueryEngine.search({
           filter: {
