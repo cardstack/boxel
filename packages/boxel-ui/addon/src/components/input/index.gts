@@ -69,6 +69,7 @@ export interface Signature {
     onKeyPress?: (ev: KeyboardEvent) => Promise<void> | void;
     optional?: boolean;
     placeholder?: string;
+    readonly?: boolean;
     required?: boolean;
     size?: 'large' | 'default';
     state?: InputValidationState;
@@ -163,6 +164,7 @@ export default class BoxelInput extends Component<Signature> {
           max={{@max}}
           required={{@required}}
           disabled={{@disabled}}
+          readonly={{@readonly}}
           autocomplete={{@autocomplete}}
           aria-describedby={{if
             @helperText
@@ -242,15 +244,16 @@ export default class BoxelInput extends Component<Signature> {
         }
 
         .boxel-input {
-          --boxel-input-height: var(--boxel-form-control-height);
-
           grid-column: 1 / span 3;
           grid-row: 2;
 
           box-sizing: border-box;
           width: 100%;
           max-width: 100%;
-          min-height: var(--boxel-input-height);
+          min-height: var(
+            --boxel-input-height,
+            var(--boxel-form-control-height)
+          );
           padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
           background-color: var(--background, var(--boxel-light));
           color: var(--foreground, var(--boxel-dark));
@@ -269,11 +272,18 @@ export default class BoxelInput extends Component<Signature> {
           font-size: var(--boxel-font-size);
         }
 
-        .boxel-text-area {
+        textarea {
           --boxel-input-height: 10rem;
+          resize: both;
+          overflow: auto;
         }
 
         .boxel-input:not([type='color']):disabled {
+          opacity: 0.5;
+          resize: none; /* do not display resize toggle since it's disabled */
+        }
+
+        .boxel-input:not([type='color'])[readonly] {
           opacity: 0.5;
         }
 

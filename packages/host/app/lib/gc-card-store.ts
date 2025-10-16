@@ -100,7 +100,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #referenceCount: ReferenceCount;
   #idResolver = new IDResolver();
   #fetch: typeof globalThis.fetch;
-  #inFlight: Promise<unknown>[] = [];
+  #inFlight: Set<Promise<unknown>> = new Set();
+  #loadGeneration = 0; // increments whenever a new load is tracked
   #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
 
@@ -128,11 +129,13 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   async loadDocument(url: string) {
     let promise = this.#docsInFlight.get(url);
     if (promise) {
+      this.trackLoad(promise);
       return await promise;
     }
+    promise = loadDocument(this.#fetch, url);
+    this.#docsInFlight.set(url, promise);
+    this.trackLoad(promise);
     try {
-      promise = loadDocument(this.#fetch, url);
-      this.#docsInFlight.set(url, promise);
       return await promise;
     } finally {
       this.#docsInFlight.delete(url);
@@ -140,11 +143,34 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   trackLoad(load: Promise<unknown>) {
-    this.#inFlight.push(load);
+    if (this.#inFlight.has(load)) {
+      return;
+    }
+    this.#inFlight.add(load);
+    this.#loadGeneration++;
+    load.finally(() => {
+      this.#inFlight.delete(load);
+    });
   }
 
   async loaded() {
-    await Promise.allSettled(this.#inFlight);
+    let observedGeneration = this.#loadGeneration;
+    for (;;) {
+      if (this.#inFlight.size === 0) {
+        // allow microtasks (like settled promise continuations) to enqueue more loads
+        await Promise.resolve();
+      } else {
+        let pendingLoads = Array.from(this.#inFlight);
+        await Promise.allSettled(pendingLoads);
+      }
+      if (
+        this.#inFlight.size === 0 &&
+        this.#loadGeneration === observedGeneration
+      ) {
+        return;
+      }
+      observedGeneration = this.#loadGeneration;
+    }
   }
 
   addInstanceOrError(id: string, instanceOrError: CardDef | CardErrorJSONAPI) {
@@ -202,6 +228,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#cards.clear();
     this.#nonTrackedCards.clear();
     this.#gcCandidates.clear();
+    this.#docsInFlight.clear();
+    this.#inFlight.clear();
+    this.#loadGeneration = 0;
     this.#idResolver.reset();
   }
 
