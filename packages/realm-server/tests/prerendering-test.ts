@@ -214,6 +214,22 @@ module(basename(__filename), function () {
             [testUserId]: ['read', 'write', 'realm-owner'],
           },
           fileSystem: {
+            'broken-card.gts': `
+              import {
+            `,
+            'broken.json': {
+              data: {
+                attributes: {
+                  name: 'Broken',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './broken-card',
+                    name: 'Broken',
+                  },
+                },
+              },
+            },
             'cat.gts': `
               import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
@@ -222,7 +238,7 @@ module(basename(__filename), function () {
                 @field name = contains(StringField);
                 @field owner = linksTo(Person);
                 static displayName = "Cat";
-                static embedded = <template>{{@fields.name}} says Meow</template>
+                static embedded = <template>{{@fields.name}} says Meow. owned by <@fields.owner /></template>
               }
             `,
             '1.json': {
@@ -615,6 +631,10 @@ module(basename(__filename), function () {
           'meta fields are null when short-circuited',
         );
         assert.true(unusable.pool.evicted, 'pool notes eviction for unusable');
+        assert.false(
+          unusable.pool.timedOut,
+          'unusable eviction does not mark timeout',
+        );
         assert.notStrictEqual(
           unusable.pool.pageId,
           'unknown',
@@ -631,6 +651,23 @@ module(basename(__filename), function () {
         });
         assert.false(next.pool.reused, 'did not reuse after unusable eviction');
         assert.false(next.pool.evicted, 'subsequent render not evicted');
+      });
+
+      test('prerender surfaces module syntax errors without timing out', async function (assert) {
+        const cardURL = `${realmURL2}broken`;
+        let broken = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: cardURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.ok(broken.response.error, 'syntax error captured');
+        assert.strictEqual(
+          broken.response.error?.error.status,
+          406,
+          'syntax error reported as 406',
+        );
+        assert.false(broken.pool.timedOut, 'syntax error does not hit timeout');
       });
     });
 
@@ -661,6 +698,7 @@ module(basename(__filename), function () {
           'got timeout error',
         );
         assert.true(timeoutRun.pool.evicted, 'timeout eviction reflected');
+        assert.true(timeoutRun.pool.timedOut, 'timeout flagged on pool');
         assert.notStrictEqual(
           timeoutRun.pool.pageId,
           'unknown',
@@ -679,6 +717,7 @@ module(basename(__filename), function () {
           'did not reuse after timeout eviction',
         );
         assert.false(afterTimeout.pool.evicted, 'no eviction on new render');
+        assert.false(afterTimeout.pool.timedOut, 'no timeout on new render');
       });
 
       test('reuses the same page within a realm', async function (assert) {
@@ -708,6 +747,8 @@ module(basename(__filename), function () {
         );
         assert.false(first.pool.reused, 'first call not reused');
         assert.true(second.pool.reused, 'second call reused');
+        assert.false(first.pool.timedOut, 'first call not timed out');
+        assert.false(second.pool.timedOut, 'second call not timed out');
       });
 
       test('does not reuse across different realms', async function (assert) {

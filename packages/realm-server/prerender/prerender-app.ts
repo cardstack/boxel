@@ -99,6 +99,25 @@ export function buildPrerenderApp(
         renderOptions,
       });
       let totalMs = Date.now() - start;
+      let poolFlags = Object.entries({
+        reused: pool.reused,
+        evicted: pool.evicted,
+        timedOut: pool.timedOut,
+      })
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .join(', ');
+      let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+      log.info(
+        'prerendered %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
+        url,
+        totalMs,
+        timings.launchMs,
+        timings.renderMs,
+        pool.pageId,
+        pool.realm,
+        poolFlagSuffix,
+      );
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {
