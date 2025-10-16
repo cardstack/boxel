@@ -224,9 +224,19 @@ export default class RenderService extends Service {
       `${baseRealm.url}card-api`,
     );
     try {
-      let instanceToResolve =
-        (notLoaded.dependencyInstance as BaseDef | undefined) ?? card;
-      let fieldToResolve = notLoaded.dependencyFieldName ?? fieldName;
+      let dependencyInstance =
+        (notLoaded.dependencyInstance as BaseDef | undefined) ?? undefined;
+      let fieldToResolve = fieldName;
+      let instanceToResolve: BaseDef = card;
+      // Only follow dependency-specific resolution when the dependency belongs
+      // to the card that is currently rendering. Otherwise we fall back to the
+      // legacy behaviour so that cyclic links keep using the async lazy loader.
+      if (dependencyInstance === card) {
+        instanceToResolve = dependencyInstance;
+        if (notLoaded.dependencyFieldName) {
+          fieldToResolve = notLoaded.dependencyFieldName as typeof fieldName;
+        }
+      }
       await api.getIfReady(instanceToResolve as any, fieldToResolve as any);
     } catch (error: any) {
       let errors = Array.isArray(error) ? error : [error];
