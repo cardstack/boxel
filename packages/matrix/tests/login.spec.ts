@@ -1,18 +1,10 @@
 import { expect, test } from '@playwright/test';
 import {
-  registerUser,
-  synapseStart,
-  synapseStop,
   getJoinedRooms,
   getAccountData,
-  type SynapseInstance,
   type Credentials,
 } from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
   assertLoggedIn,
@@ -20,8 +12,7 @@ import {
   login,
   logout,
   openRoot,
-  registerRealmUsers,
-  setupUserSubscribed,
+  createSubscribedUser,
   setupPermissions,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
@@ -29,25 +20,18 @@ import jwt from 'jsonwebtoken';
 const REALM_SECRET_SEED = "shhh! it's a secret";
 
 test.describe('Login', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-  let userCredentials: Credentials;
+  let credentials: Credentials;
+  let username: string;
+  let password: string;
 
   test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 120s to the overall test timeout
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    userCredentials = await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page, appURL);
-    await setupUserSubscribed('@user1:localhost', realmServer);
-    await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
-  });
-  test.afterEach(async () => {
-    await realmServer.stop();
-    await synapseStop(synapse.synapseId);
+    ({ username, password, credentials } =
+      await createSubscribedUser('login-tests'));
+    await setupPermissions(credentials.userId, `${appURL}/`);
   });
 
   test('it can login on the realm server home page and see the workspace chooser', async ({
@@ -56,9 +40,9 @@ test.describe('Login', () => {
     await page.goto(appURL);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-password-field]').fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -97,9 +81,9 @@ test.describe('Login', () => {
     await page.goto(`${appURL}?operatorModeState=${stateParam}`);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-password-field]').fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -142,9 +126,9 @@ test.describe('Login', () => {
     await page.goto(`${appURL}?operatorModeState=${stateParam}`);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-password-field]').fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -169,9 +153,9 @@ test.describe('Login', () => {
     await page.goto(`${appURL}/hassan`);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-password-field]').fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -191,9 +175,9 @@ test.describe('Login', () => {
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-password-field]').fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
@@ -202,7 +186,10 @@ test.describe('Login', () => {
     });
     expect(boxelSessionBeforeCardLoaded).toBeNull();
 
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
     // The authentication to the realm could possibly be processed when fetching the card,
     // so we have to wait until the card is loaded before checking the tokens.
     await page.waitForSelector('[data-test-stack-item-content]');
@@ -220,21 +207,27 @@ test.describe('Login', () => {
       sessionRoom: string;
       permissions: ('read' | 'write' | 'realm-owner')[];
     };
-    expect(claims.user).toStrictEqual('@user1:localhost');
+    expect(claims.user).toStrictEqual(credentials.userId);
     expect(claims.realm).toStrictEqual(`${appURL}/`);
     expect(claims.sessionRoom).toMatch(/!\w*:localhost/);
     expect(claims.permissions).toMatchObject(['read', 'write']);
 
     // reload to page to show that the access token persists
     await page.reload();
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
   });
 
   test('login joins the session rooms for all realm tokens', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
-    await assertLoggedIn(page);
+    await login(page, username, password, { url: appURL });
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
     await page.waitForSelector('[data-test-stack-item-content]');
 
     let boxelSession = await page.evaluate(async () => {
@@ -250,21 +243,19 @@ test.describe('Login', () => {
 
     expect(tokens.length).toBeGreaterThan(0);
 
-    let joinedRooms = await getJoinedRooms(userCredentials.accessToken);
-    let directAccountData = await getAccountData<{ [userId: string]: string[] }>(
-      userCredentials.userId,
-      userCredentials.accessToken,
-      'm.direct',
-    );
+    let joinedRooms = await getJoinedRooms(credentials.accessToken);
+    let directAccountData = await getAccountData<{
+      [userId: string]: string[];
+    }>(credentials.userId, credentials.accessToken, 'm.direct');
 
     for (let token of tokens) {
       let claims = jwt.verify(token, REALM_SECRET_SEED) as {
         sessionRoom: string;
       };
       expect(joinedRooms).toContain(claims.sessionRoom);
-      expect(
-        directAccountData?.[userCredentials.userId] ?? [],
-      ).toContain(claims.sessionRoom);
+      expect(directAccountData?.[credentials.userId] ?? []).toContain(
+        claims.sessionRoom,
+      );
     }
   });
 
@@ -273,9 +264,9 @@ test.describe('Login', () => {
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-password-field]').fill(password);
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
     let boxelSessionBeforeWorkspaceLoaded = await page.evaluate(async () => {
@@ -283,7 +274,10 @@ test.describe('Login', () => {
     });
     expect(boxelSessionBeforeWorkspaceLoaded).toBeNull();
 
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
     await expect(page.locator('[data-test-workspace-visibility]')).toHaveCount(
       2,
     );
@@ -301,19 +295,25 @@ test.describe('Login', () => {
       sessionRoom: string;
       permissions: ('read' | 'write' | 'realm-owner')[];
     };
-    expect(claims.user).toStrictEqual('@user1:localhost');
+    expect(claims.user).toStrictEqual(credentials.userId);
     expect(claims.realm).toStrictEqual(`${appURL}/`);
     expect(claims.sessionRoom).toMatch(/!\w*:localhost/);
     expect(claims.permissions).toMatchObject(['read', 'write']);
 
     // reload to page to show that the access token persists
     await page.reload();
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
   });
 
   test('it can logout', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
-    await assertLoggedIn(page);
+    await login(page, username, password, { url: appURL });
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
     // The authentication to the realm could possibly be processed when fetching the card,
     // so we have to wait until the card is loaded before checking the tokens.
     await page.waitForSelector('[data-test-stack-item-content]');
@@ -339,16 +339,16 @@ test.describe('Login', () => {
   });
 
   test('it can logout using the profile popover', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, username, password, { url: appURL });
 
     await expect(
       page.locator(
         '[data-test-profile-icon-button] > [data-test-profile-icon]',
       ),
-    ).toHaveText('U');
+    ).toHaveText(username[0].toUpperCase());
     await page.locator('[data-test-profile-icon-button]').click();
     await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
-      '@user1:localhost',
+      credentials.userId,
     );
     await page.locator('[data-test-signout-button]').click();
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();
@@ -359,7 +359,7 @@ test.describe('Login', () => {
   }) => {
     await openRoot(page, appURL);
 
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(username);
     await page.locator('[data-test-password-field]').fill('bad pass');
     await expect(
       page.locator('[data-test-login-error]'),
@@ -370,25 +370,31 @@ test.describe('Login', () => {
       'Sign in failed. Please check your credentials and try again',
     );
 
-    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-password-field]').fill(password);
     await expect(
       page.locator('[data-test-login-error]'),
       'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
 
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
   });
 
   test('it reacts to enter keypresses', async ({ page }) => {
     await openRoot(page, appURL);
 
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('pass');
+    await page.locator('[data-test-username-field]').fill(username);
+    await page.locator('[data-test-password-field]').fill(password);
 
     await page.keyboard.press('Enter');
 
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
   });
 
   test('it returns to login when auth is invalid', async ({ page }) => {

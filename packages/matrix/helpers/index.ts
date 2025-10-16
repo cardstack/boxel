@@ -572,7 +572,7 @@ export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator('[data-test-ai-assistant-panel]').click();
 }
 
-export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
+export async function assertLoggedIn(page: Page, opts: ProfileAssertions) {
   await page.locator('[data-test-profile-icon-button]').click();
 
   await expect(
@@ -583,12 +583,11 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
     page.locator('[data-test-password-field]'),
     'password field is not displayed',
   ).toHaveCount(0);
-  // TODO: shouldn't rely on user1 existing
   await expect(page.locator('[data-test-profile-display-name]')).toContainText(
-    opts?.displayName ?? 'user1',
+    opts.displayName!,
   );
   await expect(page.locator('[data-test-profile-icon-handle]')).toContainText(
-    opts?.userId ?? '@user1:localhost',
+    opts.userId!,
   );
 
   if (opts?.email) {
@@ -608,12 +607,8 @@ export async function setupUser(username: string, realmServer: SQLExecutor) {
   );
 }
 
-export async function setupPermissions(
-  username: string,
-  realmURL: string,
-  realmServer: SQLExecutor,
-) {
-  await realmServer.executeSQL(
+export async function setupPermissions(username: string, realmURL: string) {
+  await sharedSQLExecutor.executeSQL(
     `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
     VALUES (
       '${realmURL}',
