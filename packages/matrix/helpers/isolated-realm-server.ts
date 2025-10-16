@@ -4,6 +4,7 @@ import { resolve, join } from 'path';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { v4 as uuidv4 } from 'uuid';
+import { Pool } from 'pg';
 
 setGracefulCleanup();
 
@@ -227,7 +228,33 @@ export async function startServer(includePublishedRealm = false) {
   );
 }
 
-export class IsolatedRealmServer {
+export interface SQLExecutor {
+  executeSQL(sql: string): Promise<Record<string, any>[]>;
+}
+
+export class BasicSQLExecutor implements SQLExecutor {
+  pool: Pool;
+  constructor(readonly db: string) {
+    this.pool = new Pool({
+      host: 'localhost',
+      port: 5435,
+      user: 'postgres',
+      password: '', // trust auth, so no password needed
+      database: db, // default database to connect to
+    });
+  }
+  async executeSQL(sql: string) {
+    const client = await this.pool.connect();
+    try {
+      let { rows } = await client.query(sql);
+      return rows;
+    } finally {
+      client.release();
+    }
+  }
+}
+
+export class IsolatedRealmServer implements SQLExecutor {
   private realmServerStopped: (() => void) | undefined;
   private workerManagerStopped: (() => void) | undefined;
   private sqlResults: ((results: string) => void) | undefined;

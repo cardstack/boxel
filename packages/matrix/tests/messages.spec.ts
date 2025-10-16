@@ -24,42 +24,16 @@ import {
   setupUserSubscribed,
   setSkillsRedirect,
 } from '../helpers';
-import { appURL, IsolatedRealmServer } from '../helpers/isolated-realm-server';
+import { appURL, BasicSQLExecutor } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
-
-// db.ts
-import { Pool } from 'pg';
-
-class FakeRealmServer {
-  pool: Pool;
-  constructor(readonly db: string) {
-    console.log('Connecting to realm server db', db);
-    this.pool = new Pool({
-      host: 'localhost',
-      port: 5435,
-      user: 'postgres',
-      password: '', // trust auth, so no password needed
-      database: db, // default database to connect to
-    });
-  }
-  async executeSQL(sql: string) {
-    const client = await this.pool.connect();
-    try {
-      let { rows } = await client.query(sql);
-      return rows;
-    } finally {
-      client.release();
-    }
-  }
-}
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
-  let fakeRealmServer: FakeRealmServer;
+  let sqlExecutor: BasicSQLExecutor;
   test.beforeAll(async () => {
     synapse = JSON.parse(process.env.SYNAPSE!);
     const realmServerDB = JSON.parse(process.env.REALM_SERVER_DB!);
-    fakeRealmServer = new FakeRealmServer(realmServerDB);
+    sqlExecutor = new BasicSQLExecutor(realmServerDB);
   });
 
   test.beforeEach(async ({ page }) => {
@@ -72,7 +46,7 @@ test.describe('Room messages', () => {
     const username = `${prefix}-${randomUUID()}`;
     const password = randomUUID();
     const credentials = await registerUser(synapse, username, password);
-    await setupUserSubscribed(`@${username}:localhost`, fakeRealmServer);
+    await setupUserSubscribed(`@${username}:localhost`, sqlExecutor);
 
     return { username, password, credentials };
   }

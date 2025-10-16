@@ -8,7 +8,7 @@ import {
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
-import { IsolatedRealmServer } from './isolated-realm-server';
+import { SQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 
 export const testHost = 'http://localhost:4202/test';
@@ -597,10 +597,7 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   }
 }
 
-export async function setupUser(
-  username: string,
-  realmServer: IsolatedRealmServer,
-) {
+export async function setupUser(username: string, realmServer: SQLExecutor) {
   await realmServer.executeSQL(
     `INSERT INTO users (matrix_user_id) VALUES ('${username}')`,
   );
@@ -609,7 +606,7 @@ export async function setupUser(
 export async function setupPermissions(
   username: string,
   realmURL: string,
-  realmServer: IsolatedRealmServer,
+  realmServer: SQLExecutor,
 ) {
   await realmServer.executeSQL(
     `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
@@ -626,7 +623,7 @@ export async function setupPermissions(
 
 export async function setupPayment(
   username: string,
-  realmServer: IsolatedRealmServer,
+  realmServer: SQLExecutor,
   _page?: Page,
 ) {
   // mock trigger stripe webhook 'checkout.session.completed'
@@ -701,7 +698,7 @@ export async function setupPayment(
 
 export async function setupUserSubscribed(
   username: string,
-  realmServer: IsolatedRealmServer,
+  realmServer: SQLExecutor,
 ) {
   await setupUser(username, realmServer);
   await setupPayment(username, realmServer);
