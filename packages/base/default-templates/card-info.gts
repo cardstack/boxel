@@ -222,7 +222,14 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
             @icon={{LinkIcon}}
             data-test-field='cardInfo-thumbnailURL'
           >
-            <@fields.cardInfo.thumbnailURL />
+            <div class='thumbnail-input-container'>
+              {{#if this.showThumbnailPlaceholder}}
+                <span class='thumbnail-placeholder'>
+                  <@fields.thumbnailURL />
+                </span>
+              {{/if}}
+              <@fields.cardInfo.thumbnailURL />
+            </div>
           </FieldContainer>
           {{#unless @hideThemeChooser}}
             <FieldContainer
@@ -292,6 +299,18 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .theme-field :deep(.add-button--full-width) {
         min-height: var(--boxel-form-control-height);
       }
+      .thumbnail-input-container {
+        position: relative;
+      }
+      .thumbnail-placeholder :deep(input) {
+        position: absolute;
+        left: 0;
+        right: 0;
+        width: 99%;
+        padding-block: 0;
+        background: none;
+        border: none;
+      }
     </style>
   </template>
 
@@ -305,6 +324,12 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
   private toggleThumbnailEditor = () => {
     this.isThumbnailEditorVisible = !this.isThumbnailEditorVisible;
   };
+
+  private get showThumbnailPlaceholder() {
+    return (
+      !this.args.model?.cardInfo?.thumbnailURL && this.args.model?.thumbnailURL
+    );
+  }
 }
 
 const CardInfoTemplates = {
