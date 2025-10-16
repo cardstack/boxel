@@ -13,7 +13,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  SYSTEM_CARD_FIXTURE_CONTENTS,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -31,7 +30,6 @@ module('code-ref', function (hooks) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': `
           import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';

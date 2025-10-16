@@ -47,7 +47,6 @@ import {
   setupOnSave,
   setupCardLogs,
   setupIntegrationTestRealm,
-  SYSTEM_CARD_FIXTURE_CONTENTS,
   type TestContextWithSave,
   withSlowSave,
 } from '../helpers';
@@ -155,7 +154,6 @@ module('Integration | Store', function (hooks) {
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'person.gts': { Person },
           'boom-person.gts': { BoomPerson },
           'Person/hassan.json': new Person({ name: 'Hassan' }),

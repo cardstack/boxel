@@ -575,9 +575,7 @@ module(`Integration | realm querying`, function (hooks) {
   hooks.beforeEach(async function () {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
-      contents: {
-        ...sampleCards,
-      },
+      sampleCards,
     });
     queryEngine = realm.realmIndexQueryEngine;
   });

@@ -3477,10 +3477,10 @@ module(`Integration | realm indexing`, function (hooks) {
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               title: 'Van Gogh',
-              cardInfo: { theme: null, ...cardInfo },
+              cardInfo: { theme: null },
             },
           ],
-          cardInfo: { theme: null, ...cardInfo },
+          cardInfo: { theme: null },
         },
         'hassan searchData is correct',
       );

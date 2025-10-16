@@ -11,7 +11,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  SYSTEM_CARD_FIXTURE_CONTENTS,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -29,7 +28,6 @@ module('Unit | loader', function (hooks) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'a.js': `
           import { b } from './b';
           export function a() {
