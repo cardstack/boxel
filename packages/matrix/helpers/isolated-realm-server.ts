@@ -35,8 +35,10 @@ export async function startServer(includePublishedRealm = false) {
     copySync(testRealmCards, publishedRealmDir);
   }
 
+  let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
+
   process.env.PGPORT = '5435';
-  process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
+  process.env.PGDATABASE = testDBName;
   process.env.NODE_NO_WARNINGS = '1';
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
@@ -217,7 +219,12 @@ export async function startServer(includePublishedRealm = false) {
     );
   }
 
-  return new IsolatedRealmServer(realmServer, workerManager, testRealmDir);
+  return new IsolatedRealmServer(
+    realmServer,
+    workerManager,
+    testRealmDir,
+    testDBName,
+  );
 }
 
 export class IsolatedRealmServer {
@@ -230,6 +237,7 @@ export class IsolatedRealmServer {
     private realmServerProcess: ReturnType<typeof spawn>,
     private workerManagerProcess: ReturnType<typeof spawn>,
     readonly realmPath: string, // useful for debugging
+    readonly db: string,
   ) {
     workerManagerProcess.on('message', (message) => {
       if (message === 'stopped') {

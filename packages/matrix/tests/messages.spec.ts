@@ -1,6 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { randomUUID } from 'crypto';
-import { Credentials, putEvent, registerUser } from '../docker/synapse';
+import {
+  Credentials,
+  putEvent,
+  registerUser,
+  SynapseInstance,
+} from '../docker/synapse';
 import {
   login,
   logout,
@@ -12,7 +17,6 @@ import {
   sendMessage,
   reloadAndOpenAiAssistant,
   isInRoom,
-  registerRealmUsers,
   selectCardFromCatalog,
   getRoomEvents,
   setupTwoStackItems,
@@ -20,30 +24,44 @@ import {
   setupUserSubscribed,
   setSkillsRedirect,
 } from '../helpers';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+import { appURL, IsolatedRealmServer } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
+
+// db.ts
+import { Pool } from 'pg';
+
+class FakeRealmServer {
+  pool: Pool;
+  constructor(readonly db: string) {
+    console.log('Connecting to realm server db', db);
+    this.pool = new Pool({
+      host: 'localhost',
+      port: 5435,
+      user: 'postgres',
+      password: '', // trust auth, so no password needed
+      database: db, // default database to connect to
+    });
+  }
+  async executeSQL(sql: string) {
+    const client = await this.pool.connect();
+    try {
+      let { rows } = await client.query(sql);
+      return rows;
+    } finally {
+      client.release();
+    }
+  }
+}
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let fakeRealmServer: FakeRealmServer;
   test.beforeAll(async () => {
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
+    synapse = JSON.parse(process.env.SYNAPSE!);
+    const realmServerDB = JSON.parse(process.env.REALM_SERVER_DB!);
+    fakeRealmServer = new FakeRealmServer(realmServerDB);
   });
-  test.afterAll(async () => {
-    await synapseStop(synapse.synapseId);
-    await realmServer.stop();
-  });
+
   test.beforeEach(async ({ page }) => {
     await setSkillsRedirect(page);
     test.setTimeout(120_000);
@@ -54,7 +72,8 @@ test.describe('Room messages', () => {
     const username = `${prefix}-${randomUUID()}`;
     const password = randomUUID();
     const credentials = await registerUser(synapse, username, password);
-    await setupUserSubscribed(`@${username}:localhost`, realmServer);
+    await setupUserSubscribed(`@${username}:localhost`, fakeRealmServer);
+
     return { username, password, credentials };
   }
   async function createSubscribedUserAndLogin(
