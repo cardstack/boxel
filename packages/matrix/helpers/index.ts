@@ -724,9 +724,10 @@ export async function createSubscribedUser(
 export async function createSubscribedUserAndLogin(
   page: Page,
   prefix: string,
+  url = appURL,
 ): Promise<{ username: string; password: string; credentials: Credentials }> {
   const user = await createSubscribedUser(prefix);
-  await login(page, user.username, user.password, { url: appURL });
+  await login(page, user.username, user.password, { url });
   return user;
 }
 
