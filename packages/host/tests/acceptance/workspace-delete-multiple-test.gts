@@ -124,7 +124,8 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await waitFor('[data-test-cards-grid-item]');
 
     let cards = findAll('[data-test-cards-grid-item]');
-    assert.ok(cards.length >= 3, 'Multiple cards are available');
+    let initialCardCount = cards.length;
+    assert.ok(initialCardCount >= 3, 'Multiple cards are available');
 
     // Enter selection mode by clicking the first card's checkbox
     await selectCard('Pet/1');
@@ -157,11 +158,17 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await click('[data-test-confirm-delete-button]');
 
     // Wait for deletion to complete
-    await waitFor('[data-test-cards-grid-item]', { count: 1 });
+    await waitFor('[data-test-cards-grid-item]', {
+      count: initialCardCount - 2,
+    });
 
     // Verify cards were deleted
     let remainingCards = findAll('[data-test-cards-grid-item]');
-    assert.strictEqual(remainingCards.length, 1, 'Two cards were deleted');
+    assert.strictEqual(
+      remainingCards.length,
+      initialCardCount - 2,
+      'Two cards were deleted',
+    );
 
     // Verify selection mode is cleared
     assert
