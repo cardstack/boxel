@@ -30,7 +30,9 @@ interface LoginOptions {
 }
 
 // Setup just one pool
-const sharedSQLExecutor = new BasicSQLExecutor(process.env.REALM_SERVER_DB!);
+export const sharedSQLExecutor = new BasicSQLExecutor(
+  process.env.REALM_SERVER_DB!,
+);
 
 export async function setSkillsRedirect(page: Page) {
   await page.route('http://localhost:4201/skills/**', async (route) => {
@@ -607,8 +609,12 @@ export async function setupUser(username: string, realmServer: SQLExecutor) {
   );
 }
 
-export async function setupPermissions(username: string, realmURL: string) {
-  await sharedSQLExecutor.executeSQL(
+export async function setupPermissions(
+  username: string,
+  realmURL: string,
+  realmServer: SQLExecutor,
+) {
+  await realmServer.executeSQL(
     `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
     VALUES (
       '${realmURL}',

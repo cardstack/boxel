@@ -14,6 +14,7 @@ import {
   openRoot,
   createSubscribedUser,
   setupPermissions,
+  sharedSQLExecutor,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 
@@ -31,7 +32,7 @@ test.describe('Login', () => {
     await clearLocalStorage(page, appURL);
     ({ username, password, credentials } =
       await createSubscribedUser('login-tests'));
-    await setupPermissions(credentials.userId, `${appURL}/`);
+    await setupPermissions(credentials.userId, `${appURL}/`, sharedSQLExecutor);
   });
 
   test('it can login on the realm server home page and see the workspace chooser', async ({
