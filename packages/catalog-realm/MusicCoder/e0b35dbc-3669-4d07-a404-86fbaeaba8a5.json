@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MusicCoder",
+        "module": "../music-coder"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "bpm": null,
+      "title": null,
+      "pattern": "s(\"bd(3,8), sd(5,8,2)\")",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
