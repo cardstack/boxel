@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import {
+  Credentials,
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
@@ -8,8 +9,9 @@ import {
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
-import { SQLExecutor } from './isolated-realm-server';
+import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
+import { randomUUID } from 'crypto';
 
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
@@ -26,6 +28,9 @@ interface LoginOptions {
   url?: string;
   showAllCards?: boolean; //default true
 }
+
+// Setup just one pool
+const sharedSQLExecutor = new BasicSQLExecutor(process.env.REALM_SERVER_DB!);
 
 export async function setSkillsRedirect(page: Page) {
   await page.route('http://localhost:4201/skills/**', async (route) => {
@@ -702,6 +707,27 @@ export async function setupUserSubscribed(
 ) {
   await setupUser(username, realmServer);
   await setupPayment(username, realmServer);
+}
+
+export async function createSubscribedUser(
+  prefix = 'user',
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  let synapse = JSON.parse(process.env.SYNAPSE!);
+  const username = `${prefix}-${randomUUID()}`;
+  const password = randomUUID();
+  const credentials = await registerUser(synapse, username, password);
+  await setupUserSubscribed(`@${username}:localhost`, sharedSQLExecutor);
+
+  return { username, password, credentials };
+}
+
+export async function createSubscribedUserAndLogin(
+  page: Page,
+  prefix: string,
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  const user = await createSubscribedUser(prefix);
+  await login(page, user.username, user.password, { url: appURL });
+  return user;
 }
 
 export async function assertLoggedOut(page: Page) {

@@ -1,15 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { randomUUID } from 'crypto';
-import {
-  Credentials,
-  putEvent,
-  registerUser,
-  SynapseInstance,
-} from '../docker/synapse';
+
+import { Credentials, putEvent, SynapseInstance } from '../docker/synapse';
 import {
   login,
   logout,
   createRoom,
+  createSubscribedUserAndLogin,
   getRoomId,
   openRoom,
   assertMessages,
@@ -21,43 +17,16 @@ import {
   getRoomEvents,
   setupTwoStackItems,
   showAllCards,
-  setupUserSubscribed,
   setSkillsRedirect,
 } from '../helpers';
-import { appURL, BasicSQLExecutor } from '../helpers/isolated-realm-server';
+import { appURL } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
-  let synapse: SynapseInstance;
-  let sqlExecutor: BasicSQLExecutor;
-  test.beforeAll(async () => {
-    synapse = JSON.parse(process.env.SYNAPSE!);
-    const realmServerDB = JSON.parse(process.env.REALM_SERVER_DB!);
-    sqlExecutor = new BasicSQLExecutor(realmServerDB);
-  });
-
   test.beforeEach(async ({ page }) => {
     await setSkillsRedirect(page);
     test.setTimeout(120_000);
   });
-  async function createSubscribedUser(
-    prefix = 'user',
-  ): Promise<{ username: string; password: string; credentials: Credentials }> {
-    const username = `${prefix}-${randomUUID()}`;
-    const password = randomUUID();
-    const credentials = await registerUser(synapse, username, password);
-    await setupUserSubscribed(`@${username}:localhost`, sqlExecutor);
-
-    return { username, password, credentials };
-  }
-  async function createSubscribedUserAndLogin(
-    page: Page,
-    prefix: string,
-  ): Promise<{ username: string; password: string; credentials: Credentials }> {
-    const user = await createSubscribedUser(prefix);
-    await login(page, user.username, user.password, { url: appURL });
-    return user;
-  }
 
   test(`it can send a message in a room`, async ({ page }) => {
     const { username, password } = await createSubscribedUserAndLogin(
