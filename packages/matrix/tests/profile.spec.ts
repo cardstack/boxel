@@ -1,58 +1,52 @@
 import { expect, type Page, test } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-  updateUser,
-} from '../docker/synapse';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
+import { updateUser } from '../docker/synapse';
 import {
   login,
   validateEmail,
   assertLoggedOut,
   assertLoggedIn,
-  registerRealmUsers,
-  setupUserSubscribed,
+  createSubscribedUser,
+  createUser,
 } from '../helpers';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+import { appURL } from '../helpers/isolated-realm-server';
 
 test.describe('Profile', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let user: {
+    username: string;
+    password: string;
+    credentials: any;
+  };
+  let userEmail: string;
+
+  let existingUser: {
+    username: string;
+    password: string;
+    credentials: any;
+  };
+  let existingUserEmail: string;
+
+  let unseenEmail: string;
   test.beforeEach(async () => {
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await smtpStart();
+    let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
 
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
-    await registerUser(synapse, 'user1', 'pass');
-    await registerUser(synapse, 'user0', 'pass');
-    realmServer = await startRealmServer();
-    await updateUser(admin.accessToken, '@user1:localhost', {
-      emailAddresses: ['user1@localhost'],
+    user = await createSubscribedUser('profile');
+    userEmail = `${user.username}@localhost`;
+    await updateUser(adminAccessToken, user.credentials.userId, {
+      emailAddresses: [userEmail],
     });
-    await updateUser(admin.accessToken, '@user0:localhost', {
-      emailAddresses: ['user0@localhost'],
-    });
-    await setupUserSubscribed('@user1:localhost', realmServer);
-  });
 
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-    await realmServer.stop();
+    existingUser = await createUser('profile-existing-user');
+    existingUserEmail = `${existingUser.username}@localhost`;
+    await updateUser(adminAccessToken, existingUser.credentials.userId, {
+      emailAddresses: [existingUserEmail],
+    });
+
+    unseenEmail = `unseen-${user.username}@localhost`;
   });
 
   async function gotoProfileSettings(page: Page) {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, user.username, user.password, { url: appURL });
     await page.locator('[data-test-profile-icon-button]').click();
     await page.locator('[data-test-settings-button]').click();
   }
@@ -86,7 +80,7 @@ test.describe('Profile', () => {
   test('it can change email in settings', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
@@ -102,7 +96,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-email-validation-msg]')).toHaveCount(
       1,
     );
-    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-new-email-field]').fill(unseenEmail);
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeEnabled();
@@ -112,7 +106,7 @@ test.describe('Profile', () => {
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
     await page
       .locator('[data-test-password-modal] [data-test-password-field]')
-      .fill('pass');
+      .fill(user.password);
     await page.locator('[data-test-confirm-password-button]').click();
 
     // pending email state
@@ -124,14 +118,14 @@ test.describe('Profile', () => {
       0,
     );
     await expect(page.locator('[data-test-new-email]')).toContainText(
-      'user2@localhost',
+      unseenEmail,
     );
     await expect(
       page.locator('[data-test-new-email-not-verified]'),
     ).toHaveCount(1);
 
     // email client
-    await validateEmail(page, 'user2@localhost', {
+    await validateEmail(page, unseenEmail, {
       onAppTrigger: async (page) => {
         await expect(page.locator('[data-test-resend-validation]')).toHaveCount(
           1,
@@ -160,7 +154,7 @@ test.describe('Profile', () => {
     });
 
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user2@localhost',
+      unseenEmail,
     );
     await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
   });
@@ -170,11 +164,11 @@ test.describe('Profile', () => {
   }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await page.locator('[data-test-change-email-button]').click();
 
-    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-new-email-field]').fill(unseenEmail);
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     // password modal
@@ -188,7 +182,7 @@ test.describe('Profile', () => {
     ).toContainText('Invalid password');
     await page
       .locator('[data-test-password-modal] [data-test-password-field]')
-      .fill('pass');
+      .fill(user.password);
     await expect(
       page.locator('[data-test-boxel-input-error-message]'),
     ).toHaveCount(0);
@@ -199,24 +193,24 @@ test.describe('Profile', () => {
   }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await page.locator('[data-test-change-email-button]').click();
 
-    await page.locator('[data-test-new-email-field]').fill('user0@localhost');
+    await page.locator('[data-test-new-email-field]').fill(existingUserEmail);
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     // password modal
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
     await page
       .locator('[data-test-password-modal] [data-test-password-field]')
-      .fill('pass');
+      .fill(user.password);
     await page.locator('[data-test-confirm-password-button]').click();
 
     await expect(
       page.locator('[data-test-boxel-input-error-message]'),
     ).toHaveText('Email address is already in use');
-    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-new-email-field]').fill(existingUserEmail);
     await expect(
       page.locator('[data-test-boxel-input-error-message]'),
     ).toHaveCount(0);
@@ -225,21 +219,21 @@ test.describe('Profile', () => {
   test('it can resend email verification message', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await page.locator('[data-test-change-email-button]').click();
-    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-new-email-field]').fill(unseenEmail);
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     // password modal
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
     await page
       .locator('[data-test-password-modal] [data-test-password-field]')
-      .fill('pass');
+      .fill(user.password);
     await page.locator('[data-test-confirm-password-button]').click();
 
     // email client
-    await validateEmail(page, 'user2@localhost', {
+    await validateEmail(page, unseenEmail, {
       sendAttempts: 2,
       onAppTrigger: async (page) => {
         await expect(page.locator('[data-test-resend-validation]')).toHaveCount(
@@ -252,23 +246,23 @@ test.describe('Profile', () => {
   test('it can cancel email verification', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await page.locator('[data-test-change-email-button]').click();
-    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-new-email-field]').fill(unseenEmail);
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     // password modal
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
     await page
       .locator('[data-test-password-modal] [data-test-password-field]')
-      .fill('pass');
+      .fill(user.password);
     await page.locator('[data-test-confirm-password-button]').click();
 
     // pending email state
     await page.locator('[data-test-cancel-email-change]').click();
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
   });
@@ -278,10 +272,10 @@ test.describe('Profile', () => {
   }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await page.locator('[data-test-change-email-button]').click();
-    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-new-email-field]').fill(existingUserEmail);
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     // password modal
@@ -290,7 +284,7 @@ test.describe('Profile', () => {
 
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(0);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await expect(page.locator('[data-test-new-email]')).toHaveCount(0);
     await expect(page.locator('[data-test-email-validation-msg]')).toHaveCount(
@@ -301,24 +295,24 @@ test.describe('Profile', () => {
   test('it can cancel changing an email', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await page.locator('[data-test-change-email-button]').click();
-    await page.locator('[data-test-new-email-field]').fill('user2@localhost');
+    await page.locator('[data-test-new-email-field]').fill(existingUserEmail);
 
     await page.locator('[data-test-confirm-cancel-button]').click();
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings');
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
   });
 
   test('it can change password in settings', async ({ page }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
 
     await page.locator('[data-test-change-password-button]').click();
@@ -328,7 +322,9 @@ test.describe('Profile', () => {
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings > Password');
-    await page.locator('[data-test-current-password-field]').fill('pass');
+    await page
+      .locator('[data-test-current-password-field]')
+      .fill(user.password);
     await page.locator('[data-test-new-password-field]').fill('newpass123!');
     await page
       .locator('[data-test-confirm-password-field]')
@@ -339,7 +335,7 @@ test.describe('Profile', () => {
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
@@ -350,12 +346,16 @@ test.describe('Profile', () => {
     await assertLoggedOut(page);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(user.username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      userId: user.credentials.userId,
+      displayName: user.username,
+      email: userEmail,
+    });
   });
 
   test('It shows an error when new password does not meet the requirement', async ({
@@ -363,7 +363,7 @@ test.describe('Profile', () => {
   }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
 
     await page.locator('[data-test-change-password-button]').click();
@@ -373,7 +373,9 @@ test.describe('Profile', () => {
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings > Password');
-    await page.locator('[data-test-current-password-field]').fill('pass');
+    await page
+      .locator('[data-test-current-password-field]')
+      .fill(user.password);
     await page.locator('[data-test-new-password-field]').fill('newpass');
     await page.locator('[data-test-confirm-password-field]').fill('newpass');
     await expect(
@@ -419,7 +421,7 @@ test.describe('Profile', () => {
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
@@ -430,12 +432,16 @@ test.describe('Profile', () => {
     await assertLoggedOut(page);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(user.username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      userId: user.credentials.userId,
+      displayName: user.username,
+      email: userEmail,
+    });
   });
 
   test('It shows an error when current password is invalid', async ({
@@ -443,7 +449,7 @@ test.describe('Profile', () => {
   }) => {
     await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
 
     await page.locator('[data-test-change-password-button]').click();
@@ -480,14 +486,16 @@ test.describe('Profile', () => {
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
 
-    await page.locator('[data-test-current-password-field]').fill('pass');
+    await page
+      .locator('[data-test-current-password-field]')
+      .fill(user.password);
     await expect(
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeEnabled();
     await page.locator('[data-test-profile-settings-save-button]').click();
 
     await expect(page.locator('[data-test-current-email]')).toContainText(
-      'user1@localhost',
+      userEmail,
     );
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
@@ -498,11 +506,15 @@ test.describe('Profile', () => {
     await assertLoggedOut(page);
 
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(user.username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-password-field]').fill('newpass123!');
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, {
+      userId: user.credentials.userId,
+      displayName: user.username,
+      email: userEmail,
+    });
   });
 });

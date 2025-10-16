@@ -711,15 +711,21 @@ export async function setupUserSubscribed(
   await setupPayment(username, realmServer);
 }
 
-export async function createSubscribedUser(
+export async function createUser(
   prefix = 'user',
 ): Promise<{ username: string; password: string; credentials: Credentials }> {
   let synapse = JSON.parse(process.env.SYNAPSE!);
   const username = `${prefix}-${randomUUID()}`;
   const password = randomUUID();
   const credentials = await registerUser(synapse, username, password);
-  await setupUserSubscribed(`@${username}:localhost`, sharedSQLExecutor);
+  return { username, password, credentials };
+}
 
+export async function createSubscribedUser(
+  prefix = 'user',
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  const { username, password, credentials } = await createUser(prefix);
+  await setupUserSubscribed(`@${username}:localhost`, sharedSQLExecutor);
   return { username, password, credentials };
 }
 
