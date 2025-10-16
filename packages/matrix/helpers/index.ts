@@ -578,7 +578,7 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
     page.locator('[data-test-password-field]'),
     'password field is not displayed',
   ).toHaveCount(0);
-
+  // TODO: shouldn't rely on user1 existing
   await expect(page.locator('[data-test-profile-display-name]')).toContainText(
     opts?.displayName ?? 'user1',
   );
@@ -727,8 +727,8 @@ export async function assertLoggedOut(page: Page) {
 }
 
 export async function getRoomEvents(
-  username = 'user1',
-  password = 'pass',
+  username: string,
+  password: string,
   roomId?: string,
 ) {
   let { accessToken } = await loginUser(username, password);
@@ -772,7 +772,7 @@ export function getAgentId(
   }
 }
 
-export async function getRoomsFromSync(username = 'user1', password = 'pass') {
+export async function getRoomsFromSync(username: string, password: string) {
   let { accessToken } = await loginUser(username, password);
   let response = (await sync(accessToken)) as any;
   return response.rooms;
