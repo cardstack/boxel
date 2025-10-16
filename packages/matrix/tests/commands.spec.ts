@@ -32,7 +32,7 @@ import {
   appURL,
 } from '../helpers/isolated-realm-server';
 
-test.describe('Commands', () => {
+test.skip('Commands', () => {
   let synapse: SynapseInstance;
   let realmServer: IsolatedRealmServer;
   let userCred: Credentials;

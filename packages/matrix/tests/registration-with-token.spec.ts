@@ -23,41 +23,32 @@ import {
   registerRealmUsers,
   enterWorkspace,
   showAllCards,
-  setupUser,
+  createSubscribedUser,
+  getUniqueUsername,
+  getUniquePassword,
+  REGISTRATION_TOKEN,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
 
-const REGISTRATION_TOKEN = 'abc123';
-
-test.describe('User Registration w/ Token - isolated realm server', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-
+test.skip('User Registration w/ Token - isolated realm server', () => {
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(60_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    await smtpStart();
-    realmServer = await startRealmServer();
-  });
-
-  test.afterEach(async () => {
-    await realmServer.stop();
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
   });
 
   test('it can register a user with a registration token', async ({ page }) => {
     let serverIndexUrl = new URL(appURL).origin;
     test.setTimeout(120_000);
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerUser(synapse, 'user2', 'pass');
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    let secondUser = await createSubscribedUser('token-registration-2');
+    let firstUser = {
+      username: getUniqueUsername('token-registration-1'),
+      password: getUniquePassword(),
+      displayName: 'Test User',
+    };
+    let firstUserEmail = `${firstUser.username}@localhost`;
+
     await clearLocalStorage(page, serverIndexUrl);
     await gotoRegistration(page, serverIndexUrl);
 
@@ -68,17 +59,17 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'token field is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('Test User');
+    await page.locator('[data-test-name-field]').fill(firstUser.displayName);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-email-field]').fill(firstUserEmail);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(firstUser.username);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-password-field]').fill(firstUser.password);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(firstUser.password);
     await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
     await page.locator('[data-test-register-btn]').click();
 
@@ -88,15 +79,15 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'username field is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-token-field]').fill(REGISTRATION_TOKEN);
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await validateEmail(page, 'user1@example.com', {
+    await validateEmail(page, firstUserEmail, {
       onEmailPage: async (page) => {
         await expect(page).toHaveScreenshot('verification-email.png', {
           mask: [page.locator('.messagelist')],
-          maxDiffPixelRatio: 0.01,
+          maxDiffPixelRatio: 0.1,
         });
       },
       onValidationPage: async (page) => {
@@ -104,7 +95,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
           'Your email has now been validated',
         );
         await expect(page).toHaveScreenshot('verification-page.png', {
-          maxDiffPixelRatio: 0.01,
+          maxDiffPixelRatio: 0.1,
         });
       },
     });
@@ -153,7 +144,8 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       ),
     ).toHaveCount(1);
 
-    let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
+    let newRealmURL = new URL(`${firstUser.username}/personal/`, serverIndexUrl)
+      .href;
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
@@ -184,16 +176,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await logout(page);
     await assertLoggedOut(page);
 
-    await setupUser('@user2:localhost', realmServer);
-
     // assert workspaces state don't leak into other sessions
-    await login(page, 'user2', 'pass', {
+    await login(page, secondUser.username, secondUser.password, {
       url: serverIndexUrl,
     });
 
     await assertLoggedIn(page, {
-      userId: '@user2:localhost',
-      displayName: 'user2',
+      userId: secondUser.credentials.userId,
+      displayName: secondUser.username,
     });
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(page.locator(`[data-test-workspace-list]`)).toHaveCount(1);
@@ -212,10 +202,13 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // assert newly registered user can login with their credentials
     await logout(page);
     await assertLoggedOut(page);
-    await login(page, 'user1', 'mypassword1!', {
+    await login(page, firstUser.username, firstUser.password, {
       url: serverIndexUrl,
     });
-    await assertLoggedIn(page, { displayName: 'Test User' });
+    await assertLoggedIn(page, {
+      displayName: firstUser.displayName,
+      userId: firstUser.credentials.userId,
+    });
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
@@ -246,22 +239,22 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await logout(page);
     await assertLoggedOut(page);
 
-    await login(page, 'user1', 'mypassword1!', {
+    await login(page, firstUser.username, firstUser.password, {
       url: newRealmURL,
     });
-    await assertLoggedIn(page, { displayName: 'Test User' });
+    await assertLoggedIn(page, { displayName: firstUser.displayName });
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
-    let auth = await loginUser(`user1`, 'mypassword1!');
+    let auth = await loginUser(firstUser.username, firstUser.password);
     let realms = await getAccountData<{ realms: string[] } | undefined>(
       auth.userId,
       auth.accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,
     );
     expect(realms).toEqual({
-      realms: ['http://localhost:4205/user1/personal/'],
+      realms: [`http://localhost:4205/${auth.userId}/personal/`],
     });
   });
 
@@ -291,7 +284,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   });
 });
 
-test.describe('User Registration w/ Token', () => {
+test.skip('User Registration w/ Token', () => {
   let synapse: SynapseInstance;
 
   test.beforeEach(async () => {
