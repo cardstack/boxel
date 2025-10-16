@@ -25,13 +25,6 @@
         "description": null,
         "thumbnailURL": null
       }
-    },
-    "relationships": {
-      "cardInfo.theme": {
-        "links": {
-          "self": "http://localhost:4201/experiments/default/playful-illustration"
-        }
-      }
     }
   }
 }

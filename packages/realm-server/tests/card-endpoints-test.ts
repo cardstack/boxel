@@ -28,6 +28,7 @@ import {
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
+import { PgAdapter } from '@cardstack/postgres';
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
@@ -35,17 +36,20 @@ module(basename(__filename), function () {
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
 
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dir: DirResult;
+      dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dir = args.dir;
+      dbAdapter = args.dbAdapter;
     }
 
     function getRealmSetup() {
@@ -54,6 +58,7 @@ module(basename(__filename), function () {
         testRealmHttpServer,
         request,
         dir,
+        dbAdapter,
       };
     }
 

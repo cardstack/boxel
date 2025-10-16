@@ -31,7 +31,7 @@
       "https://cardstack.com/base/*": ["../base/*"],
       "*": ["types/*"]
     },
-    "types": ["@cardstack/local-types","@cardstack/local-types/matrix-js-sdk"]
+    "types": ["@cardstack/local-types"]
   },
   "include": ["./**/*"],
   "exclude": ["node_modules", "dist"]

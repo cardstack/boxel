@@ -1,0 +1,108 @@
+{
+  "data": {
+    "meta": {
+      "fields": {
+        "allItems": [
+          {
+            "adoptsFrom": {
+              "name": "ImageNode",
+              "module": "../ai-layout-board/fields/board-item"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "name": "CountdownTimer",
+              "module": "../ai-layout-board/fields/board-item"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "name": "ExternalCard",
+              "module": "../ai-layout-board/fields/board-item"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "name": "AILayoutBoard",
+        "module": "../ai-layout-board/ai-layout-board"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": [],
+      "images": [
+        {
+          "imageUrl": "https://picsum.photos/300/200",
+          "caption": "New Image",
+          "position": {
+            "x": -809.9890549394571,
+            "y": -167,
+            "width": 381,
+            "autoHeight": 392,
+            "customHeight": 415,
+            "layer": 1,
+            "format": "isolated"
+          }
+        }
+      ],
+      "timers": [
+        {
+          "targetDate": "2025-10-15T03:14:17.642Z",
+          "title": "New Timer",
+          "position": {
+            "x": -376.23199676509273,
+            "y": -169.96988938167203,
+            "width": 308.48991663227355,
+            "autoHeight": 215,
+            "customHeight": 166,
+            "layer": 1,
+            "format": "isolated"
+          }
+        }
+      ],
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "gridSize": 10,
+      "transformK": 1.2927858652143038,
+      "transformX": 1324.6606820211937,
+      "transformY": 284.3739637653796,
+      "canvasHeight": 800,
+      "externalCards": [
+        {
+          "caption": "Advanced Space Exploration Challenge - Astronomy & Astrophysics",
+          "position": {
+            "x": -370.7444517691428,
+            "y": 54.49647397396225,
+            "width": 400,
+            "autoHeight": 266,
+            "customHeight": 0,
+            "layer": 1,
+            "format": "embedded"
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "allItems.2.externalCard": {
+        "links": {
+          "self": "../GameQuizCard/advanced-space-exploration"
+        }
+      },
+      "externalCards.0.externalCard": {
+        "links": {
+          "self": "../GameQuizCard/advanced-space-exploration"
+        }
+      }
+    }
+  }
+}

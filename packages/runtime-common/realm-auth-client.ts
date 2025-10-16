@@ -114,15 +114,7 @@ export class RealmAuthClient {
       let { joined_rooms: rooms } = await this.matrixClient.getJoinedRooms();
 
       if (!rooms.includes(room)) {
-        await this.matrixClient.joinRoom(room);
-      }
-      let directRooms =
-        await this.matrixClient.getAccountDataFromServer('m.direct');
-      let userId = this.matrixClient.getUserId() as string;
-      if (!directRooms?.[userId]?.includes(room)) {
-        await this.matrixClient.setAccountData('m.direct', {
-          [userId]: [...(directRooms?.[userId] ?? []), room],
-        });
+        await joinDMRoom(this.matrixClient, room);
       }
 
       await this.matrixClient.sendEvent(room, 'm.room.message', {
@@ -207,3 +199,22 @@ export class RealmAuthClient {
 
 const maxAttempts = 5;
 const backOffMs = 100;
+
+export async function joinDMRoom(
+  matrixClient: RealmAuthMatrixClientInterface,
+  roomId: string,
+) {
+  await matrixClient.joinRoom(roomId);
+
+  /* In sliding sync, we distinguish between AI rooms and auth rooms (session rooms) based on whether a room is a DM or not.
+   * Unfortunately, the is_dm flag we set when creating a room isn’t enough to make that filter work — we also need to add
+   * the room to the m.direct account data so it can be identified as a DM room.
+   */
+  let directRooms = await matrixClient.getAccountDataFromServer('m.direct');
+  let userId = matrixClient.getUserId() as string;
+  if (!directRooms?.[userId]?.includes(roomId)) {
+    await matrixClient.setAccountData('m.direct', {
+      [userId]: [...(directRooms?.[userId] ?? []), roomId],
+    });
+  }
+}
