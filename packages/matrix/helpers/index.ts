@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
+export const REGISTRATION_TOKEN = 'abc123';
 
 const realmSecretSeed = "shhh! it's a secret";
 
