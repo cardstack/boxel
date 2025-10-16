@@ -711,12 +711,20 @@ export async function setupUserSubscribed(
   await setupPayment(username, realmServer);
 }
 
+export function getUniqueUsername(prefix = 'user'): string {
+  return `${prefix}-${randomUUID()}`;
+}
+
+export function getUniquePassword(): string {
+  return randomUUID();
+}
+
 export async function createUser(
   prefix = 'user',
 ): Promise<{ username: string; password: string; credentials: Credentials }> {
   let synapse = JSON.parse(process.env.SYNAPSE!);
-  const username = `${prefix}-${randomUUID()}`;
-  const password = randomUUID();
+  const username = getUniqueUsername(prefix);
+  const password = getUniquePassword();
   const credentials = await registerUser(synapse, username, password);
   return { username, password, credentials };
 }
