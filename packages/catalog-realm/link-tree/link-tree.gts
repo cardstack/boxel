@@ -17,12 +17,13 @@ import { gt } from '@cardstack/boxel-ui/helpers';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import SparklesIcon from '@cardstack/boxel-icons/sparkles';
 import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
 
 class IsolatedLinkTreeTemplate extends Component<typeof LinkTree> {
   @tracked sparklePositions: Array<{ x: number; y: number; delay: number }> =
     [];
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.generateSparkles();
   }
