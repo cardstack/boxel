@@ -19,7 +19,7 @@ import { RealmServerTokenClaim } from '../utils/jwt';
 import { CreateRoutesArgs } from '../routes';
 import { validateSubdomain } from '../lib/user-subdomain-validation';
 
-interface ClaimBoxelSiteHostnameJSON {
+interface ClaimedBoxelDomainJSON {
   data: {
     type: 'claimed-site-hostname';
     attributes: {
@@ -29,7 +29,7 @@ interface ClaimBoxelSiteHostnameJSON {
   };
 }
 
-export default function handleClaimBoxelSiteHostnameRequest({
+export default function handleClaimBoxelDomainRequest({
   dbAdapter,
   domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -44,7 +44,7 @@ export default function handleClaimBoxelSiteHostnameRequest({
       if (!token) {
         await sendResponseForSystemError(
           ctxt,
-          'token is required to claim site hostname',
+          'token is required to claim domain',
         );
         return;
       }
@@ -71,7 +71,7 @@ export default function handleClaimBoxelSiteHostnameRequest({
       }
 
       try {
-        assertIsClaimBoxelSiteHostnameJSON(json);
+        assertIsClaimBoxelClaimedDomainJSON(json);
       } catch (e: any) {
         await sendResponseForBadRequest(
           ctxt,
@@ -186,15 +186,15 @@ export default function handleClaimBoxelSiteHostnameRequest({
         ),
       );
     } catch (error) {
-      console.error('Error claiming site hostname:', error);
+      console.error('Error claiming domain:', error);
       await sendResponseForSystemError(ctxt, 'Internal server error');
     }
   };
 }
 
-function assertIsClaimBoxelSiteHostnameJSON(
+function assertIsClaimBoxelClaimedDomainJSON(
   json: any,
-): asserts json is ClaimBoxelSiteHostnameJSON {
+): asserts json is ClaimedBoxelDomainJSON {
   if (typeof json !== 'object') {
     throw new Error(`json must be an object`);
   }

@@ -5,21 +5,19 @@ import {
   SupportedMimeType,
   fetchUserPermissions,
 } from '@cardstack/runtime-common';
-import {
-  fetchSessionRoom,
-  upsertSessionRoom,
-} from '@cardstack/runtime-common/db-queries/session-room-queries';
 import { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { createJWT } from '../jwt';
 import { sendResponseForError, setContextResponse } from '../middleware';
+import * as Sentry from '@sentry/node';
 
 export default function handleRealmAuth({
   dbAdapter,
-  matrixClient,
   realmSecretSeed,
+  realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    let allRealms = realms;
     let token = ctxt.state.token as RealmServerTokenClaim;
     let { user: matrixUserId } = token;
     let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
@@ -40,28 +38,40 @@ export default function handleRealmAuth({
     });
 
     let sessions: { [realm: string]: string } = {};
-    for (let [realm, permissions] of Object.entries(permissionsForAllRealms)) {
-      let sessionRoom = await fetchSessionRoom(
-        dbAdapter,
-        realm,
-        user.matrixUserId,
-      );
-
-      if (!sessionRoom) {
-        sessionRoom = await matrixClient.createDM(matrixUserId);
-        await matrixClient.joinRoom(sessionRoom);
-        await upsertSessionRoom(dbAdapter, realm, matrixUserId, sessionRoom);
+    for (let [realmUrl, permissions] of Object.entries(
+      permissionsForAllRealms,
+    )) {
+      let realm = allRealms.find((r) => r.url === realmUrl);
+      if (!realm) {
+        console.error(
+          `Permissions found pointing to unknown realm ${realmUrl}`,
+        );
+        continue;
       }
-      sessions[realm] = createJWT(
-        {
-          user: matrixUserId,
-          realm: realm,
-          permissions,
-          sessionRoom,
-        },
-        '7d',
-        realmSecretSeed,
-      );
+
+      try {
+        let sessionRoom = await realm.ensureSessionRoom(matrixUserId);
+        sessions[realmUrl] = createJWT(
+          {
+            user: matrixUserId,
+            realm: realmUrl,
+            permissions,
+            sessionRoom,
+          },
+          '7d',
+          realmSecretSeed,
+        );
+      } catch (error) {
+        Sentry.withScope((scope) => {
+          scope.setExtra('realmUrl', realmUrl);
+          scope.setExtra('matrixUserId', matrixUserId);
+          scope.setExtra('permissionsForAllRealms', permissionsForAllRealms);
+
+          Sentry.captureException(error);
+        });
+
+        continue;
+      }
     }
 
     await setContextResponse(

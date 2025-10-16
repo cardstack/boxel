@@ -487,6 +487,27 @@ export class Realm {
     await this.#matrixClient.login();
   }
 
+  async ensureSessionRoom(matrixUserId: string): Promise<string> {
+    let sessionRoom = await fetchSessionRoom(
+      this.#dbAdapter,
+      this.url,
+      matrixUserId,
+    );
+
+    if (!sessionRoom) {
+      await this.#matrixClient.login();
+      sessionRoom = await this.#matrixClient.createDM(matrixUserId);
+      await upsertSessionRoom(
+        this.#dbAdapter,
+        this.url,
+        matrixUserId,
+        sessionRoom,
+      );
+    }
+
+    return sessionRoom;
+  }
+
   private async readinessCheck(
     _request: Request,
     requestContext: RequestContext,
@@ -1108,8 +1129,8 @@ export class Realm {
             this.#realmSecretSeed,
           );
         },
-        getSessionRoom: async (userId: string) =>
-          fetchSessionRoom(this.#dbAdapter, this.url, userId),
+        ensureSessionRoom: async (userId: string) =>
+          this.ensureSessionRoom(userId),
         setSessionRoom: (userId: string, roomId: string) =>
           upsertSessionRoom(this.#dbAdapter, this.url, userId, roomId),
       } as Utils,

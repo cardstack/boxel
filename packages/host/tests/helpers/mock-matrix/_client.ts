@@ -333,7 +333,20 @@ export class MockClient implements ExtendedClient {
     _roomIdOrAlias: string,
     _opts?: MatrixSDK.IJoinRoomOpts | undefined,
   ): Promise<MatrixSDK.Room> {
-    throw new Error('Method not implemented.');
+    this.serverState.rooms.push({ id: _roomIdOrAlias });
+    if (this.slidingSyncInstance) {
+      setTimeout(() => {
+        this.slidingSyncInstance.triggerRoomSync(
+          _roomIdOrAlias,
+          'A joined room',
+          this.serverState,
+        );
+      }, 0);
+    }
+
+    return Promise.resolve({
+      roomId: _roomIdOrAlias,
+    } as unknown as MatrixSDK.Room);
   }
 
   loginWithPassword(

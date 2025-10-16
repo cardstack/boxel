@@ -1,5 +1,11 @@
 import { getOwner } from '@ember/owner';
-import { click, currentURL, visit } from '@ember/test-helpers';
+import {
+  click,
+  currentURL,
+  visit,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
@@ -19,6 +25,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
+import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -126,6 +133,7 @@ module('Acceptance | host mode tests', function (hooks) {
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'pet.gts': { Pet },
+        'view-card-demo.gts': viewCardDemoCardSource,
         'Pet/mango.json': {
           data: {
             attributes: {
@@ -135,6 +143,51 @@ module('Acceptance | host mode tests', function (hooks) {
               adoptsFrom: {
                 module: `${testHostModeRealmURL}pet`,
                 name: 'Pet',
+              },
+            },
+          },
+        },
+        'ViewCardDemo/index.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Primary View Demo',
+              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/secondary.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}view-card-demo`,
+                name: 'ViewCardDemo',
+              },
+            },
+          },
+        },
+        'ViewCardDemo/secondary.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Secondary View Demo',
+              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/tertiary.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}view-card-demo`,
+                name: 'ViewCardDemo',
+              },
+            },
+          },
+        },
+        'ViewCardDemo/tertiary.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Tertiary View Demo',
+              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/index.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}view-card-demo`,
+                name: 'ViewCardDemo',
               },
             },
           },
@@ -166,7 +219,7 @@ module('Acceptance | host mode tests', function (hooks) {
   test('visiting a default width card in host mode', async function (assert) {
     await visit('/test/Pet/mango.json');
 
-    assert.dom('[data-test-host-mode-container]').hasStyle({
+    assert.dom('[data-test-host-mode-content]').hasStyle({
       'background-image':
         'url("https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg")',
     });
@@ -174,7 +227,7 @@ module('Acceptance | host mode tests', function (hooks) {
     assert
       .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
       .exists();
-    assert.dom('[data-test-host-mode-container]').hasNoClass('is-wide');
+    assert.dom('[data-test-host-mode-content]').hasNoClass('is-wide');
     assert.strictEqual(getPageTitle(), 'Mango');
 
     await percySnapshot(assert);
@@ -187,7 +240,7 @@ module('Acceptance | host mode tests', function (hooks) {
       .dom(`[data-test-host-mode-card="${testHostModeRealmURL}index"]`)
       .exists();
     assert.strictEqual(getPageTitle(), 'Test Workspace B');
-    assert.dom('[data-test-host-mode-container]').hasClass('is-wide');
+    assert.dom('[data-test-host-mode-content]').hasClass('is-wide');
 
     await percySnapshot(assert);
   });
@@ -202,6 +255,94 @@ module('Acceptance | host mode tests', function (hooks) {
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
     );
+  });
+
+  test('invoking viewCard from a card stacks the linked card', async function (assert) {
+    let targetStackId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+
+    await visit('/test/ViewCardDemo/index.json');
+
+    await waitFor('[data-test-view-card-demo-button]');
+    assert
+      .dom(`[data-test-host-mode-stack-item="${targetStackId}"]`)
+      .doesNotExist();
+
+    await click('[data-test-view-card-demo-button]');
+    await waitFor(`[data-test-host-mode-stack-item="${targetStackId}"]`);
+
+    assert.dom(`[data-test-host-mode-stack-item="${targetStackId}"]`).exists();
+  });
+
+  test('viewCard tabs persist after stacking and closing cards in host mode', async function (assert) {
+    let primaryCardId = `${testHostModeRealmURL}ViewCardDemo/index`;
+    let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let secondStackCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+
+    await visit('/test/ViewCardDemo/index.json');
+
+    let primaryCardSelector = `[data-test-host-mode-card="${primaryCardId}"]`;
+    await waitFor(
+      `${primaryCardSelector} [data-test-view-card-demo-active-tab]`,
+    );
+    await waitFor(`${primaryCardSelector} [data-test-view-card-demo-button]`);
+    assert
+      .dom(`${primaryCardSelector} [data-test-view-card-demo-active-tab]`)
+      .hasAttribute('data-test-view-card-demo-active-tab', 'overview');
+
+    await click(
+      `${primaryCardSelector} [data-test-view-card-demo-tab="details"]`,
+    );
+
+    assert
+      .dom(`${primaryCardSelector} [data-test-view-card-demo-active-tab]`)
+      .hasAttribute('data-test-view-card-demo-active-tab', 'details');
+
+    await click(`${primaryCardSelector} [data-test-view-card-demo-button]`);
+
+    let firstStackSelector = `[data-test-host-mode-stack-item="${firstStackCardId}"]`;
+    await waitFor(
+      `${firstStackSelector} [data-test-view-card-demo-active-tab]`,
+    );
+    await waitFor(`${firstStackSelector} [data-test-view-card-demo-button]`);
+    await waitFor(firstStackSelector);
+
+    assert
+      .dom(`${firstStackSelector} [data-test-view-card-demo-active-tab]`)
+      .hasAttribute('data-test-view-card-demo-active-tab', 'overview');
+
+    await click(
+      `${firstStackSelector} [data-test-view-card-demo-tab="history"]`,
+    );
+
+    assert
+      .dom(`${firstStackSelector} [data-test-view-card-demo-active-tab]`)
+      .hasAttribute('data-test-view-card-demo-active-tab', 'history');
+
+    await click(`${firstStackSelector} [data-test-view-card-demo-button]`);
+
+    let secondStackSelector = `[data-test-host-mode-stack-item="${secondStackCardId}"]`;
+    await waitFor(`${secondStackSelector} [data-test-view-card-demo-button]`);
+    await waitFor(secondStackSelector);
+
+    await click(`[data-test-host-mode-breadcrumb="${firstStackCardId}"]`);
+
+    await waitUntil(() => {
+      return !document.querySelector(secondStackSelector);
+    });
+
+    assert
+      .dom(`${firstStackSelector} [data-test-view-card-demo-active-tab]`)
+      .hasAttribute('data-test-view-card-demo-active-tab', 'history');
+
+    await click(`[data-test-host-mode-breadcrumb="${primaryCardId}"]`);
+
+    await waitUntil(() => {
+      return !document.querySelector(firstStackSelector);
+    });
+
+    assert
+      .dom(`${primaryCardSelector} [data-test-view-card-demo-active-tab]`)
+      .hasAttribute('data-test-view-card-demo-active-tab', 'details');
   });
 
   test('stack state persists in query parameter', async function (assert) {

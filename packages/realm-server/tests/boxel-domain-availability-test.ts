@@ -1,65 +1,112 @@
 import { module, test } from 'qunit';
-import { basename } from 'path';
+import { basename, join } from 'path';
 import { PgAdapter } from '@cardstack/postgres';
+import { query, insert, asExpressions, User } from '@cardstack/runtime-common';
 import {
-  query,
-  insert,
-  asExpressions,
-  User,
+  setupDB,
   insertUser,
-} from '@cardstack/runtime-common';
-import { prepareTestDB } from './helpers';
-import { handleCheckSiteNameAvailabilityRequest } from '../handlers/handle-check-site-name-availability';
-import Koa from 'koa';
+  runTestRealmServer,
+  createVirtualNetwork,
+  matrixURL,
+  closeServer,
+  setupBaseRealmServer,
+} from './helpers';
+import {
+  RealmServerTokenClaim,
+  createJWT as createRealmServerJWT,
+} from '../utils/jwt';
+import { realmSecretSeed } from './helpers';
+import supertest, { SuperTest, Test } from 'supertest';
+import { Server } from 'http';
+import { dirSync, type DirResult } from 'tmp';
+import { copySync, ensureDirSync } from 'fs-extra';
+
+const testRealmURL = new URL('http://127.0.0.1:0/test/');
 
 module(basename(__filename), function () {
-  module('site name availability endpoint', function (hooks) {
-    let dbAdapter: PgAdapter;
-    let handler: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
-    let user: User;
+  module('boxel domain availability endpoint', function (hooks) {
+    setupBaseRealmServer(hooks, matrixURL);
 
-    let boxelSiteDomain = 'boxel.dev.localhost';
+    let testRealmServer: Server;
+    let request: SuperTest<Test>;
+    let dir: DirResult;
+    let dbAdapter: PgAdapter;
+    let user: User;
+    let boxelSiteDomain = 'boxel.site';
+    let defaultToken: RealmServerTokenClaim;
 
     hooks.beforeEach(async function () {
-      prepareTestDB();
-      dbAdapter = new PgAdapter({ autoMigrate: true });
-      handler = handleCheckSiteNameAvailabilityRequest({
-        dbAdapter,
-        domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
-      } as any);
-      user = await insertUser(dbAdapter, 'matrix-user-id', 'test-user');
+      dir = dirSync();
     });
 
-    hooks.afterEach(async function () {
-      await dbAdapter.close();
+    setupDB(hooks, {
+      beforeEach: async (_dbAdapter, publisher, runner) => {
+        dbAdapter = _dbAdapter;
+        let testRealmDir = join(dir.name, 'realm_server_5', 'test');
+        ensureDirSync(testRealmDir);
+        copySync(join(__dirname, 'cards'), testRealmDir);
+
+        testRealmServer = (
+          await runTestRealmServer({
+            virtualNetwork: createVirtualNetwork(),
+            testRealmDir,
+            realmsRootPath: join(dir.name, 'realm_server_5'),
+            realmURL: testRealmURL,
+            dbAdapter,
+            publisher,
+            runner,
+            matrixURL,
+            domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
+          })
+        ).testRealmHttpServer;
+        request = supertest(testRealmServer);
+
+        user = await insertUser(
+          dbAdapter,
+          'matrix-user-id',
+          'test-user',
+          'test-user@example.com',
+        );
+        defaultToken = {
+          user: 'matrix-user-id',
+          sessionRoom: 'test-session',
+        };
+      },
+      afterEach: async () => {
+        await closeServer(testRealmServer);
+      },
     });
 
-    async function callHandler(subdomain?: string) {
-      const ctx: any = {
-        query: subdomain !== undefined ? { subdomain } : {},
-        status: undefined,
-        body: undefined,
-        req: {
-          headers: { host: 'localhost:4200' },
-          url: '/check-site-name-availability',
-        },
-        set: () => {},
-      };
+    async function makeCheckBoxelDomainRequest(
+      token: RealmServerTokenClaim | null,
+      subdomain?: string,
+    ) {
+      let requestBuilder = request
+        .get('/_check-boxel-domain-availability')
+        .set('Accept', 'application/json');
 
-      await handler(ctx, async () => {});
-      return ctx;
+      if (token) {
+        const jwt = createRealmServerJWT(token, realmSecretSeed);
+        requestBuilder = requestBuilder.set('Authorization', `Bearer ${jwt}`);
+      }
+
+      if (subdomain !== undefined) {
+        requestBuilder = requestBuilder.query({ subdomain });
+      }
+
+      return await requestBuilder;
     }
 
     test('should return 422 when subdomain is missing', async function (assert) {
-      const ctx = await callHandler();
+      const response = await makeCheckBoxelDomainRequest(defaultToken);
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         422,
         'Should return 422 for missing subdomain',
       );
       assert.ok(
-        ctx.body.includes('subdomain query parameter is required'),
+        response.text.includes('subdomain query parameter is required'),
         'Should have error message about missing subdomain',
       );
     });
@@ -93,15 +140,18 @@ module(basename(__filename), function () {
       ];
 
       for (const subdomain of invalidSubdomains) {
-        const ctx = await callHandler(subdomain);
+        const response = await makeCheckBoxelDomainRequest(
+          defaultToken,
+          subdomain,
+        );
 
         assert.strictEqual(
-          ctx.status,
+          response.status,
           200,
           `Should return 200 for invalid subdomain: ${subdomain}`,
         );
 
-        const responseBody = JSON.parse(ctx.body);
+        const responseBody = response.body;
         assert.false(
           responseBody.available,
           `Should be unavailable for subdomain: ${subdomain}`,
@@ -117,15 +167,18 @@ module(basename(__filename), function () {
       const validSubdomains = ['mike', 'my-company'];
 
       for (const subdomain of validSubdomains) {
-        const ctx = await callHandler(subdomain);
+        const response = await makeCheckBoxelDomainRequest(
+          defaultToken,
+          subdomain,
+        );
 
         assert.strictEqual(
-          ctx.status,
+          response.status,
           200,
           `Should return 200 for valid subdomain: ${subdomain}`,
         );
 
-        const responseBody = JSON.parse(ctx.body);
+        const responseBody = response.body;
         assert.ok(
           responseBody,
           `Should have response body for subdomain: ${subdomain}`,
@@ -166,15 +219,18 @@ module(basename(__filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const ctx = await callHandler(subdomain);
+      const response = await makeCheckBoxelDomainRequest(
+        defaultToken,
+        subdomain,
+      );
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         200,
         'Should return 200 for claimed subdomain',
       );
 
-      const responseBody = JSON.parse(ctx.body);
+      const responseBody = response.body;
       assert.ok(responseBody, 'Should have response body');
       assert.false(
         responseBody.available,
@@ -209,15 +265,18 @@ module(basename(__filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const ctx = await callHandler(subdomain);
+      const response = await makeCheckBoxelDomainRequest(
+        defaultToken,
+        subdomain,
+      );
 
       assert.strictEqual(
-        ctx.status,
+        response.status,
         200,
         'Should return 200 for removed subdomain',
       );
 
-      const responseBody = JSON.parse(ctx.body);
+      const responseBody = response.body;
       assert.ok(responseBody, 'Should have response body');
       assert.true(
         responseBody.available,

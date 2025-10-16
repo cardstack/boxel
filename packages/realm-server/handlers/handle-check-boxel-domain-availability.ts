@@ -8,13 +8,13 @@ import {
 import { CreateRoutesArgs } from '../routes';
 import { validateSubdomain } from '../lib/user-subdomain-validation';
 
-type CheckSiteNameAvailabilityResponse = {
+type CheckBoxelDomainAvailabilityResponse = {
   available: boolean;
   hostname: string;
   error?: string;
 };
 
-export function handleCheckSiteNameAvailabilityRequest({
+export function handleCheckBoxelDomainAvailabilityRequest({
   dbAdapter,
   domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -53,7 +53,7 @@ export function handleCheckSiteNameAvailabilityRequest({
         available = results.length === 0;
       }
 
-      const response: CheckSiteNameAvailabilityResponse = {
+      const response: CheckBoxelDomainAvailabilityResponse = {
         available,
         hostname,
         error,
@@ -69,7 +69,7 @@ export function handleCheckSiteNameAvailabilityRequest({
         }),
       );
     } catch (error) {
-      console.error('Error checking site name availability:', error);
+      console.error('Error checking boxel domain availability:', error);
       await sendResponseForSystemError(ctxt, 'Internal server error');
     }
   };

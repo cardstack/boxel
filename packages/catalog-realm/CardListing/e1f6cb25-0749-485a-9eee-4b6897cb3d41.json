@@ -1,0 +1,71 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "3D Model Viewer",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/3d-model-viewer-listing/screenshot_01.png"
+      ],
+      "summary": "This listing provides a comprehensive 3D model viewer and loader for GLTF and GLB formats, enabling interactive visualization with customizable settings, progress tracking, and error handling to enhance user experience. Its primary purpose is to embed and display 3D content within applications, supporting features like camera control, wireframe view, and model reloading.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/3d-model-viewer-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/66c3c617-21c2-4162-ae44-6aee4df29212"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/c3c61721-c251-42ee-846a-ee4df29212e3"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../3d-model-viewer/GltfViewer/modern-chair"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/design-creative"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

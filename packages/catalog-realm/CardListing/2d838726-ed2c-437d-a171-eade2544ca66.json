@@ -9,13 +9,16 @@
     "type": "card",
     "attributes": {
       "name": "Communication Log & News Feed System",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/commnuication-log-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/commnuication-log-listing/screenshot_02.png"
+      ],
       "summary": "A comprehensive communication logging and news feed system for tracking interactions, messages, and updates. Features include real-time communication logging, map rendering capabilities, and customizable news feed displays for teams and organizations.",
       "cardInfo": {
         "notes": null,
         "title": "Communication Log & News Feed",
         "description": "Track and display communications with map integration and news feed capabilities",
-        "thumbnailURL": "https://dummyimage.com/400x300/e0f2fe/0284c7&text=Communication+Log"
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/commnuication-log-listing/thumbnail.png"
       }
     },
     "relationships": {

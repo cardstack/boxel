@@ -47,3 +47,5 @@ declare module '@ember/component' {
 // runtime-common has its own global type declaration that we need to
 // incorporate
 import '../../runtime-common/global';
+
+import './matrix-js-sdk';

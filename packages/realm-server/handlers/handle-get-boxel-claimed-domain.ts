@@ -10,7 +10,7 @@ import {
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { CreateRoutesArgs } from '../routes';
 
-export default function handleGetBoxelSiteHostnameRequest({
+export default function handleGetBoxelClaimedDomainRequest({
   dbAdapter,
   domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -26,7 +26,7 @@ export default function handleGetBoxelSiteHostnameRequest({
       if (!token) {
         await sendResponseForSystemError(
           ctxt,
-          'token is required to get site hostname',
+          'token is required to get claimed domain',
         );
         return;
       }
@@ -96,7 +96,7 @@ export default function handleGetBoxelSiteHostnameRequest({
         ),
       );
     } catch (error) {
-      console.error('Error getting site hostname:', error);
+      console.error('Error getting claimed domain:', error);
       await sendResponseForSystemError(ctxt, 'Internal server error');
     }
   };

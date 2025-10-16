@@ -20,7 +20,7 @@ interface Signature {
   Args: {
     cardId: string;
     index: number;
-    stackItems: string[];
+    stackItemCardIds: string[];
     close?: (cardId: string) => void;
   };
 }
@@ -52,7 +52,7 @@ export default class HostModeStackItem extends Component<Signature> {
     //  buried card: 800px / (1.2 ^ 1) = ~666px;
     //  next buried card: 800px / (1.2 ^ 2) = ~555px;
     const maxWidthReductionPercent = 10; // Every new card on the stack is 10% wider than the previous one (for narrow viewport)
-    const numberOfCards = this.args.stackItems.length;
+    const numberOfCards = this.args.stackItemCardIds.length;
     const invertedIndex = numberOfCards - this.args.index - 1;
     const isLastCard = this.args.index === numberOfCards - 1;
     const isSecondLastCard = this.args.index === numberOfCards - 2;
@@ -89,7 +89,7 @@ export default class HostModeStackItem extends Component<Signature> {
   }
 
   private get isBuried() {
-    return this.args.index + 1 < this.args.stackItems.length;
+    return this.args.index + 1 < this.args.stackItemCardIds.length;
   }
 
   private get isTopCard() {

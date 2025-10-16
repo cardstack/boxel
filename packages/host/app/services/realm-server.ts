@@ -16,7 +16,10 @@ import {
   SupportedMimeType,
   Deferred,
 } from '@cardstack/runtime-common';
-import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
+import {
+  joinDMRoom,
+  RealmAuthClient,
+} from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -33,6 +36,12 @@ const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
 export interface RealmServerTokenClaims {
   user: string;
   sessionRoom: string;
+}
+
+export interface SubdomainAvailabilityResult {
+  available: boolean;
+  domain: string;
+  error?: string;
 }
 
 interface RealmServerEvent {
@@ -62,6 +71,7 @@ export default class RealmServerService extends Service {
   @service declare private network: NetworkService;
   @service declare private reset: ResetService;
   @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
@@ -247,8 +257,26 @@ export default class RealmServerService extends Service {
       [realmURL: string]: string;
     };
 
+    await this.ensureJoinedSessionRoom(tokens);
     for (let [realmURL, token] of Object.entries(tokens)) {
       this.realm.getOrCreateRealmResource(realmURL, token);
+    }
+  }
+
+  private async ensureJoinedSessionRoom(tokens: {
+    [realmUrl: string]: string;
+  }) {
+    if (!this.client) {
+      throw new Error(`Cannot check joined rooms without matrix client`);
+    }
+    let { joined_rooms } = await this.client.getJoinedRooms();
+    let joinedRoomSet = new Set(joined_rooms ?? []);
+    for (let [_realmURL, token] of Object.entries(tokens)) {
+      let { sessionRoom } = claimsFromRawToken(token);
+      if (!joinedRoomSet.has(sessionRoom)) {
+        await joinDMRoom(this.client, sessionRoom);
+        joinedRoomSet.add(sessionRoom);
+      }
     }
   }
 
@@ -503,6 +531,31 @@ export default class RealmServerService extends Service {
     }
 
     return response.json();
+  }
+
+  async checkSiteNameAvailability(
+    subdomain: string,
+  ): Promise<SubdomainAvailabilityResult> {
+    await this.login();
+
+    let url = new URL(`${this.url.href}_check-boxel-domain-availability`);
+    url.searchParams.set('subdomain', subdomain);
+
+    let response = await this.realmServer.authedFetch(url.href, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      let errorText = await response.text();
+      throw new Error(
+        `Check site name availability failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return (await response.json()) as SubdomainAvailabilityResult;
   }
 
   async unpublishRealm(publishedRealmURL: string) {
