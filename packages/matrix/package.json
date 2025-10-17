@@ -12,6 +12,7 @@
     "@types/uuid": "catalog:",
     "fs-extra": "catalog:",
     "jsonwebtoken": "catalog:",
+    "pg": "catalog:",
     "start-server-and-test": "catalog:",
     "tmp": "catalog:",
     "ts-node": "^10.9.1",

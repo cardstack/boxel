@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import {
+  Credentials,
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
@@ -8,12 +9,14 @@ import {
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
-import { IsolatedRealmServer } from './isolated-realm-server';
+import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
+import { randomUUID } from 'crypto';
 
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
+export const REGISTRATION_TOKEN = 'abc123';
 
 const realmSecretSeed = "shhh! it's a secret";
 
@@ -26,6 +29,11 @@ interface LoginOptions {
   url?: string;
   showAllCards?: boolean; //default true
 }
+
+// Setup just one pool
+export const sharedSQLExecutor = new BasicSQLExecutor(
+  process.env.REALM_SERVER_DB!,
+);
 
 export async function setSkillsRedirect(page: Page) {
   await page.route('http://localhost:4201/skills/**', async (route) => {
@@ -567,7 +575,7 @@ export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator('[data-test-ai-assistant-panel]').click();
 }
 
-export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
+export async function assertLoggedIn(page: Page, opts: ProfileAssertions) {
   await page.locator('[data-test-profile-icon-button]').click();
 
   await expect(
@@ -578,12 +586,11 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
     page.locator('[data-test-password-field]'),
     'password field is not displayed',
   ).toHaveCount(0);
-
   await expect(page.locator('[data-test-profile-display-name]')).toContainText(
-    opts?.displayName ?? 'user1',
+    opts.displayName!,
   );
   await expect(page.locator('[data-test-profile-icon-handle]')).toContainText(
-    opts?.userId ?? '@user1:localhost',
+    opts.userId!,
   );
 
   if (opts?.email) {
@@ -597,10 +604,7 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   }
 }
 
-export async function setupUser(
-  username: string,
-  realmServer: IsolatedRealmServer,
-) {
+export async function setupUser(username: string, realmServer: SQLExecutor) {
   await realmServer.executeSQL(
     `INSERT INTO users (matrix_user_id) VALUES ('${username}')`,
   );
@@ -609,7 +613,7 @@ export async function setupUser(
 export async function setupPermissions(
   username: string,
   realmURL: string,
-  realmServer: IsolatedRealmServer,
+  realmServer: SQLExecutor,
 ) {
   await realmServer.executeSQL(
     `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
@@ -626,7 +630,7 @@ export async function setupPermissions(
 
 export async function setupPayment(
   username: string,
-  realmServer: IsolatedRealmServer,
+  realmServer: SQLExecutor,
   _page?: Page,
 ) {
   // mock trigger stripe webhook 'checkout.session.completed'
@@ -701,10 +705,46 @@ export async function setupPayment(
 
 export async function setupUserSubscribed(
   username: string,
-  realmServer: IsolatedRealmServer,
+  realmServer: SQLExecutor,
 ) {
   await setupUser(username, realmServer);
   await setupPayment(username, realmServer);
+}
+
+export function getUniqueUsername(prefix = 'user'): string {
+  return `${prefix}-${randomUUID()}`;
+}
+
+export function getUniquePassword(): string {
+  return randomUUID();
+}
+
+export async function createUser(
+  prefix = 'user',
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  let synapse = JSON.parse(process.env.SYNAPSE!);
+  const username = getUniqueUsername(prefix);
+  const password = getUniquePassword();
+  const credentials = await registerUser(synapse, username, password);
+  return { username, password, credentials };
+}
+
+export async function createSubscribedUser(
+  prefix = 'user',
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  const { username, password, credentials } = await createUser(prefix);
+  await setupUserSubscribed(`@${username}:localhost`, sharedSQLExecutor);
+  return { username, password, credentials };
+}
+
+export async function createSubscribedUserAndLogin(
+  page: Page,
+  prefix: string,
+  url = appURL,
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  const user = await createSubscribedUser(prefix);
+  await login(page, user.username, user.password, { url });
+  return user;
 }
 
 export async function assertLoggedOut(page: Page) {
@@ -727,8 +767,8 @@ export async function assertLoggedOut(page: Page) {
 }
 
 export async function getRoomEvents(
-  username = 'user1',
-  password = 'pass',
+  username: string,
+  password: string,
   roomId?: string,
 ) {
   let { accessToken } = await loginUser(username, password);
@@ -772,7 +812,7 @@ export function getAgentId(
   }
 }
 
-export async function getRoomsFromSync(username = 'user1', password = 'pass') {
+export async function getRoomsFromSync(username: string, password: string) {
   let { accessToken } = await loginUser(username, password);
   let response = (await sync(accessToken)) as any;
   return response.rooms;

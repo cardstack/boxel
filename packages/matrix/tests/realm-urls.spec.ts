@@ -1,58 +1,37 @@
 import { expect, test } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-  updateAccountData,
-  updateUser,
-} from '../docker/synapse';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
+import { updateAccountData, updateUser } from '../docker/synapse';
+import { createSubscribedUser, login, setupUserSubscribed } from '../helpers';
 
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+import { appURL } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
 
 test.describe('Realm URLs in Matrix account data', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-  let user: { accessToken: string };
+  let user: {
+    username: string;
+    password: string;
+    credentials: any;
+  };
+  let userEmail: string;
 
   test.beforeEach(async () => {
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
 
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
-    user = await registerUser(synapse, 'user1', 'pass');
-    await updateUser(admin.accessToken, '@user1:localhost', {
-      emailAddresses: ['user1@localhost'],
+    user = await createSubscribedUser('realm-urls');
+    userEmail = `${user.username}@localhost`;
+    await updateUser(adminAccessToken, user.credentials.userId, {
+      emailAddresses: [userEmail],
     });
-    realmServer = await startRealmServer();
-    await smtpStart();
 
     await updateAccountData(
-      '@user1:localhost',
-      user.accessToken,
+      user.credentials.userId,
+      user.credentials.accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,
       JSON.stringify({ realms: [] }),
     );
-    await setupUserSubscribed('@user1:localhost', realmServer);
-  });
-
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-    await realmServer.stop();
   });
 
   test('active realms are determined by account data', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, user.username, user.password, { url: appURL });
 
     await page.locator('[data-test-workspace-chooser-toggle]').click();
 
@@ -65,8 +44,8 @@ test.describe('Realm URLs in Matrix account data', () => {
     ).toHaveCount(0);
 
     await updateAccountData(
-      '@user1:localhost',
-      user.accessToken,
+      user.credentials.userId,
+      user.credentials.accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,
       JSON.stringify({
         realms: ['http://example.com/'],
