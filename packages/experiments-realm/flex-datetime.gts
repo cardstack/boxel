@@ -4,8 +4,8 @@ import {
   Component,
   field,
   contains,
-  getField,
 } from 'https://cardstack.com/base/card-api';
+import { getField } from '@cardstack/runtime-common'
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import StringField from 'https://cardstack.com/base/string';
 import { tracked } from '@glimmer/tracking';
@@ -610,7 +610,8 @@ class FieldRenderer extends Component<typeof FlexDateTimeField> {
       try {
         const field = getField(this.args.card, this.args.fieldName);
         return field?.card;
-      } catch {
+      } catch(e) {
+
         // ignore lookup errors and fall through to other heuristics
       }
     }
