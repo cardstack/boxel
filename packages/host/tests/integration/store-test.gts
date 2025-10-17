@@ -374,6 +374,40 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('garbage collects cards that only consume each other', async function (assert) {
+    let alpha = new PersonDef({ name: 'Alpha' });
+    let beta = new PersonDef({ name: 'Beta' });
+    (alpha as any).bestFriend = beta;
+    (beta as any).bestFriend = alpha;
+
+    await storeService.add(alpha, { doNotPersist: true });
+    await storeService.add(beta, { doNotPersist: true });
+
+    assert.strictEqual(
+      storeService.peek(alpha[localId]),
+      alpha,
+      'alpha is present before GC',
+    );
+    assert.strictEqual(
+      storeService.peek(beta[localId]),
+      beta,
+      'beta is present before GC',
+    );
+
+    forceGC();
+
+    assert.strictEqual(
+      storeService.peek(alpha[localId]),
+      undefined,
+      'alpha is garbage collected',
+    );
+    assert.strictEqual(
+      storeService.peek(beta[localId]),
+      undefined,
+      'beta is garbage collected',
+    );
+  });
+
   test<TestContextWithSave>('can manually save an instance', async function (assert) {
     assert.expect(2);
     storeService.addReference(`${testRealmURL}Person/hassan`);
