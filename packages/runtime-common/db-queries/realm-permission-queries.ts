@@ -145,7 +145,8 @@ export async function fetchUserPermissions(
     permissions = (await query(dbAdapter, [
       `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
       param(userId),
-      `AND realm_owner = true`,
+      `AND realm_owner = true
+       AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)`,
     ])) as {
       realm_url: string;
       read: boolean;
@@ -158,11 +159,13 @@ export async function fetchUserPermissions(
     permissions = (await query(dbAdapter, [
       `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
       param(userId),
-      `UNION
+      `AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)
+       UNION
        SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
        AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
       param(userId),
-      `)`,
+      `)
+       AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)`,
     ])) as {
       realm_url: string;
       read: boolean;
