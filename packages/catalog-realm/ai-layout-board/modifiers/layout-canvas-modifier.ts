@@ -5,9 +5,10 @@ type LayoutCanvasNamedArgs = {
   onTransform?: (t: { x: number; y: number; k: number }) => void;
   onItemDrag?: (item: any, isDragEnd?: boolean) => void;
   onItemSelect?: (id: string | null) => void;
-  selectedItemId?: string | null;
+  selectedItemIds?: string[];
   itemData?: any[];
   onOpenCard?: (cardId: string) => void;
+  onDeleteSelected?: () => void;
 };
 
 export default class LayoutCanvasModifier extends Modifier<{
@@ -17,7 +18,9 @@ export default class LayoutCanvasModifier extends Modifier<{
   private element: HTMLElement | null = null;
   private args: { positional: []; named: LayoutCanvasNamedArgs } | null = null;
   private panZoomPane: HTMLElement | null = null;
+  private initialized = false;
   private isDragging = false;
+  private overlayInteractionActive = false;
   private dragStartPos = { x: 0, y: 0 };
   private lastPanPos = { x: 0, y: 0 };
   private currentTransform = { x: 0, y: 0, k: 1 };
@@ -26,12 +29,27 @@ export default class LayoutCanvasModifier extends Modifier<{
     HTMLElement,
     ReturnType<typeof setInterval>
   >();
+  // Track per-overlay document listeners so we can remove them on teardown
+  private overlayDocListeners = new Map<
+    HTMLElement,
+    Array<{ type: keyof DocumentEventMap; handler: (e: any) => void }>
+  >();
+  private lastItemIdsFingerprint: string | null = null;
 
   constructor(owner: any, args: any) {
     super(owner, args);
   }
 
   private cleanupOverlay(overlay: HTMLElement) {
+    // Remove any document-level listeners registered for this overlay
+    const docListeners = this.overlayDocListeners.get(overlay);
+    if (docListeners && docListeners.length) {
+      docListeners.forEach(({ type, handler }) => {
+        document.removeEventListener(type, handler as any);
+      });
+      this.overlayDocListeners.delete(overlay);
+    }
+
     const storedInterval = this.overlayMeasureIntervals.get(overlay);
     const intervalId =
       storedInterval ??
@@ -59,6 +77,10 @@ export default class LayoutCanvasModifier extends Modifier<{
     });
     this.nodeElements.clear();
     this.overlayMeasureIntervals.clear();
+    this.overlayDocListeners.clear();
+
+    // Reset interaction flags in case teardown occurred mid-interaction
+    this.overlayInteractionActive = false;
 
     if (this.panZoomPane) {
       this.panZoomPane
@@ -82,6 +104,8 @@ export default class LayoutCanvasModifier extends Modifier<{
 
     // Setup pan with mouse drag
     element.addEventListener('mousedown', this.handleMouseDown);
+    // Key handling (Delete/Backspace)
+    element.addEventListener('keydown', this.handleKeyDown);
     document.addEventListener('mousemove', this.handleMouseMove);
     document.addEventListener('mouseup', this.handleMouseUp);
 
@@ -89,7 +113,58 @@ export default class LayoutCanvasModifier extends Modifier<{
     this.setupNodes();
   }
 
+  private updateSelectionVisuals(selectedItemIds?: string[]) {
+    if (!this.panZoomPane) return;
+    const ids = new Set(selectedItemIds || []);
+    this.nodeElements.forEach((overlay, itemId) => {
+      const isSelected = ids.has(itemId);
+      const frame = overlay.querySelector('.window-frame') as HTMLElement | null;
+      const header = overlay.querySelector('.window-header') as HTMLElement | null;
+      const selectButton = overlay.querySelector('.select-button') as HTMLElement | null;
+
+      if (isSelected) {
+        overlay.classList.add('selected');
+        if (frame) frame.style.opacity = '1';
+        if (header) header.style.opacity = '1';
+        if (selectButton) {
+          selectButton.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 3px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <polyline points="20,6 9,17 4,12"></polyline>
+              </svg>
+              <span>SELECTED</span>
+            </div>
+          `;
+          selectButton.title = 'Click to deselect this item';
+          selectButton.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+          selectButton.style.borderColor = '#f59e0b';
+          selectButton.style.color = 'white';
+          selectButton.style.boxShadow = '0 0 12px rgba(245, 158, 11, 0.6), 0 2px 8px rgba(0, 0, 0, 0.2)';
+          selectButton.style.transform = 'scale(1.05)';
+        }
+      } else {
+        overlay.classList.remove('selected');
+        if (selectButton) {
+          selectButton.innerHTML = `
+            <div style=\"display: flex; align-items: center; gap: 3px;\">\n              <svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n                <circle cx=\"12\" cy=\"12\" r=\"8\"/>\n              </svg>\n              <span>SELECT</span>\n            </div>`;
+          selectButton.title = 'Click to select this item for actions';
+          selectButton.style.background = 'rgba(255, 255, 255, 0.95)';
+          selectButton.style.borderColor = '#3b82f6';
+          selectButton.style.color = '#3b82f6';
+          selectButton.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+          selectButton.style.transform = 'scale(1)';
+        }
+      }
+    });
+  }
+
   handleWheel = (event: WheelEvent) => {
+    // Block zooming via wheel while dragging canvas or items
+    if (this.isDragging || this.overlayInteractionActive) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const target = event.target as HTMLElement;
 
     // ¹²⁰ CRITICAL: Only prevent wheel on drag handles, allow content interaction
@@ -201,6 +276,11 @@ export default class LayoutCanvasModifier extends Modifier<{
     const deltaX = event.clientX - this.dragStartPos.x;
     const deltaY = event.clientY - this.dragStartPos.y;
 
+    // Ignore tiny movements to avoid accidental saves
+    if (Math.abs(deltaX) < 2 && Math.abs(deltaY) < 2) {
+      return;
+    }
+
     this.currentTransform.x = this.lastPanPos.x + deltaX;
     this.currentTransform.y = this.lastPanPos.y + deltaY;
 
@@ -220,6 +300,24 @@ export default class LayoutCanvasModifier extends Modifier<{
     }
   };
 
+  handleKeyDown = (event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null;
+    const isEditable =
+      target &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        (target as any).isContentEditable);
+    if (isEditable) return;
+
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      const hasSelection = (this.args?.named?.selectedItemIds || []).length > 0;
+      if (hasSelection) {
+        event.preventDefault();
+        this.args?.named?.onDeleteSelected?.();
+      }
+    }
+  };
+
   applyTransform() {
     // ⁹ Apply CSS transform to pan-zoom pane with 3D acceleration
     if (this.panZoomPane) {
@@ -230,7 +328,7 @@ export default class LayoutCanvasModifier extends Modifier<{
 
   setupNodes() {
     // ¹⁰ Setup node drag behavior - simplified approach
-    const { itemData, onItemDrag, onItemSelect, selectedItemId } =
+    const { itemData, onItemDrag, onItemSelect, selectedItemIds } =
       this.args?.named || {};
     if (!this.panZoomPane) return;
     // Clear existing nodes
@@ -244,7 +342,7 @@ export default class LayoutCanvasModifier extends Modifier<{
         item,
         onItemDrag,
         onItemSelect,
-        selectedItemId,
+        selectedItemIds,
       );
       this.panZoomPane!.appendChild(dragOverlay);
       this.nodeElements.set(item.id, dragOverlay);
@@ -255,7 +353,7 @@ export default class LayoutCanvasModifier extends Modifier<{
     itemData: any,
     onItemDrag: any,
     onItemSelect?: any,
-    selectedItemId?: string | null,
+    selectedItemIds?: string[],
   ) {
     // ¹¹ Create drag overlay for layout items
     const existingOverlay = this.nodeElements.get(itemData.id);
@@ -269,8 +367,8 @@ export default class LayoutCanvasModifier extends Modifier<{
     overlay.className = 'layout-item-wrapper';
     overlay.dataset.itemId = itemData.id; // Add ID for height measurement
 
-    // ¹⁴⁹ Apply selection styling if this item is selected
-    if (selectedItemId === itemData.id) {
+    // Apply selection styling if this item is selected
+    if (selectedItemIds && selectedItemIds.includes(itemData.id)) {
       overlay.classList.add('selected');
     }
 
@@ -278,13 +376,8 @@ export default class LayoutCanvasModifier extends Modifier<{
     const pos = itemData.position || {};
     const width = Math.max(pos.width || 120, 120);
 
-    // For external cards, use the same height logic as the canvas rendering
-    let height;
-    if (pos.format === 'embedded') {
-      height = Math.max(pos.customHeight || pos.autoHeight || 80, 80);
-    } else {
-      height = Math.max(pos.autoHeight || 80, 80);
-    }
+    // Height always derives from autoHeight for simplicity
+    let height = Math.max(pos.autoHeight || 80, 80);
 
     overlay.style.cssText = `
         position: absolute;
@@ -357,8 +450,8 @@ export default class LayoutCanvasModifier extends Modifier<{
         height: auto;
       `;
 
-    // ¹⁶⁰ Enhanced selection state with clear visual hierarchy
-    if (selectedItemId === itemData.id) {
+    // Selection state label and clear visual hierarchy
+    if (overlay.classList.contains('selected')) {
       selectButton.innerHTML = `
           <div style="display: flex; align-items: center; gap: 3px;">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
@@ -409,9 +502,18 @@ export default class LayoutCanvasModifier extends Modifier<{
         flex-shrink: 0;
         margin-left: 4px;
       `;
-    formatToggle.textContent = pos.format === 'fitted' ? 'FIT' : 'EMB';
-    formatToggle.title =
-      pos.format === 'fitted' ? 'Switch to Embedded' : 'Switch to Fitted';
+    // Initialize label/title for all three formats (fitted/embedded/isolated)
+    if (pos.format === 'fitted') {
+      formatToggle.textContent = 'FIT';
+      formatToggle.title = 'Switch to Embedded';
+    } else if (pos.format === 'embedded') {
+      formatToggle.textContent = 'EMB';
+      formatToggle.title = 'Switch to Isolated';
+    } else {
+      // 'isolated' (or any other unexpected value) defaults to ISO label
+      formatToggle.textContent = 'ISO';
+      formatToggle.title = 'Switch to Fitted';
+    }
     header.appendChild(formatToggle);
 
     overlay.appendChild(header);
@@ -436,6 +538,7 @@ export default class LayoutCanvasModifier extends Modifier<{
         cursor: ns-resize; opacity: 0;
         transition: opacity 0.15s ease;
         pointer-events: auto; z-index: 5;
+        display: none;
       `;
     overlay.appendChild(resizeBottom);
 
@@ -447,6 +550,7 @@ export default class LayoutCanvasModifier extends Modifier<{
         cursor: nwse-resize; opacity: 0;
         transition: opacity 0.15s ease;
         pointer-events: auto; z-index: 6;
+        display: none;
       `;
     resizeCorner.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 16 16" fill="white" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));">
@@ -519,20 +623,21 @@ export default class LayoutCanvasModifier extends Modifier<{
           });
 
           if (contentElement) {
-            // First check if there's actual content inside (not just empty wrapper)
-            const hasContent = (contentElement as Element).querySelector(
-              '.postit-note, .countdown-timer, .external-card-wrapper, .image-node, .unsupported-item',
-            );
+            // Try to measure a specific known content root if present (more precise)
+            const measuredNode =
+              ((contentElement as Element).querySelector(
+                '.postit-note, .countdown-timer, .external-card-wrapper, .image-node, .unsupported-item',
+              ) as HTMLElement | null) ||
+              ((contentElement as Element).firstElementChild as
+                | HTMLElement
+                | null);
 
-            if (hasContent) {
-              // Get the first child element which should be the actual content
-              const innerContent = (contentElement as Element)
-                .firstElementChild;
+            if (measuredNode) {
               let actualHeight = 80; // Default
 
-              if (innerContent) {
-                // Try multiple methods to get the actual height
-                const htmlElement = innerContent as HTMLElement;
+              {
+                // Try multiple methods to get the actual height of the measured node
+                const htmlElement = measuredNode as HTMLElement;
                 actualHeight = Math.max(
                   htmlElement.scrollHeight || 0,
                   htmlElement.offsetHeight || 0,
@@ -541,7 +646,7 @@ export default class LayoutCanvasModifier extends Modifier<{
                 );
 
                 // For elements with padding/margin, also check the computed style
-                const computedStyle = window.getComputedStyle(innerContent);
+                const computedStyle = window.getComputedStyle(measuredNode);
                 const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
                 const paddingBottom =
                   parseFloat(computedStyle.paddingBottom) || 0;
@@ -570,29 +675,23 @@ export default class LayoutCanvasModifier extends Modifier<{
                 actualHeight > 20 &&
                 Math.abs(actualHeight - (pos.autoHeight || 80)) > 2
               ) {
-                // Update the autoHeight with the measured value - defer to avoid circular dependency
+                // Convert measured screen pixels into world units by dividing by current scale
+                const scale = this.currentTransform.k || 1;
+                const worldHeight = Math.max(actualHeight / scale, 20);
+                // Update the autoHeight with the measured value (world units) - defer to avoid circular dependency
                 setTimeout(() => {
-                  itemData.position.autoHeight = Math.round(actualHeight);
+                  itemData.position.autoHeight = Math.round(worldHeight);
                 }, 0);
 
                 // Update height indicator
-                if (pos.customHeight) {
-                  heightIndicator.textContent = `H: ${
-                    pos.customHeight
-                  }px (auto: ${Math.round(actualHeight)}px)`;
-                  heightIndicator.style.background = 'rgba(239, 68, 68, 0.9)'; // Red for custom
-                } else {
-                  heightIndicator.textContent = `H: ${Math.round(
-                    actualHeight,
-                  )}px (auto)`;
-                  heightIndicator.style.background = 'rgba(16, 185, 129, 0.9)'; // Green for auto
-                }
+                heightIndicator.textContent = `H: ${Math.round(
+                  worldHeight,
+                )}px (auto)`;
+                heightIndicator.style.background = 'rgba(16, 185, 129, 0.9)';
 
-                // If not using custom height, update the overlay height immediately
-                if (!pos.customHeight) {
-                  overlay.style.height = `${actualHeight}px`;
-                  height = actualHeight;
-                }
+                // Update the overlay height immediately (world units)
+                overlay.style.height = `${worldHeight}px`;
+                height = worldHeight;
 
                 onItemDrag?.(itemData);
               }
@@ -605,9 +704,12 @@ export default class LayoutCanvasModifier extends Modifier<{
                 `[data-item-id="${itemId}"]`,
               );
               if (itemByDataId && itemByDataId !== overlay) {
-                const innerContent = itemByDataId.firstElementChild;
-                if (innerContent) {
-                  const htmlElement = innerContent as HTMLElement;
+                const measuredNode =
+                  (itemByDataId.querySelector(
+                    '.postit-note, .countdown-timer, .external-card-wrapper, .image-node, .unsupported-item',
+                  ) as HTMLElement | null) || itemByDataId.firstElementChild;
+                if (measuredNode) {
+                  const htmlElement = measuredNode as HTMLElement;
                   const actualHeight = Math.max(
                     htmlElement.scrollHeight || 0,
                     htmlElement.offsetHeight || 0,
@@ -619,14 +721,14 @@ export default class LayoutCanvasModifier extends Modifier<{
                     actualHeight > 20 &&
                     Math.abs(actualHeight - (pos.autoHeight || 80)) > 2
                   ) {
+                    const scale = this.currentTransform.k || 1;
+                    const worldHeight = Math.max(actualHeight / scale, 20);
                     // Defer to avoid circular dependency
                     setTimeout(() => {
-                      itemData.position.autoHeight = Math.round(actualHeight);
+                      itemData.position.autoHeight = Math.round(worldHeight);
                     }, 0);
 
-                    if (!pos.customHeight) {
-                      overlay.style.height = `${actualHeight}px`;
-                    }
+                    overlay.style.height = `${worldHeight}px`;
 
                     onItemDrag?.(itemData);
                   }
@@ -638,7 +740,7 @@ export default class LayoutCanvasModifier extends Modifier<{
       }
     };
 
-    // Schedule measurement after content renders for both embedded and isolated
+    // Schedule measurement after content renders for embedded/isolated
     if (pos.format === 'embedded' || pos.format === 'isolated') {
       // Initial measurement immediately after creation
       setTimeout(measureContentHeight, 100);
@@ -665,10 +767,10 @@ export default class LayoutCanvasModifier extends Modifier<{
         // Do NOT raise whole overlay; only header/handles remain clickable
         overlay.style.zIndex = (pos.layer || 1).toString();
 
-        // Show auto button if embedded or isolated with custom height
+        // Show auto button if embedded or isolated with a positive custom height
         if (
           (pos.format === 'embedded' || pos.format === 'isolated') &&
-          pos.customHeight != null
+          (pos.customHeight ?? 0) > 0
         ) {
           autoButton.style.display = 'block';
           autoButton.style.opacity = '1';
@@ -679,15 +781,14 @@ export default class LayoutCanvasModifier extends Modifier<{
           heightIndicator.style.display = 'block';
           // Re-measure on hover to ensure we have latest height
           measureContentHeight();
-
           if (pos.customHeight) {
             heightIndicator.textContent = `H: ${pos.customHeight}px (auto: ${
               pos.autoHeight || 80
             }px)`;
-            heightIndicator.style.background = 'rgba(239, 68, 68, 0.9)'; // Red for custom
+            heightIndicator.style.background = 'rgba(239, 68, 68, 0.9)';
           } else {
             heightIndicator.textContent = `H: ${pos.autoHeight || 80}px (auto)`;
-            heightIndicator.style.background = 'rgba(16, 185, 129, 0.9)'; // Green for auto
+            heightIndicator.style.background = 'rgba(16, 185, 129, 0.9)';
           }
         }
       }
@@ -700,8 +801,8 @@ export default class LayoutCanvasModifier extends Modifier<{
       ) {
         overlay.classList.remove('hovered');
 
-        // ¹⁵⁹ Don't hide controls if this item is selected
-        const isSelected = selectedItemId === itemData.id;
+        // Don't hide controls if this item is selected
+        const isSelected = overlay.classList.contains('selected');
         if (!isSelected) {
           frame.style.opacity = '0';
           header.style.opacity = '0';
@@ -730,6 +831,7 @@ export default class LayoutCanvasModifier extends Modifier<{
       event.preventDefault();
 
       isDraggingItem = true;
+      this.overlayInteractionActive = true;
       dragStart = { x: event.clientX, y: event.clientY };
       initialPos = { x: pos.x || 0, y: pos.y || 0 };
 
@@ -771,6 +873,7 @@ export default class LayoutCanvasModifier extends Modifier<{
       if (!isDraggingItem) return;
 
       isDraggingItem = false;
+      this.overlayInteractionActive = false;
 
       // Reset pointer pass-through now that drag has ended
       overlay.style.pointerEvents = 'none';
@@ -783,21 +886,21 @@ export default class LayoutCanvasModifier extends Modifier<{
       frame.style.boxShadow = 'none';
       header.style.background = '#3b82f6';
 
-      // Update card data with final position - this will trigger save
+      // Update card data with final position if moved
       const finalPosition = (overlay as any)._dragPosition;
       if (finalPosition) {
         itemData.position.x = finalPosition.x;
         itemData.position.y = finalPosition.y;
         // Clear the temporary position
         delete (overlay as any)._dragPosition;
+        // Persist position only when there was movement
+        onItemDrag?.(itemData, true);
       }
-
-      // Persist position
-      onItemDrag?.(itemData, true);
     };
 
     // Setup resize behavior
     let isResizing = false;
+    let didResize = false;
     let resizeType = '';
     let resizeStart = { x: 0, y: 0, width: 0, height: 0 };
 
@@ -806,6 +909,8 @@ export default class LayoutCanvasModifier extends Modifier<{
       event.preventDefault();
 
       isResizing = true;
+      this.overlayInteractionActive = true;
+      didResize = false;
       resizeType = type;
 
       // While resizing, the overlay must capture events reliably
@@ -849,27 +954,34 @@ export default class LayoutCanvasModifier extends Modifier<{
         newHeight = Math.max(80, resizeStart.height + deltaY / scale);
       }
 
-      // Update visual size
-      overlay.style.width = `${newWidth}px`;
-      overlay.style.height = `${newHeight}px`;
+      // Apply only if changed beyond a tiny threshold
+      const changedWidth = Math.abs(newWidth - (resizeStart.width || 0)) > 0.5;
+      const changedHeight = Math.abs(newHeight - (resizeStart.height || 0)) > 0.5;
+      if (changedWidth || changedHeight) {
+        didResize = true;
+        // Update visual size
+        overlay.style.width = `${newWidth}px`;
+        overlay.style.height = `${newHeight}px`;
 
-      // Update itemData - defer to avoid circular dependency
-      setTimeout(() => {
-        itemData.position.width = newWidth;
-        if (pos.format === 'embedded' || pos.format === 'isolated') {
-          itemData.position.customHeight = newHeight;
-        } else {
-          itemData.position.autoHeight = newHeight;
-        }
-      }, 0);
+        // Update itemData - defer to avoid circular dependency
+        setTimeout(() => {
+          itemData.position.width = newWidth;
+          if (pos.format === 'embedded' || pos.format === 'isolated') {
+            itemData.position.customHeight = newHeight;
+          } else {
+            itemData.position.autoHeight = newHeight;
+          }
+        }, 0);
 
-      onItemDrag?.(itemData);
+        onItemDrag?.(itemData);
+      }
     };
 
     const handleResizeUp = () => {
       if (!isResizing) return;
 
       isResizing = false;
+      this.overlayInteractionActive = false;
       resizeType = '';
 
       // Restore pass-through after resize
@@ -879,8 +991,10 @@ export default class LayoutCanvasModifier extends Modifier<{
       overlay.style.zIndex = (pos.layer || 1).toString();
       frame.style.borderColor = '#3b82f6';
 
-      // Persist size
-      onItemDrag?.(itemData, true);
+      // Persist size only if there was an actual change
+      if (didResize) {
+        onItemDrag?.(itemData, true);
+      }
     };
 
     // Auto button click handler
@@ -893,9 +1007,24 @@ export default class LayoutCanvasModifier extends Modifier<{
         itemData.position.customHeight = 0;
       }, 0);
 
-      // Update visual height based on autoHeight
+      // Re-measure immediately to refresh autoHeight and update height visually
+      // First, optimistically set to current known autoHeight
       const autoHeight = itemData.position.autoHeight || 80;
       overlay.style.height = `${autoHeight}px`;
+      heightIndicator.textContent = `H: ${autoHeight}px (auto)`;
+      heightIndicator.style.background = 'rgba(16, 185, 129, 0.9)';
+      // Also trigger a measurement cycle to catch any late-rendered content changes
+      try {
+        measureContentHeight();
+        setTimeout(() => {
+          const measured = itemData.position.autoHeight || autoHeight || 80;
+          overlay.style.height = `${measured}px`;
+          heightIndicator.textContent = `H: ${measured}px (auto)`;
+          heightIndicator.style.background = 'rgba(16, 185, 129, 0.9)';
+        }, 150);
+      } catch (_) {
+        // no-op: measurement is best-effort only
+      }
 
       // Hide the button
       autoButton.style.opacity = '0';
@@ -949,6 +1078,9 @@ export default class LayoutCanvasModifier extends Modifier<{
 
       // Persist change
       onItemDrag?.(itemData, true);
+
+      // Re-measure shortly after toggling to refresh autoHeight for the new format
+      setTimeout(measureContentHeight, 120);
     });
 
     // Format toggle hover effects
@@ -976,17 +1108,37 @@ export default class LayoutCanvasModifier extends Modifier<{
       event.preventDefault();
 
       if (onItemSelect) {
-        // ¹⁵⁵ Toggle selection instead of always selecting
-        const isCurrentlySelected = selectedItemId === itemData.id;
-        if (isCurrentlySelected) {
-          onItemSelect(null); // Deselect
-        } else {
-          onItemSelect(itemData.id); // Select this item
-
-          // ¹⁶³ Immediately show controls for newly selected item to prevent flicker
+        onItemSelect(itemData.id);
+        const isSelectedNow = overlay.classList.toggle('selected');
+        if (isSelectedNow) {
+          // Immediately show controls for newly selected item to prevent flicker
           frame.style.opacity = '1';
           header.style.opacity = '1';
-          overlay.classList.add('selected');
+          // Update button label to SELECTED
+          selectButton.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 3px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <polyline points="20,6 9,17 4,12"></polyline>
+              </svg>
+              <span>SELECTED</span>
+            </div>
+          `;
+          selectButton.title = 'Click to deselect this item';
+          selectButton.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+          selectButton.style.borderColor = '#f59e0b';
+          selectButton.style.color = 'white';
+          selectButton.style.boxShadow = '0 0 12px rgba(245, 158, 11, 0.6), 0 2px 8px rgba(0, 0, 0, 0.2)';
+          selectButton.style.transform = 'scale(1.05)';
+        } else {
+          // Update button label back to SELECT
+          selectButton.innerHTML = `
+            <div style=\"display: flex; align-items: center; gap: 3px;\">\n              <svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n                <circle cx=\"12\" cy=\"12\" r=\"8\"/>\n              </svg>\n              <span>SELECT</span>\n            </div>`;
+          selectButton.title = 'Click to select this item for actions';
+          selectButton.style.background = 'rgba(255, 255, 255, 0.95)';
+          selectButton.style.borderColor = '#3b82f6';
+          selectButton.style.color = '#3b82f6';
+          selectButton.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+          selectButton.style.transform = 'scale(1)';
         }
       }
     });
@@ -1077,9 +1229,9 @@ export default class LayoutCanvasModifier extends Modifier<{
       openButton.style.boxShadow = 'none';
     });
 
-    // ¹⁶¹ Enhanced hover effects with clear state transitions
+    // Hover effects reflect selection state
     selectButton.addEventListener('mouseenter', () => {
-      if (selectedItemId === itemData.id) {
+      if (overlay.classList.contains('selected')) {
         // Selected state hover
         selectButton.style.background =
           'linear-gradient(135deg, #d97706, #b45309)';
@@ -1099,7 +1251,7 @@ export default class LayoutCanvasModifier extends Modifier<{
     });
 
     selectButton.addEventListener('mouseleave', () => {
-      if (selectedItemId === itemData.id) {
+      if (overlay.classList.contains('selected')) {
         // Return to selected state
         selectButton.style.background =
           'linear-gradient(135deg, #f59e0b, #d97706)';
@@ -1121,13 +1273,37 @@ export default class LayoutCanvasModifier extends Modifier<{
     document.addEventListener('mousemove', handleResizeMove);
     document.addEventListener('mouseup', handleResizeUp);
 
+    this.overlayDocListeners.set(overlay, [
+      { type: 'mousemove', handler: handleItemMouseMove },
+      { type: 'mouseup', handler: handleItemMouseUp },
+      { type: 'mousemove', handler: handleResizeMove },
+      { type: 'mouseup', handler: handleResizeUp },
+    ]);
+
     return overlay;
   }
 
   modify(element: HTMLElement, positional: [], named: LayoutCanvasNamedArgs) {
     this.element = element;
     this.args = { positional, named };
-    this.setupCanvas(element);
+    if (!this.initialized) {
+      this.setupCanvas(element);
+      this.initialized = true;
+    }
+    // Rebuild overlays only if item set changed
+    try {
+      const ids = (named.itemData || []).map((d: any) => d?.id).filter(Boolean);
+      const fingerprint = Array.isArray(ids) ? ids.join('|') : '';
+      if (fingerprint !== this.lastItemIdsFingerprint) {
+        this.setupNodes();
+        this.lastItemIdsFingerprint = fingerprint;
+      }
+    } catch (_) {
+      // Fallback: if anything goes wrong, rebuild
+      this.setupNodes();
+    }
+    // Keep selection visuals in sync with args
+    this.updateSelectionVisuals(named.selectedItemIds);
   }
 
   willDestroy() {
@@ -1135,6 +1311,7 @@ export default class LayoutCanvasModifier extends Modifier<{
     if (this.element) {
       this.element.removeEventListener('wheel', this.handleWheel);
       this.element.removeEventListener('mousedown', this.handleMouseDown);
+      this.element.removeEventListener('keydown', this.handleKeyDown);
     }
     document.removeEventListener('mousemove', this.handleMouseMove);
     document.removeEventListener('mouseup', this.handleMouseUp);

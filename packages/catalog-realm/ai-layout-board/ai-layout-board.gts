@@ -47,12 +47,19 @@ class Isolated extends Component<typeof AILayoutBoard> {
     k: this.args.model.transformK ?? 1,
   };
   @tracked viewMode: 'canvas' | 'list' = 'canvas'; // ¹⁶ Toggle between canvas and list views
-  @tracked showToolPalette = false; // ⁸⁸ Track tool palette visibility
-  @tracked selectedItemId: string | null = null; // ¹⁴⁴ Track selected item for deletion
+  @tracked showToolPalette = false; // ⁸⁸ Tool palette opens by default
+  @tracked selectedItemIds: string[] = []; // Track multiple selected items
 
   // ¹⁸⁹ Cache for itemData to prevent unnecessary re-creation
   private _cachedItemData: any[] | null = null;
   private _lastAllItemsHash: string | null = null;
+  // Remember last placed rect so new items appear to the right of it
+  private _lastPlacement: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null = null;
 
   get itemData() {
     // ¹⁸ Convert allItems to data format for canvas interactions with caching
@@ -80,8 +87,9 @@ class Isolated extends Component<typeof AILayoutBoard> {
       const pos = item.position;
       const itemType = item.constructor.name;
 
+      // Use the same casing/id format as the canvas DOM (`data-item-id='ConstructorName-index'`)
       items.push({
-        id: `${itemType.toLowerCase()}-${index}`,
+        id: `${itemType}-${index}`,
         type: itemType,
         position: pos,
         item: item,
@@ -106,6 +114,115 @@ class Isolated extends Component<typeof AILayoutBoard> {
   toggleViewMode() {
     // ¹⁹ Toggle between canvas and list views
     this.viewMode = this.viewMode === 'canvas' ? 'list' : 'canvas';
+  }
+
+  // Compute a placement to the right of an anchor rect, avoiding overlaps
+  computeRightOf(
+    anchor: { x: number; y: number; width: number; height: number },
+    width: number,
+    height: number,
+  ) {
+    try {
+      const gap = this.args.model.gridSize || 20;
+      const rects = (this.args.model.allItems || [])
+        .filter((it: any) => it?.position)
+        .map((it: any) => {
+          const pos = it.position;
+          const w = pos?.width || 120;
+          const h = this.calculateItemHeight(it);
+          return {
+            x1: pos?.x || 0,
+            y1: pos?.y || 0,
+            x2: (pos?.x || 0) + w,
+            y2: (pos?.y || 0) + h,
+          };
+        });
+
+      let x = anchor.x + anchor.width + gap;
+      let y = anchor.y;
+
+      let guard = 0;
+      while (guard++ < 100) {
+        const nx1 = x;
+        const nx2 = x + width;
+        const ny1 = y;
+        const ny2 = y + height;
+
+        // Find items that vertically overlap this row
+        const verticalOverlappers = rects.filter(
+          (r) => !(r.y2 <= ny1 || r.y1 >= ny2),
+        );
+        // Among those, find any that also overlap horizontally at our current x
+        const blocking = verticalOverlappers.filter(
+          (r) => !(r.x2 <= nx1 || r.x1 >= nx2),
+        );
+
+        if (blocking.length === 0) break; // free slot to the right
+
+        // Move just to the right of the right-most blocker
+        x = Math.max(...blocking.map((r) => r.x2)) + gap;
+      }
+
+      return { x, y };
+    } catch (_e) {
+      // Fallback: anchor position
+      return { x: anchor.x + anchor.width, y: anchor.y };
+    }
+  }
+
+  // Compute a non-overlapping position near a preferred point
+  computeNonOverlappingPosition(
+    preferredX: number,
+    preferredY: number,
+    width: number,
+    height: number,
+  ) {
+    try {
+      const gap = this.args.model.gridSize || 20;
+      // Build rects for existing items using the same height logic as rendering
+      const rects = (this.args.model.allItems || [])
+        .filter((it: any) => it?.position)
+        .map((it: any) => {
+          const pos = it.position;
+          const w = pos?.width || 120;
+          const h = this.calculateItemHeight(it);
+          return {
+            x1: pos?.x || 0,
+            y1: pos?.y || 0,
+            x2: (pos?.x || 0) + w,
+            y2: (pos?.y || 0) + h,
+          };
+        });
+
+      let x = preferredX;
+      let y = preferredY;
+
+      // Simple iterative resolver: push down until no vertical overlap in the chosen column
+      let guard = 0;
+      while (guard++ < 100) {
+        const nx1 = x;
+        const nx2 = x + width;
+        const ny1 = y;
+        const ny2 = y + height;
+
+        // Find items that horizontally intersect our new rect
+        const overlappers = rects.filter((r) => !(r.x2 <= nx1 || r.x1 >= nx2));
+        // Among those, check which vertically overlap our candidate slot
+        const blocking = overlappers.filter(
+          (r) => !(r.y2 <= ny1 || r.y1 >= ny2),
+        );
+
+        if (blocking.length === 0) break; // free slot
+
+        // Move just below the lowest blocking item
+        y = Math.max(...blocking.map((r) => r.y2)) + gap;
+      }
+
+      return { x, y };
+    } catch (e) {
+      // Fallback: return the preferred location if anything goes wrong
+      return { x: preferredX, y: preferredY };
+    }
   }
 
   // ⁸¹ Zoom control actions
@@ -322,72 +439,60 @@ class Isolated extends Component<typeof AILayoutBoard> {
     this.args.model.transformK = newTransform.k;
   };
 
-  // ¹⁴⁵ Item selection handler
+  // ¹⁴⁵ Item selection handler (toggle multi-select)
   handleItemSelect = (itemId: string | null) => {
     if (itemId === null) {
-      this.selectedItemId = null;
+      this.selectedItemIds = [];
     } else {
-      this.selectedItemId = itemId;
+      const set = new Set(this.selectedItemIds);
+      if (set.has(itemId)) {
+        set.delete(itemId);
+      } else {
+        set.add(itemId);
+      }
+      this.selectedItemIds = Array.from(set);
     }
-
-    // ¹⁵⁷ Update all overlay visual states immediately with forced visibility
-    setTimeout(() => {
-      document.querySelectorAll('.layout-item-wrapper').forEach((el: any) => {
-        const itemIdFromData = el.dataset.itemId;
-        if (itemIdFromData === this.selectedItemId) {
-          el.classList.add('selected');
-          // ¹⁶² Force immediate visibility of controls for selected item
-          const frame = el.querySelector('.window-frame');
-          const header = el.querySelector('.window-header');
-          if (frame && header) {
-            frame.style.opacity = '1';
-            header.style.opacity = '1';
-          }
-        } else {
-          el.classList.remove('selected');
-        }
-      });
-    }, 10);
   };
 
-  // ¹⁴⁶ Delete selected item
+  // Delete selected item(s)
   @action
-  deleteSelectedItem() {
-    if (!this.selectedItemId) return;
+  deleteSelectedItems() {
+    if (!this.selectedItemIds.length) return;
 
-    const itemData = this.itemData.find(
-      (item) => item.id === this.selectedItemId,
-    );
-    if (!itemData) return;
+    const ids = new Set(this.selectedItemIds);
+    const toDelete = this.itemData.filter((d: any) => ids.has(d.id));
+    if (!toDelete.length) return;
 
-    // Remove from appropriate array based on item type
-    switch (itemData.type) {
-      case 'ImageNode':
-        this.args.model.images =
-          this.args.model.images?.filter((item) => item !== itemData.item) ||
-          [];
-        break;
-      case 'PostitNote':
-        this.args.model.notes =
-          this.args.model.notes?.filter((item) => item !== itemData.item) || [];
-        break;
-      case 'CountdownTimer':
-        this.args.model.timers =
-          this.args.model.timers?.filter((item) => item !== itemData.item) ||
-          [];
-        break;
-      case 'ExternalCard':
-        this.args.model.externalCards =
-          this.args.model.externalCards?.filter(
-            (item) => item !== itemData.item,
-          ) || [];
-        break;
+    // Remove from appropriate arrays based on item type
+    for (const d of toDelete) {
+      switch (d.type) {
+        case 'ImageNode':
+          this.args.model.images =
+            this.args.model.images?.filter((item: any) => item !== d.item) ||
+            [];
+          break;
+        case 'PostitNote':
+          this.args.model.notes =
+            this.args.model.notes?.filter((item: any) => item !== d.item) || [];
+          break;
+        case 'CountdownTimer':
+          this.args.model.timers =
+            this.args.model.timers?.filter((item: any) => item !== d.item) ||
+            [];
+          break;
+        case 'ExternalCard':
+          this.args.model.externalCards =
+            this.args.model.externalCards?.filter(
+              (item: any) => item !== d.item,
+            ) || [];
+          break;
+      }
     }
 
     // Clear selection
-    this.selectedItemId = null;
+    this.selectedItemIds = [];
 
-    // ¹⁹⁰ Clear itemData cache since items changed
+    // Clear itemData cache since items changed
     this._cachedItemData = null;
     this._lastAllItemsHash = null;
   }
@@ -395,7 +500,27 @@ class Isolated extends Component<typeof AILayoutBoard> {
   // ¹⁴⁷ Clear selection when clicking canvas background
   @action
   clearSelection() {
-    this.selectedItemId = null;
+    this.selectedItemIds = [];
+  }
+
+  // Handle Delete key for deleting selected items
+  @action
+  handleKeyDown(event: KeyboardEvent) {
+    const target = event.target as HTMLElement | null;
+    const isEditable =
+      target &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        (target as any).isContentEditable);
+
+    if (isEditable) return;
+
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (this.selectedItemIds.length > 0) {
+        event.preventDefault();
+        this.deleteSelectedItems();
+      }
+    }
   }
 
   // ¹⁷² Open external card in stack action
@@ -447,11 +572,38 @@ class Isolated extends Component<typeof AILayoutBoard> {
     const canvasY =
       (viewportRect.height / 2 - this.transform.y) / this.transform.k;
 
+    // Compute a placement to the right of the last placed (or selected) item
+    const width = 400;
+    const gap = this.args.model.gridSize || 20;
+    let anchor = this._lastPlacement;
+    if (!anchor && this.selectedItemIds?.length) {
+      const lastSel = this.selectedItemIds[this.selectedItemIds.length - 1];
+      const data = (this.itemData || []).find((d: any) => d.id === lastSel);
+      if (data?.position) {
+        const h = this.calculateItemHeight(data.item ?? data);
+        anchor = {
+          x: data.position.x || 0,
+          y: data.position.y || 0,
+          width: data.position.width || 120,
+          height: h || 80,
+        };
+      }
+    }
+    if (!anchor) {
+      anchor = {
+        x: canvasX - width - gap,
+        y: canvasY - 60,
+        width: 0,
+        height: 0,
+      };
+    }
+    const placed = this.computeRightOf(anchor, width, 120);
+
     // Create position object without null values
     const defaultPosition = new BoardPosition({
-      x: canvasX - 200, // Center the item (adjusted for wider width)
-      y: canvasY - 60,
-      width: 400, // ¹³¹ Default width set to 400px
+      x: placed.x,
+      y: placed.y,
+      width,
       autoHeight: 120,
       customHeight: 0, // Use 0 instead of null
       layer: 1,
@@ -496,12 +648,13 @@ class Isolated extends Component<typeof AILayoutBoard> {
         return; // Don't hide palette yet, wait for selection
     }
 
+    // Remember last placement and clear caches
+    this._lastPlacement = { x: placed.x, y: placed.y, width, height: 120 };
     // ¹⁹¹ Clear itemData cache since items changed
     this._cachedItemData = null;
     this._lastAllItemsHash = null;
 
-    // Hide palette after creation
-    this.showToolPalette = false;
+    // Keep palette visible after creation
   }
 
   // ¹²⁴ Card chooser task for external cards
@@ -526,15 +679,24 @@ class Isolated extends Component<typeof AILayoutBoard> {
         );
 
         if (cardId) {
-          // ¹²⁸ Create external card with selected card from chooser
-          const defaultPosition = new BoardPosition({
-            x: canvasX - 200, // ¹³³ Adjusted centering for 400px width
+          // ¹²⁸ Create external card with selected card from chooser, right of anchor
+          const width = 400;
+          const gap = this.args.model.gridSize || 20;
+          let anchor = this._lastPlacement || {
+            x: canvasX - width - gap,
             y: canvasY - 60,
-            width: 400, // ¹³⁴ Set default width to 400px
+            width: 0,
+            height: 0,
+          };
+          const placed = this.computeRightOf(anchor, width, 120);
+          const defaultPosition = new BoardPosition({
+            x: placed.x,
+            y: placed.y,
+            width,
             autoHeight: 120,
-            customHeight: 0, // ¹³⁵ No custom height - uses auto height
+            customHeight: 0,
             layer: 1,
-            format: 'embedded', // ¹³⁶ Default to embedded format
+            format: 'embedded',
           });
 
           // Use the selected card ID to create a new ExternalCard with proper linking
@@ -571,6 +733,13 @@ class Isolated extends Component<typeof AILayoutBoard> {
             newItem,
           ];
 
+          // Remember last placement and clear caches
+          this._lastPlacement = {
+            x: placed.x,
+            y: placed.y,
+            width,
+            height: 120,
+          };
           // ¹⁹² Clear itemData cache since items changed
           this._cachedItemData = null;
           this._lastAllItemsHash = null;
@@ -578,14 +747,23 @@ class Isolated extends Component<typeof AILayoutBoard> {
       } catch (error) {
         console.error('Error selecting card:', error);
         // ¹²⁹ Fallback: create empty external card if chooser fails
-        const defaultPosition = new BoardPosition({
-          x: canvasX - 200, // ¹³⁷ Adjusted centering for 400px width
+        const width = 400;
+        const gap = this.args.model.gridSize || 20;
+        let anchor = this._lastPlacement || {
+          x: canvasX - width - gap,
           y: canvasY - 60,
-          width: 400, // ¹³⁸ Set default width to 400px
+          width: 0,
+          height: 0,
+        };
+        const placed = this.computeRightOf(anchor, width, 120);
+        const defaultPosition = new BoardPosition({
+          x: placed.x,
+          y: placed.y,
+          width,
           autoHeight: 120,
-          customHeight: 0, // ¹³⁹ No custom height - uses auto height
+          customHeight: 0,
           layer: 1,
-          format: 'embedded', // ¹⁴⁰ Default to embedded format
+          format: 'embedded',
         });
 
         const newItem = new ExternalCard({
@@ -599,12 +777,13 @@ class Isolated extends Component<typeof AILayoutBoard> {
           newItem,
         ];
 
+        // Remember last placement and clear caches
+        this._lastPlacement = { x: placed.x, y: placed.y, width, height: 120 };
         // ¹⁹³ Clear itemData cache since items changed
         this._cachedItemData = null;
         this._lastAllItemsHash = null;
       } finally {
-        // ¹³⁰ Hide palette after selection (success or failure)
-        this.showToolPalette = false;
+        // Keep palette visible after selection (success or failure)
       }
     },
   );
@@ -660,6 +839,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
           {{! template-lint-disable no-invalid-interactive }}
           <div
             class='layout-viewport'
+            tabindex='0'
             style={{htmlSafe
               (concat
                 'height: '
@@ -667,35 +847,46 @@ class Isolated extends Component<typeof AILayoutBoard> {
                 'px;'
               )
             }}
-            {{on 'click' this.clearSelection}}
+            {{on 'keydown' this.handleKeyDown}}
             {{LayoutCanvasModifier
               onTransform=this.handleTransform
               onItemSelect=this.handleItemSelect
-              selectedItemId=this.selectedItemId
+              selectedItemIds=this.selectedItemIds
               itemData=this.itemData
               onOpenCard=this.openCardInStack
+              onDeleteSelected=this.deleteSelectedItems
             }}
           >
+            {{! Grid background anchored to viewport (not scaled by transform) }}
+            <div
+              class='grid-background'
+              style={{htmlSafe
+                (concat
+                  'background-size: '
+                  (multiply
+                    (if @model.gridSize @model.gridSize 20) this.transform.k
+                  )
+                  'px '
+                  (multiply
+                    (if @model.gridSize @model.gridSize 20) this.transform.k
+                  )
+                  'px; '
+                  'background-position: '
+                  this.transform.x
+                  'px '
+                  this.transform.y
+                  'px; '
+                  'opacity: '
+                  (if (lt this.transform.k 0.5) '0' '1')
+                  ';'
+                )
+              }}
+            ></div>
             <div
               class='pan-zoom-pane'
               style={{htmlSafe (concat 'transform: ' this.transformStyle)}}
             >
-              {{! Grid background with conditional visibility }}
-              <div
-                class='grid-background'
-                style={{htmlSafe
-                  (concat
-                    'background-size: '
-                    (if @model.gridSize @model.gridSize 20)
-                    'px '
-                    (if @model.gridSize @model.gridSize 20)
-                    'px; '
-                    'opacity: '
-                    (if (lt this.transform.k 0.5) '0' '1')
-                    ';'
-                  )
-                }}
-              ></div>
+              {{! Grid now rendered above, outside transform }}
 
               {{! ²³ Render items using allItems-@model-loop-delegateToEmbedded pattern }}
               {{#each @model.allItems as |item index|}}
@@ -898,13 +1089,13 @@ class Isolated extends Component<typeof AILayoutBoard> {
               </div>
             </div>
 
-            {{! ¹⁴⁸ Delete button - show when item is selected }}
-            {{#if this.selectedItemId}}
+            {{! Delete button - show when there are selected items }}
+            {{#if (gt (get this 'selectedItemIds.length') 0)}}
               <div class='delete-button-container'>
                 <button
                   class='delete-button'
-                  {{on 'click' this.deleteSelectedItem}}
-                  title='Delete selected item'
+                  {{on 'click' this.deleteSelectedItems}}
+                  title='Delete selected items'
                 >
                   <svg
                     viewBox='0 0 24 24'
@@ -919,39 +1110,16 @@ class Isolated extends Component<typeof AILayoutBoard> {
                     <line x1='10' y1='11' x2='10' y2='17'></line>
                     <line x1='14' y1='11' x2='14' y2='17'></line>
                   </svg>
+                  <span class='delete-label'>Delete</span>
+                  <span
+                    class='delete-count'
+                  >({{this.selectedItemIds.length}})</span>
                 </button>
               </div>
             {{/if}}
 
             {{! ⁹¹ Floating Tool Palette }}
             <div class='tool-palette-container'>
-              <button
-                class='tool-palette-trigger'
-                {{on 'click' this.toggleToolPalette}}
-                title='Toggle tool palette'
-              >
-                {{#if this.showToolPalette}}
-                  <svg
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <line x1='18' y1='6' x2='6' y2='18'></line>
-                    <line x1='6' y1='6' x2='18' y2='18'></line>
-                  </svg>
-                {{else}}
-                  <svg
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <line x1='12' y1='5' x2='12' y2='19'></line>
-                    <line x1='5' y1='12' x2='19' y2='12'></line>
-                  </svg>
-                {{/if}}
-              </button>
 
               {{#if this.showToolPalette}}
                 <div class='tool-palette'>
@@ -1010,6 +1178,34 @@ class Isolated extends Component<typeof AILayoutBoard> {
                   </div>
                 </div>
               {{/if}}
+
+              <button
+                class='tool-palette-trigger'
+                {{on 'click' this.toggleToolPalette}}
+                title='Toggle tool palette'
+              >
+                {{#if this.showToolPalette}}
+                  <svg
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    stroke-width='2'
+                  >
+                    <line x1='18' y1='6' x2='6' y2='18'></line>
+                    <line x1='6' y1='6' x2='18' y2='18'></line>
+                  </svg>
+                {{else}}
+                  <svg
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    stroke-width='2'
+                  >
+                    <line x1='12' y1='5' x2='12' y2='19'></line>
+                    <line x1='5' y1='12' x2='19' y2='12'></line>
+                  </svg>
+                {{/if}}
+              </button>
             </div>
           </div>
         </div>
@@ -1285,14 +1481,14 @@ class Isolated extends Component<typeof AILayoutBoard> {
 
       .grid-background {
         position: absolute;
-        top: -2000px;
-        left: -2000px;
-        width: 4000px;
-        height: 4000px;
+        inset: 0; /* fill full width and height of the canvas pane */
+        width: 100%;
+        height: 100%;
         background-image:
           linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
           linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
-        background-size: 20px 20px;
+        background-repeat: repeat;
+        background-size: 20px 20px; /* overridden by inline style based on grid size */
         pointer-events: none;
       }
 
@@ -1366,25 +1562,26 @@ class Isolated extends Component<typeof AILayoutBoard> {
       /* ¹⁵³ Delete button styling */
       .delete-button-container {
         position: absolute;
-        bottom: 24px;
+        top: 24px;
         right: 24px;
         z-index: 100;
         pointer-events: auto;
       }
 
       .delete-button {
-        width: 48px;
-        height: 48px;
         background: linear-gradient(135deg, #ef4444, #dc2626);
         border: none;
-        border-radius: 50%;
+        border-radius: 9999px;
         color: white;
         cursor: pointer;
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        justify-content: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 14px;
         box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
         transition: all 0.2s ease;
+        font-weight: 600;
       }
 
       .delete-button:hover {
@@ -1394,9 +1591,19 @@ class Isolated extends Component<typeof AILayoutBoard> {
       }
 
       .delete-button svg {
-        width: 24px;
-        height: 24px;
+        width: 20px;
+        height: 20px;
         stroke-width: 2;
+      }
+
+      .delete-button .delete-label {
+        font-size: 0.875rem;
+        line-height: 1;
+      }
+
+      .delete-button .delete-count {
+        font-size: 0.875rem;
+        opacity: 0.9;
       }
 
       /* ⁶⁶ External card wrapper styling */
