@@ -224,11 +224,16 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
           >
             <div class='thumbnail-input-container'>
               {{#if this.showThumbnailPlaceholder}}
-                <span class='thumbnail-placeholder'>
+                <span
+                  class='thumbnail-placeholder'
+                  data-test-thumbnail-placeholder
+                >
                   <@fields.thumbnailURL />
                 </span>
               {{/if}}
-              <@fields.cardInfo.thumbnailURL />
+              <span class='boxel-contents-only' data-test-thumbnail-input>
+                <@fields.cardInfo.thumbnailURL />
+              </span>
             </div>
           </FieldContainer>
           {{#unless @hideThemeChooser}}
