@@ -674,75 +674,88 @@ module('Integration | computeds', function (hooks) {
       .exists({ count: 3 });
   });
 
-  test('render-service resolves computed dependency on lazily loaded link', async function (assert) {
-    class Team extends CardDef {
-      @field name = contains(StringField);
-      @field shortName = contains(StringField, {
-        computeVia: function (this: Team) {
-          return this.name ? this.name.slice(0, 2).toUpperCase() : undefined;
-        },
-      });
-    }
+  module('lazy link loading', function (hooks) {
+    // Ensure the lazy link loader path is exercised while keeping global state isolated
+    let originalLazilyLoadLinks: unknown;
 
-    class SprintTask extends CardDef {
-      @field name = contains(StringField);
-      @field team = linksTo(() => Team);
-      @field shortId = contains(StringField, {
-        computeVia: function (this: SprintTask) {
-          if (!this.id) {
-            return;
-          }
-          let idPart = this.id.split('/').pop();
-          if (!idPart) {
-            return;
-          }
-          let team = this.team;
-          if (!team) {
-            return;
-          }
-          if (!team.shortName) {
-            return;
-          }
-          return `${team.shortName}-${idPart.slice(0, 4).toUpperCase()}`;
-        },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <span data-test-short-id>{{@model.shortId}}</span>
-        </template>
-      };
-    }
+    hooks.beforeEach(function () {
+      originalLazilyLoadLinks = (globalThis as any).__lazilyLoadLinks;
+      (globalThis as any).__lazilyLoadLinks = true;
+    });
 
-    let restoreLazilyLoadLinks = (globalThis as any).__lazilyLoadLinks;
-    (globalThis as any).__lazilyLoadLinks = true;
+    hooks.afterEach(function () {
+      if (originalLazilyLoadLinks === undefined) {
+        delete (globalThis as any).__lazilyLoadLinks;
+      } else {
+        (globalThis as any).__lazilyLoadLinks = originalLazilyLoadLinks;
+      }
+    });
 
-    let moduleURL = '../task-cards';
-    let remoteRealmURL = 'https://remote.example/';
-    let teamId = `${remoteRealmURL}Team/alpha`;
-    let taskId = `${testRealmURL}SprintTask/task-1`;
+    test('render-service resolves computed dependency on lazily loaded link', async function (assert) {
+      class Team extends CardDef {
+        @field name = contains(StringField);
+        @field shortName = contains(StringField, {
+          computeVia: function (this: Team) {
+            return this.name ? this.name.slice(0, 2).toUpperCase() : undefined;
+          },
+        });
+      }
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: remoteRealmURL,
-      contents: {
-        'task-cards.gts': { Team, SprintTask },
-        'Team/alpha.json': {
-          data: {
-            type: 'card',
-            id: teamId,
-            attributes: { name: 'Alpha Team' },
-            meta: {
-              adoptsFrom: {
-                module: '../task-cards',
-                name: 'Team',
+      class SprintTask extends CardDef {
+        @field name = contains(StringField);
+        @field team = linksTo(() => Team);
+        @field shortId = contains(StringField, {
+          computeVia: function (this: SprintTask) {
+            if (!this.id) {
+              return;
+            }
+            let idPart = this.id.split('/').pop();
+            if (!idPart) {
+              return;
+            }
+            let team = this.team;
+            if (!team) {
+              return;
+            }
+            if (!team.shortName) {
+              return;
+            }
+            return `${team.shortName}-${idPart.slice(0, 4).toUpperCase()}`;
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <span data-test-short-id>{{@model.shortId}}</span>
+          </template>
+        };
+      }
+
+      let moduleURL = '../task-cards';
+      let remoteRealmURL = 'https://remote.example/';
+      let teamId = `${remoteRealmURL}Team/alpha`;
+      let taskId = `${testRealmURL}SprintTask/task-1`;
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: remoteRealmURL,
+        contents: {
+          'task-cards.gts': { Team, SprintTask },
+          'Team/alpha.json': {
+            data: {
+              type: 'card',
+              id: teamId,
+              attributes: { name: 'Alpha Team' },
+              meta: {
+                adoptsFrom: {
+                  module: '../task-cards',
+                  name: 'Team',
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    try {
       let { realm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
@@ -802,12 +815,6 @@ module('Integration | computeds', function (hooks) {
       } else {
         assert.ok(false, 'expected card document to be available');
       }
-    } finally {
-      if (restoreLazilyLoadLinks === undefined) {
-        delete (globalThis as any).__lazilyLoadLinks;
-      } else {
-        (globalThis as any).__lazilyLoadLinks = restoreLazilyLoadLinks;
-      }
-    }
+    });
   });
 });
