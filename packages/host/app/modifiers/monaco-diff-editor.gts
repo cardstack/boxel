@@ -5,7 +5,7 @@ import Modifier from 'ember-modifier';
 import { makeCodeDiffStats } from '@cardstack/host/lib/formatted-message/utils';
 
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-import { createMonacoWaiterManager } from '@cardstack/host/utils/monaco-test-waiter';
+import { createMonacoWaiterManager } from '@cardstack/host/utils/editor/monaco-test-waiter';
 
 import { MonacoEditorOptions } from './monaco';
 

@@ -9,7 +9,7 @@ import * as MonacoSDK from 'monaco-editor';
 
 import config from '@cardstack/host/config/environment';
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import { createMonacoWaiterManager } from '@cardstack/host/utils/monaco-test-waiter';
+import { createMonacoWaiterManager } from '@cardstack/host/utils/editor/monaco-test-waiter';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 
 interface Signature {
