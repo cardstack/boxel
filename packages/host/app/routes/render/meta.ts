@@ -36,7 +36,8 @@ export default class RenderMetaRoute extends Route<Model> {
 
   async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
-    let parentModel = this.modelFor('render') as ParentModel;
+    let parentModel = this.modelFor('render') as ParentModel | undefined;
+    await parentModel?.readyPromise;
     let instance: CardDef;
     if (!parentModel) {
       // this is to support in-browser rendering, where we actually don't have the
@@ -78,7 +79,7 @@ export default class RenderMetaRoute extends Route<Model> {
 
     let types = getTypes(Klass);
     let displayNames = getDisplayNames(Klass);
-    let searchDoc = await api.searchDoc(instance);
+    let searchDoc = api.searchDoc(instance);
     // Add a "pseudo field" to the search doc for the card type. We use the
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards

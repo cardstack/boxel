@@ -280,6 +280,9 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
 class Logger {
   private promises: Promise<any>[] = [];
 
+  // TODO this doesn't look like it's used anymore. in the past this was used to
+  // keep track of async when eagerly running computes after a property had been set.
+  // consider removing this.
   log(promise: Promise<any>) {
     this.promises.push(promise);
     // make an effort to resolve the promise at the time it is logged
@@ -3047,9 +3050,9 @@ export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
   instance[isSavedInstance] = true;
 }
 
-export async function searchDoc<CardT extends BaseDefConstructor>(
+export function searchDoc<CardT extends BaseDefConstructor>(
   instance: InstanceType<CardT>,
-): Promise<Record<string, any>> {
+): Record<string, any> {
   return getQueryableValue(instance.constructor, instance) as Record<
     string,
     any

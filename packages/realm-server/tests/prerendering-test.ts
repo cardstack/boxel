@@ -259,6 +259,44 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'missing-link.json': {
+              data: {
+                attributes: {
+                  name: 'Missing Owner',
+                },
+                relationships: {
+                  owner: {
+                    links: { self: `${realmURL1}missing-owner` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './cat',
+                    name: 'Cat',
+                  },
+                },
+              },
+            },
+            'fetch-failed.json': {
+              data: {
+                attributes: {
+                  name: 'Missing Owner',
+                },
+                relationships: {
+                  owner: {
+                    links: {
+                      self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './cat',
+                    name: 'Cat',
+                  },
+                },
+              },
+            },
             'intentional-error.gts': `
               import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
@@ -492,11 +530,7 @@ module(basename(__filename), function () {
       test('searchDoc', function (assert) {
         assert.strictEqual(result.searchDoc?.name, 'Maple');
         assert.strictEqual(result.searchDoc?._cardType, 'Cat');
-        // This assertion seems flaky in CI is there some kind of race condition
-        // here?. we do have coverage for this in host tests, but it would be
-        // nice to see this in server tests too...
-
-        // assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
+        assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
       });
     });
 
@@ -535,6 +569,58 @@ module(basename(__filename), function () {
           iconHTML: null,
           isolatedHTML: null,
         });
+      });
+
+      test('missing link surfaces 404 without eviction', async function (assert) {
+        const testCardURL = `${realmURL2}missing-link`;
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        let { response } = result;
+
+        assert.ok(response.error, 'error present for missing link');
+        assert.strictEqual(
+          response.error?.error.message,
+          `missing-owner.json not found`,
+        );
+        assert.strictEqual(response.error?.error.status, 404);
+        assert.false(
+          result.pool.evicted,
+          'missing link does not evict prerender page',
+        );
+        assert.false(
+          result.pool.timedOut,
+          'missing link does not mark prerender timeout',
+        );
+      });
+
+      test('fetch failed surfaces error without eviction', async function (assert) {
+        const testCardURL = `${realmURL2}fetch-failed`;
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        let { response } = result;
+
+        assert.ok(response.error, 'error present for fetch failed');
+        assert.strictEqual(
+          response.error?.error.message,
+          `unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed`,
+        );
+        assert.strictEqual(response.error?.error.status, 500);
+        assert.false(
+          result.pool.evicted,
+          'fetch failed does not evict prerender page',
+        );
+        assert.false(
+          result.pool.timedOut,
+          'fetch failed does not mark prerender timeout',
+        );
       });
 
       test('embedded error markup triggers render error', async function (assert) {

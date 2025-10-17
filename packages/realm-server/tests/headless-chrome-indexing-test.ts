@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
 import {
   type IndexedInstance,
@@ -20,7 +20,6 @@ import {
   runTestRealmServer,
   closeServer,
   setupPermissionedRealms,
-  testRealmServerMatrixUserId,
   cardInfo,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
@@ -444,6 +443,17 @@ module(basename(__filename), function () {
     let realm: Realm;
     let testRealmServer: TestRealmServerResult | undefined;
 
+    async function getInstance(
+      realm: Realm,
+      url: URL,
+    ): Promise<IndexedInstance | undefined> {
+      let maybeInstance = await realm.realmIndexQueryEngine.instance(url);
+      if (maybeInstance?.type === 'error') {
+        return undefined;
+      }
+      return maybeInstance;
+    }
+
     setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
@@ -663,6 +673,176 @@ module(basename(__filename), function () {
       } else {
         assert.ok('false', 'expected search entry to be an error document');
       }
+    });
+
+    // Note this particular test should only be a server test as the nature of
+    // the TestAdapter in the host tests will trigger the linked card to be
+    // already loaded when in fact in the real world it is not.
+    test('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
+      const hassanId = `${testRealm}hassan`;
+      let queryEngine = realm.realmIndexQueryEngine;
+      let hassan = await queryEngine.cardDocument(new URL(hassanId));
+      if (hassan?.type === 'doc') {
+        assert.deepEqual(
+          hassan.doc.data.attributes,
+          {
+            title: 'Untitled Card',
+            nickName: "Ringo's buddy",
+            firstName: 'Hassan',
+            description: null,
+            thumbnailURL: null,
+            cardInfo,
+          },
+          'doc attributes are correct',
+        );
+        assert.deepEqual(
+          hassan.doc.data.relationships,
+          {
+            pet: {
+              links: {
+                self: './ringo',
+              },
+            },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
+          },
+          'doc relationships are correct',
+        );
+      } else {
+        assert.ok(
+          false,
+          `search entry was an error: ${hassan?.error.errorDetail.message}`,
+        );
+      }
+
+      let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
+      if (hassanEntry) {
+        assert.deepEqual(
+          hassanEntry.searchDoc,
+          {
+            id: hassanId,
+            pet: {
+              id: `${testRealm}ringo`,
+              title: 'Untitled Card',
+              firstName: 'Ringo',
+              cardInfo: {
+                theme: null,
+              },
+            },
+            nickName: "Ringo's buddy",
+            _cardType: 'PetPerson',
+            firstName: 'Hassan',
+            title: 'Untitled Card',
+            cardInfo: {
+              theme: null,
+            },
+          },
+          'searchData is correct',
+        );
+      } else {
+        assert.ok(false, `could not find ${hassanId} in the index`);
+      }
+    });
+
+    test('sets resource_created_at for modules and instances', async function (assert) {
+      let entry = (await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}fancy-person.gts`),
+      )) as { resourceCreatedAt: number };
+
+      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+
+      entry = (await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}mango`),
+      )) as { resourceCreatedAt: number };
+
+      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+    });
+
+    test('sets urls containing encoded CSS for deps for a module', async function (assert) {
+      let entry = (await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}fancy-person.gts`),
+      )) as { deps: string[] };
+
+      let assertCssDependency = (
+        deps: string[],
+        pattern: RegExp,
+        fileName: string,
+      ) => {
+        assert.true(
+          !!deps.find((dep) => pattern.test(dep)),
+          `css for ${fileName} is in the deps`,
+        );
+      };
+
+      let dependencies = [
+        {
+          pattern: /fancy-person\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'fancy-person.gts',
+        },
+        {
+          pattern: /\/person\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'person.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/embedded.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/isolated-and-edit.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/missing-template.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/field-edit.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'links-to-many-component.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'links-to-editor.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'contains-many-component.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'field-component.gts',
+        },
+      ];
+
+      dependencies.forEach(({ pattern, fileName }) => {
+        assertCssDependency(entry.deps, pattern, fileName);
+      });
+    });
+
+    test('will not invalidate non-json/non-executable files', async function (assert) {
+      let deletedEntries = (await testDbAdapter.execute(
+        `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
+      )) as { url: string }[];
+
+      let deletedEntryUrls = deletedEntries.map((row) => row.url);
+
+      ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
+        assert.notOk(deletedEntryUrls.includes(file));
+      });
     });
 
     test('can make a definition entry in the index', async function (assert) {
@@ -1292,17 +1472,6 @@ module(basename(__filename), function () {
   });
 
   module('indexing - headless chrome', function (hooks) {
-    async function getInstance(
-      realm: Realm,
-      url: URL,
-    ): Promise<IndexedInstance | undefined> {
-      let maybeInstance = await realm.realmIndexQueryEngine.instance(url);
-      if (maybeInstance?.type === 'error') {
-        return undefined;
-      }
-      return maybeInstance;
-    }
-
     let realm: Realm;
     let adapter: RealmAdapter;
     let testRealmServer: TestRealmServerResult | undefined;
@@ -1464,7 +1633,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('can recover from a module sequence error', async function (assert) {
+    test('can recover from a module sequence error', async function (assert) {
       // introduce errors into 2 gts file with first module has dependency on second module
       await realm.write(
         'pet.gts',
@@ -1476,19 +1645,6 @@ module(basename(__filename), function () {
             @field name = contains(Name);
           }
         `,
-      );
-      assert.deepEqual(
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 2,
-          moduleErrors: 2,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 20,
-        },
-        'indexed correct number of files',
       );
       let petDefinitionEntry =
         await realm.realmIndexQueryEngine.getOwnDefinition({
@@ -1533,20 +1689,6 @@ module(basename(__filename), function () {
       );
 
       // Since the name is ready, the pet should be indexed and not in an error state
-      assert.deepEqual(
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 1,
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 3,
-          definitionErrors: 0,
-          definitionsIndexed: 3,
-          totalIndexEntries: 27,
-        },
-        'indexed correct number of files',
-      );
-
       // Fetch the pet module
       let pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
@@ -1558,7 +1700,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('can successfully create instance after module sequence error is resolved', async function (assert) {
+    test('can successfully create instance after module sequence error is resolved', async function (assert) {
       // First create pet.gts that depends on name.gts which doesn't exist yet
       await realm.write(
         'pet.gts',
@@ -1570,22 +1712,6 @@ module(basename(__filename), function () {
             @field name = contains(Name);
           }
         `,
-      );
-
-      // Verify initial error state
-      assert.deepEqual(
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 2,
-          moduleErrors: 2,
-          modulesIndexed: 0,
-
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 20,
-        },
-        'instance and module are in error state before dependency is available',
       );
 
       // Now create the missing name.gts module
@@ -1669,11 +1795,11 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('can incrementally index instance that depends on updated card source', async function (assert) {
+    test('can incrementally index instance that depends on updated card source', async function (assert) {
       await realm.write(
         'post.gts',
         `
-        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
@@ -1685,6 +1811,12 @@ module(basename(__filename), function () {
               return this.author.firstName + '-poo';
             }
           })
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.message/></h1>
+              <h2><@fields.author/></h2>
+            </template>
+          }
         }
       `,
       );
@@ -1696,23 +1828,9 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(result.length, 1, 'found updated document');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 1,
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 1,
-          definitionErrors: 0,
-          definitionsIndexed: 1,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
-      );
     });
 
-    skip('can incrementally index instance that depends on updated card source consumed by other card sources', async function (assert) {
+    test('can incrementally index instance that depends on updated card source consumed by other card sources', async function (assert) {
       await realm.write(
         'person.gts',
         `
@@ -1729,6 +1847,9 @@ module(basename(__filename), function () {
             static embedded = class Embedded extends Component<typeof this> {
               <template><@fields.firstName/> (<@fields.nickName/>)</template>
             }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template><@fields.firstName/> (<@fields.nickName/>)</template>
+            }
           }
         `,
       );
@@ -1740,23 +1861,9 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(result.length, 1, 'found updated document');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 3,
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 3,
-          definitionErrors: 0,
-          definitionsIndexed: 3,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
-      );
     });
 
-    skip('can incrementally index instance that depends on deleted card source', async function (assert) {
+    test('can incrementally index instance that depends on deleted card source', async function (assert) {
       await realm.delete('post.gts');
       {
         let { data: result } = await realm.realmIndexQueryEngine.search({
@@ -1793,26 +1900,12 @@ module(basename(__filename), function () {
       } else {
         assert.ok(false, 'search index entry is not an error document');
       }
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 2,
-          moduleErrors: 0,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 23,
-        },
-        'indexed correct number of files',
-      );
 
       // when the definitions is created again, the instance should mend its broken link
       await realm.write(
         'post.gts',
         `
-        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
@@ -1821,9 +1914,15 @@ module(basename(__filename), function () {
           @field message = contains(StringField);
           @field nickName = contains(StringField, {
             computeVia: function() {
-              return this.author.firstName + '-poo';
+              return this.author?.firstName + '-poo';
             }
           })
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><@fields.firstName/> (<@fields.nickName/>)</template>
+          }
+          static fitted = class Fitted extends Component<typeof this> {
+            <template><@fields.firstName/> (<@fields.nickName/>)</template>
+          }
         }
       `,
       );
@@ -1836,112 +1935,9 @@ module(basename(__filename), function () {
         });
         assert.strictEqual(result.length, 1, 'found the post instance');
       }
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 1,
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 1,
-          definitionErrors: 0,
-          definitionsIndexed: 1,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
-      );
     });
 
-    // Note this particular test should only be a server test as the nature of
-    // the TestAdapter in the host tests will trigger the linked card to be
-    // already loaded when in fact in the real world it is not.
-    skip('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
-      const hassanId = `${testRealm}hassan`;
-      let queryEngine = realm.realmIndexQueryEngine;
-      let hassan = await queryEngine.cardDocument(new URL(hassanId));
-      if (hassan?.type === 'doc') {
-        assert.deepEqual(
-          hassan.doc.data.attributes,
-          {
-            title: 'Untitled Card',
-            nickName: "Ringo's buddy",
-            firstName: 'Hassan',
-            description: null,
-            thumbnailURL: null,
-            cardInfo,
-          },
-          'doc attributes are correct',
-        );
-        assert.deepEqual(
-          hassan.doc.data.relationships,
-          {
-            pet: {
-              links: {
-                self: './ringo',
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
-              },
-            },
-          },
-          'doc relationships are correct',
-        );
-      } else {
-        assert.ok(
-          false,
-          `search entry was an error: ${hassan?.error.errorDetail.message}`,
-        );
-      }
-
-      let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
-      if (hassanEntry) {
-        assert.deepEqual(
-          hassanEntry.searchDoc,
-          {
-            id: hassanId,
-            pet: {
-              id: `${testRealm}ringo`,
-              title: 'Untitled Card',
-              firstName: 'Ringo',
-              description: null,
-              thumbnailURL: null,
-              cardInfo: {
-                ...cardInfo,
-                theme: null,
-              },
-            },
-            nickName: "Ringo's buddy",
-            _cardType: 'PetPerson',
-            firstName: 'Hassan',
-            title: 'Untitled Card',
-            cardInfo: {
-              theme: null,
-            },
-          },
-          'searchData is correct',
-        );
-      } else {
-        assert.ok(false, `could not find ${hassanId} in the index`);
-      }
-
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          moduleErrors: 0,
-          instanceErrors: 6,
-          modulesIndexed: 10,
-          instancesIndexed: 6,
-          definitionErrors: 0,
-          definitionsIndexed: 10,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
-      );
-    });
-
+    // TODO i'm skeptical we are testing the right thing here since the new headless chrome indexing doesn't know about isUsed yet. Let's revisit in CS-9539
     test('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function (assert) {
       await realm.write(
         'task.gts',
@@ -2031,104 +2027,6 @@ module(basename(__filename), function () {
         'instance',
         'task instance created without any error',
       );
-    });
-
-    test('sets resource_created_at for modules and instances', async function (assert) {
-      let entry = (await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}fancy-person.gts`),
-      )) as { resourceCreatedAt: number };
-
-      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
-
-      entry = (await realm.realmIndexQueryEngine.instance(
-        new URL(`${testRealm}mango`),
-      )) as { resourceCreatedAt: number };
-
-      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
-    });
-
-    skip('sets urls containing encoded CSS for deps for a module', async function (assert) {
-      let entry = (await realm.realmIndexQueryEngine.module(
-        new URL('http://test-realm/fancy-person.gts'),
-      )) as { deps: string[] };
-
-      let assertCssDependency = (
-        deps: string[],
-        pattern: RegExp,
-        fileName: string,
-      ) => {
-        assert.true(
-          !!deps.find((dep) => pattern.test(dep)),
-          `css for ${fileName} is in the deps`,
-        );
-      };
-
-      let dependencies = [
-        {
-          pattern: /fancy-person\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'fancy-person.gts',
-        },
-        {
-          pattern: /test-realm\/person\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'person.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/embedded.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/isolated-and-edit.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/missing-template.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/field-edit.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'links-to-many-component.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'links-to-editor.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'contains-many-component.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'field-component.gts',
-        },
-      ];
-
-      dependencies.forEach(({ pattern, fileName }) => {
-        assertCssDependency(entry.deps, pattern, fileName);
-      });
-    });
-
-    test('will not invalidate non-json/non-executable files', async function (assert) {
-      let deletedEntries = (await testDbAdapter.execute(
-        `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
-      )) as { url: string }[];
-
-      let deletedEntryUrls = deletedEntries.map((row) => row.url);
-
-      ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
-        assert.notOk(deletedEntryUrls.includes(file));
-      });
     });
 
     test('should be able to handle dependencies between modules', async function (assert) {
@@ -2322,6 +2220,7 @@ module(basename(__filename), function () {
         'BlogApp module is in resolved module successfully',
       );
     });
+
     test('can write several modules at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
@@ -2556,14 +2455,14 @@ module(basename(__filename), function () {
     module('readable realm', function (hooks) {
       setupRealms(hooks, {
         provider: {
-          [testRealmServerMatrixUserId]: ['read'],
+          ['@node-test_realm:localhost']: ['read'],
         },
         consumer: {
           '*': ['read', 'write'],
         },
       });
 
-      skip('has no module errors when trying to index a card from another realm when it has permission to read', async function (assert) {
+      test('has no module errors when trying to index a card from another realm when it has permission to read', async function (assert) {
         assert.deepEqual(
           // we splat because despite having the same shape, the constructors are different
           { ...testRealm2.realmIndexUpdater.stats },
