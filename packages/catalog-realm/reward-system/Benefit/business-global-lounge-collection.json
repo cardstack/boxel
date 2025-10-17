@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "The Global Lounge Collection",
+      "partner": "Centurion Lounges & Partners",
+      "benefitKind": "access",
+      "amount": { "amount": 850, "currency": { "code": "USD" } },
+      "enrollmentRequired": false,
+      "minSpend": null,
+      "programURL": "https://www.americanexpress.com/us/credit-cards/benefits/detail/airport-lounge-access/",
+      "conditions": "Over $850 of annual value with access to Centurion Lounges, 10 complimentary Delta Sky Club visits when flying on an eligible Delta flight, Priority Pass Select membership (enrollment required), and other select partner lounges.",
+      "details": [
+        "Centurion Lounge access",
+        "10 Delta Sky Club visits per year",
+        "Priority Pass Select membership",
+        "Select partner lounges"
+      ],
+      "title": "The Global Lounge Collection"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}

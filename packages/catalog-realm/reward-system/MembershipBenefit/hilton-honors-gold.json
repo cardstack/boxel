@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "membershipProgram": "Hilton Honors",
+      "statusLevel": "Gold",
+      "autoEnrollment": false,
+      "enrollmentInstructions": "Enroll via your American Express account to activate Hilton Honors Gold status; terms apply.",
+      "benefitsList": [
+        "Space-available room upgrades at select properties",
+        "80% Bonus on Hilton Honors Base Points earned",
+        "Daily food & beverage credit at select U.S. brands; daily continental breakfast outside the U.S.",
+        "5th night free on standard room stays booked with 100% Points",
+        "Check-in, choose your room, and order ahead via the Hilton Honors App",
+        "Two complimentary bottles of water per stay at select properties",
+        "Hilton's Price Match Guarantee"
+      ],
+      "partner": "Hilton Honors",
+      "enrollmentRequired": true,
+      "conditions": null,
+      "title": "Hilton Honors Gold"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "MembershipBenefit"
+      }
+    }
+  }
+}

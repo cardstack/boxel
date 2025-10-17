@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "CLEAR Plus Credit",
+      "partner": null,
+      "benefitKind": "statement-credit",
+      "amount": { "amount": 209, "currency": { "code": "USD" } },
+      "enrollmentRequired": false,
+      "minSpend": null,
+      "programURL": "https://www.clearme.com/",
+      "conditions": "Credit automatically applied when CLEAR Plus membership fee is charged to the card. Covers membership fee but excludes taxes and fees. Must use card for CLEAR Plus payment.",
+      "details": [
+        "Statement credits up to $209 per calendar year for an auto-renewing CLEAR® Plus Membership, excluding taxes and fees.‡"
+      ],
+      "title": "CLEAR Plus Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}

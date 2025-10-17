@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Indeed Credit",
+      "partner": null,
+      "benefitKind": "statement-credit",
+      "amount": { "amount": 360, "currency": { "code": "USD" } },
+      "enrollmentRequired": true,
+      "minSpend": { "amount": 90, "currency": { "code": "USD" } },
+      "programURL": "https://employers.indeed.com/",
+      "conditions": "Must enroll for benefit. Up to $90 credit per quarter ($360 annual maximum). Covers Indeed job postings, sponsored jobs, and recruitment services. Must purchase directly from Indeed.",
+      "details": [
+        "Statement credits up to $90 per quarter for U.S. purchases made directly with Indeed. Enrollment required.‡"
+      ],
+      "title": "Indeed Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}

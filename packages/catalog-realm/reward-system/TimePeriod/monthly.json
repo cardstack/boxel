@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "unit": "month",
+      "count": 1,
+      "scope": "calendar",
+      "resetBasis": "calendar-year",
+      "eligibleBookingNightsMin": null,
+      "maxUsesPerPeriod": null,
+      "minAmount": null,
+      "notes": "Additional $20 in December; total annual value up to $200",
+      "title": "1 month (calendar)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "TimePeriod"
+      }
+    }
+  }
+}

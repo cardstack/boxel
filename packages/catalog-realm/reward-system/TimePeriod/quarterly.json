@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "unit": "quarter",
+      "count": 1,
+      "scope": "calendar",
+      "resetBasis": "calendar-year",
+      "eligibleBookingNightsMin": null,
+      "maxUsesPerPeriod": null,
+      "minAmount": null,
+      "notes": null,
+      "title": "1 quarter (calendar)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "TimePeriod"
+      }
+    }
+  }
+}
