@@ -65,7 +65,7 @@ export default class RenderRoute extends Route<Model> {
   private currentTransition: Transition | undefined;
   private lastStoreResetKey: string | undefined;
   private renderBaseParams: [string, string, string] | undefined;
-  private lastSerializedError: string | undefined;
+  private lastRenderErrorSignature: string | undefined;
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
   #modelPromises = new Map<string, Promise<Model>>();
@@ -104,7 +104,7 @@ export default class RenderRoute extends Route<Model> {
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
-    this.lastSerializedError = undefined;
+    this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
     this.#modelStates.clear();
     this.#pendingReadyModels.clear();
@@ -122,7 +122,7 @@ export default class RenderRoute extends Route<Model> {
     { id, nonce, options }: { id: string; nonce: string; options?: string },
     transition: Transition,
   ) {
-    this.lastSerializedError = undefined;
+    this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
     this.currentTransition = transition;
     let parsedOptions = parseRenderRouteOptions(options);
@@ -408,12 +408,13 @@ export default class RenderRoute extends Route<Model> {
   #processRenderError(error: any, transition?: Transition) {
     this.currentTransition?.abort();
     this.#rejectAllModelStates('error');
+    let context = this.#deriveErrorContext(transition);
     let serializedError = this.#serializeRenderError(error, transition);
-    if (serializedError === this.lastSerializedError) {
+    let signature = this.#makeErrorSignature(serializedError, context);
+    if (signature === this.lastRenderErrorSignature) {
       return;
     }
-    this.lastSerializedError = serializedError;
-    let context = this.#deriveErrorContext(transition);
+    this.lastRenderErrorSignature = signature;
     this.renderErrorState.setError({
       reason: serializedError,
       cardId: context.cardId,
@@ -483,6 +484,17 @@ export default class RenderRoute extends Route<Model> {
       }
     }
     return { cardId, nonce };
+  }
+
+  #makeErrorSignature(
+    serializedError: string,
+    context: { cardId?: string; nonce?: string },
+  ): string {
+    return JSON.stringify({
+      reason: serializedError,
+      cardId: context.cardId ?? null,
+      nonce: context.nonce ?? null,
+    });
   }
 
   #normalizeCardId(id: string): string {
