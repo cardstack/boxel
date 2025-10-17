@@ -251,9 +251,11 @@ export async function capturePrerenderResult(
   let errorElement = document.querySelector(
     '[data-prerender-error]',
   ) as HTMLElement | null;
-  let errorText = (errorElement?.textContent ?? errorElement?.innerHTML ?? '')
-    .trim()
-    .trim();
+  let errorText = (
+    errorElement?.textContent ??
+    errorElement?.innerHTML ??
+    ''
+  ).trim();
   if (errorText.length > 0) {
     return { status: 'error', value: errorText };
   }

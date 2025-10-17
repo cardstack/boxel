@@ -2455,7 +2455,6 @@ module(basename(__filename), function () {
     module('readable realm', function (hooks) {
       setupRealms(hooks, {
         provider: {
-          // [testRealmServerMatrixUserId]: ['read'],
           ['@node-test_realm:localhost']: ['read'],
         },
         consumer: {
