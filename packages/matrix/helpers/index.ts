@@ -12,6 +12,8 @@ import { registerUser } from '../docker/synapse';
 import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
+import { readFileSync } from 'fs-extra';
+import { get } from 'http';
 
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
@@ -30,10 +32,20 @@ interface LoginOptions {
   showAllCards?: boolean; //default true
 }
 
+export function getTestServices() {
+  return JSON.parse(readFileSync('./.test-services.json', 'utf-8'));
+}
+
 // Setup just one pool
-export const sharedSQLExecutor = new BasicSQLExecutor(
-  process.env.REALM_SERVER_DB!,
-);
+let sharedSQLExecutor: SQLExecutor;
+
+export function getSharedSQLExecutor() {
+  if (!sharedSQLExecutor) {
+    let testServices = getTestServices();
+    sharedSQLExecutor = new BasicSQLExecutor(testServices.realmServerDb);
+  }
+  return sharedSQLExecutor;
+}
 
 export async function setSkillsRedirect(page: Page) {
   await page.route('http://localhost:4201/skills/**', async (route) => {
@@ -722,7 +734,7 @@ export function getUniquePassword(): string {
 export async function createUser(
   prefix = 'user',
 ): Promise<{ username: string; password: string; credentials: Credentials }> {
-  let synapse = JSON.parse(process.env.SYNAPSE!);
+  let synapse = getTestServices().synapse as SynapseInstance;
   const username = getUniqueUsername(prefix);
   const password = getUniquePassword();
   const credentials = await registerUser(synapse, username, password);
@@ -733,7 +745,7 @@ export async function createSubscribedUser(
   prefix = 'user',
 ): Promise<{ username: string; password: string; credentials: Credentials }> {
   const { username, password, credentials } = await createUser(prefix);
-  await setupUserSubscribed(`@${username}:localhost`, sharedSQLExecutor);
+  await setupUserSubscribed(`@${username}:localhost`, getSharedSQLExecutor());
   return { username, password, credentials };
 }
 

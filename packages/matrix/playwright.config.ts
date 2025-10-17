@@ -26,7 +26,13 @@ export default defineConfig({
   expect: {
     timeout: 15000,
   },
-
+  webServer: {
+    command: 'ts-node --transpileOnly ./scripts/test-services.ts',
+    url: 'http://localhost:4205/test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson',
+    reuseExistingServer: !process.env.CI,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
   projects: [
     {
       name: 'chromium',

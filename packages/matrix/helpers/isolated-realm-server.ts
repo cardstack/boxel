@@ -183,7 +183,7 @@ export async function startServer(includePublishedRealm = false) {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
   });
-  realmServer.unref();
+  //realmServer.unref();
   if (realmServer.stdout) {
     realmServer.stdout.on('data', (data: Buffer) =>
       console.log(`realm server: ${data.toString()}`),
