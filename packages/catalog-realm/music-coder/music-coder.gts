@@ -214,24 +214,19 @@ class MusicCoderIsolated extends Component<typeof MusicCoder> {
   play = async () => {
     try {
       await this.ensureStrudel();
-      const { s, note, stack } = this.strudel;
+      const { evaluate } = this.strudel;
 
-      // Build the pattern from text safely
-      const factory = new Function(
-        's',
-        'note',
-        'stack',
-        `return (${this.currentPattern})`,
-      );
-      const pattern = factory(s, note, stack);
-
+      const pattern = await evaluate(this.currentPattern, false);
       // Stop old player and visualization
       this.player?.stop();
       this.stopWaveformVisualization();
 
       // Add analyze() to the pattern chain and start with tempo
       const analyserId = 'music-studio-scope';
-      this.player = pattern.analyze(analyserId).cpm(this.currentBpm).play();
+      this.player = pattern
+        .analyze(analyserId)
+        .cpm(this.currentBpm / 2)
+        .play();
 
       this.isPlaying = true;
       this.errorMessage = '';
@@ -268,12 +263,14 @@ class MusicCoderIsolated extends Component<typeof MusicCoder> {
     await this.play();
   };
 
-  loadPreset = (event: Event) => {
+  loadPreset = async (event: Event) => {
     const target = event.target as HTMLSelectElement;
     const selectedPattern = target.value;
     if (selectedPattern) {
       this.currentPattern = selectedPattern;
       this.args.model.pattern = selectedPattern;
+      await this.stop();
+      await this.play();
     }
   };
 
