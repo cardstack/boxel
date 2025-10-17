@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "title": "Anthropic: Claude 3.7 Sonnet",
+        "description": "Test fixture model configuration referencing Claude 3.7 Sonnet.",
+        "thumbnailURL": null,
+        "notes": null
+      },
+      "modelId": "anthropic/claude-3.7-sonnet",
+      "toolsSupported": true
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/system-card",
+        "name": "ModelConfiguration"
+      }
+    }
+  }
+}

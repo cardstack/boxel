@@ -8,3 +8,4 @@ node_modules
 /playwright-report
 .eslintcache
 schema_tmp.sql
+test-results/.last-run.json

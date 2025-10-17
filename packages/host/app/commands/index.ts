@@ -41,6 +41,7 @@ import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
+import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
 import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
@@ -248,6 +249,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/populate-with-sample-data',
     PopulateWithSampleDataCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/set-user-system-card',
+    SetUserSystemCardCommandModule,
+  );
 }
 
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
@@ -268,6 +273,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OpenWorkspaceCommandModule.default,
   PatchFieldsCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
+  SetUserSystemCardCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
   SaveCardCommandModule.default,

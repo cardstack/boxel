@@ -25,6 +25,7 @@ import {
   getMonacoContent,
   setMonacoContent,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -69,6 +70,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     ({ adapter } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";

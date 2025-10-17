@@ -1,0 +1,28 @@
+{
+    "data": {
+        "type": "card",
+        "attributes": {
+            "cardInfo": {
+                "title": "Google: Gemini 2.5 Flash",
+                "description": "Gemini 2.5 Flash is Google's state-of-the-art workhorse model, specifically designed for advanced reasoning, coding, mathematics, and scientific tasks. It includes built-in \"thinking\" capabilities, enabling it to provide responses with greater accuracy and nuanced context handling. \n\nAdditionally, Gemini 2.5 Flash is configurable through the \"max tokens for reasoning\" parameter, as described in the documentation (https://openrouter.ai/docs/use-cases/reasoning-tokens#max-tokens-for-reasoning).",
+                "thumbnailURL": null,
+                "notes": null
+            },
+            "modelId": "google/gemini-2.5-flash",
+            "toolsSupported": true
+        },
+        "relationships": {
+            "cardInfo.theme": {
+                "links": {
+                    "self": null
+                }
+            }
+        },
+        "meta": {
+            "adoptsFrom": {
+                "module": "https://cardstack.com/base/system-card",
+                "name": "ModelConfiguration"
+            }
+        }
+    }
+}

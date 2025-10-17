@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {},
+    "relationships": {
+      "modelConfigurations.0": {
+        "links": {
+          "self": "../ModelConfiguration/test-gpt"
+        }
+      },
+      "modelConfigurations.1": {
+        "links": {
+          "self": "../ModelConfiguration/test-claude-sonnet-4"
+        }
+      },
+      "modelConfigurations.2": {
+        "links": {
+          "self": "../ModelConfiguration/test-claude-37-sonnet"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/system-card",
+        "name": "SystemCard"
+      }
+    }
+  }
+}

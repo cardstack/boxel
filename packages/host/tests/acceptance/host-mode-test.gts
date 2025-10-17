@@ -21,6 +21,7 @@ import {
   setupOnSave,
   testHostModeRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
@@ -130,6 +131,7 @@ module('Acceptance | host mode tests', function (hooks) {
         '*': ['read'],
       },
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'pet.gts': { Pet },
         'view-card-demo.gts': viewCardDemoCardSource,
         'Pet/mango.json': {

@@ -25,6 +25,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -93,6 +94,7 @@ module('Acceptance | Code patches tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',

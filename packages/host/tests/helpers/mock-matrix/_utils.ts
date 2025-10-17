@@ -39,6 +39,10 @@ export class MockUtils {
     );
   };
 
+  getSystemCardAccountData = () => {
+    return this.testState.opts?.systemCardAccountData;
+  };
+
   getRealmEventMessagesSince = (roomId: string, since: number) => {
     return this.testState
       .sdk!.serverState.getRoomEvents(roomId)

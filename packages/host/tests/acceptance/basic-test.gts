@@ -11,6 +11,7 @@ import {
   testRealmURL,
   setupAuthEndpoints,
   setupUserSubscription,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -84,6 +85,7 @@ module('Acceptance | basic tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.gts': { Index },
         'person.gts': { Person },
         'person-entry.json': new Spec({

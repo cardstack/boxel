@@ -152,7 +152,7 @@ class Assistant {
   }
 
   // TODO: This function is used to avoid a thinking model of gpt-5.
-  // Remove this function after we have LLM environment.
+  // Remove this function after we have system card.
   getReasoningEffort(prompt: PromptParts) {
     let model = this.getModel(prompt);
     return model === 'openai/gpt-5' ? 'minimal' : undefined;

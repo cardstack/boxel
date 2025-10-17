@@ -11,6 +11,7 @@ import {
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
@@ -207,12 +208,12 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     await setupAcceptanceTestRealm({
-      contents: filesB,
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
       realmURL: testRealmURL2,
       mockMatrixUtils,
     });
     ({ adapter } = await setupAcceptanceTestRealm({
-      contents: files,
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
       mockMatrixUtils,
     }));
 

@@ -786,6 +786,26 @@ export default class Room extends Component<Signature> {
   }
 
   private get llmsForSelectMenu() {
+    // Read from the LLM environment card if available
+    let systemCard = this.matrixService.systemCard;
+    if (systemCard?.modelConfigurations) {
+      let options: Record<string, string> = {};
+      for (let modelConfig of systemCard.modelConfigurations) {
+        if (modelConfig.modelId) {
+          options[modelConfig.modelId] =
+            modelConfig.title || modelConfig.modelId;
+        }
+      }
+      // Add any used LLMs that aren't already in the options
+      for (let usedLLM of this.args.roomResource.usedLLMs) {
+        if (usedLLM && !options[usedLLM]) {
+          options[usedLLM] = usedLLM; // Use model ID as display name
+        }
+      }
+      return options;
+    }
+
+    // Fallback to hardcoded list for backwards compatibility
     let ids = [
       ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
     ]

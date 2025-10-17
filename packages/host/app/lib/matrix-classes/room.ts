@@ -6,7 +6,6 @@ import { type IEvent } from 'matrix-js-sdk';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  DEFAULT_LLM,
   APP_BOXEL_LLM_MODE,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -101,7 +100,7 @@ export default class Room {
     let event = this._roomState?.events
       .get(APP_BOXEL_ACTIVE_LLM)
       ?.get('')?.event;
-    return (event as ActiveLLMEvent)?.content.model ?? DEFAULT_LLM;
+    return (event as ActiveLLMEvent)?.content.model;
   }
 
   get activeLLMMode(): LLMMode {
