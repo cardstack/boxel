@@ -1003,12 +1003,40 @@ export class RewardCardSystem extends CardDef {
 
   static isolated = class Isolated extends Component<typeof this> {
     // ⁸³ Isolated format enhanced with RewardCardProgram styling
+    // Annualize recurring benefits using linked TimePeriod (month, quarter, half-year, year)
+    private annualizationFactor(benefit: Benefit): number {
+      try {
+        const period = benefit?.timePeriod;
+        if (!period) return 1;
+
+        const unit = period.unit;
+        const count = Number(period.count ?? 1) || 1;
+
+        // periods per calendar year
+        const perYear =
+          unit === 'month'
+            ? 12
+            : unit === 'quarter'
+            ? 4
+            : unit === 'half-year'
+            ? 2
+            : unit === 'year'
+            ? 1
+            : 1;
+
+        return perYear / count;
+      } catch (_e) {
+        return 1;
+      }
+    }
+
     get totalAnnualValue() {
       try {
         const benefits = this.args.model?.statementBenefits ?? [];
         return benefits.reduce((total, benefit) => {
-          const amount = benefit.amount?.amount || 0;
-          return total + amount;
+          const base = Number(benefit.amount?.amount || 0);
+          const factor = this.annualizationFactor(benefit);
+          return total + base * factor;
         }, 0);
       } catch (e) {
         console.error(
