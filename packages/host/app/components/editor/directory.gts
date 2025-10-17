@@ -15,6 +15,7 @@ import { type LocalPath } from '@cardstack/runtime-common/paths';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { directory } from '@cardstack/host/resources/directory';
+import { normalizeDirPath } from '@cardstack/host/utils/normalized-dir-path';
 
 interface Args {
   Args: {
@@ -154,7 +155,7 @@ export default class Directory extends Component<Args> {
 
   @action
   private selectDirectory(entryPath: LocalPath) {
-    const dirPath = this.normalizeDirPath(entryPath);
+    const dirPath = normalizeDirPath(entryPath);
 
     let index = this.openDirs.indexOf(dirPath);
     if (index !== -1) {
@@ -175,13 +176,9 @@ export default class Directory extends Component<Args> {
 
   @action
   private isOpenDirectory(entryPath: LocalPath) {
-    let dirPath = this.normalizeDirPath(entryPath);
+    let dirPath = normalizeDirPath(entryPath);
     let openDirs = this.args.openDirs ?? this.openDirs;
 
     return openDirs.includes(dirPath);
-  }
-
-  private normalizeDirPath(entryPath: LocalPath): LocalPath {
-    return entryPath.endsWith('/') ? entryPath : `${entryPath}/`;
   }
 }

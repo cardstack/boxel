@@ -64,6 +64,7 @@ import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
 
 import type IndexController from '../controllers';
+import { normalizeDirPath } from '../utils/normalized-dir-path';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -905,7 +906,7 @@ export default class OperatorModeStateService extends Service {
       return;
     }
 
-    let dirPath = this.normalizeDirPath(entryPath);
+    let dirPath = normalizeDirPath(entryPath);
     let dirs = this.currentRealmOpenDirs.slice();
     let index = dirs.indexOf(dirPath);
 
@@ -918,10 +919,6 @@ export default class OperatorModeStateService extends Service {
     this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
     this.schedulePersist();
   };
-
-  private normalizeDirPath(entryPath: string): string {
-    return entryPath.endsWith('/') ? entryPath : `${entryPath}/`;
-  }
 
   private get readyFile() {
     if (isReady(this.openFile.current)) {
