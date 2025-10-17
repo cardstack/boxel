@@ -37,7 +37,7 @@
       },
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/experiments/default/bc851156-f2f9-4ad9-8467-c610fde73c0e"
+          "self": null
         }
       },
       "earningRules.0": {
