@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Hilton Credit",
+      "partner": null,
+      "benefitKind": "statement-credit",
+      "amount": { "amount": 200, "currency": { "code": "USD" } },
+      "enrollmentRequired": true,
+      "minSpend": { "amount": 50, "currency": { "code": "USD" } },
+      "programURL": "https://hiltonhonors.com/en_US/enroll/",
+      "conditions": "Must enroll in benefit and have Hilton for Business account. Credits apply quarterly ($50 max per quarter). Must purchase directly with Hilton properties or hilton.com.",
+      "details": [
+        "Hilton for Business members can get statement credits of up to $50 quarterly on eligible purchases made directly with Hilton. Enrollment required. If you do not already have a Hilton for Business account, you will be registered for one at the time you enroll in the benefit.‡"
+      ],
+      "title": "Hilton Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}

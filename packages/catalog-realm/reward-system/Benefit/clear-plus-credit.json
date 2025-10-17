@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "CLEAR Plus Credit",
+      "partner": "CLEAR",
+      "benefitKind": "statement-credit",
+      "amount": { "amount": 209, "currency": { "code": "USD" } },
+      "enrollmentRequired": false,
+      "minSpend": null,
+      "programURL": null,
+      "conditions": "Statement credits per calendar year for an auto-renewing CLEAR Plus Membership, excluding taxes and fees.",
+      "details": [],
+      "title": "CLEAR Plus Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/yearly"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "unit": "half-year",
+      "count": 1,
+      "scope": "calendar",
+      "resetBasis": "calendar-year",
+      "eligibleBookingNightsMin": 2,
+      "maxUsesPerPeriod": null,
+      "minAmount": null,
+      "notes": "The Hotel Collection requires minimum two-night stay",
+      "title": "1 half-year (calendar)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "TimePeriod"
+      }
+    }
+  }
+}

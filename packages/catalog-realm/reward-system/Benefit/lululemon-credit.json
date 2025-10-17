@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "lululemon Credit",
+      "partner": "lululemon",
+      "benefitKind": "statement-credit",
+      "amount": { "amount": 75, "currency": { "code": "USD" } },
+      "enrollmentRequired": true,
+      "minSpend": null,
+      "programURL": null,
+      "conditions": "Statement credits up to $75 quarterly for eligible purchases at U.S. lululemon retail stores (excluding outlets) and lululemon.com. Enrollment required.",
+      "details": [],
+      "title": "lululemon Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/quarterly"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}

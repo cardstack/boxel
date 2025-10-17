@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Uber One Credit",
+      "partner": "Uber One",
+      "benefitKind": "statement-credit",
+      "amount": { "amount": 120, "currency": { "code": "USD" } },
+      "enrollmentRequired": false,
+      "minSpend": null,
+      "programURL": null,
+      "conditions": "Statement credits per calendar year after you purchase an auto-renewing Uber One membership. Terms Apply.",
+      "details": [],
+      "title": "Uber One Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/yearly"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}

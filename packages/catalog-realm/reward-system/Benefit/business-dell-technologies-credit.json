@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Dell Technologies Credit",
+      "partner": null,
+      "benefitKind": "statement-credit",
+      "amount": { "amount": 1150, "currency": { "code": "USD" } },
+      "enrollmentRequired": true,
+      "minSpend": { "amount": 5000, "currency": { "code": "USD" } },
+      "programURL": "https://www.dell.com/en-us/work/shop/american-express",
+      "conditions": "Must enroll for benefit. First $150 credit on any Dell purchases. Additional $1,000 credit unlocked after spending $5,000+ on Dell purchases in same calendar year. Must purchase directly from Dell.",
+      "details": [
+        "Statement credits up to $150 on U.S. purchases directly with Dell Technologies, and an additional $1,000 statement credit after you spend $5,000 or more on those purchases, per calendar year. Enrollment required.‡"
+      ],
+      "title": "Dell Technologies Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "Benefit"
+      }
+    }
+  }
+}
