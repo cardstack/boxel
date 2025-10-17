@@ -16,6 +16,7 @@ import Modifier from 'ember-modifier';
 import MusicIcon from '@cardstack/boxel-icons/music';
 import PlayIcon from '@cardstack/boxel-icons/play';
 import StopIcon from '@cardstack/boxel-icons/square';
+import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 
 // Strudel will be dynamically imported to avoid SSR issues
 
@@ -297,6 +298,18 @@ export class MusicCoder extends CardDef {
       this.stopWaveformVisualization();
     };
 
+    update = async () => {
+      if (!this.isPlaying) {
+        // If not playing, just start playing with new pattern
+        await this.play();
+        return;
+      }
+
+      // If already playing, stop and restart with the new pattern
+      this.stop();
+      await this.play();
+    };
+
     loadPreset = (event: Event) => {
       const target = event.target as HTMLSelectElement;
       const selectedPattern = target.value;
@@ -407,6 +420,16 @@ export class MusicCoder extends CardDef {
                 >
                   <StopIcon width='20' height='20' />
                   Stop
+                </button>
+
+                <button
+                  class='control-button update-button'
+                  {{on 'click' this.update}}
+                  disabled={{not this.canPlay}}
+                  title='Update pattern'
+                >
+                  <RefreshIcon width='20' height='20' />
+                  Update
                 </button>
               </div>
 
@@ -619,6 +642,12 @@ export class MusicCoder extends CardDef {
           background: #b91c1c;
           border-color: #dc2626;
           color: #fef2f2;
+        }
+
+        .update-button:hover:not(:disabled) {
+          background: #1e40af;
+          border-color: #2563eb;
+          color: #dbeafe;
         }
 
         .bpm-control {
