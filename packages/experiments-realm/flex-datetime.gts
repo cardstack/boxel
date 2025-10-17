@@ -17,9 +17,9 @@ import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-requ
 
 // Auto-save modifier
 class AutoSaveModifier extends Modifier {
-  prevValue: string | null = null;
+  prevValue: unknown = null;
 
-  modify(element: Element, _positional: unknown[], named: { value: string | null; onSave: () => void }) {
+  modify(_element: Element, _positional: unknown[], named: { value: unknown; onSave: () => void }) {
     const { value, onSave } = named;
     if (this.prevValue !== null && this.prevValue !== value) {
       onSave();
@@ -95,7 +95,8 @@ class StandardEditComponent extends Component<typeof FlexDateTimeField> {
         class='datetime-input'
         value={{this.formatted}}
         max='9999-12-31T23:59:59'
-        {{on 'change' (fn this.parseInput)}}
+        aria-label='Edit date and time'
+        {{on 'change' this.parseInput}}
       />
     </div>
 
@@ -137,7 +138,6 @@ class SmartEditComponent extends Component<typeof FlexDateTimeField> {
   @tracked chronoFailed = false;
   @tracked naturalInput = '';
   @tracked showNaturalInput = false;
-  debounceTimer: number | null = null;
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -208,10 +208,10 @@ class SmartEditComponent extends Component<typeof FlexDateTimeField> {
       }
       
       // If chrono couldn't parse, use AI
-      this.parseWithAI();
+      void this.parseWithAI();
     } catch (err) {
       console.error('Parsing error:', err);
-      this.parseWithAI();
+      void this.parseWithAI();
     }
   };
 
@@ -332,6 +332,7 @@ Text: "${this.naturalInput}"`;
             class='natural-input'
             value={{this.naturalInput}}
             placeholder={{if @model (formatDateTime @model size='medium') 'tomorrow 3pm, next Friday, in 2 weeks...'}}
+            aria-label='Enter a natural language date'
             {{on 'input' this.onTextInput}}
             {{on 'keydown' this.onKeyDown}}
           />
@@ -362,7 +363,8 @@ Text: "${this.naturalInput}"`;
             class='datetime-input'
             value={{this.formatted}}
             max='9999-12-31T23:59:59'
-            {{on 'change' (fn this.parseInput)}}
+            aria-label='Edit date and time'
+            {{on 'change' this.parseInput}}
           />
           <button type='button' class='toggle-btn' {{on 'click' this.toggleInputMode}}>✏️</button>
         </div>
