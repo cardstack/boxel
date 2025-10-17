@@ -4,6 +4,7 @@ import {
   Component,
   field,
   contains,
+  getField,
 } from 'https://cardstack.com/base/card-api';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import StringField from 'https://cardstack.com/base/string';
@@ -595,19 +596,26 @@ class FieldRenderer extends Component<typeof FlexDateTimeField> {
   get componentClass() {
     const format = this.args.format || 'embedded';
     const variant = this.args.variant;
-    
-    // Use the explicitly passed fieldType (preferred)
-    if (this.args.fieldType?.getComponent) {
-      return this.args.fieldType.getComponent(format, variant);
+
+    const fieldType = this.fieldType;
+    if (fieldType?.getComponent) {
+      return fieldType.getComponent(format, variant);
     }
-    
-    // Fallback: try to get from model constructor
-    if (this.args.model?.constructor?.getComponent) {
-      return this.args.model.constructor.getComponent(format, variant);
-    }
-    
-    // Default fallback
+
     return EmbeddedComponent;
+  }
+
+  get fieldType() {
+    if (this.args.card && this.args.fieldName) {
+      try {
+        const field = getField(this.args.card, this.args.fieldName);
+        return field?.card;
+      } catch {
+        // ignore lookup errors and fall through to other heuristics
+      }
+    }
+
+    return this.args.model?.constructor;
   }
 
   <template>
@@ -659,7 +667,6 @@ export class FlexDateTimeTestHarness extends CardDef {
               {{#if this.isEditMode}}
                 <FieldRenderer
                   @model={{@model.eventDate}}
-                  @fieldType={{FlexDateTimeField}}
                   @format='edit'
                   @variant='smart'
                   @context={{@context}}
@@ -669,9 +676,10 @@ export class FlexDateTimeTestHarness extends CardDef {
               {{else}}
                 <FieldRenderer
                   @model={{@model.eventDate}}
-                  @fieldType={{FlexDateTimeField}}
                   @format='embedded'
                   @context={{@context}}
+                  @card={{@model}}
+                  @fieldName='eventDate'
                 />
               {{/if}}
             </div>
@@ -684,7 +692,6 @@ export class FlexDateTimeTestHarness extends CardDef {
               {{#if this.isEditMode}}
                 <FieldRenderer
                   @model={{@model.meetingTime}}
-                  @fieldType={{FlexDateTimeField}}
                   @format='edit'
                   @variant='standard'
                   @context={{@context}}
@@ -694,9 +701,10 @@ export class FlexDateTimeTestHarness extends CardDef {
               {{else}}
                 <FieldRenderer
                   @model={{@model.meetingTime}}
-                  @fieldType={{FlexDateTimeField}}
                   @format='embedded'
                   @context={{@context}}
+                  @card={{@model}}
+                  @fieldName='meetingTime'
                 />
               {{/if}}
             </div>
@@ -708,9 +716,10 @@ export class FlexDateTimeTestHarness extends CardDef {
               <label>Deadline (inline):</label>
               <FieldRenderer
                 @model={{@model.deadline}}
-                @fieldType={{FlexDateTimeField}}
                 @format='atom'
                 @context={{@context}}
+                @card={{@model}}
+                @fieldName='deadline'
               />
             </div>
           </section>
@@ -720,9 +729,10 @@ export class FlexDateTimeTestHarness extends CardDef {
             <div class='field-example fitted-example'>
               <FieldRenderer
                 @model={{@model.eventDate}}
-                @fieldType={{FlexDateTimeField}}
                 @format='fitted'
                 @context={{@context}}
+                @card={{@model}}
+                @fieldName='eventDate'
               />
             </div>
           </section>
@@ -734,7 +744,6 @@ export class FlexDateTimeTestHarness extends CardDef {
               {{#if this.isEditMode}}
                 <FieldRenderer
                   @model={{@model.emptyDate}}
-                  @fieldType={{FlexDateTimeField}}
                   @format='edit'
                   @variant='smart'
                   @context={{@context}}
@@ -744,9 +753,10 @@ export class FlexDateTimeTestHarness extends CardDef {
               {{else}}
                 <FieldRenderer
                   @model={{@model.emptyDate}}
-                  @fieldType={{FlexDateTimeField}}
                   @format='embedded'
                   @context={{@context}}
+                  @card={{@model}}
+                  @fieldName='emptyDate'
                 />
               {{/if}}
             </div>
