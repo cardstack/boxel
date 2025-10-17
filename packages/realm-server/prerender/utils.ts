@@ -351,11 +351,11 @@ export async function captureResult(
           }
           let candidateId =
             candidate.dataset.prerenderId ??
-            errorElement?.dataset.dataPrerenderId ??
+            errorElement?.dataset.prerenderId ??
             null;
           let candidateNonce =
             candidate.dataset.prerenderNonce ??
-            errorElement?.dataset.dataPrerenderNonce ??
+            errorElement?.dataset.prerenderNonce ??
             null;
           if (targetId && candidateId && candidateId !== targetId) {
             return false;
@@ -440,11 +440,11 @@ export async function captureResult(
           alive,
           id:
             resolvedElement.dataset.prerenderId ??
-            errorElement?.dataset.dataPrerenderId ??
+            errorElement?.dataset.prerenderId ??
             undefined,
           nonce:
             resolvedElement.dataset.prerenderNonce ??
-            errorElement?.dataset.dataPrerenderNonce ??
+            errorElement?.dataset.prerenderNonce ??
             undefined,
         } as RenderCapture;
       } else {
