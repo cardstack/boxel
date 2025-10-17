@@ -1,62 +1,47 @@
-interface CssVariable {
-  property: string;
-  value?: string | null;
-}
+import {
+  type CssGroups,
+  type CssRuleMap,
+  normalizeCssRuleMap,
+} from './theme-css.ts';
 
-type CssRule = string; // `--property: value;`
-
-interface CssBlockInput {
-  blockname: string;
-  vars?: CssVariable[];
-}
-
-function generateCssRuleString(
-  property?: string | null,
-  value?: string | null,
-): CssRule | undefined {
-  let prop = property?.toString()?.trim();
-  let val = value?.toString()?.trim()?.replace(';', '');
-  if (!prop || !val) {
+const generateCssBlockString = (
+  selector: string,
+  rules: CssRuleMap,
+): string | undefined => {
+  const trimmedSelector = selector.trim();
+  if (!trimmedSelector || !rules.size) {
     return;
   }
-  if (!prop.startsWith('--')) {
-    prop = `--${prop}`;
-  }
-  return ` ${prop}: ${val};`;
-}
 
-function generateCssBlockRules(vars?: CssVariable[]): CssRule[] | [] {
-  const cssRules: CssRule[] = [];
-  vars?.map(({ property, value }) => {
-    let rule = generateCssRuleString(property, value);
-    if (rule?.length) {
-      cssRules.push(rule);
-    }
-  });
-  return cssRules;
-}
-
-function generateCSSBlockString(
-  blockName: string,
-  ruleList: CssRule[] | [] | undefined,
-): string | undefined {
-  if (!ruleList || ruleList?.length === 0) {
+  const normalizedRules = normalizeCssRuleMap(rules);
+  if (!normalizedRules.size) {
     return;
   }
-  return `${blockName} {\n${ruleList.join('\n')}\n}`;
-}
 
-export function generateCssVariables(blockInputs: CssBlockInput[]): string {
-  const blocks: string[] = [];
-  for (let { blockname, vars } of blockInputs) {
-    const ruleList = generateCssBlockRules(vars);
-    const blockString = generateCSSBlockString(blockname, ruleList);
-    if (blockString) {
-      blocks.push(blockString);
-    }
+  const lines: string[] = [];
+  for (let [property, value] of normalizedRules.entries()) {
+    lines.push(`  ${property}: ${value};`);
   }
-  if (blocks.length === 0) {
+
+  if (!lines.length) {
+    return;
+  }
+
+  return `${trimmedSelector} {\n${lines.join('\n')}\n}`;
+};
+
+export function generateCssVariables(groups?: CssGroups | null): string {
+  if (!groups?.size) {
     return '';
   }
+
+  const blocks: string[] = [];
+  for (let [selector, rules] of groups.entries()) {
+    const block = generateCssBlockString(selector, rules);
+    if (block) {
+      blocks.push(block);
+    }
+  }
+
   return blocks.join('\n\n');
 }

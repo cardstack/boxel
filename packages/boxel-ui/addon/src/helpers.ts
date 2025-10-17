@@ -6,7 +6,10 @@ import cssVar from './helpers/css-var.ts';
 import currencyFormat from './helpers/currency-format.ts';
 import { dayjsFormat } from './helpers/dayjs-format.ts';
 import element from './helpers/element.ts';
-import { extractCssVariables } from './helpers/extract-css-variables.ts';
+import {
+  extractCssVariables,
+  parseCssGroups,
+} from './helpers/extract-css-variables.ts';
 import formatAge from './helpers/format-age.ts';
 import formatCountdown from './helpers/format-countdown.ts';
 import formatCurrency from './helpers/format-currency.ts';
@@ -33,6 +36,15 @@ import pick from './helpers/pick.ts';
 import { sanitizeHtml, sanitizeHtmlSafe } from './helpers/sanitize-html.ts';
 import { substring } from './helpers/string.ts';
 import {
+  type CssGroupInput,
+  type CssGroups,
+  type CssRuleMap,
+  type CssVariableEntry,
+  buildCssGroups,
+  entriesToCssRuleMap,
+  normalizeCssRuleMap,
+} from './helpers/theme-css.ts';
+import {
   and,
   bool,
   eq,
@@ -45,10 +57,10 @@ import {
 } from './helpers/truth-helpers.ts';
 
 export {
-  type MenuItemOptions,
   add,
   and,
   bool,
+  buildCssGroups,
   cn,
   compact,
   copyCardURLToClipboard,
@@ -57,6 +69,7 @@ export {
   dayjsFormat,
   divide,
   element,
+  entriesToCssRuleMap,
   eq,
   extractCssVariables,
   formatAge,
@@ -83,13 +96,23 @@ export {
   menuItem,
   menuItemFunc,
   multiply,
+  normalizeCssRuleMap,
   not,
   optional,
   or,
+  parseCssGroups,
   pick,
   sanitizeHtml,
   sanitizeHtmlSafe,
   substring,
   subtract,
   toMenuItems,
+};
+
+export type {
+  CssGroupInput,
+  CssGroups,
+  CssRuleMap,
+  CssVariableEntry,
+  MenuItemOptions,
 };

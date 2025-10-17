@@ -13,7 +13,11 @@ interface Signature {
 }
 
 const Swatch: TemplateOnlyComponent<Signature> = <template>
-  <div class={{cn 'swatch' small=(eq @style 'round')}} ...attributes>
+  <div
+    class={{cn 'swatch' small=(eq @style 'round')}}
+    data-test-swatch={{@color}}
+    ...attributes
+  >
     {{#unless @hideLabel}}
       <div class='label'>
         {{#if @label}}

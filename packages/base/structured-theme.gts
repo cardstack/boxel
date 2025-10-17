@@ -1,3 +1,4 @@
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -6,8 +7,17 @@ import {
   BoxelButton,
   BoxelContainer,
   GridContainer,
+  BoxelInput,
+  CopyButton,
 } from '@cardstack/boxel-ui/components';
-import { generateCssVariables } from '@cardstack/boxel-ui/helpers';
+import {
+  buildCssGroups,
+  generateCssVariables,
+  parseCssGroups,
+  type CssRuleMap,
+} from '@cardstack/boxel-ui/helpers';
+import CaretUp from '@cardstack/boxel-icons/chevron-up';
+import CaretDown from '@cardstack/boxel-icons/chevron-down';
 
 import {
   field,
@@ -19,30 +29,130 @@ import {
 } from './card-api';
 import ThemeVarField from './structured-theme-variables';
 
-const formatCssFields = (vars: ThemeVarField) => {
-  const items = vars?.cssVariableFields?.map((f) => ({
-    property: f.cssVariableName,
-    value: f.value,
-  }));
-  return items;
+interface SectionToggleSignature {
+  Args: {
+    expanded: boolean;
+    onToggle: (event: Event) => void;
+  };
+  Element: HTMLButtonElement;
+}
+
+class SectionToggleButton extends GlimmerComponent<SectionToggleSignature> {
+  <template>
+    <BoxelButton
+      class='section-toggle'
+      @kind='text-only'
+      @size='auto'
+      aria-expanded={{@expanded}}
+      {{on 'click' @onToggle}}
+      ...attributes
+    >
+      <span class='section-toggle__label'>{{if @expanded 'Hide' 'Show'}}</span>
+      {{#if @expanded}}
+        <CaretUp width='14' height='14' role='presentation' />
+      {{else}}
+        <CaretDown width='14' height='14' role='presentation' />
+      {{/if}}
+    </BoxelButton>
+
+    <style scoped>
+      @layer baseComponent {
+        .section-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxxs);
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+          background: none;
+          border: none;
+          min-height: 1.5rem;
+        }
+        .section-toggle:hover {
+          color: var(--primary);
+          text-decoration: underline;
+        }
+        .section-toggle__label {
+          font-size: var(--boxel-font-size-xs);
+          line-height: 1;
+          text-transform: uppercase;
+        }
+      }
+    </style>
+  </template>
+}
+
+// Applies parsed CSS rules back onto the card fields for editing.
+const applyCssRulesToField = (
+  field: ThemeVarField | undefined,
+  rules: CssRuleMap | undefined,
+) => {
+  if (!field || !rules?.size) {
+    return;
+  }
+  const cssFields = field.cssVariableFields;
+  if (!cssFields?.length) {
+    return;
+  }
+  const lookup = new Map<string, string>(
+    cssFields.map((f) => [f.cssVariableName, f.fieldName]),
+  );
+  for (let [property, value] of rules.entries()) {
+    const fieldName = lookup.get(property);
+    if (!fieldName) {
+      continue;
+    }
+    (field as any)[fieldName] = value;
+  }
 };
 
 class Isolated extends Component<typeof StructuredTheme> {
-  @tracked isGeneratedCSSVisible = true;
+  @tracked isCssTextareaVisible = true;
   @tracked isRootVariablesVisible = true;
   @tracked isDarkVariablesVisible = true;
+  @tracked areCSSImportsVisible = true;
+  @tracked isGeneratedCSSVisible = true;
 
-  @action toggleGeneratedCSSVisibility() {
-    this.isGeneratedCSSVisible = !this.isGeneratedCSSVisible;
+  @action toggleCssTextarea() {
+    this.isCssTextareaVisible = !this.isCssTextareaVisible;
   }
 
-  @action toggleRootVariablesVisibility() {
+  @action toggleRootVariables() {
     this.isRootVariablesVisible = !this.isRootVariablesVisible;
   }
 
-  @action toggleDarkVariablesVisibility() {
+  @action toggleDarkVariables() {
     this.isDarkVariablesVisible = !this.isDarkVariablesVisible;
   }
+
+  @action toggleCSSImports() {
+    this.areCSSImportsVisible = !this.areCSSImportsVisible;
+  }
+
+  @action toggleGeneratedCSS() {
+    this.isGeneratedCSSVisible = !this.isGeneratedCSSVisible;
+  }
+
+  @action parseCss(content: string) {
+    if (!content || !parseCssGroups) {
+      return;
+    }
+    const groups = parseCssGroups(content);
+    if (!groups?.size) {
+      return;
+    }
+    applyCssRulesToField(this.args.model?.rootVariables, groups.get(':root'));
+    applyCssRulesToField(
+      this.args.model?.darkModeVariables,
+      groups.get('.dark'),
+    );
+  }
+
+  private cssPlaceholder = `:root {
+  /* ... */
+}
+
+.dark {
+  /* ... */
+}`;
 
   <template>
     <GridContainer @tag='article' class='structured-theme-card'>
@@ -55,20 +165,44 @@ class Isolated extends Component<typeof StructuredTheme> {
 
       <GridContainer @tag='section' class='content-section'>
         <GridContainer @tag='header' class='section-header'>
+          <h2>Insert CSS Variables</h2>
+          <SectionToggleButton
+            @expanded={{this.isCssTextareaVisible}}
+            @onToggle={{this.toggleCssTextarea}}
+            aria-controls='insert-css-content'
+          />
+        </GridContainer>
+        {{#if this.isCssTextareaVisible}}
+          <div id='insert-css-content' class='section-body'>
+            <label for='css-textarea' class='boxel-sr-only'>Insert CSS Variables</label>
+            <BoxelInput
+              id='css-textarea'
+              @type='textarea'
+              @onInput={{this.parseCss}}
+              @placeholder={{this.cssPlaceholder}}
+              class='css-textarea'
+              data-test-custom-css-variables
+            />
+          </div>
+
+        {{/if}}
+      </GridContainer>
+
+      <GridContainer @tag='section' class='content-section'>
+        <GridContainer @tag='header' class='section-header'>
           <h2>Root Variables (:root)</h2>
-          <BoxelButton
-            @kind='text-only'
-            @size='extra-small'
-            class='section-toggle'
-            aria-expanded={{this.isRootVariablesVisible}}
+          <SectionToggleButton
+            @expanded={{this.isRootVariablesVisible}}
+            @onToggle={{this.toggleRootVariables}}
             aria-controls='root-variables-content'
-            {{on 'click' this.toggleRootVariablesVisibility}}
-          >
-            {{if this.isRootVariablesVisible 'Hide' 'Show'}}
-          </BoxelButton>
+          />
         </GridContainer>
         {{#if this.isRootVariablesVisible}}
-          <div id='root-variables-content' class='section-body'>
+          <div
+            id='root-variables-content'
+            class='section-body'
+            data-test-root-vars
+          >
             <@fields.rootVariables />
           </div>
         {{/if}}
@@ -77,19 +211,18 @@ class Isolated extends Component<typeof StructuredTheme> {
       <GridContainer @tag='section' class='content-section'>
         <GridContainer @tag='header' class='section-header'>
           <h2>Dark Mode Variables (.dark)</h2>
-          <BoxelButton
-            @kind='text-only'
-            @size='extra-small'
-            class='section-toggle'
-            aria-expanded={{this.isDarkVariablesVisible}}
+          <SectionToggleButton
+            @expanded={{this.isDarkVariablesVisible}}
+            @onToggle={{this.toggleDarkVariables}}
             aria-controls='dark-variables-content'
-            {{on 'click' this.toggleDarkVariablesVisibility}}
-          >
-            {{if this.isDarkVariablesVisible 'Hide' 'Show'}}
-          </BoxelButton>
+          />
         </GridContainer>
         {{#if this.isDarkVariablesVisible}}
-          <div id='dark-variables-content' class='section-body'>
+          <div
+            id='dark-variables-content'
+            class='section-body'
+            data-test-dark-vars
+          >
             <@fields.darkModeVariables />
           </div>
         {{/if}}
@@ -97,17 +230,32 @@ class Isolated extends Component<typeof StructuredTheme> {
 
       <GridContainer @tag='section' class='content-section'>
         <GridContainer @tag='header' class='section-header'>
-          <h2>All CSS Variables</h2>
-          <BoxelButton
-            @kind='text-only'
-            @size='extra-small'
-            class='section-toggle'
-            aria-expanded={{this.isGeneratedCSSVisible}}
+          <h2>CSS Imports</h2>
+          <SectionToggleButton
+            @expanded={{this.areCSSImportsVisible}}
+            @onToggle={{this.toggleCSSImports}}
+            aria-controls='css-imports-content'
+          />
+        </GridContainer>
+        {{#if this.areCSSImportsVisible}}
+          <div id='css-imports-content' class='section-body'>
+            {{#if @model.cssImports}}
+              <@fields.cssImports />
+            {{else}}
+              <em>None</em>
+            {{/if}}
+          </div>
+        {{/if}}
+      </GridContainer>
+
+      <GridContainer @tag='section' class='content-section'>
+        <GridContainer @tag='header' class='section-header'>
+          <h2>Calculated CSS Variables</h2>
+          <SectionToggleButton
+            @expanded={{this.isGeneratedCSSVisible}}
+            @onToggle={{this.toggleGeneratedCSS}}
             aria-controls='generated-css-content'
-            {{on 'click' this.toggleGeneratedCSSVisibility}}
-          >
-            {{if this.isGeneratedCSSVisible 'Hide' 'Show'}}
-          </BoxelButton>
+          />
         </GridContainer>
         {{#if this.isGeneratedCSSVisible}}
           <div
@@ -115,7 +263,13 @@ class Isolated extends Component<typeof StructuredTheme> {
             class='section-body'
             data-test-css-vars
           >
-            <@fields.cssVariables />
+            <div class='generates-css-container'>
+              <CopyButton
+                class='copy-css-variables-button'
+                @textToCopy={{@model.cssVariables}}
+              />
+              <@fields.cssVariables />
+            </div>
           </div>
         {{/if}}
       </GridContainer>
@@ -129,17 +283,18 @@ class Isolated extends Component<typeof StructuredTheme> {
       h1,
       h2 {
         margin: 0;
-        font-weight: var(--boxel-font-weight-semibold);
       }
 
       h1 {
         font-size: var(--boxel-font-size-xl);
         line-height: var(--boxel-line-height-xl);
+        font-weight: var(--boxel-font-weight-semibold);
       }
 
       h2 {
         font-size: var(--boxel-font-size-lg);
         line-height: var(--boxel-line-height-lg);
+        font-weight: var(--boxel-font-weight-medium);
       }
 
       .structured-theme-card {
@@ -175,21 +330,25 @@ class Isolated extends Component<typeof StructuredTheme> {
         align-items: center;
       }
 
-      .section-toggle {
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
-        color: var(--primary);
-        background: transparent;
-        border: none;
-        text-transform: uppercase;
-      }
-
-      .section-toggle:hover,
-      .section-toggle:focus-visible {
-        text-decoration: underline;
-      }
-
       .section-body {
         animation: fade-in 120ms ease-out;
+      }
+
+      .css-textarea {
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+      }
+
+      .generates-css-container {
+        position: relative;
+      }
+      .copy-css-variables-button {
+        position: absolute;
+        top: 0;
+        right: 0;
+        color: var(--primary);
       }
 
       @keyframes fade-in {
@@ -233,13 +392,15 @@ export default class StructuredTheme extends Theme {
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
     computeVia: function (this: StructuredTheme) {
-      if (!generateCssVariables) {
+      if (!generateCssVariables || !buildCssGroups) {
         return;
       }
-      return generateCssVariables([
-        { blockname: ':root', vars: formatCssFields(this.rootVariables) },
-        { blockname: '.dark', vars: formatCssFields(this.darkModeVariables) },
-      ]);
+      return generateCssVariables(
+        buildCssGroups([
+          { selector: ':root', rules: this.rootVariables?.cssRuleMap },
+          { selector: '.dark', rules: this.darkModeVariables?.cssRuleMap },
+        ]),
+      );
     },
   });
 
