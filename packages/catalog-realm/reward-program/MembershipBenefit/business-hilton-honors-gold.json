@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "membershipProgram": "Hilton Honors",
+      "statusLevel": "Gold",
+      "autoEnrollment": true,
+      "enrollmentInstructions": "Automatically enrolled. Status appears on Hilton Honors account within 8-12 weeks of card approval. No action required from cardmember.",
+      "benefitsList": [
+        "Earn 80% bonus Hilton Honors Bonus Points on eligible stays",
+        "Late checkout until 2PM when available",
+        "Room upgrades when available (excluding suites)",
+        "Complimentary breakfast for up to 2 registered guests at participating hotels",
+        "Executive lounge access when available",
+        "Digital check-in and room selection",
+        "Digital Key when available"
+      ],
+      "partner": "Hilton Worldwide",
+      "enrollmentRequired": false,
+      "conditions": "With Hilton Honors Gold status, you can enjoy benefits at hotels and resorts within the Hilton Portfolio and earn reward stays faster with Hilton Honors Bonus Points. Status automatically granted to cardmembers in good standing.",
+      "title": "Hilton Honors Gold"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "MembershipBenefit"
+      }
+    }
+  }
+}

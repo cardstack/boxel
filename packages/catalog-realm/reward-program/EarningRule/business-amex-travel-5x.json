@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "category": "Travel - Amex Travel",
+      "rateMultiplier": 5,
+      "appliesTo": "Flights and prepaid hotels booked on AmexTravel.com",
+      "capAmount": null,
+      "capCurrency": null,
+      "conditions": "Earn 5X Membership Rewards® points on flights and prepaid hotels booked on AmexTravel.com.‡",
+      "title": "5X Travel - Amex Travel"
+    },
+    "relationships": {
+      "capPeriod": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-system",
+        "name": "EarningRule"
+      }
+    }
+  }
+}

@@ -1,0 +1,588 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RewardCardProgram",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "Sample instance for modeling purposes. Verify current terms and enrollment requirements with American Express; benefits and earning rates subject to change.",
+      "issuer": "American Express",
+      "network": "American Express",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://icm.aexp-static.com/acquisition/card-art/NUS000000363_480x304_straight_withname.png"
+      },
+      "cardName": "The Platinum Card from American Express",
+      "annualFee": 895,
+      "amexLogoUrl": "https://cdn.brandfetch.io/id5WXF6Iyd/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "signupBonus": {
+        "bonusType": "points",
+        "description": "Earn 80,000 Membership Rewards points after you spend $8,000 on purchases in your first 6 months of Card Membership.",
+        "pointsAmount": 80000,
+        "bonusCurrency": "Membership Rewards",
+        "spendWindowDays": 180,
+        "spendRequirementAmount": 8000,
+        "spendRequirementCurrency": "USD"
+      },
+      "earningRules": [
+        {
+          "category": "Flights",
+          "rateMultiplier": 5,
+          "appliesTo": "Flights booked directly with airlines or through American Express Travel",
+          "capAmount": 500000,
+          "capCurrency": "USD",
+          "capPeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "conditions": "5X Membership Rewards points on eligible flight purchases; up to $500,000 per calendar year."
+        },
+        {
+          "category": "Prepaid Hotels",
+          "rateMultiplier": 5,
+          "appliesTo": "Prepaid hotels booked on American Express Travel",
+          "capAmount": null,
+          "capCurrency": null,
+          "capPeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "conditions": "5X Membership Rewards points on prepaid hotel bookings made through American Express Travel."
+        },
+        {
+          "category": "All Other Purchases",
+          "rateMultiplier": 1,
+          "appliesTo": "All other eligible purchases",
+          "capAmount": null,
+          "capCurrency": null,
+          "capPeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "conditions": "1X Membership Rewards points on all other eligible purchases with no cap."
+        }
+      ],
+      "otherBenefits": [],
+      "programEndDate": null,
+      "programStartDate": "2025-09-18",
+      "annualFeeCurrency": "USD",
+      "statementBenefits": [
+        {
+          "name": "The Global Lounge Collection",
+          "partner": "Centurion Lounges & Partners",
+          "benefitKind": "access",
+          "amount": 850,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Over $850 of annual value with access to Centurion Lounges, 10 complimentary Delta Sky Club visits when flying on an eligible Delta flight, Priority Pass Select membership (enrollment required), and other select partner lounges.",
+          "details": [
+            "Centurion Lounge access",
+            "10 Delta Sky Club visits per year",
+            "Priority Pass Select membership",
+            "Select partner lounges"
+          ]
+        },
+        {
+          "name": "Hotel Credit",
+          "partner": "Fine Hotels + Resorts / The Hotel Collection",
+          "benefitKind": "statement-credit",
+          "amount": 300,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "half-year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": 2,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": "The Hotel Collection requires minimum two-night stay"
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits up to $300 semi-annually on prepaid Fine Hotels + Resorts or The Hotel Collection bookings through Amex Travel. The Hotel Collection requires a minimum two-night stay.",
+          "details": []
+        },
+        {
+          "name": "Uber Cash",
+          "partner": "Uber / Uber Eats (U.S.)",
+          "benefitKind": "statement-credit",
+          "amount": 15,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "month",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": "Additional $20 in December; total annual value up to $200"
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Add your Card to your Uber account and pay for rides or orders in the U.S. with an Amex Card to get $15 in Uber Cash monthly, plus a $20 bonus in December.",
+          "details": []
+        },
+        {
+          "name": "Uber One Credit",
+          "partner": "Uber One",
+          "benefitKind": "statement-credit",
+          "amount": 120,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits per calendar year after you purchase an auto-renewing Uber One membership. Terms Apply.",
+          "details": []
+        },
+        {
+          "name": "Airline Fee Credit",
+          "partner": "Selected Airline",
+          "benefitKind": "statement-credit",
+          "amount": 200,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits per calendar year for incidental fees charged by your one selected qualifying airline.",
+          "details": []
+        },
+        {
+          "name": "CLEAR Plus Credit",
+          "partner": "CLEAR",
+          "benefitKind": "statement-credit",
+          "amount": 209,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits per calendar year for an auto-renewing CLEAR Plus Membership, excluding taxes and fees.",
+          "details": []
+        },
+        {
+          "name": "Resy Credit",
+          "partner": "Resy",
+          "benefitKind": "statement-credit",
+          "amount": 100,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "quarter",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits up to $100 quarterly when you make eligible purchases at U.S. Resy restaurants. Enrollment required.",
+          "details": []
+        },
+        {
+          "name": "Digital Entertainment Credit",
+          "partner": "Participating Partners",
+          "benefitKind": "statement-credit",
+          "amount": 25,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "month",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits earned monthly of up to $25 on eligible purchases at participating partners. Enrollment required.",
+          "details": []
+        },
+        {
+          "name": "lululemon Credit",
+          "partner": "lululemon",
+          "benefitKind": "statement-credit",
+          "amount": 75,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "quarter",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits up to $75 quarterly for eligible purchases at U.S. lululemon retail stores (excluding outlets) and lululemon.com. Enrollment required.",
+          "details": []
+        },
+        {
+          "name": "Walmart+ Credit",
+          "partner": "Walmart+",
+          "benefitKind": "statement-credit",
+          "amount": 12.95,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "month",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": "Total annual value up to $155"
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credit for one auto-renewing monthly Walmart+ membership, up to $12.95 monthly plus applicable taxes.",
+          "details": []
+        },
+        {
+          "name": "Shop Saks Credit",
+          "partner": "Saks Fifth Avenue",
+          "benefitKind": "statement-credit",
+          "amount": 50,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "half-year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits up to $50 semi-annually for purchases made at Saks Fifth Avenue or saks.com. Enrollment required.",
+          "details": []
+        },
+        {
+          "name": "Shop Saks Credit",
+          "partner": "Saks Fifth Avenue",
+          "benefitKind": "statement-credit",
+          "amount": 50,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": "half-year",
+            "count": 1,
+            "scope": "calendar",
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": "Statement credits up to $50 semi-annually for purchases made at Saks Fifth Avenue or saks.com. Enrollment required.",
+          "details": []
+        }
+      ],
+      "businessOrPersonal": "personal",
+      "membershipBenefits": [
+        {
+          "membershipProgram": "Marriott Bonvoy",
+          "statusLevel": "Gold Elite",
+          "autoEnrollment": false,
+          "enrollmentInstructions": "Enroll via your American Express account to activate Gold Elite status; terms apply.",
+          "benefitsList": [
+            "Upgrades to enhanced rooms upon check-in when available",
+            "Available at participating hotels when booked with a Qualifying Rate"
+          ],
+          "name": "Marriott Bonvoy Gold Elite Status",
+          "partner": "Marriott Bonvoy",
+          "benefitKind": "membership",
+          "amount": null,
+          "currency": null,
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": null,
+          "details": []
+        },
+        {
+          "membershipProgram": "Hilton Honors",
+          "statusLevel": "Gold",
+          "autoEnrollment": false,
+          "enrollmentInstructions": "Enroll via your American Express account to activate Hilton Honors Gold status; terms apply.",
+          "benefitsList": [
+            "Space-available room upgrades at select properties",
+            "80% Bonus on Hilton Honors Base Points earned",
+            "Daily food & beverage credit at select U.S. brands; daily continental breakfast outside the U.S.",
+            "5th night free on standard room stays booked with 100% Points",
+            "Check-in, choose your room, and order ahead via the Hilton Honors App",
+            "Two complimentary bottles of water per stay at select properties",
+            "Hilton’s Price Match Guarantee"
+          ],
+          "name": "Hilton Honors Gold Status",
+          "partner": "Hilton Honors",
+          "benefitKind": "membership",
+          "amount": null,
+          "currency": null,
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": null,
+          "details": []
+        },
+        {
+          "membershipProgram": "Leaders Club",
+          "statusLevel": "Sterling",
+          "autoEnrollment": false,
+          "enrollmentInstructions": "Enrollment required through your American Express account; terms apply.",
+          "benefitsList": [
+            "5% Leaders Club points bonus on qualifying stays",
+            "5 pre-arrival upgrades annually (subject to availability)"
+          ],
+          "name": "Leaders Club Sterling Status",
+          "partner": "The Leading Hotels of the World",
+          "benefitKind": "membership",
+          "amount": null,
+          "currency": null,
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": null,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": true,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": null,
+          "conditions": null,
+          "details": []
+        },
+        {
+          "membershipProgram": "The Hotel Collection",
+          "statusLevel": null,
+          "autoEnrollment": false,
+          "enrollmentInstructions": "No enrollment required. Benefits apply automatically when booking through AmexTravel.com.",
+          "benefitsList": [
+            "Daily breakfast for two guests",
+            "Complimentary Wi-Fi",
+            "Room upgrade upon arrival when available",
+            "Guaranteed 4PM late checkout",
+            "$100 USD equivalent credit towards eligible charges",
+            "Minimum 2-night stay required"
+          ],
+          "name": "The Hotel Collection",
+          "partner": "American Express Travel",
+          "benefitKind": "membership",
+          "amount": 100,
+          "currency": "USD",
+          "timePeriod": {
+            "unit": null,
+            "count": null,
+            "scope": null,
+            "constraints": {
+              "resetBasis": null,
+              "eligibleBookingNightsMin": 2,
+              "maxUsesPerPeriod": null,
+              "minAmount": null,
+              "minAmountCurrency": null,
+              "notes": null
+            }
+          },
+          "enrollmentRequired": false,
+          "minSpend": null,
+          "minSpendCurrency": null,
+          "programURL": "https://www.americanexpress.com/us/travel/hotel-collection/",
+          "conditions": "Receive a $100 credit towards eligible charges when you book two nights or more with The Hotel Collection with AmexTravel.com. The Hotel Collection requires a two-night minimum stay. Eligible charges vary by property.",
+          "details": [
+            "Receive a $100 credit towards eligible charges¹ when you book two nights or more with The Hotel Collection with AmexTravel.com.²‡",
+            "¹Eligible charges vary by property.",
+            "²The Hotel Collection requires a two-night minimum stay.",
+            "Daily breakfast for two guests",
+            "Complimentary Wi-Fi",
+            "Room upgrade upon arrival when available",
+            "Guaranteed 4PM late checkout",
+            "$100 USD equivalent credit towards eligible charges",
+            "Must book through AmexTravel.com",
+            "Minimum 2-night stay required"
+          ]
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/4a758746-a54f-4086-b2c1-ab960e1d37a2"
+        }
+      }
+    }
+  }
+}

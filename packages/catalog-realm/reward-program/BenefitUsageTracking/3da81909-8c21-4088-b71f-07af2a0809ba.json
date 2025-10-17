@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "usedQ1": false,
+      "usedQ2": false,
+      "usedQ3": false,
+      "usedQ4": false,
+      "lastUsedDate": null,
+      "notes": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-system-tracker",
+        "name": "BenefitUsageTracking"
+      }
+    }
+  }
+}
