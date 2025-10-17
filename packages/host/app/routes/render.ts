@@ -11,6 +11,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import {
   formattedError,
   CardError,
+  baseRealm,
   SupportedMimeType,
   isCardError,
   type CardErrorsJSONAPI,
@@ -23,6 +24,7 @@ import { Deferred } from '@cardstack/runtime-common/deferred';
 import { serializableError } from '@cardstack/runtime-common/error';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   windowErrorHandler,
@@ -249,6 +251,9 @@ export default class RenderRoute extends Route<Model> {
       this.#dispositionModel(model, 'error');
       throw e;
     }
+    if (instance) {
+      await this.#touchIsUsedFields(instance);
+    }
     await this.store.loaded();
     if (instance) {
       model.instance = instance;
@@ -260,6 +265,28 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__renderInstance = instance;
     this.currentTransition = undefined;
     return model;
+  }
+
+  async #touchIsUsedFields(instance: CardDef): Promise<void> {
+    let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    // a computed linksTo/linksToMany isn't a thing yet, but some day it
+    // probably will be, so just optimistically including those
+    let fields = cardApi.getFields(instance, { includeComputeds: true });
+    for (let [fieldName, field] of Object.entries(fields)) {
+      if (field?.isUsed) {
+        try {
+          // accessing the field triggers the lazy loading of the linked field
+          (instance as any)[fieldName];
+        } catch (error) {
+          console.warn(
+            `Failed to touch field '${fieldName}' on ${instance.constructor.name} for isUsed=true:`,
+            error,
+          );
+        }
+      }
+    }
   }
 
   setupController(controller: Controller, model: Model) {
