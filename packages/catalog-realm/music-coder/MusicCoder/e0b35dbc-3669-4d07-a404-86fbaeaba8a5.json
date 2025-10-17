@@ -10,7 +10,7 @@
     "attributes": {
       "bpm": null,
       "title": null,
-      "pattern": "s(\"bd(3,8), sd(5,8,2)\")",
+      "pattern": "s(\"bd ~ bd sd, hh*8\")",
       "cardInfo": {
         "notes": null,
         "title": null,
