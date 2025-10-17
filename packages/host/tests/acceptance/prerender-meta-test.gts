@@ -30,7 +30,7 @@ module('Acceptance | prerender | meta', function (hooks) {
   });
 
   const DEFAULT_RENDER_OPTIONS_SEGMENT = encodeURIComponent(
-    JSON.stringify({ resetStore: true } as RenderRouteOptions),
+    JSON.stringify({ clearCache: true } as RenderRouteOptions),
   );
   const renderPath = (url: string, suffix: string, nonce = 0) =>
     `/render/${encodeURIComponent(

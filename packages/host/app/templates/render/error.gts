@@ -19,8 +19,12 @@ class RenderErrorRouteComponent extends Component<Signature> {
   }
 
   <template>
-    <pre data-prerender-error>
-       {{this.reason}}
+    <pre
+      data-prerender-error
+      data-prerender-id={{this.renderErrorState.cardId}}
+      data-prerender-nonce={{this.renderErrorState.nonce}}
+    >
+      {{this.reason}}
     </pre>
   </template>
 }

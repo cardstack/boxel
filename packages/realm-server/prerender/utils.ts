@@ -1,10 +1,13 @@
 import {
   delay,
+  logger,
   type PrerenderMeta,
   type RenderError,
 } from '@cardstack/runtime-common';
 
 import { type Page } from 'puppeteer';
+
+const log = logger('prerenderer');
 
 export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 15_000);
 
@@ -186,7 +189,7 @@ export async function captureResult(
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
   opts?: CaptureOptions,
 ): Promise<RenderCapture> {
-  const statuses: RenderStatus[] = ['ready', 'unusable'];
+  const statuses: RenderStatus[] = ['ready', 'error', 'unusable'];
   await page.waitForFunction(
     (
       statuses: string[],
@@ -200,7 +203,11 @@ export async function captureResult(
         let errorElement = document.querySelector(
           '[data-prerender-error]',
         ) as HTMLElement | null;
-        return Boolean(errorElement);
+        if (!errorElement) {
+          return false;
+        }
+        let raw = errorElement.textContent ?? errorElement.innerHTML ?? '';
+        return raw.trim().length > 0;
       }
       let path = window.location.pathname;
       let expectingRender = path.includes('/render/');
@@ -231,9 +238,16 @@ export async function captureResult(
       }
       for (let element of elements) {
         let status = element.dataset.prerenderStatus ?? '';
-        let hasError =
-          status === 'loading' &&
-          element.querySelector('[data-prerender-error]') !== null;
+        const errorElement = element.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        const errorText = (
+          errorElement?.textContent ??
+          errorElement?.innerHTML ??
+          ''
+        ).trim();
+        const errorHasText = errorText.length > 0;
+        const hasError = errorElement !== null && errorHasText;
         if (!statuses.includes(status) && !hasError) {
           continue;
         }
@@ -256,11 +270,21 @@ export async function captureResult(
       if (!expectingRender) {
         return elements.some((element) => {
           let status = element.dataset.prerenderStatus ?? '';
+          const errorElement = element.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          const errorText = (
+            errorElement?.textContent ??
+            errorElement?.innerHTML ??
+            ''
+          ).trim();
+          const errorHasText = errorText.length > 0;
+          const hasError = errorElement !== null && errorHasText;
           if (statuses.includes(status)) {
             return true;
           }
-          if (status === 'loading') {
-            return element.querySelector('[data-prerender-error]') !== null;
+          if (hasError) {
+            return true;
           }
           return false;
         });
@@ -312,24 +336,31 @@ export async function captureResult(
       let element =
         elements.find((candidate) => {
           let status = candidate.dataset.prerenderStatus ?? '';
-          let hasError =
-            status === 'loading' &&
-            candidate.querySelector('[data-prerender-error]') !== null;
+          const errorElement = candidate.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          const errorText = (
+            errorElement?.textContent ??
+            errorElement?.innerHTML ??
+            ''
+          ).trim();
+          const errorHasText = errorText.length > 0;
+          const hasError = errorElement !== null && errorHasText;
           if (!statuses.includes(status) && !hasError) {
             return false;
           }
-          if (
-            targetId &&
-            candidate.dataset.prerenderId &&
-            candidate.dataset.prerenderId !== targetId
-          ) {
+          let candidateId =
+            candidate.dataset.prerenderId ??
+            errorElement?.dataset.prerenderId ??
+            null;
+          let candidateNonce =
+            candidate.dataset.prerenderNonce ??
+            errorElement?.dataset.prerenderNonce ??
+            null;
+          if (targetId && candidateId && candidateId !== targetId) {
             return false;
           }
-          if (
-            targetNonce &&
-            candidate.dataset.prerenderNonce &&
-            candidate.dataset.prerenderNonce !== targetNonce
-          ) {
+          if (targetNonce && candidateNonce && candidateNonce !== targetNonce) {
             return false;
           }
           return true;
@@ -339,10 +370,17 @@ export async function captureResult(
           if (statuses.includes(status)) {
             return true;
           }
-          if (status === 'loading') {
-            return candidate.querySelector('[data-prerender-error]') !== null;
-          }
-          return false;
+          const fallbackErrorElement = candidate.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          const fallbackText = (
+            fallbackErrorElement?.textContent ??
+            fallbackErrorElement?.innerHTML ??
+            ''
+          ).trim();
+          const fallbackHasError =
+            fallbackErrorElement !== null && fallbackText.length > 0;
+          return fallbackHasError;
         });
       let strayErrorElement: HTMLElement | null = null;
       if (!element) {
@@ -365,6 +403,9 @@ export async function captureResult(
         return {
           status: 'error',
           value: json.trim(),
+          id: strayErrorElement.getAttribute('data-prerender-id') ?? undefined,
+          nonce:
+            strayErrorElement.getAttribute('data-prerender-nonce') ?? undefined,
         } as RenderCapture;
       }
       let resolvedElement = element as HTMLElement;
@@ -397,8 +438,14 @@ export async function captureResult(
           status,
           value: json.trim(),
           alive,
-          id: resolvedElement.dataset.prerenderId ?? undefined,
-          nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
+          id:
+            resolvedElement.dataset.prerenderId ??
+            errorElement?.dataset.prerenderId ??
+            undefined,
+          nonce:
+            resolvedElement.dataset.prerenderNonce ??
+            errorElement?.dataset.prerenderNonce ??
+            undefined,
         } as RenderCapture;
       } else {
         const firstChild = resolvedElement.children[0] as HTMLElement & {
@@ -449,6 +496,11 @@ export async function withTimeout<T>(
     let [_a, _b, encodedId] = url.pathname.split('/');
     let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
+    let dom = await page.evaluate(() => {
+      let el = document.querySelector('[data-prerender]');
+      return el?.outerHTML;
+    });
+    log.warn(`render of ${id} timed out with DOM:\n${dom?.trim()}`);
     return {
       error: {
         id,

@@ -241,6 +241,19 @@ module(basename(__filename), function () {
                 static embedded = <template>{{@fields.name}} says Meow. owned by <@fields.owner /></template>
               }
             `,
+            'dog.gts': `
+              import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+              export class Dog extends CardDef {
+                static displayName = "Dog";
+                @field name = contains(StringField);
+                @field owner = linksTo(Person, { isUsed: true });
+                static isolated = class extends Component<typeof this> {
+                  // owner is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
             '1.json': {
               data: {
                 attributes: {
@@ -249,6 +262,62 @@ module(basename(__filename), function () {
                 relationships: {
                   owner: {
                     links: { self: `${realmURL1}1` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './cat',
+                    name: 'Cat',
+                  },
+                },
+              },
+            },
+            'is-used.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
+                },
+                relationships: {
+                  owner: {
+                    links: { self: `${realmURL1}1` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog',
+                    name: 'Dog',
+                  },
+                },
+              },
+            },
+            'missing-link.json': {
+              data: {
+                attributes: {
+                  name: 'Missing Owner',
+                },
+                relationships: {
+                  owner: {
+                    links: { self: `${realmURL1}missing-owner` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './cat',
+                    name: 'Cat',
+                  },
+                },
+              },
+            },
+            'fetch-failed.json': {
+              data: {
+                attributes: {
+                  name: 'Missing Owner',
+                },
+                relationships: {
+                  owner: {
+                    links: {
+                      self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+                    },
                   },
                 },
                 meta: {
@@ -492,11 +561,31 @@ module(basename(__filename), function () {
       test('searchDoc', function (assert) {
         assert.strictEqual(result.searchDoc?.name, 'Maple');
         assert.strictEqual(result.searchDoc?._cardType, 'Cat');
-        // This assertion seems flaky in CI is there some kind of race condition
-        // here?. we do have coverage for this in host tests, but it would be
-        // nice to see this in server tests too...
+        assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
+      });
 
-        // assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
+      test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
+        const testCardURL = `${realmURL2}is-used`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+
+        assert.ok(
+          /Mango/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="owner"/.test(response.isolatedHTML!),
+          `owner field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.owner.name,
+          'Hassan',
+          'linked field is included in search doc via isUsed=true',
+        );
       });
     });
 
@@ -535,6 +624,58 @@ module(basename(__filename), function () {
           iconHTML: null,
           isolatedHTML: null,
         });
+      });
+
+      test('missing link surfaces 404 without eviction', async function (assert) {
+        const testCardURL = `${realmURL2}missing-link`;
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        let { response } = result;
+
+        assert.ok(response.error, 'error present for missing link');
+        assert.strictEqual(
+          response.error?.error.message,
+          `missing-owner.json not found`,
+        );
+        assert.strictEqual(response.error?.error.status, 404);
+        assert.false(
+          result.pool.evicted,
+          'missing link does not evict prerender page',
+        );
+        assert.false(
+          result.pool.timedOut,
+          'missing link does not mark prerender timeout',
+        );
+      });
+
+      test('fetch failed surfaces error without eviction', async function (assert) {
+        const testCardURL = `${realmURL2}fetch-failed`;
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        let { response } = result;
+
+        assert.ok(response.error, 'error present for fetch failed');
+        assert.strictEqual(
+          response.error?.error.message,
+          `unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed`,
+        );
+        assert.strictEqual(response.error?.error.status, 500);
+        assert.false(
+          result.pool.evicted,
+          'fetch failed does not evict prerender page',
+        );
+        assert.false(
+          result.pool.timedOut,
+          'fetch failed does not mark prerender timeout',
+        );
       });
 
       test('embedded error markup triggers render error', async function (assert) {
