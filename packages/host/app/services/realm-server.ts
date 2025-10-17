@@ -38,6 +38,12 @@ export interface RealmServerTokenClaims {
   sessionRoom: string;
 }
 
+export interface SubdomainAvailabilityResult {
+  available: boolean;
+  domain: string;
+  error?: string;
+}
+
 interface RealmServerEvent {
   eventType: string;
   data: any;
@@ -65,6 +71,7 @@ export default class RealmServerService extends Service {
   @service declare private network: NetworkService;
   @service declare private reset: ResetService;
   @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
@@ -524,6 +531,31 @@ export default class RealmServerService extends Service {
     }
 
     return response.json();
+  }
+
+  async checkSiteNameAvailability(
+    subdomain: string,
+  ): Promise<SubdomainAvailabilityResult> {
+    await this.login();
+
+    let url = new URL(`${this.url.href}_check-boxel-domain-availability`);
+    url.searchParams.set('subdomain', subdomain);
+
+    let response = await this.realmServer.authedFetch(url.href, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      let errorText = await response.text();
+      throw new Error(
+        `Check site name availability failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return (await response.json()) as SubdomainAvailabilityResult;
   }
 
   async unpublishRealm(publishedRealmURL: string) {
