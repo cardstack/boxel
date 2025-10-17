@@ -62,7 +62,7 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     <Button
       class='send-error-to-ai-assistant'
       @kind='secondary-dark'
-      @size='extra-small'
+      @size='small'
       @disabled={{this.sendToAiAssistant.isRunning}}
       {{on 'click' this.sendToAiAssistant.perform}}
       data-test-send-error-to-ai-assistant

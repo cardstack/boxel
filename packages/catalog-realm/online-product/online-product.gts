@@ -187,7 +187,7 @@ class IsolatedTemplate extends Component<typeof OnlineProduct> {
 
                 {{#if (gt @model.shortDescription.length 150)}}
                   <Button
-                    @variant='ghost'
+                    @variant='text-only'
                     class='description-toggle'
                     {{on 'click' this.toggleDescription}}
                   >

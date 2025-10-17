@@ -13,11 +13,11 @@ import startCase from 'lodash/startCase';
 import { LoadingIndicator, IconButton } from '@cardstack/boxel-ui/components';
 import {
   IconInherit,
-  IconTrash,
   IconPlus,
   IconSearch,
   Copy,
 } from '@cardstack/boxel-ui/icons';
+import IconTrash from '@cardstack/boxel-icons/trash-2';
 
 import {
   hasExecutableExtension,
@@ -406,6 +406,7 @@ export default class DetailPanel extends Component<Signature> {
               {{#if (this.realm.canWrite @readyFile.url)}}
                 <IconButton
                   @icon={{IconTrash}}
+                  @size='small'
                   @width='15'
                   @height='15'
                   {{on 'click' (fn @delete this.codePath)}}
@@ -439,6 +440,7 @@ export default class DetailPanel extends Component<Signature> {
                   @icon={{IconTrash}}
                   @width='15'
                   @height='15'
+                  @size='small'
                   {{on 'click' (fn @delete this.codePath)}}
                   class='delete-module-button'
                   aria-label='Delete Module'
@@ -571,21 +573,11 @@ export default class DetailPanel extends Component<Signature> {
         align-items: center;
         height: 100%;
       }
-      .delete-module-button {
-        --icon-stroke-width: 1.2px;
-        border: none;
-        border-radius: var(--boxel-border-radius-xs);
-        width: 20px;
-        height: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
       .delete-module-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-danger);
+        color: var(--boxel-danger);
       }
       .delete-module-button:focus:focus-visible:not(:disabled) {
-        --icon-color: var(--boxel-danger);
+        color: var(--boxel-danger);
         outline: 2px solid var(--boxel-danger);
         outline-offset: 0;
       }

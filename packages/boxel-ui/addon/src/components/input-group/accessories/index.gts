@@ -5,7 +5,7 @@ import cn from '../../../helpers/cn.ts';
 import setCssVar from '../../../modifiers/set-css-var.ts';
 import BoxelButton, { type BoxelButtonKind } from '../../button/index.gts';
 import BoxelIconButton, {
-  type Signature as BoxelIconButtonSignature,
+  type BoxelIconButtonSignature,
 } from '../../icon-button/index.gts';
 import BoxelSelect, { type BoxelSelectArgs } from '../../select/index.gts';
 

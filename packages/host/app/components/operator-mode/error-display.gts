@@ -115,20 +115,24 @@ export default class ErrorDisplay
         <CopyButton
           @textToCopy={{this.errorText}}
           @width='16px'
-          @heigth='16px'
+          @height='16px'
         />
         <Button
           class='toggle-details-button'
           @kind='text-only'
-          @size='extra-small'
+          @size='small'
           {{on 'click' this.toggleDetails}}
           data-test-toggle-details
         >
-          {{if this.showDetails 'Hide Details' 'Show Details'}}
+          <span class='detail-text'>{{if
+              this.showDetails
+              'Hide Details'
+              'Show Details'
+            }}</span>
           {{#if this.showDetails}}
-            <DropdownArrowUp width='12px' height='12px' />
+            <DropdownArrowUp width='10px' height='10px' />
           {{else}}
-            <DropdownArrowDown width='12px' height='12px' />
+            <DropdownArrowDown width='10px' height='10px' />
           {{/if}}
         </Button>
       </div>
@@ -209,27 +213,20 @@ export default class ErrorDisplay
         display: flex;
         justify-content: flex-end;
         align-items: center;
+        gap: var(--boxel-sp-5xs);
         margin-top: var(--boxel-sp);
         padding: 0 var(--boxel-sp);
-
-        --boxel-icon-button-height: 20px;
-        --boxel-icon-button-width: 20px;
       }
 
       .toggle-details-button {
-        padding: 0;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        width: 100px;
-        justify-content: flex-end;
-        font-weight: 400;
-        border: none;
+        width: 6.25rem;
+        padding-inline: var(--boxel-sp-5xs);
+        gap: var(--boxel-sp-xxxs);
+        border-radius: var(--boxel-border-radius-sm);
       }
 
-      .toggle-details-button:hover {
-        background-color: transparent;
+      .detail-text {
+        flex-grow: 1;
       }
 
       .error-details {

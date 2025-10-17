@@ -9,7 +9,7 @@ import { Velcro } from 'ember-velcro';
 
 import cn from '../../helpers/cn.ts';
 
-interface Signature {
+export interface TooltipSignature {
   Args: {
     offset?: number;
     placement?: MiddlewareState['placement'];
@@ -21,7 +21,7 @@ interface Signature {
   };
   Element: HTMLElement;
 }
-export default class Tooltip extends Component<Signature> {
+export default class Tooltip extends Component<TooltipSignature> {
   @tracked isHoverOnTrigger = false;
   private overlayContainer?: HTMLElement | null = null;
   private themeObserver?: MutationObserver | null = null;

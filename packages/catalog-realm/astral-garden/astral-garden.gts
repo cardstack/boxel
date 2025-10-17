@@ -113,7 +113,7 @@ class IsolatedTemplate extends Component<typeof AstralGardens> {
 
               <Button
                 class='cta-button'
-                @variant='primary'
+                @kind='primary'
                 {{on 'click' (fn this.selectSection 'luminous-grove')}}
               >
                 Begin Your Journey

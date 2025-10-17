@@ -7,6 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import Copy from '@cardstack/boxel-icons/copy';
 
+import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import { dropTask } from 'ember-concurrency';
@@ -20,7 +21,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
-import { ThreeDotsHorizontal, IconCode } from '@cardstack/boxel-ui/icons';
+import { IconCode } from '@cardstack/boxel-ui/icons';
 
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 
@@ -142,15 +143,12 @@ export default class AttachedFileDropdownMenu extends Component<{
 
   <template>
     <style scoped>
-      button.context-menu-button {
-        rotate: 90deg;
-        flex-shrink: 0;
-
-        --boxel-icon-button-width: 20px;
+      .context-menu-button:not(:disabled):hover {
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
       }
-
-      button.context-menu-button:hover {
-        --icon-color: var(--boxel-highlight);
+      .context-menu-button[aria-expanded='true'] {
+        background-color: var(--boxel-highlight-hover);
       }
     </style>
     {{#if this.isRestorePatchedFileModalOpen}}
@@ -170,9 +168,8 @@ export default class AttachedFileDropdownMenu extends Component<{
           data-test-attached-file-dropdown-button={{@file.name}}
           data-test-copy-file-content={{this.fileContent}}
           class='context-menu-button'
-          @icon={{ThreeDotsHorizontal}}
-          @height='12'
-          @width='12'
+          @size='small'
+          @icon={{DotsVertical}}
           aria-label='file options'
           {{bindings}}
           {{on 'click' (perform this.loadFileContent)}}

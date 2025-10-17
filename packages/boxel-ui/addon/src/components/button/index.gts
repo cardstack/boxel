@@ -9,9 +9,12 @@ import LoadingIndicator from '../loading-indicator/index.gts';
 export type BoxelButtonKind =
   | 'default'
   | 'primary'
+  | 'primary-text-only'
   | 'secondary'
   | 'muted'
   | 'destructive'
+  | 'destructive-secondary'
+  | 'destructive-text-only'
   | 'danger' // deprecated, same as 'destructive'
   | 'text-only'
   | 'primary-dark'
@@ -21,10 +24,13 @@ export type BoxelButtonKind =
 export const buttonKindOptions: BoxelButtonKind[] = [
   'default',
   'primary',
+  'primary-text-only',
   'secondary',
   'muted',
-  'destructive',
   'text-only',
+  'destructive',
+  'destructive-secondary',
+  'destructive-text-only',
   'primary-dark',
   'secondary-light',
   'secondary-dark',
@@ -79,7 +85,8 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
     {{#if (or (not @as) (eq @as 'button'))}}
       <button
         class={{classes}}
-        tabindex={{if @loading -1 0}}
+        aria-label={{if @loading 'loading'}}
+        aria-disabled={{@disabled}}
         disabled={{@disabled}}
         data-test-boxel-button
         ...attributes
@@ -159,6 +166,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       }
       .boxel-button:focus-visible {
         outline-color: var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
       }
 
       .loading-indicator {
@@ -279,16 +287,61 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       .kind-danger:not(:disabled):active {
         --boxel-button-color: var(--destructive, var(--boxel-danger-hover));
       }
+      .kind-destructive-secondary {
+        --boxel-button-text-color: var(--destructive, var(--boxel-danger));
+        --boxel-button-border: 1px solid var(--boxel-button-text-color);
+      }
+      .kind-destructive-secondary:not(:disabled):hover {
+        --boxel-button-text-color: var(
+          --destructive,
+          var(--boxel-danger-hover)
+        );
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--destructive) 10%,
+          transparent
+        );
+      }
+      .kind-destructive-text-only {
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: var(--destructive, var(--boxel-danger));
+        border-color: transparent;
+      }
+      .kind-destructive-text-only:not(:disabled):hover {
+        --boxel-button-text-color: var(
+          --destructive,
+          var(--boxel-danger-hover)
+        );
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--boxel-danger, var(--destructive)) 10%,
+          transparent
+        );
+      }
+
+      .kind-primary-text-only {
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: var(--primary, var(--boxel-highlight));
+        border-color: transparent;
+      }
+      .kind-primary-text-only:not(:disabled):hover {
+        --boxel-button-text-color: var(--primary-foreground, var(--boxel-dark));
+        --boxel-button-color: var(--primary, var(--boxel-highlight));
+      }
 
       .kind-text-only {
         /* transparent background and border */
         --boxel-button-color: transparent;
         --boxel-button-text-color: inherit;
+        border-color: transparent;
       }
       .kind-text-only:not(:disabled):hover,
       .kind-text-only:not(:disabled):active {
-        --boxel-button-color: var(--accent, var(--boxel-200));
-        --boxel-button-text-color: var(--accent-foreground, var(--boxel-dark));
+        --boxel-button-color: var(
+          --accent,
+          color-mix(in oklab, currentColor 7%, transparent)
+        );
+        --boxel-button-text-color: var(--accent-foreground, currentColor);
       }
 
       .kind-primary-dark {
@@ -355,16 +408,16 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }
 
-      /* thinner base button */
       .size-small {
         --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
-        --boxel-button-min-height: 2rem;
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-min-height: 1.875rem;
         --boxel-button-min-width: 5rem;
       }
 
       .size-base {
         --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xl);
-        --boxel-button-min-height: 2rem;
+        --boxel-button-min-height: 1.875rem;
         --boxel-button-min-width: 5rem;
       }
 

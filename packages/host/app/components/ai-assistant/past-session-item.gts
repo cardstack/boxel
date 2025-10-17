@@ -11,6 +11,7 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
 
 import {
+  Button,
   BoxelDropdown,
   IconButton,
   Menu,
@@ -20,10 +21,11 @@ import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import {
   IconPencil,
   IconTrash,
-  ThreeDotsHorizontal,
   IconCircle,
   Copy as CopyIcon,
 } from '@cardstack/boxel-ui/icons';
+
+import ThreeDotsHorizontal from '@cardstack/boxel-icons/dots';
 
 import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -54,84 +56,91 @@ export default class PastSessionItem extends Component<Signature> {
       data-room-id={{@session.roomId}}
       data-is-current-room={{@isCurrentRoom}}
     >
-      <button
-        class='view-session-button'
-        {{on 'click' (fn @actions.open @session.roomId)}}
-        data-test-enter-room={{@session.roomId}}
-      >
-        <div class='name'>{{@session.name}}</div>
-        <div
-          class='date
-            {{if this.isStreaming "is-streaming"}}
-            {{if this.hasUnseenMessage "has-unseen-message"}}'
-          data-test-last-active={{this.lastActive}}
-          data-test-is-streaming={{this.isStreaming}}
-          data-test-is-unseen-message={{this.hasUnseenMessage}}
+      <span class='session-item-content'>
+        <Button
+          @kind='secondary-dark'
+          @size='auto'
+          class='view-session-button'
+          {{on 'click' (fn @actions.open @session.roomId)}}
+          data-test-enter-room={{@session.roomId}}
         >
-          {{#if this.isStreaming}}
-            <IconCircle
-              width='12px'
-              height='12px'
-              class='icon-recency-indicator icon-streaming pulsing'
-            />
-            Thinking…
-          {{else if this.hasUnseenMessage}}
-            <IconCircle
-              width='10px'
-              height='10px'
-              class='icon-recency-indicator icon-new-messages'
-            />
-            Updated
-            {{this.formattedDate}}
-          {{else}}
-            {{this.formattedDate}}
-          {{/if}}
-        </div>
-      </button>
-      <BoxelDropdown>
-        <:trigger as |bindings|>
-          <Tooltip @placement='top'>
-            <:trigger>
-              <IconButton
-                @icon={{ThreeDotsHorizontal}}
-                @width='16px'
-                @height='16px'
-                class='menu-button'
-                aria-label='Options'
-                data-test-past-session-options-button={{@session.roomId}}
-                {{bindings}}
+          <div class='name'>{{@session.name}}</div>
+          <div
+            class='date
+              {{if this.isStreaming "is-streaming"}}
+              {{if this.hasUnseenMessage "has-unseen-message"}}'
+            data-test-last-active={{this.lastActive}}
+            data-test-is-streaming={{this.isStreaming}}
+            data-test-is-unseen-message={{this.hasUnseenMessage}}
+          >
+            {{#if this.isStreaming}}
+              <IconCircle
+                width='12px'
+                height='12px'
+                class='icon-recency-indicator icon-streaming pulsing'
               />
-            </:trigger>
-            <:content>
-              More Options
-            </:content>
-          </Tooltip>
-        </:trigger>
-        <:content as |dd|>
-          <Menu
-            class='menu past-session-menu'
-            @closeMenu={{fn this.handleCloseMenu dd.close}}
-            @items={{array
-              (menuItem
-                'Open Session'
-                (fn @actions.open @session.roomId)
-                icon=ExternalLink
-              )
-              (menuItem 'Rename' (fn @actions.rename @session) icon=IconPencil)
-              (menuItem
-                (if
-                  (eq (@actions.getCopiedRoomId) @session.roomId)
-                  'Copied!'
-                  'Copy Room Id'
+              Thinking…
+            {{else if this.hasUnseenMessage}}
+              <IconCircle
+                width='10px'
+                height='10px'
+                class='icon-recency-indicator icon-new-messages'
+              />
+              Updated
+              {{this.formattedDate}}
+            {{else}}
+              {{this.formattedDate}}
+            {{/if}}
+          </div>
+        </Button>
+        <BoxelDropdown>
+          <:trigger as |bindings|>
+            <Tooltip>
+              <:trigger>
+                <IconButton
+                  @size='small'
+                  @icon={{ThreeDotsHorizontal}}
+                  @width='16px'
+                  @height='16px'
+                  class='menu-button'
+                  aria-label='Options'
+                  data-test-past-session-options-button={{@session.roomId}}
+                  {{bindings}}
+                />
+              </:trigger>
+              <:content>
+                More Options
+              </:content>
+            </Tooltip>
+          </:trigger>
+          <:content as |dd|>
+            <Menu
+              class='menu past-session-menu'
+              @closeMenu={{fn this.handleCloseMenu dd.close}}
+              @items={{array
+                (menuItem
+                  'Open Session'
+                  (fn @actions.open @session.roomId)
+                  icon=ExternalLink
                 )
-                (fn this.handleCopyRoomId @session.roomId)
-                icon=CopyIcon
-              )
-              (menuItem 'Delete' (fn @actions.delete @session) icon=IconTrash)
-            }}
-          />
-        </:content>
-      </BoxelDropdown>
+                (menuItem
+                  'Rename' (fn @actions.rename @session) icon=IconPencil
+                )
+                (menuItem
+                  (if
+                    (eq (@actions.getCopiedRoomId) @session.roomId)
+                    'Copied!'
+                    'Copy Room Id'
+                  )
+                  (fn this.handleCopyRoomId @session.roomId)
+                  icon=CopyIcon
+                )
+                (menuItem 'Delete' (fn @actions.delete @session) icon=IconTrash)
+              }}
+            />
+          </:content>
+        </BoxelDropdown>
+      </span>
     </li>
 
     <style scoped>
@@ -141,31 +150,33 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .session {
+        margin-inline: var(--boxel-sp-xs);
+      }
+      .session + .session {
+        border-top: 1px solid var(--past-sessions-divider-color);
+      }
+      .session + .session[data-is-current-room],
+      .session[data-is-current-room] + .session,
+      .session + .session:hover,
+      .session:hover + .session {
+        border-top-color: transparent;
+      }
+
+      .session-item-content {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-top: 1px solid var(--past-sessions-divider-color);
         padding: var(--boxel-sp) var(--boxel-sp-sm);
-        margin-right: var(--boxel-sp-xs);
-        margin-left: var(--boxel-sp-xs);
+        border: 1px solid transparent;
         border-radius: var(--boxel-border-radius-xs);
       }
-
-      .session:first-child {
-        border-top: none;
+      .session[data-is-current-room] .session-item-content {
+        border-color: var(--past-sessions-divider-color);
       }
-
-      .session:hover {
+      .session-item-content:hover {
         background-color: var(--ai-assistant-menu-hover-background);
-        cursor: pointer;
       }
-      .session[data-is-current-room] {
-        border: 1px solid var(--past-sessions-divider-color);
-      }
-      .session:hover + .session:not([data-is-current-room]),
-      .session[data-is-current-room] + .session {
-        border-top-color: transparent;
-      }
+
       .name {
         font-weight: 600;
       }
@@ -174,33 +185,35 @@ export default class PastSessionItem extends Component<Signature> {
         color: var(--boxel-400);
       }
       .view-session-button {
-        color: var(--boxel-light);
-        background-color: transparent;
-        border: none;
+        display: inline-block;
         width: 100%;
+        max-width: 100%;
+        border: none;
+        border-radius: var(--boxel-border-radius-xs);
+        font-weight: var(--boxel-font-weight-normal);
         text-align: left;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .view-session-button:focus:focus-visible {
+        outline-offset: 2px;
       }
 
       .menu-button {
         visibility: hidden;
-        display: flex;
-        width: auto;
-        height: auto;
-        padding: 2px;
-        border-radius: var(--boxel-border-radius-xs);
       }
-
-      .session:hover .menu-button {
+      .session:hover .menu-button,
+      .session:focus-within .menu-button {
         visibility: visible;
+        outline-offset: 2px;
       }
-
       .menu-button:hover:not(:disabled) {
         background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
       }
-
-      .menu-button :deep(svg) {
-        stroke: var(--boxel-dark);
-        stroke-width: 1px;
+      .menu-button[aria-expanded='true'] {
+        visibility: visible;
+        background-color: var(--boxel-highlight-hover);
+        color: var(--boxel-dark);
       }
 
       .menu {

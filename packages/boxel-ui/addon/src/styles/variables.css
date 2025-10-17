@@ -121,6 +121,7 @@
   --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
   --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
   --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
+  --boxel-border-radius-3xl: calc(var(--boxel-border-radius-xxl) + 10px);
 
   /* animations */
   --boxel-infinite-spin-animation: boxel-spin 6000ms linear infinite;

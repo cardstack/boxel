@@ -195,7 +195,7 @@ class EventTicketEmbedded extends Component<typeof EventTicketCard> {
           <div class='action-buttons'>
             <Button
               class='buy-button {{if this.isPurchasing "purchasing"}}'
-              @variant='primary'
+              @kind='primary'
               {{on 'click' this.handleBuyTicket}}
               {{on 'click' this.stopPropagation}}
               disabled={{this.isPurchasing}}
@@ -213,7 +213,7 @@ class EventTicketEmbedded extends Component<typeof EventTicketCard> {
 
             <Button
               class='share-button'
-              @variant='secondary'
+              @kind='secondary'
               {{on 'click' this.shareEvent}}
               {{on 'click' this.stopPropagation}}
             >

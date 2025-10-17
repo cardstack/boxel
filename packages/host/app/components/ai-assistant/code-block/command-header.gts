@@ -1,9 +1,10 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
+import { CopyButton } from '@cardstack/boxel-ui/components';
+
 import ApplyButton, { type ApplyButtonState } from '../apply-button';
 
-import CopyCodeButton from './copy-code-button';
 import ViewCodeButton from './view-code-button';
 
 export interface CodeBlockCommandHeaderSignature {
@@ -26,7 +27,7 @@ const CodeBlockCommandHeader: TemplateOnlyComponent<CodeBlockCommandHeaderSignat
       <div class='command-description'>{{@commandDescription}}</div>
       <div class='actions'>
         {{#if @isDisplayingCode}}
-          <CopyCodeButton @code={{@code}} />
+          <CopyButton @textToCopy={{@code}} />
         {{/if}}
         <ViewCodeButton
           @isDisplayingCode={{@isDisplayingCode}}
@@ -67,7 +68,7 @@ const CodeBlockCommandHeader: TemplateOnlyComponent<CodeBlockCommandHeaderSignat
         margin-left: auto;
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-4xs);
+        gap: var(--boxel-sp-5xs);
       }
       .command-action {
         margin-left: var(--boxel-sp-5xs);

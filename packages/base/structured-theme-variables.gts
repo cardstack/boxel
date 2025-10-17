@@ -47,8 +47,7 @@ class Embedded extends Component<typeof ThemeVarField> {
           <CopyButton
             class='copy-button'
             @textToCopy={{field.cssVariableName}}
-            @width='16px'
-            @height='16px'
+            @kind='default'
             @ariaLabel='Copy CSS variable name'
           />
         </div>
@@ -58,8 +57,7 @@ class Embedded extends Component<typeof ThemeVarField> {
             <CopyButton
               class='copy-button'
               @textToCopy={{field.value}}
-              @width='16px'
-              @height='16px'
+              @kind='default'
               @ariaLabel='Copy CSS variable value'
             />
           {{else}}
@@ -82,6 +80,7 @@ class Embedded extends Component<typeof ThemeVarField> {
           display: inline-flex;
           align-items: center;
           justify-content: flex-start;
+          gap: var(--boxel-sp-xxxs);
           font-family: var(
             --font-mono,
             var(--boxel-monospace-font-family, monospace)
@@ -103,8 +102,8 @@ class Embedded extends Component<typeof ThemeVarField> {
           font-style: italic;
         }
         .copy-button {
-          color: var(--primary);
           opacity: 0;
+          transition: opacity var(--boxel-transition);
         }
         .code-preview:focus-within .copy-button,
         .code-preview:hover .copy-button {

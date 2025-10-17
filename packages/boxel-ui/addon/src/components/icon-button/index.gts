@@ -1,34 +1,51 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import LoadingIcon from '@cardstack/boxel-icons/loader';
+
 import cn from '../../helpers/cn.ts';
-import LoadingIcon from '../../icons/loading-indicator.gts';
+import { eq } from '../../helpers/truth-helpers.ts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelButton, { type BoxelButtonKind } from '../button/index.gts';
 
-export interface Signature {
-  Args: {
-    class?: string;
-    disabled?: boolean;
-    height?: string;
-    icon?: Icon;
-    loading?: boolean;
-    round?: boolean;
-    variant?: BoxelButtonKind;
-    width?: string;
-  };
+export type BoxelIconButtonSize = 'small' | 'medium' | 'large';
+export const boxelIconButtonSizeOptions = ['small', 'medium', 'large'];
+
+export interface IconButtonArgs {
+  class?: string;
+  disabled?: boolean;
+  height?: string;
+  icon?: Icon;
+  kind?: BoxelButtonKind;
+  loading?: boolean;
+  round?: boolean;
+  size?: BoxelIconButtonSize;
+  width?: string;
+}
+
+export interface BoxelIconButtonSignature {
+  Args: IconButtonArgs;
   Blocks: {
     default: [];
+    tooltipContent?: [];
   };
   Element: HTMLButtonElement | HTMLAnchorElement;
 }
 
-const IconButton: TemplateOnlyComponent<Signature> = <template>
+const IconButton: TemplateOnlyComponent<BoxelIconButtonSignature> = <template>
   <BoxelButton
-    class={{cn 'boxel-icon-button' is-round=@round loading=@loading}}
+    class={{cn
+      'boxel-icon-button'
+      is-round=@round
+      loading=@loading
+      boxel-icon-button--small=(eq @size 'small')
+      boxel-icon-button--medium=(eq @size 'medium')
+      boxel-icon-button--large=(eq @size 'large')
+    }}
     @class={{@class}}
-    @kind={{@variant}}
+    @kind={{@kind}}
     @size='auto'
     @disabled={{@disabled}}
+    aria-label={{if @loading 'loading'}}
     ...attributes
   >
     {{#if @loading}}
@@ -36,6 +53,8 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
         class='loading-icon'
         width={{if @width @width '16px'}}
         height={{if @height @height '16px'}}
+        role='presentation'
+        aria-hidden='true'
       />
     {{else if @icon}}
       <@icon
@@ -49,7 +68,10 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     @layer boxelComponentL2 {
       .boxel-icon-button {
-        --icon-color: var(--boxel-icon-button-icon-color, currentColor);
+        --icon-color: var(
+          --boxel-icon-button-icon-color,
+          var(--boxel-button-text-color, currentColor)
+        );
         width: var(--boxel-icon-button-width, var(--boxel-icon-lg));
         height: var(--boxel-icon-button-height, var(--boxel-icon-lg));
         display: inline-flex;
@@ -61,9 +83,29 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
           var(--boxel-button-color)
         );
         border-radius: var(--boxel-border-radius);
-        color: var(--boxel-icon-button-color, var(--boxel-button-text-color));
+        color: var(
+          --boxel-icon-button-color,
+          var(--boxel-button-text-color, currentColor)
+        );
         z-index: 0;
+        flex-shrink: 0;
         overflow: hidden;
+      }
+      .boxel-icon-button--small {
+        padding: 2px;
+        width: var(--boxel-icon-sm);
+        height: var(--boxel-icon-sm);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .boxel-icon-button--medium {
+        width: var(--boxel-icon-med);
+        height: var(--boxel-icon-med);
+        border-radius: var(--boxel-border-radius-sm);
+      }
+      .boxel-icon-button--large {
+        width: var(--boxel-icon-lg);
+        height: var(--boxel-icon-lg);
+        border-radius: var(--boxel-border-radius);
       }
       .is-round {
         border-radius: 50%;

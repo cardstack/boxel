@@ -424,7 +424,6 @@ export default class CardSchemaEditor extends Component<Signature> {
       {{#if @allowFieldManipulation}}
         <BoxelButton
           @kind='text-only'
-          @size='small'
           class='add-field-button'
           {{on 'click' (fn this.toggleEditFieldModal undefined)}}
           data-test-add-field-button

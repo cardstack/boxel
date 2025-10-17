@@ -204,7 +204,7 @@ const Active: TemplateOnlyComponent<ActiveSignature> = <template>
     }
     .action-button {
       --boxel-button-min-height: 1.5rem;
-      --boxel-button-padding: 0 var(--boxel-sp-5xs);
+      --boxel-button-padding: 0 var(--boxel-sp-xxxs);
       --boxel-button-font: 600 var(--boxel-font-xs);
       justify-content: flex-start;
       gap: var(--boxel-sp-xxxs);

@@ -282,7 +282,7 @@ class BoxelDropdown extends Component<Signature> {
             .boxel-menu:not(.themeless)
               .boxel-menu__item:not(.boxel-menu__item--disabled):hover
           ) {
-          color: var(--dropdown-selected-text-color) !important;
+          color: var(--dropdown-selected-text-color);
         }
 
         .boxel-dropdown__content

@@ -65,6 +65,7 @@ import TabbedHeader from './components/tabbed-header/index.gts';
 import BoxelTag from './components/tag/index.gts';
 import TagList from './components/tag-list/index.gts';
 import Tooltip from './components/tooltip/index.gts';
+import TooltipIconButton from './components/tooltip-icon-button/index.gts';
 import ViewSelector, {
   type ViewItem,
 } from './components/view-selector/index.gts';
@@ -133,5 +134,6 @@ export {
   TabbedHeader,
   TagList,
   Tooltip,
+  TooltipIconButton,
   ViewSelector,
 };
