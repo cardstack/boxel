@@ -1,0 +1,71 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Music Coder",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/music-coder-listing/screenshot_01.png"
+      ],
+      "summary": "An interactive music coding component that enables users to create, play, and visualize synthesizer and drum pattern sequences, with preset options, pattern editing, and real-time waveform visualization. Its primary purpose is to facilitate coding-based music composition and live performance within a customizable web interface.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-coder-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/6e428463-fc70-432e-9c88-59f61d4a2e48"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../music-coder/MusicCoder/demo-beat"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../music-coder/MusicCoder/f21c5c75-a9be-4db9-8a76-7cec46498236"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

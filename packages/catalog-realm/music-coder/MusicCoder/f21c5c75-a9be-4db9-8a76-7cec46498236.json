@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MusicCoder",
+        "module": "../music-coder"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "bpm": 124,
+      "title": "House Groove",
+      "pattern": "stack(note('<[c3 ~ c3 ~] [c3 ~ eb3 ~] [f3 ~ f3 ~] [g3 ~ g3 ab3]>').sound('sawtooth').lpf(800).gain(0.6), note('<[c5 ~ eb5 g5] [~ g5 f5 ~] [c5 ~ eb5 g5] [~ bb5 ab5 ~]>').sound('square').gain(0.4), s('bd ~ ~ ~, ~ ~ sd ~, [~ hh]*4, ~ ~ ~ cp').gain(0.7))",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "Classic house music beat with funky bassline and driving rhythm"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
