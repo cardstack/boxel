@@ -7,6 +7,7 @@ import type {
   BoxComponent,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
+import type Owner from '@ember/owner';
 
 // Focuses the overlay and wires up keyboard navigation when it renders
 const focusAndListen = modifier(
@@ -46,7 +47,7 @@ export class LightboxCarousel extends GlimmerComponent<LightboxCarouselSignature
   @tracked private currentIndex = 0;
   private lastStartIndex: number | null = null;
 
-  constructor(owner: unknown, args: LightboxCarouselSignature['Args']) {
+  constructor(owner: Owner, args: LightboxCarouselSignature['Args']) {
     super(owner, args);
     const normalized = this.normalizeIndex(args.startIndex);
     this.currentIndex = normalized;

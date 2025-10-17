@@ -36,6 +36,7 @@ import ValidationSteps, {
   type ValidationStep,
 } from '../components/validation-steps';
 import { realmURL } from '@cardstack/runtime-common';
+import type Owner from '@ember/owner';
 
 // Constants
 const suits = ['♠', '♣', '♥', '♦'] as const;
@@ -177,7 +178,7 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     return steps;
   }
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
 
     // Check if we have existing game state to restore

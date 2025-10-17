@@ -18,6 +18,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import ChartIcon from '@cardstack/boxel-icons/chart-bar-popular';
 import { ChartsRenderer } from './chart-renderers';
+import type Owner from '@ember/owner';
 
 // Shared CSV utilities
 class CSVParser {
@@ -856,7 +857,7 @@ class SpreadsheetChartEdit extends Component<typeof SpreadsheetChart> {
 
   @tracked topNField: string = '';
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     const v = Number(this.args.model?.topN);
     // If no topN defined → show all for line chart by default

@@ -2,6 +2,7 @@ import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -57,7 +58,7 @@ export default class DndKanbanBoard extends Component<
   @tracked removeItem: any;
   @tracked draggedCard: DndItem | null = null;
 
-  constructor(owner: unknown, args: DndKanbanBoardArgs<DndColumn>) {
+  constructor(owner: Owner, args: DndKanbanBoardArgs<DndColumn>) {
     super(owner, args);
 
     if (!isFastBoot) {

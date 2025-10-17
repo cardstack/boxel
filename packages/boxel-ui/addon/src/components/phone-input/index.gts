@@ -1,4 +1,5 @@
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import {
@@ -81,7 +82,7 @@ class PhoneInput extends Component<Signature> {
     }
   }
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.items = getSupportedRegionCodes()
       .map((code) => {

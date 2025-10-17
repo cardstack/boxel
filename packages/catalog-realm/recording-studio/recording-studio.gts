@@ -15,6 +15,7 @@ import { fn, concat } from '@ember/helper';
 import { gt, eq } from '@cardstack/boxel-ui/helpers';
 import { Button } from '@cardstack/boxel-ui/components';
 import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
 
 class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
   // ⁵² Basic recording studio - simplified to match actual functionality
@@ -57,7 +58,7 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
   @tracked currentPlayingId: string | null = null;
   finalRecordingDuration: number = 0;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.initializeAudio();
   }

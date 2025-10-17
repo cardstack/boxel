@@ -1,4 +1,5 @@
 import { fn } from '@ember/helper';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
@@ -35,7 +36,7 @@ export default class TabbedHeaderUsage extends Component {
   @tracked headerColor = '#ffd800';
   @tracked searchValue = '';
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.activeTabId = window.location?.hash?.slice(1) ?? this.tabs[0]?.tabId;
   }

@@ -19,6 +19,7 @@ import HeartIcon from '@cardstack/boxel-icons/heart';
 import SparklesIcon from '@cardstack/boxel-icons/sparkles';
 import StarIcon from '@cardstack/boxel-icons/star';
 import CrownIcon from '@cardstack/boxel-icons/crown';
+import type Owner from '@ember/owner';
 
 class IsolatedTemplate extends Component<
   typeof StylishFashionInfluencerLinktree
@@ -26,7 +27,7 @@ class IsolatedTemplate extends Component<
   @tracked sparklePositions: Array<{ x: number; y: number; delay: number }> =
     [];
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.generateSparkles();
   }

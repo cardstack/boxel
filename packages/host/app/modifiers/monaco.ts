@@ -20,6 +20,7 @@ interface Signature {
       initialCursorPosition?: MonacoSDK.Position;
       onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
+      onDispose?: () => void;
       language?: string;
       readOnly?: boolean;
       monacoSDK: typeof MonacoSDK;
@@ -41,6 +42,7 @@ export default class Monaco extends Modifier<Signature> {
   private lastModified = Date.now();
   private lastCursorPosition: MonacoSDK.Position | undefined;
   private waiterManager = createMonacoWaiterManager();
+  private onDispose: (() => void) | undefined;
   @service declare private monacoService: MonacoService;
 
   modify(
@@ -53,6 +55,7 @@ export default class Monaco extends Modifier<Signature> {
       initialCursorPosition,
       onCursorPositionChange,
       onSetup,
+      onDispose,
       readOnly,
       monacoSDK,
       editorDisplayOptions,
@@ -90,6 +93,7 @@ export default class Monaco extends Modifier<Signature> {
     if (initialCursorPosition != null) {
       this.initializeCursorPosition.perform(initialCursorPosition);
     }
+    this.onDispose = onDispose;
   }
 
   private setupEditor({
@@ -142,7 +146,10 @@ export default class Monaco extends Modifier<Signature> {
 
     onSetup?.(this.editor);
 
-    registerDestructor(this, () => this.editor!.dispose());
+    registerDestructor(this, () => {
+      this.onDispose?.();
+      this.editor!.dispose();
+    });
 
     this.model = this.editor.getModel()!;
 

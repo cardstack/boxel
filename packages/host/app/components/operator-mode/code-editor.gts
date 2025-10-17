@@ -1,4 +1,3 @@
-import { registerDestructor } from '@ember/destroyable';
 import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -76,28 +75,28 @@ export default class CodeEditor extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     // note that we actually set our own `codePath` property because within
-    // registerDestructor we actually can no longer see the codePath that pertains
+    // onEditorDispose we actually can no longer see the codePath that pertains
     // to the component that is being destroyed--rather we see the new codePath
     // that we are transitioning to.
     this.codePath = this.operatorModeStateService.state.codePath;
-
-    registerDestructor(this, () => {
-      // destructor functons are called synchronously. in order to save,
-      // which is async, we leverage an EC task that is running in a
-      // parent component (EC task lifetimes are bound to their context)
-      // that is not being destroyed.
-      if (this.codePath && this.hasUnsavedSourceChanges) {
-        let monacoContent = this.monacoService.getMonacoContent();
-        if (monacoContent) {
-          this.args.saveSourceOnClose(this.codePath, monacoContent);
-        }
-      }
-    });
 
     this.loadMonaco.perform();
 
     this.args.onSetup(this.updateMonacoCursorPositionByName);
   }
+
+  private onEditorDispose = () => {
+    // destructor functons are called synchronously. in order to save,
+    // which is async, we leverage an EC task that is running in a
+    // parent component (EC task lifetimes are bound to their context)
+    // that is not being destroyed.
+    if (this.codePath && this.hasUnsavedSourceChanges) {
+      let monacoContent = this.monacoService.getMonacoContent();
+      if (monacoContent) {
+        this.args.saveSourceOnClose(this.codePath, monacoContent);
+      }
+    }
+  };
 
   private get isReady() {
     return this.maybeMonacoSDK && isReady(this.args.file);
@@ -470,6 +469,7 @@ export default class CodeEditor extends Component<Signature> {
             language=this.language
             initialCursorPosition=this.initialMonacoCursorPosition
             onCursorPositionChange=this.onCursorPositionChange
+            onDispose=this.onEditorDispose
             readOnly=@isReadOnly
             editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
           }}
