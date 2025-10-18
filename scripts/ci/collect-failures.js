@@ -43,10 +43,12 @@ async function main() {
     }
   }
 
-  await writeJson(testsPath, failedTests);
-  await writeJson(modulesPath, Array.from(failedModulesSet));
+  const modules = Array.from(failedModulesSet);
 
-  const summary = { count: failedTests.length };
+  await writeJson(testsPath, failedTests);
+  await writeJson(modulesPath, modules);
+
+  const summary = { count: failedTests.length, modules: modules.length };
   process.stdout.write(`${JSON.stringify(summary)}\n`);
 }
 
@@ -96,13 +98,13 @@ function extractAttribute(attributeBlock, attributeName) {
   if (!attributeBlock) {
     return undefined;
   }
-  const pattern = new RegExp(`${attributeName}="([^"]*)"`, 'i');
+  const pattern = new RegExp(`(?:^|\\s)${attributeName}="([^"]*)"`, 'i');
   const doubleQuotedMatch = pattern.exec(attributeBlock);
   if (doubleQuotedMatch) {
     return decodeEntities(doubleQuotedMatch[1]);
   }
 
-  const singlePattern = new RegExp(`${attributeName}='([^']*)'`, 'i');
+  const singlePattern = new RegExp(`(?:^|\\s)${attributeName}='([^']*)'`, 'i');
   const singleMatch = singlePattern.exec(attributeBlock);
   if (singleMatch) {
     return decodeEntities(singleMatch[1]);
