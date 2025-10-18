@@ -33,14 +33,9 @@ jobs:
       matrix:
         include:
           - shardIndex: 1
-            shardTotal: 1
-            module_args: >-
-              --module "Acceptance | AI Assistant tests"
-              --module "Integration | Store"
+            shardTotal: 2
           - shardIndex: 2
-            shardTotal: 1
-            module_args: >-
-              --module "Unit | queue | browser implementation"
+            shardTotal: 2
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -82,7 +77,6 @@ jobs:
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
-          HOST_TEST_ADDITIONAL_ARGS: ${{ matrix.module_args }}
         working-directory: packages/host
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
