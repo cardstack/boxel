@@ -1,0 +1,27 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "UnifiedFieldExample",
+        "module": "../flex-markdown"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "body": "****## hi****",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
