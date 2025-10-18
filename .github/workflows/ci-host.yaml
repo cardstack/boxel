@@ -289,7 +289,8 @@ jobs:
 
       - name: Record second pass summary
         if: always()
-        run: echo "Second pass failing tests: ${{ steps.collect-rerun.outputs.fail_count }}" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Second pass failing tests: ${{ steps.collect-rerun.outputs.fail_count }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload rerun junit report
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
