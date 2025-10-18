@@ -166,20 +166,19 @@ jobs:
       - name: Determine rerun eligibility
         id: determine
         run: |
-          count='${{ steps.collect.outputs.fail_count }}'
-          if [ -z "$count" ]; then
-            count=0
-          fi
-          modules='${{ steps.collect.outputs.modules_count }}'
-          if [ -z "$modules" ]; then
-            modules=0
-          fi
-          if [ "$count" -ge 1 ] && [ "$count" -le 999 ] && [ "$modules" -gt 0 ]; then
-            echo "should_rerun=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_rerun=false" >> "$GITHUB_OUTPUT"
-          fi
-          echo "modules_count=$modules" >> "$GITHUB_OUTPUT"
+          node <<'NODE'
+          const summary = JSON.parse(process.env.SUMMARY ?? '{}');
+          const count = Number(summary.count ?? 0);
+          const modules = Number(summary.modules ?? 0);
+          const shouldRerun = count >= 1 && count <= 999 && modules > 0;
+
+          const fs = require('node:fs');
+          const output = process.env.GITHUB_OUTPUT;
+          fs.appendFileSync(output, `should_rerun=${shouldRerun}\n`);
+          fs.appendFileSync(output, `modules_count=${modules}\n`);
+          NODE
+        env:
+          SUMMARY: ${{ steps.collect.outputs.summary }}
 
       - name: Record first pass summary
         run: |
@@ -204,7 +203,7 @@ jobs:
   host-rerun-failed-modules:
     name: Host rerun failed modules
     needs: host-merge-reports-and-publish
-    if: needs.host-merge-reports-and-publish.outputs.should_rerun == 'true'
+    if: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       fail_count_second: ${{ steps.collect-rerun.outputs.fail_count }}
