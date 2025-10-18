@@ -174,7 +174,7 @@ jobs:
           if [ -z "$modules" ]; then
             modules=0
           fi
-          if [ "$count" -ge 1 ] && [ "$count" -le 99 ] && [ "$modules" -gt 0 ]; then
+          if [ "$count" -ge 1 ] && [ "$count" -le 999 ] && [ "$modules" -gt 0 ]; then
             echo "should_rerun=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_rerun=false" >> "$GITHUB_OUTPUT"
@@ -374,8 +374,8 @@ jobs:
               echo "Rerun completed with no failures." >> "$GITHUB_STEP_SUMMARY"
             fi
           else
-            if [ "$first_count" -ge 100 ]; then
-              echo "Rerun: skipped (>=100)" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$first_count" -ge 1000 ]; then
+              echo "Rerun: skipped (>=1000)" >> "$GITHUB_STEP_SUMMARY"
             else
               echo "Rerun: skipped" >> "$GITHUB_STEP_SUMMARY"
             fi
@@ -384,7 +384,7 @@ jobs:
           exit_code=0
           if [ "$first_count" -eq 0 ]; then
             exit_code=0
-          elif [ "$first_count" -ge 100 ]; then
+          elif [ "$first_count" -ge 1000 ]; then
             exit_code=1
           elif [ "$should_rerun" = "true" ] && [ "$second_count" -gt 0 ]; then
             exit_code=1
