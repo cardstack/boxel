@@ -27,7 +27,7 @@
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
     "test-with-percy": "percy exec --parallel -- pnpm test:wait-for-servers",
     "test:wait-for-servers": "./scripts/test-wait-for-servers.sh",
-    "ember-test-pre-built": "sleep 15 && ember exam --path ./dist --split $HOST_TEST_PARTITION_COUNT --partition $HOST_TEST_PARTITION --preserve-test-name",
+    "ember-test-pre-built": "sleep 15 && ember exam --path ./dist --split $HOST_TEST_PARTITION_COUNT --partition $HOST_TEST_PARTITION --preserve-test-name ${HOST_TEST_ADDITIONAL_ARGS:-}",
     "wait": "sleep 10000000"
   },
   "devDependencies": {
