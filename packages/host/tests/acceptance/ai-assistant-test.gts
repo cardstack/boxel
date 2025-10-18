@@ -378,6 +378,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   });
 
   test('attaches a card in a conversation multiple times', async function (assert) {
+    assert.true(false, 'intentional failure for CI retry validation');
     await visitOperatorMode({
       stacks: [
         [

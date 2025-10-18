@@ -105,6 +105,9 @@ jobs:
     if: always()
     needs: host-test
     runs-on: ubuntu-latest
+    outputs:
+      fail_count_first: ${{ steps.collect.outputs.fail_count }}
+      should_rerun: ${{ steps.determine.outputs.should_rerun }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
@@ -148,3 +151,236 @@ jobs:
         with:
           junit_files: host.xml
           check_name: Host Test Results
+
+      - name: Collect failed modules
+        id: collect
+        run: |
+          summary=$(node scripts/ci/collect-failures.js --input host.xml --tests failed-tests.json --modules failed-modules.json)
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          echo "fail_count=$(echo "$summary" | jq -r '.count')" >> "$GITHUB_OUTPUT"
+
+      - name: Determine rerun eligibility
+        id: determine
+        run: |
+          count='${{ steps.collect.outputs.fail_count }}'
+          if [ -z "$count" ]; then
+            count=0
+          fi
+          modules=$(jq 'length' failed-modules.json)
+          if [ "$count" -ge 1 ] && [ "$count" -le 99 ] && [ "$modules" -gt 0 ]; then
+            echo "should_rerun=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_rerun=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "modules_count=$modules" >> "$GITHUB_OUTPUT"
+
+      - name: Record first pass summary
+        run: echo "First pass failing tests: ${{ steps.collect.outputs.fail_count }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload failed test listing
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-failed-tests
+          path: failed-tests.json
+          retention-days: 30
+
+      - name: Upload failed modules
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-failed-modules
+          path: failed-modules.json
+          retention-days: 30
+
+  host-rerun-failed-modules:
+    name: Host rerun failed modules
+    needs: host-merge-reports-and-publish
+    if: needs.host-merge-reports-and-publish.outputs.should_rerun == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      fail_count_second: ${{ steps.collect-rerun.outputs.fail_count }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+
+      - name: Download failed modules
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: host-failed-modules
+          path: rerun-data
+
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
+
+      - name: Serve boxel-icons
+        run: pnpm serve &> /tmp/icon-server.log &
+        working-directory: packages/boxel-icons
+
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+
+      - name: Disable TCP/UDP network offloading
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Start host to serve assets for fastboot
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
+
+      - name: Start realm servers
+        run: pnpm start:skip-experiments | tee -a /tmp/server.log &
+        working-directory: packages/realm-server
+
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+
+      - name: Rerun failed modules
+        id: rerun-tests
+        continue-on-error: true
+        working-directory: packages/host
+        env:
+          HOST_TEST_PARTITION: rerun
+          HOST_TEST_PARTITION_COUNT: 1
+        run: |
+          readarray -t modules < <(jq -r '.[]' ../rerun-data/failed-modules.json)
+          if [ "${#modules[@]}" -eq 0 ]; then
+            echo "No modules provided for rerun." >&2
+            exit 0
+          fi
+          BASE_REALM="http-get://localhost:4201/base/"
+          CATALOG_REALM="http-get://localhost:4201/catalog/"
+          NODE_TEST_REALM="http-get://localhost:4202/node-test/"
+          SKILLS_REALM="http-get://localhost:4201/skills/"
+          TEST_REALM="http-get://localhost:4202/test/"
+          READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+          READY_ENDPOINTS="$BASE_REALM$READY_PATH|$CATALOG_REALM$READY_PATH|$NODE_TEST_REALM$READY_PATH|$SKILLS_REALM$READY_PATH|$TEST_REALM$READY_PATH|http://localhost:8008|http://localhost:5001"
+
+          cmd=(pnpm exec ember exam)
+          for module in "${modules[@]}"; do
+            cmd+=(--module "$module")
+          done
+          printf -v command_str '%q ' "${cmd[@]}"
+          NODE_NO_WARNINGS=1 pnpm exec start-server-and-test 'pnpm run wait' "$READY_ENDPOINTS" "$command_str"
+
+      - name: Rename rerun junit
+        if: always()
+        run: |
+          if [ -f junit/host-rerun.xml ]; then
+            mv junit/host-rerun.xml junit/junit-rerun.xml
+          fi
+        working-directory: packages/host
+
+      - name: Collect rerun failures
+        id: collect-rerun
+        if: always()
+        run: |
+          summary=$(node scripts/ci/collect-failures.js --input packages/host/junit/junit-rerun.xml --tests rerun-failed-tests.json --modules rerun-failed-modules.json)
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          echo "fail_count=$(echo "$summary" | jq -r '.count')" >> "$GITHUB_OUTPUT"
+
+      - name: Record second pass summary
+        if: always()
+        run: echo "Second pass failing tests: ${{ steps.collect-rerun.outputs.fail_count }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload rerun junit report
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-test-report-rerun
+          path: packages/host/junit/junit-rerun.xml
+          retention-days: 30
+
+      - name: Upload rerun failed tests
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: steps.collect-rerun.outputs.fail_count != '0'
+        with:
+          name: host-rerun-failed-tests
+          path: rerun-failed-tests.json
+          retention-days: 30
+
+      - name: Print rerun realm server logs
+        if: always()
+        run: cat /tmp/server.log
+
+      - name: Upload rerun realm server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-rerun-realm-server-log
+          path: /tmp/server.log
+          retention-days: 30
+
+      - name: Upload rerun icon server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-rerun-icon-server-log
+          path: /tmp/icon-server.log
+          retention-days: 30
+
+  host-final-gate:
+    name: Host rerun gate
+    needs:
+      - host-merge-reports-and-publish
+      - host-rerun-failed-modules
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Summarize outcome
+        run: |
+          first_count='${{ needs.host-merge-reports-and-publish.outputs.fail_count_first }}'
+          if [ -z "$first_count" ]; then
+            first_count=0
+          fi
+
+          should_rerun='${{ needs.host-merge-reports-and-publish.outputs.should_rerun }}'
+          if [ -z "$should_rerun" ]; then
+            should_rerun=false
+          fi
+
+          echo "First pass failures: $first_count" >> "$GITHUB_STEP_SUMMARY"
+
+          second_count=0
+          if [ "$should_rerun" = "true" ]; then
+            rerun_result='${{ needs.host-rerun-failed-modules.result }}'
+            if [ "$rerun_result" != "success" ]; then
+              echo "Rerun job did not complete successfully: $rerun_result" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            second_count='${{ needs.host-rerun-failed-modules.outputs.fail_count_second }}'
+            if [ -z "$second_count" ]; then
+              second_count=0
+            fi
+            echo "Second pass failures: $second_count" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$second_count" -eq 0 ]; then
+              echo "Rerun completed with no failures." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            if [ "$first_count" -ge 100 ]; then
+              echo "Rerun: skipped (>=100)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Rerun: skipped" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          exit_code=0
+          if [ "$first_count" -eq 0 ]; then
+            exit_code=0
+          elif [ "$first_count" -ge 100 ]; then
+            exit_code=1
+          elif [ "$should_rerun" = "true" ] && [ "$second_count" -gt 0 ]; then
+            exit_code=1
+          fi
+
+          if [ "$exit_code" -ne 0 ]; then
+            exit $exit_code
+          fi
