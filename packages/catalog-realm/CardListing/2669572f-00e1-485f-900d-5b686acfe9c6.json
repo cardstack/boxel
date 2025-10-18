@@ -1,0 +1,86 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "FieldListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Amount Currency Field",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/amount-currency-listing/screenshot_01.png"
+      ],
+      "summary": "This listing defines a component for displaying and editing amounts with associated currencies, serving as a reusable UI element for financial data input and presentation within a card-based framework.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/amount-currency-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/35c04cf6-643c-421e-a2f8-52b6032a53ca"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/c04cf664-3c12-4ee2-b852-b6032a53ca8b"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/4cf6643c-121e-42f8-92b6-032a53ca8bac"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/3c121ee2-f852-4603-aa53-ca8bac313f7f"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../fields-preview/AmountWithCurrencyPreview/33a0d8db-6d9d-4a8c-9c7a-3a9c2f2f1c5b"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/accounting-finance"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
