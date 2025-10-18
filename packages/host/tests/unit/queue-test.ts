@@ -19,6 +19,7 @@ module('Unit | queue | browser implementation', function (hooks) {
   });
 
   test('it can run a job', async function (assert) {
+    assert.true(false, 'intentional failure for CI retry validation');
     await runSharedTest(queueTests, assert, {
       publisher: queue,
       runner: queue,
