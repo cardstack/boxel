@@ -175,7 +175,8 @@ jobs:
           echo "modules_count=$modules" >> "$GITHUB_OUTPUT"
 
       - name: Record first pass summary
-        run: echo "First pass failing tests: ${{ steps.collect.outputs.fail_count }}" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "First pass failing tests: ${{ steps.collect.outputs.fail_count }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload failed test listing
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
