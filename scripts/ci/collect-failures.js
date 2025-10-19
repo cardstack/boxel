@@ -48,6 +48,14 @@ async function main() {
   await writeJson(testsPath, failedTests);
   await writeJson(modulesPath, modules);
 
+  const sampleTests = failedTests.slice(0, 10).join(', ');
+  console.error(
+    `[collect-failures] scanned ${xmlFiles.length} XML files, found ${failedTests.length} failing tests across ${modules.length} modules.`
+  );
+  if (failedTests.length > 0) {
+    console.error(`[collect-failures] sample failing tests: ${sampleTests}`);
+  }
+
   const summary = { count: failedTests.length, modules: modules.length };
   process.stdout.write(`${JSON.stringify(summary)}\n`);
 }

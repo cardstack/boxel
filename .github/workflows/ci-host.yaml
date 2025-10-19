@@ -111,6 +111,7 @@ jobs:
     outputs:
       fail_count_first: ${{ steps.collect.outputs.fail_count }}
       should_rerun: ${{ steps.determine.outputs.should_rerun }}
+      should_rerun_reason: ${{ steps.determine.outputs.reason }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
@@ -159,9 +160,11 @@ jobs:
         id: collect
         run: |
           summary=$(node scripts/ci/collect-failures.js --input host.xml --tests failed-tests.json --modules failed-modules.json)
+          echo "Collected failure summary: $summary"
           echo "summary=$summary" >> "$GITHUB_OUTPUT"
           echo "fail_count=$(echo "$summary" | jq -r '.count')" >> "$GITHUB_OUTPUT"
           echo "modules_count=$(echo "$summary" | jq -r '.modules')" >> "$GITHUB_OUTPUT"
+          echo "$summary" > failure-summary.json
 
       - name: Determine rerun eligibility
         id: determine
@@ -174,15 +177,51 @@ jobs:
 
           const fs = require('node:fs');
           const output = process.env.GITHUB_OUTPUT;
+          let reason;
+          if (!Number.isFinite(count)) {
+            reason = `First pass failure count was not a number: ${summary.count}`;
+          } else if (count <= 0) {
+            reason = `No first pass failures detected (count=${count}).`;
+          } else if (count > 999) {
+            reason = `First pass failure count ${count} exceeds rerun threshold.`;
+          } else if (!Number.isFinite(modules)) {
+            reason = `Failed module count was not a number: ${summary.modules}`;
+          } else if (modules === 0) {
+            reason = `No failed modules available for rerun (modules=${modules}).`;
+          } else {
+            reason = `Eligible for rerun with ${count} failing tests across ${modules} modules.`;
+          }
+
           fs.appendFileSync(output, `should_rerun=${shouldRerun}\n`);
           fs.appendFileSync(output, `modules_count=${modules}\n`);
+          let safeReason = String(reason ?? '').replace(/[\r\n]+/g, ' ').trim();
+          if (!safeReason) {
+            safeReason = 'No rerun decision reason recorded.';
+          }
+          fs.appendFileSync(output, `reason=${safeReason}\n`);
+
+          console.log(`[rerun-decision] count=${count} modules=${modules} should_rerun=${shouldRerun}`);
+          console.log(`[rerun-decision] ${reason}`);
           NODE
         env:
           SUMMARY: ${{ steps.collect.outputs.summary }}
 
       - name: Record first pass summary
         run: |
+          echo "First pass failing tests: ${{ steps.collect.outputs.fail_count }}"
+          echo "Rerun decision: ${{ steps.determine.outputs.should_rerun }}"
+          echo "Reason: ${{ steps.determine.outputs.reason }}"
           echo "First pass failing tests: ${{ steps.collect.outputs.fail_count }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Rerun decision: ${{ steps.determine.outputs.should_rerun }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reason: ${{ steps.determine.outputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload failure summary
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-failure-summary
+          path: failure-summary.json
+          retention-days: 30
 
       - name: Upload failed test listing
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
@@ -217,6 +256,15 @@ jobs:
         with:
           name: host-failed-modules
           path: rerun-data
+
+      - name: Show modules queued for rerun
+        run: |
+          echo "Modules slated for rerun:"
+          if [ -f rerun-data/failed-modules.json ]; then
+            cat rerun-data/failed-modules.json
+          else
+            echo "(missing rerun-data/failed-modules.json)"
+          fi
 
       - name: Build boxel-icons
         run: pnpm build
@@ -274,7 +322,14 @@ jobs:
           for module in "${modules[@]}"; do
             cmd+=(--module "$module")
           done
+
+          echo "Re-running ${#modules[@]} modules:"
+          for module in "${modules[@]}"; do
+            echo "  - $module"
+          done
+
           printf -v command_str '%q ' "${cmd[@]}"
+          echo "Executing rerun command: $command_str"
           NODE_NO_WARNINGS=1 pnpm exec start-server-and-test 'pnpm run wait' "$READY_ENDPOINTS" "$command_str"
 
       - name: Rename rerun junit
@@ -290,8 +345,10 @@ jobs:
         if: always()
         run: |
           summary=$(node scripts/ci/collect-failures.js --input packages/host/junit/junit-rerun.xml --tests rerun-failed-tests.json --modules rerun-failed-modules.json)
+          echo "Rerun failure summary: $summary"
           echo "summary=$summary" >> "$GITHUB_OUTPUT"
           echo "fail_count=$(echo "$summary" | jq -r '.count')" >> "$GITHUB_OUTPUT"
+          echo "$summary" > rerun-failure-summary.json
 
       - name: Record second pass summary
         if: always()
@@ -312,6 +369,14 @@ jobs:
         with:
           name: host-rerun-failed-tests
           path: rerun-failed-tests.json
+          retention-days: 30
+
+      - name: Upload rerun failure summary
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-rerun-failure-summary
+          path: rerun-failure-summary.json
           retention-days: 30
 
       - name: Print rerun realm server logs
@@ -355,12 +420,24 @@ jobs:
             should_rerun=false
           fi
 
+          echo "First pass failures: $first_count"
+          echo "Rerun eligibility: $should_rerun"
+          echo "Eligibility reason: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason }}"
           echo "First pass failures: $first_count" >> "$GITHUB_STEP_SUMMARY"
+          echo "Rerun eligibility: $should_rerun" >> "$GITHUB_STEP_SUMMARY"
+          echo "Eligibility reason: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason }}" >> "$GITHUB_STEP_SUMMARY"
 
           second_count=0
           if [ "$should_rerun" = "true" ]; then
             rerun_result='${{ needs.host-rerun-failed-modules.result }}'
+            echo "Rerun job result: $rerun_result"
+            echo "Rerun job result: $rerun_result" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$rerun_result" = "skipped" ]; then
+              echo "Rerun job was skipped unexpectedly."
+              echo "Rerun job was skipped unexpectedly." >> "$GITHUB_STEP_SUMMARY"
+            fi
             if [ "$rerun_result" != "success" ]; then
+              echo "Rerun job did not complete successfully: $rerun_result"
               echo "Rerun job did not complete successfully: $rerun_result" >> "$GITHUB_STEP_SUMMARY"
               exit 1
             fi
@@ -368,14 +445,18 @@ jobs:
             if [ -z "$second_count" ]; then
               second_count=0
             fi
+            echo "Second pass failures: $second_count"
             echo "Second pass failures: $second_count" >> "$GITHUB_STEP_SUMMARY"
             if [ "$second_count" -eq 0 ]; then
+              echo "Rerun completed with no failures."
               echo "Rerun completed with no failures." >> "$GITHUB_STEP_SUMMARY"
             fi
           else
             if [ "$first_count" -ge 1000 ]; then
+              echo "Rerun: skipped (>=1000)"
               echo "Rerun: skipped (>=1000)" >> "$GITHUB_STEP_SUMMARY"
             else
+              echo "Rerun: skipped"
               echo "Rerun: skipped" >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
