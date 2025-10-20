@@ -57,6 +57,7 @@ import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
 import * as boxelUIChangeChecker from '../lib/boxel-ui-change-checker';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 import type {
   MatrixEvent,
   RealmServerEventContent,
@@ -230,6 +231,16 @@ module(basename(__filename), function () {
             ],
             [ownerUserId]: ['read', 'write', 'realm-owner'],
           });
+
+          let sessionRoom = await fetchSessionRoom(
+            dbAdapter,
+            json.data.id,
+            ownerUserId,
+          );
+          assert.ok(
+            sessionRoom,
+            'session room record was created for the owner after realm creation',
+          );
 
           let id: string;
           let realm = testRealmServer2.testingOnlyRealms.find(
