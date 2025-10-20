@@ -167,6 +167,7 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can peek a card instance', async function (assert) {
+    assert.true(false, 'intentional failure for CI retry validation');
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
     let instance = storeService.peek(`${testRealmURL}Person/hassan`);
