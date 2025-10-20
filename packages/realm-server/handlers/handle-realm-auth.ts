@@ -2,6 +2,7 @@ import Koa from 'koa';
 
 import { type CreateRoutesArgs } from '../routes';
 import {
+  query,
   SupportedMimeType,
   fetchUserPermissions,
 } from '@cardstack/runtime-common';
@@ -28,6 +29,10 @@ export default function handleRealmAuth({
         422,
         'Unprocessable Entity',
         'User in JWT not found',
+      );
+      console.error(`user in jwt not found: ${matrixUserId}`);
+      console.error(
+        `known matrix users: ${(await query(dbAdapter, ['SELECT matrix_user_id FROM users'])).map((r) => r.matrix_user_id).join(', ')}`,
       );
       return;
     }
