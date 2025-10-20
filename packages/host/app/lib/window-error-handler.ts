@@ -25,11 +25,15 @@ export function windowErrorHandler({
     'reason' in event
       ? (event as any).reason
       : (event as CustomEvent).detail?.reason;
-  if (!reason && 'message' in event && (event as ErrorEvent).message) {
-    reason = {
-      message: (event as ErrorEvent).message,
-      status: 500,
-    };
+  if (!reason && event instanceof ErrorEvent) {
+    if (event.error) {
+      reason = event.error;
+    } else if (event.message) {
+      reason = {
+        message: event.message,
+        status: 500,
+      };
+    }
   }
   // Coerce stringified JSON into objects so our type guards work
   if (typeof reason === 'string') {
