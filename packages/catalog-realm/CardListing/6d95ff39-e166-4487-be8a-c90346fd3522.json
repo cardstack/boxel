@@ -9,13 +9,16 @@
     "type": "card",
     "attributes": {
       "name": "Cloud Image",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/cloud-image-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/cloud-image-listing/screenshot_02.png"
+      ],
       "summary": "A component for uploading, managing, and displaying cloud-stored images with features for drag-and-drop upload, real-time progress updates, and detailed asset metadata.",
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cloud-image-listing/thumbnail.png"
       }
     },
     "relationships": {
