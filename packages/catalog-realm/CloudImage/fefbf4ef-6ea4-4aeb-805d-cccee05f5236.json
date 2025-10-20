@@ -1,29 +1,22 @@
 {
   "data": {
-    "meta": {
-      "adoptsFrom": {
-        "name": "CloudImage",
-        "module": "../image/cloud"
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "joel-mchale-lifestyle-photo-2025-10-16T22-42-29.png",
+      "cloudflareImageId": "figurine-1760654549388",
+      "uploadTimestamp": "2025-10-16T22:42:32.232Z",
+      "cardInfo": {
+        "title": "joel-mchale-lifestyle-photo-2025-10-16T22-42-29",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
       }
     },
     "type": "card",
-    "attributes": {
-      "cardInfo": {
-        "notes": null,
-        "title": "joel-mchale-lifestyle-photo-2025-10-16T22-42-29",
-        "description": null,
-        "thumbnailURL": null
-      },
-      "sourceFileURL": null,
-      "uploadTimestamp": "2025-10-16T22:42:32.232Z",
-      "originalFileName": "",
-      "cloudflareImageId": ""
-    },
-    "relationships": {
-      "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
+    "meta": {
+      "adoptsFrom": {
+        "module": "../figure-image",
+        "name": "CloudImage"
       }
     }
   }
