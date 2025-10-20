@@ -25,6 +25,7 @@ import {
   cn,
   sanitizeHtmlSafe,
   buildCssGroups,
+  entriesToCssRuleMap,
   generateCssVariables,
 } from '@cardstack/boxel-ui/helpers';
 
@@ -363,10 +364,31 @@ export default class BrandGuide extends StyleReference {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
+      const cloneRules = (rules?: Map<string, string>) =>
+        rules?.size ? new Map(rules) : new Map<string, string>();
+
+      let combinedRootRules = cloneRules(this.rootVariables?.cssRuleMap);
+      let combinedDarkRules = cloneRules(this.darkModeVariables?.cssRuleMap);
+
+      const paletteRules = this.brandColorPalette?.length
+        ? entriesToCssRuleMap?.(
+            this.brandColorPalette.map((entry) => ({
+              name: entry?.name ?? undefined,
+              value: entry?.value ?? undefined,
+            })),
+          )
+        : undefined;
+
+      if (paletteRules?.size) {
+        for (let [name, value] of paletteRules.entries()) {
+          combinedRootRules.set(name, value);
+          combinedDarkRules.set(name, value);
+        }
+      }
       return generateCssVariables(
         buildCssGroups([
-          { selector: ':root', rules: this.rootVariables?.cssRuleMap },
-          { selector: '.dark', rules: this.darkModeVariables?.cssRuleMap },
+          { selector: ':root', rules: combinedRootRules },
+          { selector: '.dark', rules: combinedDarkRules },
         ]),
       );
     },
