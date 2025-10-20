@@ -18,6 +18,7 @@ export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
+export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
 export const APP_BOXEL_REASONING_CONTENT_KEY = 'app.boxel.reasoning';
@@ -41,7 +42,7 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
   'anthropic/claude-opus-4.1': 'Anthropic: Claude Opus 4.1',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
-  'google/gemini-2.5-pro-preview': 'Google: Gemini 2.5 Pro Preview 06-05',
+  'google/gemini-2.5-pro': 'Google: Gemini 2.5 Pro',
   'google/gemini-2.5-flash-lite': 'Google: Gemini 2.5 Flash Lite',
   'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
   'meta-llama/llama-3.2-3b-instruct': 'Meta: Llama 3.2 3B Instruct',
@@ -56,6 +57,11 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'openai/gpt-oss-20b': 'OpenAI: GPT OSS 20B',
 };
 
+// Note - we are moving towards using the system card for defining these for users
+// See:
+// - packages/catalog-realm/ModelConfiguration for a list of models for all users
+// - packages/catalog-realm/SystemCard/default.json for the default system card for users
+// - packages/host/README.md for how to add new models
 export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
 
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';

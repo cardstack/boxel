@@ -11,3 +11,4 @@ export const APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE =
 export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
+export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';

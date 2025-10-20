@@ -385,7 +385,6 @@ export function setupOnSave(hooks: NestedHooks) {
     this.unregisterOnSave = store._unregisterSaveSubscriber.bind(store);
   });
 }
-
 let runnerOptsMgr = new RunnerOptionsManager();
 
 interface RealmContents {
@@ -397,8 +396,126 @@ interface RealmContents {
     | Record<string, unknown>
     | string;
 }
+
+export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
+  'ModelConfiguration/test-gpt.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'OpenAI: GPT-5',
+          description: 'Test fixture model configuration referencing GPT-5.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'openai/gpt-5',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'ModelConfiguration/test-claude-sonnet-4.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Anthropic: Claude Sonnet 4',
+          description:
+            'Test fixture model configuration referencing Claude Sonnet 4.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-sonnet-4',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'ModelConfiguration/test-claude-37-sonnet.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Anthropic: Claude 3.7 Sonnet',
+          description:
+            'Test fixture model configuration referencing Claude 3.7 Sonnet.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-3.7-sonnet',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'SystemCard/default.json': {
+    data: {
+      type: 'card',
+      attributes: {},
+      relationships: {
+        'modelConfigurations.0': {
+          links: {
+            self: '../ModelConfiguration/test-gpt',
+          },
+        },
+        'modelConfigurations.1': {
+          links: {
+            self: '../ModelConfiguration/test-claude-sonnet-4',
+          },
+        },
+        'modelConfigurations.2': {
+          links: {
+            self: '../ModelConfiguration/test-claude-37-sonnet',
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'SystemCard',
+        },
+      },
+    },
+  },
+};
 export async function setupAcceptanceTestRealm({
-  contents,
+  contents = {},
   realmURL,
   permissions,
   mockMatrixUtils,
@@ -419,7 +536,7 @@ export async function setupAcceptanceTestRealm({
 }
 
 export async function setupIntegrationTestRealm({
-  contents,
+  contents = {},
   realmURL,
   permissions,
   mockMatrixUtils,
