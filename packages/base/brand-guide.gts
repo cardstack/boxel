@@ -28,6 +28,7 @@ import {
   buildCssGroups,
   entriesToCssRuleMap,
   generateCssVariables,
+  getContrastColor,
 } from '@cardstack/boxel-ui/helpers';
 
 type FunctionalPaletteKeys = Exclude<
@@ -63,6 +64,37 @@ const applyFunctionalPaletteFallback = (
       }
     }
   }
+};
+
+const applyFunctionalPaletteForegrounds = (
+  target: Map<string, string>,
+  palette?: FunctionalPalette,
+) => {
+  if (!palette || !getContrastColor) {
+    return;
+  }
+
+  let darkFallback = palette.dark ?? 'var(--boxel-dark, #000000)';
+  let lightFallback = palette.light ?? 'var(--boxel-light, #ffffff)';
+
+  const maybeSetForeground = (
+    background?: string | null,
+    variable?: string,
+  ) => {
+    if (!background || !variable || target.has(variable)) {
+      return;
+    }
+    let computed = getContrastColor(background, darkFallback, lightFallback);
+    if (computed) {
+      target.set(variable, computed);
+    }
+  };
+
+  maybeSetForeground(palette.light, '--foreground');
+  maybeSetForeground(palette.primary, '--primary-foreground');
+  maybeSetForeground(palette.secondary, '--secondary-foreground');
+  maybeSetForeground(palette.neutral, '--muted-foreground');
+  maybeSetForeground(palette.accent, '--accent-foreground');
 };
 
 class Isolated extends Component<typeof BrandGuide> {
@@ -251,7 +283,6 @@ class TypographyField extends FieldDef {
   @field fontSize = contains(CSSValueField);
   @field fontWeight = contains(CSSValueField);
   @field lineHeight = contains(CSSValueField);
-  @field color = contains(ColorField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -282,8 +313,7 @@ class TypographyField extends FieldDef {
     </template>
 
     private get styles() {
-      let { fontFamily, fontSize, fontWeight, lineHeight, color } =
-        this.args.model;
+      let { fontFamily, fontSize, fontWeight, lineHeight } = this.args.model;
       let styles = [];
       if (fontFamily) {
         styles.push(`font-family: ${fontFamily}`);
@@ -297,14 +327,11 @@ class TypographyField extends FieldDef {
       if (lineHeight) {
         styles.push(`line-height: ${lineHeight}`);
       }
-      if (color) {
-        styles.push(`color: ${color}`);
-      }
       return sanitizeHtmlSafe(styles.join('; '));
     }
 
     private get styleSummary() {
-      let { fontFamily, fontSize, fontWeight, color } = this.args.model;
+      let { fontFamily, fontSize, fontWeight } = this.args.model;
 
       switch (fontWeight) {
         case '300':
@@ -338,9 +365,7 @@ class TypographyField extends FieldDef {
       fontFamily = fontFamily?.split(',')?.[0]?.replace(/'/g, '') ?? 'Poppins';
 
       return sanitizeHtmlSafe(
-        `${fontFamily} ${fontWeight ?? 'normal'}, ${fontSize ?? '16px'} ${
-          color ?? '#000000'
-        }`,
+        `${fontFamily} ${fontWeight ?? 'normal'}, ${fontSize ?? '16px'}`,
       );
     }
   };
@@ -407,11 +432,14 @@ export default class BrandGuide extends StyleReference {
       let combinedDarkRules = cloneRules(this.darkModeVariables?.cssRuleMap);
 
       applyFunctionalPaletteFallback(combinedRootRules, this.functionalPalette);
-
+      applyFunctionalPaletteForegrounds(
+        combinedRootRules,
+        this.functionalPalette,
+      );
       const paletteRules = this.brandColorPalette?.length
         ? entriesToCssRuleMap?.(
             this.brandColorPalette.map((entry) => ({
-              name: entry?.name ?? undefined,
+              name: entry?.name?.replace(/\s+/g, '-') ?? undefined,
               value: entry?.value ?? undefined,
             })),
           )
