@@ -241,6 +241,19 @@ module(basename(__filename), function () {
                 static embedded = <template>{{@fields.name}} says Meow. owned by <@fields.owner /></template>
               }
             `,
+            'dog.gts': `
+              import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+              export class Dog extends CardDef {
+                static displayName = "Dog";
+                @field name = contains(StringField);
+                @field owner = linksTo(Person, { isUsed: true });
+                static isolated = class extends Component<typeof this> {
+                  // owner is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
             '1.json': {
               data: {
                 attributes: {
@@ -255,6 +268,24 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './cat',
                     name: 'Cat',
+                  },
+                },
+              },
+            },
+            'is-used.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
+                },
+                relationships: {
+                  owner: {
+                    links: { self: `${realmURL1}1` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog',
+                    name: 'Dog',
                   },
                 },
               },
@@ -531,6 +562,30 @@ module(basename(__filename), function () {
         assert.strictEqual(result.searchDoc?.name, 'Maple');
         assert.strictEqual(result.searchDoc?._cardType, 'Cat');
         assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
+      });
+
+      test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
+        const testCardURL = `${realmURL2}is-used`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+
+        assert.ok(
+          /Mango/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="owner"/.test(response.isolatedHTML!),
+          `owner field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.owner.name,
+          'Hassan',
+          'linked field is included in search doc via isUsed=true',
+        );
       });
     });
 
