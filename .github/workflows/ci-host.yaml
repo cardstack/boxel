@@ -14,6 +14,7 @@ on:
       - "packages/realm-server/**"
       - "packages/runtime-common/**"
       - ".github/workflows/ci-host.yml"
+      - ".github/workflows/ci-host.yaml"
       - "package.json"
       - "pnpm-lock.yaml"
   workflow_dispatch:
@@ -242,7 +243,9 @@ jobs:
   host-rerun-failed-modules:
     name: Host rerun failed modules
     needs: host-merge-reports-and-publish
-    if: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun == 'true' }}
+    # Run only if the merge job succeeded and it flagged rerun=true.
+    # Use fromJSON to robustly handle the string -> boolean conversion.
+    if: ${{ needs.host-merge-reports-and-publish.result == 'success' && fromJSON(needs.host-merge-reports-and-publish.outputs.should_rerun) }}
     runs-on: ubuntu-latest
     outputs:
       fail_count_second: ${{ steps.collect-rerun.outputs.fail_count }}
