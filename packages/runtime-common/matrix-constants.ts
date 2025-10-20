@@ -57,6 +57,11 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'openai/gpt-oss-20b': 'OpenAI: GPT OSS 20B',
 };
 
+// Note - we are moving towards using the system card for defining these for users
+// See:
+// - packages/catalog-realm/ModelConfiguration for a list of models for all users
+// - packages/catalog-realm/SystemCard/default.json for the default system card for users
+// - packages/host/README.md for how to add new models
 export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
 
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';

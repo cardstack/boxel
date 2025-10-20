@@ -22,6 +22,17 @@ You will need the following things properly installed on your computer.
 - Visit your app at [http://localhost:4200](http://localhost:4200).
 - Visit your tests at [http://localhost:4200/tests](http://localhost:4200/tests).
 
+### Updating the default SystemCard to add new LLMs
+
+The default model card is defined in the catalog realm, in SystemCard/default.json.
+
+This has a list of "ModelConfiguration" cards that define the LLMs available to the system.
+
+When adding a new LLM, you will need to create a new ModelConfiguration card in the catalog realm's ModelConfiguration directory,
+and then add that card's ID to the SystemCard/default.json file.
+
+Users can use a system card of their choice, so you can test a new model out creating a new system card that references your new model configuration. Use the three dot menu on a system card to set it as your default system card.
+
 ### Code Generators
 
 Make use of the many generators for code, try `ember help generate` for more details
