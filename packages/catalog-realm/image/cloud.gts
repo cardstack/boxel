@@ -109,6 +109,7 @@ export class CloudImage extends CardDef {
     }
 
     async uploadFile(file: File) {
+      //TODO: Replace with cloud image upload command
       if (!file.type.startsWith('image/')) {
         this.uploadError = 'Please select an image file';
         return;
@@ -616,10 +617,7 @@ export class CloudImage extends CardDef {
         }
 
         .cloud-image-isolated.drag-over {
-          background: var(
-            --theme-hover,
-            var(--muted, var(--boxel-light-100))
-          );
+          background: var(--theme-hover, var(--muted, var(--boxel-light-100)));
         }
 
         .state-container {
@@ -1041,14 +1039,8 @@ export class CloudImage extends CardDef {
 
         .primary-action:hover:not(:disabled) {
           transform: translateY(-1px);
-          background: var(
-            --theme-highlight,
-            var(--primary, var(--boxel-600))
-          );
-          box-shadow: var(
-            --shadow-md,
-            0 4px 12px rgba(0, 0, 0, 0.2)
-          );
+          background: var(--theme-highlight, var(--primary, var(--boxel-600)));
+          box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.2));
         }
 
         .primary-action:disabled {
