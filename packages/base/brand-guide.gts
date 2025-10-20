@@ -1,5 +1,4 @@
-import GlimmerComponent from '@glimmer/component';
-import { startCase } from 'lodash';
+// import GlimmerComponent from '@glimmer/component';
 import {
   Component,
   CSSField,
@@ -14,8 +13,8 @@ import ColorField from './color';
 import StyleReference from './style-reference';
 import {
   BoxelContainer,
-  FieldContainer,
-  GridContainer,
+  // FieldContainer,
+  // GridContainer,
   Swatch,
 } from '@cardstack/boxel-ui/components';
 import {
@@ -23,7 +22,8 @@ import {
   generateCssVariables,
 } from '@cardstack/boxel-ui/helpers';
 
-import BrandThemeVarField from './boxel-theme-variables';
+import BrandTypography from './brand-typography';
+import BrandFunctionalPalette from './brand-functional-palette';
 
 class BrandGuideIsolated extends Component<typeof BrandGuide> {
   <template>
@@ -34,7 +34,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           <p><@fields.description /></p>
         {{/if}}
       </BoxelContainer>
-      <@fields.themeVariables />
       <@fields.cssVariables />
     </article>
     <style scoped>
@@ -147,68 +146,13 @@ export class CompoundColorField extends FieldDef {
   };
 }
 
-class PaletteComponent extends GlimmerComponent<{
-  Args: { colors?: { name?: string; value?: string | null }[] };
-  Element: HTMLElement;
-}> {
-  <template>
-    <GridContainer class='view-palette' ...attributes>
-      {{#each @colors as |color|}}
-        <FieldContainer @label={{color.name}} @vertical={{true}}>
-          <Swatch @color={{color.value}} />
-        </FieldContainer>
-      {{/each}}
-    </GridContainer>
-    <style scoped>
-      .view-palette {
-        grid-template-columns: repeat(auto-fill, 7rem);
-      }
-    </style>
-  </template>
-}
-
-class FunctionalPaletteEmbedded extends Component<typeof FunctionalPalette> {
-  <template>
-    <PaletteComponent @colors={{this.palette}} />
-    <style scoped>
-      .functional-palette {
-        grid-template-columns: repeat(auto-fill, 7rem);
-        gap: var(--boxel-sp-xs);
-      }
-    </style>
-  </template>
-
-  private get palette() {
-    return Object.keys(this.args.fields)
-      ?.map((fieldName) => ({
-        name: startCase(fieldName),
-
-        value: (this.args.model as Record<string, any>)?.[fieldName],
-      }))
-      .filter((item) => Boolean(item.value));
-  }
-}
-
-export class FunctionalPalette extends FieldDef {
-  static displayName = 'Functional Palette';
-  @field primary = contains(ColorField);
-  @field secondary = contains(ColorField);
-  @field neutral = contains(ColorField);
-  @field light = contains(ColorField);
-  @field dark = contains(ColorField);
-  @field accent = contains(ColorField);
-
-  static embedded = FunctionalPaletteEmbedded;
-}
-
 export default class BrandGuide extends StyleReference {
   static displayName = 'Brand Guide';
 
   // Color Palettes
   @field brandColorPalette = containsMany(CompoundColorField);
-  @field functionalPalette = contains(FunctionalPalette);
-
-  @field themeVariables = contains(BrandThemeVarField);
+  @field functionalPalette = contains(BrandFunctionalPalette);
+  @field typography = contains(BrandTypography);
 
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
@@ -218,7 +162,7 @@ export default class BrandGuide extends StyleReference {
       }
       return generateCssVariables(
         buildCssGroups([
-          { selector: ':root', rules: this.themeVariables.cssRuleMap },
+          { selector: ':root', rules: this.rootVariables.cssRuleMap },
         ]),
       );
     },
