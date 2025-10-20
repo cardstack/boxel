@@ -601,23 +601,27 @@ export class CloudImage extends CardDef {
       </div>
 
       <style scoped>
-        /* Main Container */
         .cloud-image-isolated {
           width: 100%;
           height: 100%;
           position: relative;
-          font-family: var(--font-sans, 'Poppins', sans-serif);
-          color: var(--foreground, #000000);
-          background: var(--background, #ffffff);
+          font-family: var(
+            --font-sans,
+            var(--boxel-sans-font-family, 'Poppins', sans-serif)
+          );
+          color: var(--foreground, var(--boxel-dark));
+          background: var(--background, var(--boxel-light));
           transition: background-color 0.2s ease;
           overflow-y: auto;
         }
 
         .cloud-image-isolated.drag-over {
-          background: var(--muted, #f8f7fa);
+          background: var(
+            --theme-hover,
+            var(--muted, var(--boxel-light-100))
+          );
         }
 
-        /* State Containers */
         .state-container {
           width: 100%;
           height: 100%;
@@ -637,7 +641,6 @@ export class CloudImage extends CardDef {
           margin: 0 auto;
         }
 
-        /* Image Display Layout */
         .image-display {
           flex-direction: column;
         }
@@ -646,8 +649,8 @@ export class CloudImage extends CardDef {
           flex: 1;
           background: linear-gradient(
             135deg,
-            var(--muted, #f8f7fa) 0%,
-            var(--accent, #e8e8e8) 100%
+            var(--muted, var(--boxel-light-100)) 0%,
+            var(--accent, var(--boxel-light-200)) 100%
           );
           display: flex;
           align-items: center;
@@ -671,7 +674,10 @@ export class CloudImage extends CardDef {
           max-height: 100%;
           border-radius: calc(var(--radius, 0.625rem) * 0.8);
           overflow: hidden;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+          box-shadow: var(
+            --shadow-lg,
+            var(--shadow, 0 8px 32px rgba(0, 0, 0, 0.15))
+          );
           background: var(--card, #ffffff);
           transition: transform 0.3s ease;
         }
@@ -691,8 +697,8 @@ export class CloudImage extends CardDef {
         /* Metadata Panel */
         .metadata-section {
           width: 100%;
-          background: var(--background, #ffffff);
-          border-top: 1px solid var(--border, #d3d3d3);
+          background: var(--card, #ffffff);
+          border-top: 1px solid var(--border, var(--boxel-border-color));
           display: flex;
           flex-direction: column;
           flex-shrink: 0;
@@ -700,13 +706,13 @@ export class CloudImage extends CardDef {
 
         .metadata-header {
           padding: 2rem 2rem 1.5rem;
-          border-bottom: 1px solid var(--border, #d3d3d3);
+          border-bottom: 1px solid var(--border, var(--boxel-border-color));
         }
 
         .asset-title {
           font-size: 1.25rem;
           font-weight: 600;
-          color: var(--foreground, #000000);
+          color: var(--foreground, var(--boxel-dark));
           margin: 0 0 0.5rem 0;
           line-height: 1.3;
           word-break: break-word;
@@ -715,12 +721,12 @@ export class CloudImage extends CardDef {
         .asset-title.filename-fallback {
           font-size: 0.875rem;
           font-weight: 500;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
         }
 
         .asset-description {
           font-size: 1rem;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           margin: 0.5rem 0 0.75rem 0;
           line-height: 1.4;
           opacity: 0.9;
@@ -728,7 +734,7 @@ export class CloudImage extends CardDef {
 
         .upload-timestamp {
           font-size: 0.875rem;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           opacity: 0.7;
         }
 
@@ -749,7 +755,7 @@ export class CloudImage extends CardDef {
         .group-label {
           font-size: 0.875rem;
           font-weight: 600;
-          color: var(--foreground, #000000);
+          color: var(--foreground, var(--boxel-dark));
           text-transform: uppercase;
           letter-spacing: 0.05em;
           margin: 0;
@@ -770,7 +776,7 @@ export class CloudImage extends CardDef {
         .detail-label {
           font-size: 0.75rem;
           font-weight: 500;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           text-transform: uppercase;
           letter-spacing: 0.05em;
           opacity: 0.8;
@@ -778,16 +784,19 @@ export class CloudImage extends CardDef {
 
         .detail-value {
           font-size: 0.75rem;
-          color: var(--foreground, #000000);
+          color: var(--foreground, var(--boxel-dark));
           font-weight: 400;
         }
 
         .detail-value.mono {
-          font-family: var(--font-mono, 'Roboto Mono', monospace);
-          background: var(--muted, #f8f7fa);
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          background: var(--muted, var(--boxel-light-100));
           padding: 0.5rem 0.75rem;
           border-radius: calc(var(--radius, 0.625rem) * 0.6);
-          border: 1px solid var(--border, #d3d3d3);
+          border: 1px solid var(--border, var(--boxel-border-color));
           word-break: break-all;
           font-size: 0.75rem;
         }
@@ -807,18 +816,21 @@ export class CloudImage extends CardDef {
 
         .url-input-group {
           display: flex;
-          background: var(--muted, #f8f7fa);
-          border: 1px solid var(--border, #d3d3d3);
+          background: var(--muted, var(--boxel-light-100));
+          border: 1px solid var(--border, var(--boxel-border-color));
           border-radius: calc(var(--radius, 0.625rem) * 0.6);
           overflow: hidden;
         }
 
         .url-display {
           flex: 1;
-          font-family: var(--font-mono, 'Roboto Mono', monospace);
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
           font-size: 0.6875rem;
           padding: 0.625rem 0.75rem;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           background: transparent;
           border: none;
           word-break: break-all;
@@ -833,15 +845,18 @@ export class CloudImage extends CardDef {
           justify-content: center;
           background: var(--card, #ffffff);
           border: none;
-          border-left: 1px solid var(--border, #d3d3d3);
-          color: var(--muted-foreground, #272330);
+          border-left: 1px solid var(--border, var(--boxel-border-color));
+          color: var(--muted-foreground, var(--boxel-500));
           cursor: pointer;
           transition: all 0.2s ease;
         }
 
         .copy-btn:hover {
-          background: var(--accent, #e8e8e8);
-          color: var(--foreground, #000000);
+          background: var(
+            --theme-highlight,
+            var(--accent, var(--boxel-light-200))
+          );
+          color: var(--foreground, var(--boxel-dark));
         }
 
         .copy-btn svg {
@@ -869,7 +884,7 @@ export class CloudImage extends CardDef {
         .pulse-core {
           width: 24px;
           height: 24px;
-          background: var(--primary, #00ffba);
+          background: var(--primary, var(--boxel-600));
           border-radius: 50%;
           animation: pulse 2s ease-in-out infinite;
         }
@@ -879,7 +894,7 @@ export class CloudImage extends CardDef {
           position: absolute;
           width: 100%;
           height: 100%;
-          border: 2px solid var(--primary, #00ffba);
+          border: 2px solid var(--primary, var(--boxel-600));
           border-radius: 50%;
           opacity: 0.3;
           animation: ring-pulse 2s ease-in-out infinite;
@@ -917,22 +932,25 @@ export class CloudImage extends CardDef {
           width: 100%;
           max-width: 500px;
           padding: 3rem 2rem;
-          border: 2px dashed var(--border, #d3d3d3);
+          border: 2px dashed var(--border, var(--boxel-border-color));
           border-radius: var(--radius, 0.625rem);
-          background: var(--muted, #f8f7fa);
+          background: var(--muted, var(--boxel-light-100));
           transition: all 0.3s ease;
         }
 
         .upload-zone:hover {
-          border-color: var(--primary, #00ffba);
-          background: var(--accent, #e8e8e8);
+          border-color: var(--primary, var(--boxel-600));
+          background: var(
+            --theme-highlight-hover,
+            var(--accent, var(--boxel-light-200))
+          );
         }
 
         .state-icon-wrapper,
         .upload-icon-wrapper {
           width: 80px;
           height: 80px;
-          background: var(--accent, #e8e8e8);
+          background: var(--accent, var(--boxel-light-200));
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -944,21 +962,21 @@ export class CloudImage extends CardDef {
         .upload-icon {
           width: 40px;
           height: 40px;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
         }
 
         /* Typography */
         .state-title {
           font-size: 1.5rem;
           font-weight: 600;
-          color: var(--foreground, #000000);
+          color: var(--foreground, var(--boxel-dark));
           margin: 0 0 0.75rem 0;
           line-height: 1.3;
         }
 
         .state-description {
           font-size: 1rem;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           line-height: 1.5;
           margin: 0 0 2rem 0;
           opacity: 0.8;
@@ -970,7 +988,7 @@ export class CloudImage extends CardDef {
           background: var(--card, #ffffff);
           padding: 1.5rem;
           border-radius: calc(var(--radius, 0.625rem) * 0.8);
-          border: 1px solid var(--border, #d3d3d3);
+          border: 1px solid var(--border, var(--boxel-border-color));
           margin-bottom: 2rem;
           text-align: left;
         }
@@ -979,7 +997,7 @@ export class CloudImage extends CardDef {
           display: block;
           font-size: 0.75rem;
           font-weight: 500;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           text-transform: uppercase;
           letter-spacing: 0.05em;
           margin-bottom: 0.5rem;
@@ -987,9 +1005,12 @@ export class CloudImage extends CardDef {
         }
 
         .source-path {
-          font-family: var(--font-mono, 'Roboto Mono', monospace);
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
           font-size: 0.75rem;
-          color: var(--foreground, #000000);
+          color: var(--foreground, var(--boxel-dark));
           word-break: break-all;
           line-height: 1.4;
         }
@@ -1000,27 +1021,41 @@ export class CloudImage extends CardDef {
           align-items: center;
           gap: 0.75rem;
           padding: 0.875rem 2rem;
-          background: var(--primary, #00ffba);
-          color: var(--primary-foreground, #000000);
+          background: var(--primary, var(--boxel-600));
+          color: var(--primary-foreground, var(--boxel-light));
           border: none;
           border-radius: calc(var(--radius, 0.625rem) * 0.8);
-          font-family: var(--font-sans, 'Poppins', sans-serif);
+          font-family: var(
+            --font-sans,
+            var(--boxel-sans-font-family, 'Poppins', sans-serif)
+          );
           font-size: 0.875rem;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.2s ease;
-          box-shadow: var(--shadow, 0 1px 3px 0 rgba(0 0 0 / 25%));
+          box-shadow: var(
+            --shadow-sm,
+            var(--shadow, 0 1px 3px rgba(0, 0, 0, 0.25))
+          );
         }
 
         .primary-action:hover:not(:disabled) {
           transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0, 255, 186, 0.3);
+          background: var(
+            --theme-highlight,
+            var(--primary, var(--boxel-600))
+          );
+          box-shadow: var(
+            --shadow-md,
+            0 4px 12px rgba(0, 0, 0, 0.2)
+          );
         }
 
         .primary-action:disabled {
           opacity: 0.6;
           cursor: not-allowed;
           transform: none;
+          box-shadow: none;
         }
 
         .button-icon {
@@ -1031,8 +1066,9 @@ export class CloudImage extends CardDef {
         .button-spinner {
           width: 1.25rem;
           height: 1.25rem;
-          border: 2px solid rgba(0, 0, 0, 0.3);
-          border-top: 2px solid currentColor;
+          border: 2px solid var(--primary, var(--boxel-600));
+          border-top: 2px solid
+            var(--primary-foreground, var(--foreground, #ffffff));
           border-radius: 50%;
           animation: spin 1s linear infinite;
         }
@@ -1055,11 +1091,11 @@ export class CloudImage extends CardDef {
           display: flex;
           align-items: center;
           gap: 0.75rem;
-          background: rgba(255, 80, 80, 0.1);
+          background: var(--destructive-muted, rgba(255, 80, 80, 0.12));
           color: var(--destructive, #ff5050);
           padding: 1rem 1.25rem;
           border-radius: calc(var(--radius, 0.625rem) * 0.8);
-          border: 1px solid rgba(255, 80, 80, 0.2);
+          border: 1px solid var(--destructive, #ff5050);
         }
 
         .error-icon {
@@ -1077,9 +1113,9 @@ export class CloudImage extends CardDef {
         .drag-overlay {
           position: absolute;
           inset: 0;
-          background: rgba(0, 255, 186, 0.05);
-          border: 2px dashed var(--primary, #00ffba);
-          border-radius: var(--radius, 0.625rem);
+          background: var(--theme-hover, rgba(0, 0, 0, 0.05));
+          border: 2px dashed var(--primary, var(--boxel-600));
+          border-radius: calc(var(--radius, 0.625rem) * 0.8);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1092,13 +1128,16 @@ export class CloudImage extends CardDef {
           padding: 2rem;
           background: var(--card, #ffffff);
           border-radius: calc(var(--radius, 0.625rem) * 0.8);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+          box-shadow: var(
+            --shadow-lg,
+            var(--shadow, 0 8px 32px rgba(0, 0, 0, 0.15))
+          );
         }
 
         .drag-icon-wrapper {
           width: 80px;
           height: 80px;
-          background: var(--primary, #00ffba);
+          background: var(--primary, var(--boxel-600));
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -1109,19 +1148,19 @@ export class CloudImage extends CardDef {
         .drag-icon {
           width: 40px;
           height: 40px;
-          color: var(--primary-foreground, #000000);
+          color: var(--primary-foreground, var(--boxel-light));
         }
 
         .drag-title {
           font-size: 1.25rem;
           font-weight: 600;
-          color: var(--foreground, #000000);
+          color: var(--foreground, var(--boxel-dark));
           margin: 0 0 0.5rem 0;
         }
 
         .drag-subtitle {
           font-size: 0.875rem;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           opacity: 0.8;
         }
 
@@ -1159,7 +1198,7 @@ export class CloudImage extends CardDef {
         /* Focus States */
         .primary-action:focus-visible,
         .copy-btn:focus-visible {
-          outline: 2px solid var(--primary, #00ffba);
+          outline: 2px solid var(--ring, var(--primary, var(--boxel-highlight)));
           outline-offset: 2px;
         }
       </style>
@@ -1249,12 +1288,18 @@ export class CloudImage extends CardDef {
         .cloud-image-embedded {
           width: 100%;
           height: 100%;
-          font-family: var(--font-sans, 'Poppins', sans-serif);
+          font-family: var(
+            --font-sans,
+            var(--boxel-sans-font-family, 'Poppins', sans-serif)
+          );
           position: relative;
           border-radius: calc(var(--radius, 0.625rem) * 0.8);
           overflow: hidden;
-          background: var(--background, #ffffff);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+          background: var(--card, #ffffff);
+          box-shadow: var(
+            --shadow-sm,
+            var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.05))
+          );
         }
 
         /* Image Container */
@@ -1271,9 +1316,9 @@ export class CloudImage extends CardDef {
           position: relative;
           background: linear-gradient(
             135deg,
-            var(--muted, #f8f7fa) 0%,
-            var(--accent, #e8e8e8) 50%,
-            var(--muted, #f8f7fa) 100%
+            var(--muted, var(--boxel-light-100)) 0%,
+            var(--accent, var(--boxel-light-200)) 50%,
+            var(--muted, var(--boxel-light-100)) 100%
           );
           display: flex;
           align-items: center;
@@ -1308,7 +1353,7 @@ export class CloudImage extends CardDef {
           display: flex;
           flex-direction: column;
           justify-content: flex-end;
-          color: white;
+          color: var(--card-foreground, var(--foreground, #ffffff));
         }
 
         .content-header {
@@ -1321,7 +1366,7 @@ export class CloudImage extends CardDef {
         .asset-title {
           font-size: 1rem;
           font-weight: 600;
-          color: white;
+          color: var(--card-foreground, var(--foreground, #ffffff));
           margin: 0 0 0.25rem 0;
           line-height: 1.3;
           text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
@@ -1333,10 +1378,10 @@ export class CloudImage extends CardDef {
 
         .asset-description {
           font-size: 0.8125rem;
-          color: rgba(255, 255, 255, 0.9);
+          color: var(--card-foreground, rgba(255, 255, 255, 0.85));
           margin: 0;
           line-height: 1.4;
-          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
@@ -1349,10 +1394,10 @@ export class CloudImage extends CardDef {
           height: 100%;
           background: linear-gradient(
             135deg,
-            var(--muted, #f8f7fa) 0%,
-            var(--accent, #e8e8e8) 100%
+            var(--muted, var(--boxel-light-100)) 0%,
+            var(--accent, var(--boxel-light-200)) 100%
           );
-          border: 2px dashed var(--border, #d3d3d3);
+          border: 2px dashed var(--border, var(--boxel-border-color));
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1371,19 +1416,22 @@ export class CloudImage extends CardDef {
         .empty-icon-wrapper {
           width: 64px;
           height: 64px;
-          background: var(--background, #ffffff);
+          background: var(--card, #ffffff);
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
           margin-bottom: 1rem;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          box-shadow: var(
+            --shadow-sm,
+            var(--shadow, 0 4px 12px rgba(0, 0, 0, 0.1))
+          );
         }
 
         .empty-icon {
           width: 32px;
           height: 32px;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           opacity: 0.6;
         }
 
@@ -1396,12 +1444,12 @@ export class CloudImage extends CardDef {
         .empty-title {
           font-size: 0.875rem;
           font-weight: 600;
-          color: var(--foreground, #000000);
+          color: var(--foreground, var(--boxel-dark));
         }
 
         .empty-hint {
           font-size: 0.75rem;
-          color: var(--muted-foreground, #272330);
+          color: var(--muted-foreground, var(--boxel-500));
           opacity: 0.8;
         }
 
