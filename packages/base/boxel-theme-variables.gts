@@ -1,4 +1,10 @@
-import { CopyButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelContainer,
+  CopyButton,
+  GridContainer,
+  FieldContainer,
+  Swatch,
+} from '@cardstack/boxel-ui/components';
 import {
   entriesToCssRuleMap,
   type CssVariableEntry,
@@ -9,25 +15,38 @@ import {
   contains,
   Component,
   getFields,
+  FieldDef,
   StringField,
   type BaseDefComponent,
   type BoxComponent,
   type FieldsTypeFor,
+  type BaseDef,
 } from './card-api';
+import ColorField from './color';
 import URLField from './url';
 import CSSValueField from './css-value';
 import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
-import ThemeVarField, { dasherize } from './structured-theme-variables';
+import { dasherize } from './structured-theme-variables';
 
-type FieldNameType = keyof FieldsTypeFor<ThemeVarField> & string;
+type FieldNameType<T extends BaseDef> = Exclude<
+  keyof FieldsTypeFor<T>,
+  ['constructor', 'cssVariableFields', 'cssRuleMap']
+> &
+  string;
+
+type FunctionalPaletteKeys = Exclude<
+  keyof FieldsTypeFor<FunctionalPalette>,
+  ['constructor', 'cssVariableFields', 'cssRuleMap']
+> &
+  string;
 
 interface CssVariableField extends CssVariableEntry {
-  fieldName: FieldNameType;
+  fieldName: FieldNameType<BrandThemeVarField | FunctionalPalette>;
   cssVariableName: string;
   component?: BoxComponent;
 }
 
-class Embedded extends Component<typeof BoxelThemeVarField> {
+class Embedded extends Component<typeof BrandThemeVarField> {
   private get cssFields(): CssVariableField[] | undefined {
     let fields = this.args.fields;
     let cssFields = this.args.model.cssVariableFields;
@@ -39,37 +58,41 @@ class Embedded extends Component<typeof BoxelThemeVarField> {
   }
 
   <template>
-    <div class='field-list'>
-      {{#each this.cssFields as |field|}}
-        <div class='code-preview'>
-          <span class='css-label'>{{field.cssVariableName}}</span>
-          <CopyButton
-            class='copy-button'
-            @textToCopy={{field.cssVariableName}}
-            @width='16px'
-            @height='16px'
-            @ariaLabel='Copy CSS variable name'
-          />
-        </div>
-        <div class='code-preview'>
-          {{#if field.value}}
-            <span
-              class='css-value'
-              data-test-var-value={{field.fieldName}}
-            ><field.component /></span>
+    <BoxelContainer>
+      <@fields.functionalPalette />
+
+      <div class='field-list'>
+        {{#each this.cssFields as |field|}}
+          <div class='code-preview'>
+            <span class='css-label'>{{field.cssVariableName}}</span>
             <CopyButton
               class='copy-button'
-              @textToCopy={{field.value}}
+              @textToCopy={{field.cssVariableName}}
               @width='16px'
               @height='16px'
-              @ariaLabel='Copy CSS variable value'
+              @ariaLabel='Copy CSS variable name'
             />
-          {{else}}
-            <span class='css-value empty-state'>/* not set */</span>
-          {{/if}}
-        </div>
-      {{/each}}
-    </div>
+          </div>
+          <div class='code-preview'>
+            {{#if field.value}}
+              <span
+                class='css-value'
+                data-test-var-value={{field.fieldName}}
+              ><field.component /></span>
+              <CopyButton
+                class='copy-button'
+                @textToCopy={{field.value}}
+                @width='16px'
+                @height='16px'
+                @ariaLabel='Copy CSS variable value'
+              />
+            {{else}}
+              <span class='css-value empty-state'>/* not set */</span>
+            {{/if}}
+          </div>
+        {{/each}}
+      </div>
+    </BoxelContainer>
     <style scoped>
       @layer baseComponent {
         .field-list {
@@ -117,32 +140,80 @@ class Embedded extends Component<typeof BoxelThemeVarField> {
   </template>
 }
 
-export class MarkField extends URLField {
-  static displayName = 'Mark URL';
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <img
-        class='mark-image'
-        src={{@model}}
-        role='presentation'
-        {{! @glint-ignore }}
-        ...attributes
-      />
-      <style scoped>
-        @layer {
-          .mark-image {
-            min-width: 50%;
-            width: auto;
-            height: var(--logo-min-height, 2.5rem);
-          }
-        }
-      </style>
-    </template>
-  };
+class FunctionalPaletteEmbedded extends Component<typeof FunctionalPalette> {
+  <template>
+    <GridContainer class='functional-palette'>
+      {{#each @model.cssVariableFields as |color|}}
+        <FieldContainer
+          class='functional-palette-item'
+          @label={{color.name}}
+          @vertical={{true}}
+        >
+          <Swatch @color={{color.value}} />
+        </FieldContainer>
+      {{/each}}
+    </GridContainer>
+    <style scoped>
+      .functional-palette {
+        grid-template-columns: repeat(auto-fill, 9rem);
+        gap: var(--boxel-sp-xl) var(--boxel-sp);
+      }
+      .functional-palette-item {
+        grid-template-rows: 1fr auto;
+      }
+    </style>
+  </template>
 }
 
-export default class BoxelThemeVarField extends ThemeVarField {
-  static displayName = 'Boxel Theme Variables';
+export class FunctionalPalette extends FieldDef {
+  static displayName = 'Functional Palette';
+  @field primary = contains(ColorField);
+  @field secondary = contains(ColorField);
+  @field neutral = contains(ColorField);
+  @field light = contains(ColorField);
+  @field dark = contains(ColorField);
+  @field accent = contains(ColorField);
+
+  static embedded = FunctionalPaletteEmbedded;
+
+  get cssVariableFields(): CssVariableField[] | undefined {
+    let fields = getFields(this);
+    if (!fields) {
+      return;
+    }
+
+    let fieldNames = Object.keys(fields) as FunctionalPaletteKeys[];
+    if (!fieldNames?.length) {
+      return;
+    }
+    let cssVariableFields: CssVariableField[] = [];
+    for (let fieldName of fieldNames) {
+      let cssVariableName = `--brand-${dasherize(fieldName)}`;
+      let value = this?.[fieldName] as string | undefined | null;
+      cssVariableFields.push({
+        fieldName: fieldName as FieldNameType<
+          BrandThemeVarField | FunctionalPalette
+        >,
+        cssVariableName,
+        name: cssVariableName,
+        value,
+      });
+    }
+    return cssVariableFields;
+  }
+
+  get cssRuleMap(): CssRuleMap | undefined {
+    if (!entriesToCssRuleMap) {
+      return;
+    }
+    return entriesToCssRuleMap(this.cssVariableFields);
+  }
+}
+
+export default class BrandThemeVarField extends FieldDef {
+  static displayName = 'Brand Theme Variables';
+
+  @field functionalPalette = contains(FunctionalPalette);
 
   @field cornerRadius = contains(CSSValueField);
   @field spacingUnit = contains(CSSValueField);
@@ -157,38 +228,16 @@ export default class BoxelThemeVarField extends ThemeVarField {
   @field bodyFontWeight = contains(CSSValueField);
   @field bodyLineHeight = contains(CSSValueField);
 
-  // primary mark (logo)
+  // mark usage (logo)
   @field primaryMarkClearanceRatio = contains(StringField);
   @field primaryMarkMinHeight = contains(StringField);
-  @field primaryMark1 = contains(MarkField, {
-    description: 'For use on light background',
-  });
-  @field primaryMark2 = contains(MarkField, {
-    description: 'For use on dark background',
-  });
-  @field primaryMarkGreyscale1 = contains(MarkField, {
-    description: 'Greyscale version for use on light background',
-  });
-  @field primaryMarkGreyscale2 = contains(MarkField, {
-    description: 'Greyscale version for use on dark background',
-  });
-  // secondary mark (logo)
+  @field primaryMark = contains(URLField);
+  @field primaryMarkGreyscale = contains(URLField);
   @field secondaryMarkClearanceRatio = contains(StringField);
   @field secondaryMarkMinHeight = contains(StringField);
-  @field secondaryMark1 = contains(MarkField, {
-    description: 'For use on light background',
-  });
-  @field secondaryMark2 = contains(MarkField, {
-    description: 'For use on dark background',
-  });
-  @field secondaryMarkGreyscale1 = contains(MarkField, {
-    description: 'Greyscale version for use on light background',
-  });
-  @field secondaryMarkGreyscale2 = contains(MarkField, {
-    description: 'Greyscale version for use on dark background',
-  });
-  // social media mark (logo)
-  @field socialMediaProfileIcon = contains(MarkField, {
+  @field secondaryMark = contains(URLField);
+  @field secondaryMarkGreyscale = contains(URLField);
+  @field socialMediaProfileIcon = contains(URLField, {
     description:
       'For social media purposes or any small format usage requiring 1:1 aspect ratio',
   });
@@ -199,16 +248,21 @@ export default class BoxelThemeVarField extends ThemeVarField {
       return;
     }
 
-    let fieldNames = Object.keys(fields) as FieldNameType[];
+    let fieldNames = Object.keys(fields) as FieldNameType<BrandThemeVarField>[];
     if (!fieldNames?.length) {
       return;
     }
     let cssVariableFields: CssVariableField[] = [];
     for (let fieldName of fieldNames) {
-      let cssVariableName = `--${dasherize(fieldName)}`;
+      if (fieldName === 'functionalPalette') {
+        continue;
+      }
+      let cssVariableName = `--brand-${dasherize(fieldName)}`;
       let value = this?.[fieldName] as string | undefined | null;
       cssVariableFields.push({
-        fieldName,
+        fieldName: fieldName as FieldNameType<
+          BrandThemeVarField | FunctionalPalette
+        >,
         cssVariableName,
         name: cssVariableName,
         value,
