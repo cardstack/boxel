@@ -708,5 +708,135 @@ module(basename(__filename), function () {
         global.fetch = originalFetch;
       }
     });
+
+    test('should forward multipart form data when multipart flag is set', async function (assert) {
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      let capturedInit: RequestInit | undefined;
+      mockFetch.callsFake(
+        async (_input: string | URL | Request, init?: RequestInit) => {
+          capturedInit = init;
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+      );
+
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        const response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://api.example.com/upload',
+            method: 'POST',
+            multipart: true,
+            requestBody: JSON.stringify({
+              name: 'Test',
+              requireSigned: false,
+              file: {
+                filename: 'hello.txt',
+                content: Buffer.from('hello world', 'utf-8').toString('base64'),
+                contentType: 'text/plain',
+              },
+            }),
+          });
+
+        assert.strictEqual(response.status, 200, 'Should return 200 status');
+        assert.deepEqual(
+          response.body,
+          { ok: true },
+          'Should pass along API response',
+        );
+
+        assert.ok(capturedInit, 'fetch init should be captured');
+
+        const headersRecord =
+          capturedInit?.headers instanceof Headers
+            ? Object.fromEntries(capturedInit.headers.entries())
+            : ((capturedInit?.headers as Record<string, string> | undefined) ??
+              {});
+        const contentTypeHeader = headersRecord['Content-Type'];
+
+        assert.ok(contentTypeHeader, 'Content-Type header should be set');
+
+        const boundaryMatch = /multipart\/form-data; boundary=(.*)$/.exec(
+          contentTypeHeader as string,
+        );
+        assert.ok(
+          boundaryMatch,
+          'Content-Type should include multipart boundary',
+        );
+
+        const boundary = boundaryMatch?.[1];
+        assert.ok(boundary, 'Boundary should be present in header');
+
+        const bodyText = Buffer.from(capturedInit?.body as Uint8Array).toString(
+          'utf-8',
+        );
+        assert.true(
+          bodyText.includes(`--${boundary}`),
+          'Body should include boundary markers',
+        );
+        assert.true(
+          bodyText.includes(`Content-Disposition: form-data; name="name"`),
+          'Body should include normal field part',
+        );
+        assert.true(
+          bodyText.includes('Test'),
+          'Body should include name value',
+        );
+        assert.true(
+          bodyText.includes(`name="file"; filename="hello.txt"`),
+          'Body should include file part with filename',
+        );
+        assert.true(
+          bodyText.includes('Content-Type: text/plain'),
+          'Body should include file content type',
+        );
+        assert.true(
+          bodyText.includes('hello world'),
+          'Body should include decoded file content',
+        );
+      } finally {
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('should return a 400 when multipart payload is not an object', async function (assert) {
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+
+      const response = await request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          url: 'https://api.example.com/upload',
+          method: 'POST',
+          multipart: true,
+          requestBody: JSON.stringify(['not-an-object']),
+        });
+
+      assert.strictEqual(response.status, 400, 'Should return 400 status');
+      assert.true(
+        response.body.errors?.[0]?.includes(
+          'requestBody must be a JSON object when multipart is true',
+        ),
+        'Should return multipart validation error message',
+      );
+    });
   });
 });
