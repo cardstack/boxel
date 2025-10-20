@@ -15,7 +15,7 @@
     "type": "card",
     "meta": {
       "adoptsFrom": {
-        "module": "../figure-image",
+        "module": "../image/cloud",
         "name": "CloudImage"
       }
     }
