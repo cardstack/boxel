@@ -814,8 +814,6 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-custom-subdomain-cancel]').exists();
         assert.dom('[data-test-custom-subdomain-input]').exists();
 
-        await this.pauseTest();
-
         // Should display the error message (extracted from the response)
         assert
           .dom('[data-test-boxel-input-group-error-message]')
