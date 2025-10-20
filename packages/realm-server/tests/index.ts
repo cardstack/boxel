@@ -37,3 +37,4 @@ import './get-boxel-claimed-domain-test';
 import './claim-boxel-domain-test';
 import './delete-boxel-claimed-domain-test';
 import './realm-auth-test';
+import './queries-test';
