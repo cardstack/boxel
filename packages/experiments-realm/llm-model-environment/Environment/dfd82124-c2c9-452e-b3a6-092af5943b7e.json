@@ -76,7 +76,7 @@
       },
       "shortcutSettings.1.requiredSkills.0": {
         "links": {
-          "self": "/catalog/Skill/skill-pirate-speak"
+          "self": "@cardstack/catalog/Skill/skill-pirate-speak"
         }
       }
     },

@@ -3,6 +3,10 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
+
+DEFAULT_CATALOG_REALM_URL='https://app.boxel.ai/catalog/'
+CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix.boxel.ai \
   BOXEL_HOST_URL=https://app.boxel.ai \
@@ -24,8 +28,8 @@ NODE_NO_WARNINGS=1 \
   \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
-  --fromUrl='https://app.boxel.ai/catalog/' \
-  --toUrl='https://app.boxel.ai/catalog/' \
+  --fromUrl="${CATALOG_REALM_URL}" \
+  --toUrl="${CATALOG_REALM_URL}" \
   \
   --path='/persistent/skills' \
   --username='skills_realm' \
@@ -36,4 +40,3 @@ NODE_NO_WARNINGS=1 \
   --username='experiments_realm' \
   --fromUrl='https://app.boxel.ai/experiments/' \
   --toUrl='https://app.boxel.ai/experiments/'
-

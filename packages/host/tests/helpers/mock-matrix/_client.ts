@@ -28,6 +28,8 @@ import {
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import ENV from '@cardstack/host/config/environment';
+
 import type {
   FileDefManager,
   PrivilegedFileDefManager,
@@ -59,9 +61,13 @@ type Plural<T> = {
 
 const publicRealmURLs = [
   baseRealm.url,
-  'http://localhost:4201/catalog/',
-  'http://localhost:4201/skills/',
+  ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
+  ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
 ];
+
+function ensureTrailingSlash(url: string) {
+  return url.endsWith('/') ? url : `${url}/`;
+}
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};

@@ -49,6 +49,9 @@ module.exports = function (environment) {
     realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
+    resolvedCatalogRealmURL:
+      process.env.RESOLVED_CATALOG_REALM_URL ||
+      'http://localhost:4201/catalog/',
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
     featureFlags: {
