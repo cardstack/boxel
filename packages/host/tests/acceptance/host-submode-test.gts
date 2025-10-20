@@ -779,6 +779,84 @@ module('Acceptance | host submode', function (hooks) {
 
         getService('network').resetState();
       });
+
+      test('claimed custom site name displays details and reverts after unclaim', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchClaimedSiteHostname;
+        let originalDeleteClaimed = realmServer.deleteClaimedSiteHostname;
+
+        let deleteCalled = false;
+
+        realmServer.fetchClaimedSiteHostname = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'custom-site-name.localhost:4201',
+          subdomain: 'custom-site-name',
+          sourceRealmURL: testRealmURL,
+        });
+
+        realmServer.deleteClaimedSiteHostname = async () => {
+          deleteCalled = true;
+          realmServer.fetchClaimedSiteHostname = async () => null;
+        };
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+
+          let customDomainOption =
+            '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)';
+          await waitFor(`${customDomainOption} .realm-icon`);
+
+          assert
+            .dom(`${customDomainOption} .realm-icon`)
+            .exists('shows realm icon when site name is claimed');
+          assert
+            .dom(`${customDomainOption} .domain-url`)
+            .hasText(
+              'http://custom-site-name.localhost:4201/',
+              'shows claimed custom site URL',
+            );
+          assert
+            .dom('[data-test-unclaim-site-name-button]')
+            .exists('shows unclaim button when domain is claimed');
+          assert
+            .dom('[data-test-custom-subdomain-setup-button]')
+            .doesNotExist('setup button hidden while domain is claimed');
+
+          await click('[data-test-unclaim-site-name-button]');
+          assert.true(deleteCalled, 'unclaim endpoint invoked');
+
+          await waitUntil(() => {
+            return (
+              !document.querySelector(`${customDomainOption} .realm-icon`) &&
+              document.querySelector(
+                '[data-test-custom-subdomain-setup-button]',
+              )
+            );
+          });
+
+          assert
+            .dom('[data-test-custom-subdomain-setup-button]')
+            .exists('setup button returns after unclaim');
+          assert
+            .dom('[data-test-unclaim-site-name-button]')
+            .doesNotExist('unclaim button removed after unclaim');
+          assert
+            .dom(`${customDomainOption} .domain-url`)
+            .hasText(
+              'http://custom-site-name.localhost:4201/',
+              'displays placeholder custom site URL after unclaim',
+            );
+        } finally {
+          realmServer.fetchClaimedSiteHostname = originalFetchClaimed;
+          realmServer.deleteClaimedSiteHostname = originalDeleteClaimed;
+        }
+      });
     });
   });
 });

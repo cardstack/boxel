@@ -1,7 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -11,6 +11,7 @@ import Settings from '@cardstack/boxel-icons/settings';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import { formatDistanceToNow } from 'date-fns';
+import { restartableTask, task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
 import {
@@ -19,15 +20,13 @@ import {
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { IconX } from '@cardstack/boxel-ui/icons';
 import { not } from '@cardstack/boxel-ui/helpers';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
-
-import { restartableTask, task } from 'ember-concurrency';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
