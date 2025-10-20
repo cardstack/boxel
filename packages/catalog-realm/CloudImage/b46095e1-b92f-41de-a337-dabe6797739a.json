@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "jackie-chan-lifestyle-photo-2025-10-16T23-55-25.png",
+      "cloudflareImageId": "figurine-1760658925396",
+      "uploadTimestamp": "2025-10-16T23:55:27.808Z",
+      "cardInfo": {
+        "title": "jackie-chan-lifestyle-photo-2025-10-16T23-55-25",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

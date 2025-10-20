@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "anne-hathaway-product-packaging-2025-10-16T23-51-59.png",
+      "cloudflareImageId": "figurine-1760658719287",
+      "uploadTimestamp": "2025-10-16T23:52:02.549Z",
+      "cardInfo": {
+        "title": "anne-hathaway-product-packaging-2025-10-16T23-51-59",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

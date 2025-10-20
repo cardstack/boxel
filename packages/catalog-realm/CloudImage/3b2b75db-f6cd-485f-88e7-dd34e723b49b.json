@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "shohei-otani-lifestyle-photo-2025-10-16T23-00-56.png",
+      "cloudflareImageId": "figurine-1760655656070",
+      "uploadTimestamp": "2025-10-16T23:00:59.193Z",
+      "cardInfo": {
+        "title": "shohei-otani-lifestyle-photo-2025-10-16T23-00-56",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "bruno-mars-product-packaging-2025-10-16T23-06-07.png",
+      "cloudflareImageId": "figurine-1760655967044",
+      "uploadTimestamp": "2025-10-16T23:06:09.169Z",
+      "cardInfo": {
+        "title": "bruno-mars-product-packaging-2025-10-16T23-06-07",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

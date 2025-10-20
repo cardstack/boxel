@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "sonic-the-hedgehog--lifestyle-photo-2025-10-16T23-04-47.png",
+      "cloudflareImageId": "figurine-1760655887910",
+      "uploadTimestamp": "2025-10-16T23:04:49.928Z",
+      "cardInfo": {
+        "title": "sonic-the-hedgehog--lifestyle-photo-2025-10-16T23-04-47",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

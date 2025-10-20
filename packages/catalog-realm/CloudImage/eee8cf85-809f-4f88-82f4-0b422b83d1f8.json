@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "jennie-blackpink-lifestyle-photo-2025-10-17T00-33-37.png",
+      "cloudflareImageId": "figurine-1760661217037",
+      "uploadTimestamp": "2025-10-17T00:33:38.601Z",
+      "cardInfo": {
+        "title": "jennie-blackpink-lifestyle-photo-2025-10-17T00-33-37",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

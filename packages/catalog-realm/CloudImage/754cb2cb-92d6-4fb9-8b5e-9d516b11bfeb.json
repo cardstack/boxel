@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "anna-wintour-product-packaging-2025-10-16T23-51-08.png",
+      "cloudflareImageId": "figurine-1760658668716",
+      "uploadTimestamp": "2025-10-16T23:51:10.339Z",
+      "cardInfo": {
+        "title": "anna-wintour-product-packaging-2025-10-16T23-51-08",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

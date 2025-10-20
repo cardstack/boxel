@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "glinda-from-wicked-the-movie-product-packaging-2025-10-16T22-56-18.png",
+      "cloudflareImageId": "figurine-1760655378582",
+      "uploadTimestamp": "2025-10-16T22:56:20.016Z",
+      "cardInfo": {
+        "title": "glinda-from-wicked-the-movie-product-packaging-2025-10-16T22-56-18",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

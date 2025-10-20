@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "jalen-brunson---knicks-product-packaging-2025-10-17T00-24-21.png",
+      "cloudflareImageId": "figurine-1760660661284",
+      "uploadTimestamp": "2025-10-17T00:24:22.989Z",
+      "cardInfo": {
+        "title": "jalen-brunson---knicks-product-packaging-2025-10-17T00-24-21",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

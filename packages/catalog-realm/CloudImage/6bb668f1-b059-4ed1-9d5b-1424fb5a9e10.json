@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "aoc-lifestyle-photo-2025-10-16T23-48-06.png",
+      "cloudflareImageId": "figurine-1760658486525",
+      "uploadTimestamp": "2025-10-16T23:48:07.726Z",
+      "cardInfo": {
+        "title": "aoc-lifestyle-photo-2025-10-16T23-48-06",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

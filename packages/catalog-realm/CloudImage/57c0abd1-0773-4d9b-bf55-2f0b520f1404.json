@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "jalen-brunson---knicks-lifestyle-photo-2025-10-17T00-22-44.png",
+      "cloudflareImageId": "figurine-1760660564563",
+      "uploadTimestamp": "2025-10-17T00:22:46.196Z",
+      "cardInfo": {
+        "title": "jalen-brunson---knicks-lifestyle-photo-2025-10-17T00-22-44",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

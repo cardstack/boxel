@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "bruno-mars-drums-lifestyle-photo-2025-10-16T23-35-58.png",
+      "cloudflareImageId": "figurine-1760657758460",
+      "uploadTimestamp": "2025-10-16T23:36:00.401Z",
+      "cardInfo": {
+        "title": "bruno-mars-drums-lifestyle-photo-2025-10-16T23-35-58",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "anne-hathaway-lifestyle-photo-2025-10-16T23-51-41.png",
+      "cloudflareImageId": "figurine-1760658701998",
+      "uploadTimestamp": "2025-10-16T23:51:44.739Z",
+      "cardInfo": {
+        "title": "anne-hathaway-lifestyle-photo-2025-10-16T23-51-41",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

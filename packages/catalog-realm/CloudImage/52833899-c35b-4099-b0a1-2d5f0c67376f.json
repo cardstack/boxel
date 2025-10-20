@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "elton-john-product-packaging-2025-10-17T00-03-49.png",
+      "cloudflareImageId": "figurine-1760659429077",
+      "uploadTimestamp": "2025-10-17T00:03:51.130Z",
+      "cardInfo": {
+        "title": "elton-john-product-packaging-2025-10-17T00-03-49",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "steve-from-minecraft-jack-black-lifestyle-photo-2025-10-16T22-10-40.png",
+      "cloudflareImageId": "figurine-1760652640890",
+      "uploadTimestamp": "2025-10-16T22:10:43.341Z",
+      "cardInfo": {
+        "title": "steve-from-minecraft-jack-black-lifestyle-photo-2025-10-16T22-10-40",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

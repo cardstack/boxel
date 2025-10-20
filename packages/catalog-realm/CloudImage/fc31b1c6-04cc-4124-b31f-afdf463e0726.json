@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "michael-jackson-product-packaging-2025-10-16T23-37-12.png",
+      "cloudflareImageId": "figurine-1760657832189",
+      "uploadTimestamp": "2025-10-16T23:37:13.915Z",
+      "cardInfo": {
+        "title": "michael-jackson-product-packaging-2025-10-16T23-37-12",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

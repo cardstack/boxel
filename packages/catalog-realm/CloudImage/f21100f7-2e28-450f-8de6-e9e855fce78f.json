@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "steve-from-minecraft-jack-black-product-packaging-2025-10-16T22-10-58.png",
+      "cloudflareImageId": "figurine-1760652658089",
+      "uploadTimestamp": "2025-10-16T22:11:01.813Z",
+      "cardInfo": {
+        "title": "steve-from-minecraft-jack-black-product-packaging-2025-10-16T22-10-58",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

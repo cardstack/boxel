@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "ros--blackpink-product-packaging-2025-10-16T23-07-49.png",
+      "cloudflareImageId": "figurine-1760656069244",
+      "uploadTimestamp": "2025-10-16T23:07:51.094Z",
+      "cardInfo": {
+        "title": "ros--blackpink-product-packaging-2025-10-16T23-07-49",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

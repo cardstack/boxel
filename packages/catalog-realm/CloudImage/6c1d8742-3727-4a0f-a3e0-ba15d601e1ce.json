@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "bruno-mars-lifestyle-photo-2025-10-16T23-47-03.png",
+      "cloudflareImageId": "figurine-1760658423564",
+      "uploadTimestamp": "2025-10-16T23:47:05.393Z",
+      "cardInfo": {
+        "title": "bruno-mars-lifestyle-photo-2025-10-16T23-47-03",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

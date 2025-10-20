@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "glinda-from-wicked-the-movie-lifestyle-photo-2025-10-16T22-56-02.png",
+      "cloudflareImageId": "figurine-1760655362223",
+      "uploadTimestamp": "2025-10-16T22:56:04.275Z",
+      "cardInfo": {
+        "title": "glinda-from-wicked-the-movie-lifestyle-photo-2025-10-16T22-56-02",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

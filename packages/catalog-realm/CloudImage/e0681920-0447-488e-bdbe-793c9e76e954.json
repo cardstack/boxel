@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "elton-john-concert-lifestyle-photo-2025-10-16T23-46-03.png",
+      "cloudflareImageId": "figurine-1760658363065",
+      "uploadTimestamp": "2025-10-16T23:46:06.891Z",
+      "cardInfo": {
+        "title": "elton-john-concert-lifestyle-photo-2025-10-16T23-46-03",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

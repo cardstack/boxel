@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "shohei-otani-product-packaging-2025-10-16T22-58-38.png",
+      "cloudflareImageId": "figurine-1760655518899",
+      "uploadTimestamp": "2025-10-16T22:58:40.480Z",
+      "cardInfo": {
+        "title": "shohei-otani-product-packaging-2025-10-16T22-58-38",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

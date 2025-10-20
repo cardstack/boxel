@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "tim-cook-lifestyle-photo-2025-10-16T23-31-09.png",
+      "cloudflareImageId": "figurine-1760657470003",
+      "uploadTimestamp": "2025-10-16T23:31:12.417Z",
+      "cardInfo": {
+        "title": "tim-cook-lifestyle-photo-2025-10-16T23-31-09",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

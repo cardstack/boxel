@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "sonic-the-hedgehog--product-packaging-2025-10-16T23-05-01.png",
+      "cloudflareImageId": "figurine-1760655901324",
+      "uploadTimestamp": "2025-10-16T23:05:07.162Z",
+      "cardInfo": {
+        "title": "sonic-the-hedgehog--product-packaging-2025-10-16T23-05-01",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

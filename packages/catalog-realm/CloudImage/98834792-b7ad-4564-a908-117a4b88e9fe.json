@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "bruno-mars-drums-product-packaging-2025-10-16T23-36-12.png",
+      "cloudflareImageId": "figurine-1760657772340",
+      "uploadTimestamp": "2025-10-16T23:36:16.134Z",
+      "cardInfo": {
+        "title": "bruno-mars-drums-product-packaging-2025-10-16T23-36-12",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "glinda--ariana-grande--product-packaging-2025-10-17T00-13-56.png",
+      "cloudflareImageId": "figurine-1760660036821",
+      "uploadTimestamp": "2025-10-17T00:13:58.952Z",
+      "cardInfo": {
+        "title": "glinda--ariana-grande--product-packaging-2025-10-17T00-13-56",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

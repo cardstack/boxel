@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "tim-cook-product-packaging-2025-10-16T23-31-24.png",
+      "cloudflareImageId": "figurine-1760657484176",
+      "uploadTimestamp": "2025-10-16T23:31:26.147Z",
+      "cardInfo": {
+        "title": "tim-cook-product-packaging-2025-10-16T23-31-24",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

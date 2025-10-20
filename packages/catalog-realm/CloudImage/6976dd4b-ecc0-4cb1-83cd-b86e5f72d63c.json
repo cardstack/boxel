@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "elon-musk-lifestyle-photo-2025-10-16T23-31-58.png",
+      "cloudflareImageId": "figurine-1760657518879",
+      "uploadTimestamp": "2025-10-16T23:32:01.467Z",
+      "cardInfo": {
+        "title": "elon-musk-lifestyle-photo-2025-10-16T23-31-58",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

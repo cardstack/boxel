@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "jalen-brunson-product-packaging-2025-10-17T00-32-47.png",
+      "cloudflareImageId": "figurine-1760661167894",
+      "uploadTimestamp": "2025-10-17T00:32:48.940Z",
+      "cardInfo": {
+        "title": "jalen-brunson-product-packaging-2025-10-17T00-32-47",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

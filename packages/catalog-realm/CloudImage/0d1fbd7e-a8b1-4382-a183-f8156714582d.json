@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "ariana-grande-wicked-product-packaging-2025-10-17T00-19-12.png",
+      "cloudflareImageId": "figurine-1760660352831",
+      "uploadTimestamp": "2025-10-17T00:19:14.324Z",
+      "cardInfo": {
+        "title": "ariana-grande-wicked-product-packaging-2025-10-17T00-19-12",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

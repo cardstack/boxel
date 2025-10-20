@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "jalen-brunson-lifestyle-photo-2025-10-16T23-43-36.png",
+      "cloudflareImageId": "figurine-1760658216412",
+      "uploadTimestamp": "2025-10-16T23:43:38.729Z",
+      "cardInfo": {
+        "title": "jalen-brunson-lifestyle-photo-2025-10-16T23-43-36",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

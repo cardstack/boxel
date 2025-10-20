@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "jennie-blackpink-product-packaging-2025-10-16T23-12-22.png",
+      "cloudflareImageId": "figurine-1760656342208",
+      "uploadTimestamp": "2025-10-16T23:12:24.009Z",
+      "cardInfo": {
+        "title": "jennie-blackpink-product-packaging-2025-10-16T23-12-22",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

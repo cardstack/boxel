@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "ariana-grande-wicked-lifestyle-photo-2025-10-17T00-18-58.png",
+      "cloudflareImageId": "figurine-1760660338748",
+      "uploadTimestamp": "2025-10-17T00:19:01.056Z",
+      "cardInfo": {
+        "title": "ariana-grande-wicked-lifestyle-photo-2025-10-17T00-18-58",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

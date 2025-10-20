@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "ariana-grande-product-packaging-2025-10-16T22-08-21.png",
+      "cloudflareImageId": "figurine-1760652501452",
+      "uploadTimestamp": "2025-10-16T22:08:23.060Z",
+      "cardInfo": {
+        "title": "ariana-grande-product-packaging-2025-10-16T22-08-21",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

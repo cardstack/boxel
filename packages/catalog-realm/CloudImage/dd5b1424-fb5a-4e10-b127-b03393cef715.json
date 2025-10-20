@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "aoc-product-packaging-2025-10-16T23-48-19.png",
+      "cloudflareImageId": "figurine-1760658499730",
+      "uploadTimestamp": "2025-10-16T23:48:21.370Z",
+      "cardInfo": {
+        "title": "aoc-product-packaging-2025-10-16T23-48-19",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "sam-altman-lifestyle-photo-2025-10-16T21-54-59.png",
+      "cloudflareImageId": "figurine-1760651699536",
+      "uploadTimestamp": "2025-10-16T21:55:02.831Z",
+      "cardInfo": {
+        "title": "sam-altman-lifestyle-photo-2025-10-16T21-54-59",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

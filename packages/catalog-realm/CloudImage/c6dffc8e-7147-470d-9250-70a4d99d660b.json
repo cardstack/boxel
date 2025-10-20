@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "anna-wintour-lifestyle-photo-2025-10-16T23-50-53.png",
+      "cloudflareImageId": "figurine-1760658653424",
+      "uploadTimestamp": "2025-10-16T23:50:56.967Z",
+      "cardInfo": {
+        "title": "anna-wintour-lifestyle-photo-2025-10-16T23-50-53",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

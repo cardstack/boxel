@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "glinda--ariana-grande--lifestyle-photo-2025-10-17T00-16-37.png",
+      "cloudflareImageId": "figurine-1760660197693",
+      "uploadTimestamp": "2025-10-17T00:16:39.699Z",
+      "cardInfo": {
+        "title": "glinda--ariana-grande--lifestyle-photo-2025-10-17T00-16-37",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

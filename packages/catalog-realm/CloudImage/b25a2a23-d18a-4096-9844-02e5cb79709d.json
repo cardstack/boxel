@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "pope-product-packaging-2025-10-16T23-54-26.png",
+      "cloudflareImageId": "figurine-1760658866493",
+      "uploadTimestamp": "2025-10-16T23:54:27.651Z",
+      "cardInfo": {
+        "title": "pope-product-packaging-2025-10-16T23-54-26",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

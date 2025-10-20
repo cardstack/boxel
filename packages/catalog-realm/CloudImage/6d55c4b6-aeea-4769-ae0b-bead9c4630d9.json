@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "glinda-ariana-product-packaging-2025-10-17T00-09-49.png",
+      "cloudflareImageId": "figurine-1760659789801",
+      "uploadTimestamp": "2025-10-17T00:09:51.650Z",
+      "cardInfo": {
+        "title": "glinda-ariana-product-packaging-2025-10-17T00-09-49",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "elton-john-concert-product-packaging-2025-10-16T23-46-19.png",
+      "cloudflareImageId": "figurine-1760658379565",
+      "uploadTimestamp": "2025-10-16T23:46:21.518Z",
+      "cardInfo": {
+        "title": "elton-john-concert-product-packaging-2025-10-16T23-46-19",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

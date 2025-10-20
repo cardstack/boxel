@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "pope-lifestyle-photo-2025-10-16T23-54-13.png",
+      "cloudflareImageId": "figurine-1760658853393",
+      "uploadTimestamp": "2025-10-16T23:54:15.519Z",
+      "cardInfo": {
+        "title": "pope-lifestyle-photo-2025-10-16T23-54-13",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

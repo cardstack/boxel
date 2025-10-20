@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "elton-john-lifestyle-photo-2025-10-17T00-03-34.png",
+      "cloudflareImageId": "figurine-1760659414546",
+      "uploadTimestamp": "2025-10-17T00:03:36.231Z",
+      "cardInfo": {
+        "title": "elton-john-lifestyle-photo-2025-10-17T00-03-34",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

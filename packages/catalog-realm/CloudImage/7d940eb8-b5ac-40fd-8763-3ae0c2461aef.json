@@ -1,0 +1,30 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "ros--blackpink-lifestyle-photo-2025-10-16T23-07-35.png",
+      "cloudflareImageId": "figurine-1760656055578",
+      "uploadTimestamp": "2025-10-16T23:07:37.334Z",
+      "cardInfo": {
+        "title": "ros--blackpink-lifestyle-photo-2025-10-16T23-07-35",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

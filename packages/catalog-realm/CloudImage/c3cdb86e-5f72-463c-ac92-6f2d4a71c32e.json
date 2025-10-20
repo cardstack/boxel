@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "elon-musk-product-packaging-2025-10-16T23-32-13.png",
+      "cloudflareImageId": "figurine-1760657533941",
+      "uploadTimestamp": "2025-10-16T23:32:15.740Z",
+      "cardInfo": {
+        "title": "elon-musk-product-packaging-2025-10-16T23-32-13",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}

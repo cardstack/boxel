@@ -1,0 +1,23 @@
+{
+  "data": {
+    "attributes": {
+      "sourceFileURL": null,
+      "originalFileName": "jackie-chan-product-packaging-2025-10-16T23-55-43.png",
+      "cloudflareImageId": "figurine-1760658943152",
+      "uploadTimestamp": "2025-10-16T23:55:44.569Z",
+      "cardInfo": {
+        "title": "jackie-chan-product-packaging-2025-10-16T23-55-43",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image/cloud",
+        "name": "CloudImage"
+      }
+    }
+  }
+}
