@@ -140,6 +140,12 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
+  }
+  if (
+    ['code-mode-playground', 'code-mode-preview'].includes(
+      params.menuContext,
+    )
+  ) {
     menuItems.push({
       label: `Create listing with AI`,
       action: async () => {

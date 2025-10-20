@@ -92,11 +92,18 @@ module('Unit | card-menu-items', function (hooks) {
     let hasCreateListing = items.some((i: MenuItemOptions) =>
       i.label.includes('Create listing with AI'),
     );
+    let listingItem = items.find(
+      (i: MenuItemOptions) => i.label === 'Create listing with AI',
+    );
     let hasSampleDataTagged = items.some((i: MenuItemOptions) =>
       (i.tags || []).includes('playground-sample-data'),
     );
 
     assert.ok(hasCreateListing, 'contains Create listing with AI');
+    assert.false(
+      listingItem?.disabled,
+      'Create listing with AI is enabled when user can edit',
+    );
     assert.ok(
       hasSampleDataTagged,
       'contains items tagged playground-sample-data',
@@ -121,6 +128,17 @@ module('Unit | card-menu-items', function (hooks) {
     assert.ok(
       texts.includes('Open in Interact Mode'),
       'contains Open in Interact Mode',
+    );
+    assert.ok(
+      texts.includes('Create listing with AI'),
+      'contains Create listing with AI',
+    );
+    let listingItem = items.find(
+      (i: MenuItemOptions) => i.label === 'Create listing with AI',
+    );
+    assert.true(
+      listingItem?.disabled,
+      'Create listing with AI is disabled when user cannot edit',
     );
   });
 });
