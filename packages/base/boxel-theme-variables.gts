@@ -8,22 +8,16 @@ import {
   field,
   contains,
   Component,
-  FieldDef,
   getFields,
+  StringField,
   type BaseDefComponent,
   type BoxComponent,
   type FieldsTypeFor,
 } from './card-api';
-import ColorField from './color';
+import URLField from './url';
 import CSSValueField from './css-value';
 import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
-
-export function dasherize(str: string): string {
-  return str
-    .replace(/([a-z\d])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z]+)([A-Z][a-z\d]+)/g, '$1-$2')
-    .toLowerCase();
-}
+import ThemeVarField, { dasherize } from './structured-theme-variables';
 
 type FieldNameType = keyof FieldsTypeFor<ThemeVarField> & string;
 
@@ -33,7 +27,7 @@ interface CssVariableField extends CssVariableEntry {
   component?: BoxComponent;
 }
 
-class Embedded extends Component<typeof ThemeVarField> {
+class Embedded extends Component<typeof BoxelThemeVarField> {
   private get cssFields(): CssVariableField[] | undefined {
     let fields = this.args.fields;
     let cssFields = this.args.model.cssVariableFields;
@@ -123,77 +117,81 @@ class Embedded extends Component<typeof ThemeVarField> {
   </template>
 }
 
-export default class ThemeVarField extends FieldDef {
-  static displayName = 'Structured Theme Variables';
+export class MarkField extends URLField {
+  static displayName = 'Mark URL';
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <img
+        class='mark-image'
+        src={{@model}}
+        role='presentation'
+        {{! @glint-ignore }}
+        ...attributes
+      />
+      <style scoped>
+        @layer {
+          .mark-image {
+            min-width: 50%;
+            width: auto;
+            height: var(--logo-min-height, 2.5rem);
+          }
+        }
+      </style>
+    </template>
+  };
+}
 
-  // color variables
-  @field background = contains(ColorField);
-  @field foreground = contains(ColorField);
-  @field card = contains(ColorField);
-  @field cardForeground = contains(ColorField);
-  @field popover = contains(ColorField);
-  @field popoverForeground = contains(ColorField);
-  @field primary = contains(ColorField);
-  @field primaryForeground = contains(ColorField);
-  @field secondary = contains(ColorField);
-  @field secondaryForeground = contains(ColorField);
-  @field muted = contains(ColorField);
-  @field mutedForeground = contains(ColorField);
-  @field accent = contains(ColorField);
-  @field accentForeground = contains(ColorField);
-  @field destructive = contains(ColorField);
-  @field destructiveForeground = contains(ColorField);
-  @field border = contains(ColorField, {
-    description: 'Specifies border-color.',
+export default class BoxelThemeVarField extends ThemeVarField {
+  static displayName = 'Boxel Theme Variables';
+
+  @field cornerRadius = contains(CSSValueField);
+  @field spacingUnit = contains(CSSValueField);
+
+  @field headingFontFamily = contains(CSSValueField);
+  @field headingFontSize = contains(CSSValueField);
+  @field headingFontWeight = contains(CSSValueField);
+  @field headingLineHeight = contains(CSSValueField);
+
+  @field bodyFontFamily = contains(CSSValueField);
+  @field bodyFontSize = contains(CSSValueField);
+  @field bodyFontWeight = contains(CSSValueField);
+  @field bodyLineHeight = contains(CSSValueField);
+
+  // primary mark (logo)
+  @field primaryMarkClearanceRatio = contains(StringField);
+  @field primaryMarkMinHeight = contains(StringField);
+  @field primaryMark1 = contains(MarkField, {
+    description: 'For use on light background',
   });
-  @field input = contains(ColorField);
-  @field ring = contains(ColorField);
-
-  // chart color variables
-  @field chart1 = contains(ColorField);
-  @field chart2 = contains(ColorField);
-  @field chart3 = contains(ColorField);
-  @field chart4 = contains(ColorField);
-  @field chart5 = contains(ColorField);
-
-  // sidebar color variables
-  @field sidebar = contains(ColorField);
-  @field sidebarForeground = contains(ColorField);
-  @field sidebarPrimary = contains(ColorField);
-  @field sidebarPrimaryForeground = contains(ColorField);
-  @field sidebarAccent = contains(ColorField);
-  @field sidebarAccentForeground = contains(ColorField);
-  @field sidebarBorder = contains(ColorField);
-  @field sidebarRing = contains(ColorField);
-
-  // font variables
-  @field fontSans = contains(CSSValueField);
-  @field fontSerif = contains(CSSValueField);
-  @field fontMono = contains(CSSValueField);
-
-  // geometry variables
-  @field radius = contains(CSSValueField, {
-    description: 'Specifies border-radius base value.',
+  @field primaryMark2 = contains(MarkField, {
+    description: 'For use on dark background',
   });
-  @field spacing = contains(CSSValueField, {
+  @field primaryMarkGreyscale1 = contains(MarkField, {
+    description: 'Greyscale version for use on light background',
+  });
+  @field primaryMarkGreyscale2 = contains(MarkField, {
+    description: 'Greyscale version for use on dark background',
+  });
+  // secondary mark (logo)
+  @field secondaryMarkClearanceRatio = contains(StringField);
+  @field secondaryMarkMinHeight = contains(StringField);
+  @field secondaryMark1 = contains(MarkField, {
+    description: 'For use on light background',
+  });
+  @field secondaryMark2 = contains(MarkField, {
+    description: 'For use on dark background',
+  });
+  @field secondaryMarkGreyscale1 = contains(MarkField, {
+    description: 'Greyscale version for use on light background',
+  });
+  @field secondaryMarkGreyscale2 = contains(MarkField, {
+    description: 'Greyscale version for use on dark background',
+  });
+  // social media mark (logo)
+  @field socialMediaProfileIcon = contains(MarkField, {
     description:
-      'Specifies a quarter of the base value for spacing properties such as padding, margin, gap. For example, if a gap of 1rem is desired, enter 0.25rem.',
+      'For social media purposes or any small format usage requiring 1:1 aspect ratio',
   });
-  @field trackingNormal = contains(CSSValueField, {
-    description: 'Specifies letter-spacing base value.',
-  });
-
-  // box-shadow variables
-  @field shadow2xs = contains(CSSValueField);
-  @field shadowXs = contains(CSSValueField);
-  @field shadowSm = contains(CSSValueField);
-  @field shadow = contains(CSSValueField, {
-    description: 'Specifies box-shadow base value.',
-  });
-  @field shadowMd = contains(CSSValueField);
-  @field shadowLg = contains(CSSValueField);
-  @field shadowXl = contains(CSSValueField);
-  @field shadow2xl = contains(CSSValueField);
 
   get cssVariableFields(): CssVariableField[] | undefined {
     let fields = getFields(this);

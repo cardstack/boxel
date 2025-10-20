@@ -15,7 +15,6 @@ import {
 import ColorField from './color';
 import URLField from './url';
 import StyleReference from './style-reference';
-import CSSValueField from './css-value';
 import {
   BoxelContainer,
   FieldContainer,
@@ -24,7 +23,6 @@ import {
 } from '@cardstack/boxel-ui/components';
 import {
   cn,
-  sanitizeHtmlSafe,
   buildCssGroups,
   entriesToCssRuleMap,
   generateCssVariables,
@@ -32,6 +30,7 @@ import {
 } from '@cardstack/boxel-ui/helpers';
 
 import { getField } from '@cardstack/runtime-common';
+import BoxelThemeVarField from './boxel-theme-variables';
 
 type FunctionalPaletteKeys = Exclude<
   keyof FieldsTypeFor<FunctionalPalette>,
@@ -132,12 +131,12 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
             <p>Scales in proportion to size of logo used</p>
             <PreviewContainer class='preview-grid container-group'>
               <PreviewContainer @hideBoundaries={{true}} @radius='none'>
-                <@fields.primaryMark1
+                <@fields.themeVariables.primaryMark1
                   class='mark-clearance primary-clearance'
                 />
               </PreviewContainer>
               <PreviewContainer @hideBoundaries={{true}} @radius='none'>
-                <@fields.secondaryMark1
+                <@fields.themeVariables.secondaryMark1
                   class='mark-clearance secondary-clearance'
                 />
               </PreviewContainer>
@@ -150,14 +149,20 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
             <p>For screen use</p>
             <PreviewContainer class='preview-grid container-group'>
               <PreviewContainer @hideBoundaries={{true}} @radius='none'>
-                <span class='annotation'><@fields.primaryMarkMinHeight /></span>
-                <@fields.primaryMark1 class='mark-height primary-height' />
+                <span
+                  class='annotation'
+                ><@fields.themeVariables.primaryMarkMinHeight /></span>
+                <@fields.themeVariables.primaryMark1
+                  class='mark-height primary-height'
+                />
               </PreviewContainer>
               <PreviewContainer @hideBoundaries={{true}} @radius='none'>
                 <span class='annotation'>
-                  <@fields.secondaryMarkMinHeight />
+                  <@fields.themeVariables.secondaryMarkMinHeight />
                 </span>
-                <@fields.secondaryMark1 class='mark-height secondary-height' />
+                <@fields.themeVariables.secondaryMark1
+                  class='mark-height secondary-height'
+                />
               </PreviewContainer>
             </PreviewContainer>
           </div>
@@ -166,21 +171,21 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         <GridContainer class='preview-grid'>
           <FieldContainer @label='Primary Mark 1' @vertical={{true}}>
             <div class='preview-field'>
-              {{#let (getField @model 'primaryMark1') as |f|}}
+              {{#let (getField @model.themeVariables 'primaryMark1') as |f|}}
                 <p>{{f.description}}</p>
               {{/let}}
               <PreviewContainer>
-                <@fields.primaryMark1 />
+                <@fields.themeVariables.primaryMark1 />
               </PreviewContainer>
             </div>
           </FieldContainer>
           <FieldContainer @label='Primary Mark 2' @vertical={{true}}>
             <div class='preview-field'>
-              {{#let (getField @model 'primaryMark2') as |f|}}
+              {{#let (getField @model.themeVariables 'primaryMark2') as |f|}}
                 <p>{{f.description}}</p>
               {{/let}}
               <PreviewContainer @variant='dark'>
-                <@fields.primaryMark2 />
+                <@fields.themeVariables.primaryMark2 />
               </PreviewContainer>
             </div>
           </FieldContainer>
@@ -189,21 +194,21 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         <GridContainer class='preview-grid'>
           <FieldContainer @label='Secondary Mark 1' @vertical={{true}}>
             <div class='preview-field'>
-              {{#let (getField @model 'secondaryMark1') as |f|}}
+              {{#let (getField @model.themeVariables 'secondaryMark1') as |f|}}
                 <p>{{f.description}}</p>
               {{/let}}
               <PreviewContainer>
-                <@fields.secondaryMark1 />
+                <@fields.themeVariables.secondaryMark1 />
               </PreviewContainer>
             </div>
           </FieldContainer>
           <FieldContainer @label='Secondary Mark 2' @vertical={{true}}>
             <div class='preview-field'>
-              {{#let (getField @model 'secondaryMark2') as |f|}}
+              {{#let (getField @model.themeVariables 'secondaryMark2') as |f|}}
                 <p>{{f.description}}</p>
               {{/let}}
               <PreviewContainer @variant='dark'>
-                <@fields.secondaryMark2 class='inverse' />
+                <@fields.themeVariables.secondaryMark2 class='inverse' />
               </PreviewContainer>
             </div>
           </FieldContainer>
@@ -215,15 +220,15 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
               dark backgrounds</p>
             <PreviewContainer class='preview-grid container-group'>
               <PreviewContainer @hideBoundaries={{true}} @radius='none'>
-                {{#if @model.primaryMarkGreyscale1}}
-                  <@fields.primaryMarkGreyscale1 />
+                {{#if @model.themeVariables.primaryMarkGreyscale1}}
+                  <@fields.themeVariables.primaryMarkGreyscale1 />
                 {{else}}
-                  <@fields.primaryMark1 class='grayscale' />
+                  <@fields.themeVariables.primaryMark1 class='grayscale' />
                 {{/if}}
-                {{#if @model.secondaryMarkGreyscale1}}
-                  <@fields.secondaryMarkGreyscale1 />
-                {{else if @model.secondaryMark1}}
-                  <@fields.secondaryMark1 class='grayscale' />
+                {{#if @model.themeVariables.secondaryMarkGreyscale1}}
+                  <@fields.themeVariables.secondaryMarkGreyscale1 />
+                {{else if @model.themeVariables.secondaryMark1}}
+                  <@fields.themeVariables.secondaryMark1 class='grayscale' />
                 {{/if}}
               </PreviewContainer>
               <PreviewContainer
@@ -231,15 +236,15 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                 @hideBoundaries={{true}}
                 @radius='none'
               >
-                {{#if @model.primaryMarkGreyscale2}}
-                  <@fields.primaryMarkGreyscale2 />
+                {{#if @model.themeVariables.primaryMarkGreyscale2}}
+                  <@fields.themeVariables.primaryMarkGreyscale2 />
                 {{else}}
-                  <@fields.primaryMark2 class='grayscale' />
+                  <@fields.themeVariables.primaryMark2 class='grayscale' />
                 {{/if}}
-                {{#if @model.secondaryMarkGreyscale2}}
-                  <@fields.primaryMarkGreyscale2 />
-                {{else if @model.secondaryMark2}}
-                  <@fields.secondaryMark2 class='grayscale' />
+                {{#if @model.themeVariables.secondaryMarkGreyscale2}}
+                  <@fields.themeVariables.primaryMarkGreyscale2 />
+                {{else if @model.themeVariables.secondaryMark2}}
+                  <@fields.themeVariables.secondaryMark2 class='grayscale' />
                 {{/if}}
               </PreviewContainer>
             </PreviewContainer>
@@ -248,13 +253,16 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         {{! social media icon }}
         <FieldContainer @label='Social media/profile icon' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getField @model 'socialMediaProfileIcon') as |field|}}
+            {{#let
+              (getField @model.themeVariables 'socialMediaProfileIcon')
+              as |field|
+            }}
               <p>{{field.description}}</p>
             {{/let}}
             <PreviewContainer class='preview-grid container-group'>
               <PreviewContainer @hideBoundaries={{true}} @radius='none'>
                 <PreviewContainer @size='icon'>
-                  <@fields.socialMediaProfileIcon />
+                  <@fields.themeVariables.socialMediaProfileIcon />
                 </PreviewContainer>
               </PreviewContainer>
               <PreviewContainer
@@ -263,7 +271,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                 @radius='none'
               >
                 <PreviewContainer @size='icon'>
-                  <@fields.socialMediaProfileIcon />
+                  <@fields.themeVariables.socialMediaProfileIcon />
                 </PreviewContainer>
                 <span class='media-handle'>@username</span>
               </PreviewContainer>
@@ -279,8 +287,8 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       >
         <h2>Typography</h2>
         <GridContainer class='preview-grid'>
-          <@fields.headline />
-          <@fields.bodyCopy />
+          {{! <@fields.headline />
+          <@fields.bodyCopy /> }}
         </GridContainer>
       </BoxelContainer>
 
@@ -552,99 +560,99 @@ export class FunctionalPalette extends FieldDef {
   static embedded = FunctionalPaletteEmbedded;
 }
 
-class TypographyField extends FieldDef {
-  static displayName = 'Typography';
-  @field fontFamily = contains(CSSValueField);
-  @field fontSize = contains(CSSValueField);
-  @field fontWeight = contains(CSSValueField);
-  @field lineHeight = contains(CSSValueField);
+// class TypographyField extends FieldDef {
+//   static displayName = 'Typography';
+//   @field fontFamily = contains(CSSValueField);
+//   @field fontSize = contains(CSSValueField);
+//   @field fontWeight = contains(CSSValueField);
+//   @field lineHeight = contains(CSSValueField);
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <FieldContainer @vertical={{true}}>
-        <div class='preview-field'>
-          <p>{{this.styleSummary}}</p>
-          <PreviewContainer
-            @variant='muted'
-            @hideBoundaries={{true}}
-            class='typography-preview'
-            style={{this.styles}}
-          >
-            The quick brown fox
-          </PreviewContainer>
-        </div>
-      </FieldContainer>
+//   static embedded = class Embedded extends Component<typeof this> {
+//     <template>
+//       <FieldContainer @vertical={{true}}>
+//         <div class='preview-field'>
+//           <p>{{this.styleSummary}}</p>
+//           <PreviewContainer
+//             @variant='muted'
+//             @hideBoundaries={{true}}
+//             class='typography-preview'
+//             style={{this.styles}}
+//           >
+//             The quick brown fox
+//           </PreviewContainer>
+//         </div>
+//       </FieldContainer>
 
-      <style scoped>
-        .preview-field {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xs);
-        }
-        p {
-          margin-block: 0;
-        }
-      </style>
-    </template>
+//       <style scoped>
+//         .preview-field {
+//           display: flex;
+//           flex-direction: column;
+//           gap: var(--boxel-sp-xs);
+//         }
+//         p {
+//           margin-block: 0;
+//         }
+//       </style>
+//     </template>
 
-    private get styles() {
-      let { fontFamily, fontSize, fontWeight, lineHeight } = this.args.model;
-      let styles = [];
-      if (fontFamily) {
-        styles.push(`font-family: ${fontFamily}`);
-      }
-      if (fontSize) {
-        styles.push(`font-size: ${fontSize}`);
-      }
-      if (fontWeight) {
-        styles.push(`font-weight: ${fontWeight}`);
-      }
-      if (lineHeight) {
-        styles.push(`line-height: ${lineHeight}`);
-      }
-      return sanitizeHtmlSafe(styles.join('; '));
-    }
+//     private get styles() {
+//       let { fontFamily, fontSize, fontWeight, lineHeight } = this.args.model;
+//       let styles = [];
+//       if (fontFamily) {
+//         styles.push(`font-family: ${fontFamily}`);
+//       }
+//       if (fontSize) {
+//         styles.push(`font-size: ${fontSize}`);
+//       }
+//       if (fontWeight) {
+//         styles.push(`font-weight: ${fontWeight}`);
+//       }
+//       if (lineHeight) {
+//         styles.push(`line-height: ${lineHeight}`);
+//       }
+//       return sanitizeHtmlSafe(styles.join('; '));
+//     }
 
-    private get styleSummary() {
-      let { fontFamily, fontSize, fontWeight } = this.args.model;
+//     private get styleSummary() {
+//       let { fontFamily, fontSize, fontWeight } = this.args.model;
 
-      switch (fontWeight) {
-        case '300':
-        case 'light':
-          fontWeight = 'light';
-          break;
-        case '400':
-        case 'normal':
-          fontWeight = 'normal';
-          break;
-        case '500':
-        case 'medium':
-          fontWeight = 'medium';
-          break;
-        case '600':
-        case 'semibold':
-          fontWeight = 'semibold';
-          break;
-        case '700':
-        case 'bold':
-          fontWeight = 'bold';
-          break;
-        case '800':
-        case 'extrabold':
-          fontWeight = 'extrabold';
-          break;
-        default:
-          fontWeight;
-      }
+//       switch (fontWeight) {
+//         case '300':
+//         case 'light':
+//           fontWeight = 'light';
+//           break;
+//         case '400':
+//         case 'normal':
+//           fontWeight = 'normal';
+//           break;
+//         case '500':
+//         case 'medium':
+//           fontWeight = 'medium';
+//           break;
+//         case '600':
+//         case 'semibold':
+//           fontWeight = 'semibold';
+//           break;
+//         case '700':
+//         case 'bold':
+//           fontWeight = 'bold';
+//           break;
+//         case '800':
+//         case 'extrabold':
+//           fontWeight = 'extrabold';
+//           break;
+//         default:
+//           fontWeight;
+//       }
 
-      fontFamily = fontFamily?.split(',')?.[0]?.replace(/'/g, '') ?? 'Poppins';
+//       fontFamily = fontFamily?.split(',')?.[0]?.replace(/'/g, '') ?? 'Poppins';
 
-      return sanitizeHtmlSafe(
-        `${fontFamily} ${fontWeight ?? 'normal'}, ${fontSize ?? '16px'}`,
-      );
-    }
-  };
-}
+//       return sanitizeHtmlSafe(
+//         `${fontFamily} ${fontWeight ?? 'normal'}, ${fontSize ?? '16px'}`,
+//       );
+//     }
+//   };
+// }
 
 export default class BrandGuide extends StyleReference {
   static displayName = 'Brand Guide';
@@ -653,49 +661,7 @@ export default class BrandGuide extends StyleReference {
   @field brandColorPalette = containsMany(CompoundColorField);
   @field functionalPalette = contains(FunctionalPalette);
 
-  // Mark Usage
-  // primary mark
-  @field primaryMarkClearanceRatio = contains(StringField);
-  @field primaryMarkMinHeight = contains(StringField);
-  @field primaryMark1 = contains(MarkField, {
-    description: 'For use on light background',
-  });
-  @field primaryMark2 = contains(MarkField, {
-    description: 'For use on dark background',
-  });
-  @field primaryMarkGreyscale1 = contains(MarkField, {
-    description: 'Greyscale version for use on light background',
-  });
-  @field primaryMarkGreyscale2 = contains(MarkField, {
-    description: 'Greyscale version for use on dark background',
-  });
-  // secondary mark
-  @field secondaryMarkClearanceRatio = contains(StringField);
-  @field secondaryMarkMinHeight = contains(StringField);
-  @field secondaryMark1 = contains(MarkField, {
-    description: 'For use on light background',
-  });
-  @field secondaryMark2 = contains(MarkField, {
-    description: 'For use on dark background',
-  });
-  @field secondaryMarkGreyscale1 = contains(MarkField, {
-    description: 'Greyscale version for use on light background',
-  });
-  @field secondaryMarkGreyscale2 = contains(MarkField, {
-    description: 'Greyscale version for use on dark background',
-  });
-  // social media mark
-  @field socialMediaProfileIcon = contains(MarkField, {
-    description:
-      'For social media purposes or any small format usage requiring 1:1 aspect ratio',
-  });
-
-  // Typography
-  @field headline = contains(TypographyField);
-  @field bodyCopy = contains(TypographyField);
-
-  @field cornerRadius = contains(CSSValueField);
-  @field spacingUnit = contains(CSSValueField);
+  @field themeVariables = contains(BoxelThemeVarField);
 
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
