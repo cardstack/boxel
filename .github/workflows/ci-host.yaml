@@ -248,6 +248,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       fail_count_second: ${{ steps.collect-rerun.outputs.fail_count }}
+    env:
+      SHOULD_RERUN: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun || 'false' }}
+      SHOULD_RERUN_REASON: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason || 'No rerun decision reason recorded.' }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
@@ -256,31 +259,31 @@ jobs:
       - name: Debug rerun eligibility
         id: guard
         run: |
-          echo "raw_should_rerun=${{ needs.host-merge-reports-and-publish.outputs.should_rerun }}" >> "$GITHUB_OUTPUT"
-          echo "eq_true=${{ needs.host-merge-reports-and-publish.outputs.should_rerun == 'true' }}" >> "$GITHUB_OUTPUT"
-          echo "fromjson=${{ fromJSON(needs.host-merge-reports-and-publish.outputs.should_rerun) }}" >> "$GITHUB_OUTPUT"
-          echo "eligible=${{ fromJSON(needs.host-merge-reports-and-publish.outputs.should_rerun) }}" >> "$GITHUB_OUTPUT"
+          echo "raw_should_rerun=${{ env.SHOULD_RERUN }}" >> "$GITHUB_OUTPUT"
+          echo "eq_true=${{ env.SHOULD_RERUN == 'true' }}" >> "$GITHUB_OUTPUT"
+          echo "fromjson=${{ fromJSON(env.SHOULD_RERUN) }}" >> "$GITHUB_OUTPUT"
+          echo "eligible=${{ fromJSON(env.SHOULD_RERUN) }}" >> "$GITHUB_OUTPUT"
           echo "Rerun guard diagnostics:"
-          echo "  raw_should_rerun=${{ needs.host-merge-reports-and-publish.outputs.should_rerun }}"
-          echo "  eq_true=${{ needs.host-merge-reports-and-publish.outputs.should_rerun == 'true' }}"
-          echo "  fromjson=${{ fromJSON(needs.host-merge-reports-and-publish.outputs.should_rerun) }}"
-          echo "  reason=${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason }}"
+          echo "  raw_should_rerun=${{ env.SHOULD_RERUN }}"
+          echo "  eq_true=${{ env.SHOULD_RERUN == 'true' }}"
+          echo "  fromjson=${{ fromJSON(env.SHOULD_RERUN) }}"
+          echo "  reason=${{ env.SHOULD_RERUN_REASON }}"
 
       - name: Not eligible, skipping rerun
-        if: steps.guard.outputs.eligible != 'true'
+        if: ${{ !fromJSON(env.SHOULD_RERUN) }}
         run: |
-          echo "Rerun not eligible; reason: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason }}"
-          echo "Rerun not eligible; reason: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Rerun not eligible; reason: ${{ env.SHOULD_RERUN_REASON }}"
+          echo "Rerun not eligible; reason: ${{ env.SHOULD_RERUN_REASON }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Download failed modules
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
         with:
           name: host-failed-modules
           path: rerun-data
 
       - name: Show modules queued for rerun
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: |
           echo "Modules slated for rerun:"
           if [ -f rerun-data/failed-modules.json ]; then
@@ -290,26 +293,26 @@ jobs:
           fi
 
       - name: Build boxel-icons
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: pnpm build
         working-directory: packages/boxel-icons
 
       - name: Serve boxel-icons
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: pnpm serve &> /tmp/icon-server.log &
         working-directory: packages/boxel-icons
 
       - name: Build boxel-ui
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: pnpm build
         working-directory: packages/boxel-ui/addon
 
       - name: Disable TCP/UDP network offloading
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: sudo ethtool -K eth0 tx off rx off
 
       - name: Start host to serve assets for fastboot
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
@@ -318,17 +321,17 @@ jobs:
           wait-on: http-get://localhost:4200
 
       - name: Start realm servers
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: pnpm start:skip-experiments | tee -a /tmp/server.log &
         working-directory: packages/realm-server
 
       - name: create realm users
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: pnpm register-realm-users
         working-directory: packages/matrix
 
       - name: Rerun failed modules
-        if: steps.guard.outputs.eligible == 'true'
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         id: rerun-tests
         continue-on-error: true
         working-directory: packages/host
@@ -373,7 +376,7 @@ jobs:
 
       - name: Collect rerun failures
         id: collect-rerun
-        if: always()
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: |
           summary=$(node scripts/ci/collect-failures.js --input packages/host/junit/junit-rerun.xml --tests rerun-failed-tests.json --modules rerun-failed-modules.json)
           echo "Rerun failure summary: $summary"
@@ -382,13 +385,13 @@ jobs:
           echo "$summary" > rerun-failure-summary.json
 
       - name: Record second pass summary
-        if: always()
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: |
           echo "Second pass failing tests: ${{ steps.collect-rerun.outputs.fail_count }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload rerun junit report
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         with:
           name: host-test-report-rerun
           path: packages/host/junit/junit-rerun.xml
@@ -396,7 +399,7 @@ jobs:
 
       - name: Upload rerun failed tests
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: steps.collect-rerun.outputs.fail_count != '0'
+        if: ${{ fromJSON(env.SHOULD_RERUN) && steps.collect-rerun.outputs.fail_count != '0' }}
         with:
           name: host-rerun-failed-tests
           path: rerun-failed-tests.json
@@ -404,19 +407,19 @@ jobs:
 
       - name: Upload rerun failure summary
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         with:
           name: host-rerun-failure-summary
           path: rerun-failure-summary.json
           retention-days: 30
 
       - name: Print rerun realm server logs
-        if: always()
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         run: cat /tmp/server.log
 
       - name: Upload rerun realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         with:
           name: host-rerun-realm-server-log
           path: /tmp/server.log
@@ -424,7 +427,7 @@ jobs:
 
       - name: Upload rerun icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ fromJSON(env.SHOULD_RERUN) }}
         with:
           name: host-rerun-icon-server-log
           path: /tmp/icon-server.log
