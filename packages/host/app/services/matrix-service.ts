@@ -427,7 +427,7 @@ export default class MatrixService extends Service {
   ) {
     displayName = displayName.trim();
     this._isInitializingNewUser = true;
-    this.start({ auth });
+    await this.start({ auth });
     this.setDisplayName(displayName);
     let userId = this.client.getUserId();
     if (!userId) {
