@@ -52,6 +52,8 @@ import { removeFileExtension } from '../components/search-sheet/utils';
 
 import { ModuleInspectorSelections } from '../utils/local-storage-keys';
 
+import { normalizeDirPath } from '../utils/normalized-dir-path';
+
 import MatrixService from './matrix-service';
 import NetworkService from './network';
 
@@ -64,7 +66,6 @@ import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
 
 import type IndexController from '../controllers';
-import { normalizeDirPath } from '../utils/normalized-dir-path';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
