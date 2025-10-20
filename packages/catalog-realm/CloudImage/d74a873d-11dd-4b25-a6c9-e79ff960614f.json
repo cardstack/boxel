@@ -1,22 +1,29 @@
 {
   "data": {
-    "attributes": {
-      "sourceFileURL": null,
-      "originalFileName": "packaging-Jack Black-1760650172296.png",
-      "cloudflareImageId": "figurine-1760650172307",
-      "uploadTimestamp": "2025-10-16T21:29:33.901Z",
-      "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
-        "notes": null
+    "meta": {
+      "adoptsFrom": {
+        "name": "CloudImage",
+        "module": "../image/cloud"
       }
     },
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "module": "../image/cloud",
-        "name": "CloudImage"
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "packaging-Jack Black-1760650172296",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sourceFileURL": null,
+      "uploadTimestamp": "2025-10-16T21:29:33.901Z",
+      "originalFileName": "packaging-Jack Black-1760650172296.png",
+      "cloudflareImageId": "figurine-1760650172307"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

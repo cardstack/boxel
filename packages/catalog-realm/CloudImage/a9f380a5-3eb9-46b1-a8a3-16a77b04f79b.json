@@ -1,22 +1,29 @@
 {
   "data": {
-    "attributes": {
-      "sourceFileURL": null,
-      "originalFileName": "figurine-Jack Black as Steve-1760650416116.png",
-      "cloudflareImageId": "figurine-1760650416132",
-      "uploadTimestamp": "2025-10-16T21:33:38.330Z",
-      "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
-        "notes": null
+    "meta": {
+      "adoptsFrom": {
+        "name": "CloudImage",
+        "module": "../image/cloud"
       }
     },
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "module": "../image/cloud",
-        "name": "CloudImage"
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "figurine-Jack Black as Steve-1760650416116",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sourceFileURL": null,
+      "uploadTimestamp": "2025-10-16T21:33:38.330Z",
+      "originalFileName": "figurine-Jack Black as Steve-1760650416116.png",
+      "cloudflareImageId": "figurine-1760650416132"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

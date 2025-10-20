@@ -1,22 +1,29 @@
 {
   "data": {
-    "attributes": {
-      "sourceFileURL": null,
-      "originalFileName": "packaging-Elton John-1760649840536.png",
-      "cloudflareImageId": "figurine-1760649840542",
-      "uploadTimestamp": "2025-10-16T21:24:02.515Z",
-      "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
-        "notes": null
+    "meta": {
+      "adoptsFrom": {
+        "name": "CloudImage",
+        "module": "../image/cloud"
       }
     },
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "module": "../image/cloud",
-        "name": "CloudImage"
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "packaging-Elton John-1760649840536",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sourceFileURL": null,
+      "uploadTimestamp": "2025-10-16T21:24:02.515Z",
+      "originalFileName": "packaging-Elton John-1760649840536.png",
+      "cloudflareImageId": "figurine-1760649840542"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

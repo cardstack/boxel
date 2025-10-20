@@ -1,22 +1,29 @@
 {
   "data": {
-    "attributes": {
-      "sourceFileURL": null,
-      "originalFileName": "figurine-Mr. Beast-1760650505202.png",
-      "cloudflareImageId": "figurine-1760650505223",
-      "uploadTimestamp": "2025-10-16T21:35:12.279Z",
-      "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
-        "notes": null
+    "meta": {
+      "adoptsFrom": {
+        "name": "CloudImage",
+        "module": "../image/cloud"
       }
     },
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "module": "../image/cloud",
-        "name": "CloudImage"
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "figurine-Mr. Beast-1760650505202",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sourceFileURL": null,
+      "uploadTimestamp": "2025-10-16T21:35:12.279Z",
+      "originalFileName": "figurine-Mr. Beast-1760650505202.png",
+      "cloudflareImageId": "figurine-1760650505223"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

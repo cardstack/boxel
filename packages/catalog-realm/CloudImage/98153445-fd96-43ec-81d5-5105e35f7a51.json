@@ -1,22 +1,29 @@
 {
   "data": {
-    "attributes": {
-      "sourceFileURL": null,
-      "originalFileName": "figurine-AOC-1760647926254.png",
-      "cloudflareImageId": "figurine-1760647926269",
-      "uploadTimestamp": "2025-10-16T20:52:08.212Z",
-      "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
-        "notes": null
+    "meta": {
+      "adoptsFrom": {
+        "name": "CloudImage",
+        "module": "../image/cloud"
       }
     },
     "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "module": "../image/cloud",
-        "name": "CloudImage"
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "figurine-AOC-1760647926254",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sourceFileURL": null,
+      "uploadTimestamp": "2025-10-16T20:52:08.212Z",
+      "originalFileName": "figurine-AOC-1760647926254.png",
+      "cloudflareImageId": "figurine-1760647926269"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
