@@ -243,9 +243,8 @@ jobs:
   host-rerun-failed-modules:
     name: Host rerun failed modules
     needs: host-merge-reports-and-publish
-    # Run only if the merge job succeeded and it flagged rerun=true.
-    # Use fromJSON to robustly handle the string -> boolean conversion.
-    if: ${{ needs.host-merge-reports-and-publish.result == 'success' && fromJSON(needs.host-merge-reports-and-publish.outputs.should_rerun) }}
+    # Always run the job so we can debug eligibility; gate the heavy steps inside.
+    if: always()
     runs-on: ubuntu-latest
     outputs:
       fail_count_second: ${{ steps.collect-rerun.outputs.fail_count }}
@@ -254,13 +253,34 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
 
+      - name: Debug rerun eligibility
+        id: guard
+        run: |
+          echo "raw_should_rerun=${{ needs.host-merge-reports-and-publish.outputs.should_rerun }}" >> "$GITHUB_OUTPUT"
+          echo "eq_true=${{ needs.host-merge-reports-and-publish.outputs.should_rerun == 'true' }}" >> "$GITHUB_OUTPUT"
+          echo "fromjson=${{ fromJSON(needs.host-merge-reports-and-publish.outputs.should_rerun) }}" >> "$GITHUB_OUTPUT"
+          echo "eligible=${{ fromJSON(needs.host-merge-reports-and-publish.outputs.should_rerun) }}" >> "$GITHUB_OUTPUT"
+          echo "Rerun guard diagnostics:"
+          echo "  raw_should_rerun=${{ needs.host-merge-reports-and-publish.outputs.should_rerun }}"
+          echo "  eq_true=${{ needs.host-merge-reports-and-publish.outputs.should_rerun == 'true' }}"
+          echo "  fromjson=${{ fromJSON(needs.host-merge-reports-and-publish.outputs.should_rerun) }}"
+          echo "  reason=${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason }}"
+
+      - name: Not eligible, skipping rerun
+        if: steps.guard.outputs.eligible != 'true'
+        run: |
+          echo "Rerun not eligible; reason: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason }}"
+          echo "Rerun not eligible; reason: ${{ needs.host-merge-reports-and-publish.outputs.should_rerun_reason }}" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Download failed modules
+        if: steps.guard.outputs.eligible == 'true'
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
         with:
           name: host-failed-modules
           path: rerun-data
 
       - name: Show modules queued for rerun
+        if: steps.guard.outputs.eligible == 'true'
         run: |
           echo "Modules slated for rerun:"
           if [ -f rerun-data/failed-modules.json ]; then
@@ -270,21 +290,26 @@ jobs:
           fi
 
       - name: Build boxel-icons
+        if: steps.guard.outputs.eligible == 'true'
         run: pnpm build
         working-directory: packages/boxel-icons
 
       - name: Serve boxel-icons
+        if: steps.guard.outputs.eligible == 'true'
         run: pnpm serve &> /tmp/icon-server.log &
         working-directory: packages/boxel-icons
 
       - name: Build boxel-ui
+        if: steps.guard.outputs.eligible == 'true'
         run: pnpm build
         working-directory: packages/boxel-ui/addon
 
       - name: Disable TCP/UDP network offloading
+        if: steps.guard.outputs.eligible == 'true'
         run: sudo ethtool -K eth0 tx off rx off
 
       - name: Start host to serve assets for fastboot
+        if: steps.guard.outputs.eligible == 'true'
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
@@ -293,14 +318,17 @@ jobs:
           wait-on: http-get://localhost:4200
 
       - name: Start realm servers
+        if: steps.guard.outputs.eligible == 'true'
         run: pnpm start:skip-experiments | tee -a /tmp/server.log &
         working-directory: packages/realm-server
 
       - name: create realm users
+        if: steps.guard.outputs.eligible == 'true'
         run: pnpm register-realm-users
         working-directory: packages/matrix
 
       - name: Rerun failed modules
+        if: steps.guard.outputs.eligible == 'true'
         id: rerun-tests
         continue-on-error: true
         working-directory: packages/host
