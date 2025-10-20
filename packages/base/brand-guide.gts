@@ -10,6 +10,7 @@ import {
   containsMany,
   field,
   type BaseDefComponent,
+  type FieldsTypeFor,
 } from './card-api';
 import ColorField from './color';
 import URLField from './url';
@@ -28,6 +29,41 @@ import {
   entriesToCssRuleMap,
   generateCssVariables,
 } from '@cardstack/boxel-ui/helpers';
+
+type FunctionalPaletteKeys = Exclude<
+  keyof FieldsTypeFor<FunctionalPalette>,
+  'constructor'
+> &
+  string;
+
+const functionalPaletteMapping: Record<FunctionalPaletteKeys, string[]> = {
+  primary: ['--primary'],
+  secondary: ['--secondary'],
+  neutral: ['--muted'],
+  light: ['--background'],
+  dark: ['--foreground'],
+  accent: ['--accent'],
+};
+
+const applyFunctionalPaletteFallback = (
+  target: Map<string, string>,
+  palette?: FunctionalPalette,
+) => {
+  if (!palette) {
+    return;
+  }
+  for (let [key, cssVariables] of Object.entries(functionalPaletteMapping)) {
+    let paletteValue = palette[key as FunctionalPaletteKeys];
+    if (!paletteValue) {
+      continue;
+    }
+    for (let cssVariable of cssVariables) {
+      if (!target.has(cssVariable)) {
+        target.set(cssVariable, paletteValue);
+      }
+    }
+  }
+};
 
 class Isolated extends Component<typeof BrandGuide> {
   <template>
@@ -369,6 +405,8 @@ export default class BrandGuide extends StyleReference {
 
       let combinedRootRules = cloneRules(this.rootVariables?.cssRuleMap);
       let combinedDarkRules = cloneRules(this.darkModeVariables?.cssRuleMap);
+
+      applyFunctionalPaletteFallback(combinedRootRules, this.functionalPalette);
 
       const paletteRules = this.brandColorPalette?.length
         ? entriesToCssRuleMap?.(
