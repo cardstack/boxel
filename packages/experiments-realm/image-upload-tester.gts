@@ -10,9 +10,9 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { fn } from '@ember/helper';
 import UploadImageCommand from '@cardstack/catalog/commands/upload-image';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
+import RealmField from 'https://cardstack.com/base/realm';
 
 class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
   @tracked isUploading = false;
@@ -126,6 +126,7 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
   }
 
   <template>
+    {{! template-lint-disable no-invalid-interactive }}
     <form class='image-upload-tester' {{on 'submit' this.uploadImage}}>
       <div class='field-group'>
         <FieldContainer @label='Source Image URL'>
@@ -243,7 +244,7 @@ export class ImageUploadTester extends CardDef {
   static displayName = 'Image Upload Tester';
 
   @field sourceImageUrl = contains(UrlField);
-  @field targetRealmUrl = contains(StringField);
+  @field targetRealmUrl = contains(RealmField);
   @field resultImageId = contains(StringField);
 
   static isolated = ImageUploadTesterIsolated;

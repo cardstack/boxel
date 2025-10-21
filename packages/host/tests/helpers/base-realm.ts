@@ -13,6 +13,7 @@ import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
+import type * as RealmFieldModule from 'https://cardstack.com/base/realm';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
@@ -50,6 +51,9 @@ let MarkdownField: MarkdownField;
 
 type TextAreaField = (typeof TextAreaFieldModule)['default'];
 let TextAreaField: TextAreaField;
+
+type RealmField = (typeof RealmFieldModule)['default'];
+let RealmField: RealmField;
 
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
@@ -140,6 +144,10 @@ async function initialize() {
     await loader.import<typeof TextAreaFieldModule>(`${baseRealm.url}text-area`)
   ).default;
 
+  RealmField = (
+    await loader.import<typeof RealmFieldModule>(`${baseRealm.url}realm`)
+  ).default;
+
   CardsGrid = (
     await loader.import<typeof CardsGridModule>(`${baseRealm.url}cards-grid`)
   ).CardsGrid;
@@ -204,6 +212,7 @@ export {
   BooleanField,
   MarkdownField,
   TextAreaField,
+  RealmField,
   CardsGrid,
   SystemCard,
   ModelConfiguration,

@@ -193,7 +193,7 @@ export default class InteractSubmode extends Component {
   private viewCard = (
     stackIndex: number,
     cardOrURL: CardDef | URL | string,
-    format: Format = 'isolated',
+    format: Format | Event = 'isolated',
     opts?: { openCardInRightMostStack?: boolean },
   ): void => {
     if (opts?.openCardInRightMostStack) {

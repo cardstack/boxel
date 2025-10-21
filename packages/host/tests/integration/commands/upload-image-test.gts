@@ -18,6 +18,8 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type UploadImageCommand from '@cardstack/catalog/commands/upload-image';
+
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
     return {
@@ -82,10 +84,12 @@ module('Integration | commands | upload-image', function (hooks) {
     const commandService = getService('command-service');
     const loaderService = getService('loader-service');
     const loader = loaderService.loader;
-    const UploadImageCommand = (
-      await loader.import('@cardstack/catalog/commands/upload-image')
+    const UploadImageCommandClass: typeof UploadImageCommand = (
+      (await loader.import('@cardstack/catalog/commands/upload-image')) as {
+        default: typeof UploadImageCommand;
+      }
     ).default;
-    const command = new UploadImageCommand(commandService.commandContext);
+    const command = new UploadImageCommandClass(commandService.commandContext);
 
     const result = await command.execute({
       sourceImageUrl: 'https://example.com/photo.jpg',
