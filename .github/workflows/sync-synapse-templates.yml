@@ -35,12 +35,14 @@ jobs:
             echo "AWS_ECS_CLUSTER=production" >> $GITHUB_ENV
             echo "AWS_ECS_SERVICE=synapse-production" >> $GITHUB_ENV
             echo "HOST_DOMAIN=app.boxel.ai" >> $GITHUB_ENV
+            echo "BOXEL_ICON_DOMAIN_AND_PATH=boxel-host-staging\.stack\.cards\/boxel-favicon\.png" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github-synapse" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-matrix-synapse-staging" >> $GITHUB_ENV
             echo "AWS_ECS_CLUSTER=staging" >> $GITHUB_ENV
             echo "AWS_ECS_SERVICE=synapse-staging" >> $GITHUB_ENV
             echo "HOST_DOMAIN=realms-staging.stack.cards" >> $GITHUB_ENV
+            echo "BOXEL_ICON_DOMAIN_AND_PATH=boxel-host\.boxel\.ai\/boxel-favicon\.png" >> $GITHUB_ENV
           else
             echo "unrecognized environment"
             exit 1;
@@ -55,6 +57,10 @@ jobs:
       - name: Replace URL in registration success template
         run: |
           sed -i "s/http:\/\/localhost:4200/https:\/\/${{ env.HOST_DOMAIN }}/" packages/matrix/docker/synapse/templates/registration_success.html
+
+      - name: Replace icon URL with one from matching subdomain
+        run: |
+          sed -i "s/d12nxmpmo97fii.cloudfront.net\/boxel-icon.png/${{ env.BOXEL_ICON_DOMAIN_AND_PATH }}" packages/matrix/docker/synapse/templates/_base.html
 
       - name: S3 Sync
         run: |
