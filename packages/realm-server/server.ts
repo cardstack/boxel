@@ -447,8 +447,11 @@ export class RealmServer {
       },
     });
 
+    let realm = this.createAndMountRealm(realmPath, url, username);
+    await realm.ensureSessionRoom(ownerUserId);
+
     return {
-      realm: this.createAndMountRealm(realmPath, url, username),
+      realm,
       info,
     };
   };

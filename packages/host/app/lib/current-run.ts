@@ -119,9 +119,8 @@ export class CurrentRun {
     definitionErrors: 0,
     totalIndexEntries: 0,
   };
-  #hasCodeChangeForNextRender = false;
+  #shouldClearCacheForNextRender = true;
   #pendingLoaderReset = false;
-  #shouldResetStoreForNextRender = true;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
 
@@ -244,15 +243,16 @@ export class CurrentRun {
     let invalidations = CurrentRun.#sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
     );
-    if (
-      !current.#hasCodeChangeForNextRender &&
-      invalidations.some((url) => hasExecutableExtension(url.href))
-    ) {
-      current.#hasCodeChangeForNextRender = true;
-      current.#pendingLoaderReset = true;
-      log.debug(
-        `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
-      );
+    let hasExecutableInvalidation = invalidations.some((url) =>
+      hasExecutableExtension(url.href),
+    );
+    if (hasExecutableInvalidation) {
+      if (!current.#shouldClearCacheForNextRender) {
+        log.debug(
+          `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
+        );
+      }
+      current.#scheduleClearCacheForNextRender();
     }
 
     let hrefs = urls.map((u) => u.href);
@@ -323,14 +323,19 @@ export class CurrentRun {
   }
 
   get hasCodeChange(): boolean {
-    return this.#hasCodeChangeForNextRender;
+    return this.#shouldClearCacheForNextRender;
   }
 
-  #consumeHasCodeChangeForRender(): boolean {
-    if (!this.#hasCodeChangeForNextRender) {
+  #scheduleClearCacheForNextRender() {
+    this.#shouldClearCacheForNextRender = true;
+    this.#pendingLoaderReset = true;
+  }
+
+  #consumeClearCacheForRender(): boolean {
+    if (!this.#shouldClearCacheForNextRender) {
       return false;
     }
-    this.#hasCodeChangeForNextRender = false;
+    this.#shouldClearCacheForNextRender = false;
     return true;
   }
 
@@ -343,14 +348,6 @@ export class CurrentRun {
       reason: `${jobIdentity(this.#jobInfo)} pending-loader-reset`,
     });
     this.#pendingLoaderReset = false;
-  }
-
-  #consumeResetStoreForRender(): boolean {
-    if (!this.#shouldResetStoreForNextRender) {
-      return false;
-    }
-    this.#shouldResetStoreForNextRender = false;
-    return true;
   }
 
   static #sortInvalidations(urls: URL[]): URL[] {
@@ -742,15 +739,9 @@ export class CurrentRun {
       if ((globalThis as any).__useHeadlessChromePrerender?.()) {
         let renderResult: RenderResponse | undefined;
         try {
-          let includesCodeChange = this.#consumeHasCodeChangeForRender();
-          let shouldResetStore = this.#consumeResetStoreForRender();
+          let shouldClearCache = this.#consumeClearCacheForRender();
           let prerenderOptions: RenderRouteOptions | undefined =
-            includesCodeChange || shouldResetStore
-              ? {
-                  ...(shouldResetStore ? { resetStore: true } : {}),
-                  ...(includesCodeChange ? { includesCodeChange: true } : {}),
-                }
-              : undefined;
+            shouldClearCache ? { clearCache: true } : undefined;
           renderResult = await this.#prerenderer({
             url: fileURL,
             realm: this.#realmURL.href,
@@ -951,7 +942,7 @@ export class CurrentRun {
               },
             },
           }) as SingleCardDocument;
-          searchData = await api.searchDoc(card);
+          searchData = api.searchDoc(card);
 
           if (!searchData) {
             throw new Error(

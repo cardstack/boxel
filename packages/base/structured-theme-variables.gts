@@ -1,4 +1,8 @@
 import { CopyButton } from '@cardstack/boxel-ui/components';
+import {
+  entriesToCssRuleMap,
+  type CssVariableEntry,
+} from '@cardstack/boxel-ui/helpers';
 
 import {
   field,
@@ -11,6 +15,7 @@ import {
 } from './card-api';
 import ColorField from './color';
 import CSSValueField from './css-value';
+import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
 
 function dasherize(str: string): string {
   return str
@@ -21,15 +26,14 @@ function dasherize(str: string): string {
 
 type FieldNameType = keyof FieldsTypeFor<ThemeVarField> & string;
 
-interface CssVariableField {
+interface CssVariableField extends CssVariableEntry {
   fieldName: FieldNameType;
   cssVariableName: string;
   component?: BoxComponent;
-  value: string | undefined | null;
 }
 
 class Embedded extends Component<typeof ThemeVarField> {
-  private get cssFields() {
+  private get cssFields(): CssVariableField[] | undefined {
     let fields = this.args.fields;
     let cssFields = this.args.model.cssVariableFields;
     cssFields = cssFields?.map((f) => ({
@@ -54,7 +58,10 @@ class Embedded extends Component<typeof ThemeVarField> {
         </div>
         <div class='code-preview'>
           {{#if field.value}}
-            <span class='css-value'><field.component /></span>
+            <span
+              class='css-value'
+              data-test-var-value={{field.fieldName}}
+            ><field.component /></span>
             <CopyButton
               class='copy-button'
               @textToCopy={{field.value}}
@@ -192,19 +199,30 @@ export default class ThemeVarField extends FieldDef {
     if (!fields) {
       return;
     }
+
     let fieldNames = Object.keys(fields) as FieldNameType[];
     if (!fieldNames?.length) {
       return;
     }
     let cssVariableFields: CssVariableField[] = [];
     for (let fieldName of fieldNames) {
+      let cssVariableName = `--${dasherize(fieldName)}`;
+      let value = this?.[fieldName] as string | undefined | null;
       cssVariableFields.push({
         fieldName,
-        cssVariableName: `--${dasherize(fieldName)}`,
-        value: this?.[fieldName] as string | undefined | null,
+        cssVariableName,
+        name: cssVariableName,
+        value,
       });
     }
     return cssVariableFields;
+  }
+
+  get cssRuleMap(): CssRuleMap | undefined {
+    if (!entriesToCssRuleMap) {
+      return;
+    }
+    return entriesToCssRuleMap(this.cssVariableFields);
   }
 
   static embedded = Embedded;

@@ -37,6 +37,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   createJWT,
   testRealmSecretSeed,
@@ -290,6 +291,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     ({ realm: testRealm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },
         'boom-person.gts': { BoomPerson },
         'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
@@ -443,6 +445,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       mockMatrixUtils,
       realmURL: realm2URL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'Person/1.json': {
           data: {

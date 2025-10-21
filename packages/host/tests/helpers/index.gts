@@ -219,42 +219,63 @@ export async function capturePrerenderResult(
   expectedStatus: 'ready' | 'error' = 'ready',
 ): Promise<{ status: 'ready' | 'error'; value: string }> {
   await waitUntil(() => {
-    let el = document.querySelector('[data-prerender]') as HTMLElement | null;
-    if (!el) {
-      return false;
-    }
-    let status = el.dataset.prerenderStatus ?? '';
-    let hasError = !!el.querySelector('[data-prerender-error]');
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    let errorElement = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    let errorText = (errorElement?.textContent ?? errorElement?.innerHTML ?? '')
+      .trim()
+      .trim();
     if (expectedStatus === 'error') {
-      return status === 'unusable' || hasError;
+      if (container) {
+        let status = container.dataset.prerenderStatus ?? '';
+        if (status === 'error' || status === 'unusable') {
+          return true;
+        }
+      }
+      return errorText.length > 0;
     }
-    if (hasError) {
+    if (errorText.length > 0) {
       return true;
     }
-    return status === expectedStatus;
+    if (!container) {
+      return false;
+    }
+    return (container.dataset.prerenderStatus ?? '') === expectedStatus;
   });
-  let element = document.querySelector('[data-prerender]') as HTMLElement;
-  let errorElement = element.querySelector(
+  let container = document.querySelector(
+    '[data-prerender]',
+  ) as HTMLElement | null;
+  let errorElement = document.querySelector(
     '[data-prerender-error]',
   ) as HTMLElement | null;
-  if (errorElement) {
-    let text = (
-      errorElement.textContent ??
-      errorElement.innerHTML ??
-      ''
-    ).trim();
-    return { status: 'error', value: text };
+  let errorText = (
+    errorElement?.textContent ??
+    errorElement?.innerHTML ??
+    ''
+  ).trim();
+  if (errorText.length > 0) {
+    return { status: 'error', value: errorText };
   }
-  let status = element.dataset.prerenderStatus as 'ready' | 'unusable';
-  if (status === 'unusable') {
-    // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
+  if (!container) {
+    throw new Error(
+      'capturePrerenderResult: missing [data-prerender] container after wait',
+    );
+  }
+  let status = container.dataset.prerenderStatus as
+    | 'ready'
+    | 'error'
+    | 'unusable'
+    | undefined;
+  if (status === 'error' || status === 'unusable') {
     return {
       status: 'error',
-      value: element.innerHTML!.replace(/}[^}]*$/, '}'),
+      value: container.innerHTML!.replace(/}[^}]*$/, '}'),
     };
-  } else {
-    return { status: 'ready', value: element.children[0][capture]! };
   }
+  return { status: 'ready', value: container.children[0][capture]! };
 }
 
 async function makeRenderer() {
@@ -364,7 +385,6 @@ export function setupOnSave(hooks: NestedHooks) {
     this.unregisterOnSave = store._unregisterSaveSubscriber.bind(store);
   });
 }
-
 let runnerOptsMgr = new RunnerOptionsManager();
 
 interface RealmContents {
@@ -376,8 +396,126 @@ interface RealmContents {
     | Record<string, unknown>
     | string;
 }
+
+export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
+  'ModelConfiguration/test-gpt.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'OpenAI: GPT-5',
+          description: 'Test fixture model configuration referencing GPT-5.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'openai/gpt-5',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'ModelConfiguration/test-claude-sonnet-4.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Anthropic: Claude Sonnet 4',
+          description:
+            'Test fixture model configuration referencing Claude Sonnet 4.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-sonnet-4',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'ModelConfiguration/test-claude-37-sonnet.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Anthropic: Claude 3.7 Sonnet',
+          description:
+            'Test fixture model configuration referencing Claude 3.7 Sonnet.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-3.7-sonnet',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'SystemCard/default.json': {
+    data: {
+      type: 'card',
+      attributes: {},
+      relationships: {
+        'modelConfigurations.0': {
+          links: {
+            self: '../ModelConfiguration/test-gpt',
+          },
+        },
+        'modelConfigurations.1': {
+          links: {
+            self: '../ModelConfiguration/test-claude-sonnet-4',
+          },
+        },
+        'modelConfigurations.2': {
+          links: {
+            self: '../ModelConfiguration/test-claude-37-sonnet',
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'SystemCard',
+        },
+      },
+    },
+  },
+};
 export async function setupAcceptanceTestRealm({
-  contents,
+  contents = {},
   realmURL,
   permissions,
   mockMatrixUtils,
@@ -398,7 +536,7 @@ export async function setupAcceptanceTestRealm({
 }
 
 export async function setupIntegrationTestRealm({
-  contents,
+  contents = {},
   realmURL,
   permissions,
   mockMatrixUtils,

@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -12,6 +13,7 @@ import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import { formatDistanceToNow } from 'date-fns';
 import { restartableTask, task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 
 import {
@@ -176,6 +178,10 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get customSubdomainDisplay() {
+    if (this.claimedSiteHostname) {
+      return this.claimedSiteHostname.subdomain;
+    }
+
     if (this.customSubdomainSelection?.subdomain) {
       return this.customSubdomainSelection.subdomain;
     }
@@ -184,15 +190,18 @@ export default class PublishRealmModal extends Component<Signature> {
       return this.customSubdomain;
     }
 
-    return 'custom-name';
+    return 'custom-site-name';
   }
 
   get customSubdomainState() {
-    return this.customSubdomainAvailability?.available
-      ? 'valid'
-      : this.customSubdomainError
-      ? 'invalid'
-      : null;
+    // Check for errors first, as they should take priority
+    if (this.customSubdomainError) {
+      return 'invalid';
+    }
+    if (this.customSubdomainAvailability?.available) {
+      return 'valid';
+    }
+    return null;
   }
 
   get isClaimCustomSubdomainDisabled() {
@@ -376,39 +385,59 @@ export default class PublishRealmModal extends Component<Signature> {
     this.clearCustomSubdomainFeedback();
   }
 
-  @action
-  async handleClaimCustomSubdomain(event: Event) {
-    event.preventDefault();
+  private handleClaimCustomSubdomainTask = restartableTask(
+    async (event: Event) => {
+      event.preventDefault();
 
-    let subdomain = this.customSubdomain;
+      let subdomain = this.customSubdomain;
 
-    this.isCheckingCustomSubdomain = true;
-    this.clearCustomSubdomainFeedback();
+      this.isCheckingCustomSubdomain = true;
+      this.clearCustomSubdomainFeedback();
 
-    try {
-      let result = await this.realmServer.checkSiteNameAvailability(subdomain);
-      this.customSubdomainAvailability = result;
+      try {
+        let result =
+          await this.realmServer.checkSiteNameAvailability(subdomain);
+        this.customSubdomainAvailability = result;
 
-      if (result.available) {
-        let publishedUrl = this.buildPublishedRealmUrl(result.domain);
-        this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
-      } else {
+        if (result.available) {
+          // Strip port from base domain if present (e.g., "localhost:4201" -> "localhost")
+          let baseDomain = this.customSubdomainBase.split(':')[0];
+          let hostname = `${subdomain}.${baseDomain}`;
+          let publishedUrl = this.buildPublishedRealmUrl(hostname);
+          this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
+
+          try {
+            let {
+              data: { attributes },
+            } = await this.realmServer.claimBoxelDomain(
+              this.currentRealmURL,
+              hostname,
+            );
+            this.applyClaimedSiteHostname(attributes);
+            this.isCustomSubdomainSetupVisible = false;
+          } catch (claimError) {
+            let errorMessage = (claimError as Error).message;
+
+            this.customSubdomainError = errorMessage;
+            this.setCustomSubdomainSelection(null);
+          }
+        } else {
+          this.customSubdomainError =
+            result.error ?? 'This name is already taken';
+          this.setCustomSubdomainSelection(null);
+        }
+      } catch (error) {
         this.customSubdomainError =
-          result.error ?? 'This name is already taken';
+          error instanceof Error
+            ? error.message
+            : 'Failed to check site name availability';
+        this.customSubdomainAvailability = null;
         this.setCustomSubdomainSelection(null);
+      } finally {
+        this.isCheckingCustomSubdomain = false;
       }
-    } catch (error) {
-      console.error('Failed to check site name availability', error);
-      this.customSubdomainError =
-        error instanceof Error
-          ? error.message
-          : 'Failed to check site name availability';
-      this.customSubdomainAvailability = null;
-      this.setCustomSubdomainSelection(null);
-    } finally {
-      this.isCheckingCustomSubdomain = false;
-    }
-  }
+    },
+  );
 
   @action
   handleUnclaimSiteName() {
@@ -550,7 +579,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 <IconX width='12' height='12' class='cancel-icon' />
               </BoxelButton>
             {{/if}}
-            <div class='domain-details'>
+            <div class='domain-details' data-test-custom-subdomain-details>
               {{#if this.isCustomSubdomainSetupVisible}}
                 <div class='custom-subdomain-setup'>
                   <label
@@ -587,7 +616,7 @@ export default class PublishRealmModal extends Component<Signature> {
                   <span class='domain-url'>
                     <span class='url-part'>{{this.getProtocol}}://</span><span
                       class='url-part-bold'
-                    >{{this.claimedSiteHostname.subdomain}}</span><span
+                    >{{this.customSubdomainDisplay}}</span><span
                       class='url-part'
                     >.{{this.customSubdomainBase}}/</span>
                   </span>
@@ -606,7 +635,7 @@ export default class PublishRealmModal extends Component<Signature> {
                           class='unpublish-button unclaim-button'
                           @disabled={{this.isUnclaimSiteButtonDisabled}}
                           {{on 'click' this.handleUnclaimSiteName}}
-                          data-test-unclaim-site-name-button
+                          data-test-unclaim-custom-subdomain-button
                         >
                           {{#if this.unclaimSiteName.isRunning}}
                             <LoadingIndicator />
@@ -623,7 +652,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 <span class='domain-url'>
                   <span class='url-part'>{{this.getProtocol}}://</span><span
                     class='url-part'
-                  >custom-site-name</span><span
+                  >{{this.customSubdomainDisplay}}</span><span
                     class='url-part-bold'
                   >.{{this.customSubdomainBase}}/</span>
                 </span>
@@ -636,7 +665,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 @size='small'
                 class='claim-custom-subdomain-button action'
                 @disabled={{this.isClaimCustomSubdomainDisabled}}
-                {{on 'click' this.handleClaimCustomSubdomain}}
+                {{on 'click' (perform this.handleClaimCustomSubdomainTask)}}
                 data-test-claim-custom-subdomain-button
               >
                 {{#if this.isCheckingCustomSubdomain}}
@@ -646,18 +675,19 @@ export default class PublishRealmModal extends Component<Signature> {
                   Claim Site Name
                 {{/if}}
               </BoxelButton>
-
-            {{else if (not this.shouldShowUnclaimSiteButton)}}
-              <BoxelButton
-                @kind='secondary-light'
-                @size='small'
-                class='action'
-                {{on 'click' this.openCustomSubdomainSetup}}
-                data-test-custom-subdomain-setup-button
-              >
-                <Settings width='16' height='16' class='button-icon' />
-                Set Up
-              </BoxelButton>
+            {{else}}
+              {{#unless this.claimedSiteHostname}}
+                <BoxelButton
+                  @kind='secondary-light'
+                  @size='small'
+                  class='action'
+                  {{on 'click' this.openCustomSubdomainSetup}}
+                  data-test-custom-subdomain-setup-button
+                >
+                  <Settings width='16' height='16' class='button-icon' />
+                  Set Up
+                </BoxelButton>
+              {{/unless}}
             {{/if}}
           </div>
         </div>
