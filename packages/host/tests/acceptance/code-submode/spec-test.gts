@@ -16,6 +16,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -276,6 +277,7 @@ module('Acceptance | Spec preview', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': personCardSource,
         'person-1.gts': person1CardSource,
         'pet.gts': petCardSource,
@@ -563,6 +565,7 @@ module('Acceptance | Spec preview', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'new-skill.gts': newSkillCardSource,
         'person.gts': personCardSource,
         'person-entry.json': {

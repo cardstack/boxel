@@ -1875,6 +1875,7 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('Volleyball player');
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
       await click('[data-test-toggle-thumbnail-editor]');
+      assert.dom('[data-test-thumbnail-placeholder]').doesNotExist();
       assert
         .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasValue('http://pic/of/volleyball');
@@ -1951,8 +1952,9 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-thumbnail-icon]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
-        .hasNoValue();
+        .dom('[data-test-thumbnail-placeholder] input')
+        .hasValue('http://book/pic.jpg');
+      assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
         .dom('[data-test-field="bookCoverImage"] input')
@@ -2012,8 +2014,9 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('The latest novel from John Doe');
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
-        .hasNoValue();
+        .dom('[data-test-thumbnail-placeholder] input')
+        .hasValue('http://book/pic.jpg');
+      assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="title"] input').hasValue('Insomniac');
       assert

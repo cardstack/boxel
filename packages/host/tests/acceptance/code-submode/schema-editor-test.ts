@@ -18,6 +18,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
@@ -268,6 +269,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.gts': indexCardSource,
         'empty.gts': ' ',
         'pet-person.gts': personCardSource,

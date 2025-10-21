@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "title": "OpenAI: GPT-5",
+        "description": "Test fixture model configuration referencing GPT-5.",
+        "thumbnailURL": null,
+        "notes": null
+      },
+      "modelId": "openai/gpt-5",
+      "toolsSupported": true
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/system-card",
+        "name": "ModelConfiguration"
+      }
+    }
+  }
+}
