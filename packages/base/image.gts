@@ -4,28 +4,25 @@ import UrlField from './url';
 class ImageCardView extends Component<typeof ImageCard> {
   <template>
     {{#if @model.url}}
-      <img
-        class='image-card__media'
-        src={{@model.url}}
-        alt=''
-        loading='lazy'
-      />
+      <img class='image' src={{@model.url}} alt='' loading='lazy' />
     {{else}}
-      <div class='image-card__placeholder'>No image URL provided</div>
+      <div class='empty-placeholder'>No image URL provided</div>
     {{/if}}
-    <style scoped>
-      .image-card__media {
+    <style
+      scoped
+    >
+      .image {
         display: block;
         max-width: 100%;
         height: auto;
-        border-radius: var(--boxel-form-control-border-radius, 4px);
+        border-radius: var(--boxel-form-control-border-radius);
       }
-      .image-card__placeholder {
-        padding: var(--boxel-sp, 12px);
+      .empty-placeholder {
+        padding: var(--boxel-sp;
         text-align: center;
-        color: var(--boxel-500, #666);
-        background-color: var(--boxel-50, #f5f5f5);
-        border-radius: var(--boxel-form-control-border-radius, 4px);
+        color: var(--boxel-500);
+        background-color: var(--boxel-50);
+        border-radius: var(--boxel-form-control-border-radius);
       }
     </style>
   </template>

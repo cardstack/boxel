@@ -126,7 +126,7 @@ export class PhotoCollage extends CardDef {
 
         .dark-mode {
           background-color: #121212;
-          color: #f5f5f5;
+          color: var(--boxel-50);
         }
       </style>
     </template>
