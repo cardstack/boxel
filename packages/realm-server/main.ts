@@ -262,10 +262,8 @@ let autoMigrate = migrateDB || undefined;
   // PUBLISHED_REALM_BOXEL_SPACE_DOMAIN is used to form urls like "mike.boxel.space/game-mechanics"
   // PUBLISHED_REALM_BOXEL_SITE_DOMAIN is used to form urls like "mike.boxel.site"
   let domainsForPublishedRealms = {
-    boxelSpace:
-      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
-    boxelSite:
-      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
+    boxelSpace: process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost',
+    boxelSite: process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost',
   };
 
   let server = new RealmServer({
