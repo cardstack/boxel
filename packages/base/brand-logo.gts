@@ -1,8 +1,4 @@
-import {
-  BoxelContainer,
-  FieldContainer,
-  GridContainer,
-} from '@cardstack/boxel-ui/components';
+import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 import {
   entriesToCssRuleMap,
   type CssRuleMap,
@@ -176,7 +172,7 @@ class Embedded extends Component<typeof BrandLogo> {
       .mark-usage-embedded {
         --annotation: rgba(255 0 0 / 0.15);
         --annotation-foreground: rgb(255 0 0);
-        --container-border: 1px solid var(--border);
+        --container-border: 1px solid var(--border, var(--boxel-400));
         gap: var(--boxel-sp-xl);
       }
       .preview-field {

@@ -1,4 +1,3 @@
-// import GlimmerComponent from '@glimmer/component';
 import {
   Component,
   CSSField,
@@ -23,7 +22,7 @@ import BrandTypography from './brand-typography';
 import BrandFunctionalPalette from './brand-functional-palette';
 import BrandLogo from './brand-logo';
 import CSSValueField from './css-value';
-import { dasherize } from './structured-theme-variables';
+import ThemeVarField, { dasherize } from './structured-theme-variables';
 
 const rootToBrandVariableMapping: Record<string, string> = {
   '--primary': '--brand-primary',
@@ -107,15 +106,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         margin-block: 0;
       }
       .brand-guide {
-        --annotation: rgba(255 0 0 / 0.15);
-        --annotation-foreground: rgb(255 0 0);
-        --boxel-container-padding: var(--boxel-sp-xxl);
-        --container-border: 1px solid
-          color-mix(
-            in oklab,
-            var(--border, var(--muted, var(--boxel-100))) 90%,
-            var(--foreground, var(--boxel-dark))
-          );
+        --brand-guide-border: 1px solid var(--border, var(--boxel-400));
+        --brand-guide-spacing: var(--boxel-sp-xl);
+        --boxel-container-padding: var(--brand-guide-spacing);
         height: 100%;
       }
       .header-section {
@@ -132,10 +125,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         margin: var(--boxel-sp);
       }
       .content-section {
-        gap: var(--boxel-sp-xl);
+        gap: var(--brand-guide-spacing);
       }
       .content-section + .content-section {
-        border-top: var(--boxel-border);
+        border-top: var(--brand-guide-border);
       }
       .brand-palette {
         display: grid;
@@ -145,7 +138,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         text-wrap: pretty;
       }
       .brand-palette + h2 {
-        margin-top: var(--boxel-sp-xl);
+        margin-top: var(--brand-guide-spacing);
       }
     </style>
   </template>
@@ -181,6 +174,110 @@ export class CompoundColorField extends FieldDef {
 export default class BrandGuide extends StyleReference {
   static displayName = 'Brand Guide';
 
+  private appendRules(
+    source: Map<string, string> | undefined,
+    target: Map<string, string>,
+  ) {
+    if (!source?.size) {
+      return;
+    }
+    for (let [name, value] of source.entries()) {
+      if (!name || !value || target.has(name)) {
+        continue;
+      }
+      target.set(name, value);
+    }
+  }
+
+  private calculateCombinedRules(
+    cssVars?: ThemeVarField,
+  ): Map<string, string> | undefined {
+    let rootRules = cssVars?.cssRuleMap;
+    let functionalRules = this.functionalPalette?.cssRuleMap;
+    let combinedRules = rootRules
+      ? new Map<string, string>(rootRules)
+      : new Map<string, string>();
+
+    let darkColor =
+      functionalRules?.get('--brand-dark') ?? 'var(--boxel-dark, #000000)';
+    let lightColor =
+      functionalRules?.get('--brand-light') ?? 'var(--boxel-light, #ffffff)';
+
+    for (let [rootName, brandName] of Object.entries(
+      rootToBrandVariableMapping,
+    )) {
+      let rootValue = rootRules?.get(rootName);
+      let paletteBrandValue = functionalRules?.get(brandName);
+      let brandValue = paletteBrandValue ?? rootValue;
+
+      if (!brandValue) {
+        continue;
+      }
+
+      combinedRules.set(brandName, brandValue);
+      combinedRules.set(rootName, `var(${brandName})`);
+
+      let foregroundName = `${rootName}-foreground`;
+      let brandForegroundName = `${brandName}-foreground`;
+
+      if (!brandForegroundMapping.includes(brandForegroundName)) {
+        continue;
+      }
+
+      let hasForegroundOverride =
+        functionalRules?.has(brandForegroundName) ?? false;
+
+      if (!hasForegroundOverride) {
+        hasForegroundOverride = combinedRules.has(brandForegroundName);
+      }
+
+      if (!hasForegroundOverride) {
+        let foregroundValue = getContrastColor(
+          brandValue,
+          darkColor,
+          lightColor,
+        );
+        if (foregroundValue) {
+          combinedRules.set(brandForegroundName, foregroundValue);
+        }
+      }
+
+      if (combinedRules.has(brandForegroundName)) {
+        combinedRules.set(foregroundName, `var(${brandForegroundName})`);
+      }
+    }
+
+    this.appendRules(functionalRules, combinedRules);
+
+    if (this.cornerRadius) {
+      combinedRules.set('--brand-radius', this.cornerRadius);
+    }
+
+    if (this.spacing) {
+      combinedRules.set('--brand-spacing', this.spacing);
+      combinedRules.set('--spacing', `calc(var(--brand-spacing) / 4)`);
+    }
+
+    this.appendRules(this.typography?.cssRuleMap, combinedRules);
+    this.appendRules(this.markUsage?.cssRuleMap, combinedRules);
+
+    if (entriesToCssRuleMap && this.brandColorPalette?.length) {
+      let paletteRules = entriesToCssRuleMap(this.brandColorPalette);
+      for (let [name, value] of paletteRules.entries()) {
+        if (!name || !value) {
+          continue;
+        }
+        combinedRules.set(formatCssVarName(name), value);
+      }
+    }
+
+    if (!combinedRules.size) {
+      return;
+    }
+
+    return combinedRules;
+  }
+
   // Color Palettes
   @field brandColorPalette = containsMany(CompoundColorField);
   @field functionalPalette = contains(BrandFunctionalPalette);
@@ -195,112 +292,10 @@ export default class BrandGuide extends StyleReference {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
-      let rootRules = this.rootVariables?.cssRuleMap;
-      let functionalRules = this.functionalPalette?.cssRuleMap;
-      let combinedRootRules = rootRules
-        ? new Map<string, string>(rootRules)
-        : new Map<string, string>();
-      let darkColor =
-        functionalRules?.get('--brand-dark') ?? 'var(--boxel-dark, #000000)';
-      let lightColor =
-        functionalRules?.get('--brand-light') ?? 'var(--boxel-light, #ffffff)';
-
-      for (let [rootName, brandName] of Object.entries(
-        rootToBrandVariableMapping,
-      )) {
-        let rootValue = rootRules?.get(rootName);
-        let paletteBrandValue = functionalRules?.get(brandName);
-        let brandValue = paletteBrandValue ?? rootValue;
-
-        if (brandValue) {
-          combinedRootRules.set(brandName, brandValue);
-          combinedRootRules.set(rootName, `var(${brandName})`);
-
-          let foregroundName = `${rootName}-foreground`;
-          let brandForegroundName = `${brandName}-foreground`;
-          if (brandForegroundMapping.includes(brandForegroundName)) {
-            let hasForegroundOverride =
-              functionalRules?.has(brandForegroundName) ?? false;
-
-            if (!hasForegroundOverride) {
-              hasForegroundOverride =
-                combinedRootRules.has(brandForegroundName);
-            }
-
-            if (!hasForegroundOverride) {
-              let foregroundValue = getContrastColor(
-                brandValue,
-                darkColor,
-                lightColor,
-              );
-              if (foregroundValue) {
-                combinedRootRules.set(brandForegroundName, foregroundValue);
-              }
-            }
-
-            if (combinedRootRules.has(brandForegroundName)) {
-              combinedRootRules.set(
-                foregroundName,
-                `var(${brandForegroundName})`,
-              );
-            }
-          }
-        }
-      }
-
-      if (functionalRules?.size) {
-        for (let [name, value] of functionalRules.entries()) {
-          if (!name || !value || combinedRootRules.has(name)) {
-            continue;
-          }
-          combinedRootRules.set(name, value);
-        }
-      }
-
-      let cornerRadius = this.cornerRadius;
-      if (cornerRadius) {
-        combinedRootRules.set('--brand-radius', cornerRadius);
-      }
-
-      let spacing = this.spacing;
-      if (spacing) {
-        combinedRootRules.set('--brand-spacing', spacing);
-        combinedRootRules.set('--spacing', `calc(var(--brand-spacing) / 4)`);
-      }
-
-      let typographyRules = this.typography?.cssRuleMap;
-      if (typographyRules?.size) {
-        for (let [name, value] of typographyRules.entries()) {
-          if (!name || !value || combinedRootRules.has(name)) {
-            continue;
-          }
-          combinedRootRules.set(name, value);
-        }
-      }
-
-      let markUsageRules = this.markUsage?.cssRuleMap;
-      if (markUsageRules?.size) {
-        for (let [name, value] of markUsageRules.entries()) {
-          if (!name || !value || combinedRootRules.has(name)) {
-            continue;
-          }
-          combinedRootRules.set(name, value);
-        }
-      }
-
-      if (entriesToCssRuleMap && this.brandColorPalette?.length) {
-        let paletteRules = entriesToCssRuleMap(this.brandColorPalette);
-        for (let [name, value] of paletteRules.entries()) {
-          if (name && value) {
-            combinedRootRules.set(formatCssVarName(name), value);
-          }
-        }
-      }
-
-      if (!combinedRootRules.size) {
+      let combinedRootRules = this.calculateCombinedRules(this.rootVariables);
+      if (!combinedRootRules) {
         return;
       }
-
       return generateCssVariables(
         buildCssGroups([{ selector: ':root', rules: combinedRootRules }]),
       );
