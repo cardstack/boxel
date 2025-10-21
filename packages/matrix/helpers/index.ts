@@ -36,6 +36,15 @@ export async function setSkillsRedirect(page: Page) {
   });
 }
 
+export async function setCatalogRedirect(page: Page) {
+  await page.route('http://localhost:4201/catalog/**', async (route) => {
+    const url = route.request().url();
+    const suffix = url.split('http://localhost:4201/catalog/').pop();
+    const newUrl = `http://localhost:4205/catalog/${suffix}`;
+    await route.continue({ url: newUrl });
+  });
+}
+
 export async function registerRealmUsers(synapse: SynapseInstance) {
   await registerUser(
     synapse,

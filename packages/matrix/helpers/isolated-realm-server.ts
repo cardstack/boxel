@@ -14,6 +14,9 @@ const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const skillsRealmDir = resolve(
   join(__dirname, '..', '..', 'skills-realm', 'contents'),
 );
+const catalogRealmDir = resolve(
+  join(__dirname, '..', '..', 'catalog-realm'),
+);
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
 
@@ -143,6 +146,41 @@ export async function startServer(includePublishedRealm = false) {
     `);
   }
 
+  // Ensure catalog realm permissions exist before starting the realm server so initial indexing can read _mtimes
+  {
+    // Wait for worker manager to be ready (idempotent if already ready)
+    let workerManagerReadyTimedOut = await Promise.race([
+      new Promise<void>((resolve) => {
+        let checkReady = async () => {
+          try {
+            let response = await fetch('http://localhost:4212/');
+            if (response.ok) {
+              let json = await response.json();
+              if (json.ready) {
+                resolve();
+                return;
+              }
+            }
+          } catch (e) {}
+          setTimeout(checkReady, 100);
+        };
+        checkReady();
+      }),
+      new Promise<true>((resolve) => setTimeout(() => resolve(true), 30_000)),
+    ]);
+    if (workerManagerReadyTimedOut) {
+      throw new Error(`timed out waiting for worker manager to start`);
+    }
+
+    let sqlExecutor = new WorkerManagerSQLExecutor(workerManager);
+    await sqlExecutor.executeSQL(`
+      INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+      VALUES
+        ('http://localhost:4205/catalog/', '*', true, false, false),
+        ('http://localhost:4205/catalog/', '@catalog_realm:localhost', true, true, true)
+    `);
+  }
+
   let serverArgs = [
     `--transpileOnly`,
     'main',
@@ -162,6 +200,14 @@ export async function startServer(includePublishedRealm = false) {
     `--path='${skillsRealmDir}'`,
     `--fromUrl='http://localhost:4205/skills/'`,
     `--toUrl='http://localhost:4205/skills/'`,
+  ]);
+
+  // Mount catalog realm from the repository for end-to-end catalog tests
+  serverArgs = serverArgs.concat([
+    `--username='catalog_realm'`,
+    `--path='${catalogRealmDir}'`,
+    `--fromUrl='http://localhost:4205/catalog/'`,
+    `--toUrl='http://localhost:4205/catalog/'`,
   ]);
 
   if (includePublishedRealm) {
