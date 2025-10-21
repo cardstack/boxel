@@ -1,31 +1,51 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Adobe Credit",
-      "partner": null,
-      "benefitKind": "statement-credit",
-      "amount": { "amount": 250, "currency": { "code": "USD" } },
-      "enrollmentRequired": true,
-      "minSpend": { "amount": 600, "currency": { "code": "USD" } },
-      "programURL": "https://www.adobe.com/creativecloud/business/teams.html",
-      "conditions": "Must enroll for benefit and spend minimum $600 on Adobe products/services in calendar year to earn the $250 credit. Must purchase directly from Adobe. Covers Creative Cloud, Document Cloud, and other Adobe services.",
+      "amount": {
+        "amount": 250,
+        "currency": {
+          "code": "USD"
+        }
+      },
       "details": [
         "A $250 statement credit per calendar year after you spend $600 or more on U.S. purchases directly with Adobe in a calendar year. Enrollment required.‡"
       ],
-      "title": "Adobe Credit"
+      "partner": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": 600,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "Must enroll for benefit and spend minimum $600 on Adobe products/services in calendar year to earn the $250 credit. Must purchase directly from Adobe. Covers Creative Cloud, Document Cloud, and other Adobe services.",
+      "programURL": "https://www.adobe.com/creativecloud/business/teams.html",
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": true
     },
     "relationships": {
       "timePeriod": {
         "links": {
           "self": "../TimePeriod/annual-calendar"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "Benefit"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

@@ -1,11 +1,22 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MembershipBenefit",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
-      "membershipProgram": "Marriott Bonvoy",
+      "partner": "Marriott International",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "conditions": "As a Platinum Card Member, you can receive Marriott Bonvoy® Gold Elite Status without meeting any stay requirements. Enrollment required. Terms and limitations apply. Must maintain active cardmembership to retain status.",
       "statusLevel": "Gold Elite",
-      "autoEnrollment": false,
-      "enrollmentInstructions": "Enrollment required through American Express benefits platform. Must link existing Marriott Bonvoy account or create new account to receive status.",
       "benefitsList": [
         "Earn 25% bonus points on eligible stays",
         "Late checkout until 2PM when available",
@@ -15,16 +26,16 @@
         "Mobile check-in and checkout",
         "Mobile requests for services and amenities"
       ],
-      "partner": "Marriott International",
+      "autoEnrollment": false,
+      "membershipProgram": "Marriott Bonvoy",
       "enrollmentRequired": true,
-      "conditions": "As a Platinum Card Member, you can receive Marriott Bonvoy® Gold Elite Status without meeting any stay requirements. Enrollment required. Terms and limitations apply. Must maintain active cardmembership to retain status.",
-      "title": "Marriott Bonvoy Gold Elite"
+      "enrollmentInstructions": "Enrollment required through American Express benefits platform. Must link existing Marriott Bonvoy account or create new account to receive status."
     },
-    "relationships": {},
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "MembershipBenefit"
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

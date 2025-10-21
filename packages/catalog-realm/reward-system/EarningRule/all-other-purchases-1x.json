@@ -17,7 +17,7 @@
       "category": "All Other Purchases",
       "appliesTo": "All other eligible purchases",
       "capAmount": {
-        "amount": "0",
+        "amount": 0,
         "currency": {
           "code": "USD"
         }

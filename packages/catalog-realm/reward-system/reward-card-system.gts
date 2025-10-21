@@ -7,6 +7,8 @@ import {
   linksTo,
   linksToMany,
   Component,
+  FieldDef,
+  primitive,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core APIs
 import StringField from 'https://cardstack.com/base/string'; // ² Base fields
 import NumberField from 'https://cardstack.com/base/number';
@@ -17,6 +19,197 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import { gt } from '@cardstack/boxel-ui/helpers'; // ³ Helpers
 import { formatCurrency, formatNumber } from '@cardstack/boxel-ui/helpers';
 import { AmountWithCurrency } from '../fields/amount-with-currency';
+import { BoxelSelect } from '@cardstack/boxel-ui/components'; // ³ᵃ UI components for loose selects
+
+// ³ᵇ Loose select string FieldDefs for suggested values with free entry
+export class UnitField extends FieldDef {
+  static displayName = 'Time Unit';
+  static [primitive]: string;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof UnitField> {
+    get options() {
+      return ['week', 'month', 'quarter', 'half-year', 'year'];
+    }
+    <template>
+      <BoxelSelect
+        @placeholder='Select unit'
+        @options={{this.options}}
+        @selected={{@model}}
+        @onChange={{@set}}
+        as |item|
+      >
+        {{item}}
+      </BoxelSelect>
+    </template>
+  };
+}
+
+export class TimeScopeField extends FieldDef {
+  static displayName = 'Time Scope';
+  static [primitive]: string;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof TimeScopeField> {
+    get options() {
+      return ['calendar', 'cardmember', 'rolling', 'lifetime'];
+    }
+    <template>
+      <BoxelSelect
+        @placeholder='Select scope'
+        @options={{this.options}}
+        @selected={{@model}}
+        @onChange={{@set}}
+        as |item|
+      >
+        {{item}}
+      </BoxelSelect>
+    </template>
+  };
+}
+
+export class ResetBasisField extends FieldDef {
+  static displayName = 'Reset Basis';
+  static [primitive]: string;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof ResetBasisField> {
+    get options() {
+      return ['calendar-year', 'cardmember-year', 'rolling'];
+    }
+    <template>
+      <BoxelSelect
+        @placeholder='Select reset basis'
+        @options={{this.options}}
+        @selected={{@model}}
+        @onChange={{@set}}
+        as |item|
+      >
+        {{item}}
+      </BoxelSelect>
+    </template>
+  };
+}
+
+export class BonusTypeField extends FieldDef {
+  static displayName = 'Bonus Type';
+  static [primitive]: string;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof BonusTypeField> {
+    get options() {
+      return ['points', 'statement-credit'];
+    }
+    <template>
+      <BoxelSelect
+        @placeholder='Select bonus type'
+        @options={{this.options}}
+        @selected={{@model}}
+        @onChange={{@set}}
+        as |item|
+      >
+        {{item}}
+      </BoxelSelect>
+    </template>
+  };
+}
+
+export class BonusCurrencyField extends FieldDef {
+  static displayName = 'Bonus Currency';
+  static [primitive]: string;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof BonusCurrencyField> {
+    get options() {
+      return ['USD', 'Membership Rewards'];
+    }
+    <template>
+      <BoxelSelect
+        @placeholder='Select currency (or type)'
+        @options={{this.options}}
+        @selected={{@model}}
+        @onChange={{@set}}
+        as |item|
+      >
+        {{item}}
+      </BoxelSelect>
+    </template>
+  };
+}
+
+export class BenefitKindField extends FieldDef {
+  static displayName = 'Benefit Kind';
+  static [primitive]: string;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof BenefitKindField> {
+    get options() {
+      return ['statement-credit', 'travel-credit', 'offer'];
+    }
+    <template>
+      <BoxelSelect
+        @placeholder='Select kind'
+        @options={{this.options}}
+        @selected={{@model}}
+        @onChange={{@set}}
+        as |item|
+      >
+        {{item}}
+      </BoxelSelect>
+    </template>
+  };
+}
+
+export class StatusLevelField extends FieldDef {
+  static displayName = 'Status Level';
+  static [primitive]: string;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof StatusLevelField> {
+    get options() {
+      return ['Silver', 'Gold', 'Gold Elite', 'Platinum', 'Diamond'];
+    }
+    <template>
+      <BoxelSelect
+        @placeholder='Select status level'
+        @options={{this.options}}
+        @selected={{@model}}
+        @onChange={{@set}}
+        as |item|
+      >
+        {{item}}
+      </BoxelSelect>
+    </template>
+  };
+}
 
 /**
  * TimePeriod
@@ -26,10 +219,10 @@ export class TimePeriod extends CardDef {
   // ⁴ Time period card
   static displayName = 'Time Period';
 
-  @field unit = contains(StringField); // ⁵ 'week' | 'month' | 'quarter' | 'half-year' | 'year'
+  @field unit = contains(UnitField); // ⁵ 'week' | 'month' | 'quarter' | 'half-year' | 'year' (loose select)
   @field count = contains(NumberField); // ⁶ e.g., 1, 4, or 4.5
-  @field scope = contains(StringField); // ⁷ 'calendar' | 'cardmember' | 'rolling' | 'lifetime'
-  @field resetBasis = contains(StringField); // ⁸ 'calendar-year' | 'cardmember-year' | 'rolling'
+  @field scope = contains(TimeScopeField); // ⁷ 'calendar' | 'cardmember' | 'rolling' | 'lifetime' (loose select)
+  @field resetBasis = contains(ResetBasisField); // ⁸ 'calendar-year' | 'cardmember-year' | 'rolling' (loose select)
   @field eligibleBookingNightsMin = contains(NumberField); // ⁹ e.g., 2 for "2+ nights"
   @field maxUsesPerPeriod = contains(NumberField); // ¹⁰ Optional: cap like "10 visits/year"
   @field minAmount = contains(AmountWithCurrency); // ¹¹ Optional: per-use min amount gate
@@ -137,9 +330,9 @@ export class SignupBonus extends CardDef {
   // ¹⁷ Signup bonus card
   static displayName = 'Signup Bonus';
 
-  @field bonusType = contains(StringField); // ¹⁸ 'points' | 'statement-credit'
+  @field bonusType = contains(BonusTypeField); // ¹⁸ 'points' | 'statement-credit' (loose select)
   @field pointsAmount = contains(NumberField); // ¹⁹ When bonusType='points'
-  @field bonusCurrency = contains(StringField); // ²⁰ e.g., 'Membership Rewards' OR 'USD'
+  @field bonusCurrency = contains(BonusCurrencyField); // ²⁰ e.g., 'Membership Rewards' OR 'USD' (loose select)
   @field spendRequirement = contains(AmountWithCurrency); // ²¹ Spend requirement amount + currency
   @field spendWindowDays = contains(NumberField); // ²³ e.g., 180 (6 months)
   @field description = contains(MarkdownField); // ²⁴ Human description
@@ -305,7 +498,7 @@ export class Benefit extends CardDef {
 
   @field name = contains(StringField); // ²⁹ Short label
   @field partner = contains(StringField); // ³⁰ Program/partner name
-  @field benefitKind = contains(StringField); // ³¹ 'statement-credit' | 'travel-credit' | 'offer'
+  @field benefitKind = contains(BenefitKindField); // ³¹ 'statement-credit' | 'travel-credit' | 'offer' (loose select)
   @field amount = contains(AmountWithCurrency); // ³² e.g., $200 USD
   @field timePeriod = linksTo(TimePeriod); // ³⁴ Link to time period
   @field enrollmentRequired = contains(BooleanField); // ³⁵ Whether enrollment required
@@ -564,7 +757,7 @@ export class MembershipBenefit extends CardDef {
   static displayName = 'Membership Benefit';
 
   @field membershipProgram = contains(StringField); // ⁴⁵ e.g., 'Hilton Honors'
-  @field statusLevel = contains(StringField); // ⁴⁶ e.g., 'Gold', 'Gold Elite'
+  @field statusLevel = contains(StatusLevelField); // ⁴⁶ e.g., 'Gold', 'Gold Elite' (loose select)
   @field autoEnrollment = contains(BooleanField); // ⁴⁷ true if granted automatically
   @field enrollmentInstructions = contains(MarkdownField); // ⁴⁸ Steps to enroll/activate
   @field benefitsList = containsMany(StringField); // ⁴⁹ Key privileges as bullet points
@@ -1009,12 +1202,14 @@ export class RewardCardSystem extends CardDef {
         const period = benefit?.timePeriod;
         if (!period) return 1;
 
-        const unit = period.unit;
-        const count = Number(period.count ?? 1) || 1;
+        const unit = period.unit?.toLowerCase?.();
+        const count = Number(period.count ?? 1) || 1; // avoid divide-by-zero
 
         // periods per calendar year
         const perYear =
-          unit === 'month'
+          unit === 'week'
+            ? 52
+            : unit === 'month'
             ? 12
             : unit === 'quarter'
             ? 4
@@ -1035,8 +1230,10 @@ export class RewardCardSystem extends CardDef {
         const benefits = this.args.model?.statementBenefits ?? [];
         return benefits.reduce((total, benefit) => {
           const base = Number(benefit.amount?.amount || 0);
+          const period = benefit?.timePeriod;
+          const usesPerPeriod = Number(period?.maxUsesPerPeriod ?? 1) || 1;
           const factor = this.annualizationFactor(benefit);
-          return total + base * factor;
+          return total + base * usesPerPeriod * factor;
         }, 0);
       } catch (e) {
         console.error(

@@ -17,7 +17,7 @@
       "category": "Travel - Amex Travel",
       "appliesTo": "Flights and prepaid hotels booked on AmexTravel.com",
       "capAmount": {
-        "amount": 250000,
+        "amount": "250000",
         "currency": {
           "code": "USD"
         }

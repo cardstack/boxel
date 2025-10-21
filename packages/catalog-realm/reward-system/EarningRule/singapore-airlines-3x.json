@@ -1,27 +1,41 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "EarningRule",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
       "category": "Singapore Airlines",
-      "rateMultiplier": 3,
       "appliesTo": "Eligible purchases with Singapore Airlines and KrisShop",
-      "capAmount": { "amount": 0, "currency": { "code": "USD" } },
+      "capAmount": {
+        "amount": "0",
+        "currency": {
+          "code": "USD"
+        }
+      },
       "conditions": "3X KrisFlyer miles on eligible Singapore Airlines purchases.",
-      "title": "3X Singapore Airlines"
+      "rateMultiplier": 3
     },
     "relationships": {
       "capPeriod": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "EarningRule"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
 }
-

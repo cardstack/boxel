@@ -1,22 +1,38 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimePeriod",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
       "unit": "year",
       "count": 1,
-      "scope": "calendar",
-      "resetBasis": "calendar-year",
-      "eligibleBookingNightsMin": null,
-      "maxUsesPerPeriod": null,
-      "minAmount": null,
       "notes": null,
-      "title": "1 year (calendar)"
+      "scope": "cardmember",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minAmount": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "resetBasis": "cardmember-year",
+      "maxUsesPerPeriod": null,
+      "eligibleBookingNightsMin": null
     },
-    "relationships": {},
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "TimePeriod"
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

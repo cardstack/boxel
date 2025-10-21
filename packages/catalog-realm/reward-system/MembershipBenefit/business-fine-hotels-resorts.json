@@ -1,11 +1,22 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MembershipBenefit",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
-      "membershipProgram": "Fine Hotels + Resorts",
-      "statusLevel": null,
-      "autoEnrollment": false,
-      "enrollmentInstructions": "No enrollment required. Benefits apply automatically when booking through Amex Travel.",
+      "partner": "Fine Hotels + Resorts",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "conditions": "Book through Amex Travel to receive benefits. Minimum 2-night stay may be required at some properties. Benefits vary by property and availability. Must book with American Express Fine Hotels + Resorts rate to be eligible.",
+      "statusLevel": "Silver",
       "benefitsList": [
         "Noon check-in when available",
         "Room upgrade upon arrival when available",
@@ -15,16 +26,16 @@
         "Complimentary Wi-Fi when available",
         "Regional and international partner lounges"
       ],
-      "partner": "Fine Hotels + Resorts",
+      "autoEnrollment": false,
+      "membershipProgram": "Fine Hotels + Resorts",
       "enrollmentRequired": false,
-      "conditions": "Book through Amex Travel to receive benefits. Minimum 2-night stay may be required at some properties. Benefits vary by property and availability. Must book with American Express Fine Hotels + Resorts rate to be eligible.",
-      "title": "Fine Hotels + Resorts"
+      "enrollmentInstructions": "No enrollment required. Benefits apply automatically when booking through Amex Travel."
     },
-    "relationships": {},
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "MembershipBenefit"
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

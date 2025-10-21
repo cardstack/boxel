@@ -1,27 +1,41 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "EarningRule",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
       "category": "Restaurants",
-      "rateMultiplier": 4,
       "appliesTo": "Restaurants worldwide including takeout and delivery",
-      "capAmount": { "amount": 0, "currency": { "code": "USD" } },
+      "capAmount": {
+        "amount": "0",
+        "currency": {
+          "code": "USD"
+        }
+      },
       "conditions": "4X Membership Rewards points on eligible restaurant purchases.",
-      "title": "4X Restaurants"
+      "rateMultiplier": 4
     },
     "relationships": {
       "capPeriod": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "EarningRule"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
 }
-

@@ -1,25 +1,36 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MembershipBenefit",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
-      "membershipProgram": "Leaders Club",
-      "statusLevel": "Sterling",
-      "autoEnrollment": false,
-      "enrollmentInstructions": "Enrollment required through your American Express account; terms apply.",
+      "partner": "The Leading Hotels of the World",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "conditions": null,
+      "statusLevel": "Gold Elite",
       "benefitsList": [
         "5% Leaders Club points bonus on qualifying stays",
         "5 pre-arrival upgrades annually (subject to availability)"
       ],
-      "partner": "The Leading Hotels of the World",
+      "autoEnrollment": false,
+      "membershipProgram": "Leaders Club",
       "enrollmentRequired": true,
-      "conditions": null,
-      "title": "Leaders Club Sterling"
+      "enrollmentInstructions": "Enrollment required through your American Express account; terms apply."
     },
-    "relationships": {},
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "MembershipBenefit"
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

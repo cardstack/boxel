@@ -1,34 +1,51 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Hotel Credit",
-      "partner": "Fine Hotels + Resorts / The Hotel Collection",
-      "benefitKind": "statement-credit",
       "amount": {
         "amount": 600,
-        "currency": { "code": "USD" }
+        "currency": {
+          "code": "USD"
+        }
       },
-      "enrollmentRequired": false,
-      "minSpend": { "amount": 300, "currency": { "code": "USD" } },
-      "programURL": "https://www.americanexpress.com/us/travel/",
-      "conditions": "Credits are applied automatically to eligible bookings. No enrollment required. Must book through AmexTravel.com to qualify.",
       "details": [
         "Statement credits up to $300 semi-annually on prepaid bookings through Amex Travel with Fine Hotels + Resorts® or The Hotel Collection®. The Hotel Collection requires a minimum two-night stay.‡"
       ],
-      "title": "Hotel Credit"
+      "partner": "Fine Hotels + Resorts / The Hotel Collection",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": 300,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "Credits are applied automatically to eligible bookings. No enrollment required. Must book through AmexTravel.com to qualify.",
+      "programURL": "https://www.americanexpress.com/us/travel/",
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": false
     },
     "relationships": {
       "timePeriod": {
         "links": {
           "self": "../TimePeriod/annual-calendar"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "Benefit"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

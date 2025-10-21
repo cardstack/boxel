@@ -1,29 +1,49 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Walmart+ Credit",
-      "partner": "Walmart+",
-      "benefitKind": "statement-credit",
-      "amount": { "amount": 12.95, "currency": { "code": "USD" } },
-      "enrollmentRequired": false,
-      "minSpend": null,
-      "programURL": null,
-      "conditions": "Statement credit for one auto-renewing monthly Walmart+ membership, up to $12.95 monthly plus applicable taxes.",
+      "amount": {
+        "amount": 12.95,
+        "currency": {
+          "code": "USD"
+        }
+      },
       "details": [],
-      "title": "Walmart+ Credit"
+      "partner": "Walmart+",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "conditions": "Statement credit for one auto-renewing monthly Walmart+ membership, up to $12.95 monthly plus applicable taxes.",
+      "programURL": null,
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": false
     },
     "relationships": {
       "timePeriod": {
         "links": {
           "self": "../TimePeriod/monthly"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "Benefit"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
