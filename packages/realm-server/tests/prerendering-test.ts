@@ -13,6 +13,7 @@ import {
   setupPermissionedRealms,
   matrixURL,
   realmSecretSeed,
+  cleanWhiteSpace,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { baseCardRef } from '@cardstack/runtime-common';
@@ -483,7 +484,7 @@ module(basename(__filename), function () {
       test('embedded HTML', function (assert) {
         assert.ok(
           /Maple\s+says\s+Meow/.test(
-            result.embeddedHTML![`${realmURL2}cat/Cat`],
+            cleanWhiteSpace(result.embeddedHTML![`${realmURL2}cat/Cat`]),
           ),
           `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
         );
