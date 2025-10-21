@@ -60,7 +60,7 @@ jobs:
 
       - name: Replace icon URL with one from matching subdomain
         run: |
-          sed -i "s/d12nxmpmo97fii.cloudfront.net\/boxel-icon.png/${{ env.BOXEL_ICON_DOMAIN_AND_PATH }}" packages/matrix/docker/synapse/templates/_base.html
+          sed -i "s/d12nxmpmo97fii.cloudfront.net\/boxel-icon.png/${{ env.BOXEL_ICON_DOMAIN_AND_PATH }}/" packages/matrix/docker/synapse/templates/_base.html
 
       - name: S3 Sync
         run: |
