@@ -558,6 +558,36 @@ export default class RealmServerService extends Service {
     return (await response.json()) as SubdomainAvailabilityResult;
   }
 
+  async claimBoxelDomain(sourceRealmURL: string, hostname: string) {
+    const requestBody = {
+      data: {
+        type: 'claimed-site-hostname',
+        attributes: {
+          source_realm_url: sourceRealmURL,
+          hostname: hostname,
+        },
+      },
+    };
+
+    const response = await this.realmServer.authedFetch(
+      `${this.url.href}_boxel-claimed-domains`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    return response.json();
+  }
+
   async unpublishRealm(publishedRealmURL: string) {
     await this.login();
 

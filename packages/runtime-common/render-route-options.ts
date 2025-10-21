@@ -1,8 +1,7 @@
 import stringify from 'safe-stable-stringify';
 
 export interface RenderRouteOptions {
-  includesCodeChange?: true;
-  resetStore?: true;
+  clearCache?: true;
 }
 
 export function parseRenderRouteOptions(
@@ -12,7 +11,8 @@ export function parseRenderRouteOptions(
     return {};
   }
   try {
-    return JSON.parse(raw) as RenderRouteOptions;
+    let parsed = JSON.parse(raw) as RenderRouteOptions;
+    return parsed.clearCache ? { clearCache: true } : {};
   } catch {
     return {};
   }
@@ -21,5 +21,8 @@ export function parseRenderRouteOptions(
 export function serializeRenderRouteOptions(
   options: RenderRouteOptions = {},
 ): string {
-  return stringify(options);
+  if (options.clearCache) {
+    return stringify({ clearCache: true }) ?? '{}';
+  }
+  return stringify({}) ?? '{}';
 }

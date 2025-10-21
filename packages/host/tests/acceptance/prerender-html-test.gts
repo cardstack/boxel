@@ -15,6 +15,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -30,7 +31,7 @@ module('Acceptance | prerender | html', function (hooks) {
   });
 
   const DEFAULT_RENDER_OPTIONS_SEGMENT = encodeURIComponent(
-    JSON.stringify({ resetStore: true } as RenderRouteOptions),
+    JSON.stringify({ clearCache: true } as RenderRouteOptions),
   );
   const renderPath = (url: string, suffix: string, nonce = 0) =>
     `/render/${encodeURIComponent(
@@ -179,6 +180,7 @@ module('Acceptance | prerender | html', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
         'cat.gts': { Cat },

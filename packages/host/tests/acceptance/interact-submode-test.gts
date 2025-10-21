@@ -43,6 +43,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -296,6 +297,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },
         'person.gts': { Person },
         'personnel.gts': { Personnel },
@@ -378,6 +380,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace A',
@@ -407,6 +410,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealm3URL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace C',

@@ -31,6 +31,7 @@ import {
   getMonacoContent,
   percySnapshot,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
@@ -449,6 +450,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'hello.txt': txtSource,
           '.realm.json': {
             name: `Test User's Workspace`,
@@ -464,6 +466,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'hello.txt': txtSource,
           '.realm.json': {
             name: `Additional Workspace`,
@@ -479,6 +482,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           '*': ['read'],
         },
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'hello.txt': txtSource,
           '.realm.json': {
             name: `Catalog Realm`,
@@ -561,6 +565,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.gts': indexCardSource,
           'pet-person.gts': personCardSource,
           'person.gts': personCardSource,

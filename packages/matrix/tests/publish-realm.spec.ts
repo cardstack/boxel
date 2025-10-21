@@ -118,10 +118,8 @@ test.describe('Publish realm', () => {
     ).toHaveCount(0);
 
     await expect(
-      page.locator(
-        '[data-test-custom-subdomain-input] .validation-icon-container.valid',
-      ),
-    ).toBeVisible();
+      page.locator('[data-test-custom-subdomain-input]'),
+    ).toHaveCount(0);
   });
 
   test('open site popover opens with shift-click', async ({ page }) => {

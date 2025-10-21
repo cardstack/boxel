@@ -25,6 +25,7 @@ import {
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   withoutLoaderMonitoring,
   type TestContextWithSave,
@@ -182,6 +183,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
           'author.gts': authorCard,
           'blog-post.gts': blogPostCard,
@@ -1347,6 +1349,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: personalRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'author-card.gts': authorCard,
           '.realm.json': {
             name: `Test User's Workspace`,
@@ -1360,6 +1363,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: additionalRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'author-card.gts': authorCard,
           '.realm.json': {
             name: `Additional Workspace`,
@@ -1548,6 +1552,7 @@ Nullam at ligula ligula. Vestibulum egestas, purus vel congue luctus, lorem leo 
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'boom-pet.gts': boomPet,
           'person.gts': personCard,
           'boom-person.gts': boomPerson,

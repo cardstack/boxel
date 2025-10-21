@@ -37,6 +37,7 @@ import {
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
+  isCardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
@@ -57,7 +58,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   DEFAULT_CODING_LLM,
-  DEFAULT_LLM_LIST,
+  DEFAULT_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -67,7 +68,7 @@ import {
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
-  DEFAULT_LLM,
+  APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -104,6 +105,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
+import type { SystemCard } from 'https://cardstack.com/base/system-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { addPatchTools } from '../commands/utils';
@@ -195,6 +197,7 @@ export default class MatrixService extends Service {
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
+  @tracked private _systemCard: SystemCard | undefined;
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -298,12 +301,17 @@ export default class MatrixService extends Service {
       [
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
-          if (e.event.type == APP_BOXEL_REALMS_EVENT_TYPE) {
-            await this.realmServer.setAvailableRealmURLs(
-              e.event.content.realms,
-            );
-            await this.loginToRealms();
-            await this.loadMoreAuthRooms(e.event.content.realms);
+          switch (e.event.type) {
+            case APP_BOXEL_REALMS_EVENT_TYPE:
+              await this.realmServer.setAvailableRealmURLs(
+                e.event.content.realms,
+              );
+              await this.loginToRealms();
+              await this.loadMoreAuthRooms(e.event.content.realms);
+              break;
+            case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
+              await this.setSystemCard(e.event.content.id);
+              break;
           }
         },
       ],
@@ -586,6 +594,13 @@ export default class MatrixService extends Service {
             accountDataContent?.realms ?? [],
           ),
         ]);
+
+        let systemCardAccountData =
+          (await this._client.getAccountDataFromServer(
+            APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
+          )) as { id?: string } | null;
+
+        await this.setSystemCard(systemCardAccountData?.id);
 
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
@@ -1773,13 +1788,15 @@ export default class MatrixService extends Service {
   }
 
   async setLLMForInteractMode() {
-    return this.setLLMModel(DEFAULT_LLM);
+    if (this.systemCard?.modelConfigurations?.length) {
+      let preferredModel = this.systemCard.modelConfigurations[0].modelId;
+      return this.setLLMModel(preferredModel);
+    } else {
+      return this.setLLMModel(DEFAULT_LLM);
+    }
   }
 
   private async setLLMModel(model: string) {
-    if (!DEFAULT_LLM_LIST.includes(model)) {
-      throw new Error(`Cannot find LLM model: ${model}`);
-    }
     if (!this.currentRoomId) {
       return;
     }
@@ -1837,6 +1854,40 @@ export default class MatrixService extends Service {
 
   get isLoadingMoreAIRooms() {
     return this._isLoadingMoreAIRooms;
+  }
+
+  get systemCard() {
+    return this._systemCard;
+  }
+
+  private async setSystemCard(systemCardId: string | undefined) {
+    // Set the system card to use
+    // If there is none, we fall back to the default
+    if (!systemCardId) {
+      systemCardId = ENV.defaultSystemCardId;
+    }
+    if (systemCardId === this._systemCard?.id) {
+      // it's OK to call this multiple times with the same system card id
+      // we shouldn't do anything.
+      return;
+    }
+    let systemCard = await this.store.get<SystemCard>(systemCardId);
+    if (isCardErrorJSONAPI(systemCard)) {
+      console.error('Error loading system card:', systemCard);
+      return;
+    }
+
+    this.store.dropReference(this._systemCard?.id);
+    this.store.addReference(systemCardId);
+    this._systemCard = systemCard;
+  }
+
+  async setUserSystemCard(systemCardId: string | undefined) {
+    // This sets the users account data for their preferred system card
+    // If there is none, we fall back to the default
+    await this.client.setAccountData(APP_BOXEL_SYSTEM_CARD_EVENT_TYPE, {
+      id: systemCardId,
+    });
   }
 
   async loadMoreAuthRooms(realms: string[]) {
