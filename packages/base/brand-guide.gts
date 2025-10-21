@@ -182,9 +182,11 @@ export default class BrandGuide extends StyleReference {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
-      let combinedRootRules = new Map<string, string>();
       let rootRules = this.rootVariables?.cssRuleMap;
       let functionalRules = this.functionalPalette?.cssRuleMap;
+      let combinedRootRules = rootRules
+        ? new Map<string, string>(rootRules)
+        : new Map<string, string>();
       let darkColor =
         functionalRules?.get('--brand-dark') ?? 'var(--boxel-dark, #000000)';
       let lightColor =
@@ -194,19 +196,25 @@ export default class BrandGuide extends StyleReference {
         rootToBrandVariableMapping,
       )) {
         let rootValue = rootRules?.get(rootName);
-        let brandValue = functionalRules?.get(brandName);
+        let paletteBrandValue = functionalRules?.get(brandName);
+        let brandValue = paletteBrandValue ?? rootValue;
+
         if (brandValue) {
           combinedRootRules.set(brandName, brandValue);
-          if (rootValue) {
-            combinedRootRules.set(rootName, `var(${brandName}, ${rootValue})`);
-          } else {
-            combinedRootRules.set(rootName, `var(${brandName})`);
-          }
+          combinedRootRules.set(rootName, `var(${brandName})`);
 
           let foregroundName = `${rootName}-foreground`;
           let brandForegroundName = `${brandName}-foreground`;
-          if (!rootRules?.has(foregroundName)) {
-            if (brandForegroundMapping.includes(brandForegroundName)) {
+          if (brandForegroundMapping.includes(brandForegroundName)) {
+            let hasForegroundOverride =
+              functionalRules?.has(brandForegroundName) ?? false;
+
+            if (!hasForegroundOverride) {
+              hasForegroundOverride =
+                combinedRootRules.has(brandForegroundName);
+            }
+
+            if (!hasForegroundOverride) {
               let foregroundValue = getContrastColor(
                 brandValue,
                 darkColor,
@@ -214,21 +222,25 @@ export default class BrandGuide extends StyleReference {
               );
               if (foregroundValue) {
                 combinedRootRules.set(brandForegroundName, foregroundValue);
-                combinedRootRules.set(
-                  `${rootName}-foreground`,
-                  `var(${brandForegroundName})`,
-                );
               }
+            }
+
+            if (combinedRootRules.has(brandForegroundName)) {
+              combinedRootRules.set(
+                foregroundName,
+                `var(${brandForegroundName})`,
+              );
             }
           }
         }
       }
 
-      if (rootRules?.size) {
-        for (let [rootName, rootValue] of rootRules.entries()) {
-          if (!combinedRootRules.has(rootName) && rootValue) {
-            combinedRootRules.set(rootName, rootValue);
+      if (functionalRules?.size) {
+        for (let [name, value] of functionalRules.entries()) {
+          if (!name || !value || combinedRootRules.has(name)) {
+            continue;
           }
+          combinedRootRules.set(name, value);
         }
       }
 
