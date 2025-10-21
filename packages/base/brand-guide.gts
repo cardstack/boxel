@@ -19,6 +19,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import {
   buildCssGroups,
+  entriesToCssRuleMap,
   generateCssVariables,
 } from '@cardstack/boxel-ui/helpers';
 
@@ -160,10 +161,31 @@ export default class BrandGuide extends StyleReference {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
+      let combinedRootRules = new Map<string, string>(
+        this.rootVariables?.cssRuleMap ?? [],
+      );
+
+      if (entriesToCssRuleMap && this.brandColorPalette?.length) {
+        let paletteRules = entriesToCssRuleMap(this.brandColorPalette);
+        for (let [name, value] of paletteRules.entries()) {
+          if (name && value) {
+            name = name.replace(/\s+/g, '-');
+            if (name.startsWith('--')) {
+              name = name.replace(/^--/, '--brand-color-');
+            } else {
+              name = `--brand-color-${name}`;
+            }
+            combinedRootRules.set(name, value);
+          }
+        }
+      }
+
+      if (!combinedRootRules.size) {
+        return;
+      }
+
       return generateCssVariables(
-        buildCssGroups([
-          { selector: ':root', rules: this.rootVariables.cssRuleMap },
-        ]),
+        buildCssGroups([{ selector: ':root', rules: combinedRootRules }]),
       );
     },
   });
