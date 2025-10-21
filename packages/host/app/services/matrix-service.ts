@@ -427,7 +427,7 @@ export default class MatrixService extends Service {
   ) {
     displayName = displayName.trim();
     this._isInitializingNewUser = true;
-    await this.start({ auth });
+    await this.start({ auth, skipRealmAuthentication: true });
     this.setDisplayName(displayName);
     let userId = this.client.getUserId();
     if (!userId) {
@@ -437,6 +437,8 @@ export default class MatrixService extends Service {
     }
 
     await this.realmServer.createUser(userId, registrationToken);
+
+    await this.realmServer.authenticateToAllAccessibleRealms();
 
     await Promise.all([
       this.createPersonalRealmForUser({
@@ -496,9 +498,10 @@ export default class MatrixService extends Service {
     opts: {
       auth?: MatrixSDK.LoginResponse;
       refreshRoutes?: true;
+      skipRealmAuthentication?: boolean;
     } = {},
   ) {
-    let { auth, refreshRoutes } = opts;
+    let { auth, refreshRoutes, skipRealmAuthentication } = opts;
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {
@@ -569,7 +572,7 @@ export default class MatrixService extends Service {
           ([_url, realmResource]) => !realmResource.isLoggedIn,
         );
 
-        if (noRealmsLoggedIn) {
+        if (noRealmsLoggedIn && !skipRealmAuthentication) {
           // In this case we want to authenticate to all accessible realms in a single request,
           // for performance reasons (otherwise we would make 2 auth requests for
           // each realm, which could be a lot of requests).
