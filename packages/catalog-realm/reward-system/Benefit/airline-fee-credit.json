@@ -19,7 +19,7 @@
       "partner": "Selected Airline",
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "",
         "description": null,
         "thumbnailURL": null
       },
@@ -30,7 +30,7 @@
         }
       },
       "conditions": "Statement credits per calendar year for incidental fees charged by your one selected qualifying airline.",
-      "programURL": null,
+      "programURL": "",
       "benefitKind": "statement-credit",
       "enrollmentRequired": true
     },

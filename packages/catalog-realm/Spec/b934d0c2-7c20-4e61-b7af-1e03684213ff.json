@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../utils/external/avataar",
-        "name": "getAvataarsUrl"
+        "module": "../utils/create-option-select",
+        "name": "createOptionSelectField"
       },
       "specType": null,
       "containedExamples": [],
-      "title": "getAvataarsUrl",
+      "title": "createOptionSelectField",
       "description": null,
       "cardInfo": {
         "title": null,

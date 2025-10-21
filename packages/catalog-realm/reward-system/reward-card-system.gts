@@ -7,8 +7,6 @@ import {
   linksTo,
   linksToMany,
   Component,
-  FieldDef,
-  primitive,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core APIs
 import StringField from 'https://cardstack.com/base/string'; // ² Base fields
 import NumberField from 'https://cardstack.com/base/number';
@@ -19,197 +17,63 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import { gt } from '@cardstack/boxel-ui/helpers'; // ³ Helpers
 import { formatCurrency, formatNumber } from '@cardstack/boxel-ui/helpers';
 import { AmountWithCurrency } from '../fields/amount-with-currency';
-import { BoxelSelect } from '@cardstack/boxel-ui/components'; // ³ᵃ UI components for loose selects
+import { createOptionSelectField } from '../utils/create-option-select';
 
-// ³ᵇ Loose select string FieldDefs for suggested values with free entry
-export class UnitField extends FieldDef {
-  static displayName = 'Time Unit';
-  static [primitive]: string;
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
+const BusinessOrPersonalField = createOptionSelectField({
+  displayName: 'Business or Personal',
+  options: ['personal', 'business', 'both'],
+  view: 'boxel-select',
+  placeholder: 'Select type',
+});
 
-  static edit = class Edit extends Component<typeof UnitField> {
-    get options() {
-      return ['week', 'month', 'quarter', 'half-year', 'year'];
-    }
-    <template>
-      <BoxelSelect
-        @placeholder='Select unit'
-        @options={{this.options}}
-        @selected={{@model}}
-        @onChange={{@set}}
-        as |item|
-      >
-        {{item}}
-      </BoxelSelect>
-    </template>
-  };
-}
+const UnitField = createOptionSelectField({
+  displayName: 'Unit',
+  options: ['week', 'month', 'quarter', 'half-year', 'year'],
+  view: 'boxel-select',
+  placeholder: 'Select unit',
+});
 
-export class TimeScopeField extends FieldDef {
-  static displayName = 'Time Scope';
-  static [primitive]: string;
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
+const TimeScopeField = createOptionSelectField({
+  displayName: 'Time Scope',
+  options: ['calendar', 'cardmember', 'rolling', 'lifetime'],
+  view: 'boxel-select',
+  placeholder: 'Select time scope',
+});
 
-  static edit = class Edit extends Component<typeof TimeScopeField> {
-    get options() {
-      return ['calendar', 'cardmember', 'rolling', 'lifetime'];
-    }
-    <template>
-      <BoxelSelect
-        @placeholder='Select scope'
-        @options={{this.options}}
-        @selected={{@model}}
-        @onChange={{@set}}
-        as |item|
-      >
-        {{item}}
-      </BoxelSelect>
-    </template>
-  };
-}
+const ResetBasisField = createOptionSelectField({
+  displayName: 'Reset Basis',
+  options: ['calendar-year', 'cardmember-year', 'rolling'],
+  view: 'boxel-select',
+  placeholder: 'Select reset basis',
+});
 
-export class ResetBasisField extends FieldDef {
-  static displayName = 'Reset Basis';
-  static [primitive]: string;
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
+const BonusTypeField = createOptionSelectField({
+  displayName: 'Bonus Type',
+  options: ['points', 'statement-credit'],
+  view: 'boxel-select',
+  placeholder: 'Select bonus type',
+});
 
-  static edit = class Edit extends Component<typeof ResetBasisField> {
-    get options() {
-      return ['calendar-year', 'cardmember-year', 'rolling'];
-    }
-    <template>
-      <BoxelSelect
-        @placeholder='Select reset basis'
-        @options={{this.options}}
-        @selected={{@model}}
-        @onChange={{@set}}
-        as |item|
-      >
-        {{item}}
-      </BoxelSelect>
-    </template>
-  };
-}
+const BonusCurrencyField = createOptionSelectField({
+  displayName: 'Bonus Currency',
+  options: ['USD', 'Membership Rewards'],
+  view: 'boxel-select',
+  placeholder: 'Select currency (or type)',
+});
 
-export class BonusTypeField extends FieldDef {
-  static displayName = 'Bonus Type';
-  static [primitive]: string;
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
+const BenefitKindField = createOptionSelectField({
+  displayName: 'Benefit Kind',
+  options: ['statement-credit', 'travel-credit', 'offer'],
+  view: 'boxel-select',
+  placeholder: 'Select kind',
+});
 
-  static edit = class Edit extends Component<typeof BonusTypeField> {
-    get options() {
-      return ['points', 'statement-credit'];
-    }
-    <template>
-      <BoxelSelect
-        @placeholder='Select bonus type'
-        @options={{this.options}}
-        @selected={{@model}}
-        @onChange={{@set}}
-        as |item|
-      >
-        {{item}}
-      </BoxelSelect>
-    </template>
-  };
-}
-
-export class BonusCurrencyField extends FieldDef {
-  static displayName = 'Bonus Currency';
-  static [primitive]: string;
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
-
-  static edit = class Edit extends Component<typeof BonusCurrencyField> {
-    get options() {
-      return ['USD', 'Membership Rewards'];
-    }
-    <template>
-      <BoxelSelect
-        @placeholder='Select currency (or type)'
-        @options={{this.options}}
-        @selected={{@model}}
-        @onChange={{@set}}
-        as |item|
-      >
-        {{item}}
-      </BoxelSelect>
-    </template>
-  };
-}
-
-export class BenefitKindField extends FieldDef {
-  static displayName = 'Benefit Kind';
-  static [primitive]: string;
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
-
-  static edit = class Edit extends Component<typeof BenefitKindField> {
-    get options() {
-      return ['statement-credit', 'travel-credit', 'offer'];
-    }
-    <template>
-      <BoxelSelect
-        @placeholder='Select kind'
-        @options={{this.options}}
-        @selected={{@model}}
-        @onChange={{@set}}
-        as |item|
-      >
-        {{item}}
-      </BoxelSelect>
-    </template>
-  };
-}
-
-export class StatusLevelField extends FieldDef {
-  static displayName = 'Status Level';
-  static [primitive]: string;
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
-
-  static edit = class Edit extends Component<typeof StatusLevelField> {
-    get options() {
-      return ['Silver', 'Gold', 'Gold Elite', 'Platinum', 'Diamond'];
-    }
-    <template>
-      <BoxelSelect
-        @placeholder='Select status level'
-        @options={{this.options}}
-        @selected={{@model}}
-        @onChange={{@set}}
-        as |item|
-      >
-        {{item}}
-      </BoxelSelect>
-    </template>
-  };
-}
+const StatusLevelField = createOptionSelectField({
+  displayName: 'Status Level',
+  options: ['Silver', 'Gold', 'Gold Elite', 'Platinum', 'Diamond'],
+  view: 'boxel-select',
+  placeholder: 'Select status level',
+});
 
 /**
  * TimePeriod
@@ -863,7 +727,7 @@ export class MembershipBenefit extends CardDef {
           gap: calc(var(--spacing, var(--boxel-sp-xs)) * 3);
           margin-bottom: calc(var(--spacing, var(--boxel-sp-xs)) * 2);
         }
-        .membership-name strong {
+        .membership-name {
           font-weight: 500;
           color: var(--foreground, var(--boxel-dark));
           font-size: 1rem;
@@ -1162,7 +1026,7 @@ export class RewardCardSystem extends CardDef {
   @field cardName = contains(StringField); // ⁶⁸ e.g., 'The Platinum Card from American Express'
   @field issuer = contains(StringField); // ⁶⁹ e.g., 'American Express'
   @field network = contains(StringField); // ⁷⁰ e.g., 'American Express', 'Visa', 'Mastercard'
-  @field businessOrPersonal = contains(StringField); // ⁷¹ 'personal' | 'business' | 'both'
+  @field businessOrPersonal = contains(BusinessOrPersonalField); // ⁷¹ 'personal' | 'business' | 'both'
 
   // Economics
   @field annualFee = contains(AmountWithCurrency); // ⁷² e.g., $695 USD

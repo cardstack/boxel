@@ -1,33 +1,53 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-system"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "American Express One AP Statement Credit",
-      "partner": null,
-      "benefitKind": "statement-credit",
-      "amount": { "amount": 2400, "currency": { "code": "USD" } },
-      "enrollmentRequired": false,
-      "minSpend": { "amount": 250000, "currency": { "code": "USD" } },
-      "programURL": "https://www.americanexpress.com/us/business/accounts-payable/",
-      "conditions": "High-spend benefit: Must spend $250,000 on card in calendar year to unlock $2,400 in One AP credits for following year. Credits apply to One AP platform fees, transaction fees, and taxes. Automatic enrollment.",
+      "amount": {
+        "amount": 2400,
+        "currency": {
+          "code": "USD"
+        }
+      },
       "details": [
         "Unlock up to $2,400 in statement credits for use in the next calendar year on American Express One AP® monthly fees¹ after you spend $250,000 on eligible purchases on the Business Platinum Card in this calendar year.² Statement credits will be applied to your monthly bill charged to the Card for our accounts payable solution, One AP.‡",
         "¹Monthly fees include an auto-renewing platform access fee, transaction fees based on One AP usage, and applicable taxes.",
         "²Statement credits valid from January 1 through December 31 of the calendar year after the calendar year in which you spend $250,000 on eligible purchases on the Business Platinum Card."
       ],
-      "title": "American Express One AP Statement Credit"
+      "partner": "",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": 250000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "High-spend benefit: Must spend $250,000 on card in calendar year to unlock $2,400 in One AP credits for following year. Credits apply to One AP platform fees, transaction fees, and taxes. Automatic enrollment.",
+      "programURL": "https://www.americanexpress.com/us/business/accounts-payable/",
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": false
     },
     "relationships": {
       "timePeriod": {
         "links": {
           "self": "../TimePeriod/annual-calendar"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../reward-card-system",
-        "name": "Benefit"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
