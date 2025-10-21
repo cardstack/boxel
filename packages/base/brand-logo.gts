@@ -281,7 +281,6 @@ export class MarkField extends URLField {
       <img
         class='mark-image'
         src={{@model}}
-        role='presentation'
         {{! @glint-ignore }}
         ...attributes
       />

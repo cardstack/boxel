@@ -10,7 +10,13 @@ import {
 } from './card-api';
 import ColorField from './color';
 import StyleReference from './style-reference';
-import { BoxelContainer, Swatch } from '@cardstack/boxel-ui/components';
+import {
+  BoxelContainer,
+  Swatch,
+  Button,
+  FieldContainer,
+  GridContainer,
+} from '@cardstack/boxel-ui/components';
 import {
   buildCssGroups,
   entriesToCssRuleMap,
@@ -73,6 +79,26 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       <BoxelContainer @tag='section' @display='grid' class='content-section'>
         <h2>Mark Usage</h2>
         <@fields.markUsage />
+      </BoxelContainer>
+      <BoxelContainer @tag='section' @display='grid' class='content-section'>
+        <h2>UI Components</h2>
+        <GridContainer class='cta-grid'>
+          <FieldContainer @label='Primary CTA' @vertical={{true}}>
+            <div class='preview-container cta-preview-container'>
+              <Button @kind='primary' @size='extra-small'>Sample CTA</Button>
+            </div>
+          </FieldContainer>
+          <FieldContainer @label='Secondary CTA' @vertical={{true}}>
+            <div class='preview-container cta-preview-container'>
+              <Button @kind='secondary' @size='extra-small'>Sample CTA</Button>
+            </div>
+          </FieldContainer>
+          <FieldContainer @label='Disabled CTA' @vertical={{true}}>
+            <div class='preview-container cta-preview-container'>
+              <Button @disabled={{true}} @size='extra-small'>Sample CTA</Button>
+            </div>
+          </FieldContainer>
+        </GridContainer>
       </BoxelContainer>
       <BoxelContainer @tag='section' @display='grid' class='content-section'>
         <h2>Generated CSS Variables</h2>
@@ -139,6 +165,22 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .brand-palette + h2 {
         margin-top: var(--brand-guide-spacing);
+      }
+      .cta-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .preview-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 100%;
+        background-color: var(--muted, var(--boxel-100));
+        color: var(--foreground, var(--boxel-dark));
+        border-radius: var(--boxel-border-radius);
+        overflow: hidden;
+      }
+      .cta-preview-container {
+        min-height: 7.5rem;
       }
     </style>
   </template>
