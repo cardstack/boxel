@@ -1,0 +1,204 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "spacing": "16px",
+      "cardInfo": {
+        "notes": "",
+        "title": "IKEA",
+        "description": "Guide to brand elements and visual style",
+        "thumbnailURL": ""
+      },
+      "markUsage": {
+        "primaryMark1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+        "primaryMark2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+        "secondaryMark1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1bxid64Mup7aczewSAYMX&t=1727706852769",
+        "secondaryMark2": "https://cdn.brandfetch.io/idLsXYVLUs/theme/light/id-83aZ_1k.svg?c=1bxid64Mup7aczewSAYMX&t=1727706852769",
+        "primaryMarkMinHeight": "40px",
+        "primaryMarkGreyscale1": null,
+        "primaryMarkGreyscale2": null,
+        "secondaryMarkMinHeight": "20px",
+        "socialMediaProfileIcon": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+        "secondaryMarkGreyscale1": null,
+        "secondaryMarkGreyscale2": null,
+        "primaryMarkClearanceRatio": "0.5",
+        "secondaryMarkClearanceRatio": "1"
+      },
+      "styleName": "Democratic Design",
+      "visualDNA": "IKEA's design language combines bold primary colors (blue and yellow) with clean typography and generous white space. The brand emphasizes clarity, accessibility, and a friendly, approachable aesthetic that makes design democratic and available to everyone.",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap"
+      ],
+      "typography": {
+        "body": {
+          "fontSize": "14px",
+          "fontFamily": "'Noto IKEA', 'Noto Sans', sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.3"
+        },
+        "heading": {
+          "fontSize": "28px",
+          "fontFamily": "'Noto IKEA', 'Noto Sans', sans-serif",
+          "fontWeight": "700",
+          "lineHeight": "1.5"
+        }
+      },
+      "cornerRadius": "12px",
+      "inspirations": [
+        "Scandinavian minimalism",
+        "Swedish design heritage",
+        "Functional simplicity",
+        "Accessible modernism"
+      ],
+      "rootVariables": {
+        "card": "#FFFFFF",
+        "ring": "#0051BA",
+        "input": "#DFDFDF",
+        "muted": "#F5F5F5",
+        "accent": null,
+        "border": "#DFDFDF",
+        "chart1": "#0051BA",
+        "chart2": "#FFDB00",
+        "chart3": "#484848",
+        "chart4": "#DFDFDF",
+        "chart5": "#F5F5F5",
+        "radius": "2px",
+        "shadow": "0 2px 4px rgba(0, 0, 0, 0.1)",
+        "popover": "#FFFFFF",
+        "primary": "#000",
+        "sidebar": "#F5F5F5",
+        "spacing": "4px",
+        "fontMono": "'Courier New', monospace",
+        "fontSans": "'Noto IKEA', 'Noto Sans', sans-serif",
+        "shadowLg": "0 10px 15px rgba(0, 0, 0, 0.1)",
+        "shadowMd": "0 4px 6px rgba(0, 0, 0, 0.1)",
+        "shadowSm": "0 1px 2px rgba(0, 0, 0, 0.05)",
+        "shadowXl": "0 20px 25px rgba(0, 0, 0, 0.15)",
+        "shadowXs": "0 1px 1.5px rgba(0, 0, 0, 0.04)",
+        "fontSerif": "Georgia, 'Times New Roman', serif",
+        "secondary": "#F5F5F5",
+        "shadow2xl": "0 25px 50px rgba(0, 0, 0, 0.25)",
+        "shadow2xs": "0 0.5px 1px rgba(0, 0, 0, 0.03)",
+        "background": "#FFFFFF",
+        "foreground": "#111111",
+        "destructive": "#DC2626",
+        "sidebarRing": "#0051BA",
+        "sidebarAccent": "#FFDB00",
+        "sidebarBorder": "#DFDFDF",
+        "cardForeground": "#111111",
+        "sidebarPrimary": "#0051BA",
+        "trackingNormal": "0",
+        "mutedForeground": "#484848",
+        "accentForeground": null,
+        "popoverForeground": "#111111",
+        "primaryForeground": "#000",
+        "sidebarForeground": "#111111",
+        "secondaryForeground": "#111111",
+        "destructiveForeground": "#FFFFFF",
+        "sidebarAccentForeground": "#111111",
+        "sidebarPrimaryForeground": "#FFFFFF"
+      },
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=1920&h=1080&fit=crop",
+        "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1920&h=1080&fit=crop",
+        "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1920&h=1080&fit=crop"
+      ],
+      "brandColorPalette": [
+        {
+          "name": "IKEA Blue",
+          "value": "#0051BA"
+        },
+        {
+          "name": "IKEA Yellow",
+          "value": "#FFDB00"
+        },
+        {
+          "name": "Warm Grey",
+          "value": "#F5F5F5"
+        },
+        {
+          "name": "Cool Grey",
+          "value": "#DFDFDF"
+        },
+        {
+          "name": "Dark Grey",
+          "value": "#484848"
+        },
+        {
+          "name": "dark-blue",
+          "value": "#003B6F"
+        }
+      ],
+      "darkModeVariables": {
+        "card": null,
+        "ring": null,
+        "input": null,
+        "muted": null,
+        "accent": null,
+        "border": null,
+        "chart1": null,
+        "chart2": null,
+        "chart3": null,
+        "chart4": null,
+        "chart5": null,
+        "radius": null,
+        "shadow": null,
+        "popover": null,
+        "primary": null,
+        "sidebar": null,
+        "spacing": null,
+        "fontMono": null,
+        "fontSans": null,
+        "shadowLg": null,
+        "shadowMd": null,
+        "shadowSm": null,
+        "shadowXl": null,
+        "shadowXs": null,
+        "fontSerif": null,
+        "secondary": null,
+        "shadow2xl": null,
+        "shadow2xs": null,
+        "background": null,
+        "foreground": null,
+        "destructive": null,
+        "sidebarRing": null,
+        "sidebarAccent": null,
+        "sidebarBorder": null,
+        "cardForeground": null,
+        "sidebarPrimary": null,
+        "trackingNormal": null,
+        "mutedForeground": null,
+        "accentForeground": null,
+        "popoverForeground": null,
+        "primaryForeground": null,
+        "sidebarForeground": null,
+        "secondaryForeground": null,
+        "destructiveForeground": null,
+        "sidebarAccentForeground": null,
+        "sidebarPrimaryForeground": null
+      },
+      "functionalPalette": {
+        "dark": "#111",
+        "light": "#FFFFFF",
+        "accent": "#FFDB00",
+        "border": "#DFDFDF",
+        "neutral": "#F5F5F5",
+        "primary": "#0051BA",
+        "secondary": "#FFDB00"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
