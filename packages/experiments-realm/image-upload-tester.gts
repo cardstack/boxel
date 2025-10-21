@@ -109,6 +109,13 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
     this.args.model.resultImageId = '';
   }
 
+  @action
+  openResultCard() {
+    if (this.resultImageResource?.card) {
+      this.args.viewCard?.(this.resultImageResource.card, 'isolated');
+    }
+  }
+
   get renderableResultCard() {
     if (!this.resultImageResource?.card) {
       return null;
@@ -146,11 +153,13 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
       <div class={{this.statusClass}}>
         {{this.statusMessage}}
         {{#if this.renderableResultCard}}
-          <this.renderableResultCard
-            class='card result'
-            @format='embedded'
-            data-test-card-id={{this.resultImageResource.card.id}}
-          />
+          <div class='result-card-wrapper' {{on 'click' this.openResultCard}}>
+            <this.renderableResultCard
+              class='card result'
+              @format='embedded'
+              data-test-card-id={{this.resultImageResource.card.id}}
+            />
+          </div>
         {{/if}}
       </div>
     </form>
@@ -189,8 +198,16 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
         color: var(--boxel-success-400);
       }
 
-      .result {
+      .result-card-wrapper {
         margin-top: var(--boxel-sp-sm);
+        cursor: pointer;
+      }
+
+      .result-card-wrapper:hover {
+        opacity: 0.9;
+      }
+
+      .result {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
