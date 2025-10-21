@@ -21,8 +21,9 @@ import {
 
 import BrandTypography from './brand-typography';
 import BrandFunctionalPalette from './brand-functional-palette';
-import { dasherize } from './structured-theme-variables';
+import BrandLogo from './brand-logo';
 import CSSValueField from './css-value';
+import { dasherize } from './structured-theme-variables';
 
 const rootToBrandVariableMapping: Record<string, string> = {
   '--primary': '--brand-primary',
@@ -50,16 +51,15 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   <template>
     <article class='brand-guide'>
       <BoxelContainer @tag='header' @display='flex' class='header-section'>
+        {{#if @model.markUsage.primaryMark1}}
+          <@fields.markUsage.primaryMark1 class='header-logo' />
+        {{/if}}
         <h1><@fields.title /></h1>
         {{#if @model.description}}
           <p><@fields.description /></p>
         {{/if}}
       </BoxelContainer>
-      <BoxelContainer
-        @tag='section'
-        @display='grid'
-        class='content-section color-palette-section'
-      >
+      <BoxelContainer @tag='section' @display='grid' class='content-section'>
         {{#if @model.brandColorPalette.length}}
           <h2>Brand Color Palette</h2>
           <@fields.brandColorPalette class='brand-palette' />
@@ -67,16 +67,20 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         <h2>Functional Palette</h2>
         <@fields.functionalPalette />
       </BoxelContainer>
-      <BoxelContainer
-        @tag='section'
-        @display='grid'
-        class='content-section typography-section'
-      >
+      <BoxelContainer @tag='section' @display='grid' class='content-section'>
         <h2>Typography</h2>
         <@fields.typography />
       </BoxelContainer>
-      <@fields.cssVariables />
+      <BoxelContainer @tag='section' @display='grid' class='content-section'>
+        <h2>Mark Usage</h2>
+        <@fields.markUsage />
+      </BoxelContainer>
+      <BoxelContainer @tag='section' @display='grid' class='content-section'>
+        <h2>Generated CSS Variables</h2>
+        <@fields.cssVariables />
+      </BoxelContainer>
     </article>
+
     <style scoped>
       h1,
       h2 {
@@ -123,6 +127,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         background-color: var(--muted);
         color: var(--foreground);
       }
+      .header-logo {
+        --logo-min-height: var(--brand-primary-mark-min-height);
+        margin: var(--boxel-sp);
+      }
       .content-section {
         gap: var(--boxel-sp-xl);
       }
@@ -138,51 +146,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .brand-palette + h2 {
         margin-top: var(--boxel-sp-xl);
-      }
-      .container-group {
-        --boxel-container-padding: 0;
-        gap: 0;
-      }
-      .container-group > * + * {
-        border-left: var(--container-border);
-      }
-      .grayscale {
-        filter: grayscale(1);
-      }
-      .media-handle-group {
-        gap: var(--boxel-sp-xs);
-      }
-      .media-handle {
-        font-weight: var(--boxel-font-weight-semibold);
-      }
-      .mark-clearance {
-        min-width: initial;
-        border-color: var(--annotation);
-        border-style: solid;
-        border-width: var(--mark-clearance, 0px);
-        box-sizing: content-box;
-      }
-      .primary-clearance {
-        --mark-clearance: var(--logo-primary-clearance);
-      }
-      .secondary-clearance {
-        --mark-clearance: var(--logo-secondary-clearance);
-      }
-      .annotation {
-        color: var(--annotation-foreground);
-        font-weight: var(--boxel-font-weight-bold);
-        white-space: nowrap;
-      }
-      .mark-height {
-        min-width: initial;
-        padding-left: var(--boxel-sp-xs);
-        border-left: 4px solid var(--annotation);
-      }
-      .primary-height {
-        --logo-min-height: var(--logo-primary-min-height);
-      }
-      .secondary-height {
-        --logo-min-height: var(--logo-secondary-min-height);
       }
     </style>
   </template>
@@ -224,6 +187,7 @@ export default class BrandGuide extends StyleReference {
   @field typography = contains(BrandTypography);
   @field cornerRadius = contains(CSSValueField);
   @field spacing = contains(CSSValueField);
+  @field markUsage = contains(BrandLogo);
 
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
@@ -307,6 +271,16 @@ export default class BrandGuide extends StyleReference {
       let typographyRules = this.typography?.cssRuleMap;
       if (typographyRules?.size) {
         for (let [name, value] of typographyRules.entries()) {
+          if (!name || !value || combinedRootRules.has(name)) {
+            continue;
+          }
+          combinedRootRules.set(name, value);
+        }
+      }
+
+      let markUsageRules = this.markUsage?.cssRuleMap;
+      if (markUsageRules?.size) {
+        for (let [name, value] of markUsageRules.entries()) {
           if (!name || !value || combinedRootRules.has(name)) {
             continue;
           }

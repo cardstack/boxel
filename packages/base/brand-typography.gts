@@ -1,8 +1,4 @@
-import {
-  BoxelContainer,
-  FieldContainer,
-  GridContainer,
-} from '@cardstack/boxel-ui/components';
+import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 import {
   entriesToCssRuleMap,
   sanitizeHtmlSafe,
@@ -53,13 +49,9 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
   <template>
     <div class='preview-field'>
       <p>{{this.styleSummary}}</p>
-      <BoxelContainer
-        @display='flex'
-        class='typography-preview'
-        style={{this.styles}}
-      >
+      <div class='typography-preview' style={{this.styles}}>
         The quick brown fox
-      </BoxelContainer>
+      </div>
     </div>
     <style scoped>
       .preview-field {
@@ -71,9 +63,10 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
         margin-block: 0;
       }
       .typography-preview {
+        display: flex;
+        align-items: center;
         justify-content: center;
         max-width: 100%;
-        width: 100%;
         min-height: 11.25rem; /* 180px */
         background-color: var(--muted, var(--boxel-100));
         color: var(--foreground, var(--boxel-dark));
