@@ -21,6 +21,7 @@ import {
   buildCssGroups,
   entriesToCssRuleMap,
   generateCssVariables,
+  getContrastColor,
 } from '@cardstack/boxel-ui/helpers';
 
 import BrandTypography from './brand-typography';
@@ -38,6 +39,13 @@ const rootToBrandVariableMapping: Record<string, string> = {
   '--muted-foreground': '--brand-neutral-foreground',
   '--accent-foreground': '--brand-accent-foreground',
 };
+
+const brandForegroundMapping: string[] = [
+  '--brand-primary-foreground',
+  '--brand-secondary-foreground',
+  '--brand-neutral-foreground',
+  '--brand-accent-foreground',
+];
 
 class BrandGuideIsolated extends Component<typeof BrandGuide> {
   <template>
@@ -177,17 +185,42 @@ export default class BrandGuide extends StyleReference {
       let combinedRootRules = new Map<string, string>();
       let rootRules = this.rootVariables?.cssRuleMap;
       let functionalRules = this.functionalPalette?.cssRuleMap;
+      let darkColor =
+        functionalRules?.get('--brand-dark') ?? 'var(--boxel-dark, #000000)';
+      let lightColor =
+        functionalRules?.get('--brand-light') ?? 'var(--boxel-light, #ffffff)';
 
       for (let [rootName, brandName] of Object.entries(
         rootToBrandVariableMapping,
       )) {
         let rootValue = rootRules?.get(rootName);
-        let brandValue = functionalRules?.get(brandName) ?? '';
-        combinedRootRules.set(brandName, brandValue);
-        if (rootValue) {
-          combinedRootRules.set(rootName, `var(${brandName}, ${rootValue})`);
-        } else {
-          combinedRootRules.set(rootName, `var(${brandName})`);
+        let brandValue = functionalRules?.get(brandName);
+        if (brandValue) {
+          combinedRootRules.set(brandName, brandValue);
+          if (rootValue) {
+            combinedRootRules.set(rootName, `var(${brandName}, ${rootValue})`);
+          } else {
+            combinedRootRules.set(rootName, `var(${brandName})`);
+          }
+
+          let foregroundName = `${rootName}-foreground`;
+          let brandForegroundName = `${brandName}-foreground`;
+          if (!rootRules?.has(foregroundName)) {
+            if (brandForegroundMapping.includes(brandForegroundName)) {
+              let foregroundValue = getContrastColor(
+                brandValue,
+                darkColor,
+                lightColor,
+              );
+              if (foregroundValue) {
+                combinedRootRules.set(brandForegroundName, foregroundValue);
+                combinedRootRules.set(
+                  `${rootName}-foreground`,
+                  `var(${brandForegroundName})`,
+                );
+              }
+            }
+          }
         }
       }
 
