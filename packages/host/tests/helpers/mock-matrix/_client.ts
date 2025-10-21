@@ -17,6 +17,7 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -64,10 +65,6 @@ const publicRealmURLs = [
   ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
   ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
 ];
-
-function ensureTrailingSlash(url: string) {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};

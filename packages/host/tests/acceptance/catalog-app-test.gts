@@ -10,6 +10,8 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
+
 import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
@@ -42,10 +44,6 @@ import type { CardListing } from '@cardstack/catalog/listing/listing';
 
 const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 const testDestinationRealmURL = `http://test-realm/test2/`;
-
-function ensureTrailingSlash(url: string) {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 //listing
 const authorListingId = `${mockCatalogURL}Listing/author`;

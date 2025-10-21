@@ -8,6 +8,7 @@ import { module, skip } from 'qunit';
 
 import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -31,10 +32,6 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-
-function ensureTrailingSlash(url: string) {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 class MockRouterService extends Service {
   replaceWith(_route: any, _args: any) {

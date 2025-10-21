@@ -17,6 +17,7 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
+  ensureTrailingSlash,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -60,10 +61,6 @@ import {
 import { setupApplicationTest } from '../helpers/setup';
 
 const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
-
-function ensureTrailingSlash(url: string) {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 let matrixRoomId: string;
 let realm2URL = 'http://test-realm/user/test2/';

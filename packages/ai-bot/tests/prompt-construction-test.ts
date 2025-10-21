@@ -23,6 +23,7 @@ import * as path from 'path';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
 import {
   type LooseCardResource,
+  ensureTrailingSlash,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import {
@@ -37,10 +38,6 @@ const DEFAULT_CATALOG_REALM_URL = 'http://localhost:4201/catalog/';
 const catalogRealmURL = ensureTrailingSlash(
   process.env.RESOLVED_CATALOG_REALM_URL ?? DEFAULT_CATALOG_REALM_URL,
 );
-
-function ensureTrailingSlash(url: string) {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 function replaceCatalogRealmURL(value: string): string {
   return value.split(DEFAULT_CATALOG_REALM_URL).join(catalogRealmURL);

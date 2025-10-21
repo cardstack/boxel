@@ -19,6 +19,7 @@ import {
   Deferred,
   ResolvedCodeRef,
   baseRealm,
+  ensureTrailingSlash,
   skillCardRef,
 } from '@cardstack/runtime-common';
 
@@ -69,10 +70,6 @@ import { setupApplicationTest } from '../helpers/setup';
 
 const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 const skillsRealmURL = ensureTrailingSlash(ENV.resolvedSkillsRealmURL);
-
-function ensureTrailingSlash(url: string) {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
