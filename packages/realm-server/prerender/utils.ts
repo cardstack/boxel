@@ -1,4 +1,5 @@
 import {
+  cleanCapturedHTML,
   delay,
   logger,
   type PrerenderMeta,
@@ -56,7 +57,7 @@ export async function renderHTML(
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.html');
   }
-  return result.value;
+  return cleanCapturedHTML(result.value);
 }
 
 export async function renderIcon(
@@ -68,7 +69,7 @@ export async function renderIcon(
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.icon');
   }
-  return result.value;
+  return cleanCapturedHTML(result.value);
 }
 
 export async function renderMeta(
