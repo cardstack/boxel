@@ -1,8 +1,4 @@
-import {
-  GridContainer,
-  FieldContainer,
-  Swatch,
-} from '@cardstack/boxel-ui/components';
+import { GridContainer, Swatch } from '@cardstack/boxel-ui/components';
 import {
   entriesToCssRuleMap,
   type CssVariableEntry,
@@ -35,30 +31,29 @@ export default class BrandFunctionalPalette extends FieldDef {
   @field primary = contains(ColorField);
   @field secondary = contains(ColorField);
   @field neutral = contains(ColorField);
-  @field light = contains(ColorField);
-  @field dark = contains(ColorField);
+  @field border = contains(ColorField);
   @field accent = contains(ColorField);
+  @field dark = contains(ColorField);
+  @field light = contains(ColorField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <GridContainer class='functional-palette'>
         {{#each @model.cssVariableFields as |color|}}
-          <FieldContainer
-            class='functional-palette-item'
-            @label={{color.name}}
-            @vertical={{true}}
-          >
-            <Swatch @color={{color.value}} />
-          </FieldContainer>
+          {{#if color.value}}
+            <Swatch @label={{color.name}} @color={{color.value}} />
+          {{/if}}
         {{/each}}
       </GridContainer>
       <style scoped>
         .functional-palette {
-          grid-template-columns: repeat(auto-fill, 9rem);
+          grid-template-columns: repeat(auto-fill, 8rem);
           gap: var(--boxel-sp-xl) var(--boxel-sp);
+          align-items: end;
+          text-wrap: pretty;
         }
-        .functional-palette-item {
-          grid-template-rows: 1fr auto;
+        :deep(.boxel-swatch-name) {
+          font-weight: 600;
         }
       </style>
     </template>

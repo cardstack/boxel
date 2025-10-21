@@ -18,11 +18,15 @@ import ColorField from './color';
 import CSSValueField from './css-value';
 import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
 
-export function dasherize(str: string): string {
-  return str
-    .replace(/([a-z\d])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z]+)([A-Z][a-z\d]+)/g, '$1-$2')
-    .toLowerCase();
+export function dasherize(str?: string): string {
+  return (
+    str
+      ?.trim()
+      .replace(/\s+/g, '-')
+      .replace(/([a-z\d])([A-Z])/g, '$1-$2')
+      .replace(/([A-Z]+)([A-Z][a-z\d]+)/g, '$1-$2')
+      .toLowerCase() ?? ''
+  );
 }
 
 type FieldNameType = keyof FieldsTypeFor<ThemeVarField> & string;

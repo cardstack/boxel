@@ -26,6 +26,7 @@ import {
 
 import BrandTypography from './brand-typography';
 import BrandFunctionalPalette from './brand-functional-palette';
+import { dasherize } from './structured-theme-variables';
 
 const rootToBrandVariableMapping: Record<string, string> = {
   '--primary': '--brand-primary',
@@ -34,6 +35,7 @@ const rootToBrandVariableMapping: Record<string, string> = {
   '--accent': '--brand-accent',
   '--background': '--brand-light',
   '--foreground': '--brand-dark',
+  '--border': '--brand-border',
   '--primary-foreground': '--brand-primary-foreground',
   '--secondary-foreground': '--brand-secondary-foreground',
   '--muted-foreground': '--brand-neutral-foreground',
@@ -55,6 +57,18 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         {{#if @model.description}}
           <p><@fields.description /></p>
         {{/if}}
+      </BoxelContainer>
+      <BoxelContainer
+        @tag='section'
+        @display='grid'
+        class='content-section color-palette-section'
+      >
+        {{#if @model.brandColorPalette.length}}
+          <h2>Brand Color Palette</h2>
+          <@fields.brandColorPalette class='brand-palette' />
+        {{/if}}
+        <h2>Functional Palette</h2>
+        <@fields.functionalPalette />
       </BoxelContainer>
       <@fields.cssVariables />
     </article>
@@ -97,6 +111,16 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .content-section + .content-section {
         border-top: var(--boxel-border);
+      }
+      .brand-palette {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, 8rem);
+        gap: var(--boxel-sp-xl) var(--boxel-sp);
+        align-items: end;
+        text-wrap: pretty;
+      }
+      .brand-palette + h2 {
+        margin-top: var(--boxel-sp-xl);
       }
       .preview-field {
         display: flex;
@@ -156,6 +180,16 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   </template>
 }
 
+const formatCssVarName = (name?: string) => {
+  let varName = dasherize(name);
+  if (varName?.startsWith('--')) {
+    varName = varName.replace(/^--/, '--brand-color-');
+  } else {
+    varName = `--brand-color-${varName}`;
+  }
+  return varName;
+};
+
 export class CompoundColorField extends FieldDef {
   static displayName = 'Color';
   @field name = contains(StringField);
@@ -163,7 +197,12 @@ export class CompoundColorField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <Swatch @label={{@model.name}} @color={{@model.value}} />
+      <Swatch @label={{formatCssVarName @model.name}} @color={{@model.value}} />
+      <style scoped>
+        :deep(.boxel-swatch-name) {
+          font-weight: 600;
+        }
+      </style>
     </template>
   };
 }
@@ -248,13 +287,7 @@ export default class BrandGuide extends StyleReference {
         let paletteRules = entriesToCssRuleMap(this.brandColorPalette);
         for (let [name, value] of paletteRules.entries()) {
           if (name && value) {
-            name = name.replace(/\s+/g, '-');
-            if (name.startsWith('--')) {
-              name = name.replace(/^--/, '--brand-color-');
-            } else {
-              name = `--brand-color-${name}`;
-            }
-            combinedRootRules.set(name, value);
+            combinedRootRules.set(formatCssVarName(name), value);
           }
         }
       }
