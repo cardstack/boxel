@@ -4,7 +4,6 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import UploadImageCommand from '@cardstack/catalog/commands/upload-image';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -13,6 +12,7 @@ import {
   setupRealmServerEndpoints,
   testRealmInfo,
   testRealmURL,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -70,7 +70,9 @@ module('Integration | commands | upload-image', function (hooks) {
 
     await setupIntegrationTestRealm({
       mockMatrixUtils,
-      contents: {},
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+      },
     });
   });
 
@@ -78,11 +80,16 @@ module('Integration | commands | upload-image', function (hooks) {
     assert.expect(7);
 
     const commandService = getService('command-service');
+    const loaderService = getService('loader-service');
+    const loader = loaderService.loader;
+    const UploadImageCommand = (
+      await loader.import('@cardstack/catalog/commands/upload-image')
+    ).default;
     const command = new UploadImageCommand(commandService.commandContext);
 
     const result = await command.execute({
-      sourceUrl: 'https://example.com/photo.jpg',
-      targetRealm: testRealmURL,
+      sourceImageUrl: 'https://example.com/photo.jpg',
+      targetRealmUrl: testRealmURL,
     });
 
     assert.ok(result, 'command returns a result card');
@@ -105,7 +112,7 @@ module('Integration | commands | upload-image', function (hooks) {
     );
     assert.strictEqual(
       (savedCard as any).url,
-      'https://imagedelivery.net/4a94a1eb2d21bbbe160234438a49f687/cloudflare-image-id/public',
+      'https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/cloudflare-image-id/public',
       'computed URL uses expected Cloudflare delivery format',
     );
   });
