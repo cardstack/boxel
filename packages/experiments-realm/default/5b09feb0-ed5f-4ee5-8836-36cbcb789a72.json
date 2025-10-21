@@ -129,10 +129,6 @@
         {
           "name": "Dark Grey",
           "value": "#484848"
-        },
-        {
-          "name": "dark-blue",
-          "value": "#003B6F"
         }
       ],
       "darkModeVariables": {

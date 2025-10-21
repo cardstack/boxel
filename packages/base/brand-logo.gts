@@ -13,6 +13,7 @@ import {
   Component,
   FieldDef,
   StringField,
+  type BaseDef,
 } from './card-api';
 import {
   dasherize,
@@ -20,6 +21,13 @@ import {
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
 import URLField from './url';
+
+const getFieldValue = (model?: Partial<BrandLogo>, fieldName?: string) => {
+  if (!model || !fieldName) {
+    return;
+  }
+  return getField(model as BaseDef, fieldName);
+};
 
 class Embedded extends Component<typeof BrandLogo> {
   <template>
@@ -67,7 +75,7 @@ class Embedded extends Component<typeof BrandLogo> {
       <GridContainer class='preview-grid'>
         <FieldContainer @label='Primary Mark 1' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getField @model 'primaryMark1') as |f|}}
+            {{#let (getFieldValue @model 'primaryMark1') as |f|}}
               <p>{{f.description}}</p>
             {{/let}}
             <div class='preview-container border-container'>
@@ -77,7 +85,7 @@ class Embedded extends Component<typeof BrandLogo> {
         </FieldContainer>
         <FieldContainer @label='Primary Mark 2' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getField @model 'primaryMark2') as |f|}}
+            {{#let (getFieldValue @model 'primaryMark2') as |f|}}
               <p>{{f.description}}</p>
             {{/let}}
             <div class='preview-container border-container dark-container'>
@@ -90,7 +98,7 @@ class Embedded extends Component<typeof BrandLogo> {
       <GridContainer class='preview-grid'>
         <FieldContainer @label='Secondary Mark 1' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getField @model 'secondaryMark1') as |f|}}
+            {{#let (getFieldValue @model 'secondaryMark1') as |f|}}
               <p>{{f.description}}</p>
             {{/let}}
             <div class='preview-container border-container'>
@@ -100,7 +108,7 @@ class Embedded extends Component<typeof BrandLogo> {
         </FieldContainer>
         <FieldContainer @label='Secondary Mark 2' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getField @model 'secondaryMark2') as |f|}}
+            {{#let (getFieldValue @model 'secondaryMark2') as |f|}}
               <p>{{f.description}}</p>
             {{/let}}
             <div class='preview-container border-container dark-container'>
@@ -145,7 +153,7 @@ class Embedded extends Component<typeof BrandLogo> {
       {{! social media icon }}
       <FieldContainer @label='Social media/profile icon' @vertical={{true}}>
         <div class='preview-field'>
-          {{#let (getField @model 'socialMediaProfileIcon') as |field|}}
+          {{#let (getFieldValue @model 'socialMediaProfileIcon') as |field|}}
             <p>{{field.description}}</p>
           {{/let}}
           <div class='preview-grid border-container border-group'>
