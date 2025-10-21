@@ -70,7 +70,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     :global(.boxel-card-container--themed) {
       --theme-spacing: calc(var(--spacing) * 4);
       /* setting boxel base css variable overrides, with boxel defaults as fallback */
-      --boxel-font-size: var(--typescale-body, var(--_boxel-font-size));
+      --boxel-font-size: var(--brand-body-font-size, var(--_boxel-font-size));
       --boxel-spacing: var(--theme-spacing, var(--_boxel-spacing));
       --boxel-radius: var(--radius, var(--_boxel-radius));
 
@@ -105,11 +105,11 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
       --boxel-form-control-border-radius: var(--boxel-border-radius);
 
-      font-family: var(--font-family-base, var(--font-sans));
-      font-size: var(--typescale-body);
-      font-weight: var(--font-weight-body);
+      font-family: var(--brand-body-font-family, var(--font-sans));
+      font-size: var(--brand-body-font-size);
+      font-weight: var(--brand-body-font-weight);
       letter-spacing: var(--tracking-normal);
-      line-height: var(--lineheight-base);
+      line-height: var(--brand-body-line-height);
       box-shadow: var(--shadow);
     }
   </style>

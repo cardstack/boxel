@@ -11,12 +11,7 @@ import {
 } from './card-api';
 import ColorField from './color';
 import StyleReference from './style-reference';
-import {
-  BoxelContainer,
-  // FieldContainer,
-  // GridContainer,
-  Swatch,
-} from '@cardstack/boxel-ui/components';
+import { BoxelContainer, Swatch } from '@cardstack/boxel-ui/components';
 import {
   buildCssGroups,
   entriesToCssRuleMap,
@@ -27,6 +22,7 @@ import {
 import BrandTypography from './brand-typography';
 import BrandFunctionalPalette from './brand-functional-palette';
 import { dasherize } from './structured-theme-variables';
+import CSSValueField from './css-value';
 
 const rootToBrandVariableMapping: Record<string, string> = {
   '--primary': '--brand-primary',
@@ -40,6 +36,7 @@ const rootToBrandVariableMapping: Record<string, string> = {
   '--secondary-foreground': '--brand-secondary-foreground',
   '--muted-foreground': '--brand-neutral-foreground',
   '--accent-foreground': '--brand-accent-foreground',
+  '--radius': '--brand-radius',
 };
 
 const brandForegroundMapping: string[] = [
@@ -70,6 +67,14 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         <h2>Functional Palette</h2>
         <@fields.functionalPalette />
       </BoxelContainer>
+      <BoxelContainer
+        @tag='section'
+        @display='grid'
+        class='content-section typography-section'
+      >
+        <h2>Typography</h2>
+        <@fields.typography />
+      </BoxelContainer>
       <@fields.cssVariables />
     </article>
     <style scoped>
@@ -77,13 +82,22 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       h2 {
         margin-block: 0;
         font-family: var(--brand-heading-font-family, var(--boxel-font-family));
-        font-size: var(--brand-heading-font-size, var(--boxel-font-size-med));
         font-weight: var(
           --brand-heading-font-weight,
           var(--boxel-font-weight-semibold)
         );
         letter-spacing: var(--boxel-lsp-xs);
-        line-height: var(--brand-heading-line-height, calc(28 / 20));
+      }
+      h1 {
+        font-size: var(--brand-heading-font-size, var(--boxel-font-size-med));
+        line-height: var(
+          --brand-heading-line-height,
+          var(--boxel-lineheight-med)
+        );
+      }
+      h2 {
+        font-size: var(--boxel-font-size-med);
+        line-height: var(--boxel-lineheight-med);
       }
       p {
         margin-block: 0;
@@ -107,7 +121,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         align-items: center;
         gap: 0;
         background-color: var(--muted);
-        color: var(--muted-foreground);
+        color: var(--foreground);
+      }
+      .content-section {
+        gap: var(--boxel-sp-xl);
       }
       .content-section + .content-section {
         border-top: var(--boxel-border);
@@ -121,15 +138,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .brand-palette + h2 {
         margin-top: var(--boxel-sp-xl);
-      }
-      .preview-field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .preview-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
       }
       .container-group {
         --boxel-container-padding: 0;
@@ -214,6 +222,8 @@ export default class BrandGuide extends StyleReference {
   @field brandColorPalette = containsMany(CompoundColorField);
   @field functionalPalette = contains(BrandFunctionalPalette);
   @field typography = contains(BrandTypography);
+  @field cornerRadius = contains(CSSValueField);
+  @field spacing = contains(CSSValueField);
 
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
@@ -276,6 +286,27 @@ export default class BrandGuide extends StyleReference {
 
       if (functionalRules?.size) {
         for (let [name, value] of functionalRules.entries()) {
+          if (!name || !value || combinedRootRules.has(name)) {
+            continue;
+          }
+          combinedRootRules.set(name, value);
+        }
+      }
+
+      let cornerRadius = this.cornerRadius;
+      if (cornerRadius) {
+        combinedRootRules.set('--brand-radius', cornerRadius);
+      }
+
+      let spacing = this.spacing;
+      if (spacing) {
+        combinedRootRules.set('--brand-spacing', spacing);
+        combinedRootRules.set('--spacing', `calc(var(--brand-spacing) / 4)`);
+      }
+
+      let typographyRules = this.typography?.cssRuleMap;
+      if (typographyRules?.size) {
+        for (let [name, value] of typographyRules.entries()) {
           if (!name || !value || combinedRootRules.has(name)) {
             continue;
           }

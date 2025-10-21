@@ -1,31 +1,14 @@
 import { GridContainer, Swatch } from '@cardstack/boxel-ui/components';
-import {
-  entriesToCssRuleMap,
-  type CssVariableEntry,
-} from '@cardstack/boxel-ui/helpers';
+import { entriesToCssRuleMap } from '@cardstack/boxel-ui/helpers';
 
-import {
-  field,
-  contains,
-  Component,
-  getFields,
-  FieldDef,
-  type FieldsTypeFor,
-} from './card-api';
+import { field, contains, Component, getFields, FieldDef } from './card-api';
 import ColorField from './color';
 import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
-import { dasherize } from './structured-theme-variables';
-
-type BrandFunctionalPaletteKeys = Exclude<
-  keyof FieldsTypeFor<BrandFunctionalPalette>,
-  'constructor' | 'cssVariableFields' | 'cssRuleMap'
-> &
-  string;
-
-interface CssVariableField extends CssVariableEntry {
-  fieldName: BrandFunctionalPaletteKeys;
-  cssVariableName: string;
-}
+import {
+  dasherize,
+  type CssVariableField,
+  type CssVariableFieldEntry,
+} from './structured-theme-variables';
 
 export default class BrandFunctionalPalette extends FieldDef {
   static displayName = 'Functional Palette';
@@ -60,20 +43,20 @@ export default class BrandFunctionalPalette extends FieldDef {
     </template>
   };
 
-  get cssVariableFields(): CssVariableField[] | undefined {
+  get cssVariableFields(): CssVariableFieldEntry[] | undefined {
     let fields = getFields(this);
     if (!fields) {
       return;
     }
 
-    let fieldNames = Object.keys(fields) as BrandFunctionalPaletteKeys[];
+    let fieldNames = Object.keys(fields);
     if (!fieldNames?.length) {
       return;
     }
-    let cssVariableFields: CssVariableField[] = [];
+    let cssVariableFields: CssVariableFieldEntry[] = [];
     for (let fieldName of fieldNames) {
       let cssVariableName = `--brand-${dasherize(fieldName)}`;
-      let value = this?.[fieldName];
+      let value = (this as CssVariableField)?.[fieldName];
       cssVariableFields.push({
         fieldName,
         cssVariableName,
