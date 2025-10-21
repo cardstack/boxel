@@ -8,9 +8,7 @@ class ImageCardView extends Component<typeof ImageCard> {
     {{else}}
       <div class='empty-placeholder'>No image URL provided</div>
     {{/if}}
-    <style
-      scoped
-    >
+    <style scoped>
       .image {
         display: block;
         max-width: 100%;
@@ -18,7 +16,7 @@ class ImageCardView extends Component<typeof ImageCard> {
         border-radius: var(--boxel-form-control-border-radius);
       }
       .empty-placeholder {
-        padding: var(--boxel-sp;
+        padding: var(--boxel-sp);
         text-align: center;
         color: var(--boxel-500);
         background-color: var(--boxel-50);
@@ -28,7 +26,7 @@ class ImageCardView extends Component<typeof ImageCard> {
   </template>
 }
 
-export class ImageCard extends CardDef {
+export default class ImageCard extends CardDef {
   static displayName = 'Image';
 
   @field url = contains(UrlField);

@@ -14,8 +14,9 @@
         "description": null,
         "thumbnailURL": null
       },
-      "sourceUrl": "",
-      "targetRealm": ""
+      "resultImageId": "",
+      "sourceImageUrl": "",
+      "targetRealmUrl": ""
     },
     "relationships": {
       "cardInfo.theme": {

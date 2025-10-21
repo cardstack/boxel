@@ -20,8 +20,8 @@ interface CloudflareUploadResponse {
 }
 
 export class UploadImageInput extends CardDef {
-  @field sourceUrl = contains(UrlField);
-  @field targetRealm = contains(StringField);
+  @field sourceImageUrl = contains(UrlField);
+  @field targetRealmUrl = contains(StringField);
 }
 
 export class CardIdCard extends CardDef {
@@ -41,13 +41,13 @@ export default class UploadImageCommand extends Command<
   }
 
   protected async run(input: UploadImageInput): Promise<CardIdCard> {
-    if (!input.sourceUrl) {
-      throw new Error('sourceUrl is required');
+    if (!input.sourceImageUrl) {
+      throw new Error('sourceImageUrl is required');
     }
-    if (!input.sourceUrl.startsWith('http')) {
-      throw new Error('sourceUrl must be a valid URL');
+    if (!input.sourceImageUrl.startsWith('http')) {
+      throw new Error('sourceImageUrl must be a valid URL');
     }
-    if (!input.targetRealm) {
+    if (!input.targetRealmUrl) {
       throw new Error('targetRealm is required');
     }
 
@@ -58,7 +58,7 @@ export default class UploadImageCommand extends Command<
       url: CLOUDFLARE_IMAGE_INGEST_URL,
       method: 'POST',
       requestBody: JSON.stringify({
-        url: input.sourceUrl,
+        url: input.sourceImageUrl,
       }),
       multipart: true,
     });
@@ -97,7 +97,7 @@ export default class UploadImageCommand extends Command<
     });
     await saveCardCommand.execute({
       card: cloudflareImageCard,
-      realm: input.targetRealm,
+      realm: input.targetRealmUrl,
     });
     if (!isCardInstance(cloudflareImageCard)) {
       throw new Error(

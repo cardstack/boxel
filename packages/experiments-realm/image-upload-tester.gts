@@ -16,25 +16,34 @@ import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 
 class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
   @tracked isUploading = false;
+  @tracked isSaving = false;
   @tracked errorMessage: string | null = null;
-  @tracked uploadedCardId: string | null = null;
+
+  // Load the result image card dynamically using getCard
+  resultImageResource = this.args.context?.getCard(
+    this,
+    () => this.args.model.resultImageId,
+  );
 
   get canUpload() {
     return (
-      !!this.args.model.sourceUrl &&
-      !!this.args.model.targetRealm &&
+      !!this.args.model.sourceImageUrl &&
+      !!this.args.model.targetRealmUrl &&
       !this.isUploading
     );
   }
 
   get statusMessage() {
+    if (this.isSaving) {
+      return 'Saving new image in result field...';
+    }
     if (this.isUploading) {
       return 'Uploading image to Cloudflare...';
     }
     if (this.errorMessage) {
       return this.errorMessage;
     }
-    if (this.uploadedCardId) {
+    if (this.args.model.resultImageId) {
       return 'Upload complete!';
     }
     return 'Provide an image URL and target realm to try the command.';
@@ -44,7 +53,7 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
     let classes = ['status-message'];
     if (this.errorMessage) {
       classes.push('status-message--error');
-    } else if (this.uploadedCardId) {
+    } else if (this.args.model.resultImageId) {
       classes.push('status-message--success');
     }
     return classes.join(' ');
@@ -65,15 +74,21 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
 
     this.isUploading = true;
     this.errorMessage = null;
-    this.uploadedCardId = null;
+    this.args.model.resultImageId = '';
 
     try {
       let command = new UploadImageCommand(commandContext);
       let result = await command.execute({
-        sourceUrl: this.args.model.sourceUrl,
-        targetRealm: this.args.model.targetRealm,
+        sourceImageUrl: this.args.model.sourceImageUrl,
+        targetRealmUrl: this.args.model.targetRealmUrl,
       });
-      this.uploadedCardId = result.cardId;
+
+      // Store the card ID, which will trigger getCard to load it
+      console.log('Upload result:', result);
+      this.isSaving = true;
+      if (result.cardId) {
+        this.args.model.resultImageId = result.cardId;
+      }
     } catch (error) {
       let message =
         error instanceof Error
@@ -82,48 +97,60 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
       this.errorMessage = message;
     } finally {
       this.isUploading = false;
+      this.isSaving = false;
     }
   }
 
   @action
   clearStatus() {
     this.errorMessage = null;
-    this.uploadedCardId = null;
+    this.args.model.sourceImageUrl = '';
+    this.args.model.targetRealmUrl = '';
+    this.args.model.resultImageId = '';
+  }
+
+  get renderableResultCard() {
+    if (!this.resultImageResource?.card) {
+      return null;
+    }
+    return this.resultImageResource.card.constructor.getComponent(
+      this.resultImageResource.card,
+    );
   }
 
   <template>
     <form class='image-upload-tester' {{on 'submit' this.uploadImage}}>
       <div class='field-group'>
         <FieldContainer @label='Source Image URL'>
-          <div {{on 'input' this.clearStatus}}>
-            <@fields.sourceUrl />
-          </div>
+          <@fields.sourceImageUrl @format='edit' />
         </FieldContainer>
         <FieldContainer @label='Target Realm URL'>
-          <div {{on 'input' this.clearStatus}}>
-            <@fields.targetRealm />
-          </div>
+          <@fields.targetRealmUrl @format='edit' />
         </FieldContainer>
       </div>
 
-      <Button type='submit' @variant='primary' @disabled={{not this.canUpload}}>
-        {{if this.isUploading 'Uploading…' 'Upload Image'}}
-      </Button>
+      {{#if @model.resultImageId}}
+        <Button @variant='secondary' {{on 'click' this.clearStatus}}>
+          Reset
+        </Button>
+      {{else}}
+        <Button
+          type='submit'
+          @variant='primary'
+          @disabled={{not this.canUpload}}
+        >
+          {{if this.isUploading 'Uploading…' 'Upload Image'}}
+        </Button>
+      {{/if}}
 
       <div class={{this.statusClass}}>
         {{this.statusMessage}}
-        {{#if this.uploadedCardId}}
-          <div class='result'>
-            <span class='result-label'>Card ID:</span>
-            <code class='result-id'>{{this.uploadedCardId}}</code>
-            <Button
-              @kind='primary'
-              @size='base'
-              {{on 'click' (fn @viewCard this.uploadedCardId)}}
-            >
-              View Image Card
-            </Button>
-          </div>
+        {{#if this.renderableResultCard}}
+          <this.renderableResultCard
+            class='card result'
+            @format='embedded'
+            data-test-card-id={{this.resultImageResource.card.id}}
+          />
         {{/if}}
       </div>
     </form>
@@ -168,6 +195,7 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xs);
+        height: auto;
       }
 
       .result-label {
@@ -197,8 +225,9 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
 export class ImageUploadTester extends CardDef {
   static displayName = 'Image Upload Tester';
 
-  @field sourceUrl = contains(UrlField);
-  @field targetRealm = contains(StringField);
+  @field sourceImageUrl = contains(UrlField);
+  @field targetRealmUrl = contains(StringField);
+  @field resultImageId = contains(StringField);
 
   static isolated = ImageUploadTesterIsolated;
 }

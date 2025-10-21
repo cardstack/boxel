@@ -1,4 +1,4 @@
-import { ImageCard } from 'https://cardstack.com/base/image';
+import ImageCard from 'https://cardstack.com/base/image';
 import { contains, field } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import UrlField from 'https://cardstack.com/base/url';
