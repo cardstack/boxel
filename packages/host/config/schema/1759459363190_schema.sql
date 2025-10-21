@@ -55,14 +55,6 @@
    PRIMARY KEY ( url, realm_url ) 
 );
 
- CREATE TABLE IF NOT EXISTS claimed_domains_for_sites (
-   id DEFAULT (hex(randomblob(16))) NOT NULL,
-   hostname TEXT NOT NULL,
-   claimed_at INTEGER NOT NULL,
-   removed_at INTEGER,
-   PRIMARY KEY ( id ) 
-);
-
  CREATE TABLE IF NOT EXISTS published_realms (
    id DEFAULT (hex(randomblob(16))) NOT NULL,
    owner_username TEXT NOT NULL,
