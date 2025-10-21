@@ -26,6 +26,19 @@ import {
 import BrandTypography from './brand-typography';
 import BrandFunctionalPalette from './brand-functional-palette';
 
+const rootToBrandVariableMapping: Record<string, string> = {
+  '--primary': '--brand-primary',
+  '--secondary': '--brand-secondary',
+  '--muted': '--brand-neutral',
+  '--accent': '--brand-accent',
+  '--background': '--brand-light',
+  '--foreground': '--brand-dark',
+  '--primary-foreground': '--brand-primary-foreground',
+  '--secondary-foreground': '--brand-secondary-foreground',
+  '--muted-foreground': '--brand-neutral-foreground',
+  '--accent-foreground': '--brand-accent-foreground',
+};
+
 class BrandGuideIsolated extends Component<typeof BrandGuide> {
   <template>
     <article class='brand-guide'>
@@ -161,9 +174,30 @@ export default class BrandGuide extends StyleReference {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
-      let combinedRootRules = new Map<string, string>(
-        this.rootVariables?.cssRuleMap ?? [],
-      );
+      let combinedRootRules = new Map<string, string>();
+      let rootRules = this.rootVariables?.cssRuleMap;
+      let functionalRules = this.functionalPalette?.cssRuleMap;
+
+      for (let [rootName, brandName] of Object.entries(
+        rootToBrandVariableMapping,
+      )) {
+        let rootValue = rootRules?.get(rootName);
+        let brandValue = functionalRules?.get(brandName) ?? '';
+        combinedRootRules.set(brandName, brandValue);
+        if (rootValue) {
+          combinedRootRules.set(rootName, `var(${brandName}, ${rootValue})`);
+        } else {
+          combinedRootRules.set(rootName, `var(${brandName})`);
+        }
+      }
+
+      if (rootRules?.size) {
+        for (let [rootName, rootValue] of rootRules.entries()) {
+          if (!combinedRootRules.has(rootName) && rootValue) {
+            combinedRootRules.set(rootName, rootValue);
+          }
+        }
+      }
 
       if (entriesToCssRuleMap && this.brandColorPalette?.length) {
         let paletteRules = entriesToCssRuleMap(this.brandColorPalette);
