@@ -355,6 +355,21 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
+  toggleCustomSubdomain() {
+    if (this.claimedSiteHostname) {
+      const customUrl = this.buildPublishedRealmUrl(
+        this.claimedSiteHostname.hostname,
+      );
+      if (!this.selectedPublishedRealmURLs.includes(customUrl)) {
+        this.selectedPublishedRealmURLs = [
+          ...this.selectedPublishedRealmURLs,
+          customUrl,
+        ];
+      }
+    }
+  }
+
+  @action
   openCustomSubdomainSetup() {
     this.isCustomSubdomainSetupVisible = true;
     this.customSubdomain =
@@ -407,13 +422,25 @@ export default class PublishRealmModal extends Component<Signature> {
           this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
 
           try {
-            let {
-              data: { attributes },
-            } = await this.realmServer.claimBoxelDomain(
+            let claimResult = (await this.realmServer.claimBoxelDomain(
               this.currentRealmURL,
               hostname,
-            );
-            this.applyClaimedSiteHostname(attributes);
+            )) as {
+              data: {
+                id: string;
+                attributes: {
+                  subdomain: string;
+                  hostname: string;
+                  sourceRealmURL: string;
+                };
+              };
+            };
+            this.applyClaimedSiteHostname({
+              id: claimResult.data.id,
+              subdomain: claimResult.data.attributes.subdomain,
+              hostname: claimResult.data.attributes.hostname,
+              sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
+            });
             this.isCustomSubdomainSetupVisible = false;
           } catch (claimError) {
             let errorMessage = (claimError as Error).message;
@@ -564,6 +591,7 @@ export default class PublishRealmModal extends Component<Signature> {
               class='domain-checkbox'
               data-test-custom-subdomain-checkbox
               disabled={{not this.claimedSiteHostname}}
+              {{on 'change' this.toggleCustomSubdomain}}
             />
             <label class='option-title' for='custom-subdomain-checkbox'>Custom
               Site Name</label>
