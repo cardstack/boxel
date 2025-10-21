@@ -10,20 +10,21 @@ import {
   Component,
   getFields,
   FieldDef,
-  type BoxComponent,
   type FieldsTypeFor,
 } from './card-api';
 import ColorField from './color';
 import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
 import { dasherize } from './structured-theme-variables';
 
-type BrandFunctionalPaletteKeys = keyof FieldsTypeFor<BrandFunctionalPalette> &
+type BrandFunctionalPaletteKeys = Exclude<
+  keyof FieldsTypeFor<BrandFunctionalPalette>,
+  'constructor' | 'cssVariableFields' | 'cssRuleMap'
+> &
   string;
 
 interface CssVariableField extends CssVariableEntry {
   fieldName: BrandFunctionalPaletteKeys;
   cssVariableName: string;
-  component?: BoxComponent;
 }
 
 export default class BrandFunctionalPalette extends FieldDef {
@@ -72,7 +73,7 @@ export default class BrandFunctionalPalette extends FieldDef {
     let cssVariableFields: CssVariableField[] = [];
     for (let fieldName of fieldNames) {
       let cssVariableName = `--brand-${dasherize(fieldName)}`;
-      let value = this?.[fieldName] as string | undefined | null;
+      let value = this?.[fieldName];
       cssVariableFields.push({
         fieldName,
         cssVariableName,

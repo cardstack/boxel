@@ -6,22 +6,23 @@ import {
 import {
   field,
   contains,
-  // Component,
   getFields,
   FieldDef,
-  type BoxComponent,
   type FieldsTypeFor,
 } from './card-api';
 import CSSValueField from './css-value';
 import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
 import { dasherize } from './structured-theme-variables';
 
-type FieldNameType = keyof FieldsTypeFor<BrandTypography> & string;
+type BrandTypographyKey = Exclude<
+  keyof FieldsTypeFor<BrandTypography>,
+  'constructor' | 'cssVariableFields' | 'cssRuleMap'
+> &
+  string;
 
 interface CssVariableField extends CssVariableEntry {
-  fieldName: FieldNameType;
+  fieldName: BrandTypographyKey;
   cssVariableName: string;
-  component?: BoxComponent;
 }
 
 export default class BrandTypography extends FieldDef {
@@ -43,16 +44,16 @@ export default class BrandTypography extends FieldDef {
       return;
     }
 
-    let fieldNames = Object.keys(fields) as FieldNameType[];
+    let fieldNames = Object.keys(fields) as BrandTypographyKey[];
     if (!fieldNames?.length) {
       return;
     }
     let cssVariableFields: CssVariableField[] = [];
     for (let fieldName of fieldNames) {
       let cssVariableName = `--brand-${dasherize(fieldName)}`;
-      let value = this?.[fieldName] as string | undefined | null;
+      let value = this?.[fieldName];
       cssVariableFields.push({
-        fieldName: fieldName as FieldNameType,
+        fieldName,
         cssVariableName,
         name: cssVariableName,
         value,
