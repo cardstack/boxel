@@ -67,8 +67,8 @@ export function join(...pathParts: string[]): LocalPath {
     .join('/');
 }
 
-function ensureTrailingSlash(realmUrlString: string) {
-  return realmUrlString.replace(/\/$/, '') + '/';
+export function ensureTrailingSlash(url: string) {
+  return url.endsWith('/') ? url : `${url}/`;
 }
 
 // Documenting that this represents a local path within realm, with no leading

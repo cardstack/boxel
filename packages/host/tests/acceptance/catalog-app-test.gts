@@ -10,10 +10,14 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
+
 import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import ListingUseCommand from '@cardstack/host/commands/listing-use';
+
+import ENV from '@cardstack/host/config/environment';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -39,7 +43,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 import type { CardListing } from '@cardstack/catalog/listing/listing';
 
-const catalogRealmURL = 'http://localhost:4201/catalog/';
+const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 const testDestinationRealmURL = `http://test-realm/test2/`;
 
 //listing
