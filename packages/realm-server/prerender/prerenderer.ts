@@ -31,8 +31,13 @@ import {
 
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
-const REMOVE_CHILD_ERROR_FRAGMENT = `Failed to execute 'removeChild' on 'Node'`;
-const NOT_FOUND_ERROR_FRAGMENT = 'NotFoundError';
+const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
+  // this is a side effect of glimmer scoped styles moving a DOM node that
+  // glimmer is tracking. when we go to teardown the component glimmer gets mad
+  // that a node it was tracking is no longer there. performing a new prerender
+  // capture with a cleared store/loader cache will workaround this issue.
+  [`Failed to execute 'removeChild' on 'Node'`, 'NotFoundError'],
+];
 
 export class Prerenderer {
   #browser: Browser | null = null;
@@ -364,12 +369,14 @@ export class Prerenderer {
         });
         lastResult = result;
 
-        let shouldRetry = this.#shouldRetryWithClearCache(result.response);
+        let retrySignature = this.#shouldRetryWithClearCache(result.response);
         let isClearCacheAttempt = attemptOptions?.clearCache === true;
 
-        if (!isClearCacheAttempt && shouldRetry) {
+        if (!isClearCacheAttempt && retrySignature) {
           log.warn(
-            `retrying prerender for ${url} with clearCache due to removeChild error`,
+            `retrying prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+              ' | ',
+            )}`,
           );
           attemptOptions = {
             ...(attemptOptions ?? {}),
@@ -378,9 +385,11 @@ export class Prerenderer {
           continue;
         }
 
-        if (isClearCacheAttempt && shouldRetry && result.response.error) {
-          log.error(
-            `prerender retry with clearCache did not resolve removeChild error for ${url}`,
+        if (isClearCacheAttempt && retrySignature && result.response.error) {
+          log.warn(
+            `prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+              ' | ',
+            )} for ${url}`,
           );
         }
 
@@ -668,24 +677,26 @@ export class Prerenderer {
     };
   }
 
-  #shouldRetryWithClearCache(response: RenderResponse): boolean {
+  #shouldRetryWithClearCache(
+    response: RenderResponse,
+  ): readonly string[] | undefined {
     let renderError = response.error?.error;
     if (!renderError) {
-      return false;
+      return undefined;
     }
     let parts = [renderError.message, renderError.stack].filter(
       (part): part is string => typeof part === 'string' && part.length > 0,
     );
     if (parts.length === 0) {
-      return false;
+      return undefined;
     }
-    let hasRemoveChild = parts.some((part) =>
-      part.includes(REMOVE_CHILD_ERROR_FRAGMENT),
-    );
-    if (!hasRemoveChild) {
-      return false;
+    let haystack = parts.join('\n');
+    for (let signature of CLEAR_CACHE_RETRY_SIGNATURES) {
+      if (signature.every((fragment) => haystack.includes(fragment))) {
+        return signature;
+      }
     }
-    return parts.some((part) => part.includes(NOT_FOUND_ERROR_FRAGMENT));
+    return undefined;
   }
 
   async #getBrowser(): Promise<Browser> {
