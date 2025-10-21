@@ -585,6 +585,8 @@ export default class MatrixService extends Service {
           // for performance reasons (otherwise we would make 2 auth requests for
           // each realm, which could be a lot of requests).
 
+          // This should not happen if a record has not yet been inserted in the users table.
+
           await this.realmServer.authenticateToAllAccessibleRealms();
         }
 
