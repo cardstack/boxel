@@ -1,0 +1,19 @@
+diff --git a/dist/ast-transform-8c8ef165.js b/dist/ast-transform-8c8ef165.js
+index 066d5bc5f9e350d855d7d48ae56f47b4e33907bc..a74f310b1fb14849a448ebe91c750612a5c2398c 100644
+--- a/dist/ast-transform-8c8ef165.js
++++ b/dist/ast-transform-8c8ef165.js
+@@ -211,7 +211,13 @@ function generateScopedCSSPlugin(options) {
+             // available)
+             let encodedCss = encodeCSS(outputCSS);
+             jsutils.importForSideEffect(`./${path.basename(env.filename)}.${encodedCss}.glimmer-scoped.css`);
+-            return null;
++            // Return an empty <style> stub so Glimmer still has something to remove during teardown.
++            // Without this stub, the runtime-inserted <style> lives in <head> and Ember would throw
++            // when it tries to remove the original node. The stub carries the scoped attribute so the
++            // runtime script can recognise which block it belongs to.
++            node.attributes = [builders.attr('data-boxel-scoped-css-stub', builders.text(dataAttribute))];
++            node.children = [];
++            return node;
+           } else {
+             if (node.tag.startsWith(':')) {
+               return node;

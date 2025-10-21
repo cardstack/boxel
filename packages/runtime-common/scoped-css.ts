@@ -9,16 +9,17 @@ export async function maybeHandleScopedCSSRequest(req: Request) {
     } else {
       let decoded = decodeScopedCSSRequest(req.url);
       let css = decoded.css;
-      let key = decoded.fromFile;
+      // Each scoped block receives a unique data-scopedcss-* attribute from the AST transform.
+      // We use that attribute as the key for the <style> element we keep in <head>; falling back
+      // to the original filename keeps legacy behaviour if the transform ever changes.
+      let attrMatch = css.match(/data-scopedcss-[0-9a-f]{10}-[0-9a-f]{10}/);
+      let key = attrMatch ? attrMatch[0] : decoded.fromFile;
       return Promise.resolve(
         new Response(`
           (function() {
             const css = '${jsEscapeString(css)}';
             const key = '${jsEscapeString(key)}';
             const doc = document;
-            // We leave a keyed <style> tag in <head> so repeated renders just mutate it
-            // instead of appending duplicates. Ember’s teardown can still succeed because
-            // we leave behind a stub in the original location (see below).
             let styleNode = doc.head.querySelector('style[data-boxel-scoped-css="' + key + '"]');
             if (!styleNode) {
               styleNode = doc.createElement('style');
@@ -27,35 +28,6 @@ export async function maybeHandleScopedCSSRequest(req: Request) {
             }
             if (styleNode.textContent !== css) {
               styleNode.textContent = css;
-            }
-            const insertStub = (parent, beforeNode) => {
-              if (!parent) {
-                return;
-              }
-              let existingStub = parent.querySelector('style[data-boxel-scoped-css-stub="' + key + '"]');
-              if (existingStub) {
-                return;
-              }
-              const stub = doc.createElement('style');
-              stub.setAttribute('data-boxel-scoped-css-stub', key);
-              parent.insertBefore(stub, beforeNode);
-            };
-            const currentScript = doc.currentScript;
-            if (currentScript && currentScript.parentNode) {
-              insertStub(currentScript.parentNode, currentScript);
-              currentScript.remove();
-            } else {
-              // Fallback: derive the scoped attribute from the CSS selectors and insert the stub
-              // before the first element that carries it. This mirrors where the original <style>
-              // would have lived in the template tree.
-              const attrMatch = css.match(/data-scopedcss-[0-9a-f]{10}-[0-9a-f]{10}/);
-              if (attrMatch) {
-                const attrName = attrMatch[0];
-                const host = doc.querySelector('[' + attrName + ']');
-                if (host && host.parentNode) {
-                  insertStub(host.parentNode, host);
-                }
-              }
             }
           })();
         `),
