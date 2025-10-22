@@ -708,7 +708,7 @@ module('Acceptance | host submode', function (hooks) {
           return new Response(
             JSON.stringify({
               data: {
-                type: 'claimed-site-hostname',
+                type: 'claimed-domain',
                 id: '1',
                 attributes: {
                   hostname: 'my-boxel-site.localhost',
@@ -937,21 +937,21 @@ module('Acceptance | host submode', function (hooks) {
 
       test('claimed custom site name displays details and reverts after unclaim', async function (assert) {
         let realmServer = getService('realm-server') as any;
-        let originalFetchClaimed = realmServer.fetchClaimedSiteHostname;
-        let originalDeleteClaimed = realmServer.deleteClaimedSiteHostname;
+        let originalFetchClaimed = realmServer.fetchClaimedDomain;
+        let originalDeleteClaimed = realmServer.deleteClaimedDomain;
 
         let deleteCalled = false;
 
-        realmServer.fetchClaimedSiteHostname = async () => ({
+        realmServer.fetchClaimedDomain = async () => ({
           id: 'claimed-domain-1',
           hostname: 'custom-site-name.localhost:4201',
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
 
-        realmServer.deleteClaimedSiteHostname = async () => {
+        realmServer.deleteClaimedDomain = async () => {
           deleteCalled = true;
-          realmServer.fetchClaimedSiteHostname = async () => null;
+          realmServer.fetchClaimedDomain = async () => null;
         };
 
         try {
@@ -1008,8 +1008,8 @@ module('Acceptance | host submode', function (hooks) {
               'displays placeholder custom site URL after unclaim',
             );
         } finally {
-          realmServer.fetchClaimedSiteHostname = originalFetchClaimed;
-          realmServer.deleteClaimedSiteHostname = originalDeleteClaimed;
+          realmServer.fetchClaimedDomain = originalFetchClaimed;
+          realmServer.deleteClaimedDomain = originalDeleteClaimed;
         }
       });
     });

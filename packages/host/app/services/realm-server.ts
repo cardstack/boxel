@@ -44,7 +44,7 @@ export interface SubdomainAvailabilityResult {
   error?: string;
 }
 
-export interface ClaimedSiteHostname {
+export interface ClaimedDomain {
   id: string;
   hostname: string;
   subdomain: string;
@@ -565,9 +565,9 @@ export default class RealmServerService extends Service {
     return (await response.json()) as SubdomainAvailabilityResult;
   }
 
-  async fetchClaimedSiteHostname(
+  async fetchClaimedDomain(
     sourceRealmURL: string,
-  ): Promise<ClaimedSiteHostname | null> {
+  ): Promise<ClaimedDomain | null> {
     await this.login();
 
     let url = new URL(`${this.url.href}_boxel-claimed-domains`);
@@ -587,7 +587,7 @@ export default class RealmServerService extends Service {
     if (!response.ok) {
       let errorText = await response.text();
       throw new Error(
-        `Fetch claimed site hostname failed: ${response.status} - ${errorText}`,
+        `Fetch claimed domain failed: ${response.status} - ${errorText}`,
       );
     }
 
@@ -612,7 +612,7 @@ export default class RealmServerService extends Service {
     };
   }
 
-  async deleteClaimedSiteHostname(claimedDomainId: string): Promise<void> {
+  async deleteClaimedDomain(claimedDomainId: string): Promise<void> {
     await this.login();
 
     let response = await this.authedFetch(
@@ -629,7 +629,7 @@ export default class RealmServerService extends Service {
     if (!response.ok) {
       let errorText = await response.text();
       throw new Error(
-        `Delete claimed site hostname failed: ${response.status} - ${errorText}`,
+        `Delete claimed domain failed: ${response.status} - ${errorText}`,
       );
     }
   }
@@ -637,7 +637,7 @@ export default class RealmServerService extends Service {
   async claimBoxelDomain(sourceRealmURL: string, hostname: string) {
     const requestBody = {
       data: {
-        type: 'claimed-site-hostname',
+        type: 'claimed-domain',
         attributes: {
           source_realm_url: sourceRealmURL,
           hostname: hostname,

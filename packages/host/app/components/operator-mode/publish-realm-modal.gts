@@ -35,7 +35,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
-  ClaimedSiteHostname,
+  ClaimedDomain,
   SubdomainAvailabilityResult,
 } from '@cardstack/host/services/realm-server';
 
@@ -70,7 +70,7 @@ export default class PublishRealmModal extends Component<Signature> {
     null;
   @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
-  @tracked private claimedSiteHostname: ClaimedSiteHostname | null = null;
+  @tracked private claimedDomain: ClaimedDomain | null = null;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -94,11 +94,11 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get claimedSitePublishedUrl() {
-    if (!this.claimedSiteHostname) {
+    if (!this.claimedDomain) {
       return null;
     }
 
-    return this.buildPublishedRealmUrl(this.claimedSiteHostname.hostname);
+    return this.buildPublishedRealmUrl(this.claimedDomain.hostname);
   }
 
   get claimedSiteLastPublishedTime() {
@@ -118,7 +118,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get shouldShowUnclaimSiteButton() {
-    return !!this.claimedSiteHostname && !this.isClaimedSitePublished;
+    return !!this.claimedDomain && !this.isClaimedSitePublished;
   }
 
   get isUnclaimSiteButtonDisabled() {
@@ -178,8 +178,8 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get customSubdomainDisplay() {
-    if (this.claimedSiteHostname) {
-      return this.claimedSiteHostname.subdomain;
+    if (this.claimedDomain) {
+      return this.claimedDomain.subdomain;
     }
 
     if (this.customSubdomainSelection?.subdomain) {
@@ -267,8 +267,8 @@ export default class PublishRealmModal extends Component<Signature> {
     this.customSubdomainError = null;
   }
 
-  private applyClaimedSiteHostname(claim: ClaimedSiteHostname | null) {
-    this.claimedSiteHostname = claim;
+  private applyClaimedDomain(claim: ClaimedDomain | null) {
+    this.claimedDomain = claim;
 
     if (claim) {
       this.setCustomSubdomainSelection({
@@ -284,27 +284,25 @@ export default class PublishRealmModal extends Component<Signature> {
 
   private fetchClaimedSite = restartableTask(async () => {
     try {
-      let claimedSite = await this.realmServer.fetchClaimedSiteHostname(
+      let claimedSite = await this.realmServer.fetchClaimedDomain(
         this.currentRealmURL,
       );
-      this.applyClaimedSiteHostname(claimedSite);
+      this.applyClaimedDomain(claimedSite);
     } catch (error) {
-      console.error('Failed to load claimed site hostname', error);
+      console.error('Failed to load claimed domain', error);
     }
   });
 
   private unclaimSiteName = task(async () => {
-    if (!this.claimedSiteHostname) {
+    if (!this.claimedDomain) {
       return;
     }
 
     this.customSubdomainError = null;
 
     try {
-      await this.realmServer.deleteClaimedSiteHostname(
-        this.claimedSiteHostname.id,
-      );
-      this.applyClaimedSiteHostname(null);
+      await this.realmServer.deleteClaimedDomain(this.claimedDomain.id);
+      this.applyClaimedDomain(null);
     } catch (error) {
       console.error('Failed to unclaim site name', error);
       this.customSubdomainError =
@@ -356,9 +354,9 @@ export default class PublishRealmModal extends Component<Signature> {
 
   @action
   toggleCustomSubdomain() {
-    if (this.claimedSiteHostname) {
+    if (this.claimedDomain) {
       const customUrl = this.buildPublishedRealmUrl(
-        this.claimedSiteHostname.hostname,
+        this.claimedDomain.hostname,
       );
       if (!this.selectedPublishedRealmURLs.includes(customUrl)) {
         this.selectedPublishedRealmURLs = [
@@ -435,7 +433,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 };
               };
             };
-            this.applyClaimedSiteHostname({
+            this.applyClaimedDomain({
               id: claimResult.data.id,
               subdomain: claimResult.data.attributes.subdomain,
               hostname: claimResult.data.attributes.hostname,
@@ -590,7 +588,7 @@ export default class PublishRealmModal extends Component<Signature> {
               id='custom-subdomain-checkbox'
               class='domain-checkbox'
               data-test-custom-subdomain-checkbox
-              disabled={{not this.claimedSiteHostname}}
+              disabled={{not this.claimedDomain}}
               {{on 'change' this.toggleCustomSubdomain}}
             />
             <label class='option-title' for='custom-subdomain-checkbox'>Custom
@@ -636,7 +634,7 @@ export default class PublishRealmModal extends Component<Signature> {
                     </BoxelInputGroup>
                   </div>
                 </div>
-              {{else if this.claimedSiteHostname}}
+              {{else if this.claimedDomain}}
                 <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
                   <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
                 </WithLoadedRealm>
@@ -648,7 +646,7 @@ export default class PublishRealmModal extends Component<Signature> {
                       class='url-part'
                     >.{{this.customSubdomainBase}}/</span>
                   </span>
-                  {{#if this.claimedSiteHostname}}
+                  {{#if this.claimedDomain}}
                     <div class='domain-info'>
                       {{#if this.claimedSiteLastPublishedTime}}
                         <span class='last-published-at'>Published
@@ -704,7 +702,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 {{/if}}
               </BoxelButton>
             {{else}}
-              {{#unless this.claimedSiteHostname}}
+              {{#unless this.claimedDomain}}
                 <BoxelButton
                   @kind='secondary-light'
                   @size='small'
