@@ -1,0 +1,138 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Minimal Monochrome",
+      "visualDNA": "Calm grayscale surfaces, modular blocks, and subtle iconography built for focus-first documentation flows.",
+      "inspirations": [
+        "Notion docs",
+        "Linear issue tracker",
+        "Obsidian vaults",
+        "Documentation hubs"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1532153955177-f59af40d6472?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Ideal for wikis, knowledge bases, and productivity canvases that need calm clarity.",
+        "title": "Minimal Monochrome",
+        "description": "A focus-first doc aesthetic with balanced grays, modular blocks, and quiet motion cues.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f5f6f8",
+        "foreground": "#1f2024",
+        "card": "#ffffff",
+        "cardForeground": "#1f2024",
+        "popover": "#edeff2",
+        "popoverForeground": "#1f2024",
+        "primary": "#2f333a",
+        "primaryForeground": "#f8f9fb",
+        "secondary": "#a6adb7",
+        "secondaryForeground": "#1f2024",
+        "muted": "#e3e6ea",
+        "mutedForeground": "#4b4f57",
+        "accent": "#717785",
+        "accentForeground": "#f8f9fb",
+        "destructive": "#c64736",
+        "destructiveForeground": "#fff6f4",
+        "border": "#d7dce3",
+        "input": "#cfd4dc",
+        "ring": "#2f333a",
+        "chart1": "#2f333a",
+        "chart2": "#717785",
+        "chart3": "#a6adb7",
+        "chart4": "#4f9ec4",
+        "chart5": "#7c8cff",
+        "sidebar": "#eef1f5",
+        "sidebarForeground": "#1f2024",
+        "sidebarPrimary": "#2f333a",
+        "sidebarPrimaryForeground": "#f8f9fb",
+        "sidebarAccent": "#a6adb7",
+        "sidebarAccentForeground": "#1f2024",
+        "sidebarBorder": "#d7dce3",
+        "sidebarRing": "#2f333a",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Newsreader', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "12px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(47, 51, 58, 0.05)",
+        "shadowXs": "0 2px 4px rgba(47, 51, 58, 0.08)",
+        "shadowSm": "0 4px 12px rgba(47, 51, 58, 0.1)",
+        "shadow": "0 10px 24px rgba(47, 51, 58, 0.12)",
+        "shadowMd": "0 16px 32px rgba(47, 51, 58, 0.16)",
+        "shadowLg": "0 24px 48px rgba(47, 51, 58, 0.18)",
+        "shadowXl": "0 32px 56px rgba(47, 51, 58, 0.2)",
+        "shadow2xl": "0 40px 72px rgba(47, 51, 58, 0.22)"
+      },
+      "darkModeVariables": {
+        "background": "#121316",
+        "foreground": "#e9ebef",
+        "card": "#1a1c20",
+        "cardForeground": "#e9ebef",
+        "popover": "#202328",
+        "popoverForeground": "#f1f2f6",
+        "primary": "#d0d5de",
+        "primaryForeground": "#101114",
+        "secondary": "#838b98",
+        "secondaryForeground": "#101114",
+        "muted": "#1f2227",
+        "mutedForeground": "#a9afbb",
+        "accent": "#99a2b3",
+        "accentForeground": "#101114",
+        "destructive": "#e06454",
+        "destructiveForeground": "#140806",
+        "border": "#2a2d33",
+        "input": "#262930",
+        "ring": "#d0d5de",
+        "chart1": "#d0d5de",
+        "chart2": "#99a2b3",
+        "chart3": "#838b98",
+        "chart4": "#60b3d7",
+        "chart5": "#7c8cff",
+        "sidebar": "#0f1013",
+        "sidebarForeground": "#e9ebef",
+        "sidebarPrimary": "#d0d5de",
+        "sidebarPrimaryForeground": "#101114",
+        "sidebarAccent": "#838b98",
+        "sidebarAccentForeground": "#f1f2f6",
+        "sidebarBorder": "#20242a",
+        "sidebarRing": "#99a2b3",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Newsreader', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "12px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.45)",
+        "shadowXs": "0 2px 4px rgba(0, 0, 0, 0.5)",
+        "shadowSm": "0 6px 12px rgba(0, 0, 0, 0.55)",
+        "shadow": "0 12px 28px rgba(0, 0, 0, 0.58)",
+        "shadowMd": "0 18px 36px rgba(0, 0, 0, 0.6)",
+        "shadowLg": "0 26px 48px rgba(0, 0, 0, 0.62)",
+        "shadowXl": "0 32px 64px rgba(0, 0, 0, 0.65)",
+        "shadow2xl": "0 40px 80px rgba(0, 0, 0, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
