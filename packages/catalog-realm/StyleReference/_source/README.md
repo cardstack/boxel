@@ -57,11 +57,11 @@ realm expects.
 - [x] 025 Creative Community (Dribbble, Behance, DeviantArt) - Masonry cards, pastel header, infinite scroll, like counters
 - [x] 026 Kaleidoscope Deco (Palace Lido, Tame Impala site, The Great Gatsby 2013) - Art-deco frames, neon jewels, marquee text, ornate borders
 - [x] 027 Raw Commerce (Gumroad, Carrd, Buy Me a Coffee) - Plain HTML, system font, instant checkout, bold links
-- [ ] 028 Swiss-Grid (Dropbox.design, GridSystem.io, Vignelli Center) - 12-column grid, Helvetica, numeric margins, red rules
-- [ ] 029 Swiss Modern (Swiss Air, Lufthansa, SBB Mobile) - ITS grid, left-aligned layouts, airline icons, primary red
-- [ ] 030 Retro Revival (Burger King rebrand, Pepsi Throwback, Pizza Hut Classic) - Brown-orange, chunky Cooper, wavy stripes, grain
-- [ ] 031 Luxury Maximal (LV Dream, Dolce & Gabbana, Versace Home) - Deep blacks, gold accents, flourish borders, luxe serif
-- [ ] 032 Humorous Parallax (Old Spice, Dollar Shave, Liquid Death) - Gag scroll, mascots, explosion GIFs, comic bubbles
+- [x] 028 Swiss-Grid (Dropbox.design, GridSystem.io, Vignelli Center) - 12-column grid, Helvetica, numeric margins, red rules
+- [x] 029 Swiss Modern (Swiss Air, Lufthansa, SBB Mobile) - ITS grid, left-aligned layouts, airline icons, primary red
+- [x] 030 Retro Revival (Burger King rebrand, Pepsi Throwback, Pizza Hut Classic) - Brown-orange, chunky Cooper, wavy stripes, grain
+- [x] 031 Luxury Maximal (LV Dream, Dolce & Gabbana, Versace Home) - Deep blacks, gold accents, flourish borders, luxe serif
+- [x] 032 Humorous Parallax (Old Spice, Dollar Shave, Liquid Death) - Gag scroll, mascots, explosion GIFs, comic bubbles
 - [ ] 033 Campaign 3-D (Heineken Closer, Coke Beat Heat, Nike You Cant Stop Us) - Rotating cans, neon glow, confetti, call-to-action modals
 - [ ] 034 Maker Grid (Kickstarter, Indiegogo, Product Hunt) - Pastels, rounded cards, progress bars, community avatars
 - [ ] 035 Friendly Fintech (Monzo, N26, Cash App) - Punchy coral, emoji icons, clean graphs, rounded sans

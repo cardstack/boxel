@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Humorous Parallax",
+      "visualDNA": "Mascot-driven scroll hijinks, comic-book bursts, and tongue-in-cheek CTA gags stitched into a parallax ride.",
+      "inspirations": [
+        "Old Spice microsites",
+        "Dollar Shave Club launch",
+        "Liquid Death landing pages"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1524242109383-e349707a99e4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&family=Shrikhand&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use oversized speech bubbles, stuntman scroll triggers, and wink-to-camera tooltips.",
+        "title": "Humorous Parallax",
+        "description": "A comedic storytelling shell packed with mascot reveals, comic bubbles, and gag-timed parallax beats.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fff8ee",
+        "foreground": "#1d1308",
+        "card": "#ffffff",
+        "cardForeground": "#1d1308",
+        "popover": "#ffe8c9",
+        "popoverForeground": "#1d1308",
+        "primary": "#ff5d6c",
+        "primaryForeground": "#fff7f9",
+        "secondary": "#ffb347",
+        "secondaryForeground": "#2a1500",
+        "muted": "#ffe0b5",
+        "mutedForeground": "#5c3a24",
+        "accent": "#33c6ff",
+        "accentForeground": "#031924",
+        "destructive": "#ff3366",
+        "destructiveForeground": "#fff5f9",
+        "border": "#f2d5a9",
+        "input": "#ebc999",
+        "ring": "#ff5d6c",
+        "chart1": "#ff5d6c",
+        "chart2": "#ffb347",
+        "chart3": "#33c6ff",
+        "chart4": "#8be34c",
+        "chart5": "#845ef7",
+        "sidebar": "#ffefda",
+        "sidebarForeground": "#1d1308",
+        "sidebarPrimary": "#ff5d6c",
+        "sidebarPrimaryForeground": "#fff7f9",
+        "sidebarAccent": "#ffb347",
+        "sidebarAccentForeground": "#2a1500",
+        "sidebarBorder": "#f2d5a9",
+        "sidebarRing": "#33c6ff",
+        "fontSans": "'Fredoka', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Shrikhand', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "22px",
+        "spacing": "0.26rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 4px rgba(29, 19, 8, 0.06)",
+        "shadowXs": "0 4px 12px rgba(29, 19, 8, 0.08)",
+        "shadowSm": "0 10px 22px rgba(29, 19, 8, 0.1)",
+        "shadow": "0 16px 32px rgba(255, 93, 108, 0.18)",
+        "shadowMd": "0 24px 44px rgba(51, 198, 255, 0.16)",
+        "shadowLg": "0 32px 60px rgba(29, 19, 8, 0.2)",
+        "shadowXl": "0 40px 72px rgba(29, 19, 8, 0.22)",
+        "shadow2xl": "0 48px 88px rgba(29, 19, 8, 0.25)"
+      },
+      "darkModeVariables": {
+        "background": "#140a03",
+        "foreground": "#fbece0",
+        "card": "#1c1106",
+        "cardForeground": "#fbece0",
+        "popover": "#25160a",
+        "popoverForeground": "#fff3ea",
+        "primary": "#ff7590",
+        "primaryForeground": "#24000c",
+        "secondary": "#ffcb65",
+        "secondaryForeground": "#241200",
+        "muted": "#2b190c",
+        "mutedForeground": "#f1cfa9",
+        "accent": "#4ad4ff",
+        "accentForeground": "#02131c",
+        "destructive": "#ff4677",
+        "destructiveForeground": "#2d000b",
+        "border": "#3a2212",
+        "input": "#332010",
+        "ring": "#ff7590",
+        "chart1": "#ff7590",
+        "chart2": "#ffcb65",
+        "chart3": "#4ad4ff",
+        "chart4": "#9bf968",
+        "chart5": "#a98dff",
+        "sidebar": "#110803",
+        "sidebarForeground": "#fbece0",
+        "sidebarPrimary": "#ff7590",
+        "sidebarPrimaryForeground": "#2d000c",
+        "sidebarAccent": "#ffcb65",
+        "sidebarAccentForeground": "#241200",
+        "sidebarBorder": "#332010",
+        "sidebarRing": "#4ad4ff",
+        "fontSans": "'Fredoka', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Shrikhand', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "22px",
+        "spacing": "0.26rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 6px rgba(0, 0, 0, 0.35)",
+        "shadowXs": "0 6px 14px rgba(0, 0, 0, 0.42)",
+        "shadowSm": "0 12px 26px rgba(0, 0, 0, 0.46)",
+        "shadow": "0 20px 40px rgba(255, 117, 144, 0.28)",
+        "shadowMd": "0 28px 52px rgba(74, 212, 255, 0.22)",
+        "shadowLg": "0 36px 64px rgba(0, 0, 0, 0.58)",
+        "shadowXl": "0 44px 78px rgba(0, 0, 0, 0.62)",
+        "shadow2xl": "0 56px 96px rgba(0, 0, 0, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

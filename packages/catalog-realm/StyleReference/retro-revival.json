@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Retro Revival",
+      "visualDNA": "Butterscotch browns, chunky throwback type, and striping accents that cue late-70s fast food nostalgia.",
+      "inspirations": [
+        "Burger King rebrand",
+        "Pepsi Throwback packaging",
+        "Pizza Hut Classic promos"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1500336624523-d727130c3328?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1503602642458-232111445657?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1523365280197-f1783db9fe62?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Lilita+One&family=Work+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Stack badge buttons, throwback coupons, and animated ribbon wipes.",
+        "title": "Retro Revival",
+        "description": "A groovy heritage palette with Cooper-inspired headlines, wavy stripes, and grainy filter overlays.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1500336624523-d727130c3328?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fff4e2",
+        "foreground": "#351c0f",
+        "card": "#ffffff",
+        "cardForeground": "#351c0f",
+        "popover": "#ffe2bf",
+        "popoverForeground": "#351c0f",
+        "primary": "#d65b29",
+        "primaryForeground": "#fff7f1",
+        "secondary": "#f6b73c",
+        "secondaryForeground": "#2a1600",
+        "muted": "#f2d6b8",
+        "mutedForeground": "#5d3c26",
+        "accent": "#3b6c8e",
+        "accentForeground": "#f2f6fa",
+        "destructive": "#c0392b",
+        "destructiveForeground": "#fff4ef",
+        "border": "#e2c5a2",
+        "input": "#d9b890",
+        "ring": "#d65b29",
+        "chart1": "#d65b29",
+        "chart2": "#f6b73c",
+        "chart3": "#3b6c8e",
+        "chart4": "#8bbf47",
+        "chart5": "#ff8d6b",
+        "sidebar": "#ffe8cc",
+        "sidebarForeground": "#2f1a0f",
+        "sidebarPrimary": "#d65b29",
+        "sidebarPrimaryForeground": "#fff7f1",
+        "sidebarAccent": "#f6b73c",
+        "sidebarAccentForeground": "#2a1600",
+        "sidebarBorder": "#e2c5a2",
+        "sidebarRing": "#3b6c8e",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Lilita One', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 4px rgba(53, 28, 15, 0.08)",
+        "shadowXs": "0 4px 12px rgba(53, 28, 15, 0.12)",
+        "shadowSm": "0 10px 22px rgba(53, 28, 15, 0.16)",
+        "shadow": "0 18px 34px rgba(214, 91, 41, 0.18)",
+        "shadowMd": "0 26px 48px rgba(59, 108, 142, 0.18)",
+        "shadowLg": "0 34px 56px rgba(53, 28, 15, 0.22)",
+        "shadowXl": "0 44px 70px rgba(53, 28, 15, 0.25)",
+        "shadow2xl": "0 56px 90px rgba(53, 28, 15, 0.28)"
+      },
+      "darkModeVariables": {
+        "background": "#1b0f05",
+        "foreground": "#f7e7d4",
+        "card": "#251406",
+        "cardForeground": "#f7e7d4",
+        "popover": "#2f1a0a",
+        "popoverForeground": "#ffefdc",
+        "primary": "#ff7d3f",
+        "primaryForeground": "#2a0c00",
+        "secondary": "#ffcb63",
+        "secondaryForeground": "#2f1800",
+        "muted": "#352012",
+        "mutedForeground": "#f3cfa4",
+        "accent": "#4d8ab5",
+        "accentForeground": "#041420",
+        "destructive": "#e74c3c",
+        "destructiveForeground": "#2f0500",
+        "border": "#3b2617",
+        "input": "#322015",
+        "ring": "#ff7d3f",
+        "chart1": "#ff7d3f",
+        "chart2": "#ffcb63",
+        "chart3": "#4d8ab5",
+        "chart4": "#9edb59",
+        "chart5": "#ff9d7a",
+        "sidebar": "#160b03",
+        "sidebarForeground": "#f7e7d4",
+        "sidebarPrimary": "#ff7d3f",
+        "sidebarPrimaryForeground": "#2a0c00",
+        "sidebarAccent": "#ffcb63",
+        "sidebarAccentForeground": "#2f1800",
+        "sidebarBorder": "#322015",
+        "sidebarRing": "#4d8ab5",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Lilita One', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 6px rgba(0, 0, 0, 0.34)",
+        "shadowXs": "0 6px 14px rgba(0, 0, 0, 0.4)",
+        "shadowSm": "0 12px 26px rgba(0, 0, 0, 0.46)",
+        "shadow": "0 20px 38px rgba(255, 125, 63, 0.26)",
+        "shadowMd": "0 30px 52px rgba(77, 138, 181, 0.22)",
+        "shadowLg": "0 38px 68px rgba(0, 0, 0, 0.6)",
+        "shadowXl": "0 48px 82px rgba(0, 0, 0, 0.64)",
+        "shadow2xl": "0 60px 100px rgba(0, 0, 0, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

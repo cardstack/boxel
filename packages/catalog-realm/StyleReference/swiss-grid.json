@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Swiss-Grid",
+      "visualDNA": "Tight baseline systems, Helvetica clarity, and disciplined red bar accents for precision editorial layouts.",
+      "inspirations": [
+        "Dropbox.design system pages",
+        "GridSystem.io specimens",
+        "Vignelli Center archives"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Overlay baseline toggles, typographic scales, and time-stamped caption labels.",
+        "title": "Swiss-Grid",
+        "description": "A modular grid kit with numeric gutters, signaling red rules, and annotated legends.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f5f6f9",
+        "foreground": "#111820",
+        "card": "#ffffff",
+        "cardForeground": "#111820",
+        "popover": "#eef1f6",
+        "popoverForeground": "#111820",
+        "primary": "#d90429",
+        "primaryForeground": "#ffffff",
+        "secondary": "#0f1c2c",
+        "secondaryForeground": "#f5f6f9",
+        "muted": "#e3e6ed",
+        "mutedForeground": "#434b55",
+        "accent": "#1f7aec",
+        "accentForeground": "#ffffff",
+        "destructive": "#ba0000",
+        "destructiveForeground": "#ffffff",
+        "border": "#d0d5de",
+        "input": "#c7ccd6",
+        "ring": "#d90429",
+        "chart1": "#d90429",
+        "chart2": "#1f7aec",
+        "chart3": "#111820",
+        "chart4": "#00a99d",
+        "chart5": "#ffb300",
+        "sidebar": "#eef1f6",
+        "sidebarForeground": "#111820",
+        "sidebarPrimary": "#d90429",
+        "sidebarPrimaryForeground": "#ffffff",
+        "sidebarAccent": "#1f7aec",
+        "sidebarAccentForeground": "#ffffff",
+        "sidebarBorder": "#d0d5de",
+        "sidebarRing": "#d90429",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "8px",
+        "spacing": "0.18rem",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 1px 2px rgba(17, 24, 32, 0.05)",
+        "shadowXs": "0 2px 6px rgba(17, 24, 32, 0.08)",
+        "shadowSm": "0 6px 12px rgba(17, 24, 32, 0.1)",
+        "shadow": "0 12px 20px rgba(17, 24, 32, 0.14)",
+        "shadowMd": "0 18px 30px rgba(17, 24, 32, 0.18)",
+        "shadowLg": "0 26px 38px rgba(17, 24, 32, 0.2)",
+        "shadowXl": "0 34px 48px rgba(17, 24, 32, 0.22)",
+        "shadow2xl": "0 42px 60px rgba(17, 24, 32, 0.24)"
+      },
+      "darkModeVariables": {
+        "background": "#0b1018",
+        "foreground": "#e5ecf5",
+        "card": "#141c26",
+        "cardForeground": "#e5ecf5",
+        "popover": "#19232f",
+        "popoverForeground": "#f1f6ff",
+        "primary": "#ff2444",
+        "primaryForeground": "#250002",
+        "secondary": "#1f3045",
+        "secondaryForeground": "#e5ecf5",
+        "muted": "#1f2a39",
+        "mutedForeground": "#9aa6b6",
+        "accent": "#3c8bff",
+        "accentForeground": "#040a12",
+        "destructive": "#ff4a4a",
+        "destructiveForeground": "#250002",
+        "border": "#273449",
+        "input": "#233042",
+        "ring": "#ff2444",
+        "chart1": "#ff2444",
+        "chart2": "#3c8bff",
+        "chart3": "#e5ecf5",
+        "chart4": "#36d0c4",
+        "chart5": "#ffc857",
+        "sidebar": "#060910",
+        "sidebarForeground": "#e5ecf5",
+        "sidebarPrimary": "#ff2444",
+        "sidebarPrimaryForeground": "#250002",
+        "sidebarAccent": "#3c8bff",
+        "sidebarAccentForeground": "#040a12",
+        "sidebarBorder": "#233042",
+        "sidebarRing": "#ff2444",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "8px",
+        "spacing": "0.18rem",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.32)",
+        "shadowXs": "0 2px 6px rgba(0, 0, 0, 0.36)",
+        "shadowSm": "0 6px 12px rgba(0, 0, 0, 0.4)",
+        "shadow": "0 12px 20px rgba(0, 0, 0, 0.44)",
+        "shadowMd": "0 18px 30px rgba(0, 0, 0, 0.48)",
+        "shadowLg": "0 26px 38px rgba(0, 0, 0, 0.52)",
+        "shadowXl": "0 34px 48px rgba(0, 0, 0, 0.55)",
+        "shadow2xl": "0 44px 64px rgba(0, 0, 0, 0.6)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
