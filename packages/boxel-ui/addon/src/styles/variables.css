@@ -103,6 +103,13 @@
   --boxel-icon-xl: 3.75rem; /* 60px */
   --boxel-icon-xxl: 5rem; /* 80px */
 
+  /* button sizes */
+  --boxel-button-mini: 1.25rem; /* 20px */
+  --boxel-button-xs: 1.5rem; /* 24px */
+  --boxel-button-sm: 1.875rem; /* 30px - base */
+  --boxel-button-tall: 2.5rem; /* 40px */
+  --boxel-button-touch: 3rem; /* 48px */
+
   /* border-color */
   --boxel-border-color: #d3d3d3;
   --boxel-button-border-color: #acacac;
