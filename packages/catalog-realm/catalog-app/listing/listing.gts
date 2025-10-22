@@ -626,6 +626,10 @@ export class SkillListing extends Listing {
   static displayName = 'SkillListing';
 }
 
+export class StyleReferenceListing extends Listing {
+  static displayName = 'StyleReferenceListing';
+}
+
 function specBreakdown(specs: Spec[]): Record<string, Spec[]> {
   return specs.reduce(
     (groupedSpecs, spec) => {

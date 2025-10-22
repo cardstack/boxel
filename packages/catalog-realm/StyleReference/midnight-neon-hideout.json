@@ -1,0 +1,138 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Midnight Neon Hideout",
+      "visualDNA": "Moody synthwave gradients, holographic accents, and glassy panels built for late-night creation sprints. Electric cyan and magenta pulse against deep indigo shadows.",
+      "inspirations": [
+        "Synthwave skylines",
+        "Neon signage",
+        "Night mode workspaces",
+        "Digital clubhouses"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526401485004-46910ecc8e51?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Chivo+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "title": "Midnight Neon Hideout",
+        "description": "A neon-drenched toolkit with glass panels, cyan glows, and analog synth mood.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=600&q=80",
+        "notes": "Ideal for music apps, live collaboration rooms, or nightlife communities."
+      },
+      "rootVariables": {
+        "background": "#11122b",
+        "foreground": "#f3f1ff",
+        "card": "#1b1d3a",
+        "cardForeground": "#f3f1ff",
+        "popover": "#23264a",
+        "popoverForeground": "#fdfcff",
+        "primary": "#8f7dff",
+        "primaryForeground": "#0b0615",
+        "secondary": "#00e5ff",
+        "secondaryForeground": "#06121c",
+        "muted": "#191c36",
+        "mutedForeground": "#9fa4d6",
+        "accent": "#ff61d8",
+        "accentForeground": "#0b0615",
+        "destructive": "#ff4f6d",
+        "destructiveForeground": "#0b0615",
+        "border": "#2c305a",
+        "input": "#222651",
+        "ring": "#8f7dff",
+        "chart1": "#8f7dff",
+        "chart2": "#00e5ff",
+        "chart3": "#ff61d8",
+        "chart4": "#ffb861",
+        "chart5": "#00ff9f",
+        "sidebar": "#0f1126",
+        "sidebarForeground": "#f3f1ff",
+        "sidebarPrimary": "#8f7dff",
+        "sidebarPrimaryForeground": "#0b0615",
+        "sidebarAccent": "#00e5ff",
+        "sidebarAccentForeground": "#06121c",
+        "sidebarBorder": "#24274a",
+        "sidebarRing": "#ff61d8",
+        "fontSans": "'Barlow', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'DM Serif Display', Georgia, serif",
+        "fontMono": "'Chivo Mono', 'JetBrains Mono', monospace",
+        "radius": "20px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.45)",
+        "shadowXs": "0 1px 3px rgba(0, 0, 0, 0.5)",
+        "shadowSm": "0 4px 12px rgba(14, 11, 33, 0.45)",
+        "shadow": "0 10px 32px rgba(14, 11, 33, 0.5)",
+        "shadowMd": "0 18px 48px rgba(14, 11, 33, 0.55)",
+        "shadowLg": "0 24px 64px rgba(14, 11, 33, 0.6)",
+        "shadowXl": "0 32px 80px rgba(14, 11, 33, 0.65)",
+        "shadow2xl": "0 40px 96px rgba(14, 11, 33, 0.7)"
+      },
+      "darkModeVariables": {
+        "background": "#070712",
+        "foreground": "#e7e4ff",
+        "card": "#12132a",
+        "cardForeground": "#f5f3ff",
+        "popover": "#1a1b37",
+        "popoverForeground": "#f7f5ff",
+        "primary": "#a394ff",
+        "primaryForeground": "#070712",
+        "secondary": "#29f5ff",
+        "secondaryForeground": "#021017",
+        "muted": "#141534",
+        "mutedForeground": "#a3a6d8",
+        "accent": "#ff7ae2",
+        "accentForeground": "#070712",
+        "destructive": "#ff6b82",
+        "destructiveForeground": "#070712",
+        "border": "#1f2040",
+        "input": "#191a38",
+        "ring": "#a394ff",
+        "chart1": "#a394ff",
+        "chart2": "#29f5ff",
+        "chart3": "#ff7ae2",
+        "chart4": "#ffce73",
+        "chart5": "#43ffa8",
+        "sidebar": "#050512",
+        "sidebarForeground": "#e7e4ff",
+        "sidebarPrimary": "#a394ff",
+        "sidebarPrimaryForeground": "#050512",
+        "sidebarAccent": "#29f5ff",
+        "sidebarAccentForeground": "#021017",
+        "sidebarBorder": "#151637",
+        "sidebarRing": "#ff7ae2",
+        "fontSans": "'Barlow', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'DM Serif Display', Georgia, serif",
+        "fontMono": "'Chivo Mono', 'JetBrains Mono', monospace",
+        "radius": "20px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.52)",
+        "shadowXs": "0 1px 3px rgba(0, 0, 0, 0.56)",
+        "shadowSm": "0 4px 12px rgba(0, 0, 0, 0.58)",
+        "shadow": "0 10px 32px rgba(0, 0, 0, 0.6)",
+        "shadowMd": "0 18px 48px rgba(0, 0, 0, 0.62)",
+        "shadowLg": "0 24px 64px rgba(0, 0, 0, 0.66)",
+        "shadowXl": "0 32px 80px rgba(0, 0, 0, 0.7)",
+        "shadow2xl": "0 40px 96px rgba(0, 0, 0, 0.72)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Abstract Workspace Pals",
+      "visualDNA": "Friendly geometric shapes, optimistic gradients, and warm light pour across collaborative work surfaces. Soft purples and apricots keep things playful while allowing primary actions to pop. Typography leans modern and upbeat.",
+      "inspirations": [
+        "Playful productivity",
+        "Mid-century geometry",
+        "Soft gradients",
+        "Collaborative workspaces"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1523475472560-d2df97ec485c?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600&family=DM+Serif+Text:ital@0;1&display=swap"
+      ],
+      "cardInfo": {
+        "title": "Abstract Workspace Pals",
+        "description": "A cheerful workspace palette that balances lavender primaries, peach highlights, and pill-shaped shadows.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=600&q=80",
+        "notes": "Pairs well with productivity dashboards or community hubs."
+      },
+      "rootVariables": {
+        "background": "#f7f4ff",
+        "foreground": "#332f63",
+        "card": "#ffffff",
+        "cardForeground": "#403a78",
+        "popover": "#fff7ea",
+        "popoverForeground": "#332f63",
+        "primary": "#6c5ce7",
+        "primaryForeground": "#ffffff",
+        "secondary": "#ffd77a",
+        "secondaryForeground": "#332f63",
+        "muted": "#ebe7ff",
+        "mutedForeground": "#5f5aa2",
+        "accent": "#ff8aa6",
+        "accentForeground": "#361c52",
+        "destructive": "#ff6b6b",
+        "destructiveForeground": "#ffffff",
+        "border": "#d8d2ff",
+        "input": "#d2ccff",
+        "ring": "#6c5ce7",
+        "chart1": "#6c5ce7",
+        "chart2": "#ffd77a",
+        "chart3": "#ff8aa6",
+        "chart4": "#48c0b5",
+        "chart5": "#3a86ff",
+        "sidebar": "#f2edff",
+        "sidebarForeground": "#2b2658",
+        "sidebarPrimary": "#6c5ce7",
+        "sidebarPrimaryForeground": "#ffffff",
+        "sidebarAccent": "#ffcd6b",
+        "sidebarAccentForeground": "#2b2658",
+        "sidebarBorder": "#d8d2ff",
+        "sidebarRing": "#6c5ce7",
+        "fontSans": "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'DM Serif Text', Georgia, serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.25rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(108, 92, 231, 0.12)",
+        "shadowXs": "0 1px 3px rgba(108, 92, 231, 0.18)",
+        "shadowSm": "0 4px 8px rgba(90, 80, 190, 0.12)",
+        "shadow": "0 6px 16px rgba(90, 80, 190, 0.18)",
+        "shadowMd": "0 10px 24px rgba(90, 80, 190, 0.2)",
+        "shadowLg": "0 16px 32px rgba(90, 80, 190, 0.24)",
+        "shadowXl": "0 24px 48px rgba(90, 80, 190, 0.28)",
+        "shadow2xl": "0 32px 60px rgba(90, 80, 190, 0.32)"
+      },
+      "darkModeVariables": {
+        "background": "#221d3c",
+        "foreground": "#e3dcff",
+        "card": "#2d2752",
+        "cardForeground": "#f1ecff",
+        "popover": "#342d5f",
+        "popoverForeground": "#f5f1ff",
+        "primary": "#a998ff",
+        "primaryForeground": "#221d3c",
+        "secondary": "#ffb75d",
+        "secondaryForeground": "#2d2752",
+        "muted": "#39335f",
+        "mutedForeground": "#bbb5e6",
+        "accent": "#ff82c2",
+        "accentForeground": "#221d3c",
+        "destructive": "#ff7a8a",
+        "destructiveForeground": "#1c1432",
+        "border": "#4a4381",
+        "input": "#443d76",
+        "ring": "#a998ff",
+        "chart1": "#a998ff",
+        "chart2": "#ffb75d",
+        "chart3": "#ff82c2",
+        "chart4": "#5be7c0",
+        "chart5": "#57a1ff",
+        "sidebar": "#1c1734",
+        "sidebarForeground": "#e3dcff",
+        "sidebarPrimary": "#a998ff",
+        "sidebarPrimaryForeground": "#1c1734",
+        "sidebarAccent": "#ffb75d",
+        "sidebarAccentForeground": "#1c1734",
+        "sidebarBorder": "#453e72",
+        "sidebarRing": "#a998ff",
+        "fontSans": "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'DM Serif Text', Georgia, serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.25rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(17, 10, 36, 0.4)",
+        "shadowXs": "0 1px 3px rgba(17, 10, 36, 0.45)",
+        "shadowSm": "0 4px 8px rgba(17, 10, 36, 0.5)",
+        "shadow": "0 6px 16px rgba(17, 10, 36, 0.55)",
+        "shadowMd": "0 10px 24px rgba(17, 10, 36, 0.6)",
+        "shadowLg": "0 16px 32px rgba(17, 10, 36, 0.65)",
+        "shadowXl": "0 24px 48px rgba(17, 10, 36, 0.7)",
+        "shadow2xl": "0 32px 60px rgba(17, 10, 36, 0.75)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
