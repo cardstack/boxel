@@ -44,6 +44,7 @@ import {
   type LooseCardResource,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import {
@@ -997,6 +998,9 @@ export default class StoreService extends Service implements StoreInterface {
     let json = await this.cardService.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(doc, null, 2),
+      headers: {
+        'Content-Type': SupportedMimeType.CardJson,
+      },
     });
     if (!isSingleCardDocument(json)) {
       throw new Error(
