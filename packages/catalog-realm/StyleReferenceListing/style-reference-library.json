@@ -1,0 +1,83 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StyleReferenceListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Style Reference Library",
+      "images": [
+        "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1582719478181-2cf4e7bda3a0?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "summary": "A curated set of themed **Style Reference** cards that package visual DNA copy, inspiration tags, and synchronized light/dark design tokens. Use them to seed new products, remix palettes, or hand teammates a ready-to-go art direction.",
+      "cardInfo": {
+        "notes": "Each reference includes paired CSS variables, inspiration tags, and wallpapers for instant context.",
+        "title": "Style Reference Library",
+        "description": "Visual language kits for quickly aligning teams on color, mood, and typography across light and dark modes.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=600&q=80"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/style-reference"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../StyleReference/abstract-workspace-pals"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../StyleReference/digital-bauhaus-atelier"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../StyleReference/midnight-neon-hideout"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/design-creative"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

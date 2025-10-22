@@ -66,6 +66,10 @@ class Isolated extends Component<typeof Catalog> {
       tabId: 'skill',
       displayName: 'Skills',
     },
+    {
+      tabId: 'styleReference',
+      displayName: 'Style References',
+    },
   ];
 
   @tracked activeTabId: string = this.tabFilterOptions[0].tabId;

@@ -1,0 +1,138 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Digital Bauhaus Atelier",
+      "visualDNA": "Punchy primaries, strict grids, and industrial typography translate Bauhaus poster energy into a modern visual system built for prototyping studios.",
+      "inspirations": [
+        "Bauhaus print design",
+        "Primary color blocking",
+        "Grid-first composition",
+        "Creative studio workflows"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1582719478181-2cf4e7bda3a0?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1529429617124-aee3f4f3e4b1?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "title": "Digital Bauhaus Atelier",
+        "description": "A structural palette of vivid orange, cobalt, and golden accent blocks anchored by soft cream surfaces.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1582719478181-2cf4e7bda3a0?auto=format&fit=crop&w=600&q=80",
+        "notes": "Perfect for design tooling, creative networks, or editorial dashboards."
+      },
+      "rootVariables": {
+        "background": "#fef6ec",
+        "foreground": "#1f1c1a",
+        "card": "#ffffff",
+        "cardForeground": "#1f1f1f",
+        "popover": "#fff0d5",
+        "popoverForeground": "#1f1c1a",
+        "primary": "#ff6f3c",
+        "primaryForeground": "#1f1c1a",
+        "secondary": "#2f5bea",
+        "secondaryForeground": "#fef6ec",
+        "muted": "#f3ede4",
+        "mutedForeground": "#4b4642",
+        "accent": "#ffd23f",
+        "accentForeground": "#1f1c1a",
+        "destructive": "#d7263d",
+        "destructiveForeground": "#ffffff",
+        "border": "#ded6cc",
+        "input": "#f1e4d5",
+        "ring": "#ff6f3c",
+        "chart1": "#ff6f3c",
+        "chart2": "#2f5bea",
+        "chart3": "#ffd23f",
+        "chart4": "#00a5cf",
+        "chart5": "#1f1f1f",
+        "sidebar": "#fbeedb",
+        "sidebarForeground": "#1f1c1a",
+        "sidebarPrimary": "#2f5bea",
+        "sidebarPrimaryForeground": "#fef6ec",
+        "sidebarAccent": "#ffd23f",
+        "sidebarAccentForeground": "#1f1c1a",
+        "sidebarBorder": "#e6ddcf",
+        "sidebarRing": "#ff6f3c",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'DM Serif Text', Georgia, serif",
+        "fontMono": "'IBM Plex Mono', 'JetBrains Mono', monospace",
+        "radius": "12px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.005em",
+        "shadow2xs": "0 1px 2px rgba(31, 28, 26, 0.08)",
+        "shadowXs": "0 1px 3px rgba(31, 28, 26, 0.12)",
+        "shadowSm": "0 2px 6px rgba(31, 28, 26, 0.16)",
+        "shadow": "0 6px 18px rgba(31, 28, 26, 0.18)",
+        "shadowMd": "0 10px 28px rgba(31, 28, 26, 0.22)",
+        "shadowLg": "0 16px 36px rgba(31, 28, 26, 0.25)",
+        "shadowXl": "0 24px 48px rgba(31, 28, 26, 0.28)",
+        "shadow2xl": "0 32px 60px rgba(31, 28, 26, 0.32)"
+      },
+      "darkModeVariables": {
+        "background": "#14131a",
+        "foreground": "#f5f1ea",
+        "card": "#1d1b22",
+        "cardForeground": "#f5f1ea",
+        "popover": "#232028",
+        "popoverForeground": "#f5f1ea",
+        "primary": "#ff8d55",
+        "primaryForeground": "#14131a",
+        "secondary": "#4a78ff",
+        "secondaryForeground": "#fef6ec",
+        "muted": "#26242d",
+        "mutedForeground": "#bbb6ae",
+        "accent": "#ffd23f",
+        "accentForeground": "#1f1c1a",
+        "destructive": "#ff5555",
+        "destructiveForeground": "#14131a",
+        "border": "#2e2b34",
+        "input": "#2a2730",
+        "ring": "#ff8d55",
+        "chart1": "#ff8d55",
+        "chart2": "#4a78ff",
+        "chart3": "#ffd23f",
+        "chart4": "#19b9e9",
+        "chart5": "#f5f1ea",
+        "sidebar": "#18171f",
+        "sidebarForeground": "#f5f1ea",
+        "sidebarPrimary": "#4a78ff",
+        "sidebarPrimaryForeground": "#fef6ec",
+        "sidebarAccent": "#ffd23f",
+        "sidebarAccentForeground": "#1f1c1a",
+        "sidebarBorder": "#2a2730",
+        "sidebarRing": "#ff8d55",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'DM Serif Text', Georgia, serif",
+        "fontMono": "'IBM Plex Mono', 'JetBrains Mono', monospace",
+        "radius": "12px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.005em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.3)",
+        "shadowXs": "0 1px 3px rgba(0, 0, 0, 0.35)",
+        "shadowSm": "0 2px 6px rgba(0, 0, 0, 0.4)",
+        "shadow": "0 6px 18px rgba(0, 0, 0, 0.45)",
+        "shadowMd": "0 10px 28px rgba(0, 0, 0, 0.5)",
+        "shadowLg": "0 16px 36px rgba(0, 0, 0, 0.55)",
+        "shadowXl": "0 24px 48px rgba(0, 0, 0, 0.6)",
+        "shadow2xl": "0 32px 60px rgba(0, 0, 0, 0.65)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

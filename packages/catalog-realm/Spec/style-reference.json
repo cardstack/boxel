@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "Style Reference cards capture an opinionated visual system—including inspiration tags, visual DNA copy, and paired light/dark design tokens—so they can be shared or remixed across apps.",
+      "ref": {
+        "module": "https://cardstack.com/base/style-reference",
+        "name": "default"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Style Reference",
+      "description": "Card for sharing curated themes with visual DNA and CSS variables.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1526498460520-4c246339dccb?auto=format&fit=crop&w=600&q=80"
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
