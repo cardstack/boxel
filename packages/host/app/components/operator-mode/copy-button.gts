@@ -196,8 +196,7 @@ export default class CopyButton extends Component<Signature> {
         if (!sourceCard) {
           return undefined;
         }
-        let sourceStackIndex =
-          indexCardIndicies[0] === LEFT ? RIGHT : LEFT;
+        let sourceStackIndex = indexCardIndicies[0] === LEFT ? RIGHT : LEFT;
         let sourceItem = topMostStackItems[sourceStackIndex];
         let destinationItem = topMostStackItems[
           indexCardIndicies[0]
