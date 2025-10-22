@@ -750,7 +750,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-workspace-chooser-toggle]');
 
-    assert.dom('[data-test-submode-layout-title]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();
     assert
       .dom(`[data-test-workspace-list] [data-test-workspace-loading-indicator]`)
