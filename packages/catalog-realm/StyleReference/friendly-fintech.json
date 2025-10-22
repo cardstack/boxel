@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Friendly Fintech",
+      "visualDNA": "Punchy coral highlights, round data cards, and emoji-forward CTAs for approachable finance tools.",
+      "inspirations": [
+        "Monzo app",
+        "Cash App stories",
+        "N26 onboarding"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521543833715-744428103cad?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;600&family=Source+Serif+Pro:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Build for budgeting workflows, savings journeys, and referral dashboards.",
+        "title": "Friendly Fintech",
+        "description": "A cheerful fintech kit with animated balance chips, shareable insights, and inclusive illustrations.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f5fbff",
+        "foreground": "#102435",
+        "card": "#ffffff",
+        "cardForeground": "#12344d",
+        "popover": "#e8f3ff",
+        "popoverForeground": "#102435",
+        "primary": "#2563eb",
+        "primaryForeground": "#f5fbff",
+        "secondary": "#35a0ae",
+        "secondaryForeground": "#041a1f",
+        "muted": "#e2f0ff",
+        "mutedForeground": "#365f7c",
+        "accent": "#f97316",
+        "accentForeground": "#1f1200",
+        "destructive": "#e23d3d",
+        "destructiveForeground": "#fff5f5",
+        "border": "#cfe4ff",
+        "input": "#bfd4f5",
+        "ring": "#2563eb",
+        "chart1": "#2563eb",
+        "chart2": "#35a0ae",
+        "chart3": "#f97316",
+        "chart4": "#22c55e",
+        "chart5": "#9333ea",
+        "sidebar": "#eef6ff",
+        "sidebarForeground": "#102435",
+        "sidebarPrimary": "#2563eb",
+        "sidebarPrimaryForeground": "#f5fbff",
+        "sidebarAccent": "#35a0ae",
+        "sidebarAccentForeground": "#041a1f",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Atkinson Hyperlegible', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Source Serif Pro', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 1px 2px rgba(37, 99, 235, 0.08)",
+        "shadowXs": "0 2px 6px rgba(16, 36, 53, 0.12)",
+        "shadowSm": "0 4px 12px rgba(16, 36, 53, 0.14)",
+        "shadow": "0 8px 20px rgba(16, 36, 53, 0.16)",
+        "shadowMd": "0 12px 28px rgba(37, 99, 235, 0.18)",
+        "shadowLg": "0 18px 36px rgba(16, 36, 53, 0.2)",
+        "shadowXl": "0 24px 48px rgba(16, 36, 53, 0.22)",
+        "shadow2xl": "0 32px 64px rgba(16, 36, 53, 0.24)"
+      },
+      "darkModeVariables": {
+        "background": "#0b1723",
+        "foreground": "#e5f3ff",
+        "card": "#122337",
+        "cardForeground": "#e5f3ff",
+        "popover": "#142a42",
+        "popoverForeground": "#e5f3ff",
+        "primary": "#4f8dff",
+        "primaryForeground": "#061326",
+        "secondary": "#2cc6d8",
+        "secondaryForeground": "#021217",
+        "muted": "#1a314b",
+        "mutedForeground": "#93c8e8",
+        "accent": "#fb923c",
+        "accentForeground": "#210f02",
+        "destructive": "#f87171",
+        "destructiveForeground": "#220607",
+        "border": "#1a314b",
+        "input": "#1a314b",
+        "ring": "#4f8dff",
+        "chart1": "#4f8dff",
+        "chart2": "#2cc6d8",
+        "chart3": "#fb923c",
+        "chart4": "#34d399",
+        "chart5": "#a855f7",
+        "sidebar": "#0a1522",
+        "sidebarForeground": "#e5f3ff",
+        "sidebarPrimary": "#4f8dff",
+        "sidebarPrimaryForeground": "#061326",
+        "sidebarAccent": "#2cc6d8",
+        "sidebarAccentForeground": "#021217",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Atkinson Hyperlegible', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Source Serif Pro', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 2px 4px rgba(15, 38, 60, 0.35)",
+        "shadowXs": "0 6px 10px rgba(15, 38, 60, 0.4)",
+        "shadowSm": "0 10px 18px rgba(15, 38, 60, 0.45)",
+        "shadow": "0 16px 28px rgba(79, 141, 255, 0.28)",
+        "shadowMd": "0 24px 40px rgba(44, 198, 216, 0.24)",
+        "shadowLg": "0 32px 56px rgba(10, 21, 34, 0.54)",
+        "shadowXl": "0 40px 72px rgba(10, 21, 34, 0.6)",
+        "shadow2xl": "0 48px 90px rgba(10, 21, 34, 0.65)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

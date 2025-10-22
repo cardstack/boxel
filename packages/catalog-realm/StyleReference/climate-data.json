@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Climate Data",
+      "visualDNA": "Urgent reds, stacked anomaly charts, and real-time counters for climate storytelling.",
+      "inspirations": [
+        "Carbon clock dashboards",
+        "NOAA climate briefs",
+        "CO2 countdown widgets"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1505739671864-9e7b32f7a3c5?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Serif:wght@500&family=Space+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Great for impact reports, emission trackers, and sustainability data rooms.",
+        "title": "Climate Data",
+        "description": "A high-alert dashboard palette with heat gradients, ticker counters, and layerable charts.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fff6f3",
+        "foreground": "#2b1211",
+        "card": "#ffffff",
+        "cardForeground": "#2b1211",
+        "popover": "#ffe7df",
+        "popoverForeground": "#2b1211",
+        "primary": "#e11d48",
+        "primaryForeground": "#fff7f8",
+        "secondary": "#fb923c",
+        "secondaryForeground": "#230b02",
+        "muted": "#ffe3db",
+        "mutedForeground": "#8c463a",
+        "accent": "#0ea5e9",
+        "accentForeground": "#011c26",
+        "destructive": "#ef4444",
+        "destructiveForeground": "#fff6f6",
+        "border": "#f7c9bc",
+        "input": "#efbbaa",
+        "ring": "#e11d48",
+        "chart1": "#e11d48",
+        "chart2": "#fb923c",
+        "chart3": "#0ea5e9",
+        "chart4": "#22d3ee",
+        "chart5": "#facc15",
+        "sidebar": "#ffefe7",
+        "sidebarForeground": "#2b1211",
+        "sidebarPrimary": "#e11d48",
+        "sidebarPrimaryForeground": "#fff7f8",
+        "sidebarAccent": "#fb923c",
+        "sidebarAccentForeground": "#230b02",
+        "sidebarBorder": "#f7c9bc",
+        "sidebarRing": "#e11d48",
+        "fontSans": "'IBM Plex Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Serif', 'Times New Roman', serif",
+        "fontMono": "'Space Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.012em",
+        "shadow2xs": "0 1px 2px rgba(225, 29, 72, 0.1)",
+        "shadowXs": "0 2px 6px rgba(43, 18, 17, 0.12)",
+        "shadowSm": "0 6px 12px rgba(43, 18, 17, 0.14)",
+        "shadow": "0 12px 22px rgba(43, 18, 17, 0.16)",
+        "shadowMd": "0 18px 32px rgba(225, 29, 72, 0.2)",
+        "shadowLg": "0 24px 44px rgba(43, 18, 17, 0.22)",
+        "shadowXl": "0 32px 60px rgba(43, 18, 17, 0.24)",
+        "shadow2xl": "0 40px 76px rgba(43, 18, 17, 0.26)"
+      },
+      "darkModeVariables": {
+        "background": "#140507",
+        "foreground": "#ffe6e9",
+        "card": "#1d0a0c",
+        "cardForeground": "#ffe6e9",
+        "popover": "#250f11",
+        "popoverForeground": "#ffeef1",
+        "primary": "#fb3f6b",
+        "primaryForeground": "#240008",
+        "secondary": "#ff9b45",
+        "secondaryForeground": "#2a0d02",
+        "muted": "#2a1316",
+        "mutedForeground": "#e7a8a3",
+        "accent": "#3bc9ff",
+        "accentForeground": "#04121a",
+        "destructive": "#ff6470",
+        "destructiveForeground": "#270208",
+        "border": "#2d1619",
+        "input": "#2d1619",
+        "ring": "#fb3f6b",
+        "chart1": "#fb3f6b",
+        "chart2": "#ff9b45",
+        "chart3": "#3bc9ff",
+        "chart4": "#38d6ef",
+        "chart5": "#ffd447",
+        "sidebar": "#0f0405",
+        "sidebarForeground": "#ffe6e9",
+        "sidebarPrimary": "#fb3f6b",
+        "sidebarPrimaryForeground": "#240008",
+        "sidebarAccent": "#ff9b45",
+        "sidebarAccentForeground": "#2a0d02",
+        "sidebarBorder": "#2d1619",
+        "sidebarRing": "#fb3f6b",
+        "fontSans": "'IBM Plex Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Serif', 'Times New Roman', serif",
+        "fontMono": "'Space Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.012em",
+        "shadow2xs": "0 1px 2px rgba(251, 63, 107, 0.18)",
+        "shadowXs": "0 2px 6px rgba(20, 5, 7, 0.45)",
+        "shadowSm": "0 6px 12px rgba(20, 5, 7, 0.5)",
+        "shadow": "0 10px 24px rgba(20, 5, 7, 0.56)",
+        "shadowMd": "0 16px 32px rgba(251, 63, 107, 0.28)",
+        "shadowLg": "0 24px 48px rgba(20, 5, 7, 0.6)",
+        "shadowXl": "0 32px 64px rgba(20, 5, 7, 0.64)",
+        "shadow2xl": "0 40px 78px rgba(20, 5, 7, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
