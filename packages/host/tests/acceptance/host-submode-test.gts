@@ -937,21 +937,21 @@ module('Acceptance | host submode', function (hooks) {
 
       test('claimed custom site name displays details and reverts after unclaim', async function (assert) {
         let realmServer = getService('realm-server') as any;
-        let originalFetchClaimed = realmServer.fetchClaimedDomain;
-        let originalDeleteClaimed = realmServer.deleteClaimedDomain;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+        let originalDeleteClaimed = realmServer.deleteBoxelClaimedDomain;
 
         let deleteCalled = false;
 
-        realmServer.fetchClaimedDomain = async () => ({
+        realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
           hostname: 'custom-site-name.localhost:4201',
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
 
-        realmServer.deleteClaimedDomain = async () => {
+        realmServer.deleteBoxelClaimedDomain = async () => {
           deleteCalled = true;
-          realmServer.fetchClaimedDomain = async () => null;
+          realmServer.fetchBoxelClaimedDomain = async () => null;
         };
 
         try {
@@ -1008,8 +1008,8 @@ module('Acceptance | host submode', function (hooks) {
               'displays placeholder custom site URL after unclaim',
             );
         } finally {
-          realmServer.fetchClaimedDomain = originalFetchClaimed;
-          realmServer.deleteClaimedDomain = originalDeleteClaimed;
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
+          realmServer.deleteBoxelClaimedDomain = originalDeleteClaimed;
         }
       });
     });

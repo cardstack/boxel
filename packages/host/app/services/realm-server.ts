@@ -540,7 +540,7 @@ export default class RealmServerService extends Service {
     return response.json();
   }
 
-  async checkSiteNameAvailability(
+  async checkDomainAvailability(
     subdomain: string,
   ): Promise<SubdomainAvailabilityResult> {
     await this.login();
@@ -565,7 +565,7 @@ export default class RealmServerService extends Service {
     return (await response.json()) as SubdomainAvailabilityResult;
   }
 
-  async fetchClaimedDomain(
+  async fetchBoxelClaimedDomain(
     sourceRealmURL: string,
   ): Promise<ClaimedDomain | null> {
     await this.login();
@@ -612,7 +612,7 @@ export default class RealmServerService extends Service {
     };
   }
 
-  async deleteClaimedDomain(claimedDomainId: string): Promise<void> {
+  async deleteBoxelClaimedDomain(claimedDomainId: string): Promise<void> {
     await this.login();
 
     let response = await this.authedFetch(

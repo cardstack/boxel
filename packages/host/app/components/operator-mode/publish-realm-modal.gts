@@ -12,7 +12,7 @@ import Settings from '@cardstack/boxel-icons/settings';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import { formatDistanceToNow } from 'date-fns';
-import { restartableTask, task } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 
@@ -74,7 +74,7 @@ export default class PublishRealmModal extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    this.fetchClaimedSite.perform();
+    this.fetchBoxelClaimedDomain.perform();
   }
 
   get isRealmPublished() {
@@ -93,7 +93,7 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.getFormattedLastPublishedTime(this.generatedUrl);
   }
 
-  get claimedSitePublishedUrl() {
+  get claimedDomainPublishedUrl() {
     if (!this.claimedDomain) {
       return null;
     }
@@ -101,29 +101,29 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.buildPublishedRealmUrl(this.claimedDomain.hostname);
   }
 
-  get claimedSiteLastPublishedTime() {
-    if (!this.claimedSitePublishedUrl) {
+  get claimedDomainLastPublishedTime() {
+    if (!this.claimedDomainPublishedUrl) {
       return null;
     }
 
-    return this.getFormattedLastPublishedTime(this.claimedSitePublishedUrl);
+    return this.getFormattedLastPublishedTime(this.claimedDomainPublishedUrl);
   }
 
-  get isClaimedSitePublished() {
-    if (!this.claimedSitePublishedUrl) {
+  get isClaimedDomainPublished() {
+    if (!this.claimedDomainPublishedUrl) {
       return false;
     }
 
-    return !!this.getLastPublishedTimestamp(this.claimedSitePublishedUrl);
+    return !!this.getLastPublishedTimestamp(this.claimedDomainPublishedUrl);
   }
 
-  get shouldShowUnclaimSiteButton() {
-    return !!this.claimedDomain && !this.isClaimedSitePublished;
+  get shouldShowUnclaimDomainButton() {
+    return !!this.claimedDomain && !this.isClaimedDomainPublished;
   }
 
-  get isUnclaimSiteButtonDisabled() {
+  get isUnclaimDomainButtonDisabled() {
     return (
-      this.unclaimSiteName.isRunning ||
+      this.handleUnclaimCustomSubdomainTask.isRunning ||
       this.isUnpublishingAnyRealms ||
       this.isPublishing
     );
@@ -282,18 +282,18 @@ export default class PublishRealmModal extends Component<Signature> {
     }
   }
 
-  private fetchClaimedSite = restartableTask(async () => {
+  private fetchBoxelClaimedDomain = restartableTask(async () => {
     try {
-      let claimedSite = await this.realmServer.fetchClaimedDomain(
+      let claimedDomain = await this.realmServer.fetchBoxelClaimedDomain(
         this.currentRealmURL,
       );
-      this.applyClaimedDomain(claimedSite);
+      this.applyClaimedDomain(claimedDomain);
     } catch (error) {
       console.error('Failed to load claimed domain', error);
     }
   });
 
-  private unclaimSiteName = task(async () => {
+  private handleUnclaimCustomSubdomainTask = restartableTask(async () => {
     if (!this.claimedDomain) {
       return;
     }
@@ -301,7 +301,7 @@ export default class PublishRealmModal extends Component<Signature> {
     this.customSubdomainError = null;
 
     try {
-      await this.realmServer.deleteClaimedDomain(this.claimedDomain.id);
+      await this.realmServer.deleteBoxelClaimedDomain(this.claimedDomain.id);
       this.applyClaimedDomain(null);
     } catch (error) {
       console.error('Failed to unclaim site name', error);
@@ -408,8 +408,7 @@ export default class PublishRealmModal extends Component<Signature> {
       this.clearCustomSubdomainFeedback();
 
       try {
-        let result =
-          await this.realmServer.checkSiteNameAvailability(subdomain);
+        let result = await this.realmServer.checkDomainAvailability(subdomain);
         this.customSubdomainAvailability = result;
 
         if (result.available) {
@@ -463,11 +462,6 @@ export default class PublishRealmModal extends Component<Signature> {
       }
     },
   );
-
-  @action
-  handleUnclaimSiteName() {
-    this.unclaimSiteName.perform();
-  }
 
   @action
   handleOpenSite() {
@@ -648,22 +642,27 @@ export default class PublishRealmModal extends Component<Signature> {
                   </span>
                   {{#if this.claimedDomain}}
                     <div class='domain-info'>
-                      {{#if this.claimedSiteLastPublishedTime}}
+                      {{#if this.claimedDomainLastPublishedTime}}
                         <span class='last-published-at'>Published
-                          {{this.claimedSiteLastPublishedTime}}</span>
+                          {{this.claimedDomainLastPublishedTime}}</span>
                       {{else}}
                         <span class='not-published-yet'>Not published yet</span>
                       {{/if}}
-                      {{#if this.shouldShowUnclaimSiteButton}}
+                      {{#if this.shouldShowUnclaimDomainButton}}
                         <BoxelButton
                           @kind='text-only'
                           @size='extra-small'
                           class='unpublish-button unclaim-button'
-                          @disabled={{this.isUnclaimSiteButtonDisabled}}
-                          {{on 'click' this.handleUnclaimSiteName}}
+                          @disabled={{this.isUnclaimDomainButtonDisabled}}
+                          {{on
+                            'click'
+                            (perform this.handleUnclaimCustomSubdomainTask)
+                          }}
                           data-test-unclaim-custom-subdomain-button
                         >
-                          {{#if this.unclaimSiteName.isRunning}}
+                          {{#if
+                            this.handleUnclaimCustomSubdomainTask.isRunning
+                          }}
                             <LoadingIndicator />
                             Unclaiming…
                           {{else}}
