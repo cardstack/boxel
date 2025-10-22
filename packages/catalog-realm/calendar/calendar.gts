@@ -24,6 +24,7 @@ import { cached } from '@glimmer/tracking';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common';
+import type Owner from '@ember/owner';
 
 // Simple date formatting helper for calendar
 function formatCalendarDate(
@@ -458,7 +459,7 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
   @tracked newEventIsAllDay = false;
   @tracked newEventType = 'meeting';
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     // ¹² Initialize from model data
     if (this.args.model?.month && this.args.model?.year) {
