@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Dark Cinematic",
+      "visualDNA": "Black-screen hero rails, neon accent glows, and trailer hover reels shaped for streaming hubs.",
+      "inspirations": [
+        "Netflix UI",
+        "HBO Max galleries",
+        "Apple TV+ promos"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Unna:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Great for streaming guides, film drops, or episodic storytelling dashboards.",
+        "title": "Dark Cinematic",
+        "description": "A marquee streaming shell with poster grids, hover trailers, and spotlight typography.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0c101a",
+        "foreground": "#f2f5ff",
+        "card": "#141a29",
+        "cardForeground": "#f2f5ff",
+        "popover": "#1a2234",
+        "popoverForeground": "#f7f9ff",
+        "primary": "#e50914",
+        "primaryForeground": "#070305",
+        "secondary": "#5865f2",
+        "secondaryForeground": "#070d2a",
+        "muted": "#111626",
+        "mutedForeground": "#9aa5c2",
+        "accent": "#ffbb33",
+        "accentForeground": "#201300",
+        "destructive": "#ff4f5e",
+        "destructiveForeground": "#070205",
+        "border": "#1f2739",
+        "input": "#1b2335",
+        "ring": "#e50914",
+        "chart1": "#e50914",
+        "chart2": "#5865f2",
+        "chart3": "#ffbb33",
+        "chart4": "#2fe0c8",
+        "chart5": "#ff6fd8",
+        "sidebar": "#090d16",
+        "sidebarForeground": "#f2f5ff",
+        "sidebarPrimary": "#e50914",
+        "sidebarPrimaryForeground": "#070305",
+        "sidebarAccent": "#5865f2",
+        "sidebarAccentForeground": "#070d2a",
+        "sidebarBorder": "#1f2739",
+        "sidebarRing": "#e50914",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Unna', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 4px rgba(0, 0, 0, 0.32)",
+        "shadowXs": "0 6px 16px rgba(0, 0, 0, 0.42)",
+        "shadowSm": "0 12px 28px rgba(0, 0, 0, 0.46)",
+        "shadow": "0 20px 40px rgba(0, 0, 0, 0.5)",
+        "shadowMd": "0 28px 56px rgba(0, 0, 0, 0.54)",
+        "shadowLg": "0 36px 68px rgba(0, 0, 0, 0.58)",
+        "shadowXl": "0 48px 96px rgba(0, 0, 0, 0.62)",
+        "shadow2xl": "0 60px 120px rgba(0, 0, 0, 0.65)"
+      },
+      "darkModeVariables": {
+        "background": "#070910",
+        "foreground": "#e8ecff",
+        "card": "#0f141f",
+        "cardForeground": "#e8ecff",
+        "popover": "#161d2b",
+        "popoverForeground": "#f2f5ff",
+        "primary": "#f03c46",
+        "primaryForeground": "#120203",
+        "secondary": "#7882ff",
+        "secondaryForeground": "#0a102d",
+        "muted": "#141b2b",
+        "mutedForeground": "#b1bad3",
+        "accent": "#ffd45d",
+        "accentForeground": "#221800",
+        "destructive": "#ff6270",
+        "destructiveForeground": "#150204",
+        "border": "#1b2232",
+        "input": "#181f30",
+        "ring": "#f03c46",
+        "chart1": "#f03c46",
+        "chart2": "#7882ff",
+        "chart3": "#ffd45d",
+        "chart4": "#4de8d2",
+        "chart5": "#ff8be0",
+        "sidebar": "#05070d",
+        "sidebarForeground": "#e8ecff",
+        "sidebarPrimary": "#f03c46",
+        "sidebarPrimaryForeground": "#150204",
+        "sidebarAccent": "#7882ff",
+        "sidebarAccentForeground": "#0b1130",
+        "sidebarBorder": "#181f30",
+        "sidebarRing": "#f03c46",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Unna', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 4px rgba(0, 0, 0, 0.4)",
+        "shadowXs": "0 6px 16px rgba(0, 0, 0, 0.48)",
+        "shadowSm": "0 12px 28px rgba(0, 0, 0, 0.52)",
+        "shadow": "0 20px 40px rgba(0, 0, 0, 0.56)",
+        "shadowMd": "0 28px 56px rgba(0, 0, 0, 0.6)",
+        "shadowLg": "0 36px 68px rgba(0, 0, 0, 0.64)",
+        "shadowXl": "0 48px 96px rgba(0, 0, 0, 0.68)",
+        "shadow2xl": "0 60px 120px rgba(0, 0, 0, 0.72)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
