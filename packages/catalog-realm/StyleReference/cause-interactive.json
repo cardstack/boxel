@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Cause Interactive",
+      "visualDNA": "Ripple gradients, donation meters, and empathetic photography designed for impact storytelling.",
+      "inspirations": [
+        "UNICEF tap to donate",
+        "Charity: water live dashboards",
+        "GoFundMe community drives"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526312426976-f4d754fa9bd6?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1498550744921-75f79806b8a7?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Nunito:wght@400;600&family=Crimson+Text:wght@500&family=JetBrains+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Add donation thermometers, volunteer mosaics, and animated ripple cursors.",
+        "title": "Cause Interactive",
+        "description": "A mission-first kit with ripple highlights, transparent meters, and hopeful action copy.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f3fbff",
+        "foreground": "#082432",
+        "card": "#ffffff",
+        "cardForeground": "#082432",
+        "popover": "#e6f6ff",
+        "popoverForeground": "#082432",
+        "primary": "#00a5c8",
+        "primaryForeground": "#effcff",
+        "secondary": "#12d6a3",
+        "secondaryForeground": "#012018",
+        "muted": "#d9f5ff",
+        "mutedForeground": "#327a8d",
+        "accent": "#ffc857",
+        "accentForeground": "#211400",
+        "destructive": "#ff6f61",
+        "destructiveForeground": "#2b0602",
+        "border": "#bfe4f1",
+        "input": "#add8e7",
+        "ring": "#00a5c8",
+        "chart1": "#00a5c8",
+        "chart2": "#12d6a3",
+        "chart3": "#ffc857",
+        "chart4": "#ff8fab",
+        "chart5": "#606efc",
+        "sidebar": "#e9f8ff",
+        "sidebarForeground": "#082432",
+        "sidebarPrimary": "#00a5c8",
+        "sidebarPrimaryForeground": "#effcff",
+        "sidebarAccent": "#12d6a3",
+        "sidebarAccentForeground": "#012018",
+        "sidebarBorder": "#bfe4f1",
+        "sidebarRing": "#00a5c8",
+        "fontSans": "'Nunito', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Crimson Text', 'Times New Roman', serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(0, 165, 200, 0.08)",
+        "shadowXs": "0 2px 6px rgba(8, 36, 50, 0.12)",
+        "shadowSm": "0 4px 12px rgba(8, 36, 50, 0.14)",
+        "shadow": "0 8px 20px rgba(8, 36, 50, 0.16)",
+        "shadowMd": "0 14px 32px rgba(0, 165, 200, 0.2)",
+        "shadowLg": "0 20px 44px rgba(8, 36, 50, 0.22)",
+        "shadowXl": "0 28px 56px rgba(8, 36, 50, 0.24)",
+        "shadow2xl": "0 36px 72px rgba(8, 36, 50, 0.26)"
+      },
+      "darkModeVariables": {
+        "background": "#04131a",
+        "foreground": "#d9f4ff",
+        "card": "#0a2028",
+        "cardForeground": "#d9f4ff",
+        "popover": "#0f2933",
+        "popoverForeground": "#def7ff",
+        "primary": "#1cc3df",
+        "primaryForeground": "#011218",
+        "secondary": "#2ee7b7",
+        "secondaryForeground": "#011911",
+        "muted": "#12333e",
+        "mutedForeground": "#8fb6c6",
+        "accent": "#ffd57a",
+        "accentForeground": "#231700",
+        "destructive": "#ff8578",
+        "destructiveForeground": "#2b0805",
+        "border": "#14343f",
+        "input": "#14343f",
+        "ring": "#1cc3df",
+        "chart1": "#1cc3df",
+        "chart2": "#2ee7b7",
+        "chart3": "#ffd57a",
+        "chart4": "#ff9dbf",
+        "chart5": "#7f8dff",
+        "sidebar": "#030d12",
+        "sidebarForeground": "#d9f4ff",
+        "sidebarPrimary": "#1cc3df",
+        "sidebarPrimaryForeground": "#011218",
+        "sidebarAccent": "#2ee7b7",
+        "sidebarAccentForeground": "#011911",
+        "sidebarBorder": "#14343f",
+        "sidebarRing": "#1cc3df",
+        "fontSans": "'Nunito', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Crimson Text', 'Times New Roman', serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(28, 195, 223, 0.14)",
+        "shadowXs": "0 2px 6px rgba(4, 19, 26, 0.4)",
+        "shadowSm": "0 6px 12px rgba(4, 19, 26, 0.45)",
+        "shadow": "0 12px 24px rgba(4, 19, 26, 0.48)",
+        "shadowMd": "0 18px 36px rgba(28, 195, 223, 0.28)",
+        "shadowLg": "0 26px 48px rgba(4, 19, 26, 0.58)",
+        "shadowXl": "0 34px 60px rgba(4, 19, 26, 0.62)",
+        "shadow2xl": "0 44px 72px rgba(4, 19, 26, 0.66)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

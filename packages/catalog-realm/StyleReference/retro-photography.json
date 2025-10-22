@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Retro Photography",
+      "visualDNA": "Film frames, light leaks, and warm grain overlays for analog story galleries.",
+      "inspirations": [
+        "Polaroid Originals",
+        "Kodak throwbacks",
+        "Lomography zines"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1524646432685-3f0c0d4d577d?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526401485004-46910ecc8e51?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Cardo:wght@400;500&family=Work+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Blend roll metadata, callout stickers, and before/after sliders.",
+        "title": "Retro Photography",
+        "description": "Warm film palettes with deckled frames, studio notes, and contact sheet storytelling.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f7f2eb",
+        "foreground": "#251f1a",
+        "card": "#fffaf3",
+        "cardForeground": "#2f2721",
+        "popover": "#f0e4d7",
+        "popoverForeground": "#251f1a",
+        "primary": "#a06d4f",
+        "primaryForeground": "#fdf7f0",
+        "secondary": "#c7a48b",
+        "secondaryForeground": "#211611",
+        "muted": "#efe1d5",
+        "mutedForeground": "#5b4639",
+        "accent": "#d1b28d",
+        "accentForeground": "#241d16",
+        "destructive": "#cc6557",
+        "destructiveForeground": "#fff5f2",
+        "border": "#e5d5c4",
+        "input": "#d7c3b0",
+        "ring": "#a06d4f",
+        "chart1": "#a06d4f",
+        "chart2": "#c7a48b",
+        "chart3": "#f4d8b9",
+        "chart4": "#86695e",
+        "chart5": "#cc6557",
+        "sidebar": "#f2e5d8",
+        "sidebarForeground": "#291f19",
+        "sidebarPrimary": "#a06d4f",
+        "sidebarPrimaryForeground": "#fdf7f0",
+        "sidebarAccent": "#c7a48b",
+        "sidebarAccentForeground": "#211611",
+        "sidebarBorder": "#e5d5c4",
+        "sidebarRing": "#a06d4f",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Cardo', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.3rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 3px rgba(52, 38, 27, 0.08)",
+        "shadowXs": "0 4px 8px rgba(52, 38, 27, 0.1)",
+        "shadowSm": "0 8px 16px rgba(52, 38, 27, 0.12)",
+        "shadow": "0 16px 28px rgba(52, 38, 27, 0.16)",
+        "shadowMd": "0 24px 40px rgba(52, 38, 27, 0.2)",
+        "shadowLg": "0 32px 56px rgba(52, 38, 27, 0.22)",
+        "shadowXl": "0 40px 64px rgba(52, 38, 27, 0.24)",
+        "shadow2xl": "0 56px 90px rgba(52, 38, 27, 0.26)"
+      },
+      "darkModeVariables": {
+        "background": "#16100c",
+        "foreground": "#f2e7da",
+        "card": "#1f1812",
+        "cardForeground": "#f2e7da",
+        "popover": "#271d16",
+        "popoverForeground": "#f6eadc",
+        "primary": "#d19c76",
+        "primaryForeground": "#180f09",
+        "secondary": "#a67e66",
+        "secondaryForeground": "#f8ecdf",
+        "muted": "#271d16",
+        "mutedForeground": "#c9ad94",
+        "accent": "#f0caa0",
+        "accentForeground": "#20140c",
+        "destructive": "#e2786a",
+        "destructiveForeground": "#260a08",
+        "border": "#312218",
+        "input": "#312218",
+        "ring": "#d19c76",
+        "chart1": "#d19c76",
+        "chart2": "#a67e66",
+        "chart3": "#f0caa0",
+        "chart4": "#8f6b5c",
+        "chart5": "#e2786a",
+        "sidebar": "#120c09",
+        "sidebarForeground": "#f2e7da",
+        "sidebarPrimary": "#d19c76",
+        "sidebarPrimaryForeground": "#180f09",
+        "sidebarAccent": "#a67e66",
+        "sidebarAccentForeground": "#f8ecdf",
+        "sidebarBorder": "#312218",
+        "sidebarRing": "#d19c76",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Cardo', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.3rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 2px 4px rgba(12, 8, 6, 0.4)",
+        "shadowXs": "0 8px 16px rgba(12, 8, 6, 0.45)",
+        "shadowSm": "0 14px 24px rgba(12, 8, 6, 0.5)",
+        "shadow": "0 20px 32px rgba(209, 156, 118, 0.24)",
+        "shadowMd": "0 28px 52px rgba(240, 202, 160, 0.22)",
+        "shadowLg": "0 36px 60px rgba(10, 6, 5, 0.58)",
+        "shadowXl": "0 48px 72px rgba(10, 6, 5, 0.62)",
+        "shadow2xl": "0 60px 96px rgba(10, 6, 5, 0.66)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

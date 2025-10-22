@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "ASCII Minimal",
+      "visualDNA": "Terminal-black canvases, monospace grids, and ASCII-line charts for hacker-era storytelling.",
+      "inspirations": [
+        "GitHub Octoverse",
+        "Terminal.css experiments",
+        "Neon green dashboards"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1517430816045-df4b7de11d1d?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1580894897204-65934c35e8cc?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use for status dashboards, developer retrospectives, or hacker-culture zines.",
+        "title": "ASCII Minimal",
+        "description": "A command-line aesthetic with pixel-grain shadows, neon cursors, and focus-first typography.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1517430816045-df4b7de11d1d?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#050505",
+        "foreground": "#f0f3ef",
+        "card": "#0c0c0c",
+        "cardForeground": "#f0f3ef",
+        "popover": "#111111",
+        "popoverForeground": "#f6faf6",
+        "primary": "#00ff88",
+        "primaryForeground": "#06140c",
+        "secondary": "#08d7ff",
+        "secondaryForeground": "#021018",
+        "muted": "#161616",
+        "mutedForeground": "#9aa09d",
+        "accent": "#ffe066",
+        "accentForeground": "#1f1700",
+        "destructive": "#ff4f5e",
+        "destructiveForeground": "#1a0508",
+        "border": "#1c1c1c",
+        "input": "#141414",
+        "ring": "#00ff88",
+        "chart1": "#00ff88",
+        "chart2": "#08d7ff",
+        "chart3": "#ffe066",
+        "chart4": "#ff8ad6",
+        "chart5": "#9bff9b",
+        "sidebar": "#040404",
+        "sidebarForeground": "#f0f3ef",
+        "sidebarPrimary": "#00ff88",
+        "sidebarPrimaryForeground": "#06140c",
+        "sidebarAccent": "#08d7ff",
+        "sidebarAccentForeground": "#021018",
+        "sidebarBorder": "#1c1c1c",
+        "sidebarRing": "#00ff88",
+        "fontSans": "'IBM Plex Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Serif', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "6px",
+        "spacing": "0.18rem",
+        "trackingNormal": "0.04em",
+        "shadow2xs": "0 1px 2px rgba(0, 255, 136, 0.12)",
+        "shadowXs": "0 2px 4px rgba(0, 0, 0, 0.36)",
+        "shadowSm": "0 6px 12px rgba(0, 0, 0, 0.42)",
+        "shadow": "0 10px 20px rgba(0, 0, 0, 0.5)",
+        "shadowMd": "0 16px 30px rgba(0, 0, 0, 0.55)",
+        "shadowLg": "0 20px 40px rgba(0, 0, 0, 0.6)",
+        "shadowXl": "0 28px 56px rgba(0, 0, 0, 0.62)",
+        "shadow2xl": "0 36px 70px rgba(0, 0, 0, 0.65)"
+      },
+      "darkModeVariables": {
+        "background": "#000000",
+        "foreground": "#dff9df",
+        "card": "#070707",
+        "cardForeground": "#dff9df",
+        "popover": "#0d0d0d",
+        "popoverForeground": "#e8ffe8",
+        "primary": "#26ff9d",
+        "primaryForeground": "#011109",
+        "secondary": "#33e6ff",
+        "secondaryForeground": "#001018",
+        "muted": "#121212",
+        "mutedForeground": "#a3b6a6",
+        "accent": "#ffe88a",
+        "accentForeground": "#231a00",
+        "destructive": "#ff5c6d",
+        "destructiveForeground": "#20050c",
+        "border": "#151515",
+        "input": "#121212",
+        "ring": "#26ff9d",
+        "chart1": "#26ff9d",
+        "chart2": "#33e6ff",
+        "chart3": "#ffe88a",
+        "chart4": "#ff9ae6",
+        "chart5": "#a4ffb2",
+        "sidebar": "#030303",
+        "sidebarForeground": "#dff9df",
+        "sidebarPrimary": "#26ff9d",
+        "sidebarPrimaryForeground": "#011109",
+        "sidebarAccent": "#33e6ff",
+        "sidebarAccentForeground": "#001018",
+        "sidebarBorder": "#151515",
+        "sidebarRing": "#26ff9d",
+        "fontSans": "'IBM Plex Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Serif', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "6px",
+        "spacing": "0.18rem",
+        "trackingNormal": "0.04em",
+        "shadow2xs": "0 1px 2px rgba(38, 255, 157, 0.18)",
+        "shadowXs": "0 2px 6px rgba(0, 0, 0, 0.45)",
+        "shadowSm": "0 6px 12px rgba(0, 0, 0, 0.5)",
+        "shadow": "0 10px 24px rgba(0, 0, 0, 0.55)",
+        "shadowMd": "0 16px 32px rgba(0, 0, 0, 0.58)",
+        "shadowLg": "0 22px 44px rgba(0, 0, 0, 0.6)",
+        "shadowXl": "0 30px 58px rgba(0, 0, 0, 0.64)",
+        "shadow2xl": "0 36px 72px rgba(0, 0, 0, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

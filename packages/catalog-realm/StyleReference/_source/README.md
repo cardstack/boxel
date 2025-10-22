@@ -62,19 +62,19 @@ realm expects.
 - [x] 030 Retro Revival (Burger King rebrand, Pepsi Throwback, Pizza Hut Classic) - Brown-orange, chunky Cooper, wavy stripes, grain
 - [x] 031 Luxury Maximal (LV Dream, Dolce & Gabbana, Versace Home) - Deep blacks, gold accents, flourish borders, luxe serif
 - [x] 032 Humorous Parallax (Old Spice, Dollar Shave, Liquid Death) - Gag scroll, mascots, explosion GIFs, comic bubbles
-- [ ] 033 Campaign 3-D (Heineken Closer, Coke Beat Heat, Nike You Cant Stop Us) - Rotating cans, neon glow, confetti, call-to-action modals
-- [ ] 034 Maker Grid (Kickstarter, Indiegogo, Product Hunt) - Pastels, rounded cards, progress bars, community avatars
-- [ ] 035 Friendly Fintech (Monzo, N26, Cash App) - Punchy coral, emoji icons, clean graphs, rounded sans
-- [ ] 036 Blueprint Tokens (Atlassian Design, IBM Carbon, Shopify Polaris) - Component diagrams, token tables, code playground
-- [ ] 037 ASCII Minimal (GitHub Octoverse, Terminal.css, Hacker News) - Monospace, ASCII charts, black screen, blinking cursor
-- [ ] 038 Safety Blue (Volvo EV, Ford Sync, Waymo) - Sky-blue, inclusive imagery, infographic icons, checklists
-- [ ] 039 Cause Interactive (UNICEF Tap, Charity Water, GoFundMe) - Aqua gradient, ripple cursor, donation meter
-- [ ] 040 Museum Modernist (MoMA, Tate, Centre Pompidou) - White cube look, art-first, modernist grid
-- [ ] 041 Typographic Lab (Cooper Hewitt Labs, Variable-Fonts, Google Fonts) - Oversized glyphs, sliders, neon guides, code panels
-- [ ] 042 Climate Data (CNN Climate, CarbonClock, Climate.gov) - Urgent reds, stacked charts, timeline scrubber, CO2 counters
-- [ ] 043 Fashion Immersive (Fendi, Bottega 360, Saint Laurent) - Edge-to-edge video, split lookbook, dark glamour
-- [ ] 044 Retro Photography (Polaroid Originals, Kodak, Lomography) - Film frames, rainbow stripe, grain filter, script heads
-- [ ] 045 Cyberpunk Neon (Synthwave Records, Retrowave.fm, Cyberpunk 2077) - Magenta-cyan grid, VHS noise, glow type
+- [x] 033 Campaign 3-D (Heineken Closer, Coke Beat Heat, Nike You Cant Stop Us) - Rotating cans, neon glow, confetti, call-to-action modals
+- [x] 034 Maker Grid (Kickstarter, Indiegogo, Product Hunt) - Pastels, rounded cards, progress bars, community avatars
+- [x] 035 Friendly Fintech (Monzo, N26, Cash App) - Punchy coral, emoji icons, clean graphs, rounded sans
+- [x] 036 Blueprint Tokens (Atlassian Design, IBM Carbon, Shopify Polaris) - Component diagrams, token tables, code playground
+- [x] 037 ASCII Minimal (GitHub Octoverse, Terminal.css, Hacker News) - Monospace, ASCII charts, black screen, blinking cursor
+- [x] 038 Safety Blue (Volvo EV, Ford Sync, Waymo) - Sky-blue, inclusive imagery, infographic icons, checklists
+- [x] 039 Cause Interactive (UNICEF Tap, Charity Water, GoFundMe) - Aqua gradient, ripple cursor, donation meter
+- [x] 040 Museum Modernist (MoMA, Tate, Centre Pompidou) - White cube look, art-first, modernist grid
+- [x] 041 Typographic Lab (Cooper Hewitt Labs, Variable-Fonts, Google Fonts) - Oversized glyphs, sliders, neon guides, code panels
+- [x] 042 Climate Data (CNN Climate, CarbonClock, Climate.gov) - Urgent reds, stacked charts, timeline scrubber, CO2 counters
+- [x] 043 Fashion Immersive (Fendi, Bottega 360, Saint Laurent) - Edge-to-edge video, split lookbook, dark glamour
+- [x] 044 Retro Photography (Polaroid Originals, Kodak, Lomography) - Film frames, rainbow stripe, grain filter, script heads
+- [x] 045 Cyberpunk Neon (Synthwave Records, Retrowave.fm, Cyberpunk 2077) - Magenta-cyan grid, VHS noise, glow type
 - [ ] 046 Poetic Story (Broken-Relationships Museum, Humans of New York, StoryCorps) - Sparse layout, serif italics, muted palette, long-form prose
 - [ ] 047 Calm Health (One Medical, Forward Health, Headspace Health) - Soft teal, rounded inputs, friendly photos, empathetic tone
 - [ ] 048 Font Showcase (Adobe Fonts, Google Fonts, MyFonts) - Dark canvas, live sliders, glyph grid, filter sidebar

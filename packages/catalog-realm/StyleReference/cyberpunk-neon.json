@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Cyberpunk Neon",
+      "visualDNA": "Magenta-cyan grids, VHS noise, and glitch frames for dystopian nightlife storytelling.",
+      "inspirations": [
+        "Synthwave record labels",
+        "Retro-futuristic cityscapes",
+        "Cyberpunk 2077 UI"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526401485004-46910ecc8e51?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600&family=Rajdhani:wght@500;600&family=Share+Tech+Mono&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Add animated scanlines, cursor trails, and synthwave audio loops.",
+        "title": "Cyberpunk Neon",
+        "description": "A neon-noir aesthetic with holographic panels, scanline overlays, and glitch typography.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#060111",
+        "foreground": "#f5e9ff",
+        "card": "#100329",
+        "cardForeground": "#f5e9ff",
+        "popover": "#180a3f",
+        "popoverForeground": "#f7ecff",
+        "primary": "#ff2dac",
+        "primaryForeground": "#220015",
+        "secondary": "#2deaff",
+        "secondaryForeground": "#00191f",
+        "muted": "#1a0e3f",
+        "mutedForeground": "#bea9ff",
+        "accent": "#7bff9f",
+        "accentForeground": "#02140a",
+        "destructive": "#ff5f5f",
+        "destructiveForeground": "#280307",
+        "border": "#281253",
+        "input": "#221046",
+        "ring": "#ff2dac",
+        "chart1": "#ff2dac",
+        "chart2": "#2deaff",
+        "chart3": "#7bff9f",
+        "chart4": "#ffd447",
+        "chart5": "#8d7bff",
+        "sidebar": "#04000d",
+        "sidebarForeground": "#f5e9ff",
+        "sidebarPrimary": "#ff2dac",
+        "sidebarPrimaryForeground": "#220015",
+        "sidebarAccent": "#2deaff",
+        "sidebarAccentForeground": "#00191f",
+        "sidebarBorder": "#281253",
+        "sidebarRing": "#ff2dac",
+        "fontSans": "'Orbitron', 'Rajdhani', sans-serif",
+        "fontSerif": "'Rajdhani', 'Inter', sans-serif",
+        "fontMono": "'Share Tech Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.045em",
+        "shadow2xs": "0 2px 6px rgba(255, 45, 172, 0.18)",
+        "shadowXs": "0 8px 18px rgba(6, 1, 17, 0.48)",
+        "shadowSm": "0 14px 30px rgba(6, 1, 17, 0.52)",
+        "shadow": "0 22px 44px rgba(45, 234, 255, 0.28)",
+        "shadowMd": "0 30px 60px rgba(6, 1, 17, 0.6)",
+        "shadowLg": "0 40px 72px rgba(6, 1, 17, 0.64)",
+        "shadowXl": "0 52px 96px rgba(6, 1, 17, 0.68)",
+        "shadow2xl": "0 64px 120px rgba(6, 1, 17, 0.72)"
+      },
+      "darkModeVariables": {
+        "background": "#030008",
+        "foreground": "#efe1ff",
+        "card": "#0b0121",
+        "cardForeground": "#efe1ff",
+        "popover": "#150337",
+        "popoverForeground": "#f5eaff",
+        "primary": "#ff43b7",
+        "primaryForeground": "#230018",
+        "secondary": "#3cf4ff",
+        "secondaryForeground": "#001b21",
+        "muted": "#14092c",
+        "mutedForeground": "#c9b5ff",
+        "accent": "#8bffb3",
+        "accentForeground": "#03180c",
+        "destructive": "#ff6c6c",
+        "destructiveForeground": "#2c0308",
+        "border": "#1d0d3b",
+        "input": "#1d0d3b",
+        "ring": "#ff43b7",
+        "chart1": "#ff43b7",
+        "chart2": "#3cf4ff",
+        "chart3": "#8bffb3",
+        "chart4": "#ffdb63",
+        "chart5": "#9f90ff",
+        "sidebar": "#020006",
+        "sidebarForeground": "#efe1ff",
+        "sidebarPrimary": "#ff43b7",
+        "sidebarPrimaryForeground": "#230018",
+        "sidebarAccent": "#3cf4ff",
+        "sidebarAccentForeground": "#001b21",
+        "sidebarBorder": "#1d0d3b",
+        "sidebarRing": "#ff43b7",
+        "fontSans": "'Orbitron', 'Rajdhani', sans-serif",
+        "fontSerif": "'Rajdhani', 'Inter', sans-serif",
+        "fontMono": "'Share Tech Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.045em",
+        "shadow2xs": "0 2px 6px rgba(255, 67, 183, 0.22)",
+        "shadowXs": "0 8px 18px rgba(3, 0, 8, 0.5)",
+        "shadowSm": "0 14px 30px rgba(3, 0, 8, 0.54)",
+        "shadow": "0 22px 44px rgba(60, 244, 255, 0.3)",
+        "shadowMd": "0 30px 60px rgba(3, 0, 8, 0.62)",
+        "shadowLg": "0 40px 72px rgba(3, 0, 8, 0.66)",
+        "shadowXl": "0 52px 96px rgba(3, 0, 8, 0.7)",
+        "shadow2xl": "0 64px 120px rgba(3, 0, 8, 0.74)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

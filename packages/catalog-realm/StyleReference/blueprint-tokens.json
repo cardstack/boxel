@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Blueprint Tokens",
+      "visualDNA": "Grid papers, component diagrams, and annotated design tokens for system documentation portals.",
+      "inspirations": [
+        "Atlassian design tokens",
+        "IBM Carbon kit",
+        "Shopify Polaris docs"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1529429617124-aee3f4f3e4b1?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1506089676908-3592f7389d4d?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+Pro:wght@500&family=Roboto+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use for component libraries, design ops dashboards, or token documentation.",
+        "title": "Blueprint Tokens",
+        "description": "A schematic system shell with blueprint grids, callout labels, and code-to-design bridges.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1529429617124-aee3f4f3e4b1?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f4f7ff",
+        "foreground": "#17243d",
+        "card": "#ffffff",
+        "cardForeground": "#1d2c49",
+        "popover": "#e6eeff",
+        "popoverForeground": "#17243d",
+        "primary": "#1d4ed8",
+        "primaryForeground": "#f4f7ff",
+        "secondary": "#38bdf8",
+        "secondaryForeground": "#061822",
+        "muted": "#dde6ff",
+        "mutedForeground": "#425781",
+        "accent": "#7c3aed",
+        "accentForeground": "#160029",
+        "destructive": "#ef4444",
+        "destructiveForeground": "#fff6f6",
+        "border": "#c6d5ff",
+        "input": "#b5c5f9",
+        "ring": "#1d4ed8",
+        "chart1": "#1d4ed8",
+        "chart2": "#38bdf8",
+        "chart3": "#7c3aed",
+        "chart4": "#10b981",
+        "chart5": "#f97316",
+        "sidebar": "#eaf1ff",
+        "sidebarForeground": "#17243d",
+        "sidebarPrimary": "#1d4ed8",
+        "sidebarPrimaryForeground": "#f4f7ff",
+        "sidebarAccent": "#38bdf8",
+        "sidebarAccentForeground": "#061822",
+        "sidebarBorder": "#c6d5ff",
+        "sidebarRing": "#1d4ed8",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Source Serif Pro', 'Times New Roman', serif",
+        "fontMono": "'Roboto Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(23, 36, 61, 0.08)",
+        "shadowXs": "0 2px 6px rgba(23, 36, 61, 0.12)",
+        "shadowSm": "0 4px 12px rgba(23, 36, 61, 0.14)",
+        "shadow": "0 8px 20px rgba(23, 36, 61, 0.16)",
+        "shadowMd": "0 14px 32px rgba(23, 36, 61, 0.18)",
+        "shadowLg": "0 20px 44px rgba(23, 36, 61, 0.2)",
+        "shadowXl": "0 28px 56px rgba(23, 36, 61, 0.22)",
+        "shadow2xl": "0 36px 72px rgba(23, 36, 61, 0.24)"
+      },
+      "darkModeVariables": {
+        "background": "#0b162e",
+        "foreground": "#d9e5ff",
+        "card": "#13213b",
+        "cardForeground": "#d9e5ff",
+        "popover": "#182a4a",
+        "popoverForeground": "#e2ecff",
+        "primary": "#4f83ff",
+        "primaryForeground": "#071126",
+        "secondary": "#4fd3ff",
+        "secondaryForeground": "#03121c",
+        "muted": "#1c3054",
+        "mutedForeground": "#94aad6",
+        "accent": "#a78bfa",
+        "accentForeground": "#18063a",
+        "destructive": "#fb7185",
+        "destructiveForeground": "#26030a",
+        "border": "#1b2c4d",
+        "input": "#1b2c4d",
+        "ring": "#4f83ff",
+        "chart1": "#4f83ff",
+        "chart2": "#4fd3ff",
+        "chart3": "#a78bfa",
+        "chart4": "#34d399",
+        "chart5": "#fb923c",
+        "sidebar": "#081020",
+        "sidebarForeground": "#d9e5ff",
+        "sidebarPrimary": "#4f83ff",
+        "sidebarPrimaryForeground": "#071126",
+        "sidebarAccent": "#4fd3ff",
+        "sidebarAccentForeground": "#03121c",
+        "sidebarBorder": "#1b2c4d",
+        "sidebarRing": "#4f83ff",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Source Serif Pro', 'Times New Roman', serif",
+        "fontMono": "'Roboto Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(79, 131, 255, 0.18)",
+        "shadowXs": "0 4px 8px rgba(8, 16, 32, 0.4)",
+        "shadowSm": "0 8px 18px rgba(8, 16, 32, 0.45)",
+        "shadow": "0 12px 26px rgba(8, 16, 32, 0.5)",
+        "shadowMd": "0 18px 36px rgba(8, 16, 32, 0.55)",
+        "shadowLg": "0 26px 48px rgba(8, 16, 32, 0.58)",
+        "shadowXl": "0 34px 62px rgba(8, 16, 32, 0.62)",
+        "shadow2xl": "0 42px 76px rgba(8, 16, 32, 0.66)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

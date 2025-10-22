@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Campaign 3-D",
+      "visualDNA": "Neon-lit hero renders, confetti particles, and rotating product capsules for hype-driven launches.",
+      "inspirations": [
+        "Heineken immersive promos",
+        "Nike 360 reveals",
+        "Coke hologram launches"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1557672172-298e090bd0f1?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Space+Grotesk:wght@500&family=JetBrains+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Pair with looping 3-D hero renders, celebratory counters, and stacked CTA modals.",
+        "title": "Campaign 3-D",
+        "description": "A kinetic promo surface with neon strokes, depth-glow pedestals, and particle confetti.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0c0524",
+        "foreground": "#f6f4ff",
+        "card": "#170a3d",
+        "cardForeground": "#f6f4ff",
+        "popover": "#1f0f55",
+        "popoverForeground": "#f7f4ff",
+        "primary": "#ff3d9a",
+        "primaryForeground": "#1f0012",
+        "secondary": "#46f6ff",
+        "secondaryForeground": "#00161a",
+        "muted": "#201252",
+        "mutedForeground": "#c2b9ff",
+        "accent": "#ffd642",
+        "accentForeground": "#241500",
+        "destructive": "#ff6b6b",
+        "destructiveForeground": "#250007",
+        "border": "#2d1d66",
+        "input": "#28195c",
+        "ring": "#ff3d9a",
+        "chart1": "#ff3d9a",
+        "chart2": "#46f6ff",
+        "chart3": "#ffd642",
+        "chart4": "#7df9c1",
+        "chart5": "#8c7bff",
+        "sidebar": "#0a041d",
+        "sidebarForeground": "#f6f4ff",
+        "sidebarPrimary": "#ff3d9a",
+        "sidebarPrimaryForeground": "#1f0012",
+        "sidebarAccent": "#46f6ff",
+        "sidebarAccentForeground": "#00161a",
+        "sidebarBorder": "#2d1d66",
+        "sidebarRing": "#ff3d9a",
+        "fontSans": "'Barlow Condensed', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 2px 6px rgba(255, 61, 154, 0.2)",
+        "shadowXs": "0 8px 18px rgba(12, 5, 36, 0.45)",
+        "shadowSm": "0 14px 30px rgba(12, 5, 36, 0.5)",
+        "shadow": "0 22px 44px rgba(70, 246, 255, 0.25)",
+        "shadowMd": "0 30px 60px rgba(12, 5, 36, 0.6)",
+        "shadowLg": "0 40px 72px rgba(12, 5, 36, 0.64)",
+        "shadowXl": "0 52px 96px rgba(12, 5, 36, 0.68)",
+        "shadow2xl": "0 64px 120px rgba(12, 5, 36, 0.72)"
+      },
+      "darkModeVariables": {
+        "background": "#070217",
+        "foreground": "#f2ebff",
+        "card": "#120735",
+        "cardForeground": "#f2ebff",
+        "popover": "#1a0c46",
+        "popoverForeground": "#f7f0ff",
+        "primary": "#ff58ad",
+        "primaryForeground": "#220015",
+        "secondary": "#59f8ff",
+        "secondaryForeground": "#001a1e",
+        "muted": "#1b0f40",
+        "mutedForeground": "#d0c4ff",
+        "accent": "#ffdf66",
+        "accentForeground": "#271800",
+        "destructive": "#ff7a85",
+        "destructiveForeground": "#26040a",
+        "border": "#231454",
+        "input": "#1e1147",
+        "ring": "#ff58ad",
+        "chart1": "#ff58ad",
+        "chart2": "#59f8ff",
+        "chart3": "#ffdf66",
+        "chart4": "#8bffd6",
+        "chart5": "#a391ff",
+        "sidebar": "#050112",
+        "sidebarForeground": "#f2ebff",
+        "sidebarPrimary": "#ff58ad",
+        "sidebarPrimaryForeground": "#220015",
+        "sidebarAccent": "#59f8ff",
+        "sidebarAccentForeground": "#001a1e",
+        "sidebarBorder": "#231454",
+        "sidebarRing": "#ff58ad",
+        "fontSans": "'Barlow Condensed', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 2px 6px rgba(255, 88, 173, 0.24)",
+        "shadowXs": "0 8px 18px rgba(7, 2, 23, 0.48)",
+        "shadowSm": "0 14px 30px rgba(7, 2, 23, 0.52)",
+        "shadow": "0 22px 44px rgba(89, 248, 255, 0.3)",
+        "shadowMd": "0 30px 60px rgba(7, 2, 23, 0.6)",
+        "shadowLg": "0 40px 72px rgba(7, 2, 23, 0.64)",
+        "shadowXl": "0 52px 96px rgba(7, 2, 23, 0.68)",
+        "shadow2xl": "0 64px 120px rgba(7, 2, 23, 0.72)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

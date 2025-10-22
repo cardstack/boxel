@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Maker Grid",
+      "visualDNA": "Pastel project tiles, pledge meters, and friendly avatar rows for maker launch hubs.",
+      "inspirations": [
+        "Kickstarter storytelling",
+        "Indiegogo perks",
+        "Product Hunt drops"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1484981137418-28a064062ccd?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Fraunces:wght@500;600&family=Fira+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Highlight funding milestones, collaborator callouts, and maker update threads.",
+        "title": "Maker Grid",
+        "description": "Pastel pledge cards, progress trackers, and community shout-outs to showcase in-progress ideas.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f8f7ff",
+        "foreground": "#231d33",
+        "card": "#ffffff",
+        "cardForeground": "#2b223d",
+        "popover": "#efeaff",
+        "popoverForeground": "#231d33",
+        "primary": "#ff7a66",
+        "primaryForeground": "#fff7f4",
+        "secondary": "#7d73ff",
+        "secondaryForeground": "#100b2d",
+        "muted": "#ebe7ff",
+        "mutedForeground": "#4a4266",
+        "accent": "#ffd66b",
+        "accentForeground": "#231d33",
+        "destructive": "#e8545e",
+        "destructiveForeground": "#fff5f6",
+        "border": "#ddd4ff",
+        "input": "#d3caff",
+        "ring": "#ff7a66",
+        "chart1": "#ff7a66",
+        "chart2": "#7d73ff",
+        "chart3": "#ffd66b",
+        "chart4": "#58c4b9",
+        "chart5": "#ff9ad5",
+        "sidebar": "#f1efff",
+        "sidebarForeground": "#231d33",
+        "sidebarPrimary": "#7d73ff",
+        "sidebarPrimaryForeground": "#f7f5ff",
+        "sidebarAccent": "#ffd66b",
+        "sidebarAccentForeground": "#231d33",
+        "sidebarBorder": "#ddd4ff",
+        "sidebarRing": "#ff7a66",
+        "fontSans": "'Poppins', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Fraunces', 'Times New Roman', serif",
+        "fontMono": "'Fira Mono', 'IBM Plex Mono', monospace",
+        "radius": "18px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.012em",
+        "shadow2xs": "0 2px 4px rgba(35, 29, 51, 0.06)",
+        "shadowXs": "0 4px 10px rgba(35, 29, 51, 0.08)",
+        "shadowSm": "0 8px 20px rgba(35, 29, 51, 0.1)",
+        "shadow": "0 16px 32px rgba(35, 29, 51, 0.14)",
+        "shadowMd": "0 24px 48px rgba(35, 29, 51, 0.16)",
+        "shadowLg": "0 32px 64px rgba(35, 29, 51, 0.18)",
+        "shadowXl": "0 40px 72px rgba(35, 29, 51, 0.2)",
+        "shadow2xl": "0 48px 88px rgba(35, 29, 51, 0.22)"
+      },
+      "darkModeVariables": {
+        "background": "#161129",
+        "foreground": "#f2efff",
+        "card": "#1f1937",
+        "cardForeground": "#f2efff",
+        "popover": "#251f41",
+        "popoverForeground": "#f7f4ff",
+        "primary": "#ff937f",
+        "primaryForeground": "#1f0e13",
+        "secondary": "#9a92ff",
+        "secondaryForeground": "#140d30",
+        "muted": "#251f41",
+        "mutedForeground": "#bebbda",
+        "accent": "#ffe48c",
+        "accentForeground": "#211932",
+        "destructive": "#ff6f7a",
+        "destructiveForeground": "#14060a",
+        "border": "#302753",
+        "input": "#2a2247",
+        "ring": "#ff937f",
+        "chart1": "#ff937f",
+        "chart2": "#9a92ff",
+        "chart3": "#ffe48c",
+        "chart4": "#6bd8cb",
+        "chart5": "#ffb0e4",
+        "sidebar": "#120e22",
+        "sidebarForeground": "#f2efff",
+        "sidebarPrimary": "#9a92ff",
+        "sidebarPrimaryForeground": "#160c34",
+        "sidebarAccent": "#ffe48c",
+        "sidebarAccentForeground": "#201631",
+        "sidebarBorder": "#2a2247",
+        "sidebarRing": "#ff937f",
+        "fontSans": "'Poppins', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Fraunces', 'Times New Roman', serif",
+        "fontMono": "'Fira Mono', 'IBM Plex Mono', monospace",
+        "radius": "18px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.012em",
+        "shadow2xs": "0 2px 4px rgba(0, 0, 0, 0.32)",
+        "shadowXs": "0 4px 10px rgba(0, 0, 0, 0.38)",
+        "shadowSm": "0 8px 20px rgba(0, 0, 0, 0.44)",
+        "shadow": "0 16px 32px rgba(0, 0, 0, 0.48)",
+        "shadowMd": "0 24px 48px rgba(0, 0, 0, 0.5)",
+        "shadowLg": "0 32px 64px rgba(0, 0, 0, 0.54)",
+        "shadowXl": "0 40px 80px rgba(0, 0, 0, 0.56)",
+        "shadow2xl": "0 48px 96px rgba(0, 0, 0, 0.6)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
