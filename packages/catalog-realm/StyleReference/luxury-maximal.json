@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Luxury Maximal",
+      "visualDNA": "Velvet-black canvases, gilded filigree, and jewel-glow spotlights staged for couture spectacle moments.",
+      "inspirations": [
+        "LV Dream exhibition",
+        "Dolce & Gabbana Alta Moda",
+        "Versace Home campaigns"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Plus+Jakarta+Sans:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Layer gold-foil dividers, animated jewel flares, and slow-bloom CTA glows.",
+        "title": "Luxury Maximal",
+        "description": "Opulent black-and-gold storytelling with baroque borders, neon gemstone flares, and indulgent typography stacks.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#080508",
+        "foreground": "#f7ecff",
+        "card": "#110911",
+        "cardForeground": "#f7ecff",
+        "popover": "#1a0f1d",
+        "popoverForeground": "#fff4ff",
+        "primary": "#d4a017",
+        "primaryForeground": "#140900",
+        "secondary": "#7e36ff",
+        "secondaryForeground": "#0b021d",
+        "muted": "#1a101a",
+        "mutedForeground": "#cfb3ff",
+        "accent": "#f05fa6",
+        "accentForeground": "#280013",
+        "destructive": "#ff4760",
+        "destructiveForeground": "#2a0008",
+        "border": "#2b152f",
+        "input": "#241126",
+        "ring": "#d4a017",
+        "chart1": "#d4a017",
+        "chart2": "#7e36ff",
+        "chart3": "#f05fa6",
+        "chart4": "#4fe5d6",
+        "chart5": "#ff8f3f",
+        "sidebar": "#060307",
+        "sidebarForeground": "#f7ecff",
+        "sidebarPrimary": "#d4a017",
+        "sidebarPrimaryForeground": "#140900",
+        "sidebarAccent": "#7e36ff",
+        "sidebarAccentForeground": "#0b021d",
+        "sidebarBorder": "#2b152f",
+        "sidebarRing": "#f05fa6",
+        "fontSans": "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Cormorant Garamond', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "28px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 8px rgba(212, 160, 23, 0.24)",
+        "shadowXs": "0 8px 20px rgba(8, 5, 8, 0.45)",
+        "shadowSm": "0 16px 38px rgba(8, 5, 8, 0.5)",
+        "shadow": "0 24px 52px rgba(126, 54, 255, 0.3)",
+        "shadowMd": "0 36px 68px rgba(240, 95, 166, 0.28)",
+        "shadowLg": "0 48px 90px rgba(8, 5, 8, 0.6)",
+        "shadowXl": "0 60px 110px rgba(8, 5, 8, 0.64)",
+        "shadow2xl": "0 74px 136px rgba(8, 5, 8, 0.7)"
+      },
+      "darkModeVariables": {
+        "background": "#040105",
+        "foreground": "#f3e6ff",
+        "card": "#0d0410",
+        "cardForeground": "#f3e6ff",
+        "popover": "#150a1b",
+        "popoverForeground": "#f8edff",
+        "primary": "#f0c55a",
+        "primaryForeground": "#1b1000",
+        "secondary": "#9e63ff",
+        "secondaryForeground": "#13023a",
+        "muted": "#130914",
+        "mutedForeground": "#dcc6ff",
+        "accent": "#ff7bbd",
+        "accentForeground": "#2d0015",
+        "destructive": "#ff5a78",
+        "destructiveForeground": "#30010a",
+        "border": "#221129",
+        "input": "#1c0d21",
+        "ring": "#f0c55a",
+        "chart1": "#f0c55a",
+        "chart2": "#9e63ff",
+        "chart3": "#ff7bbd",
+        "chart4": "#61f5e5",
+        "chart5": "#ff9d52",
+        "sidebar": "#020103",
+        "sidebarForeground": "#f3e6ff",
+        "sidebarPrimary": "#f0c55a",
+        "sidebarPrimaryForeground": "#1b1000",
+        "sidebarAccent": "#9e63ff",
+        "sidebarAccentForeground": "#13023a",
+        "sidebarBorder": "#1c0d21",
+        "sidebarRing": "#ff7bbd",
+        "fontSans": "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Cormorant Garamond', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "28px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 8px rgba(0, 0, 0, 0.4)",
+        "shadowXs": "0 8px 20px rgba(0, 0, 0, 0.46)",
+        "shadowSm": "0 16px 38px rgba(0, 0, 0, 0.5)",
+        "shadow": "0 24px 52px rgba(158, 99, 255, 0.3)",
+        "shadowMd": "0 36px 68px rgba(255, 123, 189, 0.26)",
+        "shadowLg": "0 48px 90px rgba(0, 0, 0, 0.64)",
+        "shadowXl": "0 60px 110px rgba(0, 0, 0, 0.68)",
+        "shadow2xl": "0 74px 136px rgba(0, 0, 0, 0.72)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
