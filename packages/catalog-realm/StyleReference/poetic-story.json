@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Poetic Story",
+      "visualDNA": "Sparse layouts, serif italics, and muted image washes designed for long-form narratives.",
+      "inspirations": [
+        "Museum of Broken Relationships",
+        "Humans of New York",
+        "StoryCorps essays"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526358268760-1ad63d839c0c?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1496307042754-b4aa456c4a2d?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;1,500&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use for oral histories, reflective essays, and narrative-driven testimonials.",
+        "title": "Poetic Story",
+        "description": "A lyrical editorial system with contemplative whitespace, gentle transitions, and long-form friendly typography.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f5f1ec",
+        "foreground": "#2a2522",
+        "card": "#ffffff",
+        "cardForeground": "#2a2522",
+        "popover": "#ebe3dc",
+        "popoverForeground": "#2a2522",
+        "primary": "#8a5d4c",
+        "primaryForeground": "#fdf7f1",
+        "secondary": "#c6a48d",
+        "secondaryForeground": "#2a2522",
+        "muted": "#ede3da",
+        "mutedForeground": "#5b4d44",
+        "accent": "#b38ba0",
+        "accentForeground": "#251019",
+        "destructive": "#d86e5c",
+        "destructiveForeground": "#fff4f1",
+        "border": "#ddcec1",
+        "input": "#d2c2b5",
+        "ring": "#8a5d4c",
+        "chart1": "#8a5d4c",
+        "chart2": "#c6a48d",
+        "chart3": "#b38ba0",
+        "chart4": "#6f9bb6",
+        "chart5": "#e4b96f",
+        "sidebar": "#f0e6de",
+        "sidebarForeground": "#2a2522",
+        "sidebarPrimary": "#8a5d4c",
+        "sidebarPrimaryForeground": "#fdf7f1",
+        "sidebarAccent": "#c6a48d",
+        "sidebarAccentForeground": "#2a2522",
+        "sidebarBorder": "#ddcec1",
+        "sidebarRing": "#8a5d4c",
+        "fontSans": "'Source Sans 3', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'EB Garamond', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.26rem",
+        "trackingNormal": "0.005em",
+        "shadow2xs": "0 2px 6px rgba(42, 37, 34, 0.08)",
+        "shadowXs": "0 6px 14px rgba(42, 37, 34, 0.1)",
+        "shadowSm": "0 12px 24px rgba(42, 37, 34, 0.12)",
+        "shadow": "0 20px 40px rgba(42, 37, 34, 0.16)",
+        "shadowMd": "0 28px 52px rgba(42, 37, 34, 0.18)",
+        "shadowLg": "0 36px 66px rgba(42, 37, 34, 0.2)",
+        "shadowXl": "0 46px 84px rgba(42, 37, 34, 0.22)",
+        "shadow2xl": "0 56px 104px rgba(42, 37, 34, 0.24)"
+      },
+      "darkModeVariables": {
+        "background": "#1a1411",
+        "foreground": "#efe6df",
+        "card": "#211a17",
+        "cardForeground": "#efe6df",
+        "popover": "#2a221f",
+        "popoverForeground": "#f5ede7",
+        "primary": "#d18c73",
+        "primaryForeground": "#190c06",
+        "secondary": "#caa891",
+        "secondaryForeground": "#1a120b",
+        "muted": "#2a211e",
+        "mutedForeground": "#b39c8f",
+        "accent": "#c896ae",
+        "accentForeground": "#1c0e17",
+        "destructive": "#f27f74",
+        "destructiveForeground": "#260605",
+        "border": "#2d2521",
+        "input": "#2d2521",
+        "ring": "#d18c73",
+        "chart1": "#d18c73",
+        "chart2": "#caa891",
+        "chart3": "#c896ae",
+        "chart4": "#84b7d0",
+        "chart5": "#f2c37e",
+        "sidebar": "#160f0c",
+        "sidebarForeground": "#efe6df",
+        "sidebarPrimary": "#d18c73",
+        "sidebarPrimaryForeground": "#190c06",
+        "sidebarAccent": "#caa891",
+        "sidebarAccentForeground": "#1a120b",
+        "sidebarBorder": "#2a211e",
+        "sidebarRing": "#d18c73",
+        "fontSans": "'Source Sans 3', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'EB Garamond', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.26rem",
+        "trackingNormal": "0.005em",
+        "shadow2xs": "0 2px 6px rgba(0, 0, 0, 0.42)",
+        "shadowXs": "0 8px 16px rgba(0, 0, 0, 0.46)",
+        "shadowSm": "0 14px 28px rgba(0, 0, 0, 0.5)",
+        "shadow": "0 22px 42px rgba(209, 140, 115, 0.24)",
+        "shadowMd": "0 32px 56px rgba(209, 140, 115, 0.26)",
+        "shadowLg": "0 42px 72px rgba(0, 0, 0, 0.55)",
+        "shadowXl": "0 54px 90px rgba(0, 0, 0, 0.58)",
+        "shadow2xl": "0 66px 110px rgba(0, 0, 0, 0.6)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

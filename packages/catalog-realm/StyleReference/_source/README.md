@@ -75,11 +75,11 @@ realm expects.
 - [x] 043 Fashion Immersive (Fendi, Bottega 360, Saint Laurent) - Edge-to-edge video, split lookbook, dark glamour
 - [x] 044 Retro Photography (Polaroid Originals, Kodak, Lomography) - Film frames, rainbow stripe, grain filter, script heads
 - [x] 045 Cyberpunk Neon (Synthwave Records, Retrowave.fm, Cyberpunk 2077) - Magenta-cyan grid, VHS noise, glow type
-- [ ] 046 Poetic Story (Broken-Relationships Museum, Humans of New York, StoryCorps) - Sparse layout, serif italics, muted palette, long-form prose
-- [ ] 047 Calm Health (One Medical, Forward Health, Headspace Health) - Soft teal, rounded inputs, friendly photos, empathetic tone
-- [ ] 048 Font Showcase (Adobe Fonts, Google Fonts, MyFonts) - Dark canvas, live sliders, glyph grid, filter sidebar
-- [ ] 049 Data-Art Flat (Information Is Beautiful, Flourish, Datawrapper) - Rainbow palette, playful SVG charts, interactive legend
-- [ ] 050 Kinetic Type (Array-Expressive, Animography, Motionographer) - Scroll-triggered morphs, oversized mono, motion blur
+- [x] 046 Poetic Story (Broken-Relationships Museum, Humans of New York, StoryCorps) - Sparse layout, serif italics, muted palette, long-form prose
+- [x] 047 Calm Health (One Medical, Forward Health, Headspace Health) - Soft teal, rounded inputs, friendly photos, empathetic tone
+- [x] 048 Font Showcase (Adobe Fonts, Google Fonts, MyFonts) - Dark canvas, live sliders, glyph grid, filter sidebar
+- [x] 049 Data-Art Flat (Information Is Beautiful, Flourish, Datawrapper) - Rainbow palette, playful SVG charts, interactive legend
+- [x] 050 Kinetic Type (Array-Expressive, Animography, Motionographer) - Scroll-triggered morphs, oversized mono, motion blur
 - [ ] 051 Bauhaus Geometric (Bauhaus archives, Google Bauhaus, Harvard Art Museums) - Primary blocks, geometric grid, minimalist type
 - [ ] 052 Swiss Typography (Helvetica specimen, Vignelli manuals, International Style posters) - Strict grid, neutral sans, objective hierarchy
 - [ ] 053 Art Nouveau (Musee d'Orsay, Jugendstil posters, Tiffany & Co.) - Flowing lines, floral motifs, ornate frames
