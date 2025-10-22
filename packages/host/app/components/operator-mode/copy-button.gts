@@ -25,6 +25,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import consumeContext from '../../helpers/consume-context';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RealmService from '../../services/realm';
 
 interface Signature {
   Args: {
@@ -117,6 +118,7 @@ export default class CopyButton extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realm: RealmService;
   @tracked private topMostCardCollection:
     | ReturnType<getCardCollection>
     | undefined;
@@ -131,6 +133,14 @@ export default class CopyButton extends Component<Signature> {
           .filter(Boolean) as string[],
     );
   };
+
+  private canWriteStackItem(stackItem: StackItem): boolean {
+    let id = stackItem.id;
+    if (!id) {
+      return false;
+    }
+    return this.realm.canWrite(id);
+  }
 
   private get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -186,12 +196,21 @@ export default class CopyButton extends Component<Signature> {
         if (!sourceCard) {
           return undefined;
         }
-        let sourceItem =
-          topMostStackItems[indexCardIndicies[0] === LEFT ? RIGHT : LEFT];
+        let sourceStackIndex =
+          indexCardIndicies[0] === LEFT ? RIGHT : LEFT;
+        let sourceItem = topMostStackItems[sourceStackIndex];
+        let destinationItem = topMostStackItems[
+          indexCardIndicies[0]
+        ] as StackItem; // the index card is never a contained card
+
+        if (!this.canWriteStackItem(destinationItem)) {
+          return undefined;
+        }
+
         return {
           direction: indexCardIndicies[0] === LEFT ? 'left' : 'right',
           sources: [sourceCard],
-          destinationItem: topMostStackItems[indexCardIndicies[0]] as StackItem, // the index card is never a contained card
+          destinationItem,
           sourceItem,
         };
       }
@@ -231,6 +250,10 @@ export default class CopyButton extends Component<Signature> {
 
         // if the source and destination are the same, don't show a copy button
         if (sourceItem.id === destinationItem.id) {
+          return undefined;
+        }
+
+        if (!this.canWriteStackItem(destinationItem)) {
           return undefined;
         }
 
