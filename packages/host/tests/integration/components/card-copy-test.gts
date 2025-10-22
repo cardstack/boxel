@@ -70,6 +70,9 @@ module('Integration | card-copy', function (hooks) {
       testRealm2URL,
       readOnlyRealmURL,
     ],
+    realmPermissions: {
+      [readOnlyRealmURL]: ['read'],
+    },
     autostart: true,
   });
 
