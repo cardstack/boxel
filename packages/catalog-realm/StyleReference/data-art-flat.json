@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Data-Art Flat",
+      "visualDNA": "Rainbow data tiles, playful SVG charts, and interactive legends crafted for story-driven dashboards.",
+      "inspirations": [
+        "Information Is Beautiful spotlights",
+        "Flourish explainers",
+        "Datawrapper storytelling"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1582719478280-5fe460db9f82?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Cabinet+Grotesk:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Perfect for recap dashboards, insight decks, and shareable stat stories.",
+        "title": "Data-Art Flat",
+        "description": "A vibrant data playground with pastel charts, tappable legends, and narrative callouts.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1582719478280-5fe460db9f82?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fff9fe",
+        "foreground": "#211428",
+        "card": "#ffffff",
+        "cardForeground": "#211428",
+        "popover": "#f4ecff",
+        "popoverForeground": "#211428",
+        "primary": "#ff6fb6",
+        "primaryForeground": "#29101f",
+        "secondary": "#6d66ff",
+        "secondaryForeground": "#100f2a",
+        "muted": "#efe8ff",
+        "mutedForeground": "#5b4f7f",
+        "accent": "#ffc568",
+        "accentForeground": "#2d1a00",
+        "destructive": "#ff5b5f",
+        "destructiveForeground": "#fff5f5",
+        "border": "#e1d6ff",
+        "input": "#d4c7ff",
+        "ring": "#ff6fb6",
+        "chart1": "#ff6fb6",
+        "chart2": "#6d66ff",
+        "chart3": "#ffc568",
+        "chart4": "#4fd2ff",
+        "chart5": "#7ce5b5",
+        "sidebar": "#f7f0ff",
+        "sidebarForeground": "#211428",
+        "sidebarPrimary": "#6d66ff",
+        "sidebarPrimaryForeground": "#f7f4ff",
+        "sidebarAccent": "#ffc568",
+        "sidebarAccentForeground": "#2d1a00",
+        "sidebarBorder": "#e1d6ff",
+        "sidebarRing": "#ff6fb6",
+        "fontSans": "'DM Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Cabinet Grotesk', 'Inter', system-ui, sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.018em",
+        "shadow2xs": "0 2px 4px rgba(105, 80, 150, 0.08)",
+        "shadowXs": "0 6px 14px rgba(105, 80, 150, 0.12)",
+        "shadowSm": "0 10px 22px rgba(105, 80, 150, 0.16)",
+        "shadow": "0 18px 36px rgba(33, 20, 40, 0.16)",
+        "shadowMd": "0 26px 48px rgba(255, 111, 182, 0.18)",
+        "shadowLg": "0 34px 60px rgba(33, 20, 40, 0.2)",
+        "shadowXl": "0 42px 80px rgba(33, 20, 40, 0.22)",
+        "shadow2xl": "0 52px 100px rgba(33, 20, 40, 0.24)"
+      },
+      "darkModeVariables": {
+        "background": "#160b1f",
+        "foreground": "#f6edff",
+        "card": "#1e1230",
+        "cardForeground": "#f6edff",
+        "popover": "#25183d",
+        "popoverForeground": "#f9f2ff",
+        "primary": "#ff85c3",
+        "primaryForeground": "#220015",
+        "secondary": "#8580ff",
+        "secondaryForeground": "#0b0a2f",
+        "muted": "#25183d",
+        "mutedForeground": "#c2b6ec",
+        "accent": "#ffd27d",
+        "accentForeground": "#2c1800",
+        "destructive": "#ff767a",
+        "destructiveForeground": "#2c0407",
+        "border": "#2c2144",
+        "input": "#2c2144",
+        "ring": "#ff85c3",
+        "chart1": "#ff85c3",
+        "chart2": "#8580ff",
+        "chart3": "#ffd27d",
+        "chart4": "#63ddff",
+        "chart5": "#91f0ca",
+        "sidebar": "#12081d",
+        "sidebarForeground": "#f6edff",
+        "sidebarPrimary": "#8580ff",
+        "sidebarPrimaryForeground": "#0b0a2f",
+        "sidebarAccent": "#ffd27d",
+        "sidebarAccentForeground": "#2c1800",
+        "sidebarBorder": "#2a1f41",
+        "sidebarRing": "#ff85c3",
+        "fontSans": "'DM Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Cabinet Grotesk', 'Inter', system-ui, sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.018em",
+        "shadow2xs": "0 2px 4px rgba(0, 0, 0, 0.32)",
+        "shadowXs": "0 6px 12px rgba(0, 0, 0, 0.36)",
+        "shadowSm": "0 12px 24px rgba(0, 0, 0, 0.4)",
+        "shadow": "0 18px 36px rgba(255, 133, 195, 0.24)",
+        "shadowMd": "0 26px 48px rgba(133, 128, 255, 0.2)",
+        "shadowLg": "0 34px 60px rgba(0, 0, 0, 0.52)",
+        "shadowXl": "0 44px 76px rgba(0, 0, 0, 0.56)",
+        "shadow2xl": "0 56px 96px rgba(0, 0, 0, 0.6)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

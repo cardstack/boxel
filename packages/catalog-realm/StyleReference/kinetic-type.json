@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Kinetic Type",
+      "visualDNA": "Scroll-triggered glyph morphs, oversized monos, and motion blur accents for expressive typography stories.",
+      "inspirations": [
+        "Array collective motion pieces",
+        "Animography specimen reels",
+        "Motionographer kinetic posters"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Work+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Perfect for animation portfolios, typographic essays, or expressive landing stories.",
+        "title": "Kinetic Type",
+        "description": "A motion-primed typographic skin with neon accents, gradient strokes, and layered baseline grids.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#090919",
+        "foreground": "#f4f3ff",
+        "card": "#13142d",
+        "cardForeground": "#f4f3ff",
+        "popover": "#1c1d3c",
+        "popoverForeground": "#f6f5ff",
+        "primary": "#ff6a45",
+        "primaryForeground": "#140603",
+        "secondary": "#4f8dff",
+        "secondaryForeground": "#050f26",
+        "muted": "#1b1c39",
+        "mutedForeground": "#9ba0d1",
+        "accent": "#9a77ff",
+        "accentForeground": "#12052d",
+        "destructive": "#ff5b7a",
+        "destructiveForeground": "#25020d",
+        "border": "#23264b",
+        "input": "#202243",
+        "ring": "#ff6a45",
+        "chart1": "#ff6a45",
+        "chart2": "#4f8dff",
+        "chart3": "#9a77ff",
+        "chart4": "#4de6d5",
+        "chart5": "#ffc857",
+        "sidebar": "#070717",
+        "sidebarForeground": "#f4f3ff",
+        "sidebarPrimary": "#ff6a45",
+        "sidebarPrimaryForeground": "#140603",
+        "sidebarAccent": "#4f8dff",
+        "sidebarAccentForeground": "#050f26",
+        "sidebarBorder": "#202243",
+        "sidebarRing": "#ff6a45",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 2px 6px rgba(255, 106, 69, 0.2)",
+        "shadowXs": "0 8px 18px rgba(9, 9, 25, 0.45)",
+        "shadowSm": "0 14px 28px rgba(9, 9, 25, 0.5)",
+        "shadow": "0 22px 44px rgba(79, 141, 255, 0.24)",
+        "shadowMd": "0 30px 58px rgba(9, 9, 25, 0.58)",
+        "shadowLg": "0 38px 68px rgba(9, 9, 25, 0.62)",
+        "shadowXl": "0 48px 86px rgba(9, 9, 25, 0.65)",
+        "shadow2xl": "0 60px 104px rgba(9, 9, 25, 0.68)"
+      },
+      "darkModeVariables": {
+        "background": "#050510",
+        "foreground": "#e9e8ff",
+        "card": "#101129",
+        "cardForeground": "#e9e8ff",
+        "popover": "#181a35",
+        "popoverForeground": "#f1f0ff",
+        "primary": "#ff7c5b",
+        "primaryForeground": "#190804",
+        "secondary": "#6ca2ff",
+        "secondaryForeground": "#07122d",
+        "muted": "#171838",
+        "mutedForeground": "#b3b9ea",
+        "accent": "#b692ff",
+        "accentForeground": "#16063a",
+        "destructive": "#ff6f8d",
+        "destructiveForeground": "#2a0611",
+        "border": "#1c1d3a",
+        "input": "#1c1d3a",
+        "ring": "#ff7c5b",
+        "chart1": "#ff7c5b",
+        "chart2": "#6ca2ff",
+        "chart3": "#b692ff",
+        "chart4": "#64f3df",
+        "chart5": "#ffd46a",
+        "sidebar": "#04040d",
+        "sidebarForeground": "#e9e8ff",
+        "sidebarPrimary": "#ff7c5b",
+        "sidebarPrimaryForeground": "#190804",
+        "sidebarAccent": "#6ca2ff",
+        "sidebarAccentForeground": "#07122d",
+        "sidebarBorder": "#191a36",
+        "sidebarRing": "#ff7c5b",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 2px 6px rgba(255, 124, 91, 0.24)",
+        "shadowXs": "0 8px 18px rgba(5, 5, 16, 0.48)",
+        "shadowSm": "0 14px 28px rgba(5, 5, 16, 0.52)",
+        "shadow": "0 22px 44px rgba(108, 162, 255, 0.28)",
+        "shadowMd": "0 30px 58px rgba(5, 5, 16, 0.6)",
+        "shadowLg": "0 38px 72px rgba(5, 5, 16, 0.64)",
+        "shadowXl": "0 48px 92px rgba(5, 5, 16, 0.68)",
+        "shadow2xl": "0 62px 112px rgba(5, 5, 16, 0.7)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

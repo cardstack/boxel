@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Font Showcase",
+      "visualDNA": "Dark specimen canvases, slider controls, and glyph grids built for type exploration tools.",
+      "inspirations": [
+        "Adobe Fonts playground",
+        "Google Fonts sandbox",
+        "Typographic specimens"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1517433456452-f9633a875f6f?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=Fraunces:ital,wght@0,600;1,500&family=JetBrains+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Great for font marketplaces, typography research, or live preview tooling.",
+        "title": "Font Showcase",
+        "description": "A specimen lab with variable sliders, glyph walls, and contrast-friendly type pairings.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0f0f18",
+        "foreground": "#f4f4fb",
+        "card": "#171827",
+        "cardForeground": "#f4f4fb",
+        "popover": "#202134",
+        "popoverForeground": "#f9f9ff",
+        "primary": "#7c5cff",
+        "primaryForeground": "#0f0f18",
+        "secondary": "#ff7ad9",
+        "secondaryForeground": "#140418",
+        "muted": "#1c1e2f",
+        "mutedForeground": "#a0a3c7",
+        "accent": "#64f0c6",
+        "accentForeground": "#031f16",
+        "destructive": "#ff5f6c",
+        "destructiveForeground": "#2a0308",
+        "border": "#22253a",
+        "input": "#1e2136",
+        "ring": "#7c5cff",
+        "chart1": "#7c5cff",
+        "chart2": "#ff7ad9",
+        "chart3": "#64f0c6",
+        "chart4": "#ffce6b",
+        "chart5": "#5fd0ff",
+        "sidebar": "#0c0d16",
+        "sidebarForeground": "#f4f4fb",
+        "sidebarPrimary": "#7c5cff",
+        "sidebarPrimaryForeground": "#0f0f18",
+        "sidebarAccent": "#64f0c6",
+        "sidebarAccentForeground": "#031f16",
+        "sidebarBorder": "#202336",
+        "sidebarRing": "#7c5cff",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Fraunces', 'Times New Roman', serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.18rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 6px rgba(124, 92, 255, 0.24)",
+        "shadowXs": "0 8px 18px rgba(15, 15, 24, 0.45)",
+        "shadowSm": "0 14px 28px rgba(15, 15, 24, 0.5)",
+        "shadow": "0 20px 42px rgba(124, 92, 255, 0.3)",
+        "shadowMd": "0 28px 56px rgba(15, 15, 24, 0.6)",
+        "shadowLg": "0 36px 70px rgba(15, 15, 24, 0.64)",
+        "shadowXl": "0 46px 90px rgba(15, 15, 24, 0.68)",
+        "shadow2xl": "0 58px 110px rgba(15, 15, 24, 0.7)"
+      },
+      "darkModeVariables": {
+        "background": "#06060e",
+        "foreground": "#eaeaff",
+        "card": "#111222",
+        "cardForeground": "#eaeaff",
+        "popover": "#1a1b31",
+        "popoverForeground": "#f1f1ff",
+        "primary": "#8f78ff",
+        "primaryForeground": "#0c061f",
+        "secondary": "#ff8fe0",
+        "secondaryForeground": "#1f061f",
+        "muted": "#18192a",
+        "mutedForeground": "#b3b5d6",
+        "accent": "#6df7cf",
+        "accentForeground": "#031f16",
+        "destructive": "#ff7587",
+        "destructiveForeground": "#2f080f",
+        "border": "#1d1f31",
+        "input": "#1d1f31",
+        "ring": "#8f78ff",
+        "chart1": "#8f78ff",
+        "chart2": "#ff8fe0",
+        "chart3": "#6df7cf",
+        "chart4": "#ffd982",
+        "chart5": "#74dbff",
+        "sidebar": "#04040b",
+        "sidebarForeground": "#eaeaff",
+        "sidebarPrimary": "#8f78ff",
+        "sidebarPrimaryForeground": "#0c061f",
+        "sidebarAccent": "#6df7cf",
+        "sidebarAccentForeground": "#031f16",
+        "sidebarBorder": "#1a1c2c",
+        "sidebarRing": "#8f78ff",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Fraunces', 'Times New Roman', serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "16px",
+        "spacing": "0.18rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 6px rgba(143, 120, 255, 0.28)",
+        "shadowXs": "0 8px 18px rgba(6, 6, 14, 0.48)",
+        "shadowSm": "0 14px 28px rgba(6, 6, 14, 0.52)",
+        "shadow": "0 22px 44px rgba(143, 120, 255, 0.32)",
+        "shadowMd": "0 30px 60px rgba(6, 6, 14, 0.6)",
+        "shadowLg": "0 40px 78px rgba(6, 6, 14, 0.64)",
+        "shadowXl": "0 50px 96px rgba(6, 6, 14, 0.66)",
+        "shadow2xl": "0 62px 116px rgba(6, 6, 14, 0.7)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

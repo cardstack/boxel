@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Calm Health",
+      "visualDNA": "Soft teal gradients, rounded inputs, and empathetic photography tuned for modern care journeys.",
+      "inspirations": [
+        "One Medical onboarding",
+        "Headspace Health wellbeing hubs",
+        "Forward telehealth portal"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1541976076758-347942db197f?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526256262350-7da7584cf5eb?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1524253482453-3fed8d2fe12b?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600&family=Playfair+Display:ital,wght@0,500;1,500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Ideal for patient onboarding, wellness programs, and empathetic care dashboards.",
+        "title": "Calm Health",
+        "description": "A reassuring care palette with breezy gradients, friendly forms, and supportive iconography.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1541976076758-347942db197f?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f4fbfa",
+        "foreground": "#123436",
+        "card": "#ffffff",
+        "cardForeground": "#153b3d",
+        "popover": "#e6f5f4",
+        "popoverForeground": "#123436",
+        "primary": "#2ab8a5",
+        "primaryForeground": "#f4fbfa",
+        "secondary": "#7dd3c1",
+        "secondaryForeground": "#123436",
+        "muted": "#d7efec",
+        "mutedForeground": "#3d6666",
+        "accent": "#f9c784",
+        "accentForeground": "#2f1d09",
+        "destructive": "#f47272",
+        "destructiveForeground": "#fff5f5",
+        "border": "#c0e3df",
+        "input": "#b4d9d5",
+        "ring": "#2ab8a5",
+        "chart1": "#2ab8a5",
+        "chart2": "#7dd3c1",
+        "chart3": "#f9c784",
+        "chart4": "#55c4f0",
+        "chart5": "#a78bfa",
+        "sidebar": "#eaf6f4",
+        "sidebarForeground": "#123436",
+        "sidebarPrimary": "#2ab8a5",
+        "sidebarPrimaryForeground": "#f4fbfa",
+        "sidebarAccent": "#7dd3c1",
+        "sidebarAccentForeground": "#123436",
+        "sidebarBorder": "#c0e3df",
+        "sidebarRing": "#2ab8a5",
+        "fontSans": "'Nunito Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(18, 52, 54, 0.08)",
+        "shadowXs": "0 3px 8px rgba(18, 52, 54, 0.1)",
+        "shadowSm": "0 6px 16px rgba(18, 52, 54, 0.12)",
+        "shadow": "0 12px 28px rgba(42, 184, 165, 0.16)",
+        "shadowMd": "0 18px 36px rgba(18, 52, 54, 0.18)",
+        "shadowLg": "0 26px 52px rgba(18, 52, 54, 0.2)",
+        "shadowXl": "0 34px 64px rgba(18, 52, 54, 0.22)",
+        "shadow2xl": "0 42px 80px rgba(18, 52, 54, 0.24)"
+      },
+      "darkModeVariables": {
+        "background": "#0b1c1e",
+        "foreground": "#d9f4f2",
+        "card": "#132628",
+        "cardForeground": "#d9f4f2",
+        "popover": "#183133",
+        "popoverForeground": "#def7f5",
+        "primary": "#5bd9c9",
+        "primaryForeground": "#081716",
+        "secondary": "#8de6d6",
+        "secondaryForeground": "#0e1f1e",
+        "muted": "#1c3234",
+        "mutedForeground": "#9ac4c2",
+        "accent": "#f9d49b",
+        "accentForeground": "#231407",
+        "destructive": "#ff8a88",
+        "destructiveForeground": "#2c0909",
+        "border": "#1e393b",
+        "input": "#1e393b",
+        "ring": "#5bd9c9",
+        "chart1": "#5bd9c9",
+        "chart2": "#8de6d6",
+        "chart3": "#f9d49b",
+        "chart4": "#63d4ff",
+        "chart5": "#b6a4ff",
+        "sidebar": "#081617",
+        "sidebarForeground": "#d9f4f2",
+        "sidebarPrimary": "#5bd9c9",
+        "sidebarPrimaryForeground": "#081716",
+        "sidebarAccent": "#8de6d6",
+        "sidebarAccentForeground": "#0e1f1e",
+        "sidebarBorder": "#1c3234",
+        "sidebarRing": "#5bd9c9",
+        "fontSans": "'Nunito Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.4)",
+        "shadowXs": "0 4px 8px rgba(0, 0, 0, 0.42)",
+        "shadowSm": "0 8px 18px rgba(0, 0, 0, 0.46)",
+        "shadow": "0 14px 28px rgba(91, 217, 201, 0.22)",
+        "shadowMd": "0 20px 38px rgba(91, 217, 201, 0.24)",
+        "shadowLg": "0 28px 52px rgba(0, 0, 0, 0.52)",
+        "shadowXl": "0 36px 66px rgba(0, 0, 0, 0.56)",
+        "shadow2xl": "0 44px 84px rgba(0, 0, 0, 0.6)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
