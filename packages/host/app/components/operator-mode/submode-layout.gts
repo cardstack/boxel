@@ -622,6 +622,13 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         flex-shrink: 0;
+        position: relative;
+      }
+
+      .workspace-button :deep(svg) {
+        position: absolute;
+        left: 0;
+        max-width: unset;
       }
 
       .workspace-button:focus:not(:focus-visible) {
@@ -634,6 +641,7 @@ export default class SubmodeLayout extends Component<Signature> {
         --icon-bg-opacity: 1;
         --icon-color: var(--boxel-dark);
         --icon-bg-color: var(--boxel-highlight);
+        --boxel-icon-button-width: 40px;
         outline: var(--submode-bar-item-outline);
       }
       .workspace-button--dark:focus:not(:focus-visible) {
