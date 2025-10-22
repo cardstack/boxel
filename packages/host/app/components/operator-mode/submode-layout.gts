@@ -643,6 +643,7 @@ export default class SubmodeLayout extends Component<Signature> {
         --icon-bg-color: var(--boxel-highlight);
         --boxel-icon-button-width: 40px;
         outline: var(--submode-bar-item-outline);
+        box-shadow: var(--submode-bar-item-box-shadow);
       }
       .workspace-button--dark:focus:not(:focus-visible) {
         outline: var(--submode-bar-item-outline);
