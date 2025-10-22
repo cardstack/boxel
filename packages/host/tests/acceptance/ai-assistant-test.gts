@@ -19,6 +19,7 @@ import {
   Deferred,
   ResolvedCodeRef,
   baseRealm,
+  ensureTrailingSlash,
   skillCardRef,
 } from '@cardstack/runtime-common';
 
@@ -29,6 +30,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import ENV from '@cardstack/host/config/environment';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
@@ -67,6 +69,9 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
+
+const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
+const skillsRealmURL = ensureTrailingSlash(ENV.resolvedSkillsRealmURL);
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
@@ -1978,12 +1983,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         {
           name: 'Cardstack Catalog',
           type: 'catalog-workspace',
-          url: 'http://localhost:4201/catalog/',
+          url: catalogRealmURL,
         },
         {
           name: 'Boxel Skills',
           type: 'catalog-workspace',
-          url: 'http://localhost:4201/skills/',
+          url: skillsRealmURL,
         },
       ],
       'Context sent with message contains correct workspaces',
@@ -2561,7 +2566,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .exists({ count: 1 });
     assert
       .dom(
-        `[data-test-skill-menu] [data-test-attached-card="http://localhost:4201/skills/Skill/boxel-environment"]`,
+        `[data-test-skill-menu] [data-test-attached-card="${skillsRealmURL}Skill/boxel-environment"]`,
       )
       .exists();
   });

@@ -7,6 +7,9 @@ wait_for_postgres
 PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
 wait_for_prerender "$PRERENDER_URL"
 
+DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
+CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
@@ -30,8 +33,8 @@ NODE_ENV=development \
   --fromUrl='http://localhost:4201/experiments/' \
   --toUrl='http://localhost:4201/experiments/' \
   \
-  --fromUrl='http://localhost:4201/catalog/' \
-  --toUrl='http://localhost:4201/catalog/' \
+  --fromUrl="${CATALOG_REALM_URL}" \
+  --toUrl="${CATALOG_REALM_URL}" \
   \
   --fromUrl='http://localhost:4201/skills/' \
   --toUrl='http://localhost:4201/skills/'

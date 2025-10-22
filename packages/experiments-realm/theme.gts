@@ -490,7 +490,7 @@ class Isolated extends Component<typeof BrandTheme> {
         font-family: monospace;
         font-size: 13px;
         color: #666;
-        background: #f5f5f5;
+        background: var(--boxel-50);
         padding: 8px 12px;
         border-radius: 4px;
         flex: 1;
@@ -1057,7 +1057,7 @@ class Embedded extends Component<typeof BrandTheme> {
           'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
         font-size: 11px;
         color: #666;
-        background: #f5f5f5;
+        background: var(--boxel-50);
         padding: 4px 8px;
         border-radius: 4px;
         flex: 1;

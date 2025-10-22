@@ -5,7 +5,7 @@ import {
   type SingleCardDocument,
 } from './document-types';
 import { isMeta, type CardResource } from './resource-types';
-import { RealmPaths, LocalPath, join } from './paths';
+import { RealmPaths, LocalPath, ensureTrailingSlash, join } from './paths';
 import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
 import {
   systemError,
@@ -1780,7 +1780,8 @@ export class Realm {
     for (let [i, resource] of resources.entries()) {
       if (
         (i > 0 && typeof resource.lid !== 'string') ||
-        (resource.meta.realmURL && resource.meta.realmURL !== this.url)
+        (resource.meta.realmURL &&
+          ensureTrailingSlash(resource.meta.realmURL) !== this.url)
       ) {
         continue;
       }

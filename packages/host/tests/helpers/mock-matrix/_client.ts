@@ -17,6 +17,7 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -28,6 +29,8 @@ import {
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+
+import ENV from '@cardstack/host/config/environment';
 
 import type {
   FileDefManager,
@@ -60,8 +63,8 @@ type Plural<T> = {
 
 const publicRealmURLs = [
   baseRealm.url,
-  'http://localhost:4201/catalog/',
-  'http://localhost:4201/skills/',
+  ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
+  ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
 ];
 
 export class MockClient implements ExtendedClient {
