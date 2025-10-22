@@ -22,13 +22,13 @@
         "https://images.unsplash.com/photo-1526401485004-46910ecc8e51?auto=format&fit=crop&w=1400&q=80"
       ],
       "cssImports": [
-        "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Chivo+Mono:wght@400;500&display=swap"
+        "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Chivo+Mono:wght@400;500&family=DM+Serif+Display:wght@400&display=swap"
       ],
       "cardInfo": {
+        "notes": "Ideal for music apps, live collaboration rooms, or nightlife communities.",
         "title": "Midnight Neon Hideout",
         "description": "A neon-drenched toolkit with glass panels, cyan glows, and analog synth mood.",
-        "thumbnailURL": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=600&q=80",
-        "notes": "Ideal for music apps, live collaboration rooms, or nightlife communities."
+        "thumbnailURL": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=600&q=80"
       },
       "rootVariables": {
         "background": "#11122b",
@@ -64,7 +64,7 @@
         "sidebarBorder": "#24274a",
         "sidebarRing": "#ff61d8",
         "fontSans": "'Barlow', 'Inter', system-ui, sans-serif",
-        "fontSerif": "'DM Serif Display', Georgia, serif",
+        "fontSerif": "'DM Serif Display', 'Georgia', serif",
         "fontMono": "'Chivo Mono', 'JetBrains Mono', monospace",
         "radius": "20px",
         "spacing": "0.22rem",
@@ -112,7 +112,7 @@
         "sidebarBorder": "#151637",
         "sidebarRing": "#ff7ae2",
         "fontSans": "'Barlow', 'Inter', system-ui, sans-serif",
-        "fontSerif": "'DM Serif Display', Georgia, serif",
+        "fontSerif": "'DM Serif Display', 'Georgia', serif",
         "fontMono": "'Chivo Mono', 'JetBrains Mono', monospace",
         "radius": "20px",
         "spacing": "0.22rem",

@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Vibrant Gradient",
+      "visualDNA": "Kaleidoscopic gradient washes, energetic blobs, and playful UI tokens.",
+      "inspirations": [
+        "Adobe Creative Cloud campaigns",
+        "Instagram gradient evolutions",
+        "Spotify artist promos"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1527443154391-507e9dc6c5cc?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Manrope:wght@400;600&family=Fredoka:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use layered gradient blobs, animated transitions, and confetti UI.",
+        "title": "Vibrant Gradient",
+        "description": "Luminous blends, floating cards, and upbeat copy built for expressive brands.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0d031a",
+        "foreground": "#fdf7ff",
+        "card": "#1b0a3a",
+        "cardForeground": "#fdf7ff",
+        "popover": "#280d52",
+        "popoverForeground": "#fdf7ff",
+        "primary": "#ff7ad9",
+        "primaryForeground": "#2a0221",
+        "secondary": "#695bff",
+        "secondaryForeground": "#0d021d",
+        "muted": "#2b1c4d",
+        "mutedForeground": "#c9b7ff",
+        "accent": "#31f6ff",
+        "accentForeground": "#001a1f",
+        "destructive": "#ff5f6e",
+        "destructiveForeground": "#270006",
+        "border": "#3a2460",
+        "input": "#31204f",
+        "ring": "#ff7ad9",
+        "chart1": "#ff7ad9",
+        "chart2": "#695bff",
+        "chart3": "#31f6ff",
+        "chart4": "#f9f871",
+        "chart5": "#ff9f68",
+        "sidebar": "#12052a",
+        "sidebarForeground": "#fdf7ff",
+        "sidebarPrimary": "#ff7ad9",
+        "sidebarPrimaryForeground": "#2a0221",
+        "sidebarAccent": "#695bff",
+        "sidebarAccentForeground": "#0d021d",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Manrope', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Fredoka', 'Fredoka One', sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "22px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 3px 8px rgba(255, 122, 217, 0.28)",
+        "shadowXs": "0 8px 18px rgba(49, 246, 255, 0.22)",
+        "shadowSm": "0 16px 32px rgba(13, 3, 26, 0.38)",
+        "shadow": "0 24px 48px rgba(13, 3, 26, 0.45)",
+        "shadowMd": "0 32px 64px rgba(105, 91, 255, 0.32)",
+        "shadowLg": "0 40px 72px rgba(13, 3, 26, 0.5)",
+        "shadowXl": "0 52px 96px rgba(13, 3, 26, 0.55)",
+        "shadow2xl": "0 64px 120px rgba(13, 3, 26, 0.6)"
+      },
+      "darkModeVariables": {
+        "background": "#080112",
+        "foreground": "#fdf7ff",
+        "card": "#110329",
+        "cardForeground": "#fdf7ff",
+        "popover": "#1b0642",
+        "popoverForeground": "#fdf7ff",
+        "primary": "#ff91e4",
+        "primaryForeground": "#300036",
+        "secondary": "#8679ff",
+        "secondaryForeground": "#11031d",
+        "muted": "#1f0d44",
+        "mutedForeground": "#ddceff",
+        "accent": "#4ffbff",
+        "accentForeground": "#021a22",
+        "destructive": "#ff7690",
+        "destructiveForeground": "#2d0010",
+        "border": "#2d1760",
+        "input": "#251250",
+        "ring": "#ff91e4",
+        "chart1": "#ff91e4",
+        "chart2": "#8679ff",
+        "chart3": "#4ffbff",
+        "chart4": "#fff685",
+        "chart5": "#ffb688",
+        "sidebar": "#050018",
+        "sidebarForeground": "#fdf7ff",
+        "sidebarPrimary": "#ff91e4",
+        "sidebarPrimaryForeground": "#300036",
+        "sidebarAccent": "#4ffbff",
+        "sidebarAccentForeground": "#021a22",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Manrope', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Fredoka', 'Fredoka One', sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "22px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 4px 10px rgba(255, 145, 228, 0.3)",
+        "shadowXs": "0 12px 24px rgba(8, 0, 24, 0.44)",
+        "shadowSm": "0 20px 40px rgba(8, 0, 24, 0.5)",
+        "shadow": "0 30px 60px rgba(133, 147, 255, 0.28)",
+        "shadowMd": "0 40px 80px rgba(255, 145, 228, 0.25)",
+        "shadowLg": "0 52px 96px rgba(8, 0, 24, 0.6)",
+        "shadowXl": "0 64px 120px rgba(8, 0, 24, 0.64)",
+        "shadow2xl": "0 76px 140px rgba(8, 0, 24, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -22,13 +22,13 @@
         "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1400&q=80"
       ],
       "cssImports": [
-        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&family=IBM+Plex+Mono:wght@400;500&family=DM+Serif+Text:wght@500&display=swap"
       ],
       "cardInfo": {
+        "notes": "Perfect for design tooling, creative networks, or editorial dashboards.",
         "title": "Digital Bauhaus Atelier",
         "description": "A structural palette of vivid orange, cobalt, and golden accent blocks anchored by soft cream surfaces.",
-        "thumbnailURL": "https://images.unsplash.com/photo-1582719478181-2cf4e7bda3a0?auto=format&fit=crop&w=600&q=80",
-        "notes": "Perfect for design tooling, creative networks, or editorial dashboards."
+        "thumbnailURL": "https://images.unsplash.com/photo-1582719478181-2cf4e7bda3a0?auto=format&fit=crop&w=600&q=80"
       },
       "rootVariables": {
         "background": "#fef6ec",
@@ -64,7 +64,7 @@
         "sidebarBorder": "#e6ddcf",
         "sidebarRing": "#ff6f3c",
         "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
-        "fontSerif": "'DM Serif Text', Georgia, serif",
+        "fontSerif": "'DM Serif Text', 'Georgia', serif",
         "fontMono": "'IBM Plex Mono', 'JetBrains Mono', monospace",
         "radius": "12px",
         "spacing": "0.2rem",
@@ -112,7 +112,7 @@
         "sidebarBorder": "#2a2730",
         "sidebarRing": "#ff8d55",
         "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
-        "fontSerif": "'DM Serif Text', Georgia, serif",
+        "fontSerif": "'DM Serif Text', 'Georgia', serif",
         "fontMono": "'IBM Plex Mono', 'JetBrains Mono', monospace",
         "radius": "12px",
         "spacing": "0.2rem",

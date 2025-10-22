@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Playful 3D",
+      "visualDNA": "Primary colors, WebGL bricks, and hover bounce interactions for gamified interfaces.",
+      "inspirations": [
+        "LEGO Kids experiences",
+        "Nintendo Labo playful UI",
+        "Minecraft Education dashboards"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Roboto:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Deploy floating blocks, perspective cards, and bounce easing on hover.",
+        "title": "Playful 3D",
+        "description": "Chunky shapes, bubbly typography, and playful motion for kid-friendly 3D interfaces.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f8fbff",
+        "foreground": "#1a1d21",
+        "card": "#ffffff",
+        "cardForeground": "#1a1d21",
+        "popover": "#f1f5ff",
+        "popoverForeground": "#1a1d21",
+        "primary": "#ff6473",
+        "primaryForeground": "#2d0208",
+        "secondary": "#3ac7ff",
+        "secondaryForeground": "#031822",
+        "muted": "#e7efff",
+        "mutedForeground": "#4c5b78",
+        "accent": "#ffe769",
+        "accentForeground": "#2a2105",
+        "destructive": "#ff4d61",
+        "destructiveForeground": "#30000a",
+        "border": "#dbe7ff",
+        "input": "#d0ddff",
+        "ring": "#ff6473",
+        "chart1": "#ff6473",
+        "chart2": "#3ac7ff",
+        "chart3": "#ffe769",
+        "chart4": "#4dffb8",
+        "chart5": "#8a64ff",
+        "sidebar": "#edf3ff",
+        "sidebarForeground": "#1a1d21",
+        "sidebarPrimary": "#ff6473",
+        "sidebarPrimaryForeground": "#2d0208",
+        "sidebarAccent": "#3ac7ff",
+        "sidebarAccentForeground": "#031822",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Roboto', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Fredoka', 'Fredoka One', sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "28px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 4px 8px rgba(58, 199, 255, 0.18)",
+        "shadowXs": "0 10px 18px rgba(255, 100, 115, 0.2)",
+        "shadowSm": "0 16px 26px rgba(26, 29, 33, 0.22)",
+        "shadow": "0 24px 36px rgba(26, 29, 33, 0.26)",
+        "shadowMd": "0 32px 48px rgba(26, 29, 33, 0.28)",
+        "shadowLg": "0 44px 60px rgba(26, 29, 33, 0.32)",
+        "shadowXl": "0 60px 80px rgba(26, 29, 33, 0.36)",
+        "shadow2xl": "0 80px 110px rgba(26, 29, 33, 0.4)"
+      },
+      "darkModeVariables": {
+        "background": "#0d1016",
+        "foreground": "#f5f9ff",
+        "card": "#141924",
+        "cardForeground": "#f5f9ff",
+        "popover": "#1a212f",
+        "popoverForeground": "#f5f9ff",
+        "primary": "#ff7a8a",
+        "primaryForeground": "#2d020e",
+        "secondary": "#47dcff",
+        "secondaryForeground": "#021c24",
+        "muted": "#1f2735",
+        "mutedForeground": "#a6b6d6",
+        "accent": "#ffe680",
+        "accentForeground": "#2c2206",
+        "destructive": "#ff6074",
+        "destructiveForeground": "#33000d",
+        "border": "#253041",
+        "input": "#253041",
+        "ring": "#ff7a8a",
+        "chart1": "#ff7a8a",
+        "chart2": "#47dcff",
+        "chart3": "#ffe680",
+        "chart4": "#5cffd2",
+        "chart5": "#9a7bff",
+        "sidebar": "#0b0f18",
+        "sidebarForeground": "#f5f9ff",
+        "sidebarPrimary": "#ff7a8a",
+        "sidebarPrimaryForeground": "#2d020e",
+        "sidebarAccent": "#47dcff",
+        "sidebarAccentForeground": "#021c24",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Roboto', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Fredoka', 'Fredoka One', sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "28px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 6px 10px rgba(71, 220, 255, 0.24)",
+        "shadowXs": "0 12px 20px rgba(15, 20, 30, 0.32)",
+        "shadowSm": "0 20px 30px rgba(15, 20, 30, 0.36)",
+        "shadow": "0 28px 44px rgba(15, 20, 30, 0.4)",
+        "shadowMd": "0 38px 58px rgba(15, 20, 30, 0.44)",
+        "shadowLg": "0 48px 72px rgba(15, 20, 30, 0.48)",
+        "shadowXl": "0 60px 90px rgba(15, 20, 30, 0.52)",
+        "shadow2xl": "0 74px 110px rgba(15, 20, 30, 0.56)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

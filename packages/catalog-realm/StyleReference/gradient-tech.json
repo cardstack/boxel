@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Gradient Tech",
+      "visualDNA": "Dark nebula backdrops, electric gradients, and glass-card panels echo high-velocity product launches and code-forward storytelling.",
+      "inspirations": [
+        "Stripe product stories",
+        "Linear contrast gradients",
+        "Raycast neon glass"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1527443154391-507e9dc6c5cc?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&family=IBM+Plex+Serif:wght@500&family=JetBrains+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Pair with glassmorphism overlays and command palette interactions.",
+        "title": "Gradient Tech",
+        "description": "A neon-gradient system for product teams that live between command lines and launch films.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0b0f19",
+        "foreground": "#e5edff",
+        "card": "#111826",
+        "cardForeground": "#f5f8ff",
+        "popover": "#141c2c",
+        "popoverForeground": "#f5f8ff",
+        "primary": "#6366f1",
+        "primaryForeground": "#0b0f19",
+        "secondary": "#14b8a6",
+        "secondaryForeground": "#031312",
+        "muted": "#1a2235",
+        "mutedForeground": "#9db3ff",
+        "accent": "#8b5cf6",
+        "accentForeground": "#0b0f19",
+        "destructive": "#f87171",
+        "destructiveForeground": "#19070a",
+        "border": "#1f2a40",
+        "input": "#1c2538",
+        "ring": "#6366f1",
+        "chart1": "#6366f1",
+        "chart2": "#14b8a6",
+        "chart3": "#f472b6",
+        "chart4": "#38bdf8",
+        "chart5": "#fbbf24",
+        "sidebar": "#0e1421",
+        "sidebarForeground": "#e5edff",
+        "sidebarPrimary": "#6366f1",
+        "sidebarPrimaryForeground": "#080d18",
+        "sidebarAccent": "#14b8a6",
+        "sidebarAccentForeground": "#031312",
+        "sidebarBorder": "#1f2a40",
+        "sidebarRing": "#8b5cf6",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Serif', 'Georgia', serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 1px 2px rgba(99, 102, 241, 0.24)",
+        "shadowXs": "0 4px 8px rgba(20, 184, 166, 0.18)",
+        "shadowSm": "0 8px 16px rgba(11, 15, 25, 0.4)",
+        "shadow": "0 16px 32px rgba(11, 15, 25, 0.5)",
+        "shadowMd": "0 24px 48px rgba(99, 102, 241, 0.32)",
+        "shadowLg": "0 32px 64px rgba(20, 184, 166, 0.28)",
+        "shadowXl": "0 48px 96px rgba(139, 92, 246, 0.35)",
+        "shadow2xl": "0 64px 120px rgba(11, 15, 25, 0.6)"
+      },
+      "darkModeVariables": {
+        "background": "#070b12",
+        "foreground": "#e5edff",
+        "card": "#0c131f",
+        "cardForeground": "#f1f5ff",
+        "popover": "#111a2b",
+        "popoverForeground": "#f7faff",
+        "primary": "#818cf8",
+        "primaryForeground": "#070b12",
+        "secondary": "#22d3ee",
+        "secondaryForeground": "#041317",
+        "muted": "#141f32",
+        "mutedForeground": "#b4c6ff",
+        "accent": "#a855f7",
+        "accentForeground": "#070b12",
+        "destructive": "#fb7185",
+        "destructiveForeground": "#19070a",
+        "border": "#1a2740",
+        "input": "#172031",
+        "ring": "#818cf8",
+        "chart1": "#818cf8",
+        "chart2": "#22d3ee",
+        "chart3": "#fb7185",
+        "chart4": "#38bdf8",
+        "chart5": "#facc15",
+        "sidebar": "#050912",
+        "sidebarForeground": "#e5edff",
+        "sidebarPrimary": "#818cf8",
+        "sidebarPrimaryForeground": "#050912",
+        "sidebarAccent": "#22d3ee",
+        "sidebarAccentForeground": "#031114",
+        "sidebarBorder": "#1a2740",
+        "sidebarRing": "#a855f7",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Serif', 'Georgia', serif",
+        "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 4px rgba(129, 140, 248, 0.28)",
+        "shadowXs": "0 6px 12px rgba(8, 12, 24, 0.45)",
+        "shadowSm": "0 10px 20px rgba(8, 12, 24, 0.5)",
+        "shadow": "0 18px 36px rgba(129, 140, 248, 0.32)",
+        "shadowMd": "0 26px 52px rgba(34, 211, 238, 0.28)",
+        "shadowLg": "0 36px 72px rgba(8, 12, 24, 0.55)",
+        "shadowXl": "0 48px 96px rgba(10, 16, 32, 0.6)",
+        "shadow2xl": "0 64px 120px rgba(10, 16, 32, 0.66)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

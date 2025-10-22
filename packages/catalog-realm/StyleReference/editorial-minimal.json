@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Editorial Minimal",
+      "visualDNA": "Magazine-grade whitespace, serif headlines, and muted photography with patient transitions.",
+      "inspirations": [
+        "Cereal editorial spreads",
+        "Kinfolk product stories",
+        "Monocle field reports"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1526481280695-3c3695125d11?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500&family=Playfair+Display:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Lean on asymmetric grid modules, generous whitespace, and disciplined drop caps.",
+        "title": "Editorial Minimal",
+        "description": "A magazine-inspired palette favoring calm photography, measured typography, and deliberate pacing.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1526481280695-3c3695125d11?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fdfbf6",
+        "foreground": "#23201d",
+        "card": "#ffffff",
+        "cardForeground": "#2f2924",
+        "popover": "#f7f3ec",
+        "popoverForeground": "#23201d",
+        "primary": "#2f2924",
+        "primaryForeground": "#fdfbf6",
+        "secondary": "#c0b19c",
+        "secondaryForeground": "#201a12",
+        "muted": "#f1ede6",
+        "mutedForeground": "#534941",
+        "accent": "#7f6a50",
+        "accentForeground": "#fffaf2",
+        "destructive": "#b94a44",
+        "destructiveForeground": "#fff5f2",
+        "border": "#e8ded1",
+        "input": "#dcccc0",
+        "ring": "#7f6a50",
+        "chart1": "#2f2924",
+        "chart2": "#c0b19c",
+        "chart3": "#7f6a50",
+        "chart4": "#d5c3af",
+        "chart5": "#b94a44",
+        "sidebar": "#f7f3ec",
+        "sidebarForeground": "#2f2924",
+        "sidebarPrimary": "#2f2924",
+        "sidebarPrimaryForeground": "#fdfbf6",
+        "sidebarAccent": "#c0b19c",
+        "sidebarAccentForeground": "#201a12",
+        "sidebarBorder": "#e8ded1",
+        "sidebarRing": "#7f6a50",
+        "fontSans": "'Public Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "12px",
+        "spacing": "0.3rem",
+        "trackingNormal": "0.005em",
+        "shadow2xs": "0 1px 2px rgba(47, 39, 36, 0.08)",
+        "shadowXs": "0 2px 4px rgba(47, 39, 36, 0.1)",
+        "shadowSm": "0 4px 8px rgba(47, 39, 36, 0.12)",
+        "shadow": "0 8px 16px rgba(47, 39, 36, 0.15)",
+        "shadowMd": "0 12px 24px rgba(47, 39, 36, 0.18)",
+        "shadowLg": "0 18px 36px rgba(47, 39, 36, 0.2)",
+        "shadowXl": "0 24px 48px rgba(47, 39, 36, 0.22)",
+        "shadow2xl": "0 32px 64px rgba(47, 39, 36, 0.24)"
+      },
+      "darkModeVariables": {
+        "background": "#1a1713",
+        "foreground": "#f5eee3",
+        "card": "#221d18",
+        "cardForeground": "#f5eee3",
+        "popover": "#29221c",
+        "popoverForeground": "#f9f4eb",
+        "primary": "#e0d1bd",
+        "primaryForeground": "#201810",
+        "secondary": "#a08e76",
+        "secondaryForeground": "#201810",
+        "muted": "#29221c",
+        "mutedForeground": "#cbbba6",
+        "accent": "#b19168",
+        "accentForeground": "#20160d",
+        "destructive": "#d96a5c",
+        "destructiveForeground": "#200c0a",
+        "border": "#30261f",
+        "input": "#30261f",
+        "ring": "#e0d1bd",
+        "chart1": "#e0d1bd",
+        "chart2": "#a08e76",
+        "chart3": "#b19168",
+        "chart4": "#f0e5d3",
+        "chart5": "#d96a5c",
+        "sidebar": "#17130f",
+        "sidebarForeground": "#f5eee3",
+        "sidebarPrimary": "#e0d1bd",
+        "sidebarPrimaryForeground": "#201810",
+        "sidebarAccent": "#a08e76",
+        "sidebarAccentForeground": "#201810",
+        "sidebarBorder": "#30261f",
+        "sidebarRing": "#e0d1bd",
+        "fontSans": "'Public Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "12px",
+        "spacing": "0.3rem",
+        "trackingNormal": "0.005em",
+        "shadow2xs": "0 1px 2px rgba(18, 14, 11, 0.35)",
+        "shadowXs": "0 2px 4px rgba(18, 14, 11, 0.4)",
+        "shadowSm": "0 6px 12px rgba(18, 14, 11, 0.45)",
+        "shadow": "0 10px 24px rgba(18, 14, 11, 0.5)",
+        "shadowMd": "0 18px 36px rgba(18, 14, 11, 0.54)",
+        "shadowLg": "0 26px 52px rgba(18, 14, 11, 0.58)",
+        "shadowXl": "0 36px 72px rgba(18, 14, 11, 0.62)",
+        "shadow2xl": "0 48px 96px rgba(18, 14, 11, 0.66)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Skeuo-Story",
+      "visualDNA": "Scrap-book edges, taped photos, and warm skeuomorphic layers for narrative timelines.",
+      "inspirations": [
+        "IKEA museum timelines",
+        "LEGO history chronologies",
+        "Disney100 scrapbook moments"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1473186578172-c141e6798cf4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1517840933437-c41356892b95?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Grandstander:wght@500;600&family=Source+Sans+Pro:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use notebook backdrops, pinned badges, and timeline sliders with haptic cues.",
+        "title": "Skeuo-Story",
+        "description": "A tactile storytelling kit with torn paper edges, pushpins, and artifact callouts.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1523731407965-2430cd12f5e4?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fcf7ef",
+        "foreground": "#2c2013",
+        "card": "#fffaf0",
+        "cardForeground": "#362515",
+        "popover": "#f2e6d2",
+        "popoverForeground": "#2c2013",
+        "primary": "#b97837",
+        "primaryForeground": "#fff7eb",
+        "secondary": "#e3c082",
+        "secondaryForeground": "#2d1b0f",
+        "muted": "#f0e0cc",
+        "mutedForeground": "#6a5136",
+        "accent": "#4fb48c",
+        "accentForeground": "#0f211c",
+        "destructive": "#d16558",
+        "destructiveForeground": "#fff5f2",
+        "border": "#d8c1a7",
+        "input": "#d0b394",
+        "ring": "#b97837",
+        "chart1": "#b97837",
+        "chart2": "#4fb48c",
+        "chart3": "#e3c082",
+        "chart4": "#8a6f53",
+        "chart5": "#d16558",
+        "sidebar": "#f8eddb",
+        "sidebarForeground": "#2d2014",
+        "sidebarPrimary": "#b97837",
+        "sidebarPrimaryForeground": "#fff7eb",
+        "sidebarAccent": "#4fb48c",
+        "sidebarAccentForeground": "#0f211c",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Source Sans Pro', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Grandstander', cursive",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.32rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 4px rgba(43, 31, 19, 0.18)",
+        "shadowXs": "0 6px 12px rgba(43, 31, 19, 0.22)",
+        "shadowSm": "0 12px 20px rgba(43, 31, 19, 0.25)",
+        "shadow": "0 20px 30px rgba(43, 31, 19, 0.28)",
+        "shadowMd": "0 28px 40px rgba(43, 31, 19, 0.32)",
+        "shadowLg": "0 36px 48px rgba(43, 31, 19, 0.34)",
+        "shadowXl": "0 48px 64px rgba(43, 31, 19, 0.38)",
+        "shadow2xl": "0 56px 80px rgba(43, 31, 19, 0.4)"
+      },
+      "darkModeVariables": {
+        "background": "#1a130a",
+        "foreground": "#f2e5d4",
+        "card": "#21170d",
+        "cardForeground": "#f2e5d4",
+        "popover": "#271d16",
+        "popoverForeground": "#f7ead8",
+        "primary": "#d7985c",
+        "primaryForeground": "#231407",
+        "secondary": "#cba46c",
+        "secondaryForeground": "#28180a",
+        "muted": "#2a1e13",
+        "mutedForeground": "#d3b48f",
+        "accent": "#66d0a9",
+        "accentForeground": "#0f261d",
+        "destructive": "#e07c6b",
+        "destructiveForeground": "#290b05",
+        "border": "#3a2817",
+        "input": "#3a2817",
+        "ring": "#d7985c",
+        "chart1": "#d7985c",
+        "chart2": "#66d0a9",
+        "chart3": "#cba46c",
+        "chart4": "#8d6c47",
+        "chart5": "#e07c6b",
+        "sidebar": "#150f08",
+        "sidebarForeground": "#f2e5d4",
+        "sidebarPrimary": "#d7985c",
+        "sidebarPrimaryForeground": "#231407",
+        "sidebarAccent": "#66d0a9",
+        "sidebarAccentForeground": "#0f261d",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Source Sans Pro', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Grandstander', cursive",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.32rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 6px rgba(15, 10, 6, 0.42)",
+        "shadowXs": "0 10px 14px rgba(15, 10, 6, 0.46)",
+        "shadowSm": "0 18px 24px rgba(15, 10, 6, 0.52)",
+        "shadow": "0 26px 36px rgba(102, 80, 51, 0.32)",
+        "shadowMd": "0 34px 44px rgba(211, 152, 92, 0.28)",
+        "shadowLg": "0 44px 58px rgba(8, 5, 3, 0.6)",
+        "shadowXl": "0 54px 70px rgba(8, 5, 3, 0.66)",
+        "shadow2xl": "0 64px 82px rgba(8, 5, 3, 0.7)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

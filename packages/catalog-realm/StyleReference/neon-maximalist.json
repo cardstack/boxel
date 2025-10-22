@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Neon Maximalist",
+      "visualDNA": "Fluoro palette, layered GIF energy, and glitch edges designed for chaotic culture drops.",
+      "inspirations": [
+        "Razzle-Dazzle microsites",
+        "MTV throwback bumpers",
+        "Adult Swim interstitials"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1527443154391-507e9dc6c5cc?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526312426976-f4d754fa9bd6?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=Unbounded:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Stack marquee text, animated stickers, and aggressive hover flashes.",
+        "title": "Neon Maximalist",
+        "description": "A kaleidoscopic kit with glow typography, gradient halos, and rave-ready UI treatments.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0a0314",
+        "foreground": "#fdf6ff",
+        "card": "#140a2a",
+        "cardForeground": "#fdf6ff",
+        "popover": "#1b0e3b",
+        "popoverForeground": "#fdf6ff",
+        "primary": "#ff5efc",
+        "primaryForeground": "#2b0030",
+        "secondary": "#04f4f4",
+        "secondaryForeground": "#001f1f",
+        "muted": "#22114c",
+        "mutedForeground": "#d8bfff",
+        "accent": "#f8ff61",
+        "accentForeground": "#221400",
+        "destructive": "#ff476f",
+        "destructiveForeground": "#30000b",
+        "border": "#2a1760",
+        "input": "#251254",
+        "ring": "#ff5efc",
+        "chart1": "#ff5efc",
+        "chart2": "#04f4f4",
+        "chart3": "#f8ff61",
+        "chart4": "#7a5bff",
+        "chart5": "#ff476f",
+        "sidebar": "#0f0620",
+        "sidebarForeground": "#fdf6ff",
+        "sidebarPrimary": "#ff5efc",
+        "sidebarPrimaryForeground": "#2b0030",
+        "sidebarAccent": "#04f4f4",
+        "sidebarAccentForeground": "#001f1f",
+        "sidebarBorder": "#2a1760",
+        "sidebarRing": "#ff5efc",
+        "fontSans": "'Chakra Petch', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Unbounded', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "24px",
+        "spacing": "0.20rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 2px 6px rgba(255, 94, 252, 0.3)",
+        "shadowXs": "0 6px 12px rgba(4, 244, 244, 0.28)",
+        "shadowSm": "0 12px 24px rgba(10, 3, 20, 0.4)",
+        "shadow": "0 18px 36px rgba(10, 3, 20, 0.48)",
+        "shadowMd": "0 26px 52px rgba(248, 255, 97, 0.32)",
+        "shadowLg": "0 32px 64px rgba(10, 3, 20, 0.6)",
+        "shadowXl": "0 40px 80px rgba(10, 3, 20, 0.66)",
+        "shadow2xl": "0 56px 110px rgba(10, 3, 20, 0.72)"
+      },
+      "darkModeVariables": {
+        "background": "#050112",
+        "foreground": "#fdf6ff",
+        "card": "#0a031f",
+        "cardForeground": "#fdf6ff",
+        "popover": "#11052f",
+        "popoverForeground": "#fdf6ff",
+        "primary": "#ff7afd",
+        "primaryForeground": "#320036",
+        "secondary": "#15fefe",
+        "secondaryForeground": "#001d1d",
+        "muted": "#16073a",
+        "mutedForeground": "#e4cfff",
+        "accent": "#fbff85",
+        "accentForeground": "#2c2100",
+        "destructive": "#ff6086",
+        "destructiveForeground": "#36000f",
+        "border": "#1c0a46",
+        "input": "#1c0a46",
+        "ring": "#ff7afd",
+        "chart1": "#ff7afd",
+        "chart2": "#15fefe",
+        "chart3": "#fbff85",
+        "chart4": "#8d6bff",
+        "chart5": "#ff6086",
+        "sidebar": "#05061b",
+        "sidebarForeground": "#fdf6ff",
+        "sidebarPrimary": "#ff7afd",
+        "sidebarPrimaryForeground": "#320036",
+        "sidebarAccent": "#15fefe",
+        "sidebarAccentForeground": "#001d1d",
+        "sidebarBorder": "#1c0a46",
+        "sidebarRing": "#ff7afd",
+        "fontSans": "'Chakra Petch', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Unbounded', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "24px",
+        "spacing": "0.20rem",
+        "trackingNormal": "0.03em",
+        "shadow2xs": "0 2px 6px rgba(255, 122, 253, 0.32)",
+        "shadowXs": "0 8px 16px rgba(21, 254, 254, 0.26)",
+        "shadowSm": "0 14px 28px rgba(5, 1, 18, 0.45)",
+        "shadow": "0 22px 44px rgba(5, 1, 18, 0.52)",
+        "shadowMd": "0 32px 60px rgba(251, 255, 133, 0.3)",
+        "shadowLg": "0 44px 80px rgba(5, 1, 18, 0.62)",
+        "shadowXl": "0 56px 96px rgba(5, 1, 18, 0.68)",
+        "shadow2xl": "0 64px 120px rgba(5, 1, 18, 0.72)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

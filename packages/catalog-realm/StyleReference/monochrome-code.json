@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Monochrome Code",
+      "visualDNA": "Pure black-and-white interface, monospace snippets, and grid cards tuned for developer-first experiences.",
+      "inspirations": [
+        "Vercel docs aesthetic",
+        "GitLab pipelines",
+        "Railway console"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1517430816045-df4b7de11d1d?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1453928582365-b6ad33cbcf64?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;600&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use split panes, ASCII dividers, and dark-light toggle previews.",
+        "title": "Monochrome Code",
+        "description": "Minimalist dev tooling palette with grid consoles, CLI callouts, and terminal chic.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1517430816045-df4b7de11d1d?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fdfdfd",
+        "foreground": "#0d0d0d",
+        "card": "#ffffff",
+        "cardForeground": "#0d0d0d",
+        "popover": "#f7f7f7",
+        "popoverForeground": "#0d0d0d",
+        "primary": "#0d0d0d",
+        "primaryForeground": "#fdfdfd",
+        "secondary": "#cfcfcf",
+        "secondaryForeground": "#0d0d0d",
+        "muted": "#f2f2f2",
+        "mutedForeground": "#4d4d4d",
+        "accent": "#111111",
+        "accentForeground": "#fdfdfd",
+        "destructive": "#d72d2d",
+        "destructiveForeground": "#fff5f5",
+        "border": "#111111",
+        "input": "#c8c8c8",
+        "ring": "#0d0d0d",
+        "chart1": "#0d0d0d",
+        "chart2": "#4d4d4d",
+        "chart3": "#909090",
+        "chart4": "#cecece",
+        "chart5": "#000000",
+        "sidebar": "#ffffff",
+        "sidebarForeground": "#0d0d0d",
+        "sidebarPrimary": "#0d0d0d",
+        "sidebarPrimaryForeground": "#fdfdfd",
+        "sidebarAccent": "#4d4d4d",
+        "sidebarAccentForeground": "#ffffff",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Mono', 'SFMono-Regular', monospace",
+        "fontMono": "'IBM Plex Mono', 'SFMono-Regular', monospace",
+        "radius": "4px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.08em",
+        "shadow2xs": "0 0 0 1px #0d0d0d",
+        "shadowXs": "0 6px 0 0 #0d0d0d",
+        "shadowSm": "0 10px 0 0 rgba(13,13,13,0.6)",
+        "shadow": "0 14px 0 0 rgba(13,13,13,0.65)",
+        "shadowMd": "0 18px 0 0 rgba(13,13,13,0.7)",
+        "shadowLg": "0 24px 0 0 rgba(13,13,13,0.75)",
+        "shadowXl": "0 32px 0 0 rgba(13,13,13,0.8)",
+        "shadow2xl": "0 40px 0 0 rgba(13,13,13,0.85)"
+      },
+      "darkModeVariables": {
+        "background": "#080808",
+        "foreground": "#f7f7f7",
+        "card": "#101010",
+        "cardForeground": "#f7f7f7",
+        "popover": "#191919",
+        "popoverForeground": "#f7f7f7",
+        "primary": "#f7f7f7",
+        "primaryForeground": "#080808",
+        "secondary": "#262626",
+        "secondaryForeground": "#f7f7f7",
+        "muted": "#1c1c1c",
+        "mutedForeground": "#d0d0d0",
+        "accent": "#707070",
+        "accentForeground": "#0b0b0b",
+        "destructive": "#ff5c5c",
+        "destructiveForeground": "#310505",
+        "border": "#f7f7f7",
+        "input": "#262626",
+        "ring": "#f7f7f7",
+        "chart1": "#f7f7f7",
+        "chart2": "#c6c6c6",
+        "chart3": "#8a8a8a",
+        "chart4": "#5c5c5c",
+        "chart5": "#ffffff",
+        "sidebar": "#060606",
+        "sidebarForeground": "#f7f7f7",
+        "sidebarPrimary": "#f7f7f7",
+        "sidebarPrimaryForeground": "#060606",
+        "sidebarAccent": "#8a8a8a",
+        "sidebarAccentForeground": "#060606",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Mono', 'SFMono-Regular', monospace",
+        "fontMono": "'IBM Plex Mono', 'SFMono-Regular', monospace",
+        "radius": "4px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.08em",
+        "shadow2xs": "0 0 0 1px #f7f7f7",
+        "shadowXs": "0 8px 0 0 rgba(247,247,247,0.45)",
+        "shadowSm": "0 14px 0 0 rgba(247,247,247,0.5)",
+        "shadow": "0 20px 0 0 rgba(247,247,247,0.55)",
+        "shadowMd": "0 28px 0 0 rgba(247,247,247,0.6)",
+        "shadowLg": "0 36px 0 0 rgba(247,247,247,0.65)",
+        "shadowXl": "0 46px 0 0 rgba(247,247,247,0.7)",
+        "shadow2xl": "0 56px 0 0 rgba(247,247,247,0.75)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

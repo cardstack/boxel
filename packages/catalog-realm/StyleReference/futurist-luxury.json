@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Futurist Luxury",
+      "visualDNA": "Midnight glass, holographic glow, and precision serif accents for flagship tech unveilings.",
+      "inspirations": [
+        "BMW i7 launch pages",
+        "Mercedes EQS configurators",
+        "Rolls-Royce Spectre experience"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1519648023493-d82b5f8d7fd3?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1522402911-09b7e13787fe?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1529429617124-aee3f4f3e4b1?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Playfair+Display:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use floating cards, gloss reflections, and spec callouts with headline serifs.",
+        "title": "Futurist Luxury",
+        "description": "Dark glass panels, holographic accents, and meticulous typography crafted for premium vehicles.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1519648023493-d82b5f8d7fd3?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#070910",
+        "foreground": "#f3f7ff",
+        "card": "#0f1322",
+        "cardForeground": "#f3f7ff",
+        "popover": "#151a2d",
+        "popoverForeground": "#f3f7ff",
+        "primary": "#5f7bff",
+        "primaryForeground": "#060914",
+        "secondary": "#2cd0e0",
+        "secondaryForeground": "#04181d",
+        "muted": "#1a2034",
+        "mutedForeground": "#92a3d6",
+        "accent": "#bf9ff9",
+        "accentForeground": "#1c1430",
+        "destructive": "#ff6b6b",
+        "destructiveForeground": "#270306",
+        "border": "#232a40",
+        "input": "#1d2438",
+        "ring": "#5f7bff",
+        "chart1": "#5f7bff",
+        "chart2": "#2cd0e0",
+        "chart3": "#bf9ff9",
+        "chart4": "#7bffda",
+        "chart5": "#f4d160",
+        "sidebar": "#090d16",
+        "sidebarForeground": "#f3f7ff",
+        "sidebarPrimary": "#5f7bff",
+        "sidebarPrimaryForeground": "#060914",
+        "sidebarAccent": "#2cd0e0",
+        "sidebarAccentForeground": "#04181d",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Montserrat', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 6px rgba(95, 123, 255, 0.28)",
+        "shadowXs": "0 6px 12px rgba(44, 208, 224, 0.24)",
+        "shadowSm": "0 12px 24px rgba(8, 16, 32, 0.4)",
+        "shadow": "0 18px 40px rgba(8, 16, 32, 0.48)",
+        "shadowMd": "0 26px 56px rgba(95, 123, 255, 0.32)",
+        "shadowLg": "0 36px 72px rgba(8, 16, 32, 0.6)",
+        "shadowXl": "0 48px 96px rgba(8, 16, 32, 0.66)",
+        "shadow2xl": "0 60px 120px rgba(8, 16, 32, 0.72)"
+      },
+      "darkModeVariables": {
+        "background": "#04060c",
+        "foreground": "#edf5ff",
+        "card": "#080d19",
+        "cardForeground": "#edf5ff",
+        "popover": "#0d1424",
+        "popoverForeground": "#edf5ff",
+        "primary": "#8095ff",
+        "primaryForeground": "#030710",
+        "secondary": "#4de8f4",
+        "secondaryForeground": "#02171b",
+        "muted": "#121a2b",
+        "mutedForeground": "#aab8e3",
+        "accent": "#d6b6ff",
+        "accentForeground": "#211830",
+        "destructive": "#ff7f87",
+        "destructiveForeground": "#2b040a",
+        "border": "#182236",
+        "input": "#182236",
+        "ring": "#8095ff",
+        "chart1": "#8095ff",
+        "chart2": "#4de8f4",
+        "chart3": "#d6b6ff",
+        "chart4": "#8dffe8",
+        "chart5": "#ffd980",
+        "sidebar": "#03050b",
+        "sidebarForeground": "#edf5ff",
+        "sidebarPrimary": "#8095ff",
+        "sidebarPrimaryForeground": "#030710",
+        "sidebarAccent": "#4de8f4",
+        "sidebarAccentForeground": "#02171b",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Montserrat', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 8px rgba(128, 149, 255, 0.32)",
+        "shadowXs": "0 10px 18px rgba(4, 10, 18, 0.48)",
+        "shadowSm": "0 18px 36px rgba(4, 10, 18, 0.54)",
+        "shadow": "0 28px 56px rgba(4, 10, 18, 0.6)",
+        "shadowMd": "0 36px 72px rgba(77, 232, 244, 0.3)",
+        "shadowLg": "0 44px 88px rgba(4, 10, 18, 0.65)",
+        "shadowXl": "0 56px 110px rgba(4, 10, 18, 0.7)",
+        "shadow2xl": "0 70px 130px rgba(4, 10, 18, 0.74)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Activist Rugged",
+      "visualDNA": "Weathered textures, bold CTA blocks, and trail-mapped backgrounds built for eco brand campaigns and volunteer drives.",
+      "inspirations": [
+        "Patagonia field reports",
+        "REI stewardship drives",
+        "Trailhead community guides"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1476041800959-2f6bb412c8ce?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;600&family=Cormorant+Garamond:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Highlight gear checklists, action badges, and partner shoutouts across panels.",
+        "title": "Activist Rugged",
+        "description": "Field-ready storytelling kit for campaigns that blend rugged maps, gear callouts, and community action prompts.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f2f0e6",
+        "foreground": "#1f2a21",
+        "card": "#ffffff",
+        "cardForeground": "#223328",
+        "popover": "#ebe3d0",
+        "popoverForeground": "#1f2a21",
+        "primary": "#2f5d3a",
+        "primaryForeground": "#f2f9f2",
+        "secondary": "#8fbf8f",
+        "secondaryForeground": "#18261a",
+        "muted": "#e1dac8",
+        "mutedForeground": "#4a5a4d",
+        "accent": "#e3a857",
+        "accentForeground": "#2f1a05",
+        "destructive": "#c8513f",
+        "destructiveForeground": "#fff5f2",
+        "border": "#d7ccb7",
+        "input": "#cfc3aa",
+        "ring": "#2f5d3a",
+        "chart1": "#2f5d3a",
+        "chart2": "#8fbf8f",
+        "chart3": "#e3a857",
+        "chart4": "#4a90a4",
+        "chart5": "#c8513f",
+        "sidebar": "#ede5d2",
+        "sidebarForeground": "#1f2a21",
+        "sidebarPrimary": "#2f5d3a",
+        "sidebarPrimaryForeground": "#f2f9f2",
+        "sidebarAccent": "#e3a857",
+        "sidebarAccentForeground": "#2f1a05",
+        "sidebarBorder": "#d7ccb7",
+        "sidebarRing": "#2f5d3a",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Cormorant Garamond', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.28rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 1px 2px rgba(47, 93, 58, 0.12)",
+        "shadowXs": "0 4px 6px rgba(47, 93, 58, 0.14)",
+        "shadowSm": "0 8px 14px rgba(47, 93, 58, 0.18)",
+        "shadow": "0 12px 24px rgba(47, 93, 58, 0.22)",
+        "shadowMd": "0 18px 36px rgba(47, 93, 58, 0.24)",
+        "shadowLg": "0 24px 48px rgba(28, 46, 36, 0.28)",
+        "shadowXl": "0 32px 64px rgba(28, 46, 36, 0.32)",
+        "shadow2xl": "0 40px 80px rgba(28, 46, 36, 0.36)"
+      },
+      "darkModeVariables": {
+        "background": "#141c16",
+        "foreground": "#f0f6ef",
+        "card": "#192319",
+        "cardForeground": "#f0f6ef",
+        "popover": "#1f2b1f",
+        "popoverForeground": "#f0f6ef",
+        "primary": "#6fce74",
+        "primaryForeground": "#0e140e",
+        "secondary": "#3c6f57",
+        "secondaryForeground": "#f1f8f2",
+        "muted": "#1f2b1f",
+        "mutedForeground": "#a6c7ac",
+        "accent": "#f0b867",
+        "accentForeground": "#201103",
+        "destructive": "#ff7b61",
+        "destructiveForeground": "#210804",
+        "border": "#243323",
+        "input": "#243323",
+        "ring": "#6fce74",
+        "chart1": "#6fce74",
+        "chart2": "#3c6f57",
+        "chart3": "#f0b867",
+        "chart4": "#4ab4c4",
+        "chart5": "#ff7b61",
+        "sidebar": "#101911",
+        "sidebarForeground": "#f0f6ef",
+        "sidebarPrimary": "#6fce74",
+        "sidebarPrimaryForeground": "#0e140e",
+        "sidebarAccent": "#f0b867",
+        "sidebarAccentForeground": "#201103",
+        "sidebarBorder": "#243323",
+        "sidebarRing": "#6fce74",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Cormorant Garamond', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.28rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 4px rgba(19, 33, 24, 0.4)",
+        "shadowXs": "0 6px 12px rgba(19, 33, 24, 0.45)",
+        "shadowSm": "0 10px 20px rgba(19, 33, 24, 0.5)",
+        "shadow": "0 18px 36px rgba(111, 206, 116, 0.28)",
+        "shadowMd": "0 26px 52px rgba(240, 184, 103, 0.24)",
+        "shadowLg": "0 36px 72px rgba(12, 20, 15, 0.58)",
+        "shadowXl": "0 48px 96px rgba(12, 20, 15, 0.64)",
+        "shadow2xl": "0 60px 120px rgba(12, 20, 15, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Pop Data-Viz",
+      "visualDNA": "Bright blocks, animated stats, and share-card ready colors for energetic metrics stories.",
+      "inspirations": [
+        "Spotify Wrapped",
+        "Apple Music Replay",
+        "Strava Year in Sport"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1526498460520-4c246339dccb?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Plus+Jakarta+Sans:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use animated number counters, sticker legends, and export-ready layouts.",
+        "title": "Pop Data-Viz",
+        "description": "Punchy gradients, stacked stats, and shareable cards for recap moments.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1526498460520-4c246339dccb?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0b0220",
+        "foreground": "#f9f7ff",
+        "card": "#170a40",
+        "cardForeground": "#f9f7ff",
+        "popover": "#1f0d54",
+        "popoverForeground": "#f9f7ff",
+        "primary": "#ff74b8",
+        "primaryForeground": "#250016",
+        "secondary": "#6c7dff",
+        "secondaryForeground": "#06092b",
+        "muted": "#26155f",
+        "mutedForeground": "#c6b9ff",
+        "accent": "#ffa947",
+        "accentForeground": "#2a1600",
+        "destructive": "#ff5f6c",
+        "destructiveForeground": "#270006",
+        "border": "#33226d",
+        "input": "#2b1a61",
+        "ring": "#ff74b8",
+        "chart1": "#ff74b8",
+        "chart2": "#6c7dff",
+        "chart3": "#ffa947",
+        "chart4": "#39f3d2",
+        "chart5": "#ffe564",
+        "sidebar": "#10032c",
+        "sidebarForeground": "#f9f7ff",
+        "sidebarPrimary": "#ff74b8",
+        "sidebarPrimaryForeground": "#250016",
+        "sidebarAccent": "#6c7dff",
+        "sidebarAccentForeground": "#06092b",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'DM Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Plus Jakarta Sans', 'Plus Jakarta Sans', sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.18rem",
+        "trackingNormal": "0.025em",
+        "shadow2xs": "0 3px 8px rgba(255, 116, 184, 0.24)",
+        "shadowXs": "0 8px 18px rgba(108, 125, 255, 0.2)",
+        "shadowSm": "0 14px 32px rgba(11, 2, 32, 0.36)",
+        "shadow": "0 20px 48px rgba(11, 2, 32, 0.42)",
+        "shadowMd": "0 30px 60px rgba(255, 116, 184, 0.28)",
+        "shadowLg": "0 40px 72px rgba(11, 2, 32, 0.55)",
+        "shadowXl": "0 52px 96px rgba(11, 2, 32, 0.6)",
+        "shadow2xl": "0 64px 120px rgba(11, 2, 32, 0.64)"
+      },
+      "darkModeVariables": {
+        "background": "#060014",
+        "foreground": "#f9f7ff",
+        "card": "#110433",
+        "cardForeground": "#f9f7ff",
+        "popover": "#170546",
+        "popoverForeground": "#f9f7ff",
+        "primary": "#ff8ad0",
+        "primaryForeground": "#2a0017",
+        "secondary": "#8593ff",
+        "secondaryForeground": "#060730",
+        "muted": "#1f0e52",
+        "mutedForeground": "#d7ccff",
+        "accent": "#ffc166",
+        "accentForeground": "#311d00",
+        "destructive": "#ff7384",
+        "destructiveForeground": "#2d000a",
+        "border": "#26175f",
+        "input": "#26175f",
+        "ring": "#ff8ad0",
+        "chart1": "#ff8ad0",
+        "chart2": "#8593ff",
+        "chart3": "#ffc166",
+        "chart4": "#4ffbdb",
+        "chart5": "#fff27c",
+        "sidebar": "#040021",
+        "sidebarForeground": "#f9f7ff",
+        "sidebarPrimary": "#ff8ad0",
+        "sidebarPrimaryForeground": "#2a0017",
+        "sidebarAccent": "#8593ff",
+        "sidebarAccentForeground": "#060730",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'DM Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Plus Jakarta Sans', 'Plus Jakarta Sans', sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.18rem",
+        "trackingNormal": "0.025em",
+        "shadow2xs": "0 4px 10px rgba(255, 138, 208, 0.3)",
+        "shadowXs": "0 12px 24px rgba(4, 0, 33, 0.45)",
+        "shadowSm": "0 20px 40px rgba(4, 0, 33, 0.5)",
+        "shadow": "0 30px 60px rgba(133, 147, 255, 0.28)",
+        "shadowMd": "0 40px 80px rgba(255, 138, 208, 0.25)",
+        "shadowLg": "0 52px 96px rgba(4, 0, 33, 0.6)",
+        "shadowXl": "0 64px 120px rgba(4, 0, 33, 0.64)",
+        "shadow2xl": "0 76px 140px rgba(4, 0, 33, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

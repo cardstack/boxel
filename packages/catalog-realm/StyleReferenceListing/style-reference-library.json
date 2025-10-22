@@ -14,7 +14,7 @@
         "https://images.unsplash.com/photo-1582719478181-2cf4e7bda3a0?auto=format&fit=crop&w=1400&q=80",
         "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80"
       ],
-      "summary": "A curated set of themed **Style Reference** cards that package visual DNA copy, inspiration tags, and synchronized light/dark design tokens. Use them to seed new products, remix palettes, or hand teammates a ready-to-go art direction.",
+      "summary": "An expanding library of themed **Style Reference** cards that package visual DNA copy, inspiration tags, and synchronized light/dark design tokens. Use them to seed new products, remix palettes, or hand teammates a ready-to-go art direction.",
       "cardInfo": {
         "notes": "Each reference includes paired CSS variables, inspiration tags, and wallpapers for instant context.",
         "title": "Style Reference Library",
@@ -55,12 +55,47 @@
       },
       "examples.1": {
         "links": {
-          "self": "../StyleReference/digital-bauhaus-atelier"
+          "self": "../StyleReference/monochrome-code"
         }
       },
       "examples.2": {
         "links": {
-          "self": "../StyleReference/midnight-neon-hideout"
+          "self": "../StyleReference/futurist-lab"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../StyleReference/futurist-luxury"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../StyleReference/skeuo-story"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../StyleReference/high-fashion-immersive"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../StyleReference/cinematic-editorial"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../StyleReference/playful-3d"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../StyleReference/vibrant-gradient"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../StyleReference/luxe-commerce"
         }
       },
       "categories.0": {

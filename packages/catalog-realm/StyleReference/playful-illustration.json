@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Playful Illustration",
+      "visualDNA": "Chunky vector doodles, pastel punch, and asymmetric tiles that keep microcopy cheeky and approachable.",
+      "inspirations": [
+        "Mailchimp illustration tone",
+        "Slack onboarding energy",
+        "Headspace calm humor"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1559028012-481c04fa702d?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1522252234503-e356532cafd5?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600&family=Libre+Baskerville:wght@400;500&family=Fira+Code:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Layer blobby backgrounds, wavy dividers, and anthropomorphic icons.",
+        "title": "Playful Illustration",
+        "description": "A pastel-forward system with bubbly typography and sticker-like depth for whimsical products.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1559028012-481c04fa702d?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fff7eb",
+        "foreground": "#33201f",
+        "card": "#ffffff",
+        "cardForeground": "#3e2723",
+        "popover": "#ffe9f0",
+        "popoverForeground": "#33201f",
+        "primary": "#ff7ab8",
+        "primaryForeground": "#2f0a1b",
+        "secondary": "#ffd166",
+        "secondaryForeground": "#3a2a14",
+        "muted": "#ffe7d6",
+        "mutedForeground": "#734b35",
+        "accent": "#6cc7ff",
+        "accentForeground": "#082333",
+        "destructive": "#ff5c5c",
+        "destructiveForeground": "#2f0a0a",
+        "border": "#ffd9c7",
+        "input": "#ffcdbb",
+        "ring": "#ff7ab8",
+        "chart1": "#ff7ab8",
+        "chart2": "#ffd166",
+        "chart3": "#6cc7ff",
+        "chart4": "#35d0a5",
+        "chart5": "#ff9f1c",
+        "sidebar": "#fff1e4",
+        "sidebarForeground": "#39201b",
+        "sidebarPrimary": "#ff7ab8",
+        "sidebarPrimaryForeground": "#2f0a1b",
+        "sidebarAccent": "#ffd166",
+        "sidebarAccentForeground": "#3a2a14",
+        "sidebarBorder": "#ffd9c7",
+        "sidebarRing": "#ff7ab8",
+        "fontSans": "'Baloo 2', 'Fredoka', sans-serif",
+        "fontSerif": "'Libre Baskerville', 'Times New Roman', serif",
+        "fontMono": "'Fira Code', 'JetBrains Mono', monospace",
+        "radius": "24px",
+        "spacing": "0.28rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 4px rgba(255, 122, 184, 0.12)",
+        "shadowXs": "0 4px 8px rgba(255, 122, 184, 0.14)",
+        "shadowSm": "0 6px 12px rgba(244, 114, 182, 0.18)",
+        "shadow": "0 10px 24px rgba(244, 114, 182, 0.22)",
+        "shadowMd": "0 18px 36px rgba(107, 149, 255, 0.18)",
+        "shadowLg": "0 24px 48px rgba(107, 149, 255, 0.2)",
+        "shadowXl": "0 32px 64px rgba(255, 209, 102, 0.18)",
+        "shadow2xl": "0 40px 80px rgba(255, 122, 184, 0.24)"
+      },
+      "darkModeVariables": {
+        "background": "#281420",
+        "foreground": "#fce7f6",
+        "card": "#331d27",
+        "cardForeground": "#fef6fb",
+        "popover": "#3a2230",
+        "popoverForeground": "#fef6fb",
+        "primary": "#ff9ad1",
+        "primaryForeground": "#1c0614",
+        "secondary": "#ffbf4d",
+        "secondaryForeground": "#2b1900",
+        "muted": "#3a2230",
+        "mutedForeground": "#f5c5e6",
+        "accent": "#67e3ff",
+        "accentForeground": "#08121d",
+        "destructive": "#ff7a7a",
+        "destructiveForeground": "#280810",
+        "border": "#412a35",
+        "input": "#412a35",
+        "ring": "#ff9ad1",
+        "chart1": "#ff9ad1",
+        "chart2": "#ffbf4d",
+        "chart3": "#67e3ff",
+        "chart4": "#5ff4c7",
+        "chart5": "#ff9f1c",
+        "sidebar": "#1f121c",
+        "sidebarForeground": "#fce7f6",
+        "sidebarPrimary": "#ff9ad1",
+        "sidebarPrimaryForeground": "#1c0614",
+        "sidebarAccent": "#ffbf4d",
+        "sidebarAccentForeground": "#2b1900",
+        "sidebarBorder": "#412a35",
+        "sidebarRing": "#ff9ad1",
+        "fontSans": "'Baloo 2', 'Fredoka', sans-serif",
+        "fontSerif": "'Libre Baskerville', 'Times New Roman', serif",
+        "fontMono": "'Fira Code', 'JetBrains Mono', monospace",
+        "radius": "24px",
+        "spacing": "0.28rem",
+        "trackingNormal": "0.015em",
+        "shadow2xs": "0 2px 4px rgba(255, 154, 209, 0.2)",
+        "shadowXs": "0 6px 12px rgba(17, 7, 25, 0.4)",
+        "shadowSm": "0 10px 20px rgba(17, 7, 25, 0.45)",
+        "shadow": "0 18px 36px rgba(17, 7, 25, 0.5)",
+        "shadowMd": "0 26px 52px rgba(255, 191, 77, 0.22)",
+        "shadowLg": "0 36px 72px rgba(103, 227, 255, 0.22)",
+        "shadowXl": "0 48px 96px rgba(28, 14, 32, 0.55)",
+        "shadow2xl": "0 64px 120px rgba(28, 14, 32, 0.6)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
