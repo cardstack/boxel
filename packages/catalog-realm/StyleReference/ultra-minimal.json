@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Ultra Minimal",
+      "visualDNA": "Cathedral whitespace, surgical typography, and precision grayscale with only intentional accent pulses.",
+      "inspirations": [
+        "Apple product detail pages",
+        "Tesla reserve flow",
+        "Muji catalog calm"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1481277542470-605612bd2d61?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Lean on macro white margins, hairline dividers, and soft fade transitions.",
+        "title": "Ultra Minimal",
+        "description": "A grayscale-first theme that lets product photography and subtle motion carry the narrative.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f8fafc",
+        "foreground": "#0b1120",
+        "card": "#ffffff",
+        "cardForeground": "#1f2937",
+        "popover": "#ffffff",
+        "popoverForeground": "#111827",
+        "primary": "#0f172a",
+        "primaryForeground": "#f8fafc",
+        "secondary": "#e2e8f0",
+        "secondaryForeground": "#1f2937",
+        "muted": "#f1f5f9",
+        "mutedForeground": "#334155",
+        "accent": "#2563eb",
+        "accentForeground": "#f8fafc",
+        "destructive": "#ef4444",
+        "destructiveForeground": "#fef2f2",
+        "border": "#e2e8f0",
+        "input": "#d1d5db",
+        "ring": "#2563eb",
+        "chart1": "#0f172a",
+        "chart2": "#2563eb",
+        "chart3": "#38bdf8",
+        "chart4": "#94a3b8",
+        "chart5": "#0ea5e9",
+        "sidebar": "#ffffff",
+        "sidebarForeground": "#0f172a",
+        "sidebarPrimary": "#0f172a",
+        "sidebarPrimaryForeground": "#f8fafc",
+        "sidebarAccent": "#2563eb",
+        "sidebarAccentForeground": "#f8fafc",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Serif', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'SFMono-Regular', monospace",
+        "radius": "12px",
+        "spacing": "0.25rem",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 1px 1px rgba(15, 23, 42, 0.04)",
+        "shadowXs": "0 1px 2px rgba(15, 23, 42, 0.05)",
+        "shadowSm": "0 2px 4px rgba(15, 23, 42, 0.06)",
+        "shadow": "0 8px 16px rgba(15, 23, 42, 0.08)",
+        "shadowMd": "0 12px 24px rgba(15, 23, 42, 0.1)",
+        "shadowLg": "0 16px 32px rgba(15, 23, 42, 0.12)",
+        "shadowXl": "0 24px 48px rgba(15, 23, 42, 0.14)",
+        "shadow2xl": "0 32px 64px rgba(15, 23, 42, 0.16)"
+      },
+      "darkModeVariables": {
+        "background": "#0b1120",
+        "foreground": "#e2e8f0",
+        "card": "#111827",
+        "cardForeground": "#f8fafc",
+        "popover": "#1f2937",
+        "popoverForeground": "#f8fafc",
+        "primary": "#38bdf8",
+        "primaryForeground": "#0b1120",
+        "secondary": "#1f2937",
+        "secondaryForeground": "#e2e8f0",
+        "muted": "#1f2937",
+        "mutedForeground": "#94a3b8",
+        "accent": "#60a5fa",
+        "accentForeground": "#0b1120",
+        "destructive": "#f87171",
+        "destructiveForeground": "#0b1120",
+        "border": "#1e293b",
+        "input": "#1e293b",
+        "ring": "#38bdf8",
+        "chart1": "#38bdf8",
+        "chart2": "#60a5fa",
+        "chart3": "#818cf8",
+        "chart4": "#22d3ee",
+        "chart5": "#facc15",
+        "sidebar": "#101524",
+        "sidebarForeground": "#e2e8f0",
+        "sidebarPrimary": "#38bdf8",
+        "sidebarPrimaryForeground": "#0b1120",
+        "sidebarAccent": "#60a5fa",
+        "sidebarAccentForeground": "#0b1120",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Inter', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Serif', 'Georgia', serif",
+        "fontMono": "'IBM Plex Mono', 'SFMono-Regular', monospace",
+        "radius": "12px",
+        "spacing": "0.25rem",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 1px 1px rgba(8, 14, 24, 0.32)",
+        "shadowXs": "0 2px 4px rgba(8, 14, 24, 0.38)",
+        "shadowSm": "0 6px 12px rgba(8, 14, 24, 0.45)",
+        "shadow": "0 10px 24px rgba(8, 14, 24, 0.52)",
+        "shadowMd": "0 18px 36px rgba(8, 14, 24, 0.58)",
+        "shadowLg": "0 28px 56px rgba(8, 14, 24, 0.62)",
+        "shadowXl": "0 36px 72px rgba(8, 14, 24, 0.66)",
+        "shadow2xl": "0 48px 96px rgba(8, 14, 24, 0.7)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Luxe Commerce",
+      "visualDNA": "Neutral canvas, editorial photography, and slender serif touches for high-end product catalogs.",
+      "inspirations": [
+        "Farfetch editorial",
+        "Net-a-Porter experience",
+        "SSENSE shopping flow"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;600&family=Montserrat:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Pair with sticky filters, magnified product frames, and editorial copy modules.",
+        "title": "Luxe Commerce",
+        "description": "A refined retail palette with light neutrals, delicate grids, and product-focused hero blocks.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fbf7f2",
+        "foreground": "#1f1a17",
+        "card": "#ffffff",
+        "cardForeground": "#26211d",
+        "popover": "#f2ebe3",
+        "popoverForeground": "#1f1a17",
+        "primary": "#2e2722",
+        "primaryForeground": "#fbf7f2",
+        "secondary": "#b8a991",
+        "secondaryForeground": "#1f1a17",
+        "muted": "#efe5d8",
+        "mutedForeground": "#574d43",
+        "accent": "#d7c7ae",
+        "accentForeground": "#261d11",
+        "destructive": "#c75c4d",
+        "destructiveForeground": "#fff6f3",
+        "border": "#e6d9c8",
+        "input": "#d7caba",
+        "ring": "#2e2722",
+        "chart1": "#2e2722",
+        "chart2": "#b8a991",
+        "chart3": "#d7c7ae",
+        "chart4": "#7a6a5a",
+        "chart5": "#c75c4d",
+        "sidebar": "#f2ebe3",
+        "sidebarForeground": "#2a221c",
+        "sidebarPrimary": "#2e2722",
+        "sidebarPrimaryForeground": "#fbf7f2",
+        "sidebarAccent": "#b8a991",
+        "sidebarAccentForeground": "#1f1a17",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Montserrat', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Libre Baskerville', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "14px",
+        "spacing": "0.26rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 2px 4px rgba(46, 39, 34, 0.08)",
+        "shadowXs": "0 4px 10px rgba(46, 39, 34, 0.1)",
+        "shadowSm": "0 8px 18px rgba(46, 39, 34, 0.12)",
+        "shadow": "0 16px 28px rgba(46, 39, 34, 0.16)",
+        "shadowMd": "0 24px 36px rgba(46, 39, 34, 0.2)",
+        "shadowLg": "0 32px 48px rgba(46, 39, 34, 0.22)",
+        "shadowXl": "0 40px 64px rgba(46, 39, 34, 0.24)",
+        "shadow2xl": "0 52px 80px rgba(46, 39, 34, 0.26)"
+      },
+      "darkModeVariables": {
+        "background": "#17120f",
+        "foreground": "#f4ede4",
+        "card": "#1f1915",
+        "cardForeground": "#f4ede4",
+        "popover": "#271f1a",
+        "popoverForeground": "#f4ede4",
+        "primary": "#d6c5ae",
+        "primaryForeground": "#1a130d",
+        "secondary": "#a08c74",
+        "secondaryForeground": "#261c14",
+        "muted": "#271f1a",
+        "mutedForeground": "#c7b59e",
+        "accent": "#f0d9b8",
+        "accentForeground": "#20150b",
+        "destructive": "#dd7766",
+        "destructiveForeground": "#270a06",
+        "border": "#30251d",
+        "input": "#30251d",
+        "ring": "#d6c5ae",
+        "chart1": "#d6c5ae",
+        "chart2": "#a08c74",
+        "chart3": "#f0d9b8",
+        "chart4": "#8a7062",
+        "chart5": "#dd7766",
+        "sidebar": "#140f0b",
+        "sidebarForeground": "#f4ede4",
+        "sidebarPrimary": "#d6c5ae",
+        "sidebarPrimaryForeground": "#1a130d",
+        "sidebarAccent": "#a08c74",
+        "sidebarAccentForeground": "#f1e6d8",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Montserrat', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Libre Baskerville', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "14px",
+        "spacing": "0.26rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 2px 6px rgba(12, 8, 6, 0.4)",
+        "shadowXs": "0 8px 14px rgba(12, 8, 6, 0.45)",
+        "shadowSm": "0 14px 24px rgba(12, 8, 6, 0.5)",
+        "shadow": "0 20px 32px rgba(214, 197, 174, 0.24)",
+        "shadowMd": "0 28px 46px rgba(214, 197, 174, 0.28)",
+        "shadowLg": "0 38px 60px rgba(10, 7, 5, 0.6)",
+        "shadowXl": "0 48px 72px rgba(10, 7, 5, 0.64)",
+        "shadow2xl": "0 60px 90px rgba(10, 7, 5, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

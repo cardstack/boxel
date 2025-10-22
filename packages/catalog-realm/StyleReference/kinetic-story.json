@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Kinetic Story",
+      "visualDNA": "Edge-lit typography, diagonal action lines, and cinematic color blocking that choreographs hero videos with stat callouts.",
+      "inspirations": [
+        "Nike kinetic storytelling",
+        "Apple AirPods campaign",
+        "Spotify motion narratives"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1535223289827-42f1e9919769?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;600&family=Playfair+Display:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use diagonal masks, burst counters, and timed scroll steps.",
+        "title": "Kinetic Story",
+        "description": "A motion-forward palette tuned for sports, music, and campaign storytelling with punchy contrast.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0b1723",
+        "foreground": "#f3f8ff",
+        "card": "#111f33",
+        "cardForeground": "#f3f8ff",
+        "popover": "#132337",
+        "popoverForeground": "#f3f8ff",
+        "primary": "#ff6b35",
+        "primaryForeground": "#0b1723",
+        "secondary": "#2ec4b6",
+        "secondaryForeground": "#041d19",
+        "muted": "#1a2c43",
+        "mutedForeground": "#8fb5d9",
+        "accent": "#ffe066",
+        "accentForeground": "#1a1400",
+        "destructive": "#f94144",
+        "destructiveForeground": "#ffedea",
+        "border": "#1f334b",
+        "input": "#1b2e46",
+        "ring": "#ff6b35",
+        "chart1": "#ff6b35",
+        "chart2": "#2ec4b6",
+        "chart3": "#ffe066",
+        "chart4": "#1b98e0",
+        "chart5": "#1f7a8c",
+        "sidebar": "#101f32",
+        "sidebarForeground": "#f3f8ff",
+        "sidebarPrimary": "#ff6b35",
+        "sidebarPrimaryForeground": "#0b1723",
+        "sidebarAccent": "#2ec4b6",
+        "sidebarAccentForeground": "#041d19",
+        "sidebarBorder": "#1f334b",
+        "sidebarRing": "#ffe066",
+        "fontSans": "'Barlow Semi Condensed', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.26rem",
+        "trackingNormal": "0.025em",
+        "shadow2xs": "0 2px 4px rgba(255, 107, 53, 0.22)",
+        "shadowXs": "0 4px 12px rgba(15, 34, 55, 0.26)",
+        "shadowSm": "0 8px 20px rgba(15, 34, 55, 0.3)",
+        "shadow": "0 16px 32px rgba(15, 34, 55, 0.34)",
+        "shadowMd": "0 24px 48px rgba(255, 96, 44, 0.22)",
+        "shadowLg": "0 32px 64px rgba(46, 196, 182, 0.2)",
+        "shadowXl": "0 48px 96px rgba(15, 34, 55, 0.38)",
+        "shadow2xl": "0 64px 120px rgba(15, 34, 55, 0.42)"
+      },
+      "darkModeVariables": {
+        "background": "#070f19",
+        "foreground": "#e6f1ff",
+        "card": "#0d1827",
+        "cardForeground": "#e6f1ff",
+        "popover": "#111f31",
+        "popoverForeground": "#eff6ff",
+        "primary": "#ff8a5c",
+        "primaryForeground": "#0b1723",
+        "secondary": "#3ae3cf",
+        "secondaryForeground": "#031712",
+        "muted": "#132335",
+        "mutedForeground": "#9ec3e7",
+        "accent": "#ffe599",
+        "accentForeground": "#1a1400",
+        "destructive": "#ff5c70",
+        "destructiveForeground": "#14040a",
+        "border": "#16273b",
+        "input": "#152333",
+        "ring": "#ff8a5c",
+        "chart1": "#ff8a5c",
+        "chart2": "#3ae3cf",
+        "chart3": "#ffe599",
+        "chart4": "#29b6f6",
+        "chart5": "#1f7a8c",
+        "sidebar": "#060e17",
+        "sidebarForeground": "#e6f1ff",
+        "sidebarPrimary": "#ff8a5c",
+        "sidebarPrimaryForeground": "#0b1723",
+        "sidebarAccent": "#3ae3cf",
+        "sidebarAccentForeground": "#031712",
+        "sidebarBorder": "#16273b",
+        "sidebarRing": "#ffe599",
+        "fontSans": "'Barlow Semi Condensed', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "20px",
+        "spacing": "0.26rem",
+        "trackingNormal": "0.025em",
+        "shadow2xs": "0 2px 4px rgba(255, 138, 92, 0.24)",
+        "shadowXs": "0 6px 12px rgba(8, 12, 24, 0.45)",
+        "shadowSm": "0 10px 20px rgba(8, 12, 24, 0.5)",
+        "shadow": "0 18px 36px rgba(8, 12, 24, 0.56)",
+        "shadowMd": "0 26px 52px rgba(255, 138, 92, 0.28)",
+        "shadowLg": "0 36px 72px rgba(58, 227, 207, 0.22)",
+        "shadowXl": "0 48px 96px rgba(5, 14, 23, 0.6)",
+        "shadow2xl": "0 64px 120px rgba(5, 14, 23, 0.66)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "slug": "style-reference-library",
+  "name": "Style Reference Library",
+  "images": [
+    "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1400&q=80",
+    "https://images.unsplash.com/photo-1582719478181-2cf4e7bda3a0?auto=format&fit=crop&w=1400&q=80",
+    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80"
+  ],
+  "summary": "An expanding library of themed **Style Reference** cards that package visual DNA copy, inspiration tags, and synchronized light/dark design tokens. Use them to seed new products, remix palettes, or hand teammates a ready-to-go art direction.",
+  "cardInfo": {
+    "title": "Style Reference Library",
+    "description": "Visual language kits for quickly aligning teams on color, mood, and typography across light and dark modes.",
+    "thumbnailURL": "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=600&q=80",
+    "notes": "Each reference includes paired CSS variables, inspiration tags, and wallpapers for instant context."
+  },
+  "specs": [
+    "../Spec/style-reference"
+  ],
+  "categories": [
+    "../Category/design-creative",
+    "../Category/ui-components-design"
+  ],
+  "tags": [],
+  "skills": [],
+  "license": null,
+  "publisher": null,
+  "exampleSlugs": [
+    "abstract-workspace-pals",
+    "monochrome-code",
+    "futurist-lab",
+    "futurist-luxury",
+    "skeuo-story",
+    "high-fashion-immersive",
+    "cinematic-editorial",
+    "playful-3d",
+    "vibrant-gradient",
+    "luxe-commerce"
+  ]
+}

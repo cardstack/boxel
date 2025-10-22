@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Futurist Lab",
+      "visualDNA": "Dark mode, monospaced heads, and generative gradients for speculative design R&D spaces.",
+      "inspirations": [
+        "SPACE10 research sites",
+        "Google ATAP experiments",
+        "MIT Media Lab showcases"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1462332420958-a05d1e002413?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use animated grid overlays, diagnostic widgets, and telemetry glyphs.",
+        "title": "Futurist Lab",
+        "description": "Glowing lab terminals, gridded schematics, and code-forward storytelling for advanced prototypes.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1462332420958-a05d1e002413?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#04070f",
+        "foreground": "#e8f4ff",
+        "card": "#071021",
+        "cardForeground": "#e8f4ff",
+        "popover": "#0c1832",
+        "popoverForeground": "#e8f4ff",
+        "primary": "#4adeff",
+        "primaryForeground": "#011217",
+        "secondary": "#8b5cf6",
+        "secondaryForeground": "#160032",
+        "muted": "#0f203b",
+        "mutedForeground": "#76a3d9",
+        "accent": "#22d3ee",
+        "accentForeground": "#03191f",
+        "destructive": "#ff6b6b",
+        "destructiveForeground": "#270306",
+        "border": "#1c2b45",
+        "input": "#152338",
+        "ring": "#4adeff",
+        "chart1": "#4adeff",
+        "chart2": "#8b5cf6",
+        "chart3": "#22d3ee",
+        "chart4": "#f472b6",
+        "chart5": "#ffd166",
+        "sidebar": "#050b18",
+        "sidebarForeground": "#e8f4ff",
+        "sidebarPrimary": "#4adeff",
+        "sidebarPrimaryForeground": "#011217",
+        "sidebarAccent": "#8b5cf6",
+        "sidebarAccentForeground": "#160032",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Mono', 'Fira Code', monospace",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 6px rgba(74, 222, 255, 0.18)",
+        "shadowXs": "0 6px 14px rgba(8, 16, 32, 0.32)",
+        "shadowSm": "0 12px 24px rgba(8, 16, 32, 0.4)",
+        "shadow": "0 18px 38px rgba(8, 16, 32, 0.46)",
+        "shadowMd": "0 26px 52px rgba(139, 92, 246, 0.28)",
+        "shadowLg": "0 36px 72px rgba(8, 16, 32, 0.58)",
+        "shadowXl": "0 48px 96px rgba(8, 16, 32, 0.63)",
+        "shadow2xl": "0 60px 120px rgba(8, 16, 32, 0.68)"
+      },
+      "darkModeVariables": {
+        "background": "#01040a",
+        "foreground": "#e8f4ff",
+        "card": "#030b16",
+        "cardForeground": "#e8f4ff",
+        "popover": "#071126",
+        "popoverForeground": "#e8f4ff",
+        "primary": "#76f8ff",
+        "primaryForeground": "#001218",
+        "secondary": "#a98bff",
+        "secondaryForeground": "#18002c",
+        "muted": "#0b1b33",
+        "mutedForeground": "#9ac7ff",
+        "accent": "#38e4ff",
+        "accentForeground": "#01171d",
+        "destructive": "#ff8b94",
+        "destructiveForeground": "#2a0408",
+        "border": "#122036",
+        "input": "#122036",
+        "ring": "#76f8ff",
+        "chart1": "#76f8ff",
+        "chart2": "#a98bff",
+        "chart3": "#38e4ff",
+        "chart4": "#f998d0",
+        "chart5": "#ffe28a",
+        "sidebar": "#01030a",
+        "sidebarForeground": "#e8f4ff",
+        "sidebarPrimary": "#76f8ff",
+        "sidebarPrimaryForeground": "#001218",
+        "sidebarAccent": "#a98bff",
+        "sidebarAccentForeground": "#18002c",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'IBM Plex Mono', 'Fira Code', monospace",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.24rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 3px 8px rgba(118, 248, 255, 0.24)",
+        "shadowXs": "0 10px 20px rgba(3, 12, 22, 0.46)",
+        "shadowSm": "0 18px 36px rgba(3, 12, 22, 0.52)",
+        "shadow": "0 26px 52px rgba(118, 248, 255, 0.28)",
+        "shadowMd": "0 36px 70px rgba(169, 139, 255, 0.26)",
+        "shadowLg": "0 48px 96px rgba(2, 8, 16, 0.62)",
+        "shadowXl": "0 60px 120px rgba(2, 8, 16, 0.68)",
+        "shadow2xl": "0 72px 140px rgba(2, 8, 16, 0.72)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Cinematic Editorial",
+      "visualDNA": "Full-bleed video, parallax chapters, and map embeds for documentary storytelling.",
+      "inspirations": [
+        "NYT \"Snow Fall\"",
+        "The Guardian \"Firestorm\"",
+        "National Geographic immersive features"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1526481280695-3c3695125d11?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop=w=1400&q=80",
+        "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600&family=Work+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Blend parallax chapters, mini cartography, and crossfade transitions.",
+        "title": "Cinematic Editorial",
+        "description": "Scroll-driven narrative design with pull quotes, chapter intros, and immersive media embeds.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1526481280695-3c3695125d11?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#0f1115",
+        "foreground": "#f5f5fa",
+        "card": "#161920",
+        "cardForeground": "#f5f5fa",
+        "popover": "#1d212b",
+        "popoverForeground": "#f5f5fa",
+        "primary": "#f0e1c5",
+        "primaryForeground": "#20190c",
+        "secondary": "#6d7d91",
+        "secondaryForeground": "#06090d",
+        "muted": "#1e222c",
+        "mutedForeground": "#9aa6bb",
+        "accent": "#9ad7ff",
+        "accentForeground": "#04121d",
+        "destructive": "#ff6b6b",
+        "destructiveForeground": "#260508",
+        "border": "#242935",
+        "input": "#202530",
+        "ring": "#f0e1c5",
+        "chart1": "#f0e1c5",
+        "chart2": "#9ad7ff",
+        "chart3": "#6d7d91",
+        "chart4": "#7dd3a1",
+        "chart5": "#ff8f66",
+        "sidebar": "#11131a",
+        "sidebarForeground": "#f5f5fa",
+        "sidebarPrimary": "#f0e1c5",
+        "sidebarPrimaryForeground": "#20190c",
+        "sidebarAccent": "#6d7d91",
+        "sidebarAccentForeground": "#0b1120",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Source Serif 4', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.28rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 4px 12px rgba(0, 0, 0, 0.28)",
+        "shadowXs": "0 10px 24px rgba(0, 0, 0, 0.34)",
+        "shadowSm": "0 16px 32px rgba(0, 0, 0, 0.4)",
+        "shadow": "0 24px 48px rgba(0, 0, 0, 0.46)",
+        "shadowMd": "0 32px 64px rgba(0, 0, 0, 0.52)",
+        "shadowLg": "0 48px 80px rgba(0, 0, 0, 0.56)",
+        "shadowXl": "0 60px 104px rgba(0, 0, 0, 0.6)",
+        "shadow2xl": "0 72px 128px rgba(0, 0, 0, 0.64)"
+      },
+      "darkModeVariables": {
+        "background": "#0b0c0f",
+        "foreground": "#f5f5fa",
+        "card": "#14161b",
+        "cardForeground": "#f5f5fa",
+        "popover": "#1a1d24",
+        "popoverForeground": "#f5f5fa",
+        "primary": "#f6e9d1",
+        "primaryForeground": "#221a0d",
+        "secondary": "#7c8ca1",
+        "secondaryForeground": "#090d12",
+        "muted": "#1a1e27",
+        "mutedForeground": "#a8b3c7",
+        "accent": "#a7e1ff",
+        "accentForeground": "#05202b",
+        "destructive": "#ff93a0",
+        "destructiveForeground": "#320810",
+        "border": "#202531",
+        "input": "#202531",
+        "ring": "#f6e9d1",
+        "chart1": "#f6e9d1",
+        "chart2": "#a7e1ff",
+        "chart3": "#7c8ca1",
+        "chart4": "#8edeb3",
+        "chart5": "#ff9c78",
+        "sidebar": "#090a0e",
+        "sidebarForeground": "#f5f5fa",
+        "sidebarPrimary": "#f6e9d1",
+        "sidebarPrimaryForeground": "#221a0d",
+        "sidebarAccent": "#7c8ca1",
+        "sidebarAccentForeground": "#090d12",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Work Sans', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Source Serif 4', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.28rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 6px 16px rgba(0, 0, 0, 0.32)",
+        "shadowXs": "0 12px 28px rgba(0, 0, 0, 0.4)",
+        "shadowSm": "0 20px 40px rgba(0, 0, 0, 0.46)",
+        "shadow": "0 30px 60px rgba(0, 0, 0, 0.52)",
+        "shadowMd": "0 40px 80px rgba(0, 0, 0, 0.56)",
+        "shadowLg": "0 54px 96px rgba(0, 0, 0, 0.6)",
+        "shadowXl": "0 68px 120px rgba(0, 0, 0, 0.64)",
+        "shadow2xl": "0 84px 140px rgba(0, 0, 0, 0.68)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

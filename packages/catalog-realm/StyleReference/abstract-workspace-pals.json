@@ -22,13 +22,13 @@
         "https://images.unsplash.com/photo-1523475472560-d2df97ec485c?auto=format&fit=crop&w=1400&q=80"
       ],
       "cssImports": [
-        "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600&family=DM+Serif+Text:ital@0;1&display=swap"
+        "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600&family=DM+Serif+Text:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap"
       ],
       "cardInfo": {
+        "notes": "Pairs well with productivity dashboards or community hubs.",
         "title": "Abstract Workspace Pals",
         "description": "A cheerful workspace palette that balances lavender primaries, peach highlights, and pill-shaped shadows.",
-        "thumbnailURL": "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=600&q=80",
-        "notes": "Pairs well with productivity dashboards or community hubs."
+        "thumbnailURL": "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=600&q=80"
       },
       "rootVariables": {
         "background": "#f7f4ff",
@@ -64,7 +64,7 @@
         "sidebarBorder": "#d8d2ff",
         "sidebarRing": "#6c5ce7",
         "fontSans": "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
-        "fontSerif": "'DM Serif Text', Georgia, serif",
+        "fontSerif": "'DM Serif Text', 'Georgia', serif",
         "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
         "radius": "18px",
         "spacing": "0.25rem",
@@ -112,7 +112,7 @@
         "sidebarBorder": "#453e72",
         "sidebarRing": "#a998ff",
         "fontSans": "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
-        "fontSerif": "'DM Serif Text', Georgia, serif",
+        "fontSerif": "'DM Serif Text', 'Georgia', serif",
         "fontMono": "'JetBrains Mono', 'Fira Code', monospace",
         "radius": "18px",
         "spacing": "0.25rem",

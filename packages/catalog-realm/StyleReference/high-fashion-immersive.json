@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "High-Fashion Immersive",
+      "visualDNA": "Dark glam hero reels, oversized serif headlines, and subtle neon reveals for runway moments.",
+      "inspirations": [
+        "Moncler Genius experiences",
+        "Jacquemus immersive lookbooks",
+        "Balenciaga runway archives"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1500916434205-0c77489c6cf7?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Archivo:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Deploy hover reveals, editorial split layouts, and dramatic lighting cues.",
+        "title": "High-Fashion Immersive",
+        "description": "Edge-to-edge video, oversized fashion type, and moody overlays for couture storytelling.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1500916434205-0c77489c6cf7?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#05050a",
+        "foreground": "#f0f0f5",
+        "card": "#0b0b14",
+        "cardForeground": "#f0f0f5",
+        "popover": "#151a2d",
+        "popoverForeground": "#f0f0f5",
+        "primary": "#c4abff",
+        "primaryForeground": "#120b2b",
+        "secondary": "#ff69b4",
+        "secondaryForeground": "#190013",
+        "muted": "#14142a",
+        "mutedForeground": "#c5c5da",
+        "accent": "#7cf7ff",
+        "accentForeground": "#06181c",
+        "destructive": "#ff5f70",
+        "destructiveForeground": "#280308",
+        "border": "#1f1f33",
+        "input": "#1c1c31",
+        "ring": "#c4abff",
+        "chart1": "#c4abff",
+        "chart2": "#ff69b4",
+        "chart3": "#7cf7ff",
+        "chart4": "#ffe066",
+        "chart5": "#7b8cff",
+        "sidebar": "#070712",
+        "sidebarForeground": "#f0f0f5",
+        "sidebarPrimary": "#c4abff",
+        "sidebarPrimaryForeground": "#120b2b",
+        "sidebarAccent": "#ff69b4",
+        "sidebarAccentForeground": "#190013",
+        "sidebarBorder": "#e2e8f0",
+        "sidebarRing": "#2563eb",
+        "fontSans": "'Archivo', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "28px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 8px rgba(196, 171, 255, 0.26)",
+        "shadowXs": "0 8px 18px rgba(7, 7, 18, 0.4)",
+        "shadowSm": "0 16px 32px rgba(7, 7, 18, 0.48)",
+        "shadow": "0 24px 48px rgba(7, 7, 18, 0.55)",
+        "shadowMd": "0 32px 64px rgba(255, 105, 180, 0.3)",
+        "shadowLg": "0 44px 80px rgba(7, 7, 18, 0.6)",
+        "shadowXl": "0 56px 110px rgba(7, 7, 18, 0.64)",
+        "shadow2xl": "0 70px 140px rgba(7, 7, 18, 0.7)"
+      },
+      "darkModeVariables": {
+        "background": "#02020a",
+        "foreground": "#f0f0f5",
+        "card": "#080816",
+        "cardForeground": "#f0f0f5",
+        "popover": "#0f0f22",
+        "popoverForeground": "#f0f0f5",
+        "primary": "#d5c3ff",
+        "primaryForeground": "#150d33",
+        "secondary": "#ff7dcd",
+        "secondaryForeground": "#1a0215",
+        "muted": "#161632",
+        "mutedForeground": "#d8d8ea",
+        "accent": "#8fffff",
+        "accentForeground": "#041a1f",
+        "destructive": "#ff7390",
+        "destructiveForeground": "#30010d",
+        "border": "#1b1b33",
+        "input": "#1b1b33",
+        "ring": "#d5c3ff",
+        "chart1": "#d5c3ff",
+        "chart2": "#ff7dcd",
+        "chart3": "#8fffff",
+        "chart4": "#ffe680",
+        "chart5": "#8aa4ff",
+        "sidebar": "#02020f",
+        "sidebarForeground": "#f0f0f5",
+        "sidebarPrimary": "#d5c3ff",
+        "sidebarPrimaryForeground": "#150d33",
+        "sidebarAccent": "#ff7dcd",
+        "sidebarAccentForeground": "#1a0215",
+        "sidebarBorder": "#1e293b",
+        "sidebarRing": "#38bdf8",
+        "fontSans": "'Archivo', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "28px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 4px 10px rgba(213, 195, 255, 0.3)",
+        "shadowXs": "0 12px 26px rgba(3, 3, 16, 0.45)",
+        "shadowSm": "0 22px 42px rgba(3, 3, 16, 0.5)",
+        "shadow": "0 30px 64px rgba(3, 3, 16, 0.58)",
+        "shadowMd": "0 42px 82px rgba(255, 125, 205, 0.3)",
+        "shadowLg": "0 56px 110px rgba(3, 3, 16, 0.64)",
+        "shadowXl": "0 70px 132px rgba(3, 3, 16, 0.68)",
+        "shadow2xl": "0 84px 160px rgba(3, 3, 16, 0.72)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
