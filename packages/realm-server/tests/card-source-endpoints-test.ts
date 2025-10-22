@@ -98,6 +98,85 @@ module(basename(__filename), function () {
           );
         });
 
+        test('caches responses and invalidates on write', async function (assert) {
+          let cacheTestPath = 'cache-test.gts';
+          let initialContent = '// initial cache test content';
+
+          await testRealm.write(cacheTestPath, initialContent);
+
+          let firstResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            firstResponse.status,
+            200,
+            'initial request succeeds',
+          );
+          assert.strictEqual(
+            firstResponse.text,
+            initialContent,
+            'initial response body matches',
+          );
+          let cachedResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            cachedResponse.status,
+            200,
+            'second request succeeds',
+          );
+          assert.strictEqual(
+            cachedResponse.headers['x-boxel-cache'],
+            'hit',
+            'second request served from cache',
+          );
+          assert.strictEqual(
+            cachedResponse.text,
+            initialContent,
+            'cached response matches original content',
+          );
+
+          let updatedContent = `${initialContent}\n// updated by test`;
+          await testRealm.write(cacheTestPath, updatedContent);
+
+          let afterWriteResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            afterWriteResponse.status,
+            200,
+            'request after write succeeds',
+          );
+          assert.strictEqual(
+            afterWriteResponse.text,
+            updatedContent,
+            'response reflects updated content',
+          );
+
+          let repopulatedResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            repopulatedResponse.status,
+            200,
+            'subsequent request succeeds',
+          );
+          assert.strictEqual(
+            repopulatedResponse.headers['x-boxel-cache'],
+            'hit',
+            'cache repopulated after miss',
+          );
+          assert.strictEqual(
+            repopulatedResponse.text,
+            updatedContent,
+            'cached response returns updated content',
+          );
+        });
+
         test('serves a card-source GET request that results in redirect', async function (assert) {
           let response = await request
             .get('/person')
@@ -143,7 +222,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             response.headers['content-type'],
-            'text/plain;charset=UTF-8',
+            'text/plain; charset=utf-8',
             'content type is correct',
           );
           assert.strictEqual(

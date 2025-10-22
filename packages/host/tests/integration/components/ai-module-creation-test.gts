@@ -232,7 +232,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       document.querySelector('[data-test-view-module]') as HTMLElement
     )?.innerText;
     let module = await getModule(realm, new URL(moduleURL));
-    assert.strictEqual(module?.source, moduleCode);
+    assert.strictEqual(module?.canonicalURL, moduleURL);
 
     await click('[data-test-view-module]');
     assert.dom('[data-test-code-mode]').exists();

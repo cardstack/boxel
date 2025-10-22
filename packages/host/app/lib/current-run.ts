@@ -519,7 +519,6 @@ export class CurrentRun {
           }
           await this.indexCard({
             path: localPath,
-            source: content,
             lastModified,
             resourceCreatedAt,
             resource,
@@ -595,7 +594,6 @@ export class CurrentRun {
     let moduleCreatedAt = await this.batch.ensureFileCreatedAt(moduleLocalPath);
     await this.batch.updateEntry(url, {
       type: 'module',
-      source: ref.content,
       lastModified: ref.lastModified,
       resourceCreatedAt: moduleCreatedAt,
       deps: new Set(deps),
@@ -709,14 +707,12 @@ export class CurrentRun {
 
   private async indexCard({
     path,
-    source,
     lastModified,
     resourceCreatedAt,
     resource,
     store,
   }: {
     path: LocalPath;
-    source: string;
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
@@ -834,7 +830,6 @@ export class CurrentRun {
           } = renderResult;
           await this.updateEntry(instanceURL, {
             type: 'instance',
-            source,
             resource: serialized!.data as CardResource,
             searchData: searchDoc!,
             isolatedHtml: isolatedHTML ?? undefined,
@@ -1032,7 +1027,6 @@ export class CurrentRun {
         } else if (searchData && doc && typesMaybeError?.type === 'types') {
           await this.updateEntry(instanceURL, {
             type: 'instance',
-            source,
             resource: doc.data,
             searchData,
             isolatedHtml,
