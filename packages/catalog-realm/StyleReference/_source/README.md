@@ -52,11 +52,11 @@ realm expects.
 - [x] 020 Cinematic Editorial (NYT Snow Fall, The Guardian Firestorm, National Geographic) - Full-bleed video, parallax chapters, map embeds
 - [x] 021 Playful 3-D (LEGO Kids, Nintendo Labo, Minecraft Education) - WebGL bricks, primary palette, hover bounce, gamified navigation
 - [x] 022 Minimal Monochrome (Notion, Linear docs, Obsidian) - Grey palette, minimal icons, modular blocks, calm motion
-- [ ] 023 Dark Cinematic (Netflix Tudum, HBO Max, Apple TV Plus) - Black UI, poster grid, red accent, trailer hovers
-- [ ] 024 Scientific 3-D (NASA Eyes, ESA Solar System, Google Earth) - Space black, 3-D models, telemetry overlays
-- [ ] 025 Creative Community (Dribbble, Behance, DeviantArt) - Masonry cards, pastel header, infinite scroll, like counters
-- [ ] 026 Kaleidoscope Deco (Palace Lido, Tame Impala site, The Great Gatsby 2013) - Art-deco frames, neon jewels, marquee text, ornate borders
-- [ ] 027 Raw Commerce (Gumroad, Carrd, Buy Me a Coffee) - Plain HTML, system font, instant checkout, bold links
+- [x] 023 Dark Cinematic (Netflix Tudum, HBO Max, Apple TV Plus) - Black UI, poster grid, red accent, trailer hovers
+- [x] 024 Scientific 3-D (NASA Eyes, ESA Solar System, Google Earth) - Space black, 3-D models, telemetry overlays
+- [x] 025 Creative Community (Dribbble, Behance, DeviantArt) - Masonry cards, pastel header, infinite scroll, like counters
+- [x] 026 Kaleidoscope Deco (Palace Lido, Tame Impala site, The Great Gatsby 2013) - Art-deco frames, neon jewels, marquee text, ornate borders
+- [x] 027 Raw Commerce (Gumroad, Carrd, Buy Me a Coffee) - Plain HTML, system font, instant checkout, bold links
 - [ ] 028 Swiss-Grid (Dropbox.design, GridSystem.io, Vignelli Center) - 12-column grid, Helvetica, numeric margins, red rules
 - [ ] 029 Swiss Modern (Swiss Air, Lufthansa, SBB Mobile) - ITS grid, left-aligned layouts, airline icons, primary red
 - [ ] 030 Retro Revival (Burger King rebrand, Pepsi Throwback, Pizza Hut Classic) - Brown-orange, chunky Cooper, wavy stripes, grain

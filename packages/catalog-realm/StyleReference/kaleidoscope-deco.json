@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Kaleidoscope Deco",
+      "visualDNA": "Neon marquees, art-deco frames, and jewel gradients pulsing through animated headline tunnels.",
+      "inspirations": [
+        "Palace Lido microsites",
+        "Tame Impala tour visuals",
+        "Great Gatsby neon signage"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1501554728187-ce583db33af7?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1517602302552-471fe67acf66?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;700&family=Playfair+Display:wght@600&family=Space+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Layer shimmering CTA frames, marching marquee lights, and stacked deco glyphs.",
+        "title": "Kaleidoscope Deco",
+        "description": "An electric deco rave of marquee borders, jewel gradients, and animated typographic arches.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1501554728187-ce583db33af7?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#100324",
+        "foreground": "#fdf5ff",
+        "card": "#190739",
+        "cardForeground": "#fdf5ff",
+        "popover": "#230a4f",
+        "popoverForeground": "#fff6ff",
+        "primary": "#ffbf36",
+        "primaryForeground": "#221100",
+        "secondary": "#7c4dff",
+        "secondaryForeground": "#100024",
+        "muted": "#1c0a3c",
+        "mutedForeground": "#c3a8ff",
+        "accent": "#f44fa9",
+        "accentForeground": "#210012",
+        "destructive": "#ff5b6e",
+        "destructiveForeground": "#2a0006",
+        "border": "#2f0f54",
+        "input": "#281149",
+        "ring": "#ffbf36",
+        "chart1": "#ffbf36",
+        "chart2": "#7c4dff",
+        "chart3": "#f44fa9",
+        "chart4": "#4ff5f5",
+        "chart5": "#ff7b4f",
+        "sidebar": "#0d021d",
+        "sidebarForeground": "#fdf5ff",
+        "sidebarPrimary": "#7c4dff",
+        "sidebarPrimaryForeground": "#f6eeff",
+        "sidebarAccent": "#ffbf36",
+        "sidebarAccentForeground": "#1a0b00",
+        "sidebarBorder": "#2f0f54",
+        "sidebarRing": "#f44fa9",
+        "fontSans": "'League Spartan', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'Space Mono', 'IBM Plex Mono', monospace",
+        "radius": "24px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 6px rgba(16, 3, 36, 0.4)",
+        "shadowXs": "0 8px 18px rgba(16, 3, 36, 0.46)",
+        "shadowSm": "0 16px 32px rgba(16, 3, 36, 0.5)",
+        "shadow": "0 24px 48px rgba(16, 3, 36, 0.56)",
+        "shadowMd": "0 32px 68px rgba(244, 79, 169, 0.28)",
+        "shadowLg": "0 44px 90px rgba(12, 2, 30, 0.62)",
+        "shadowXl": "0 58px 118px rgba(12, 2, 30, 0.68)",
+        "shadow2xl": "0 72px 144px rgba(12, 2, 30, 0.74)"
+      },
+      "darkModeVariables": {
+        "background": "#09001a",
+        "foreground": "#f4e8ff",
+        "card": "#13042d",
+        "cardForeground": "#f4e8ff",
+        "popover": "#1d0743",
+        "popoverForeground": "#f9efff",
+        "primary": "#ffcd5d",
+        "primaryForeground": "#231200",
+        "secondary": "#9a70ff",
+        "secondaryForeground": "#140035",
+        "muted": "#160437",
+        "mutedForeground": "#d2b8ff",
+        "accent": "#ff69bc",
+        "accentForeground": "#2a0215",
+        "destructive": "#ff6e7a",
+        "destructiveForeground": "#2f0208",
+        "border": "#25114c",
+        "input": "#1f0d40",
+        "ring": "#ffcd5d",
+        "chart1": "#ffcd5d",
+        "chart2": "#9a70ff",
+        "chart3": "#ff69bc",
+        "chart4": "#65f9f2",
+        "chart5": "#ff8a5d",
+        "sidebar": "#050014",
+        "sidebarForeground": "#f4e8ff",
+        "sidebarPrimary": "#9a70ff",
+        "sidebarPrimaryForeground": "#18053f",
+        "sidebarAccent": "#ffcd5d",
+        "sidebarAccentForeground": "#231200",
+        "sidebarBorder": "#1f0d40",
+        "sidebarRing": "#ff69bc",
+        "fontSans": "'League Spartan', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'Space Mono', 'IBM Plex Mono', monospace",
+        "radius": "24px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 2px 6px rgba(0, 0, 0, 0.5)",
+        "shadowXs": "0 8px 18px rgba(0, 0, 0, 0.55)",
+        "shadowSm": "0 16px 32px rgba(0, 0, 0, 0.6)",
+        "shadow": "0 24px 48px rgba(0, 0, 0, 0.66)",
+        "shadowMd": "0 32px 68px rgba(255, 105, 188, 0.3)",
+        "shadowLg": "0 44px 90px rgba(0, 0, 0, 0.72)",
+        "shadowXl": "0 58px 118px rgba(0, 0, 0, 0.75)",
+        "shadow2xl": "0 72px 144px rgba(0, 0, 0, 0.78)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Scientific 3-D",
+      "visualDNA": "Space-black hero panels, telemetry overlays, and orbiting 3-D models ready for mission control narratives.",
+      "inspirations": [
+        "NASA Eyes visualizations",
+        "ESA solar system explorers",
+        "Google Earth immersive tools"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1473923377535-0002805f57ef?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1523861751938-12104bb8170a?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&family=Roboto+Mono:wght@400;500&family=Spectral:wght@500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use for mission dashboards, product replicas, or exploratory science stories.",
+        "title": "Scientific 3-D",
+        "description": "A cosmic telemetry shell with orbit paths, data HUDs, and immersive model showcases.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f0f4ff",
+        "foreground": "#0c1a33",
+        "card": "#ffffff",
+        "cardForeground": "#0c1a33",
+        "popover": "#e0e9ff",
+        "popoverForeground": "#0c1a33",
+        "primary": "#1d4ed8",
+        "primaryForeground": "#f0f4ff",
+        "secondary": "#0ea5e9",
+        "secondaryForeground": "#001722",
+        "muted": "#d5e1ff",
+        "mutedForeground": "#38527a",
+        "accent": "#7c3aed",
+        "accentForeground": "#160029",
+        "destructive": "#f97316",
+        "destructiveForeground": "#210d00",
+        "border": "#c7d6ff",
+        "input": "#b6c8ff",
+        "ring": "#1d4ed8",
+        "chart1": "#1d4ed8",
+        "chart2": "#0ea5e9",
+        "chart3": "#7c3aed",
+        "chart4": "#22d3ee",
+        "chart5": "#f97316",
+        "sidebar": "#e7efff",
+        "sidebarForeground": "#0c1a33",
+        "sidebarPrimary": "#1d4ed8",
+        "sidebarPrimaryForeground": "#f0f4ff",
+        "sidebarAccent": "#0ea5e9",
+        "sidebarAccentForeground": "#001722",
+        "sidebarBorder": "#c7d6ff",
+        "sidebarRing": "#1d4ed8",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Spectral', 'Times New Roman', serif",
+        "fontMono": "'Roboto Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(29, 78, 216, 0.12)",
+        "shadowXs": "0 4px 8px rgba(12, 26, 51, 0.14)",
+        "shadowSm": "0 8px 18px rgba(12, 26, 51, 0.18)",
+        "shadow": "0 16px 32px rgba(12, 26, 51, 0.2)",
+        "shadowMd": "0 24px 40px rgba(29, 78, 216, 0.18)",
+        "shadowLg": "0 32px 56px rgba(12, 26, 51, 0.24)",
+        "shadowXl": "0 40px 70px rgba(12, 26, 51, 0.28)",
+        "shadow2xl": "0 50px 84px rgba(12, 26, 51, 0.32)"
+      },
+      "darkModeVariables": {
+        "background": "#060d1c",
+        "foreground": "#deecff",
+        "card": "#0b152b",
+        "cardForeground": "#deecff",
+        "popover": "#0f1c36",
+        "popoverForeground": "#e6f1ff",
+        "primary": "#4f83ff",
+        "primaryForeground": "#020815",
+        "secondary": "#38bdf8",
+        "secondaryForeground": "#01131f",
+        "muted": "#112146",
+        "mutedForeground": "#8ca6d8",
+        "accent": "#a78bfa",
+        "accentForeground": "#1a083d",
+        "destructive": "#fb923c",
+        "destructiveForeground": "#200d02",
+        "border": "#17243f",
+        "input": "#132038",
+        "ring": "#4f83ff",
+        "chart1": "#4f83ff",
+        "chart2": "#38bdf8",
+        "chart3": "#a78bfa",
+        "chart4": "#22d3ee",
+        "chart5": "#fb923c",
+        "sidebar": "#050b17",
+        "sidebarForeground": "#deecff",
+        "sidebarPrimary": "#4f83ff",
+        "sidebarPrimaryForeground": "#020815",
+        "sidebarAccent": "#38bdf8",
+        "sidebarAccentForeground": "#01131f",
+        "sidebarBorder": "#132038",
+        "sidebarRing": "#4f83ff",
+        "fontSans": "'Space Grotesk', 'Inter', system-ui, sans-serif",
+        "fontSerif": "'Spectral', 'Times New Roman', serif",
+        "fontMono": "'Roboto Mono', 'Fira Code', monospace",
+        "radius": "18px",
+        "spacing": "0.22rem",
+        "trackingNormal": "0.01em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.35)",
+        "shadowXs": "0 4px 8px rgba(0, 0, 0, 0.4)",
+        "shadowSm": "0 8px 18px rgba(0, 0, 0, 0.44)",
+        "shadow": "0 16px 32px rgba(0, 0, 0, 0.5)",
+        "shadowMd": "0 24px 40px rgba(79, 131, 255, 0.26)",
+        "shadowLg": "0 32px 56px rgba(0, 0, 0, 0.58)",
+        "shadowXl": "0 40px 70px rgba(0, 0, 0, 0.62)",
+        "shadow2xl": "0 50px 84px rgba(0, 0, 0, 0.66)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

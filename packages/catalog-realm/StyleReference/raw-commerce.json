@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Raw Commerce",
+      "visualDNA": "Plain HTML scaffolding, system typography, and bold inline links for frictionless checkout funnels.",
+      "inspirations": [
+        "Gumroad bare layouts",
+        "Carrd microsales",
+        "Buy Me a Coffee pages"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1515162305280-7d7d7d43aa65?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Lean into single-column stacks, trust badges, and no-nonsense call-to-actions.",
+        "title": "Raw Commerce",
+        "description": "A stripped-down sales shell with system fonts, high-contrast buttons, and bold inline receipts.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#f7f7f7",
+        "foreground": "#1e1f22",
+        "card": "#ffffff",
+        "cardForeground": "#1e1f22",
+        "popover": "#ededed",
+        "popoverForeground": "#1e1f22",
+        "primary": "#1f1f1f",
+        "primaryForeground": "#f7f7f7",
+        "secondary": "#ff6b35",
+        "secondaryForeground": "#1f0d04",
+        "muted": "#ececec",
+        "mutedForeground": "#4a4b52",
+        "accent": "#ffbe0b",
+        "accentForeground": "#251700",
+        "destructive": "#d7263d",
+        "destructiveForeground": "#fff5f7",
+        "border": "#d7d7d7",
+        "input": "#cfcfcf",
+        "ring": "#1f1f1f",
+        "chart1": "#1f1f1f",
+        "chart2": "#ff6b35",
+        "chart3": "#ffbe0b",
+        "chart4": "#4f9deb",
+        "chart5": "#38c172",
+        "sidebar": "#f0f0f0",
+        "sidebarForeground": "#1e1f22",
+        "sidebarPrimary": "#1f1f1f",
+        "sidebarPrimaryForeground": "#f7f7f7",
+        "sidebarAccent": "#ff6b35",
+        "sidebarAccentForeground": "#1f0d04",
+        "sidebarBorder": "#d7d7d7",
+        "sidebarRing": "#1f1f1f",
+        "fontSans": "'Inter', system-ui, -apple-system, sans-serif",
+        "fontSerif": "'Inter', system-ui, sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "8px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.05)",
+        "shadowXs": "0 2px 6px rgba(0, 0, 0, 0.08)",
+        "shadowSm": "0 4px 10px rgba(0, 0, 0, 0.1)",
+        "shadow": "0 8px 16px rgba(0, 0, 0, 0.12)",
+        "shadowMd": "0 12px 24px rgba(0, 0, 0, 0.14)",
+        "shadowLg": "0 18px 32px rgba(0, 0, 0, 0.16)",
+        "shadowXl": "0 24px 40px rgba(0, 0, 0, 0.18)",
+        "shadow2xl": "0 28px 48px rgba(0, 0, 0, 0.2)"
+      },
+      "darkModeVariables": {
+        "background": "#111213",
+        "foreground": "#f4f5f7",
+        "card": "#18191b",
+        "cardForeground": "#f4f5f7",
+        "popover": "#1f2022",
+        "popoverForeground": "#f4f5f7",
+        "primary": "#f7f7f7",
+        "primaryForeground": "#111213",
+        "secondary": "#ff7f4d",
+        "secondaryForeground": "#1f0d04",
+        "muted": "#202225",
+        "mutedForeground": "#a9abb3",
+        "accent": "#ffd65c",
+        "accentForeground": "#2a1a00",
+        "destructive": "#ef4565",
+        "destructiveForeground": "#210108",
+        "border": "#2a2c30",
+        "input": "#25272a",
+        "ring": "#f7f7f7",
+        "chart1": "#f7f7f7",
+        "chart2": "#ff7f4d",
+        "chart3": "#ffd65c",
+        "chart4": "#63b3ff",
+        "chart5": "#4ade80",
+        "sidebar": "#0e0f10",
+        "sidebarForeground": "#f4f5f7",
+        "sidebarPrimary": "#f7f7f7",
+        "sidebarPrimaryForeground": "#111213",
+        "sidebarAccent": "#ff7f4d",
+        "sidebarAccentForeground": "#110602",
+        "sidebarBorder": "#25272a",
+        "sidebarRing": "#f7f7f7",
+        "fontSans": "'Inter', system-ui, -apple-system, sans-serif",
+        "fontSerif": "'Inter', system-ui, sans-serif",
+        "fontMono": "'IBM Plex Mono', 'Fira Code', monospace",
+        "radius": "8px",
+        "spacing": "0.2rem",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 1px 2px rgba(0, 0, 0, 0.32)",
+        "shadowXs": "0 2px 6px rgba(0, 0, 0, 0.36)",
+        "shadowSm": "0 4px 10px rgba(0, 0, 0, 0.4)",
+        "shadow": "0 8px 16px rgba(0, 0, 0, 0.44)",
+        "shadowMd": "0 12px 24px rgba(0, 0, 0, 0.46)",
+        "shadowLg": "0 18px 32px rgba(0, 0, 0, 0.5)",
+        "shadowXl": "0 24px 40px rgba(0, 0, 0, 0.54)",
+        "shadow2xl": "0 28px 48px rgba(0, 0, 0, 0.58)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
