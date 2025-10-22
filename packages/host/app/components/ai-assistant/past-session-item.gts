@@ -20,10 +20,11 @@ import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import {
   IconPencil,
   IconTrash,
-  ThreeDotsHorizontal,
   IconCircle,
   Copy as CopyIcon,
 } from '@cardstack/boxel-ui/icons';
+
+import ThreeDotsHorizontal from '@cardstack/boxel-icons/dots';
 
 import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -94,8 +95,7 @@ export default class PastSessionItem extends Component<Signature> {
             <:trigger>
               <IconButton
                 @icon={{ThreeDotsHorizontal}}
-                @width='16px'
-                @height='16px'
+                @size='extra-small'
                 class='menu-button'
                 aria-label='Options'
                 data-test-past-session-options-button={{@session.roomId}}
@@ -155,6 +155,7 @@ export default class PastSessionItem extends Component<Signature> {
         border-top: none;
       }
 
+      .session:focus-within,
       .session:hover {
         background-color: var(--ai-assistant-menu-hover-background);
         cursor: pointer;
@@ -176,31 +177,31 @@ export default class PastSessionItem extends Component<Signature> {
       .view-session-button {
         color: var(--boxel-light);
         background-color: transparent;
+        border-radius: var(--boxel-border-radius-xs);
         border: none;
         width: 100%;
+        margin-right: 1px;
         text-align: left;
+      }
+      .view-session-button:focus:focus-visible {
+        outline-offset: 1px;
       }
 
       .menu-button {
         visibility: hidden;
-        display: flex;
-        width: auto;
-        height: auto;
-        padding: 2px;
-        border-radius: var(--boxel-border-radius-xs);
       }
-
-      .session:hover .menu-button {
+      .session:hover .menu-button,
+      .session:focus-within .menu-button {
         visibility: visible;
       }
-
       .menu-button:hover:not(:disabled) {
         background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
       }
-
-      .menu-button :deep(svg) {
-        stroke: var(--boxel-dark);
-        stroke-width: 1px;
+      .menu-button[aria-expanded='true'] {
+        visibility: visible;
+        background-color: var(--boxel-highlight-hover);
+        color: var(--boxel-dark);
       }
 
       .menu {
@@ -226,7 +227,7 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .menu :deep(.boxel-menu__item:hover) {
-        background-color: var(--past-sessions-hover-background);
+        background-color: var(--ai-assistant-menu-hover-background);
         border-radius: var(--boxel-border-radius-xs);
       }
 

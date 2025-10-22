@@ -12,7 +12,7 @@ import { restartableTask } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 
 import {
-  Button,
+  IconButton,
   LoadingIndicator,
   ResizeHandle,
 } from '@cardstack/boxel-ui/components';
@@ -90,33 +90,30 @@ export default class AiAssistantPanel extends Component<Signature> {
             this.aiAssistantPanelService.loadingRooms
             as |pastSessionsLoading|
           }}
-            <Button
+            <IconButton
               title='Past Sessions'
               class='button past-sessions-button
                 {{if this.hasOtherActiveSessions "has-other-active-sessions"}}'
-              @kind='text-only'
+              @icon={{HistoryIcon}}
               @size='extra-small'
               @loading={{pastSessionsLoading}}
               @disabled={{this.aiAssistantPanelService.displayRoomError}}
               {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
               data-test-past-sessions-button
               data-test-has-active-sessions={{this.hasOtherActiveSessions}}
-            >
-              {{#unless pastSessionsLoading}}
-                <HistoryIcon />
-              {{/unless}}
-            </Button>
+              aria-expanded='{{this.aiAssistantPanelService.isShowingPastSessions}}'
+            />
           {{/let}}
-          <Button
+          <IconButton
             title='Close AI Assistant'
             class='button'
-            @kind='text-only'
+            @icon={{XIcon}}
             @size='extra-small'
+            @width='18'
+            @height='18'
             {{on 'click' @onClose}}
             data-test-close-ai-assistant
-          >
-            <XIcon />
-          </Button>
+          />
         </header>
 
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
@@ -297,44 +294,28 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .button {
-        --boxel-button-text-color: var(--boxel-highlight);
-        --boxel-button-padding: 1px 0;
-        --boxel-button-min-width: 0;
-        --boxel-button-min-height: 0;
-        --boxel-loading-indicator-size: 16px;
-
-        border: none;
-        border-radius: var(--boxel-border-radius-xs);
+        width: var(--boxel-button-mini);
+        height: var(--boxel-button-mini);
+        padding: 0;
         transform: translateY(-1px);
       }
-
-      .button:hover {
-        --boxel-button-text-color: var(--boxel-dark);
-
-        background-color: var(--boxel-highlight);
-      }
-
-      .button[disabled] {
-        --boxel-button-text-color: var(--boxel-400);
-
-        background-color: transparent;
-        border-color: transparent;
-      }
-
-      .button svg {
-        width: 18px;
-        height: 18px;
+      .button :deep(svg) {
         stroke-width: 2.5;
       }
-
-      /* This icon looks slightly bigger so this makes it match */
-      .button.past-sessions-button svg {
-        padding: 2px;
+      .button :deep(.loading-icon) {
+        width: 16px;
+        height: 16px;
       }
-
-      .button :deep(.loading-indicator) {
-        margin-right: 0;
-        padding-top: 1px;
+      .button:not(:disabled) {
+        color: var(--boxel-highlight);
+      }
+      .button:hover:not(:disabled) {
+        color: var(--boxel-dark);
+        background-color: var(--boxel-highlight);
+      }
+      .button[aria-expanded='true'] {
+        color: var(--boxel-dark);
+        background-color: var(--boxel-highlight-hover);
       }
 
       .has-other-active-sessions {

@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
-import { Button, Tooltip } from '@cardstack/boxel-ui/components';
+import { IconButton, Tooltip } from '@cardstack/boxel-ui/components';
 
 import NewSessionSettings from './new-session-settings';
 
@@ -68,16 +68,17 @@ export default class NewSessionButton extends Component<Signature> {
     <div class='new-session-button-container {{if this.showMenu "menu-open"}}'>
       <Tooltip>
         <:trigger>
-          <Button
+          <IconButton
             class='button new-session-button'
-            @kind='text-only'
+            @icon={{PlusIcon}}
             @size='extra-small'
+            @width='18'
+            @height='18'
             @disabled={{@disabled}}
+            aria-expanded='{{this.showMenu}}'
             {{on 'click' this.handleCreateNewSession}}
             data-test-create-room-btn
-          >
-            <PlusIcon />
-          </Button>
+          />
         </:trigger>
         <:content>
           {{#if this.showMenu}}
@@ -112,30 +113,28 @@ export default class NewSessionButton extends Component<Signature> {
         z-index: 1000;
       }
       .button {
-        --boxel-button-text-color: var(--boxel-highlight);
-        --boxel-button-padding: 1px 0;
-        --boxel-button-min-width: 0;
-        --boxel-button-min-height: 0;
-        --boxel-loading-indicator-size: 16px;
-
-        border: none;
-        border-radius: var(--boxel-border-radius-xs);
+        width: var(--boxel-button-mini);
+        height: var(--boxel-button-mini);
+        padding: 0;
         transform: translateY(-1px);
       }
-      .button:hover,
-      .new-session-button-container.menu-open .button {
-        --boxel-button-text-color: var(--boxel-dark);
+      .button :deep(svg) {
+        stroke-width: 2.5;
+      }
+      .button :deep(.loading-icon) {
+        width: 16px;
+        height: 16px;
+      }
+      .button:not(:disabled) {
+        color: var(--boxel-highlight);
+      }
+      .button:hover:not(:disabled) {
+        color: var(--boxel-dark);
         background-color: var(--boxel-highlight);
       }
-      .button[disabled] {
-        --boxel-button-text-color: var(--boxel-400);
-        background-color: transparent;
-        border-color: transparent;
-      }
-      .button svg {
-        width: 18px;
-        height: 18px;
-        stroke-width: 2.5;
+      .button[aria-expanded='true'] {
+        color: var(--boxel-dark);
+        background-color: var(--boxel-highlight-hover);
       }
     </style>
   </template>

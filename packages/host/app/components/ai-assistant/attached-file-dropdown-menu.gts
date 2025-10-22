@@ -20,7 +20,9 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
-import { ThreeDotsHorizontal, IconCode } from '@cardstack/boxel-ui/icons';
+import { IconCode } from '@cardstack/boxel-ui/icons';
+
+import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
 
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 
@@ -142,15 +144,12 @@ export default class AttachedFileDropdownMenu extends Component<{
 
   <template>
     <style scoped>
-      button.context-menu-button {
-        rotate: 90deg;
-        flex-shrink: 0;
-
-        --boxel-icon-button-width: 20px;
+      .context-menu-button:hover {
+        background-color: var(--boxel-highlight);
       }
-
-      button.context-menu-button:hover {
-        --icon-color: var(--boxel-highlight);
+      .context-menu-button[aria-expanded='true'] {
+        background-color: var(--boxel-highlight-hover);
+        outline-color: var(--boxel-highlight-hover);
       }
     </style>
     {{#if this.isRestorePatchedFileModalOpen}}
@@ -170,9 +169,8 @@ export default class AttachedFileDropdownMenu extends Component<{
           data-test-attached-file-dropdown-button={{@file.name}}
           data-test-copy-file-content={{this.fileContent}}
           class='context-menu-button'
-          @icon={{ThreeDotsHorizontal}}
-          @height='12'
-          @width='12'
+          @icon={{DotsVertical}}
+          @size='extra-small'
           aria-label='file options'
           {{bindings}}
           {{on 'click' (perform this.loadFileContent)}}
