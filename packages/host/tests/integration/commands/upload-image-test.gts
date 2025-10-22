@@ -302,4 +302,88 @@ module('Integration | commands | upload-image', function (hooks) {
       URL.revokeObjectURL(objectUrl);
     }
   });
+
+  test('performs direct upload when source is a data URI', async function (assert) {
+    assert.expect(12);
+
+    const commandService = getService('command-service');
+    const loaderService = getService('loader-service');
+    const loader = loaderService.loader;
+    const UploadImageCommandClass: typeof UploadImageCommand = (
+      (await loader.import('@cardstack/catalog/commands/upload-image')) as {
+        default: typeof UploadImageCommand;
+      }
+    ).default;
+    const command = new UploadImageCommandClass(commandService.commandContext);
+
+    const payloadString = 'fake image bytes';
+    const nodeBuffer = (globalThis as any).Buffer as
+      | {
+          from(
+            input: string,
+            encoding?: string,
+          ): { toString(encoding: string): string };
+        }
+      | undefined;
+    const base64Payload = nodeBuffer
+      ? nodeBuffer.from(payloadString, 'utf-8').toString('base64')
+      : btoa(payloadString);
+    const dataUri = `data:image/png;base64,${base64Payload}`;
+
+    const result = await command.execute({
+      sourceImageUrl: dataUri,
+      targetRealmUrl: testRealmURL,
+    });
+
+    assert.ok(result, 'command returns a result');
+    assert.ok(result.cardId, 'result card contains an id');
+
+    assert.strictEqual(
+      forwardPayloads.length,
+      1,
+      'proxy invoked only for direct upload URL request',
+    );
+
+    const [directUploadCall] = forwardPayloads;
+    assert.strictEqual(
+      directUploadCall.url,
+      'https://api.cloudflare.com/client/v4/accounts/4a94a1eb2d21bbbe160234438a49f687/images/v2/direct_upload',
+      'proxy call requests direct upload URL',
+    );
+    assert.true(
+      directUploadCall.multipart,
+      'direct upload URL request is sent as multipart form-data',
+    );
+
+    assert.ok(lastDirectUploadRequest, 'direct upload performed via fetch');
+    assert.strictEqual(
+      lastDirectUploadRequest?.url,
+      'https://upload.imagedelivery.net/direct-upload-url',
+      'direct upload posts to provided upload URL',
+    );
+
+    const fileEntry = lastDirectUploadRequest?.formData.get('file');
+    assert.ok(fileEntry, 'form data includes file field');
+    const uploadedFile = fileEntry as File;
+    assert.strictEqual(uploadedFile.type, 'image/png');
+    assert.strictEqual(uploadedFile.name, 'upload.png');
+
+    const expectedBytes = nodeBuffer
+      ? new Uint8Array(nodeBuffer.from(payloadString, 'utf-8') as any)
+      : Uint8Array.from(payloadString, (char) => char.charCodeAt(0));
+    const uploadedBytes = new Uint8Array(await uploadedFile.arrayBuffer());
+    assert.deepEqual(
+      Array.from(uploadedBytes),
+      Array.from(expectedBytes),
+      'uploaded file contents match data URI payload',
+    );
+
+    const store = getService('store');
+    const savedCard = store.peek(result.cardId!);
+    assert.strictEqual(
+      (savedCard as any).cloudflareId,
+      'cloudflare-direct-upload-id',
+      'saved card uses id returned by direct upload',
+    );
+  });
 });

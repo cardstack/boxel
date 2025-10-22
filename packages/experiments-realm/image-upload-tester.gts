@@ -60,6 +60,8 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
     switch (this.currentCommand?.progressStep) {
       case 'requesting-direct-upload-url':
         return 'Requesting Cloudflare upload URL...';
+      case 'parsing-data-uri':
+        return 'Parsing data URI...';
       case 'fetching-local-file':
         return 'Preparing selected file...';
       case 'uploading-local-file':
@@ -265,6 +267,9 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
         {{#if this.isUrlMode}}
           <FieldContainer @label='Source Image URL'>
             <@fields.sourceImageUrl @format='edit' />
+            <p class='field-hint'>
+              Supports https URLs, Blob URLs, and data URIs (e.g. data:image/png;base64,...)
+            </p>
           </FieldContainer>
         {{/if}}
 
@@ -352,6 +357,11 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
       .file-input__label {
         font: var(--boxel-font-sm);
         color: var(--boxel-500);
+      }
+      .field-hint {
+        margin-top: var(--boxel-sp-xs);
+        font: var(--boxel-font-xs);
+        color: var(--boxel-400);
       }
 
       .status-message {

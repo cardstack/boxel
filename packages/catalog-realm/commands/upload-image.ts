@@ -16,6 +16,7 @@ const CLOUDFLARE_DIRECT_UPLOAD_URL = `https://api.cloudflare.com/client/v4/accou
 type UploadProgressStep =
   | 'idle'
   | 'requesting-direct-upload-url'
+  | 'parsing-data-uri'
   | 'fetching-local-file'
   | 'uploading-local-file'
   | 'uploading-remote-url'
@@ -69,8 +70,11 @@ export default class UploadImageCommand extends Command<
       throw new Error('targetRealm is required');
     }
 
-    let isBlobUrl = input.sourceImageUrl.startsWith('blob:');
-    if (!isBlobUrl && !input.sourceImageUrl.startsWith('http')) {
+    const sourceImageUrl = input.sourceImageUrl.trim();
+
+    let isBlobUrl = sourceImageUrl.startsWith('blob:');
+    let isDataUri = sourceImageUrl.startsWith('data:');
+    if (!isBlobUrl && !isDataUri && !sourceImageUrl.startsWith('http')) {
       throw new Error('sourceImageUrl must be a valid URL');
     }
 
@@ -80,18 +84,21 @@ export default class UploadImageCommand extends Command<
     let cloudflareId: string;
 
     try {
-      if (isBlobUrl) {
+      if (isBlobUrl || isDataUri) {
         this.progressStep = 'requesting-direct-upload-url';
         let { uploadURL, id } = await this.requestDirectUploadUrl(
           sendRequestCommand,
         );
 
-        this.progressStep = 'fetching-local-file';
-        let {
-          blob,
-          fileName,
-          contentType,
-        } = await this.fetchBlobFromObjectUrl(input.sourceImageUrl);
+        let blobDetails;
+        if (isDataUri) {
+          this.progressStep = 'parsing-data-uri';
+          blobDetails = this.parseDataUri(sourceImageUrl);
+        } else {
+          this.progressStep = 'fetching-local-file';
+          blobDetails = await this.fetchBlobFromObjectUrl(sourceImageUrl);
+        }
+        let { blob, fileName, contentType } = blobDetails;
 
         this.progressStep = 'uploading-local-file';
         let uploadPayload = await this.uploadBlobToCloudflare(
@@ -111,7 +118,7 @@ export default class UploadImageCommand extends Command<
         this.progressStep = 'uploading-remote-url';
         let payload = await this.forwardRemoteUrl(
           sendRequestCommand,
-          input.sourceImageUrl,
+          sourceImageUrl,
         );
 
         const remoteUploadId = payload.result?.id;
@@ -196,6 +203,129 @@ export default class UploadImageCommand extends Command<
     }
 
     return { uploadURL, id };
+  }
+
+  private parseDataUri(dataUri: string) {
+    const trimmed = dataUri.trim();
+    if (!trimmed.startsWith('data:')) {
+      throw new Error('Invalid data URI: missing data: prefix');
+    }
+
+    const commaIndex = trimmed.indexOf(',');
+    if (commaIndex === -1) {
+      throw new Error('Invalid data URI: missing data payload');
+    }
+
+    const metadataSection = trimmed.substring(5, commaIndex); // remove "data:"
+    const payloadSection = trimmed.substring(commaIndex + 1);
+
+    if (!payloadSection) {
+      throw new Error('Invalid data URI: empty data payload');
+    }
+
+    const metadataParts = metadataSection.split(';').filter(Boolean);
+
+    let mimeType = 'text/plain;charset=US-ASCII';
+    let isBase64 = false;
+    let providedFileName: string | undefined;
+
+    for (let part of metadataParts) {
+      if (part === 'base64') {
+        isBase64 = true;
+        continue;
+      }
+      if (part.startsWith('name=')) {
+        providedFileName = part.slice('name='.length);
+        continue;
+      }
+      if (part.includes('/')) {
+        mimeType = part;
+      } else if (part.startsWith('charset=')) {
+        // Preserve charset parameter when no explicit mime type provided
+        if (!mimeType.includes('/')) {
+          mimeType = `text/plain;${part}`;
+        }
+      }
+    }
+
+    if (!mimeType.includes('/')) {
+      mimeType = 'application/octet-stream';
+    }
+
+    const cleanedPayload = payloadSection.replace(/\s+/g, '');
+    if (!cleanedPayload) {
+      throw new Error('Invalid data URI: payload contains no data');
+    }
+
+    let byteArray: Uint8Array;
+    const nodeBuffer = (globalThis as any).Buffer as
+      | { from(input: string, encoding: string): Uint8Array }
+      | undefined;
+    if (isBase64) {
+      try {
+        if (nodeBuffer) {
+          byteArray = new Uint8Array(
+            nodeBuffer.from(cleanedPayload, 'base64'),
+          );
+        } else if (typeof atob === 'function') {
+          const binaryString = atob(cleanedPayload);
+          byteArray = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            byteArray[i] = binaryString.charCodeAt(i);
+          }
+        } else {
+          throw new Error('No base64 decoder available in this environment');
+        }
+      } catch (error) {
+        throw new Error(`Failed to decode base64 data URI payload: ${String(error)}`);
+      }
+    } else {
+      try {
+        const decoded = decodeURIComponent(cleanedPayload);
+        const TextEncoderCtor = (globalThis as any).TextEncoder as
+          | { new (): { encode(input: string): Uint8Array } }
+          | undefined;
+        if (TextEncoderCtor) {
+          byteArray = new TextEncoderCtor().encode(decoded);
+        } else {
+          byteArray = new Uint8Array(decoded.length);
+          for (let i = 0; i < decoded.length; i++) {
+            byteArray[i] = decoded.charCodeAt(i);
+          }
+        }
+      } catch (error) {
+        throw new Error(`Failed to decode data URI payload: ${String(error)}`);
+      }
+    }
+
+    const blob = new Blob([byteArray], { type: mimeType });
+    if (providedFileName) {
+      providedFileName = providedFileName.replace(/^"(.*)"$/, '$1');
+      try {
+        providedFileName = decodeURIComponent(providedFileName);
+      } catch {
+        // ignore decoding errors and keep original value
+      }
+    }
+    const fileName =
+      providedFileName ?? this.deriveFileNameFromMimeType(mimeType);
+    const contentType = mimeType || 'application/octet-stream';
+
+    return { blob, fileName, contentType };
+  }
+
+  private deriveFileNameFromMimeType(mimeType: string) {
+    const extensionMap: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'image/avif': 'avif',
+    };
+
+    const extension = extensionMap[mimeType] ?? 'bin';
+    return `upload.${extension}`;
   }
 
   private async fetchBlobFromObjectUrl(objectUrl: string) {
