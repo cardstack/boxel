@@ -14,7 +14,7 @@ TEST_REALM_READY="$TEST_REALM$READY_PATH"
 
 HOST_PATH="http://127.0.0.1:4200"
 
-start-server-and-test \
+WAIT_ON_TIMEOUT=600000 start-server-and-test \
   'pnpm run wait' \
   "$BASE_REALM_READY|$NODE_TEST_REALM_READY|$TEST_REALM_READY" \
   "pnpm run start:host-pre-built" \

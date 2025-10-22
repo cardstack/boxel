@@ -18,6 +18,7 @@ import {
   type PrerenderMeta,
   type RenderRouteOptions,
   serializeRenderRouteOptions,
+  cleanCapturedHTML,
 } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
@@ -495,17 +496,6 @@ function omitOneTimeOptions(options: RenderRouteOptions): RenderRouteOptions {
     return rest as RenderRouteOptions;
   }
   return options;
-}
-
-function cleanCapturedHTML(html: string): string {
-  if (!html) {
-    return html;
-  }
-  const emberIdAttr = /\s+id=(?:"ember\d+"|'ember\d+'|ember\d+)(?=[\s>])/g;
-  const emptyDataAttr = /\s+(data-[A-Za-z0-9:_-]+)=(?:""|''|(?=[\s>]))/g;
-  let cleaned = html.replace(emberIdAttr, '');
-  cleaned = cleaned.replace(emptyDataAttr, ' $1');
-  return cleaned;
 }
 
 function extractPrerenderError(markup: string): string | undefined {

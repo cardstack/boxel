@@ -86,8 +86,8 @@ export default class RenderRoute extends Route<Model> {
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
-    (globalThis as any)._lazilyLoadLinks = undefined;
-    (globalThis as any)._boxelRenderContext = undefined;
+    (globalThis as any).__lazilyLoadLinks = undefined;
+    (globalThis as any).__boxelRenderContext = undefined;
   };
 
   activate() {
@@ -98,8 +98,8 @@ export default class RenderRoute extends Route<Model> {
   }
 
   deactivate() {
-    (globalThis as any)._lazilyLoadLinks = undefined;
-    (globalThis as any)._boxelRenderContext = undefined;
+    (globalThis as any).__lazilyLoadLinks = undefined;
+    (globalThis as any).__boxelRenderContext = undefined;
     (globalThis as any).__renderInstance = undefined;
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
@@ -455,10 +455,10 @@ export default class RenderRoute extends Route<Model> {
     try {
       let cardError: CardError = JSON.parse(error.message);
       return JSON.stringify(
-        {
+        this.#stripLastKnownGoodHtml({
           type: 'error',
           error: cardError,
-        } as RenderError,
+        } as RenderError),
         null,
         2,
       );
@@ -473,15 +473,44 @@ export default class RenderRoute extends Route<Model> {
       } while (current && !id);
       if (isCardError(error)) {
         return JSON.stringify(
-          { type: 'error', error: serializableError(error) },
+          this.#stripLastKnownGoodHtml({
+            type: 'error',
+            error: serializableError(error),
+          }),
           null,
           2,
         );
       }
       let errorJSONAPI = formattedError(id, error).errors[0];
       let errorPayload = errorJsonApiToErrorEntry(errorJSONAPI);
-      return JSON.stringify(errorPayload, null, 2);
+      return JSON.stringify(
+        this.#stripLastKnownGoodHtml(errorPayload),
+        null,
+        2,
+      );
     }
+  }
+
+  #stripLastKnownGoodHtml<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.map((item) =>
+        this.#stripLastKnownGoodHtml(item),
+      ) as unknown as T;
+    }
+    if (value && typeof value === 'object') {
+      let entries = Object.entries(value).reduce<Record<string, unknown>>(
+        (acc, [key, val]) => {
+          if (key === 'lastKnownGoodHtml') {
+            return acc;
+          }
+          acc[key] = this.#stripLastKnownGoodHtml(val);
+          return acc;
+        },
+        {},
+      );
+      return entries as T;
+    }
+    return value;
   }
 
   #deriveErrorContext(transition?: Transition): {
