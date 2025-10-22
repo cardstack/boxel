@@ -68,7 +68,13 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     }
 
     :global(.boxel-card-container--themed) {
+      /* convert variable names */
       --theme-spacing: calc(var(--spacing) * 4);
+      --typescale-h1: var(--brand-heading-font-size);
+      --typescale-body: var(--brand-body-font-size);
+      --font-family-base: var(--brand-body-font-family);
+      --font-weight-body: var(--brand-body-font-weight);
+      --lineheight-base: var(--brand-body-line-height);
       /* setting boxel base css variable overrides, with boxel defaults as fallback */
       --boxel-font-size: var(--typescale-body, var(--_boxel-font-size));
       --boxel-spacing: var(--theme-spacing, var(--_boxel-spacing));
