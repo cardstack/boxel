@@ -1709,32 +1709,41 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
-    let localName = this.paths.local(new URL(request.url));
-    let cached = this.#sourceCache.get(localName);
-    if (cached) {
-      let start = Date.now();
-      try {
-        if (cached.type === 'redirect') {
-          return createResponse({
-            body: null,
-            init: {
-              status: cached.status,
-              headers: {
-                ...cached.headers,
+    let url = new URL(request.url);
+    let noCache = url.searchParams.has('noCache');
+    let localName = this.paths.local(url);
+    if (!noCache) {
+      let cached = this.#sourceCache.get(localName);
+      if (cached) {
+        let start = Date.now();
+        try {
+          if (cached.type === 'redirect') {
+            return createResponse({
+              body: null,
+              init: {
+                status: cached.status,
+                headers: {
+                  ...cached.headers,
+                  [CACHE_HEADER]: CACHE_HIT_VALUE,
+                },
+              },
+              requestContext,
+            });
+          }
+          return await this.serveLocalFile(
+            request,
+            cached.ref,
+            requestContext,
+            {
+              defaultHeaders: {
+                ...cached.defaultHeaders,
                 [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
             },
-            requestContext,
-          });
+          );
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
         }
-        return await this.serveLocalFile(request, cached.ref, requestContext, {
-          defaultHeaders: {
-            ...cached.defaultHeaders,
-            [CACHE_HEADER]: CACHE_HIT_VALUE,
-          },
-        });
-      } finally {
-        this.#logRequestPerformance(request, start, 'cache hit');
       }
     }
 
@@ -1761,12 +1770,14 @@ export class Realm {
           },
           requestContext,
         });
-        this.#sourceCache.set(localName, {
-          type: 'redirect',
-          status: 302,
-          headers,
-          canonicalPath: handle.path,
-        });
+        if (!noCache) {
+          this.#sourceCache.set(localName, {
+            type: 'redirect',
+            status: 302,
+            headers,
+            canonicalPath: handle.path,
+          });
+        }
         return response;
       }
 
@@ -1779,12 +1790,14 @@ export class Realm {
         [CACHE_HEADER]: CACHE_MISS_VALUE,
       };
       let cachedRef = await this.materializeFileRef(handle);
-      this.#sourceCache.set(localName, {
-        type: 'file',
-        ref: cachedRef,
-        defaultHeaders,
-        canonicalPath: handle.path,
-      });
+      if (!noCache) {
+        this.#sourceCache.set(localName, {
+          type: 'file',
+          ref: cachedRef,
+          defaultHeaders,
+          canonicalPath: handle.path,
+        });
+      }
       return await this.serveLocalFile(request, cachedRef, requestContext, {
         defaultHeaders,
       });

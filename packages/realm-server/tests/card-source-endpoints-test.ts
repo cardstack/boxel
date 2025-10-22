@@ -177,6 +177,55 @@ module(basename(__filename), function () {
           );
         });
 
+        test('supports noCache query param to bypass cache', async function (assert) {
+          let cacheTestPath = 'cache-test-nocache.gts';
+          let initialContent = '// initial cache test content';
+
+          await testRealm.write(cacheTestPath, initialContent);
+
+          await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          let updatedContent = `${initialContent}\n// updated by test`;
+          await testRealm.write(cacheTestPath, updatedContent);
+
+          let noCacheResponse = await request
+            .get(`/${cacheTestPath}?noCache=true`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            noCacheResponse.status,
+            200,
+            'noCache request succeeds',
+          );
+          assert.strictEqual(
+            noCacheResponse.headers['x-boxel-cache'],
+            'miss',
+            'noCache request reported cache miss',
+          );
+          assert.strictEqual(
+            noCacheResponse.text,
+            updatedContent,
+            'noCache request sees updated content',
+          );
+
+          let cachedResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            cachedResponse.headers['x-boxel-cache'],
+            'miss',
+            'subsequent request fetches from disk because noCache call did not seed cache',
+          );
+          assert.strictEqual(
+            cachedResponse.text,
+            updatedContent,
+            'cache serves updated content after miss repopulates cache',
+          );
+        });
+
         test('serves a card-source GET request that results in redirect', async function (assert) {
           let response = await request
             .get('/person')
