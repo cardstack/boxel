@@ -174,11 +174,17 @@ export default class CopyButton extends Component<Signature> {
       [] as number[],
     );
 
+    // Returning `undefined` from this getter hides the copy button.
     switch (indexCardIndicies.length) {
+      // Case (Number of top-most index cards across the two stacks)
+      // Case 0 index cards: hide the button because neither top stack card is an index card.
+      // Case 1 index card: the index stack is the destination; copy the other stack's top card only when the destination has no selections and its realm is writable.
+      // Case 2 index cards:
+      //        - whichever stack has selections becomes the source and the other stack becomes the destination
+      //        - show the button only when selections reference a different stack item and the destination realm allows writes
       case 0:
         // at least one of the top most cards needs to be an index card
         return undefined;
-
       case 1: {
         // if only one of the top most cards are index cards, and the index card
         // has no selections, then the copy state reflects the copy of the top most
@@ -213,7 +219,6 @@ export default class CopyButton extends Component<Signature> {
           sourceItem,
         };
       }
-
       case 2: {
         if (topMostStackItems[LEFT].id === topMostStackItems[RIGHT].id) {
           // the source and destination cannot be the same
