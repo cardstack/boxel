@@ -15,7 +15,7 @@ module.exports = {
       );
       res.setHeader(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, X-Boxel-Building-Index, X-Boxel-Cache',
+        'Content-Type, Authorization, X-Boxel-Building-Index',
       );
       next();
     });
