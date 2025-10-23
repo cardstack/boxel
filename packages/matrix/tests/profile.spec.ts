@@ -288,7 +288,9 @@ test.describe('Profile', () => {
       userEmail,
     );
     await page.locator('[data-test-change-email-button]').click();
-    await page.locator('[data-test-new-email-field]').fill(existingUserEmail);
+    await page
+      .locator('[data-test-new-email-field]')
+      .fill('new-email-prefix' + userEmail);
 
     await page.locator('[data-test-confirm-cancel-button]').click();
     await expect(
