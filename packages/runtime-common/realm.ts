@@ -1712,6 +1712,12 @@ export class Realm {
     let url = new URL(request.url);
     let noCache = url.searchParams.has('noCache');
     let localName = this.paths.local(url);
+    if (noCache) {
+      let cachedEntry = this.#sourceCache.get(localName);
+      if (cachedEntry) {
+        this.#sourceCache.invalidate(cachedEntry.canonicalPath);
+      }
+    }
     if (!noCache) {
       let cached = this.#sourceCache.get(localName);
       if (cached) {
