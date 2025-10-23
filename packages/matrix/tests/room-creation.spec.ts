@@ -85,9 +85,9 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room1New]);
   });
 
-  // SKIPPING FLAKY TEST!
+  // SKIPPING FLAKY TEST! Re-enabled while we work on the fix.
   // https://linear.app/cardstack/issue/CS-6640/flaky-matrix-test-room-creation-spec-does-not-create-a-new-room-when
-  test.skip('it does not create a new room when another new room is available', async ({
+  test('it does not create a new room when another new room is available [CS-6640]', async ({
     page,
   }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });
@@ -126,9 +126,9 @@ test.describe('Room creation', () => {
     expect(user2Room).not.toEqual(newRoom);
   });
 
-  // skipping flaky test:
+  // skipping flaky test: re-enabled while we work on the fix.
   // https://linear.app/cardstack/issue/CS-7637/flaky-test-room-creationspects1217-%E2%80%BA-room-creation-%E2%80%BA-it-can-rename-a
-  test.skip('it can rename a room', async ({ page }) => {
+  test('it can rename a room [CS-7637]', async ({ page }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });
 
     let room1 = await getRoomId(page);
@@ -369,9 +369,9 @@ test.describe('Room creation', () => {
     await expect(page.locator('[data-test-room-is-empty]')).toHaveCount(1);
   });
 
-  // skipping flaky test
+  // skipping flaky test - re-enabled while we work on the fix.
   // https://linear.app/cardstack/issue/CS-7603/flaky-test-room-creation-%E2%80%BA-it-orders-past-sessions-list-items-based-on
-  test.skip('it orders past-sessions list items based on last activity in reverse chronological order', async ({
+  test('it orders past-sessions list items based on last activity in reverse chronological order [CS-7603]', async ({
     page,
   }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });

@@ -8,7 +8,7 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 4 : 0,
   workers: 2,
   globalSetup: 'tests/global.setup.ts',
   reporter: process.env.CI ? 'blob' : 'html',
