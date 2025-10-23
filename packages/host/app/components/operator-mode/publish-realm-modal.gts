@@ -662,7 +662,11 @@ export default class PublishRealmModal extends Component<Signature> {
                 <IconX width='12' height='12' class='cancel-icon' />
               </BoxelButton>
             {{/if}}
-            <div class='domain-details' data-test-custom-subdomain-details>
+            <div
+              class='domain-details
+                {{if this.isCustomSubdomainSetupVisible "full-width"}}'
+              data-test-custom-subdomain-details
+            >
               {{#if this.isCustomSubdomainSetupVisible}}
                 <div class='custom-subdomain-setup'>
                   <label
@@ -689,6 +693,24 @@ export default class PublishRealmModal extends Component<Signature> {
                         >.{{this.customSubdomainBase}}</Accessories.Text>
                       </:after>
                     </BoxelInputGroup>
+                    <BoxelButton
+                      @kind='primary'
+                      @size='small'
+                      class='claim-custom-subdomain-button'
+                      @disabled={{this.isClaimCustomSubdomainDisabled}}
+                      {{on
+                        'click'
+                        (perform this.handleClaimCustomSubdomainTask)
+                      }}
+                      data-test-claim-custom-subdomain-button
+                    >
+                      {{#if this.isCheckingCustomSubdomain}}
+                        <LoadingIndicator />
+                        Checking…
+                      {{else}}
+                        Claim Site Name
+                      {{/if}}
+                    </BoxelButton>
                   </div>
                 </div>
               {{else if this.claimedDomain}}
@@ -780,23 +802,7 @@ export default class PublishRealmModal extends Component<Signature> {
               {{/if}}
             </div>
 
-            {{#if this.isCustomSubdomainSetupVisible}}
-              <BoxelButton
-                @kind='primary'
-                @size='small'
-                class='claim-custom-subdomain-button action'
-                @disabled={{this.isClaimCustomSubdomainDisabled}}
-                {{on 'click' (perform this.handleClaimCustomSubdomainTask)}}
-                data-test-claim-custom-subdomain-button
-              >
-                {{#if this.isCheckingCustomSubdomain}}
-                  <LoadingIndicator />
-                  Checking…
-                {{else}}
-                  Claim Site Name
-                {{/if}}
-              </BoxelButton>
-            {{else}}
+            {{#if (not this.isCustomSubdomainSetupVisible)}}
               {{#if this.isClaimedDomainPublished}}
                 <BoxelButton
                   @kind='secondary-light'
@@ -954,6 +960,10 @@ export default class PublishRealmModal extends Component<Signature> {
         margin-top: var(--boxel-sp);
       }
 
+      .domain-details.full-width {
+        grid-column: 3 / -1;
+      }
+
       .realm-icon {
         flex-shrink: 0;
         --boxel-realm-icon-size: 30px;
@@ -1072,11 +1082,14 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
-        padding-right: var(--boxel-sp);
       }
 
       .custom-subdomain-row :deep(.container) {
-        width: 100%;
+        flex: 1;
+      }
+
+      .custom-subdomain-row .claim-custom-subdomain-button {
+        flex-shrink: 0;
       }
 
       .custom-domain-suffix {
