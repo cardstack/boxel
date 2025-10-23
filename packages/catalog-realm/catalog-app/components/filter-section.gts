@@ -27,9 +27,16 @@ interface FilterCategoryGroupArgs {
 }
 
 export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArgs> {
+  get shouldShowLoadingState() {
+    return (
+      this.args.isLoading &&
+      (!this.args.categories || this.args.categories.length === 0)
+    );
+  }
+
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
-      {{#if @isLoading}}
+      {{#if this.shouldShowLoadingState}}
         <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />
       {{else}}
         <FilterList
@@ -69,9 +76,16 @@ interface FilterTagGroupArgs {
 }
 
 export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
+  get shouldShowLoadingState() {
+    return (
+      this.args.isLoading &&
+      (!this.args.tags || this.args.tags.length === 0)
+    );
+  }
+
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
-      {{#if @isLoading}}
+      {{#if this.shouldShowLoadingState}}
         <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />
       {{else}}
         <TagList
