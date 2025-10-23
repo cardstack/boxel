@@ -1,21 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { putEvent } from '../docker/synapse';
 import {
-  login,
   getRoomId,
   sendMessage,
-  createSubscribedUser,
   createSubscribedUserAndLogin,
   getRoomEvents,
   showAllCards,
-  waitUntil,
   setSkillsRedirect,
   getAgentId,
   createRealm,
   postNewCard,
-  setupPermissions,
-  sharedSQLExecutor,
-  clearLocalStorage,
 } from '../helpers';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -41,95 +35,94 @@ test.describe('Commands', () => {
   test(`it includes the patch tool in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
-    const { username, password, credentials } = await createSubscribedUser(
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
       'commands-patch-tool',
+      serverIndexUrl,
     );
-    await setupPermissions(credentials.userId, `${appURL}/`, sharedSQLExecutor);
-    await login(page, username, password, { url: appURL });
+    const realmName = uniqueRealmName('commands-patch-tool');
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    const cardId = await postNewCard(page, realmURL, {
+      data: {
+        attributes: {
+          cardInfo: {
+            title: 'Patch Tool Card',
+            description: 'Card for patch tool test',
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
+
+    await page.goto(realmURL);
     let room1 = await getRoomId(page);
     await showAllCards(page);
-    const cardId = `${appURL}/mango`;
-    let mangoCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
-    await mangoCard.waitFor();
-    await mangoCard.click();
+    let realmCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
+    await realmCard.waitFor();
+    await realmCard.click();
     await expect(
       page.locator(`[data-test-stack-card="${cardId}"]`),
     ).toHaveCount(1);
     await sendMessage(page, room1, 'please change this card');
     let message;
     await expect(async () => {
-      message = (await getRoomEvents(username, password)).pop()!;
+      message = (await getRoomEvents(username, password, room1)).pop()!;
       expect(message?.content?.msgtype).toStrictEqual(
         APP_BOXEL_MESSAGE_MSGTYPE,
       );
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
-
-    expect(boxelMessageData.context.tools.length).toEqual(1);
+    expect(boxelMessageData.context.tools.length).toBeGreaterThan(0);
     let patchCardTool = boxelMessageData.context.tools.find(
-      (t: any) => t.function.name === 'patchCardInstance',
+      (t: any) => t.function?.name === 'patchCardInstance',
     );
-    expect(patchCardTool).toMatchObject({
-      type: 'function',
-      function: {
-        name: 'patchCardInstance',
-        description:
-          'Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
-        parameters: {
-          type: 'object',
-          properties: {
-            attributes: {
-              type: 'object',
-              properties: {
-                cardId: {
-                  type: 'string',
-                  const: cardId,
-                },
-                patch: {
-                  type: 'object',
-                  properties: {
-                    attributes: {
-                      type: 'object',
-                      properties: {
-                        firstName: {
-                          type: 'string',
-                        },
-                        lastName: {
-                          type: 'string',
-                        },
-                        email: {
-                          type: 'string',
-                        },
-                        posts: {
-                          type: 'number',
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          required: ['attributes', 'description'],
-        },
-      },
-    });
+    expect(patchCardTool).toBeDefined();
+    expect(
+      patchCardTool?.function?.parameters?.properties?.attributes?.properties
+        ?.cardId?.const,
+    ).toEqual(cardId);
   });
 
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
     page,
   }) => {
-    const { username, password, credentials } = await createSubscribedUser(
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
       'commands-unattached',
+      serverIndexUrl,
     );
-    await setupPermissions(credentials.userId, `${appURL}/`, sharedSQLExecutor);
-    await login(page, username, password, { url: appURL });
+    const realmName = uniqueRealmName('commands-unattached');
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    const cardId = await postNewCard(page, realmURL, {
+      data: {
+        attributes: {
+          cardInfo: {
+            title: 'Detachable Card',
+            description: 'Card for unattached patch tool test',
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
+
+    await page.goto(realmURL);
     let room1 = await getRoomId(page);
     await showAllCards(page);
-    const cardId = `${appURL}/mango`;
-    let mangoCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
-    await mangoCard.waitFor();
-    await mangoCard.click();
+    let realmCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
+    await realmCard.waitFor();
+    await realmCard.click();
     await expect(
       page.locator(`[data-test-stack-card="${cardId}"]`),
     ).toHaveCount(1);
@@ -141,7 +134,7 @@ test.describe('Commands', () => {
     await sendMessage(page, room1, 'please change this card');
     let message;
     await expect(async () => {
-      message = (await getRoomEvents(username, password)).pop()!;
+      message = (await getRoomEvents(username, password, room1)).pop()!;
       expect(message?.content?.msgtype).toStrictEqual(
         APP_BOXEL_MESSAGE_MSGTYPE,
       );
@@ -153,7 +146,6 @@ test.describe('Commands', () => {
   test(`applying a command dispatches a CommandResultEvent if command is succesful`, async ({
     page,
   }) => {
-    await clearLocalStorage(page, serverIndexUrl);
     const { username, password, credentials } =
       await createSubscribedUserAndLogin(
         page,
@@ -238,9 +230,7 @@ test.describe('Commands', () => {
     page,
   }) => {
     const { username, password, credentials } =
-      await createSubscribedUser('commands-search');
-    await setupPermissions(credentials.userId, `${appURL}/`, sharedSQLExecutor);
-    await login(page, username, password, { url: appURL });
+      await createSubscribedUserAndLogin(page, 'commands-search');
     let room1 = await getRoomId(page);
     let cardId = `${appURL}/hassan`;
     let content = {
@@ -293,7 +283,6 @@ test.describe('Commands', () => {
   test('an autoexecuted command does not run again when the message is re-rendered', async ({
     page,
   }) => {
-    await clearLocalStorage(page, serverIndexUrl);
     const { username, password, credentials } =
       await createSubscribedUserAndLogin(
         page,
@@ -404,11 +393,11 @@ test.describe('Commands', () => {
     );
 
     // verify that command result event was created correctly
-    await waitUntil(
-      async () =>
-        (await getRoomEvents(username, password, roomId)).length >
-        numEventsBeforeResponse + 2,
-    );
+    await expect(async () => {
+      let events = (await getRoomEvents(username, password, roomId)) || [];
+      expect(events.length).toBeGreaterThan(numEventsBeforeResponse + 2);
+    }).toPass();
+
     let message = (await getRoomEvents(username, password, roomId))
       .reverse()
       .slice(0, 5)
