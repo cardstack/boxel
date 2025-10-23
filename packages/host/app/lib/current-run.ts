@@ -79,6 +79,18 @@ const log = logger('current-run');
 const perfLog = logger('index-perf');
 const { renderTimeoutMs } = ENV;
 
+function canonicalURL(url: string, relativeTo?: string): string {
+  try {
+    let parsed = new URL(url, relativeTo);
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.href;
+  } catch (_e) {
+    let stripped = url.split('#')[0] ?? url;
+    return stripped.split('?')[0] ?? stripped;
+  }
+}
+
 interface CardType {
   refURL: string;
   codeRef: CodeRef;
@@ -792,7 +804,9 @@ export class CurrentRun {
             renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
           ) {
             renderError.error.deps = renderError.error.deps ?? [];
-            renderError.error.deps.push(renderError.error.id);
+            renderError.error.deps.push(
+              canonicalURL(renderError.error.id, instanceURL.href),
+            );
           }
           if (!renderError) {
             log.error(
@@ -804,8 +818,8 @@ export class CurrentRun {
           // always include the modules that we see in serialized as deps
           renderError.error.deps = renderError.error.deps ?? [];
           renderError.error.deps.push(
-            ...modulesConsumedInMeta(resource.meta).map(
-              (m) => new URL(m, instanceURL.href).href,
+            ...modulesConsumedInMeta(resource.meta).map((m) =>
+              canonicalURL(m, instanceURL.href),
             ),
           );
           renderError.error.deps = [...new Set(renderError.error.deps)];
@@ -1012,6 +1026,9 @@ export class CurrentRun {
                   : []),
               ]),
             ];
+            error.error.deps = error.error.deps.map((dep) =>
+              canonicalURL(dep, instanceURL.href),
+            );
           } else if (typesMaybeError?.type === 'error') {
             error = { type: 'error', error: typesMaybeError.error };
           } else {
