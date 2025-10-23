@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
-  clearLocalStorage,
   createRealm,
   showAllCards,
   patchCardInstance,
@@ -25,7 +24,6 @@ test.describe('Live Cards', () => {
   test('it can subscribe to realm events of a private realm', async ({
     page,
   }) => {
-    await clearLocalStorage(page, serverIndexUrl);
     let { username } = await createSubscribedUserAndLogin(
       page,
       'subscriber',
@@ -171,7 +169,6 @@ test.describe('Live Cards', () => {
   test('updating a card in code mode edit updates its source', async ({
     page,
   }) => {
-    await clearLocalStorage(page, serverIndexUrl);
     let { username } = await createSubscribedUserAndLogin(
       page,
       'subscriber',
