@@ -1695,6 +1695,17 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   )
                 ) {
                   content = 'Mock listing summary sentence.';
+                } else if (
+                  systemLower.includes("boxel's sample data assistant")
+                ) {
+                  content = JSON.stringify({
+                    examples: [
+                      {
+                        label: 'Generated field value',
+                        url: 'https://example.com/contact',
+                      },
+                    ],
+                  });
                 } else if (systemLower.includes('representing tag')) {
                   // Deterministic tag selection
                   content = JSON.stringify([calculatorTagId]);

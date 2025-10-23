@@ -9,6 +9,7 @@ import {
   Component,
   instanceOf,
   realmURL,
+  type GetCardMenuItemParams,
 } from 'https://cardstack.com/base/card-api';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -30,7 +31,8 @@ import {
   BoxelButton,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
 
 import AppListingHeader from '../components/app-listing-header';
 import ChooseRealmAction from '../components/choose-realm-action';
@@ -39,6 +41,9 @@ import ListOfPills from '../components/list-of-pills';
 import { listingActions, isReady } from '../resources/listing-actions';
 
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
+import GenerateListingExampleCommand from '@cardstack/boxel-host/commands/generate-listing-example';
+
+import { getCardMenuItems } from '@cardstack/runtime-common';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -554,6 +559,50 @@ export class Listing extends CardDef {
       return this.name;
     },
   });
+
+  protected getGenerateExampleMenuItem(
+    params: GetCardMenuItemParams,
+  ): MenuItemOptions | undefined {
+    if (!params.commandContext) {
+      return undefined;
+    }
+    const firstExample =
+      Array.isArray(this.examples) && this.examples.length
+        ? (this.examples[0] as CardDef | undefined)
+        : undefined;
+    if (!firstExample) {
+      return undefined;
+    }
+    return {
+      label: 'Generate example with AI',
+      action: async () => {
+        const command = new GenerateListingExampleCommand(
+          params.commandContext,
+        );
+        try {
+          await command.execute({
+            listing: this,
+            referenceExample: firstExample,
+          });
+        } catch (error) {
+          console.warn('Failed to generate listing example', { error });
+        }
+      },
+      icon: AiBwIcon,
+      id: 'generate-listing-example',
+    };
+  }
+
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getCardMenuItems](params);
+    if (params.menuContext === 'interact') {
+      const extra = this.getGenerateExampleMenuItem(params);
+      if (extra) {
+        menuItems = [...menuItems, extra];
+      }
+    }
+    return menuItems;
+  }
 
   static isolated = EmbeddedTemplate;
   static embedded = EmbeddedTemplate;
