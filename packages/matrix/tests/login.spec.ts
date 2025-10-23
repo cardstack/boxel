@@ -405,7 +405,10 @@ test.describe('Login', () => {
           '{"user_id":"@b:stack.cards","access_token":"INVALID_TOKEN","home_server":"stack.cards","device_id":"HELLO","well_known":{"m.homeserver":{"base_url":"http://example.com/"}}}'
         )`,
     });
-
+    // Once the init script is in, we can navigate
+    // If the openRoot is called before, then the script isn't run and the test
+    // passes regardless because the opening page is the login screen.
+    await openRoot(page, appURL);
     await assertLoggedOut(page);
   });
 });
