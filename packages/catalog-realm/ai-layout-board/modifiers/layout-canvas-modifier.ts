@@ -145,7 +145,12 @@ export default class LayoutCanvasModifier extends Modifier<{
         overlay.classList.remove('selected');
         if (selectButton) {
           selectButton.innerHTML = `
-            <div style=\"display: flex; align-items: center; gap: 3px;\">\n              <svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\n                <circle cx=\"12\" cy=\"12\" r=\"8\"/>\n              </svg>\n              <span>SELECT</span>\n            </div>`;
+            <div style="display: flex; align-items: center; gap: 3px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="8"/>
+              </svg>
+              <span>SELECT</span>
+            </div>`;
           selectButton.title = 'Click to select this item for actions';
           selectButton.style.background = 'rgba(255, 255, 255, 0.95)';
           selectButton.style.borderColor = '#3b82f6';
