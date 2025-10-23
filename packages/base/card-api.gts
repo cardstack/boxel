@@ -86,7 +86,6 @@ import ImportIcon from '@cardstack/boxel-icons/import';
 import {
   normalizeEnumOptions as normalizeEnumOptionsUtil,
   enumAllowedValues as enumAllowedValuesUtil,
-  getEnumOptionsSync as getEnumOptionsSyncUtil,
 } from './enum-utils';
 
 import {
@@ -117,6 +116,7 @@ import {
   isCard,
   isCardOrField,
   isNotLoadedValue,
+  resolveFieldConfiguration,
   notifyCardTracking,
   peekAtField,
   relationshipMeta,
@@ -688,8 +688,13 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     if (primitive in this.card) {
       // minimal enum validation for plural primitive fields
       if ((this.card as any).isEnumField) {
-        let opts: any[] = (this.card as any).enumOptions ?? [];
-        let allowed = enumAllowedValuesUtil(opts);
+        let allowed: any[];
+        if (typeof (this.card as any).allowedValues === 'function') {
+          allowed = (this.card as any).allowedValues(instance);
+        } else {
+          let opts: any[] = (this.card as any).enumOptions ?? [];
+          allowed = enumAllowedValuesUtil(opts);
+        }
         let allowedDisplay = allowed.map(String).join(', ');
         for (let [index, item] of values.entries()) {
           if (item != null && !allowed.includes(item)) {
@@ -926,8 +931,26 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     if (primitive in this.card) {
       // minimal enum validation: if field card is an enum, enforce allowed values
       if ((this.card as any).isEnumField) {
-        let opts: any[] = (this.card as any).enumOptions ?? [];
-        let allowed = enumAllowedValuesUtil(opts);
+        let allowed: any[];
+        // Prefer merged configuration when available
+        try {
+          // lazy import to avoid circular pitfalls; resolve is already a direct import at top-level
+          let cfg = resolveFieldConfiguration(this as any, _instance);
+          let opts: any[] | undefined = (cfg as any)?.options;
+          if (Array.isArray(opts)) {
+            allowed = enumAllowedValuesUtil(opts);
+          } else if (typeof (this.card as any).allowedValues === 'function') {
+            // Fallback to class-level provider (supports dynamic function on FieldDef)
+            allowed = (this.card as any).allowedValues(_instance);
+          } else {
+            let staticOpts: any[] = (this.card as any).enumOptions ?? [];
+            allowed = enumAllowedValuesUtil(staticOpts);
+          }
+        } catch (_e) {
+          // On any unexpected error, fall back to static
+          let staticOpts: any[] = (this.card as any).enumOptions ?? [];
+          allowed = enumAllowedValuesUtil(staticOpts);
+        }
         if (value != null && !allowed.includes(value)) {
           let allowedDisplay = allowed.map(String).join(', ');
           throw new Error(
@@ -2273,29 +2296,50 @@ export class TextAreaField extends StringField {
 // and exposes the allowed options. Enough to support the integration test.
 export function enumField<BaseT extends FieldDefConstructor>(
   Base: BaseT,
-  config: { options: any[] }
+  config: { options: any; displayName?: string; icon?: any }
 ): BaseT {
-  let rawOpts: any[] = (config?.options ?? []) as any[];
+  let rawOpts: any[] = Array.isArray((config as any)?.options)
+    ? ((config as any).options as any[])
+    : [];
 
   class EnumField extends (Base as any) {
     static isEnumField = true;
-    // Preserve original options shape for existing helpers/tests
+    // Back-compat: retain static enumOptions for existing helpers/tests
     static enumOptions = rawOpts;
-    // Prep for dynamic options: provide class helpers
-    static resolveEnumOptions(_instance?: unknown) {
-      return normalizeEnumOptionsUtil((this as any).enumOptions ?? []);
+    // Leverage new configuration API: expose options via FieldDef.configuration
+    static configuration = typeof (config as any)?.options === 'function'
+      ? (self: any) => ({ options: (config as any).options(self) })
+      : ({ options: (config as any)?.options } as any);
+    // Allow customizing display metadata
+    static displayName = (config as any)?.displayName ?? (Base as any).displayName;
+    static icon = (config as any)?.icon ?? (Base as any).icon;
+
+    // Helper for validation fallback when resolver is not used
+    static allowedValues(instance?: unknown) {
+      let provided = (EnumField as any).configuration;
+      if (typeof provided === 'function') {
+        let fragment = provided(instance as any);
+        if (fragment && Array.isArray((fragment as any).options)) {
+          return enumAllowedValuesUtil((fragment as any).options);
+        }
+      } else if (provided && Array.isArray((provided as any).options)) {
+        return enumAllowedValuesUtil((provided as any).options);
+      }
+      return enumAllowedValuesUtil((EnumField as any).enumOptions ?? []);
     }
-    static getEnumOptionsSync(_instance?: unknown) {
-      return getEnumOptionsSyncUtil(this);
-    }
-    static allowedValues(_instance?: unknown) {
-      return enumAllowedValuesUtil((this as any).enumOptions ?? []);
-    }
+
     static atom = class Atom extends GlimmerComponent<any> {
+      get normalizedOptions() {
+        let cfg = this.args.configuration as { options?: any[] } | undefined;
+        let opts = cfg?.options ?? (EnumField as any).enumOptions ?? [];
+        return normalizeEnumOptionsUtil(opts);
+      }
       get option() {
         let v = this.args.model as any;
-        let opts = (EnumField as any).getEnumOptionsSync();
-        return opts.find((o: any) => o.value === v) ?? { value: v, label: String(v) };
+        let opts = this.normalizedOptions as any[];
+        return (
+          opts.find((o: any) => o.value === v) ?? { value: v, label: String(v) }
+        );
       }
       <template>
         {{#if this.option}}
@@ -2307,21 +2351,23 @@ export function enumField<BaseT extends FieldDefConstructor>(
       </template>
     };
     // selected item component used for trigger rendering; adapts BoxelSelect's `@option` to atom's `@model`
-    static selectedItem = class SelectedItem extends GlimmerComponent<{ Args: { option: any } }> {
+    static selectedItem = class SelectedItem extends GlimmerComponent<{ Args: { option: any; configuration?: any } }> {
       <template>
         {{#if @option}}
           {{#let (component EnumField.atom) as |Atom|}}
-            <Atom @model={{@option.value}} />
+            <Atom @model={{@option.value}} @configuration={{@configuration}} />
           {{/let}}
         {{/if}}
       </template>
     };
     static edit = class Edit extends GlimmerComponent<any> {
       get options() {
-        return (EnumField as any).getEnumOptionsSync();
+        let cfg = this.args.configuration as { options?: any[] } | undefined;
+        let opts = cfg?.options ?? (EnumField as any).enumOptions ?? [];
+        return normalizeEnumOptionsUtil(opts);
       }
       get selectedOption() {
-        let opts = (EnumField as any).getEnumOptionsSync();
+        let opts = this.options as any[];
         return opts.find((o: any) => o.value === (this.args.model as any)) ?? null;
       }
       update = (opt: any) => {
@@ -2332,14 +2378,14 @@ export function enumField<BaseT extends FieldDefConstructor>(
           @options={{this.options}}
           @selected={{this.selectedOption}}
           @onChange={{this.update}}
-          @selectedItemComponent={{component EnumField.selectedItem}}
+          @selectedItemComponent={{component EnumField.selectedItem configuration=@configuration}}
           @disabled={{not @canEdit}}
           @renderInPlace={{true}}
           @placeholder='Choose...'
           as |opt|
         >
           {{#let (component EnumField.atom) as |Atom|}}
-            <Atom @model={{opt.value}} />
+            <Atom @model={{opt.value}} @configuration={{@configuration}} />
           {{/let}}
         </BoxelSelect>
       </template>

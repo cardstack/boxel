@@ -32,6 +32,7 @@ import {
   createFromSerialized,
   getQueryableValue,
   enumField,
+  linksTo,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
@@ -641,5 +642,37 @@ module('Integration | enumField', function (hooks) {
 
     assert.deepEqual(t.priorities, ['high', 'medium'], 'second item updates');
     // UI text is verified in other tests; value change is sufficient here
+  });
+
+  test('dynamic options provider resolves options per instance (intentional fail until implemented)', async function (assert) {
+    assert.expect(1);
+
+    class CrmApp extends CardDef {
+      @field globalPriorityOptions = containsMany(StringField);
+    }
+
+    const PriorityField = enumField(StringField, {
+      options: (instance: any) => instance.crmApp?.globalPriorityOptions,
+    });
+
+    class Task extends CardDef {
+      @field crmApp = linksTo(CrmApp);
+      @field priority = contains(PriorityField);
+    }
+
+    let app = new CrmApp({ globalPriorityOptions: ['High', 'Low'] });
+    let t = new Task({ crmApp: app as any, priority: 'High' });
+
+    const helperModule = await loader.import(
+      `${baseRealm.url}helpers/enum-values`,
+    );
+    const enumValues = (helperModule as any).default;
+
+    let values = enumValues(t, 'priority');
+    assert.deepEqual(
+      values,
+      ['High', 'Low'],
+      'resolves enum values from linked card',
+    );
   });
 });
