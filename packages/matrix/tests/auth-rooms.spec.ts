@@ -1,75 +1,66 @@
 import { expect, test } from '@playwright/test';
 import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
   getJoinedRooms,
   getRoomMembers,
   getRoomRetentionPolicy,
 } from '../docker/synapse';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
-
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+import { createSubscribedUser } from '../helpers';
+import { appURL } from '../helpers/isolated-realm-server';
 
 test.describe('Auth rooms', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-  let user: { accessToken: string };
-
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await smtpStart();
-
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-
-    user = await registerUser(synapse, 'user1', 'pass');
-    await setupUserSubscribed('@user1:localhost', realmServer);
   });
 
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-    await realmServer.stop();
-  });
+  // CS-8988 - was flaky before, making it a toPass to attempt to stabilize
+  test('auth rooms have a retention policy', async ({ page }) => {
+    const { username, password, credentials } =
+      await createSubscribedUser('auth-rooms');
+    await page.goto(appURL);
 
-  // CS-8988 - this test is flaky and needs to be fixed
-  // By delaying await getJoinedRooms(user.accessToken); the test is passing more
-  // reliably but that makes the test take too long to run (several seconds)
-  test.skip('auth rooms have a retention policy', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill(username);
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill(password);
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
 
-    let roomIds = await getJoinedRooms(user.accessToken);
+    await page.locator('[data-test-room-settled]').waitFor();
+    let realmRoomsByUser = new Map<string, string>();
+    expect(async () => {
+      let roomIds = await getJoinedRooms(credentials.accessToken);
 
-    let roomIdToMembers = new Map<string, any>();
+      let roomIdToMembers = new Map<string, any>();
 
-    for (let room of roomIds) {
-      let members = await getRoomMembers(room, user.accessToken);
-      roomIdToMembers.set(room, members);
-    }
+      for (let room of roomIds) {
+        let members = await getRoomMembers(room, credentials.accessToken);
+        roomIdToMembers.set(room, members);
+      }
+      console.log(roomIdToMembers);
+      // Only look at auth rooms that we know will be there for the isolated realm server
+      let realmUsers = ['@realm_server:localhost', '@test_realm:localhost'];
+      // make sure we reset it each time we test
+      realmRoomsByUser = new Map<string, string>();
 
-    let realmUsers = ['@base_realm:localhost', '@test_realm:localhost'];
+      for (let [roomId, members] of roomIdToMembers.entries()) {
+        let joinedMembers = members?.joined ?? {};
+        for (let realmUser of realmUsers) {
+          if (!realmRoomsByUser.has(realmUser) && joinedMembers[realmUser]) {
+            realmRoomsByUser.set(realmUser, roomId);
+          }
+        }
+      }
 
-    let realmRoomIds = roomIds.filter((room) =>
-      realmUsers.some((user) => roomIdToMembers.get(room)?.joined[user]),
-    );
+      expect(realmRoomsByUser.size).toBe(realmUsers.length);
+    }).toPass();
 
-    expect(realmRoomIds.length).toBe(realmUsers.length);
-
-    for (let room of realmRoomIds) {
+    for (let [realmUser, room] of realmRoomsByUser.entries()) {
+      console.log(
+        `checking retention for realm user ${realmUser} in room ${room}`,
+      );
       let retentionPolicy = await getRoomRetentionPolicy(
-        user.accessToken,
+        credentials.accessToken,
         room,
       );
 
