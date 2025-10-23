@@ -1,5 +1,22 @@
 import { expect, test } from '@playwright/test';
-import { Credentials, putEvent, registerUser } from '../docker/synapse';
+import { putEvent } from '../docker/synapse';
+import {
+  login,
+  getRoomId,
+  sendMessage,
+  createSubscribedUser,
+  createSubscribedUserAndLogin,
+  getRoomEvents,
+  showAllCards,
+  waitUntil,
+  setSkillsRedirect,
+  getAgentId,
+  createRealm,
+  postNewCard,
+  setupPermissions,
+  sharedSQLExecutor,
+  clearLocalStorage,
+} from '../helpers';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -7,67 +24,41 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
 } from '../helpers/matrix-constants';
+import { appURL } from '../helpers/isolated-realm-server';
 
-import {
-  login,
-  getRoomId,
-  sendMessage,
-  registerRealmUsers,
-  getRoomEvents,
-  showAllCards,
-  waitUntil,
-  setupUserSubscribed,
-  getAgentId,
-  setSkillsRedirect,
-  setupPermissions,
-} from '../helpers';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-  appURL,
-} from '../helpers/isolated-realm-server';
+const serverIndexUrl = new URL(appURL).origin;
 
-test.skip('Commands', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-  let userCred: Credentials;
+function uniqueRealmName(prefix: string) {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+test.describe('Commands', () => {
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(120_000);
     await setSkillsRedirect(page);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    userCred = await registerUser(synapse, 'user1', 'pass');
-    await setupUserSubscribed('@user1:localhost', realmServer);
-    await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
-  });
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await realmServer.stop();
   });
 
   test(`it includes the patch tool in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, password, credentials } = await createSubscribedUser(
+      'commands-patch-tool',
+    );
+    await setupPermissions(credentials.userId, `${appURL}/`, sharedSQLExecutor);
+    await login(page, username, password, { url: appURL });
     let room1 = await getRoomId(page);
     await showAllCards(page);
-    await page
-      .locator(
-        `[data-test-stack-card="${appURL}/index"] [data-test-cards-grid-item="${appURL}/mango"]`,
-      )
-      .click();
+    const cardId = `${appURL}/mango`;
+    let mangoCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
+    await mangoCard.waitFor();
+    await mangoCard.click();
     await expect(
-      page.locator(`[data-test-stack-card="${appURL}/mango"]`),
+      page.locator(`[data-test-stack-card="${cardId}"]`),
     ).toHaveCount(1);
     await sendMessage(page, room1, 'please change this card');
     let message;
     await expect(async () => {
-      message = (await getRoomEvents()).pop()!;
+      message = (await getRoomEvents(username, password)).pop()!;
       expect(message?.content?.msgtype).toStrictEqual(
         APP_BOXEL_MESSAGE_MSGTYPE,
       );
@@ -92,7 +83,7 @@ test.skip('Commands', () => {
               properties: {
                 cardId: {
                   type: 'string',
-                  const: `${appURL}/mango`,
+                  const: cardId,
                 },
                 patch: {
                   type: 'object',
@@ -128,26 +119,29 @@ test.skip('Commands', () => {
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, password, credentials } = await createSubscribedUser(
+      'commands-unattached',
+    );
+    await setupPermissions(credentials.userId, `${appURL}/`, sharedSQLExecutor);
+    await login(page, username, password, { url: appURL });
     let room1 = await getRoomId(page);
     await showAllCards(page);
-    await page
-      .locator(
-        `[data-test-stack-card="${appURL}/index"] [data-test-cards-grid-item="${appURL}/mango"]`,
-      )
-      .click();
+    const cardId = `${appURL}/mango`;
+    let mangoCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
+    await mangoCard.waitFor();
+    await mangoCard.click();
     await expect(
-      page.locator(`[data-test-stack-card="${appURL}/mango"]`),
+      page.locator(`[data-test-stack-card="${cardId}"]`),
     ).toHaveCount(1);
     await page
       .locator(
-        `[data-test-attached-card="${appURL}/mango"] [data-test-remove-card-btn]`,
+        `[data-test-attached-card="${cardId}"] [data-test-remove-card-btn]`,
       )
       .click();
     await sendMessage(page, room1, 'please change this card');
     let message;
     await expect(async () => {
-      message = (await getRoomEvents()).pop()!;
+      message = (await getRoomEvents(username, password)).pop()!;
       expect(message?.content?.msgtype).toStrictEqual(
         APP_BOXEL_MESSAGE_MSGTYPE,
       );
@@ -159,9 +153,42 @@ test.skip('Commands', () => {
   test(`applying a command dispatches a CommandResultEvent if command is succesful`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await clearLocalStorage(page, serverIndexUrl);
+    const { username, password, credentials } =
+      await createSubscribedUserAndLogin(
+        page,
+        'commands-command-result',
+        serverIndexUrl,
+      );
+    const realmName = uniqueRealmName('commands-command-result');
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    const cardId = await postNewCard(page, realmURL, {
+      data: {
+        attributes: {
+          cardInfo: {
+            title: 'Test card title',
+            description: 'Test card description',
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
+
+    await page.goto(realmURL);
     let room1 = await getRoomId(page);
-    let cardId = `${appURL}/hassan`;
+    await showAllCards(page);
+    let newCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
+    await newCard.waitFor();
+    await newCard.click();
+    await expect(
+      page.locator(`[data-test-stack-card="${cardId}"]`),
+    ).toHaveCount(1);
     let content = {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
@@ -177,7 +204,9 @@ test.skip('Commands', () => {
               cardId,
               patch: {
                 attributes: {
-                  firstName: 'Dave',
+                  cardInfo: {
+                    title: 'Updated card title',
+                  },
                 },
               },
             },
@@ -186,18 +215,18 @@ test.skip('Commands', () => {
       ],
     };
 
-    await showAllCards(page);
-    await page
-      .locator(
-        `[data-test-stack-card="${appURL}/index"] [data-test-cards-grid-item="${cardId}"]`,
-      )
-      .click();
-    await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
+    await putEvent(
+      credentials.accessToken,
+      room1,
+      'm.room.message',
+      '1',
+      content,
+    );
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
 
     await expect(async () => {
-      let events = await getRoomEvents('user1', 'pass', room1);
+      let events = await getRoomEvents(username, password, room1);
       let commandResultEvent = (events as any).find(
         (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
@@ -208,9 +237,12 @@ test.skip('Commands', () => {
   test(`applying a search command dispatches a result event if command is succesful and result is returned`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, password, credentials } =
+      await createSubscribedUser('commands-search');
+    await setupPermissions(credentials.userId, `${appURL}/`, sharedSQLExecutor);
+    await login(page, username, password, { url: appURL });
     let room1 = await getRoomId(page);
-    let card_id = `${appURL}/hassan`;
+    let cardId = `${appURL}/hassan`;
     let content = {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
@@ -234,16 +266,20 @@ test.skip('Commands', () => {
     };
 
     await showAllCards(page);
-    await page
-      .locator(
-        `[data-test-stack-card="${appURL}/index"] [data-test-cards-grid-item="${card_id}"]`,
-      )
-      .click();
-    await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
+    let hassanCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
+    await hassanCard.waitFor();
+    await hassanCard.click();
+    await putEvent(
+      credentials.accessToken,
+      room1,
+      'm.room.message',
+      '1',
+      content,
+    );
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
     await expect(async () => {
-      let events = await getRoomEvents('user1', 'pass', room1);
+      let events = await getRoomEvents(username, password, room1);
       let commandResultEvent = (events as any).find(
         (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
@@ -257,7 +293,18 @@ test.skip('Commands', () => {
   test('an autoexecuted command does not run again when the message is re-rendered', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await clearLocalStorage(page, serverIndexUrl);
+    const { username, password, credentials } =
+      await createSubscribedUserAndLogin(
+        page,
+        'commands-autoexec',
+        serverIndexUrl,
+      );
+    const realmName = uniqueRealmName('commands-autoexec');
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+
+    await page.goto(realmURL);
     await showAllCards(page);
 
     // create a skill card
@@ -310,12 +357,12 @@ test.skip('Commands', () => {
     await page.locator('[data-test-message-idx="0"]').waitFor();
 
     let roomId = await getRoomId(page);
-    let roomEvents = await getRoomEvents('user1', 'pass', roomId);
+    let roomEvents = await getRoomEvents(username, password, roomId);
     let numEventsBeforeResponse = roomEvents.length;
     let agentId = getAgentId(roomEvents);
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
-    await putEvent(userCred.accessToken, roomId, 'm.room.message', '1', {
+    await putEvent(credentials.accessToken, roomId, 'm.room.message', '1', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: '',
@@ -359,10 +406,10 @@ test.skip('Commands', () => {
     // verify that command result event was created correctly
     await waitUntil(
       async () =>
-        (await getRoomEvents('user1', 'pass', roomId)).length >
+        (await getRoomEvents(username, password, roomId)).length >
         numEventsBeforeResponse + 2,
     );
-    let message = (await getRoomEvents('user1', 'pass', roomId))
+    let message = (await getRoomEvents(username, password, roomId))
       .reverse()
       .slice(0, 5)
       .find((message) => {
@@ -389,7 +436,7 @@ test.skip('Commands', () => {
 
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
-    await putEvent(userCred.accessToken, roomId, 'm.room.message', '2', {
+    await putEvent(credentials.accessToken, roomId, 'm.room.message', '2', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
