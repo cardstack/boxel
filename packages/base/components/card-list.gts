@@ -40,8 +40,9 @@ export default class CardList extends Component<Signature> {
   declare cardCrudFunctions: CardCrudFunctions | undefined;
 
   @action
-  handleCardClick(cardUrl: string) {
+  handleCardClick(cardUrl: string, event?: Event) {
     if (this.cardCrudFunctions?.viewCard) {
+      event?.preventDefault();
       this.cardCrudFunctions.viewCard(new URL(cardUrl));
     }
   }
@@ -80,6 +81,8 @@ export default class CardList extends Component<Signature> {
                 data-test-cards-grid-item={{removeFileExtension card.url}}
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                 data-cards-grid-item={{removeFileExtension card.url}}
+                role={{if this.cardCrudFunctions.viewCard 'button'}}
+                tabindex={{if this.cardCrudFunctions.viewCard '0'}}
                 {{on 'click' (fn this.handleCardClick card.url)}}
               >
                 <card.component />
