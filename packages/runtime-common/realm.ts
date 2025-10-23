@@ -1710,15 +1710,17 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
-    let noCache = url.searchParams.has('noCache');
+    let bypassCache =
+      url.searchParams.has('noCache') ||
+      (!url.pathname.endsWith('.json') &&
+        !hasExecutableExtension(url.pathname));
     let localName = this.paths.local(url);
-    if (noCache) {
+    if (bypassCache) {
       let cachedEntry = this.#sourceCache.get(localName);
       if (cachedEntry) {
         this.#sourceCache.invalidate(cachedEntry.canonicalPath);
       }
-    }
-    if (!noCache) {
+    } else {
       let cached = this.#sourceCache.get(localName);
       if (cached) {
         let start = Date.now();
@@ -1776,7 +1778,7 @@ export class Realm {
           },
           requestContext,
         });
-        if (!noCache) {
+        if (!bypassCache) {
           this.#sourceCache.set(localName, {
             type: 'redirect',
             status: 302,
@@ -1795,18 +1797,22 @@ export class Realm {
           : {}),
         [CACHE_HEADER]: CACHE_MISS_VALUE,
       };
-      let cachedRef = await this.materializeFileRef(handle);
-      if (!noCache) {
+      if (bypassCache) {
+        return await this.serveLocalFile(request, handle, requestContext, {
+          defaultHeaders,
+        });
+      } else {
+        let cachedRef = await this.materializeFileRef(handle);
         this.#sourceCache.set(localName, {
           type: 'file',
           ref: cachedRef,
           defaultHeaders,
           canonicalPath: handle.path,
         });
+        return await this.serveLocalFile(request, cachedRef, requestContext, {
+          defaultHeaders,
+        });
       }
-      return await this.serveLocalFile(request, cachedRef, requestContext, {
-        defaultHeaders,
-      });
     } finally {
       this.#logRequestPerformance(request, start, 'cache miss');
     }
