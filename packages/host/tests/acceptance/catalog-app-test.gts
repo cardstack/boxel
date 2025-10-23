@@ -1376,6 +1376,21 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
+    test('listing card shows more options dropdown in stack item', async function (assert) {
+      let triggerSelector = `[data-test-stack-card="${authorListingId}"] [data-test-more-options-button]`;
+      await waitFor(triggerSelector);
+      await click(triggerSelector);
+      await waitFor('[data-test-boxel-dropdown-content]');
+      assert
+        .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
+        .exists('Listing card dropdown renders menu items');
+      assert
+        .dom(
+          `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Generate example with AI"]`,
+        )
+        .exists('Generate example with AI action is present');
+    });
+
     test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
       let selector = `[data-test-card="${authorListingId}"] [data-test-catalog-listing-action="Remix"]`;
       await openMenu(selector, false);
