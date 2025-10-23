@@ -484,7 +484,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @action
   handleOpenCustomSubdomainSite() {
     if (this.claimedDomainPublishedUrl) {
-      window.open(this.claimedDomainPublishedUrl + ' /index', '_blank');
+      window.open(this.claimedDomainPublishedUrl + 'index', '_blank');
     }
   }
 
@@ -535,6 +535,13 @@ export default class PublishRealmModal extends Component<Signature> {
   @action
   clearPublishError() {
     this.publishError = null;
+  }
+
+  get publishErrorForCustomSubdomain() {
+    if (!this.claimedDomainPublishedUrl) {
+      return null;
+    }
+    return this.getPublishErrorForUrl(this.claimedDomainPublishedUrl);
   }
 
   <template>
@@ -815,14 +822,14 @@ export default class PublishRealmModal extends Component<Signature> {
                 </BoxelButton>
               {{/if}}
             {{/if}}
-            {{#if (this.getPublishErrorForUrl this.claimedDomainPublishedUrl)}}
+            {{#if this.publishErrorForCustomSubdomain}}
               <div
                 class='domain-publish-error'
                 data-test-domain-publish-error={{this.claimedDomainPublishedUrl}}
               >
-                <span class='error-text'>{{this.getPublishErrorForUrl
-                    this.claimedDomainPublishedUrl
-                  }}</span>
+                <span
+                  class='error-text'
+                >{{this.publishErrorForCustomSubdomain}}</span>
               </div>
             {{/if}}
           </div>

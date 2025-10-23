@@ -1204,7 +1204,7 @@ module('Acceptance | host submode', function (hooks) {
           window.open = (url?: URL | string, target?: string) => {
             assert.strictEqual(
               url,
-              'http://my-custom-site.localhost:4201/',
+              'http://my-custom-site.localhost:4201/index',
               'Open custom subdomain site URL',
             );
             assert.strictEqual(target, '_blank', 'Open in a new tab');
