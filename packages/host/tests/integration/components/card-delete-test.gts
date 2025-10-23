@@ -581,6 +581,19 @@ module('Integration | card-delete', function (hooks) {
       .doesNotExist('recent item removed');
   });
 
+  async function waitForCopySelectionCount(expectedCount: number) {
+    await waitUntil(() => {
+      let button = document.querySelector('[data-test-copy-button]');
+      if (!button) {
+        return false;
+      }
+      let normalizedText = button.textContent?.replace(/\s+/g, ' ').trim();
+      let expectedLabel =
+        expectedCount === 1 ? 'Copy 1 Card' : `Copy ${expectedCount} Cards`;
+      return normalizedText === expectedLabel;
+    });
+  }
+
   test('can delete a card that is a selected item', async function (assert) {
     setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -614,7 +627,7 @@ module('Integration | card-delete', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] [data-test-overlay-select]`,
     );
-    await waitFor('[data-test-copy-button]');
+    await waitForCopySelectionCount(2);
     assert
       .dom('[data-test-copy-button]')
       .containsText('Copy 2 Cards', 'button text is correct');
@@ -636,6 +649,7 @@ module('Integration | card-delete', function (hooks) {
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
+    await waitForCopySelectionCount(1);
     assert
       .dom('[data-test-copy-button]')
       .containsText('Copy 1 Card', 'button text is correct');
