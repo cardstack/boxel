@@ -35,10 +35,10 @@
           "content": "Piano Demo",
           "color": "#fef08a",
           "position": {
-            "x": 314.3340352998696,
-            "y": -216.8534151288368,
+            "x": 316.98426139341797,
+            "y": -218.17852817561098,
             "width": 421.2592813672573,
-            "autoHeight": 83,
+            "autoHeight": 107,
             "customHeight": 0,
             "layer": 1,
             "format": "isolated"
@@ -51,10 +51,10 @@
           "targetDate": "2025-10-18T08:29:30.092Z",
           "title": "New Timer",
           "position": {
-            "x": 802.429015542818,
-            "y": -287.99907967207326,
+            "x": 864.0380747614751,
+            "y": -60.23225468188656,
             "width": 329.75793390634584,
-            "autoHeight": 166,
+            "autoHeight": 149,
             "customHeight": 166,
             "layer": 1,
             "format": "embedded"
@@ -63,14 +63,14 @@
       ],
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Layout Board",
         "description": null,
         "thumbnailURL": null
       },
       "gridSize": 20,
-      "transformK": 1.2335388926520952,
-      "transformX": -87.73472839546321,
-      "transformY": 304.20133255661636,
+      "transformK": 1,
+      "transformX": -257,
+      "transformY": 178,
       "canvasHeight": 800,
       "externalCards": [
         {

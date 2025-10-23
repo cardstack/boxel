@@ -1,4 +1,3 @@
-// ²⁷ Board positioning field with enhanced height management
 import {
   FieldDef,
   field,
@@ -110,7 +109,11 @@ class Edit extends Component<typeof BoardPosition> {
           <input
             type='number'
             value={{@model.customHeight}}
-            placeholder={{if (eq @model.format 'embedded') @model.autoHeight ''}}
+            placeholder={{if
+              (eq @model.format 'embedded')
+              @model.autoHeight
+              ''
+            }}
             {{on 'input' (fn this.updateField 'customHeight')}}
           />
           {{#if (eq @model.format 'embedded')}}

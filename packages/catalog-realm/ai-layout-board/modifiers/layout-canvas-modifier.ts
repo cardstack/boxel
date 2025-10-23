@@ -1,4 +1,3 @@
-// ³ Canvas Modifier for 2D Layout interactions - simplified from Flow2D
 import Modifier from 'ember-modifier';
 
 type LayoutCanvasNamedArgs = {

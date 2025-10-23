@@ -1,4 +1,3 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   CardDef,
   field,
@@ -167,61 +166,6 @@ class Isolated extends Component<typeof AILayoutBoard> {
     } catch (_e) {
       // Fallback: anchor position
       return { x: anchor.x + anchor.width, y: anchor.y };
-    }
-  }
-
-  // Compute a non-overlapping position near a preferred point
-  computeNonOverlappingPosition(
-    preferredX: number,
-    preferredY: number,
-    width: number,
-    height: number,
-  ) {
-    try {
-      const gap = this.args.model.gridSize || 20;
-      // Build rects for existing items using the same height logic as rendering
-      const rects = (this.args.model.allItems || [])
-        .filter((it: any) => it?.position)
-        .map((it: any) => {
-          const pos = it.position;
-          const w = pos?.width || 120;
-          const h = this.calculateItemHeight(it);
-          return {
-            x1: pos?.x || 0,
-            y1: pos?.y || 0,
-            x2: (pos?.x || 0) + w,
-            y2: (pos?.y || 0) + h,
-          };
-        });
-
-      let x = preferredX;
-      let y = preferredY;
-
-      // Simple iterative resolver: push down until no vertical overlap in the chosen column
-      let guard = 0;
-      while (guard++ < 100) {
-        const nx1 = x;
-        const nx2 = x + width;
-        const ny1 = y;
-        const ny2 = y + height;
-
-        // Find items that horizontally intersect our new rect
-        const overlappers = rects.filter((r) => !(r.x2 <= nx1 || r.x1 >= nx2));
-        // Among those, check which vertically overlap our candidate slot
-        const blocking = overlappers.filter(
-          (r) => !(r.y2 <= ny1 || r.y1 >= ny2),
-        );
-
-        if (blocking.length === 0) break; // free slot
-
-        // Move just below the lowest blocking item
-        y = Math.max(...blocking.map((r) => r.y2)) + gap;
-      }
-
-      return { x, y };
-    } catch (e) {
-      // Fallback: return the preferred location if anything goes wrong
-      return { x: preferredX, y: preferredY };
     }
   }
 
@@ -1562,8 +1506,8 @@ class Isolated extends Component<typeof AILayoutBoard> {
       /* ¹⁵³ Delete button styling */
       .delete-button-container {
         position: absolute;
-        top: 24px;
-        right: 24px;
+        top: 2%;
+        right: 2%;
         z-index: 100;
         pointer-events: auto;
       }
@@ -1705,8 +1649,8 @@ class Isolated extends Component<typeof AILayoutBoard> {
 
       .canvas-controls {
         position: absolute;
-        top: 16px;
-        left: 16px;
+        top: 2%;
+        left: 2%;
         background: white;
         border: 1px solid #e5e7eb;
         border-radius: 6px;
@@ -2073,30 +2017,38 @@ class Embedded extends Component<typeof AILayoutBoard> {
             {{#each @model.allItems as |item index|}}
               {{#if (lt index 6)}}
                 <div
-                  class='minimap-item'
-                  style={{htmlSafe
-                    (concat
-                      'left: '
-                      (if
-                        item.position.x (add (multiply item.position.x 0.1) 5) 5
-                      )
-                      'px; '
-                      'top: '
-                      (if
-                        item.position.y (add (multiply item.position.y 0.1) 5) 5
-                      )
-                      'px; '
-                      'z-index: '
-                      (if item.position.layer item.position.layer 1)
-                      ';'
+                  class={{concat
+                    'minimap-item '
+                    (if
+                      (eq item.constructor.name 'ImageNode') 'minimap-image ' ''
                     )
+                    (if
+                      (eq item.constructor.name 'PostitNote') 'minimap-note ' ''
+                    )
+                    (if
+                      (eq item.constructor.name 'CountdownTimer')
+                      'minimap-timer '
+                      ''
+                    )
+                    (if
+                      (eq item.constructor.name 'ExternalCard')
+                      'minimap-external '
+                      ''
+                    )
+                  }}
+                  title={{concat
+                    item.constructor.name
+                    ' at ('
+                    item.position.x
+                    ','
+                    item.position.y
+                    ')'
                   }}
                 >
                   {{#if (eq item.constructor.name 'ImageNode')}}📷{{/if}}
                   {{#if (eq item.constructor.name 'PostitNote')}}📝{{/if}}
                   {{#if (eq item.constructor.name 'CountdownTimer')}}⏱️{{/if}}
                   {{#if (eq item.constructor.name 'ExternalCard')}}🔗{{/if}}
-                  {{! ⁶⁸ External card icon in minimap }}
                 </div>
               {{/if}}
             {{/each}}
@@ -2140,25 +2092,41 @@ class Embedded extends Component<typeof AILayoutBoard> {
       }
 
       .layout-minimap {
-        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 4px;
         width: 100%;
         height: 80px;
         background: #f8fafc;
         border-radius: 8px;
         border: 1px solid #e5e7eb;
         overflow: hidden;
+        align-content: flex-start;
       }
 
       .minimap-item {
-        position: absolute;
-        width: 16px;
-        height: 12px;
-        background: rgba(59, 130, 246, 0.8);
+        width: 20px;
+        height: 20px;
         border-radius: 2px;
+        font-size: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 8px;
+        color: white;
+      }
+
+      .minimap-image {
+        background: #3b82f6;
+      }
+      .minimap-note {
+        background: #f59e0b;
+      }
+      .minimap-timer {
+        background: #8b5cf6;
+      }
+      .minimap-external {
+        background: #10b981;
       }
 
       .more-indicator {
@@ -2185,6 +2153,49 @@ class Fitted extends Component<typeof AILayoutBoard> {
   // Getter to safely compute allItems length (mirrors Isolated)
   get allItemsLength(): number {
     return this.args.model.allItems?.length || 0;
+  }
+
+  // Normalized data for the card minimap so items always fit and are visible
+  get minimapData() {
+    const items = (this.args.model.allItems || []).filter(
+      (it: any) => it && it.position,
+    );
+    if (!items.length) return [] as any[];
+
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+
+    items.forEach((item: any) => {
+      const x = item.position.x || 0;
+      const y = item.position.y || 0;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    });
+
+    const rangeX = Math.max(0, maxX - minX);
+    const rangeY = Math.max(0, maxY - minY);
+    const margin = 5; // percent padding inside minimap
+    const span = 100 - margin * 2;
+
+    return items.map((item: any) => {
+      const x = item.position.x || 0;
+      const y = item.position.y || 0;
+      const normX = rangeX === 0 ? 0.5 : (x - minX) / rangeX;
+      const normY = rangeY === 0 ? 0.5 : (y - minY) / rangeY;
+      const left = margin + normX * span;
+      const top = margin + normY * span;
+      return {
+        type: item.constructor?.name || 'Item',
+        x,
+        y,
+        left,
+        top,
+      };
+    });
   }
 
   <template>
@@ -2234,23 +2245,42 @@ class Fitted extends Component<typeof AILayoutBoard> {
               {{#each @model.allItems as |item index|}}
                 {{#if (lt index 9)}}
                   <div
-                    class='tile-mini-item'
-                    style={{htmlSafe
-                      (concat
-                        'left: '
-                        (multiply (if item.position.x item.position.x 0) 0.05)
-                        'px; '
-                        'top: '
-                        (multiply (if item.position.y item.position.y 0) 0.05)
-                        'px;'
+                    class={{concat
+                      'tile-mini-item '
+                      (if
+                        (eq item.constructor.name 'ImageNode')
+                        'tile-mini-image '
+                        ''
                       )
+                      (if
+                        (eq item.constructor.name 'PostitNote')
+                        'tile-mini-note '
+                        ''
+                      )
+                      (if
+                        (eq item.constructor.name 'CountdownTimer')
+                        'tile-mini-timer '
+                        ''
+                      )
+                      (if
+                        (eq item.constructor.name 'ExternalCard')
+                        'tile-mini-external '
+                        ''
+                      )
+                    }}
+                    title={{concat
+                      item.constructor.name
+                      ' at ('
+                      item.position.x
+                      ','
+                      item.position.y
+                      ')'
                     }}
                   >
                     {{#if (eq item.constructor.name 'ImageNode')}}📷{{/if}}
                     {{#if (eq item.constructor.name 'PostitNote')}}📝{{/if}}
                     {{#if (eq item.constructor.name 'CountdownTimer')}}⏱️{{/if}}
                     {{#if (eq item.constructor.name 'ExternalCard')}}🔗{{/if}}
-                    {{! ⁶⁹ External card in tile minimap }}
                   </div>
                 {{/if}}
               {{/each}}
@@ -2277,35 +2307,17 @@ class Fitted extends Component<typeof AILayoutBoard> {
             <div class='layout-icon'>🎨</div>
           </div>
           <div class='card-body'>
-            <div class='card-minimap'>
-              {{#each @model.allItems as |item index|}}
+            <div class='tile-minimap'>
+              {{#each this.minimapData as |mItem index|}}
                 {{#if (lt index 8)}}
                   <div
-                    class='card-mini-item'
-                    style={{htmlSafe
-                      (concat
-                        'left: '
-                        (multiply (if item.position.x item.position.x 0) 0.08)
-                        'px; '
-                        'top: '
-                        (multiply (if item.position.y item.position.y 0) 0.08)
-                        'px;'
-                      )
-                    }}
-                    title={{concat
-                      item.constructor.name
-                      ' at ('
-                      item.position.x
-                      ','
-                      item.position.y
-                      ')'
-                    }}
+                    class='tile-mini-item'
+                    title={{concat mItem.type ' at (' mItem.x ',' mItem.y ')'}}
                   >
-                    {{#if (eq item.constructor.name 'ImageNode')}}📷{{/if}}
-                    {{#if (eq item.constructor.name 'PostitNote')}}📝{{/if}}
-                    {{#if (eq item.constructor.name 'CountdownTimer')}}⏱️{{/if}}
-                    {{#if (eq item.constructor.name 'ExternalCard')}}🔗{{/if}}
-                    {{! ⁷⁰ External card in card minimap }}
+                    {{#if (eq mItem.type 'ImageNode')}}📷{{/if}}
+                    {{#if (eq mItem.type 'PostitNote')}}📝{{/if}}
+                    {{#if (eq mItem.type 'CountdownTimer')}}⏱️{{/if}}
+                    {{#if (eq mItem.type 'ExternalCard')}}🔗{{/if}}
                   </div>
                 {{/if}}
               {{/each}}
@@ -2443,8 +2455,10 @@ class Fitted extends Component<typeof AILayoutBoard> {
 
       .tile-minimap {
         position: relative;
-        width: 100%;
-        height: 60px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        padding: 0.1rem;
         background: white;
         border-radius: 6px;
         border: 1px solid #e5e7eb;
@@ -2453,15 +2467,29 @@ class Fitted extends Component<typeof AILayoutBoard> {
       }
 
       .tile-mini-item {
-        position: absolute;
-        width: 8px;
-        height: 6px;
-        background: #8b5cf6;
-        border-radius: 1px;
-        font-size: 6px;
+        position: relative;
+        width: 25px;
+        height: 25px;
+        border-radius: 4px;
+        font-size: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
+        color: white;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+      }
+
+      .tile-mini-image {
+        background: #3b82f6;
+      }
+      .tile-mini-note {
+        background: #f59e0b;
+      }
+      .tile-mini-timer {
+        background: #8b5cf6;
+      }
+      .tile-mini-external {
+        background: #10b981;
       }
 
       .overflow-indicator {
@@ -2568,30 +2596,6 @@ class Fitted extends Component<typeof AILayoutBoard> {
         flex: 1;
         display: flex;
         flex-direction: column;
-      }
-
-      .card-minimap {
-        position: relative;
-        flex: 1;
-        background: white;
-        border-radius: 8px;
-        border: 1px solid #e5e7eb;
-        overflow: hidden;
-        margin-bottom: 1rem;
-        min-height: 80px;
-      }
-
-      .card-mini-item {
-        position: absolute;
-        width: 12px;
-        height: 8px;
-        background: #8b5cf6;
-        border-radius: 2px;
-        font-size: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
       }
 
       .card-stats {
