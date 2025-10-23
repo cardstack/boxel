@@ -13,7 +13,6 @@ import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
-import * as GenerateListingExampleCommandModule from './generate-listing-example';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
@@ -24,6 +23,7 @@ import * as ListingCreateCommandModule from './listing-create';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
+import * as ListingGenerateExampleCommandModule from './listing-generate-example';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
@@ -91,10 +91,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CreateSpecCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/generate-listing-example',
-    GenerateListingExampleCommandModule,
-  );
-  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
     GetEventsFromRoomCommandModule,
   );
@@ -121,6 +117,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-remix',
     ListingRemixCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-generate-example',
+    ListingGenerateExampleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-in-interact-mode',

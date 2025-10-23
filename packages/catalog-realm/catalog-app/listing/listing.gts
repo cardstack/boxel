@@ -41,7 +41,7 @@ import ListOfPills from '../components/list-of-pills';
 import { listingActions, isReady } from '../resources/listing-actions';
 
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
-import GenerateListingExampleCommand from '@cardstack/boxel-host/commands/generate-listing-example';
+import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listing-generate-example';
 
 import { getCardMenuItems } from '@cardstack/runtime-common';
 
@@ -576,7 +576,7 @@ export class Listing extends CardDef {
     return {
       label: 'Generate example with AI',
       action: async () => {
-        const command = new GenerateListingExampleCommand(
+        const command = new ListingGenerateExampleCommand(
           params.commandContext,
         );
         try {

@@ -12,7 +12,7 @@ import { GenerateExampleCardsOneShotCommand } from './generate-example-cards';
 
 import type RealmService from '../services/realm';
 
-export default class GenerateListingExampleCommand extends HostBaseCommand<
+export default class ListingGenerateExampleCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateListingExampleInput,
   typeof BaseCommandModule.CreateInstanceResult
 > {
