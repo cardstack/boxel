@@ -21,8 +21,6 @@ test.describe('Login using email', () => {
     test.setTimeout(120_000);
     let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
 
-    await clearLocalStorage(page, appURL);
-    await gotoRegistration(page, appURL);
     user = await createSubscribedUser('email-login');
     userEmail = `${user.username}@example.com`;
     await updateUser(adminAccessToken, user.credentials.userId, {

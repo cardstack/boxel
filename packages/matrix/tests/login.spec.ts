@@ -29,7 +29,6 @@ test.describe('Login', () => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 120s to the overall test timeout
     test.setTimeout(120_000);
-    await clearLocalStorage(page, appURL);
     ({ username, password, credentials } =
       await createSubscribedUser('login-tests'));
     await setupPermissions(credentials.userId, `${appURL}/`, sharedSQLExecutor);

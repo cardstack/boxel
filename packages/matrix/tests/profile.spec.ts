@@ -18,17 +18,10 @@ test.describe('Profile', () => {
   };
   let userEmail: string;
 
-  let existingUser: {
-    username: string;
-    password: string;
-    credentials: any;
-  };
-  let existingUserEmail: string;
-
   let unseenEmail: string;
-  test.beforeEach(async () => {
+  let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
+  test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
-    let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
 
     user = await createSubscribedUser('profile');
     userEmail = `${user.username}@localhost`;
@@ -36,13 +29,8 @@ test.describe('Profile', () => {
       emailAddresses: [userEmail],
     });
 
-    existingUser = await createUser('profile-existing-user');
-    existingUserEmail = `${existingUser.username}@localhost`;
-    await updateUser(adminAccessToken, existingUser.credentials.userId, {
-      emailAddresses: [existingUserEmail],
-    });
-
     unseenEmail = `unseen-${user.username}@localhost`;
+    await gotoProfileSettings(page);
   });
 
   async function gotoProfileSettings(page: Page) {
@@ -57,7 +45,6 @@ test.describe('Profile', () => {
   }
 
   test('it can change display name in settings', async ({ page }) => {
-    await gotoProfileSettings(page);
     await expect(
       page.locator('[data-test-profile-display-name]'),
     ).toContainText('');
@@ -78,7 +65,6 @@ test.describe('Profile', () => {
   });
 
   test('it can change email in settings', async ({ page }) => {
-    await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -162,7 +148,6 @@ test.describe('Profile', () => {
   test('it can handle incorrect password when changing email', async ({
     page,
   }) => {
-    await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -191,7 +176,11 @@ test.describe('Profile', () => {
   test('it can handle setting email to an already existing email when changing email', async ({
     page,
   }) => {
-    await gotoProfileSettings(page);
+    let existingUser = await createUser('profile-existing-user');
+    let existingUserEmail = `${existingUser.username}@localhost`;
+    await updateUser(adminAccessToken, existingUser.credentials.userId, {
+      emailAddresses: [existingUserEmail],
+    });
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -217,7 +206,6 @@ test.describe('Profile', () => {
   });
 
   test('it can resend email verification message', async ({ page }) => {
-    await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -244,7 +232,6 @@ test.describe('Profile', () => {
   });
 
   test('it can cancel email verification', async ({ page }) => {
-    await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -270,7 +257,11 @@ test.describe('Profile', () => {
   test('it can cancel password confirmation when changing email', async ({
     page,
   }) => {
-    await gotoProfileSettings(page);
+    let existingUser = await createUser('profile-existing-user');
+    let existingUserEmail = `${existingUser.username}@localhost`;
+    await updateUser(adminAccessToken, existingUser.credentials.userId, {
+      emailAddresses: [existingUserEmail],
+    });
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -293,7 +284,6 @@ test.describe('Profile', () => {
   });
 
   test('it can cancel changing an email', async ({ page }) => {
-    await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -310,7 +300,6 @@ test.describe('Profile', () => {
   });
 
   test('it can change password in settings', async ({ page }) => {
-    await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -361,7 +350,6 @@ test.describe('Profile', () => {
   test('It shows an error when new password does not meet the requirement', async ({
     page,
   }) => {
-    await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -447,7 +435,6 @@ test.describe('Profile', () => {
   test('It shows an error when current password is invalid', async ({
     page,
   }) => {
-    await gotoProfileSettings(page);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
