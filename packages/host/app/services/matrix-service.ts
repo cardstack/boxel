@@ -433,18 +433,22 @@ export default class MatrixService extends Service {
     displayName: string,
     registrationToken?: string,
   ) {
+    await this.ready;
     displayName = displayName.trim();
     this._isInitializingNewUser = true;
-    await this.start({ auth, skipRealmAuthentication: true });
-    this.setDisplayName(displayName);
-    let userId = this.client.getUserId();
+
+    this.configureClientWithAuth(auth);
+
+    let userId = auth.user_id;
     if (!userId) {
       throw new Error(
         `bug: there is no userId associated with the matrix client`,
       );
     }
-
     await this.realmServer.createUser(userId, registrationToken);
+
+    await this.start({ auth });
+    this.setDisplayName(displayName);
 
     await this.realmServer.authenticateToAllAccessibleRealms();
 
@@ -502,21 +506,7 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
-  async start(
-    opts: {
-      auth?: MatrixSDK.LoginResponse;
-      refreshRoutes?: true;
-      skipRealmAuthentication?: boolean;
-    } = {},
-  ) {
-    let { auth, refreshRoutes, skipRealmAuthentication } = opts;
-    if (!auth) {
-      auth = this.getAuth();
-      if (!auth) {
-        return;
-      }
-    }
-
+  private configureClientWithAuth(auth: LoginResponse) {
     let {
       access_token: accessToken,
       user_id: userId,
@@ -550,21 +540,41 @@ export default class MatrixService extends Service {
         )}`,
       );
     }
+
     this._client = this.matrixSDK.createClient({
       baseUrl: matrixURL,
       accessToken,
       userId,
       deviceId,
     });
-    if (this.client.isLoggedIn()) {
-      this.realmServer.setClient(this.client);
-      this.saveAuth(auth);
+    this.realmServer.setClient(this.client);
+    this.saveAuth(auth);
+  }
+
+  async start(
+    opts: {
+      auth?: MatrixSDK.LoginResponse;
+      refreshRoutes?: true;
+    } = {},
+  ) {
+    await this.ready;
+    let { auth, refreshRoutes } = opts;
+    if (!auth) {
+      auth = this.getAuth();
+      if (!auth) {
+        return;
+      }
+    }
+
+    this.configureClientWithAuth(auth);
+    let client = this.client;
+    if (client.isLoggedIn()) {
       this.bindEventListeners();
 
       try {
-        let deviceId = this._client.getDeviceId();
+        let deviceId = client.getDeviceId();
         if (deviceId) {
-          let { last_seen_ts } = await this._client.getDevice(deviceId);
+          let { last_seen_ts } = await client.getDevice(deviceId);
           if (last_seen_ts) {
             this.startedAtTs = last_seen_ts;
           }
@@ -572,7 +582,7 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        let accountDataContent = (await this._client.getAccountDataFromServer(
+        let accountDataContent = (await client.getAccountDataFromServer(
           APP_BOXEL_REALMS_EVENT_TYPE,
         )) as { realms: string[] } | null;
 
@@ -580,7 +590,7 @@ export default class MatrixService extends Service {
           ([_url, realmResource]) => !realmResource.isLoggedIn,
         );
 
-        if (noRealmsLoggedIn && !skipRealmAuthentication) {
+        if (noRealmsLoggedIn) {
           // In this case we want to authenticate to all accessible realms in a single request,
           // for performance reasons (otherwise we would make 2 auth requests for
           // each realm, which could be a lot of requests).
@@ -597,15 +607,13 @@ export default class MatrixService extends Service {
           ),
         ]);
 
-        let systemCardAccountData =
-          (await this._client.getAccountDataFromServer(
-            APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
-          )) as { id?: string } | null;
-
+        let systemCardAccountData = (await client.getAccountDataFromServer(
+          APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
+        )) as { id?: string } | null;
         await this.setSystemCard(systemCardAccountData?.id);
 
         await this.initSlidingSync(accountDataContent);
-        await this.client.startClient({ slidingSync: this.slidingSync });
+        await client.startClient({ slidingSync: this.slidingSync });
 
         this.postLoginCompleted = true;
       } catch (e) {
