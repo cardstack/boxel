@@ -14,26 +14,29 @@ interface Signature {
 
 const Swatch: TemplateOnlyComponent<Signature> = <template>
   <div
-    class={{cn 'swatch' small=(eq @style 'round')}}
+    class={{cn 'boxel-swatch' boxel-swatch--small=(eq @style 'round')}}
     data-test-swatch={{@color}}
     ...attributes
   >
     {{#unless @hideLabel}}
-      <div class='label'>
+      <div class='boxel-swatch-label'>
         {{#if @label}}
-          <div>{{@label}}</div>
+          <div class='boxel-swatch-name'>{{@label}}</div>
         {{/if}}
-        <code class='value'>{{@color}}</code>
+        <code class='boxel-swatch-value'>{{@color}}</code>
       </div>
     {{/unless}}
     <div
-      class={{cn 'preview' round=(eq @style 'round')}}
+      class={{cn
+        'boxel-swatch-preview'
+        boxel-swatch-preview--round=(eq @style 'round')
+      }}
       style={{cssVar swatch-background=@color}}
     />
   </div>
   <style scoped>
     @layer boxelComponentL1 {
-      .swatch {
+      .boxel-swatch {
         --swatch-width: 7rem;
         --swatch-height: 3.375rem;
         --_swatch-border: color-mix(
@@ -45,13 +48,13 @@ const Swatch: TemplateOnlyComponent<Signature> = <template>
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
-      .small {
+      .boxel-swatch--small {
         --swatch-width: 1.4rem;
         --swatch-height: 1.4rem;
         flex-direction: row;
         align-items: center;
       }
-      .preview {
+      .boxel-swatch-preview {
         width: var(--swatch-width);
         height: var(--swatch-height);
         max-width: 100%;
@@ -61,13 +64,13 @@ const Swatch: TemplateOnlyComponent<Signature> = <template>
           var(--boxel-swatch-border-color, var(--_swatch-border));
         border-radius: var(--boxel-border-radius);
       }
-      .preview.round {
+      .boxel-swatch-preview--round {
         flex-shrink: 0;
         aspect-ratio: 1;
         border-radius: 50%;
         order: -1;
       }
-      .value {
+      .boxel-swatch-value {
         font-family: var(--font-mono, var(--boxel-monospace-font-family));
         text-transform: uppercase;
       }

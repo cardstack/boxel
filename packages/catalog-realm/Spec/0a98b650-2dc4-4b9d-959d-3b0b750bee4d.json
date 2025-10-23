@@ -4,7 +4,7 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../external/game-sound-effect-utils",
+        "module": "../utils/external/game-sound-effect",
         "name": "GameSoundEffectUtils"
       },
       "specType": null,

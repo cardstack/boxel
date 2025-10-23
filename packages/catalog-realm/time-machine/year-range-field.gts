@@ -39,7 +39,7 @@ export class YearRangeField extends FieldDef {
       <style scoped>
         .year-range-display {
           padding: 0.5rem;
-          background: #f5f5f5;
+          background: var(--boxel-50);
           border-radius: 0.25rem;
           text-align: center;
           font-weight: 500;

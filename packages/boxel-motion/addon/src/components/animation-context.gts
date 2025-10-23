@@ -1,5 +1,6 @@
 import { assert } from '@ember/debug';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -74,7 +75,7 @@ export default class AnimationContextComponent
     );
   }
 
-  constructor(owner: unknown, args: AnimationContextArgs) {
+  constructor(owner: Owner, args: AnimationContextArgs) {
     super(owner, args);
     if (!this.animations) {
       throw new Error(

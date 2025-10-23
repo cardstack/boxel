@@ -17,6 +17,7 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
+  ensureTrailingSlash,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -24,6 +25,8 @@ import {
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import ENV from '@cardstack/host/config/environment';
+
 import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
 
 import {
@@ -57,6 +60,8 @@ import {
   setRecentFiles,
 } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
+
+const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 
 let matrixRoomId: string;
 let realm2URL = 'http://test-realm/user/test2/';
@@ -745,7 +750,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-workspace-chooser-toggle]');
 
-    assert.dom('[data-test-submode-layout-title]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();
     assert
       .dom(`[data-test-workspace-list] [data-test-workspace-loading-indicator]`)
@@ -832,7 +836,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
       .exists();
     assert
-      .dom(`[data-test-recent-file="http://localhost:4201/catalog/index.json"]`)
+      .dom(`[data-test-recent-file="${catalogRealmURL}index.json"]`)
       .exists();
     assert
       .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)

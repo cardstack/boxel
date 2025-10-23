@@ -164,7 +164,7 @@ module(basename(__filename), function () {
       assert.ok(response.body.data, 'Should have data object');
       assert.strictEqual(
         response.body.data.type,
-        'claimed-site-hostname',
+        'claimed-domain',
         'Should have correct type',
       );
       assert.ok(response.body.data.id, 'Should have an ID');

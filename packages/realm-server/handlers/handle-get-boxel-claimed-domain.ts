@@ -75,7 +75,7 @@ export default function handleGetBoxelClaimedDomainRequest({
           JSON.stringify(
             {
               data: {
-                type: 'claimed-site-hostname',
+                type: 'claimed-domain',
                 id: claim.id,
                 attributes: {
                   hostname,

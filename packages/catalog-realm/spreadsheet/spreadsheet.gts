@@ -12,6 +12,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { restartableTask, timeout } from 'ember-concurrency';
 import TableIcon from '@cardstack/boxel-icons/table';
+import type Owner from '@ember/owner';
 
 class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
   @tracked parsedData: string[][] = [];
@@ -23,7 +24,7 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
   @tracked showDelimiterHelp = false;
   @tracked isEditingDelimiter = false;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.delimiter = this.args.model?.delimiter || ',';
     this.initialParse.perform();

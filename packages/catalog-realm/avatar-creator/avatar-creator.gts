@@ -9,7 +9,7 @@ import StringField from 'https://cardstack.com/base/string';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Avatar from '../fields/avatar';
 import AvatarCreatorComponent from './components/avatar-creator';
-import { AvataaarsModel } from '../external/avataar-utils';
+import { AvataaarsModel } from '../utils/external/avataar';
 import { restartableTask } from 'ember-concurrency';
 import { CreateRealImage } from '../commands/create-real-image';
 

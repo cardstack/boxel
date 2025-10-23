@@ -36,7 +36,7 @@ import { QuizDifficultyField } from './fields/quiz-difficulty';
 import {
   GameSoundEffectUtils,
   type GameSoundType,
-} from '../external/game-sound-effect-utils';
+} from '../utils/external/game-sound-effect';
 
 type GameState = 'menu' | 'playing' | 'completed' | 'gameOver';
 

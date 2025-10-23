@@ -13,6 +13,9 @@ fi
 
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
 
+DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
+CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
@@ -39,8 +42,8 @@ NODE_ENV=development \
   \
   --path='../catalog-realm' \
   --username='catalog_realm' \
-  --fromUrl='http://localhost:4201/catalog/' \
-  --toUrl='http://localhost:4201/catalog/' \
+  --fromUrl="${CATALOG_REALM_URL}" \
+  --toUrl="${CATALOG_REALM_URL}" \
   \
   --path='../skills-realm/contents' \
   --username='skills_realm' \

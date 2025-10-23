@@ -31,16 +31,18 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
     <ul class='cards {{this.view}}-view' ...attributes>
       {{#each @cards key='url' as |card|}}
         {{#let (getComponent card) as |CardComponent|}}
-          <li class='{{this.view}}-view-container'>
-            <CardContainer
-              class='card'
-              @displayBoundaries={{true}}
-              data-test-cards-grid-item={{removeFileExtension card.id}}
-              data-cards-grid-item={{removeFileExtension card.id}}
-            >
-              <CardComponent />
-            </CardContainer>
-          </li>
+          {{#if CardComponent}}
+            <li class='{{this.view}}-view-container'>
+              <CardContainer
+                class='card'
+                @displayBoundaries={{true}}
+                data-test-cards-grid-item={{removeFileExtension card.id}}
+                data-cards-grid-item={{removeFileExtension card.id}}
+              >
+                <CardComponent />
+              </CardContainer>
+            </li>
+          {{/if}}
         {{/let}}
       {{/each}}
     </ul>
@@ -105,10 +107,19 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
 }
 
 function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
+  if (
+    !cardOrField ||
+    typeof (cardOrField.constructor as { getComponent?: unknown })?.getComponent !== 'function'
+  ) {
+    return;
+  }
+  return (cardOrField.constructor as typeof CardDef).getComponent(cardOrField);
 }
 
-function removeFileExtension(cardUrl: string) {
+function removeFileExtension(cardUrl: string | undefined | null) {
+  if (typeof cardUrl !== 'string') {
+    return '';
+  }
   return cardUrl.replace(/\.[^/.]+$/, '');
 }
 

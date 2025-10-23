@@ -28,12 +28,19 @@ import {
 } from '@cardstack/runtime-common';
 import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
+import LintAndFixCommand from '@cardstack/host/commands/lint-and-fix';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
-import { isReady, type FileResource } from '@cardstack/host/resources/file';
-import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
-
-import { type ModuleAnalysis } from '@cardstack/host/resources/module-contents';
+import {
+  isReady,
+  type FileResource,
+  type Ready,
+} from '@cardstack/host/resources/file';
+import {
+  type ModuleAnalysis,
+  type ModuleDeclaration,
+} from '@cardstack/host/resources/module-contents';
 import type { SaveType } from '@cardstack/host/services/card-service';
+import CommandService from '@cardstack/host/services/command-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import { findDeclarationByName } from '@cardstack/host/services/module-contents-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -41,6 +48,7 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
+import { applyBoxelFormatting } from '@cardstack/host/utils/editor/boxel-formatter';
 
 import BinaryFileInfo from './binary-file-info';
 
@@ -67,16 +75,27 @@ export default class CodeEditor extends Component<Signature> {
   @service private declare environmentService: EnvironmentService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare store: StoreService;
+  @service private declare commandService: CommandService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
+  @tracked private isFormatting = false;
+  @tracked private formattingError: string | undefined;
 
   private hasUnsavedSourceChanges = false;
   private codePath;
+  private formatContextKey:
+    | ReturnType<
+        import('monaco-editor').editor.IStandaloneCodeEditor['createContextKey']
+      >
+    | undefined;
+  private formatActionDisposable:
+    | import('monaco-editor').IDisposable
+    | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     // note that we actually set our own `codePath` property because within
-    // registerDestructor we actually can no longer see the codePath that pertains
+    // onEditorDispose we actually can no longer see the codePath that pertains
     // to the component that is being destroyed--rather we see the new codePath
     // that we are transitioning to.
     this.codePath = this.operatorModeStateService.state.codePath;
@@ -92,12 +111,28 @@ export default class CodeEditor extends Component<Signature> {
           this.args.saveSourceOnClose(this.codePath, monacoContent);
         }
       }
+      this.formatActionDisposable?.dispose();
+      this.formatActionDisposable = undefined;
+      this.formatContextKey = undefined;
     });
 
     this.loadMonaco.perform();
 
     this.args.onSetup(this.updateMonacoCursorPositionByName);
   }
+
+  private onEditorDispose = () => {
+    // destructor functons are called synchronously. in order to save,
+    // which is async, we leverage an EC task that is running in a
+    // parent component (EC task lifetimes are bound to their context)
+    // that is not being destroyed.
+    if (this.codePath && this.hasUnsavedSourceChanges) {
+      let monacoContent = this.monacoService.getMonacoContent();
+      if (monacoContent) {
+        this.args.saveSourceOnClose(this.codePath, monacoContent);
+      }
+    }
+  };
 
   private get isReady() {
     return this.maybeMonacoSDK && isReady(this.args.file);
@@ -453,27 +488,134 @@ export default class CodeEditor extends Component<Signature> {
     return undefined;
   }
 
+  private setupFormatAction = (
+    editor: import('monaco-editor').editor.IStandaloneCodeEditor,
+  ) => {
+    this.formatContextKey = editor.createContextKey(
+      'boxelFormatSupported',
+      this.computeFormatSupport(),
+    );
+    this.formatActionDisposable = editor.addAction({
+      id: 'boxel-format-with-boxel',
+      label: 'Format with Boxel',
+      contextMenuGroupId: '1_modification',
+      contextMenuOrder: 0.5,
+      precondition: 'boxelFormatSupported',
+      run: () => this.formatWithBoxel.perform(),
+    });
+    this.updateFormatActionAvailability();
+  };
+
+  private isFormatSupported(file: Ready) {
+    if (this.args.isReadOnly || file.isBinary) {
+      return false;
+    }
+    let normalizedName = file.name.toLowerCase();
+    return normalizedName.endsWith('.gts') || normalizedName.endsWith('.ts');
+  }
+
+  private updateFormatActionAvailability() {
+    if (!this.formatContextKey) {
+      return;
+    }
+    let supports = this.computeFormatSupport();
+    if (!supports) {
+      this.formattingError = undefined;
+    }
+    this.formatContextKey.set(supports && !this.isFormatting);
+  }
+
+  private formatWithBoxel = restartableTask(async () => {
+    if (this.isFormatting || !this.computeFormatSupport()) {
+      return;
+    }
+    if (!this.monacoService.editor) {
+      return;
+    }
+
+    let model = this.monacoService.editor.getModel();
+    if (!model) {
+      return;
+    }
+
+    let content = model.getValue();
+    let readyFile = this.readyFile;
+    this.isFormatting = true;
+    this.formattingError = undefined;
+    this.updateFormatActionAvailability();
+
+    try {
+      let lintCommand = new LintAndFixCommand(
+        this.commandService.commandContext,
+      );
+      await applyBoxelFormatting({
+        lintAndFix: (input) => lintCommand.execute(input),
+        realm: readyFile.realmURL,
+        filename: readyFile.name,
+        fileContent: content,
+        editor: this.monacoService.editor,
+        model,
+      });
+    } catch (error) {
+      console.error(error);
+      this.formattingError =
+        error instanceof Error ? error.message : String(error);
+    } finally {
+      this.isFormatting = false;
+      this.updateFormatActionAvailability();
+    }
+  });
+
+  private computeFormatSupport(): boolean {
+    if (!isReady(this.args.file)) {
+      return false;
+    }
+    return this.isFormatSupported(this.args.file);
+  }
+
   <template>
     {{#if this.isReady}}
       {{#if this.readyFile.isBinary}}
         <BinaryFileInfo @readyFile={{this.readyFile}} />
       {{else}}
-        <div
-          class='monaco-container {{if @isReadOnly "readonly"}}'
-          data-test-editor
-          data-test-percy-hide
-          data-monaco-container-operator-mode
-          {{monacoModifier
-            content=this.readyFile.content
-            contentChanged=(perform this.contentChangedTask)
-            monacoSDK=this.monacoSDK
-            language=this.language
-            initialCursorPosition=this.initialMonacoCursorPosition
-            onCursorPositionChange=this.onCursorPositionChange
-            readOnly=@isReadOnly
-            editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
-          }}
-        ></div>
+        <div class='monaco-wrapper'>
+          {{#if this.isFormatting}}
+            <div
+              class='formatting-status'
+              data-test-formatting-status
+              aria-live='assertive'
+            >
+              Formatting with Boxel…
+            </div>
+          {{/if}}
+          {{#if this.formattingError}}
+            <div
+              class='formatting-error'
+              data-test-formatting-error
+              role='alert'
+            >
+              {{this.formattingError}}
+            </div>
+          {{/if}}
+          <div
+            class='monaco-container {{if @isReadOnly "readonly"}}'
+            data-test-editor
+            data-test-percy-hide
+            data-monaco-container-operator-mode
+            {{monacoModifier
+              content=this.readyFile.content
+              contentChanged=(perform this.contentChangedTask)
+              monacoSDK=this.monacoSDK
+              language=this.language
+              initialCursorPosition=this.initialMonacoCursorPosition
+              onCursorPositionChange=this.onCursorPositionChange
+              onSetup=this.setupFormatAction
+              onDispose=this.onEditorDispose
+              readOnly=@isReadOnly
+              editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
+            }}
+          ></div>
+        </div>
       {{/if}}
     {{else if this.isLoading}}
       <div class='loading'>
@@ -482,6 +624,34 @@ export default class CodeEditor extends Component<Signature> {
     {{/if}}
 
     <style scoped>
+      .monaco-wrapper {
+        position: relative;
+        height: 100%;
+      }
+
+      .formatting-status,
+      .formatting-error {
+        position: absolute;
+        top: var(--boxel-sp-xs);
+        left: var(--boxel-sp-xs);
+        z-index: 1;
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
+        font: 600 var(--boxel-font-sm);
+      }
+
+      .formatting-status {
+        background: rgba(49, 132, 255, 0.9);
+        color: white;
+      }
+
+      .formatting-error {
+        top: calc(var(--boxel-sp-xs) + var(--boxel-sp-sm));
+        background: rgba(220, 53, 69, 0.9);
+        color: white;
+        max-width: 60ch;
+      }
+
       .monaco-container {
         height: 100%;
         min-height: 100%;
