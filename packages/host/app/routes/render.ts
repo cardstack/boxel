@@ -512,7 +512,12 @@ export default class RenderRoute extends Route<Model> {
     }
 
     // also strip out query params in URL like ?noCache
-    if (value && typeof value === 'string') {
+    if (
+      value &&
+      typeof value === 'string' &&
+      !value.includes(' ') &&
+      (value.startsWith('http://') || value.startsWith('https://'))
+    ) {
       let parsed: URL | undefined;
       try {
         parsed = new URL(value);
@@ -521,7 +526,7 @@ export default class RenderRoute extends Route<Model> {
       }
       parsed.search = '';
       parsed.hash = '';
-      return parsed.href as unknown as T;
+      return parsed.href as T;
     }
     return value;
   }
