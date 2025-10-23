@@ -83,6 +83,11 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+import {
+  normalizeEnumOptions as normalizeEnumOptionsUtil,
+  enumAllowedValues as enumAllowedValuesUtil,
+  getEnumOptionsSync as getEnumOptionsSyncUtil,
+} from './enum-utils';
 
 import {
   callSerializeHook,
@@ -683,7 +688,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       // minimal enum validation for plural primitive fields
       if ((this.card as any).isEnumField) {
         let opts: any[] = (this.card as any).enumOptions ?? [];
-        let allowed = enumAllowedValues(opts);
+        let allowed = enumAllowedValuesUtil(opts);
         let allowedDisplay = allowed.map(String).join(', ');
         for (let [index, item] of values.entries()) {
           if (item != null && !allowed.includes(item)) {
@@ -920,7 +925,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       // minimal enum validation: if field card is an enum, enforce allowed values
       if ((this.card as any).isEnumField) {
         let opts: any[] = (this.card as any).enumOptions ?? [];
-        let allowed = enumAllowedValues(opts);
+        let allowed = enumAllowedValuesUtil(opts);
         if (value != null && !allowed.includes(value)) {
           let allowedDisplay = allowed.map(String).join(', ');
           throw new Error(
@@ -2264,34 +2269,31 @@ export class TextAreaField extends StringField {
 
 // Minimal enum field factory: wraps a FieldDef with a dropdown editor
 // and exposes the allowed options. Enough to support the integration test.
-// Local helpers for enum option handling
-function normalizeEnumOptions(rawOpts: any[]) {
-  return rawOpts.map((v) =>
-    v && typeof v === 'object' && 'value' in v
-      ? v
-      : { value: v, label: String(v) },
-  );
-}
-
-function enumAllowedValues(rawOpts: any[]) {
-  return normalizeEnumOptions(rawOpts).map((o) => o.value);
-}
-
 export function enumField<BaseT extends FieldDefConstructor>(
   Base: BaseT,
-  ...values: any[]
+  config: { options: any[] }
 ): BaseT {
-  const rawOpts = values;
-  const normalized = normalizeEnumOptions(rawOpts);
+  let rawOpts: any[] = (config?.options ?? []) as any[];
 
   class EnumField extends (Base as any) {
     static isEnumField = true;
     // Preserve original options shape for existing helpers/tests
     static enumOptions = rawOpts;
+    // Prep for dynamic options: provide class helpers
+    static resolveEnumOptions(_instance?: unknown) {
+      return normalizeEnumOptionsUtil((this as any).enumOptions ?? []);
+    }
+    static getEnumOptionsSync(_instance?: unknown) {
+      return getEnumOptionsSyncUtil(this);
+    }
+    static allowedValues(_instance?: unknown) {
+      return enumAllowedValuesUtil((this as any).enumOptions ?? []);
+    }
     static atom = class Atom extends GlimmerComponent<any> {
       get option() {
         let v = this.args.model as any;
-        return normalized.find((o) => o.value === v) ?? { value: v, label: String(v) };
+        let opts = (EnumField as any).getEnumOptionsSync();
+        return opts.find((o: any) => o.value === v) ?? { value: v, label: String(v) };
       }
       <template>
         {{#if this.option}}
@@ -2314,10 +2316,11 @@ export function enumField<BaseT extends FieldDefConstructor>(
     };
     static edit = class Edit extends GlimmerComponent<any> {
       get options() {
-        return normalized;
+        return (EnumField as any).getEnumOptionsSync();
       }
       get selectedOption() {
-        return normalized.find((o) => o.value === (this.args.model as any)) ?? null;
+        let opts = (EnumField as any).getEnumOptionsSync();
+        return opts.find((o: any) => o.value === (this.args.model as any)) ?? null;
       }
       update = (opt: any) => {
         this.args.set?.(opt?.value ?? null);
