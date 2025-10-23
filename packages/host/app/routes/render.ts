@@ -510,6 +510,19 @@ export default class RenderRoute extends Route<Model> {
       );
       return entries as T;
     }
+
+    // also strip out query params in URL like ?noCache
+    if (value && typeof value === 'string') {
+      let parsed: URL | undefined;
+      try {
+        parsed = new URL(value);
+      } catch (e) {
+        return value;
+      }
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.href as unknown as T;
+    }
     return value;
   }
 

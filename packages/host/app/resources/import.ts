@@ -5,7 +5,12 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  CardError,
+  CardErrorJSONAPI,
+  CardErrorsJSONAPI,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import NetworkService from '../services/network';
@@ -33,10 +38,21 @@ export async function loadModule(
       headers: { 'content-type': 'text/javascript' },
     });
     if (!errResponse.ok) {
+      let message = await errResponse.text();
+      let cardError: CardError | undefined;
+      try {
+        let errorJSON: CardErrorJSONAPI = (
+          JSON.parse(message) as CardErrorsJSONAPI
+        ).errors[0];
+        cardError = CardError.fromCardErrorJsonAPI(errorJSON);
+        message = JSON.stringify(cardError, null, 2);
+      } catch {
+        // just use text of response
+      }
       return {
         error: {
           type: 'compile',
-          message: err.responseText ?? (await errResponse.text()),
+          message,
         },
       };
     } else {
