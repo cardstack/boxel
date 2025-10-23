@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../reward-system/reward-card-system",
-        "name": "RewardCardSystem"
+        "module": "../reward-card-program/reward-card-program",
+        "name": "RewardCardProgram"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "RewardCardSystem",
+      "title": "RewardCardProgram",
       "description": null,
       "cardInfo": {
         "title": null,

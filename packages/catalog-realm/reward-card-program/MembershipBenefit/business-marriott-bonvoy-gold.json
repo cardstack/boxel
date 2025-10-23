@@ -1,0 +1,42 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MembershipBenefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "partner": "Marriott International",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "conditions": "As a Platinum Card Member, you can receive Marriott Bonvoy® Gold Elite Status without meeting any stay requirements. Enrollment required. Terms and limitations apply. Must maintain active cardmembership to retain status.",
+      "statusLevel": "Gold Elite",
+      "benefitsList": [
+        "Earn 25% bonus points on eligible stays",
+        "Late checkout until 2PM when available",
+        "Enhanced room upgrades when available",
+        "Welcome gift of 250 points per stay",
+        "Preferred Guest Services phone line",
+        "Mobile check-in and checkout",
+        "Mobile requests for services and amenities"
+      ],
+      "autoEnrollment": false,
+      "membershipProgram": "Marriott Bonvoy",
+      "enrollmentRequired": true,
+      "enrollmentInstructions": "Enrollment required through American Express benefits platform. Must link existing Marriott Bonvoy account or create new account to receive status."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

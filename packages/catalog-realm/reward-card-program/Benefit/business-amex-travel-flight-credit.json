@@ -1,0 +1,53 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Amex Travel Online Flight Statement Credit",
+      "amount": {
+        "amount": 1200,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [
+        "Unlock up to $1,200 in statement credits on flights booked on AmexTravel.com with the Business Platinum Card, for use in the next calendar year¹, after spending $250,000 in eligible purchases in this calendar year. Learn more and explore destinations at AmexTravel.com.‡",
+        "¹Statement credits valid for flights booked on AmexTravel.com between January 1 and December 31 of the calendar year after the calendar year in which you make $250,000 in eligible purchases with the Business Platinum Card."
+      ],
+      "partner": "",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": 250000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "High-spend benefit: Must spend $250,000 on card in calendar year to unlock $1,200 in flight credits for following year. Credits only apply to flights booked through AmexTravel.com. Automatic enrollment.",
+      "programURL": "https://travel.americanexpress.com/",
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": false
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

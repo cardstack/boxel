@@ -1,0 +1,50 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Shop Saks Credit",
+      "amount": {
+        "amount": 50,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [],
+      "partner": "Saks Fifth Avenue",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "conditions": "Statement credits up to $50 semi-annually for purchases made at Saks Fifth Avenue or saks.com. Enrollment required.",
+      "programURL": null,
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": true
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/half-yearly"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

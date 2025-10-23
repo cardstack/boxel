@@ -4,7 +4,7 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../reward-system/reward-card-system",
+        "module": "../reward-card-program/reward-card-program",
         "name": "MembershipBenefit"
       },
       "specType": "card",

@@ -1,0 +1,75 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RewardCardProgram",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "Well-rounded rewards card focused on dining and groceries.",
+      "issuer": "American Express",
+      "network": "American Express",
+      "cardInfo": {
+        "notes": null,
+        "title": "American Express Gold Card",
+        "description": "Reward card with elevated earnings on restaurants and supermarkets",
+        "thumbnailURL": "https://icm.aexp-static.com/Internet/internationalcardshop/en_sg/images/cards/gold-card.png"
+      },
+      "cardName": "American Express Gold Card",
+      "annualFee": {
+        "amount": 325,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "networkLogoUrl": "https://cdn.brandfetch.io/id5WXF6Iyd/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "programEndDate": null,
+      "programStartDate": "2024-01-01",
+      "businessOrPersonal": "personal"
+    },
+    "relationships": {
+      "signupBonus": {
+        "links": {
+          "self": "../SignupBonus/amex-gold-signup-bonus"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "earningRules.0": {
+        "links": {
+          "self": "../EarningRule/restaurants-4x"
+        }
+      },
+      "earningRules.1": {
+        "links": {
+          "self": "../EarningRule/supermarkets-4x"
+        }
+      },
+      "earningRules.2": {
+        "links": {
+          "self": "../EarningRule/all-other-purchases-1x"
+        }
+      },
+      "statementBenefits.0": {
+        "links": {
+          "self": "../Benefit/digital-entertainment-credit"
+        }
+      },
+      "statementBenefits.1": {
+        "links": {
+          "self": "../Benefit/uber-cash"
+        }
+      },
+      "membershipBenefits.0": {
+        "links": {
+          "self": "../MembershipBenefit/hotel-collection"
+        }
+      }
+    }
+  }
+}

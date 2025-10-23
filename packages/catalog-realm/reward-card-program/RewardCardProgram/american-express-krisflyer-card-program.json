@@ -1,0 +1,70 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RewardCardProgram",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "Co-branded card earning KrisFlyer miles.",
+      "issuer": "American Express",
+      "network": "American Express",
+      "cardInfo": {
+        "notes": null,
+        "title": "American Express KrisFlyer Credit Card",
+        "description": "KrisFlyer-focused rewards with elevated earnings on Singapore Airlines purchases",
+        "thumbnailURL": "https://icm.aexp-static.com/Internet/internationalcardshop/en_sg/images/Amex_KrisFlyer-Credit_Card315x200.png"
+      },
+      "cardName": "American Express KrisFlyer Credit Card",
+      "annualFee": {
+        "amount": 179.85,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "networkLogoUrl": "https://cdn.brandfetch.io/id5WXF6Iyd/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "programEndDate": null,
+      "programStartDate": "2024-01-01",
+      "businessOrPersonal": "personal"
+    },
+    "relationships": {
+      "signupBonus": {
+        "links": {
+          "self": "../SignupBonus/amex-krisflyer-signup-bonus"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "earningRules.0": {
+        "links": {
+          "self": "../EarningRule/singapore-airlines-3x"
+        }
+      },
+      "earningRules.1": {
+        "links": {
+          "self": "../EarningRule/all-other-purchases-1x"
+        }
+      },
+      "membershipBenefits": {
+        "links": {
+          "self": null
+        }
+      },
+      "statementBenefits.0": {
+        "links": {
+          "self": "../Benefit/airline-fee-credit"
+        }
+      },
+      "statementBenefits.1": {
+        "links": {
+          "self": "../Benefit/global-lounge-collection"
+        }
+      }
+    }
+  }
+}
