@@ -1,17 +1,42 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Story Board",
-      "summary": "A modern story sharing platform inspired by Hacker News. Features include story submission with title and URL, upvote/downvote system with animated feedback, real-time sorting by Hot/New/Top stories, comment system with count tracking, clean modern UI with smooth transitions, responsive design, and individual story view mode. Built with modern web technologies following best practices for user experience and performance.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/story-board-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/story-board-listing/screenshot_02.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/story-board-listing/thumbnail.png"
+      "summary": "A modern story sharing platform inspired by Hacker News. Features include story submission with title and URL, upvote/downvote system with animated feedback, real-time sorting by Hot/New/Top stories, comment system with count tracking, clean modern UI with smooth transitions, responsive design, and individual story view mode. Built with modern web technologies following best practices for user experience and performance.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
       "specs.0": {
         "links": {
           "self": "../Spec/story-board"
@@ -22,31 +47,45 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../story-board/StoryBoard/a3169f5d-2044-45e4-a5d0-4c9571f4be09"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../story-board/Story/ai-breakthrough"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../story-board/Story/brain-computer"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../story-board/Story/fusion-power"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../story-board/Story/mars-colony"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../story-board/Story/quantum-computing"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/developer-tools-code"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../story-board/StoryBoard/a3169f5d-2044-45e4-a5d0-4c9571f4be09"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }
