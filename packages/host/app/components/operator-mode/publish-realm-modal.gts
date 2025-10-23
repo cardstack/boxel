@@ -14,7 +14,6 @@ import Undo2 from '@cardstack/boxel-icons/undo-2';
 import { formatDistanceToNow } from 'date-fns';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import window from 'ember-window-mock';
 
 import {
   BoxelButton,
@@ -477,16 +476,11 @@ export default class PublishRealmModal extends Component<Signature> {
     },
   );
 
-  @action
-  handleOpenSite() {
-    window.open(this.generatedUrl, '_blank');
-  }
-
-  @action
-  handleOpenCustomSubdomainSite() {
+  get customSubdomainIndexUrl() {
     if (this.claimedDomainPublishedUrl) {
-      window.open(this.claimedDomainPublishedUrl + 'index', '_blank');
+      return this.claimedDomainPublishedUrl + 'index';
     }
+    return null;
   }
 
   @action
@@ -595,11 +589,14 @@ export default class PublishRealmModal extends Component<Signature> {
             </div>
             {{#if this.isRealmPublished}}
               <BoxelButton
+                @as='anchor'
                 @kind='secondary-light'
                 @size='small'
+                @href={{this.generatedUrl}}
                 @disabled={{this.isUnpublishingAnyRealms}}
-                {{on 'click' this.handleOpenSite}}
                 class='action'
+                target='_blank'
+                rel='noopener noreferrer'
                 data-test-open-boxel-space-button
               >
                 <ExternalLink width='16' height='16' class='button-icon' />
@@ -785,11 +782,14 @@ export default class PublishRealmModal extends Component<Signature> {
             {{#if (not this.isCustomSubdomainSetupVisible)}}
               {{#if this.isClaimedDomainPublished}}
                 <BoxelButton
+                  @as='anchor'
                   @kind='secondary-light'
                   @size='small'
+                  @href={{this.customSubdomainIndexUrl}}
                   @disabled={{this.isUnpublishingAnyRealms}}
-                  {{on 'click' this.handleOpenCustomSubdomainSite}}
                   class='action'
+                  target='_blank'
+                  rel='noopener noreferrer'
                   data-test-open-custom-subdomain-button
                 >
                   <ExternalLink width='16' height='16' class='button-icon' />
@@ -1015,6 +1015,12 @@ export default class PublishRealmModal extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         font-size: var(--boxel-font-size-xs);
+        text-decoration: none;
+      }
+
+      .action.disabled {
+        pointer-events: none;
+        opacity: 0.5;
       }
 
       .domain-option.claiming .action {

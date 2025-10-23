@@ -7,7 +7,6 @@ import {
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
@@ -600,19 +599,12 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-open-site-button]').exists();
         assert.dom('[data-test-open-site-button]').containsText('Open Site');
 
-        window.open = (url?: URL | string, target?: string) => {
-          assert.strictEqual(
-            url,
-            'http://testuser.localhost:4201/test/',
-            'Open published site URL',
-          );
-          assert.strictEqual(target, '_blank', 'Open in a new tab');
-
-          return null;
-        };
-        await click(
-          '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
-        );
+        assert
+          .dom(
+            '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
+          )
+          .hasAttribute('href', 'http://testuser.localhost:4201/test/')
+          .hasAttribute('target', '_blank');
       });
 
       test('can unpublish realm', async function (assert) {
@@ -862,16 +854,11 @@ module('Acceptance | host submode', function (hooks) {
           trail: [`${testRealmURL}Person/1.json`],
         });
 
-        let originalWindowOpen = window.open;
-        window.open = (url?: URL | string, target?: string) => {
-          assert.strictEqual(
-            url,
-            'http://testuser.localhost:4201/test/Person/1',
-            'Open most recently published realm URL',
-          );
-          assert.strictEqual(target, '_blank', 'Open in a new tab');
-          return null;
-        };
+        // Check that the main button has the correct href
+        assert
+          .dom('[data-test-open-site-button]')
+          .hasAttribute('href', 'http://testuser.localhost:4201/test/Person/1')
+          .hasAttribute('target', '_blank');
 
         await triggerEvent('[data-test-open-site-button]', 'mouseenter');
         await waitFor('[data-test-tooltip-content]');
@@ -881,8 +868,6 @@ module('Acceptance | host submode', function (hooks) {
             'Open Site in a New Tab (Shift+Click for options)',
             'Tooltip shows correct text when menu is closed',
           );
-        await click('[data-test-open-site-button]');
-        window.open = originalWindowOpen;
 
         assert.dom('[data-test-open-site-popover]').doesNotExist();
 
@@ -906,31 +891,20 @@ module('Acceptance | host submode', function (hooks) {
           )
           .exists();
 
-        window.open = (url?: URL | string, target?: string) => {
-          assert.strictEqual(
-            url,
-            'http://testuser.localhost:4201/test/Person/1',
-            'Open published realm URL',
-          );
-          assert.strictEqual(target, '_blank', 'Open in a new tab');
-          return null;
-        };
-        await click(
-          '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
-        );
-        window.open = (url?: URL | string, target?: string) => {
-          assert.strictEqual(
-            url,
-            'https://another-domain.com/realm/Person/1',
-            'Open published realm URL',
-          );
-          assert.strictEqual(target, '_blank', 'Open in a new tab');
-          return null;
-        };
-        await click(
-          '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"] [data-test-open-site-button]',
-        );
-        window.open = originalWindowOpen;
+        // Check that popover buttons have correct href attributes
+        assert
+          .dom(
+            '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
+          )
+          .hasAttribute('href', 'http://testuser.localhost:4201/test/Person/1')
+          .hasAttribute('target', '_blank');
+
+        assert
+          .dom(
+            '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"] [data-test-open-site-button]',
+          )
+          .hasAttribute('href', 'https://another-domain.com/realm/Person/1')
+          .hasAttribute('target', '_blank');
 
         getService('network').resetState();
       });
@@ -1201,16 +1175,10 @@ module('Acceptance | host submode', function (hooks) {
           await waitFor('[data-test-open-custom-subdomain-button]');
           assert.dom('[data-test-open-custom-subdomain-button]').exists();
 
-          window.open = (url?: URL | string, target?: string) => {
-            assert.strictEqual(
-              url,
-              'http://my-custom-site.localhost:4201/index',
-              'Open custom subdomain site URL',
-            );
-            assert.strictEqual(target, '_blank', 'Open in a new tab');
-            return null;
-          };
-          await click('[data-test-open-custom-subdomain-button]');
+          assert
+            .dom('[data-test-open-custom-subdomain-button]')
+            .hasAttribute('href', 'http://my-custom-site.localhost:4201/index')
+            .hasAttribute('target', '_blank');
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
         }
