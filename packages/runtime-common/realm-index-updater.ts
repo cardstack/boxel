@@ -19,6 +19,9 @@ import { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
 
+const FROM_SCRATCH_JOB_TIMEOUT_SEC = 10 * 60;
+const INCREMENTAL_JOB_TIMEOUT_SEC = 3 * 60;
+
 export class RealmIndexUpdater {
   #realm: Realm;
   #log = logger('realm-index-updater');
@@ -93,7 +96,7 @@ export class RealmIndexUpdater {
       let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: 3 * 60,
+        timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
         priority: systemInitiatedPriority,
         args,
       });
@@ -130,7 +133,7 @@ export class RealmIndexUpdater {
       let job = await this.#queue.publish<IncrementalResult>({
         jobType: `incremental-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: 60,
+        timeout: INCREMENTAL_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
         args,
       });

@@ -138,6 +138,9 @@ export function buildPrerenderApp(
           pool,
         },
       };
+      if (pool.timedOut) {
+        log.warn(`render of ${url} timed out`);
+      }
       if (response.error) {
         log.debug(
           `render of ${url} resulted in error doc:\n${JSON.stringify(response.error, null, 2)}`,

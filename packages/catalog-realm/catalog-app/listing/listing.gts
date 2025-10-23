@@ -7,6 +7,7 @@ import {
   StringField,
   linksTo,
   Component,
+  instanceOf,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
@@ -579,7 +580,9 @@ export class SkillListing extends Listing {
 function specBreakdown(specs: Spec[]): Record<string, Spec[]> {
   return specs.reduce(
     (groupedSpecs, spec) => {
-      if (!spec) {
+      if (!spec || !instanceOf(spec, Spec)) {
+        // During prerender linksToMany may still contain not-loaded placeholders;
+        // skip until the real Spec instance arrives.
         return groupedSpecs;
       }
       let key = spec.specType ?? 'unknown';

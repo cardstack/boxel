@@ -19,6 +19,7 @@ import { PgAdapter } from './pg-adapter';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
+const MAX_JOB_TIMEOUT_SEC = 10 * 60;
 
 interface JobsTable {
   id: number;
@@ -234,7 +235,7 @@ export class PgQueueRunner implements QueueRunner {
   constructor({
     adapter,
     workerId,
-    maxTimeoutSec = 5 * 60,
+    maxTimeoutSec = MAX_JOB_TIMEOUT_SEC,
     priority = 0,
   }: {
     adapter: PgAdapter;

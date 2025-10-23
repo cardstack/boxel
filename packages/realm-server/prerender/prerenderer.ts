@@ -31,6 +31,13 @@ import {
 
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
+const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
+  // this is a side effect of glimmer scoped styles moving a DOM node that
+  // glimmer is tracking. when we go to teardown the component glimmer gets mad
+  // that a node it was tracking is no longer there. performing a new prerender
+  // capture with a cleared store/loader cache will workaround this issue.
+  [`Failed to execute 'removeChild' on 'Node'`, 'NotFoundError'],
+];
 
 export class Prerenderer {
   #browser: Browser | null = null;
@@ -303,13 +310,6 @@ export class Prerenderer {
       timedOut: boolean;
     };
   }> {
-    this.#nonce++;
-    log.info(
-      `prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId}`,
-    );
-    log.debug(
-      `prerendering url ${url} with permissions=${JSON.stringify(permissions)}`,
-    );
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
@@ -325,19 +325,6 @@ export class Prerenderer {
       await prev.catch((e) => {
         log.debug('Previous prerender in chain failed (continuing):', e);
       }); // ensure chain continues even after errors
-      const { page, reused, launchMs } = await this.#getPage(realm);
-      const poolInfo = {
-        pageId: this.#pool.get(realm)?.pageId ?? 'unknown',
-        realm,
-        reused,
-        evicted: false,
-        timedOut: false,
-      };
-      const markTimeout = (err?: RenderError) => {
-        if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
-          poolInfo.timedOut = true;
-        }
-      };
 
       let sessions: { [realm: string]: string } = {};
       for (let [realmURL, realmPermissions] of Object.entries(
@@ -356,230 +343,360 @@ export class Prerenderer {
       }
       let auth = JSON.stringify(sessions);
 
-      if (!reused) {
-        page.evaluateOnNewDocument((auth) => {
-          localStorage.setItem('boxel-session', auth);
-        }, auth);
-      } else {
-        // Only set immediately when reusing an already-loaded document; on a fresh
-        // navigation, calling localStorage on about:blank can throw a SecurityError.
-        await page.evaluate((auth) => {
-          localStorage.setItem('boxel-session', auth);
-        }, auth);
-      }
-
-      let renderStart = Date.now();
-      let error: RenderError | undefined;
-      let shortCircuit = false;
-      let options = renderOptions ?? {};
-      let serializedOptions = serializeRenderRouteOptions(options);
-      let optionsSegment = encodeURIComponent(serializedOptions);
-      const captureOptions: CaptureOptions = {
-        expectedId: url.replace(/\.json$/i, ''),
-        expectedNonce: String(this.#nonce),
-        simulateTimeoutMs: opts?.simulateTimeoutMs,
-      };
-
-      // We need to render the isolated HTML view first, as the template will pull linked fields.
-      let result = await withTimeout(
-        page,
-        async () => {
-          if (reused) {
-            await transitionTo(
-              page,
-              'render.html',
-              url,
-              String(this.#nonce),
-              serializedOptions,
-              'isolated',
-              '0',
-            );
-          } else {
-            await page.goto(
-              `${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
-            );
+      let attemptOptions = renderOptions;
+      let lastResult:
+        | {
+            response: RenderResponse;
+            timings: { launchMs: number; renderMs: number };
+            pool: {
+              pageId: string;
+              realm: string;
+              reused: boolean;
+              evicted: boolean;
+              timedOut: boolean;
+            };
           }
-          return await captureResult(page, 'innerHTML', captureOptions);
-        },
-        opts?.timeoutMs,
-      );
-      let isolatedHTML: string | null = null;
-      if (isRenderError(result)) {
-        error = result;
-        markTimeout(error);
-        let evicted = await this.#maybeEvict(
+        | undefined;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let result = await this.#prerenderAttempt({
           realm,
-          'isolated render',
-          result as RenderError,
-        );
+          url,
+          userId,
+          permissions,
+          auth,
+          opts,
+          renderOptions: attemptOptions,
+        });
+        lastResult = result;
+
+        let retrySignature = this.#shouldRetryWithClearCache(result.response);
+        let isClearCacheAttempt = attemptOptions?.clearCache === true;
+
+        if (!isClearCacheAttempt && retrySignature) {
+          log.warn(
+            `retrying prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+              ' | ',
+            )}`,
+          );
+          attemptOptions = {
+            ...(attemptOptions ?? {}),
+            clearCache: true,
+          };
+          continue;
+        }
+
+        if (isClearCacheAttempt && retrySignature && result.response.error) {
+          log.warn(
+            `prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+              ' | ',
+            )} for ${url}`,
+          );
+        }
+
+        return result;
+      }
+      if (lastResult) {
+        if (lastResult.response.error) {
+          log.error(
+            `prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+          );
+        }
+        return lastResult;
+      }
+      throw new Error(`prerender attempts exhausted for ${url}`);
+    } finally {
+      deferred.fulfill();
+    }
+  }
+
+  async #prerenderAttempt({
+    realm,
+    url,
+    userId,
+    permissions,
+    auth,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    userId: string;
+    permissions: RealmPermissions;
+    auth: string;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: RenderResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    log.info(
+      `prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId}`,
+    );
+    log.debug(
+      `prerendering url ${url} with permissions=${JSON.stringify(permissions)}`,
+    );
+
+    const { page, reused, launchMs } = await this.#getPage(realm);
+    const poolInfo = {
+      pageId: this.#pool.get(realm)?.pageId ?? 'unknown',
+      realm,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+
+    if (!reused) {
+      page.evaluateOnNewDocument((auth) => {
+        localStorage.setItem('boxel-session', auth);
+      }, auth);
+    } else {
+      // Only set immediately when reusing an already-loaded document; on a fresh
+      // navigation, calling localStorage on about:blank can throw a SecurityError.
+      await page.evaluate((auth) => {
+        localStorage.setItem('boxel-session', auth);
+      }, auth);
+    }
+
+    let renderStart = Date.now();
+    let error: RenderError | undefined;
+    let shortCircuit = false;
+    let options = renderOptions ?? {};
+    let serializedOptions = serializeRenderRouteOptions(options);
+    let optionsSegment = encodeURIComponent(serializedOptions);
+    const captureOptions: CaptureOptions = {
+      expectedId: url.replace(/\.json$/i, ''),
+      expectedNonce: String(this.#nonce),
+      simulateTimeoutMs: opts?.simulateTimeoutMs,
+    };
+
+    // We need to render the isolated HTML view first, as the template will pull linked fields.
+    let result = await withTimeout(
+      page,
+      async () => {
+        if (reused) {
+          await transitionTo(
+            page,
+            'render.html',
+            url,
+            String(this.#nonce),
+            serializedOptions,
+            'isolated',
+            '0',
+          );
+        } else {
+          await page.goto(
+            `${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
+          );
+        }
+        return await captureResult(page, 'innerHTML', captureOptions);
+      },
+      opts?.timeoutMs,
+    );
+    let isolatedHTML: string | null = null;
+    if (isRenderError(result)) {
+      error = result;
+      markTimeout(error);
+      let evicted = await this.#maybeEvict(
+        realm,
+        'isolated render',
+        result as RenderError,
+      );
+      if (evicted) {
+        poolInfo.evicted = true;
+        shortCircuit = true;
+      }
+    } else {
+      let capture = result as RenderCapture;
+      if (capture.status === 'ready') {
+        isolatedHTML = capture.value;
+      } else {
+        let capErr = this.#captureToError(capture);
+        if (!error && capErr) {
+          error = capErr;
+        }
+        markTimeout(capErr);
+        let evicted = await this.#maybeEvict(realm, 'isolated render', capErr);
         if (evicted) {
           poolInfo.evicted = true;
           shortCircuit = true;
         }
-      } else {
-        let capture = result as RenderCapture;
-        if (capture.status === 'ready') {
-          isolatedHTML = capture.value;
-        } else {
-          let capErr = this.#captureToError(capture);
-          if (!error && capErr) {
-            error = capErr;
-          }
-          markTimeout(capErr);
-          let evicted = await this.#maybeEvict(
-            realm,
-            'isolated render',
-            capErr,
-          );
-          if (evicted) {
-            poolInfo.evicted = true;
-            shortCircuit = true;
-          }
-        }
       }
+    }
 
-      if (shortCircuit) {
-        let meta: PrerenderMeta = {
-          serialized: null,
-          searchDoc: null,
-          displayNames: null,
-          deps: null,
-          types: null,
-        };
-        return {
-          response: {
-            ...meta,
-            ...(error ? { error } : {}),
-            iconHTML: null,
-            isolatedHTML,
-            atomHTML: null,
-            embeddedHTML: null,
-            fittedHTML: null,
-          },
-          timings: { launchMs, renderMs: Date.now() - renderStart },
-          pool: poolInfo,
-        };
-      }
-
-      // TODO consider breaking out rendering search doc into its own route so
-      // that we can fully understand all the linked fields that are used in all
-      // the html formats and generate a search doc that is well populated. Right
-      // now we only consider linked fields used in the isolated template.
-      let metaMaybeError = await withTimeout(
-        page,
-        () => renderMeta(page, captureOptions),
-        opts?.timeoutMs,
-      );
-      // TODO also consider introducing a mechanism in the API to track and reset
-      // field usage for an instance recursively so that the depth that an
-      // instance is loaded from a different rendering context in the same realm
-      // doesn't elide fields that this rendering context cares about. in that
-      // manner we can get a complete picture of how to build the search doc's linked
-      // fields for each rendering context.
-      let meta: PrerenderMeta;
-      if (isRenderError(metaMaybeError)) {
-        markTimeout(metaMaybeError as RenderError);
-        if (
-          await this.#maybeEvict(
-            realm,
-            'render.meta',
-            metaMaybeError as RenderError,
-          )
-        ) {
-          poolInfo.evicted = true;
-          shortCircuit = true;
-        }
-        error = error ?? (metaMaybeError as RenderError);
-        markTimeout(error);
-        meta = {
-          serialized: null,
-          searchDoc: null,
-          displayNames: null,
-          deps: null,
-          types: null,
-        };
-      } else {
-        meta = metaMaybeError;
-      }
-      let atomHTML: string | null = null,
-        iconHTML: string | null = null,
-        embeddedHTML: Record<string, string> | null = null,
-        fittedHTML: Record<string, string> | null = null;
-      if (!shortCircuit && meta.types) {
-        // Render sequentially and short-circuit on unusable page/timeout
-        const steps: Array<{
-          name: string;
-          cb: () => Promise<string | Record<string, string> | RenderError>;
-          assign: (value: string | Record<string, string>) => void;
-        }> = [
-          {
-            name: 'fitted render',
-            cb: () =>
-              renderAncestors(page, 'fitted', meta.types!, captureOptions),
-            assign: (v: string | Record<string, string>) => {
-              fittedHTML = v as Record<string, string>;
-            },
-          },
-          {
-            name: 'embedded render',
-            cb: () =>
-              renderAncestors(page, 'embedded', meta.types!, captureOptions),
-            assign: (v: string | Record<string, string>) => {
-              embeddedHTML = v as Record<string, string>;
-            },
-          },
-          {
-            name: 'atom render',
-            cb: () => renderHTML(page, 'atom', 0, captureOptions),
-            assign: (v: string | Record<string, string>) => {
-              atomHTML = v as string;
-            },
-          },
-          {
-            name: 'icon render',
-            cb: () => renderIcon(page, captureOptions),
-            assign: (v: string | Record<string, string>) => {
-              iconHTML = v as string;
-            },
-          },
-        ];
-
-        for (let step of steps) {
-          if (shortCircuit) break;
-          let res = await this.#step(realm, step.name, () =>
-            withTimeout(page, step.cb, opts?.timeoutMs),
-          );
-          if (res.ok) {
-            step.assign(res.value);
-          } else {
-            error = error ?? res.error;
-            markTimeout(res.error);
-            if (res.evicted) {
-              poolInfo.evicted = true;
-              shortCircuit = true;
-              break;
-            }
-          }
-        }
-      }
-
-      let response: RenderResponse = {
-        ...(meta as PrerenderMeta),
-        ...(error ? { error } : {}),
-        iconHTML,
-        isolatedHTML,
-        atomHTML,
-        embeddedHTML,
-        fittedHTML,
+    if (shortCircuit) {
+      let meta: PrerenderMeta = {
+        serialized: null,
+        searchDoc: null,
+        displayNames: null,
+        deps: null,
+        types: null,
       };
       return {
-        response,
+        response: {
+          ...meta,
+          ...(error ? { error } : {}),
+          iconHTML: null,
+          isolatedHTML,
+          atomHTML: null,
+          embeddedHTML: null,
+          fittedHTML: null,
+        },
         timings: { launchMs, renderMs: Date.now() - renderStart },
         pool: poolInfo,
       };
-    } finally {
-      deferred.fulfill();
     }
+
+    // TODO consider breaking out rendering search doc into its own route so
+    // that we can fully understand all the linked fields that are used in all
+    // the html formats and generate a search doc that is well populated. Right
+    // now we only consider linked fields used in the isolated template.
+    let metaMaybeError = await withTimeout(
+      page,
+      () => renderMeta(page, captureOptions),
+      opts?.timeoutMs,
+    );
+    // TODO also consider introducing a mechanism in the API to track and reset
+    // field usage for an instance recursively so that the depth that an
+    // instance is loaded from a different rendering context in the same realm
+    // doesn't elide fields that this rendering context cares about. in that
+    // manner we can get a complete picture of how to build the search doc's linked
+    // fields for each rendering context.
+    let meta: PrerenderMeta;
+    if (isRenderError(metaMaybeError)) {
+      markTimeout(metaMaybeError as RenderError);
+      if (
+        await this.#maybeEvict(
+          realm,
+          'render.meta',
+          metaMaybeError as RenderError,
+        )
+      ) {
+        poolInfo.evicted = true;
+        shortCircuit = true;
+      }
+      error = error ?? (metaMaybeError as RenderError);
+      markTimeout(error);
+      meta = {
+        serialized: null,
+        searchDoc: null,
+        displayNames: null,
+        deps: null,
+        types: null,
+      };
+    } else {
+      meta = metaMaybeError;
+    }
+    let atomHTML: string | null = null,
+      iconHTML: string | null = null,
+      embeddedHTML: Record<string, string> | null = null,
+      fittedHTML: Record<string, string> | null = null;
+    if (!shortCircuit && meta.types) {
+      // Render sequentially and short-circuit on unusable page/timeout
+      const steps: Array<{
+        name: string;
+        cb: () => Promise<string | Record<string, string> | RenderError>;
+        assign: (value: string | Record<string, string>) => void;
+      }> = [
+        {
+          name: 'fitted render',
+          cb: () =>
+            renderAncestors(page, 'fitted', meta.types!, captureOptions),
+          assign: (v: string | Record<string, string>) => {
+            fittedHTML = v as Record<string, string>;
+          },
+        },
+        {
+          name: 'embedded render',
+          cb: () =>
+            renderAncestors(page, 'embedded', meta.types!, captureOptions),
+          assign: (v: string | Record<string, string>) => {
+            embeddedHTML = v as Record<string, string>;
+          },
+        },
+        {
+          name: 'atom render',
+          cb: () => renderHTML(page, 'atom', 0, captureOptions),
+          assign: (v: string | Record<string, string>) => {
+            atomHTML = v as string;
+          },
+        },
+        {
+          name: 'icon render',
+          cb: () => renderIcon(page, captureOptions),
+          assign: (v: string | Record<string, string>) => {
+            iconHTML = v as string;
+          },
+        },
+      ];
+
+      for (let step of steps) {
+        if (shortCircuit) break;
+        let res = await this.#step(realm, step.name, () =>
+          withTimeout(page, step.cb, opts?.timeoutMs),
+        );
+        if (res.ok) {
+          step.assign(res.value);
+        } else {
+          error = error ?? res.error;
+          markTimeout(res.error);
+          if (res.evicted) {
+            poolInfo.evicted = true;
+            shortCircuit = true;
+            break;
+          }
+        }
+      }
+    }
+
+    let response: RenderResponse = {
+      ...(meta as PrerenderMeta),
+      ...(error ? { error } : {}),
+      iconHTML,
+      isolatedHTML,
+      atomHTML,
+      embeddedHTML,
+      fittedHTML,
+    };
+    return {
+      response,
+      timings: { launchMs, renderMs: Date.now() - renderStart },
+      pool: poolInfo,
+    };
+  }
+
+  #shouldRetryWithClearCache(
+    response: RenderResponse,
+  ): readonly string[] | undefined {
+    let renderError = response.error?.error;
+    if (!renderError) {
+      return undefined;
+    }
+    let parts = [renderError.message, renderError.stack].filter(
+      (part): part is string => typeof part === 'string' && part.length > 0,
+    );
+    if (parts.length === 0) {
+      return undefined;
+    }
+    let haystack = parts.join('\n');
+    for (let signature of CLEAR_CACHE_RETRY_SIGNATURES) {
+      if (signature.every((fragment) => haystack.includes(fragment))) {
+        return signature;
+      }
+    }
+    return undefined;
   }
 
   async #getBrowser(): Promise<Browser> {

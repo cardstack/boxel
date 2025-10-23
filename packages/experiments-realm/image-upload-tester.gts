@@ -9,6 +9,7 @@ import StringField from 'https://cardstack.com/base/string';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 import { not } from '@cardstack/boxel-ui/helpers';
 import UploadImageCommand from '@cardstack/catalog/commands/upload-image';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
@@ -16,8 +17,13 @@ import RealmField from 'https://cardstack.com/base/realm';
 
 class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
   @tracked isUploading = false;
-  @tracked isSaving = false;
   @tracked errorMessage: string | null = null;
+  @tracked uploadMode: 'url' | 'file' = 'url';
+  @tracked selectedFile: File | null = null;
+  @tracked currentCommand: UploadImageCommand | null = null;
+
+  private cachedRemoteUrl = '';
+  private currentFileObjectUrl: string | null = null;
 
   // Load the result image card dynamically using getCard
   resultImageResource = this.args.context?.getCard(
@@ -26,19 +32,20 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
   );
 
   get canUpload() {
-    return (
-      !!this.args.model.sourceImageUrl &&
-      !!this.args.model.targetRealmUrl &&
-      !this.isUploading
-    );
+    if (!this.args.model.targetRealmUrl || this.isUploading) {
+      return false;
+    }
+
+    if (this.uploadMode === 'file') {
+      return !!this.selectedFile;
+    }
+
+    return !!this.args.model.sourceImageUrl;
   }
 
   get statusMessage() {
-    if (this.isSaving) {
-      return 'Saving new image in result field...';
-    }
     if (this.isUploading) {
-      return 'Uploading image to Cloudflare...';
+      return this.progressStatusMessage;
     }
     if (this.errorMessage) {
       return this.errorMessage;
@@ -49,6 +56,29 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
     return 'Provide an image URL and target realm to try the command.';
   }
 
+  get progressStatusMessage() {
+    switch (this.currentCommand?.progressStep) {
+      case 'requesting-direct-upload-url':
+        return 'Requesting Cloudflare upload URL...';
+      case 'parsing-data-uri':
+        return 'Parsing data URI...';
+      case 'fetching-local-file':
+        return 'Preparing selected file...';
+      case 'uploading-local-file':
+        return 'Uploading file to Cloudflare...';
+      case 'uploading-remote-url':
+        return 'Uploading remote image to Cloudflare...';
+      case 'saving-card':
+        return 'Saving new image in result field...';
+      case 'completed':
+        return 'Finalizing upload...';
+      case 'error':
+        return 'Upload failed.';
+      default:
+        return 'Uploading image to Cloudflare...';
+    }
+  }
+
   get statusClass() {
     let classes = ['status-message'];
     if (this.errorMessage) {
@@ -57,6 +87,79 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
       classes.push('status-message--success');
     }
     return classes.join(' ');
+  }
+
+  @action
+  selectUploadMode(mode: 'url' | 'file') {
+    if (mode === this.uploadMode) {
+      return;
+    }
+
+    if (mode === 'file') {
+      this.cachedRemoteUrl = this.args.model.sourceImageUrl ?? '';
+      this.resetFileSelection({ clearSource: false });
+      this.args.model.sourceImageUrl = '';
+    } else {
+      this.resetFileSelection({ clearSource: false });
+      this.args.model.sourceImageUrl = this.cachedRemoteUrl;
+    }
+
+    this.uploadMode = mode;
+    this.errorMessage = null;
+  }
+
+  @action
+  handleFileSelection(event: Event) {
+    let input = event.target as HTMLInputElement | null;
+    if (!input?.files || input.files.length === 0) {
+      this.resetFileSelection();
+      return;
+    }
+
+    let file = input.files[0];
+    this.setSelectedFile(file);
+    input.value = '';
+  }
+
+  private setSelectedFile(file: File | null) {
+    this.resetFileSelection();
+    if (!file) {
+      return;
+    }
+
+    let objectUrl = URL.createObjectURL(file);
+    this.currentFileObjectUrl = objectUrl;
+    this.selectedFile = file;
+    this.args.model.sourceImageUrl = objectUrl;
+  }
+
+  private resetFileSelection(options?: { clearSource?: boolean }) {
+    if (this.currentFileObjectUrl) {
+      try {
+        URL.revokeObjectURL(this.currentFileObjectUrl);
+      } catch {
+        // The URL may already be revoked; ignore.
+      }
+    }
+    this.currentFileObjectUrl = null;
+    this.selectedFile = null;
+    const shouldClearSource =
+      options?.clearSource ?? this.uploadMode === 'file';
+    if (shouldClearSource) {
+      this.args.model.sourceImageUrl = '';
+    }
+  }
+
+  get selectedFileName() {
+    return this.selectedFile?.name ?? 'No file selected';
+  }
+
+  get isFileMode() {
+    return this.uploadMode === 'file';
+  }
+
+  get isUrlMode() {
+    return this.uploadMode === 'url';
   }
 
   @action
@@ -78,6 +181,7 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
 
     try {
       let command = new UploadImageCommand(commandContext);
+      this.currentCommand = command;
       let result = await command.execute({
         sourceImageUrl: this.args.model.sourceImageUrl,
         targetRealmUrl: this.args.model.targetRealmUrl,
@@ -85,7 +189,6 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
 
       // Store the card ID, which will trigger getCard to load it
       console.log('Upload result:', result);
-      this.isSaving = true;
       if (result.cardId) {
         this.args.model.resultImageId = result.cardId;
       }
@@ -97,7 +200,6 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
       this.errorMessage = message;
     } finally {
       this.isUploading = false;
-      this.isSaving = false;
     }
   }
 
@@ -107,6 +209,9 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
     this.args.model.sourceImageUrl = '';
     this.args.model.targetRealmUrl = '';
     this.args.model.resultImageId = '';
+    this.cachedRemoteUrl = '';
+    this.currentCommand = null;
+    this.resetFileSelection();
   }
 
   @action
@@ -114,6 +219,11 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
     if (this.resultImageResource?.card) {
       this.args.viewCard?.(this.resultImageResource.card, 'isolated');
     }
+  }
+
+  override willDestroy(): void {
+    super.willDestroy();
+    this.resetFileSelection();
   }
 
   get renderableResultCard() {
@@ -129,9 +239,54 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
     {{! template-lint-disable no-invalid-interactive }}
     <form class='image-upload-tester' {{on 'submit' this.uploadImage}}>
       <div class='field-group'>
-        <FieldContainer @label='Source Image URL'>
-          <@fields.sourceImageUrl @format='edit' />
+        <FieldContainer @label='Upload Type'>
+          <div class='mode-toggle'>
+            <label>
+              <input
+                type='radio'
+                name='upload-mode'
+                value='url'
+                checked={{this.isUrlMode}}
+                {{on 'change' (fn this.selectUploadMode 'url')}}
+              />
+              URL
+            </label>
+            <label>
+              <input
+                type='radio'
+                name='upload-mode'
+                value='file'
+                checked={{this.isFileMode}}
+                {{on 'change' (fn this.selectUploadMode 'file')}}
+              />
+              File
+            </label>
+          </div>
         </FieldContainer>
+
+        {{#if this.isUrlMode}}
+          <FieldContainer @label='Source Image URL'>
+            <@fields.sourceImageUrl @format='edit' />
+            <p class='field-hint'>
+              Supports https URLs, Blob URLs, and data URIs (e.g. data:image/png;base64,...)
+            </p>
+          </FieldContainer>
+        {{/if}}
+
+        {{#if this.isFileMode}}
+          <FieldContainer @label='Select Image File'>
+            <div class='file-input'>
+              <input
+                type='file'
+                accept='image/*'
+                aria-label='Select image file'
+                {{on 'change' this.handleFileSelection}}
+              />
+              <span class='file-input__label'>{{this.selectedFileName}}</span>
+            </div>
+          </FieldContainer>
+        {{/if}}
+
         <FieldContainer @label='Target Realm URL'>
           <@fields.targetRealmUrl @format='edit' />
         </FieldContainer>
@@ -179,6 +334,34 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
       .field-group {
         display: grid;
         gap: var(--boxel-sp);
+      }
+
+      .mode-toggle {
+        display: flex;
+        gap: var(--boxel-sp);
+      }
+
+      .mode-toggle label {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        font: var(--boxel-font-sm);
+      }
+
+      .file-input {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .file-input__label {
+        font: var(--boxel-font-sm);
+        color: var(--boxel-500);
+      }
+      .field-hint {
+        margin-top: var(--boxel-sp-xs);
+        font: var(--boxel-font-xs);
+        color: var(--boxel-400);
       }
 
       .status-message {

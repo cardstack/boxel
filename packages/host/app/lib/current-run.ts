@@ -24,6 +24,7 @@ import {
   jobIdentity,
   getFieldDefinitions,
   modulesConsumedInMeta,
+  cleanCapturedHTML,
   type ResolvedCodeRef,
   type Definition,
   type Batch,
@@ -1202,8 +1203,7 @@ export class CurrentRun {
 }
 
 function sanitizeHTML(html: string): string {
-  // currently this only involves removing auto-generated ember ID's
-  return html.replace(/\s+id="ember[0-9]+"/g, '');
+  return cleanCapturedHTML(html);
 }
 
 function assertURLEndsWithJSON(url: URL): URL {
