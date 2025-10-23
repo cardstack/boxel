@@ -114,12 +114,17 @@
       },
       "publisher": {
         "links": {
-          "self": null
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
       "examples.0": {
         "links": {
           "self": "../AILayoutBoard/e478c721-53b2-4464-8b6e-a8b89410a4c5"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
         }
       },
       "categories.0": {
