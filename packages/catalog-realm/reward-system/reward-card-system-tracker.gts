@@ -1235,7 +1235,8 @@ export class RewardSystemTracker extends CardDef {
     get completionPct() {
       const count = this.trackings.length;
       if (!count) return 0;
-      return Math.round((this.completedBenefitsCount / count) * 1000) / 10;
+      // Return percentage with one decimal place, e.g. 87.5
+      return Number(((this.completedBenefitsCount / count) * 100).toFixed(1));
     }
 
     get cardTitle() {
