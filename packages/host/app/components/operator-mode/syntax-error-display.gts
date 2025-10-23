@@ -28,7 +28,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
       return maybeCardError;
     }
     delete json!.deps; // definitely json exists at this point
-    const stackDepth = 3;
+    const stackDepth = 4;
     // prevent super deep stacks
     return (json!.stack ?? JSON.stringify(json, null, 2))
       .split('\n')
