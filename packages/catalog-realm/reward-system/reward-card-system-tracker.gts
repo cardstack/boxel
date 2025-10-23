@@ -122,17 +122,18 @@ class BenefitUsageTrackingEmbedded extends Component<
     const unit = this.timePeriodUnit;
     const count = this.timePeriodCount;
 
+    // Check 6-month special case first!
+    if (unit === 'month' && count === 6) return 2;
     switch (unit) {
       case 'month':
         return 12;
       case 'quarter':
         return 4;
-      case 'year':
-        return 1;
       case 'half-year':
         return 2;
+      case 'year':
+        return 1;
       default:
-        if (count === 6 && unit === 'month') return 2;
         return 4;
     }
   }
@@ -191,11 +192,13 @@ class BenefitUsageTrackingEmbedded extends Component<
     const unit = this.timePeriodUnit;
     const count = this.timePeriodCount;
 
-    if (unit === 'year') {
+    if (unit === 'month' && count === 6) {
+      return `${this.usageCount}/2 periods used`;
+    } else if (unit === 'year') {
       return this.usageCount > 0 ? 'Used this year' : 'Not used yet';
     } else if (unit === 'month') {
       return `${this.usageCount}/12 months used`;
-    } else if (unit === 'half-year' || (count === 6 && unit === 'month')) {
+    } else if (unit === 'half-year') {
       return `${this.usageCount}/2 periods used`;
     } else {
       return `${this.usageCount}/4 quarters used`;
@@ -209,12 +212,18 @@ class BenefitUsageTrackingEmbedded extends Component<
 
     if (unit === 'year') {
       return this.args.model?.usedAnnually ? amount : 0;
+    } else if (unit === 'month' && count === 6) {
+      // 6-month special case handled elsewhere
+      const halfYearsUsed = this.usageCount;
+      const isAnnualValue = amount >= 100;
+      const halfYearlyValue = isAnnualValue ? amount / 2 : amount;
+      return Math.round(halfYearlyValue * halfYearsUsed);
     } else if (unit === 'month') {
       const monthsUsed = this.usageCount;
       const isAnnualValue = amount >= 50;
       const monthlyValue = isAnnualValue ? amount / 12 : amount;
       return Math.round(monthlyValue * monthsUsed);
-    } else if (unit === 'half-year' || (count === 6 && unit === 'month')) {
+    } else if (unit === 'half-year') {
       const halfYearsUsed = this.usageCount;
       const isAnnualValue = amount >= 100;
       const halfYearlyValue = isAnnualValue ? amount / 2 : amount;
@@ -234,10 +243,13 @@ class BenefitUsageTrackingEmbedded extends Component<
 
     if (unit === 'year') {
       return amount;
+    } else if (unit === 'month' && count === 6) {
+      const isAnnualValue = amount >= 100;
+      return isAnnualValue ? amount : amount * 2;
     } else if (unit === 'month') {
       const isAnnualValue = amount >= 50;
       return isAnnualValue ? amount : amount * 12;
-    } else if (unit === 'half-year' || (count === 6 && unit === 'month')) {
+    } else if (unit === 'half-year') {
       const isAnnualValue = amount >= 100;
       return isAnnualValue ? amount : amount * 2;
     } else {
@@ -1235,7 +1247,6 @@ export class RewardSystemTracker extends CardDef {
     get completionPct() {
       const count = this.trackings.length;
       if (!count) return 0;
-      // Return percentage with one decimal place, e.g. 87.5
       return Number(((this.completedBenefitsCount / count) * 100).toFixed(1));
     }
 

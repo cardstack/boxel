@@ -114,11 +114,6 @@
         "links": {
           "self": "../Benefit/business-amex-travel-flight-credit"
         }
-      },
-      "benefitTrackings.3.benefit": {
-        "links": {
-          "self": "../Benefit/uber-cash"
-        }
       }
     }
   }
