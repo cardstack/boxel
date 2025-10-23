@@ -13,7 +13,6 @@ import {
   gt,
   lt,
   subtract,
-  add,
   multiply,
 } from '@cardstack/boxel-ui/helpers';
 import { concat, fn, get } from '@ember/helper';
