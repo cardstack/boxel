@@ -69,7 +69,9 @@ module('Integration | enumField', function (hooks) {
       'enumField factory exists (intentional fail until implemented)',
     );
 
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -99,7 +101,9 @@ module('Integration | enumField', function (hooks) {
     assert.expect(1);
 
     // via base-realm helpers
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -120,7 +124,9 @@ module('Integration | enumField', function (hooks) {
     assert.expect(2);
 
     // via base-realm helpers
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -145,7 +151,9 @@ module('Integration | enumField', function (hooks) {
     assert.expect(4);
 
     // via base-realm helpers
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priorities = containsMany(PriorityField);
@@ -188,7 +196,9 @@ module('Integration | enumField', function (hooks) {
     assert.expect(1);
 
     // via base-realm helpers
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priorities = containsMany(PriorityField);
@@ -208,7 +218,9 @@ module('Integration | enumField', function (hooks) {
   test('serialization round-trip preserves enum value(s)', async function (assert) {
     assert.expect(4);
 
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -261,7 +273,9 @@ module('Integration | enumField', function (hooks) {
   test('queryableValue delegates to base field for enums', async function (assert) {
     assert.expect(2);
 
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -290,7 +304,9 @@ module('Integration | enumField', function (hooks) {
   test('single enum accepts null and serializes as null', async function (assert) {
     assert.expect(3);
 
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -329,7 +345,9 @@ module('Integration | enumField', function (hooks) {
   test('containsMany enum handles empty arrays and null members', async function (assert) {
     assert.expect(4);
 
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priorities = containsMany(PriorityField);
@@ -361,7 +379,9 @@ module('Integration | enumField', function (hooks) {
   test('enumField edit respects @canEdit (computed fields are disabled)', async function (assert) {
     assert.expect(2);
 
-    const PriorityField = enumField(StringField, 'High', 'Medium', 'Low');
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Medium', 'Low'],
+    });
 
     class Task extends CardDef {
       @field priorityRaw = contains(PriorityField);
@@ -397,12 +417,13 @@ module('Integration | enumField', function (hooks) {
   test('rich options API renders labels and stores primitive values', async function (assert) {
     assert.expect(9);
 
-    const PriorityField = enumField(
-      StringField,
-      { value: 'high', label: 'High', icon: ArrowUpIcon },
-      { value: 'medium', label: 'Medium', icon: MinusIcon },
-      { value: 'low', label: 'Low', icon: ArrowDownIcon },
-    );
+    const PriorityField = enumField(StringField, {
+      options: [
+        { value: 'high', label: 'High', icon: ArrowUpIcon },
+        { value: 'medium', label: 'Medium', icon: MinusIcon },
+        { value: 'low', label: 'Low', icon: ArrowDownIcon },
+      ],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -443,7 +464,7 @@ module('Integration | enumField', function (hooks) {
   test('enumOptions returns objects for primitive enums', async function (assert) {
     assert.expect(3);
 
-    const StatusField = enumField(StringField, 'Open', 'Closed');
+    const StatusField = enumField(StringField, { options: ['Open', 'Closed'] });
     class Ticket extends CardDef {
       @field status = contains(StatusField);
     }
@@ -466,12 +487,13 @@ module('Integration | enumField', function (hooks) {
   test('enumValues returns primitive values for rich enums', async function (assert) {
     assert.expect(2);
 
-    const PriorityField = enumField(
-      StringField,
-      { value: 'high', label: 'High', icon: ArrowUpIcon },
-      { value: 'medium', label: 'Medium', icon: MinusIcon },
-      { value: 'low', label: 'Low', icon: ArrowDownIcon },
-    );
+    const PriorityField = enumField(StringField, {
+      options: [
+        { value: 'high', label: 'High', icon: ArrowUpIcon },
+        { value: 'medium', label: 'Medium', icon: MinusIcon },
+        { value: 'low', label: 'Low', icon: ArrowDownIcon },
+      ],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -495,12 +517,13 @@ module('Integration | enumField', function (hooks) {
   test('enumOptions exposes icon for rich enums', async function (assert) {
     assert.expect(2);
 
-    const PriorityField = enumField(
-      StringField,
-      { value: 'high', label: 'High', icon: ArrowUpIcon },
-      { value: 'medium', label: 'Medium', icon: MinusIcon },
-      { value: 'low', label: 'Low', icon: ArrowDownIcon },
-    );
+    const PriorityField = enumField(StringField, {
+      options: [
+        { value: 'high', label: 'High', icon: ArrowUpIcon },
+        { value: 'medium', label: 'Medium', icon: MinusIcon },
+        { value: 'low', label: 'Low', icon: ArrowDownIcon },
+      ],
+    });
     class Task extends CardDef {
       @field priority = contains(PriorityField);
     }
@@ -518,12 +541,13 @@ module('Integration | enumField', function (hooks) {
   test('trigger shows selected label and icon for rich enum', async function (assert) {
     assert.expect(2);
 
-    const PriorityField = enumField(
-      StringField,
-      { value: 'high', label: 'High', icon: ArrowUpIcon },
-      { value: 'medium', label: 'Medium', icon: MinusIcon },
-      { value: 'low', label: 'Low', icon: ArrowDownIcon },
-    );
+    const PriorityField = enumField(StringField, {
+      options: [
+        { value: 'high', label: 'High', icon: ArrowUpIcon },
+        { value: 'medium', label: 'Medium', icon: MinusIcon },
+        { value: 'low', label: 'Low', icon: ArrowDownIcon },
+      ],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -550,12 +574,13 @@ module('Integration | enumField', function (hooks) {
   test('selecting an option updates single enum value and trigger', async function (assert) {
     assert.expect(2);
 
-    const PriorityField = enumField(
-      StringField,
-      { value: 'high', label: 'High', icon: ArrowUpIcon },
-      { value: 'medium', label: 'Medium', icon: MinusIcon },
-      { value: 'low', label: 'Low', icon: ArrowDownIcon },
-    );
+    const PriorityField = enumField(StringField, {
+      options: [
+        { value: 'high', label: 'High', icon: ArrowUpIcon },
+        { value: 'medium', label: 'Medium', icon: MinusIcon },
+        { value: 'low', label: 'Low', icon: ArrowDownIcon },
+      ],
+    });
 
     class Task extends CardDef {
       @field priority = contains(PriorityField);
@@ -587,12 +612,13 @@ module('Integration | enumField', function (hooks) {
   test('selecting an option updates containsMany item', async function (assert) {
     assert.expect(1);
 
-    const PriorityField = enumField(
-      StringField,
-      { value: 'high', label: 'High', icon: ArrowUpIcon },
-      { value: 'medium', label: 'Medium', icon: MinusIcon },
-      { value: 'low', label: 'Low', icon: ArrowDownIcon },
-    );
+    const PriorityField = enumField(StringField, {
+      options: [
+        { value: 'high', label: 'High', icon: ArrowUpIcon },
+        { value: 'medium', label: 'Medium', icon: MinusIcon },
+        { value: 'low', label: 'Low', icon: ArrowDownIcon },
+      ],
+    });
 
     class Task extends CardDef {
       @field priorities = containsMany(PriorityField);
