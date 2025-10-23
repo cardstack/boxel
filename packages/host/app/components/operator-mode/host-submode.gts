@@ -43,14 +43,20 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
   @tracked isOpenSitePopoverOpen = false;
+  @tracked publishError: string | null = null;
+  @tracked publishErrors: Map<string, string> = new Map();
 
   @action
   openPublishRealmModal() {
+    this.publishError = null;
+    this.publishErrors.clear();
     this.isPublishRealmModalOpen = true;
   }
 
   @action
   closePublishRealmModal() {
+    this.publishError = null;
+    this.publishErrors.clear();
     this.isPublishRealmModalOpen = false;
   }
 
@@ -112,7 +118,27 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
-    await this.realm.publish(this.realmURL, publishedRealmURLs);
+    this.publishError = null;
+    this.publishErrors.clear();
+
+    const results = await this.realm.publish(this.realmURL, publishedRealmURLs);
+
+    // Collect errors for each failed URL
+    if (results) {
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const url = publishedRealmURLs[index];
+          const error = result as PromiseRejectedResult;
+          const errorMessage =
+            error.reason?.message || 'Failed to publish to this domain';
+          this.publishErrors.set(url, errorMessage);
+        }
+      });
+
+      // Trigger reactivity by creating a new Map instance
+      this.publishErrors = new Map(this.publishErrors);
+    }
+
     this.isPublishingRealmPopoverOpen = false;
   });
 
@@ -238,6 +264,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       @onClose={{this.closePublishRealmModal}}
       @handlePublish={{perform this.handlePublish}}
       @handleUnpublish={{perform this.handleUnpublish}}
+      @publishError={{this.publishError}}
+      @publishErrors={{this.publishErrors}}
     />
 
     <style scoped>
