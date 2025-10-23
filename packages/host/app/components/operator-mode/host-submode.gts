@@ -30,6 +30,8 @@ import HostModeContent from '../host-mode/content';
 
 import SubmodeLayout from './submode-layout';
 
+import type { PublishError } from './publish-realm-modal';
+
 interface HostSubmodeSignature {
   Element: HTMLElement;
   Args: {};
@@ -43,20 +45,14 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
   @tracked isOpenSitePopoverOpen = false;
-  @tracked publishError: string | null = null;
-  @tracked publishErrors: Map<string, string> = new Map();
 
   @action
   openPublishRealmModal() {
-    this.publishError = null;
-    this.publishErrors.clear();
     this.isPublishRealmModalOpen = true;
   }
 
   @action
   closePublishRealmModal() {
-    this.publishError = null;
-    this.publishErrors.clear();
     this.isPublishRealmModalOpen = false;
   }
 
@@ -117,13 +113,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return baseURL;
   }
 
-  handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
-    this.publishError = null;
-    this.publishErrors.clear();
-
+  handlePublishTask = restartableTask(async (publishedRealmURLs: string[]) => {
     const results = await this.realm.publish(this.realmURL, publishedRealmURLs);
 
-    // Collect errors for each failed URL
+    const errors = new Map<string, string>();
     if (results) {
       results.forEach((result, index) => {
         if (result.status === 'rejected') {
@@ -131,16 +124,35 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
           const error = result as PromiseRejectedResult;
           const errorMessage =
             error.reason?.message || 'Failed to publish to this domain';
-          this.publishErrors.set(url, errorMessage);
+          errors.set(url, errorMessage);
         }
       });
+    }
 
-      // Trigger reactivity by creating a new Map instance
-      this.publishErrors = new Map(this.publishErrors);
+    if (errors.size > 0) {
+      const error = new Error(
+        'Failed to publish to some domains',
+      ) as PublishError;
+      error.urlErrors = errors;
+      throw error;
     }
 
     this.isPublishingRealmPopoverOpen = false;
   });
+
+  @action
+  handlePublish(publishedRealmURLs: string[]) {
+    let promise = this.handlePublishTask.perform(publishedRealmURLs);
+    // Catch the error so it doesn't bubble
+    // to the browser (so error reporters like Bugsnag will see it).
+    // TODO: remove this after this issue (https://github.com/machty/ember-concurrency/issues/40)
+    // is resolved.
+    promise.catch((_error) => {});
+  }
+
+  get handlePublishError(): PublishError | null {
+    return this.handlePublishTask.last?.error as PublishError | null;
+  }
 
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     await this.realm.unpublish(this.realmURL, publishedRealmURL);
@@ -262,10 +274,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     <PublishRealmModal
       @isOpen={{this.isPublishRealmModalOpen}}
       @onClose={{this.closePublishRealmModal}}
-      @handlePublish={{perform this.handlePublish}}
+      @handlePublish={{this.handlePublish}}
+      @publishError={{this.handlePublishError}}
       @handleUnpublish={{perform this.handleUnpublish}}
-      @publishError={{this.publishError}}
-      @publishErrors={{this.publishErrors}}
     />
 
     <style scoped>

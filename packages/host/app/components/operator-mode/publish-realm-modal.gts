@@ -44,15 +44,18 @@ type CustomSubdomainSelection = {
   subdomain: string;
 };
 
+export type PublishError = Error & {
+  urlErrors: Map<string, string>;
+};
+
 interface Signature {
   Element: HTMLElement;
   Args: {
     isOpen: boolean;
     onClose: () => void;
-    handlePublish: (publishedRealmURLs: string[]) => Promise<void>;
+    handlePublish: (publishedRealmURLs: string[]) => void;
+    publishError?: PublishError | null;
     handleUnpublish: (publishedRealmURL: string) => void;
-    publishError?: string | null;
-    publishErrors?: Map<string, string>;
   };
 }
 
@@ -73,8 +76,6 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
   @tracked private claimedDomain: ClaimedDomain | null = null;
-  @tracked private publishError: string | null = null;
-  @tracked private publishErrors: Map<string, string> = new Map();
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -508,34 +509,13 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.realm.isPublishing(this.currentRealmURL);
   }
 
-  get displayPublishError() {
-    return this.args.publishError || this.publishError;
-  }
-
   getPublishErrorForUrl = (url: string): string | null => {
-    return (
-      this.args.publishErrors?.get(url) || this.publishErrors.get(url) || null
-    );
-  };
-
-  @action
-  async handlePublishClick() {
-    this.publishError = null;
-    this.publishErrors.clear();
-    try {
-      await this.args.handlePublish(this.selectedPublishedRealmURLs);
-    } catch (error) {
-      this.publishError =
-        error instanceof Error
-          ? error.message
-          : 'Failed to publish realm. Please try again.';
+    const error = this.args.publishError;
+    if (error?.urlErrors) {
+      return error.urlErrors.get(url) || null;
     }
-  }
-
-  @action
-  clearPublishError() {
-    this.publishError = null;
-  }
+    return null;
+  };
 
   get publishErrorForCustomSubdomain() {
     if (!this.claimedDomainPublishedUrl) {
@@ -844,25 +824,11 @@ export default class PublishRealmModal extends Component<Signature> {
 
       <:footer>
         {{#if @isOpen}}
-          {{#if this.displayPublishError}}
-            <div class='publish-error' data-test-publish-error>
-              <span class='error-message'>{{this.displayPublishError}}</span>
-              <BoxelButton
-                @kind='text-only'
-                @size='extra-small'
-                class='clear-error-button'
-                {{on 'click' this.clearPublishError}}
-                data-test-clear-publish-error
-              >
-                <IconX width='12' height='12' />
-              </BoxelButton>
-            </div>
-          {{/if}}
           <div class='footer-buttons'>
             <BoxelButton
               @kind='primary'
               @size='tall'
-              {{on 'click' this.handlePublishClick}}
+              {{on 'click' (fn @handlePublish this.selectedPublishedRealmURLs)}}
               @disabled={{this.isPublishDisabled}}
               class='publish-button'
               data-test-publish-button
@@ -1099,34 +1065,6 @@ export default class PublishRealmModal extends Component<Signature> {
       .custom-subdomain-cancel {
         gap: var(--boxel-sp-xxxs);
         margin-left: auto;
-      }
-
-      .publish-error {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm) var(--boxel-sp);
-        margin-bottom: var(--boxel-sp-sm);
-        background-color: var(--boxel-error-100);
-        border: 1px solid var(--boxel-error-200);
-        border-radius: var(--boxel-border-radius);
-      }
-
-      .error-message {
-        flex: 1;
-        color: var(--boxel-error-900);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
-      }
-
-      .clear-error-button {
-        flex-shrink: 0;
-        color: var(--boxel-error-700);
-      }
-
-      .clear-error-button:hover {
-        color: var(--boxel-error-900);
       }
 
       .domain-publish-error {
