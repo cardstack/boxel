@@ -17,6 +17,7 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
+  ensureTrailingSlash,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -24,6 +25,8 @@ import {
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import ENV from '@cardstack/host/config/environment';
+
 import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
 
 import {
@@ -37,6 +40,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   createJWT,
   testRealmSecretSeed,
@@ -56,6 +60,8 @@ import {
   setRecentFiles,
 } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
+
+const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 
 let matrixRoomId: string;
 let realm2URL = 'http://test-realm/user/test2/';
@@ -290,6 +296,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     ({ realm: testRealm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },
         'boom-person.gts': { BoomPerson },
         'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
@@ -443,6 +450,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       mockMatrixUtils,
       realmURL: realm2URL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'Person/1.json': {
           data: {
@@ -829,7 +837,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
       .exists();
     assert
-      .dom(`[data-test-recent-file="http://localhost:4201/catalog/index.json"]`)
+      .dom(`[data-test-recent-file="${catalogRealmURL}index.json"]`)
       .exists();
     assert
       .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)

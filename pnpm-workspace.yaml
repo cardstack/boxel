@@ -29,6 +29,7 @@ catalog:
   "@eslint/eslintrc": ^2.1.4
   "@eslint/js": ^8.57.1
   "@floating-ui/dom": ^1.6.3
+  "@glimmer/component": ^2.0.0
   "@glint/environment-ember-loose": ^1.5.2
   "@koa/cors": ^4.0.0
   "@koa/router": ^14.0.0

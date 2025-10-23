@@ -280,6 +280,9 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
 class Logger {
   private promises: Promise<any>[] = [];
 
+  // TODO this doesn't look like it's used anymore. in the past this was used to
+  // keep track of async when eagerly running computes after a property had been set.
+  // consider removing this.
   log(promise: Promise<any>) {
     this.promises.push(promise);
     // make an effort to resolve the promise at the time it is logged
@@ -356,7 +359,7 @@ export interface Field<
   emptyValue(instance: BaseDef): any;
   validate(instance: BaseDef, value: any): void;
   component(model: Box<BaseDef>): BoxComponent;
-  getter(instance: BaseDef): BaseInstanceType<CardT>;
+  getter(instance: BaseDef): BaseInstanceType<CardT> | undefined;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
@@ -423,13 +426,16 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return this.cardThunk();
   }
 
-  getter(instance: BaseDef): BaseInstanceType<FieldT> {
+  getter(instance: BaseDef): BaseInstanceType<FieldT> | undefined {
     let deserialized = getDataBucket(instance);
     entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
+      if ((globalThis as any).__lazilyLoadLinks) {
+        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+      }
     }
     return getter(instance, this);
   }
@@ -733,13 +739,16 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return this.cardThunk();
   }
 
-  getter(instance: BaseDef): BaseInstanceType<CardT> {
+  getter(instance: BaseDef): BaseInstanceType<CardT> | undefined {
     let deserialized = getDataBucket(instance);
     entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
+      if ((globalThis as any).__lazilyLoadLinks) {
+        return undefined;
+      }
     }
     return getter(instance, this);
   }
@@ -931,13 +940,16 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  getter(instance: CardDef): BaseInstanceType<CardT> {
+  getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
+      if ((globalThis as any).__lazilyLoadLinks) {
+        return undefined;
+      }
     }
     return getter(instance, this);
   }
@@ -1319,7 +1331,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
       lazilyLoadLink(instance, this, value.reference, { value });
-      return this.emptyValue as BaseInstanceType<FieldT>;
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
 
     // Ensure we have an array - if not, something went wrong during deserialization
@@ -1339,6 +1351,31 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
+      // Important: we intentionally leave the NotLoadedValue sentinels inside the
+      // WatchedArray so the lazy loader can swap them out in place once the linked
+      // cards finish loading. Because the array identity never changes, Glimmer’s
+      // tracking sees the mutation and re-renders when lazilyLoadLink replaces each
+      // sentinel with a CardDef instance. Callers should treat these entries as
+      // placeholders (e.g. check for constructor.getComponent) rather than assuming
+      // every element is immediately renderable. Ideally the .value refactor can
+      // iron out this kink.
+      // TODO
+      // Codex has offered a couple interim solutions to ease the burden on card
+      // authors around this:
+      // We can wrap the guard in a reusable helper/component so card authors don’t
+      // have to think about the sentinel:
+      //
+      // - Helper – export something like `has-card-component` (just checks
+      //   `value?.constructor?.getComponent`) from card-api. Then in templates
+      //   they write: `{{#if (has-card-component card)}}…{{/if}}` or
+      //   `{{#each (filter-loadable cards) as |c|}}`.
+      //
+      // - Component – provide a `LoadableCard` component that takes a card instance
+      //   and renders the correct `CardContainer` only when the component is ready;
+      //   otherwise it renders nothing or a skeleton. Card authors use
+      //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
+      //   themselves.
+
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, notLoadedRefs, this.name);
       }
@@ -3047,9 +3084,9 @@ export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
   instance[isSavedInstance] = true;
 }
 
-export async function searchDoc<CardT extends BaseDefConstructor>(
+export function searchDoc<CardT extends BaseDefConstructor>(
   instance: InstanceType<CardT>,
-): Promise<Record<string, any>> {
+): Record<string, any> {
   return getQueryableValue(instance.constructor, instance) as Record<
     string,
     any

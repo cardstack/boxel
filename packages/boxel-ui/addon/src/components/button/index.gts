@@ -179,9 +179,9 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       a.boxel-button:not([href]),
       a.boxel-button[href=''],
       a.boxel-button.disabled-link {
-        --boxel-button-color: var(--muted, var(--boxel-border-color));
+        --boxel-button-color: var(--boxel-border-color);
         --boxel-button-border: 1px solid var(--boxel-button-color);
-        --boxel-button-text-color: var(--muted-foreground, var(--boxel-450));
+        --boxel-button-text-color: var(--boxel-450);
         --boxel-button-box-shadow: none;
 
         cursor: default;

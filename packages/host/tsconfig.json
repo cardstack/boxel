@@ -27,6 +27,7 @@
       "@cardstack/host/*": ["app/*"],
       "@cardstack/boxel-host/commands/*": ["app/commands/*"],
       "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/catalog/commands/*": ["../catalog-realm/commands/*"],
       "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
       "*": ["types/*"]
     },

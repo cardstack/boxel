@@ -49,6 +49,9 @@ module.exports = function (environment) {
     realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
+    resolvedCatalogRealmURL:
+      process.env.RESOLVED_CATALOG_REALM_URL ||
+      'http://localhost:4201/catalog/',
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
     featureFlags: {
@@ -62,6 +65,9 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
+    ENV.defaultSystemCardId =
+      process.env.DEFAULT_SYSTEM_CARD_ID ??
+      'http://localhost:4201/catalog/SystemCard/default';
   }
 
   if (environment === 'test') {
@@ -85,11 +91,24 @@ module.exports = function (environment) {
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
     };
+
+    ENV.defaultSystemCardId =
+      process.env.DEFAULT_SYSTEM_CARD_ID ??
+      'http://test-realm/test/SystemCard/default';
+  }
+
+  if (environment === 'staging') {
+    ENV.defaultSystemCardId =
+      process.env.DEFAULT_SYSTEM_CARD_ID ??
+      'https://realms-staging.stack.cards/catalog/SystemCard/default';
   }
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
     ENV.logLevels = '*=warn,current-run=debug';
+    ENV.defaultSystemCardId =
+      process.env.DEFAULT_SYSTEM_CARD_ID ??
+      'https://app.boxel.ai/catalog/SystemCard/default';
   }
 
   return ENV;

@@ -70,6 +70,9 @@ export function buildPrerenderApp(
           ? (attrs.renderOptions as RenderRouteOptions)
           : {};
 
+      log.debug(
+        `received prerender request ${url}: realm=${realm} userId=${userId} options=${JSON.stringify(renderOptions)} permissions=${JSON.stringify(permissions)}`,
+      );
       if (
         !url ||
         !userId ||
@@ -135,6 +138,18 @@ export function buildPrerenderApp(
           pool,
         },
       };
+      if (pool.timedOut) {
+        log.warn(`render of ${url} timed out`);
+      }
+      if (response.error) {
+        log.debug(
+          `render of ${url} resulted in error doc:\n${JSON.stringify(response.error, null, 2)}`,
+        );
+      } else {
+        log.debug(
+          `render of ${url} resulted in search doc:\n${JSON.stringify(response.searchDoc, null, 2)}`,
+        );
+      }
     } catch (err: any) {
       Sentry.captureException(err);
       log.error(`Unhandled error in /prerender:`, err);

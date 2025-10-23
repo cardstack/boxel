@@ -44,6 +44,13 @@ export interface SubdomainAvailabilityResult {
   error?: string;
 }
 
+export interface ClaimedDomain {
+  id: string;
+  hostname: string;
+  subdomain: string;
+  sourceRealmURL: string;
+}
+
 interface RealmServerEvent {
   eventType: string;
   data: any;
@@ -533,7 +540,7 @@ export default class RealmServerService extends Service {
     return response.json();
   }
 
-  async checkSiteNameAvailability(
+  async checkDomainAvailability(
     subdomain: string,
   ): Promise<SubdomainAvailabilityResult> {
     await this.login();
@@ -556,6 +563,105 @@ export default class RealmServerService extends Service {
     }
 
     return (await response.json()) as SubdomainAvailabilityResult;
+  }
+
+  async fetchBoxelClaimedDomain(
+    sourceRealmURL: string,
+  ): Promise<ClaimedDomain | null> {
+    await this.login();
+
+    let url = new URL(`${this.url.href}_boxel-claimed-domains`);
+    url.searchParams.set('source_realm_url', sourceRealmURL);
+
+    let response = await this.authedFetch(url.href, {
+      method: 'GET',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+      },
+    });
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      let errorText = await response.text();
+      throw new Error(
+        `Fetch claimed domain failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    let {
+      data: { id, attributes },
+    } = (await response.json()) as {
+      data: {
+        id: string;
+        attributes: {
+          hostname: string;
+          subdomain: string;
+          sourceRealmURL: string;
+        };
+      };
+    };
+
+    return {
+      id,
+      hostname: attributes.hostname,
+      subdomain: attributes.subdomain,
+      sourceRealmURL: attributes.sourceRealmURL,
+    };
+  }
+
+  async deleteBoxelClaimedDomain(claimedDomainId: string): Promise<void> {
+    await this.login();
+
+    let response = await this.authedFetch(
+      `${this.url.href}_boxel-claimed-domains/${claimedDomainId}`,
+      {
+        method: 'DELETE',
+      },
+    );
+
+    if (response.status === 204) {
+      return;
+    }
+
+    if (!response.ok) {
+      let errorText = await response.text();
+      throw new Error(
+        `Delete claimed domain failed: ${response.status} - ${errorText}`,
+      );
+    }
+  }
+
+  async claimBoxelDomain(sourceRealmURL: string, hostname: string) {
+    const requestBody = {
+      data: {
+        type: 'claimed-domain',
+        attributes: {
+          source_realm_url: sourceRealmURL,
+          hostname: hostname,
+        },
+      },
+    };
+
+    const response = await this.realmServer.authedFetch(
+      `${this.url.href}_boxel-claimed-domains`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    return response.json();
   }
 
   async unpublishRealm(publishedRealmURL: string) {

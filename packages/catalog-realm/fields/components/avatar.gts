@@ -23,7 +23,7 @@ import {
   getCurrentSelectionForCategory,
   updateAvatarModelForCategory,
   playClickSound,
-} from '../../external/avataar-utils';
+} from '../../utils/external/avataar';
 
 import { SuggestAvatar } from '../../commands/suggest-avatar';
 

@@ -1,6 +1,8 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -10,6 +12,8 @@ import Settings from '@cardstack/boxel-icons/settings';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import { formatDistanceToNow } from 'date-fns';
+import { restartableTask } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 
 import {
@@ -18,6 +22,7 @@ import {
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
@@ -29,7 +34,10 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type { SubdomainAvailabilityResult } from '@cardstack/host/services/realm-server';
+import type {
+  ClaimedDomain,
+  SubdomainAvailabilityResult,
+} from '@cardstack/host/services/realm-server';
 
 type CustomSubdomainSelection = {
   url: string;
@@ -62,6 +70,12 @@ export default class PublishRealmModal extends Component<Signature> {
     null;
   @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
+  @tracked private claimedDomain: ClaimedDomain | null = null;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    this.fetchBoxelClaimedDomain.perform();
+  }
 
   get isRealmPublished() {
     return !!this.lastPublishedTime;
@@ -76,19 +90,47 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get lastPublishedTime() {
-    const realmInfo = this.operatorModeStateService.currentRealmInfo;
-    if (
-      !realmInfo?.lastPublishedAt ||
-      typeof realmInfo.lastPublishedAt !== 'object'
-    ) {
+    return this.getFormattedLastPublishedTime(this.generatedUrl);
+  }
+
+  get claimedDomainPublishedUrl() {
+    if (!this.claimedDomain) {
       return null;
     }
 
-    const publishedUrl = this.generatedUrl;
-    const publishedAt = realmInfo.lastPublishedAt[publishedUrl]
-      ? Number(realmInfo.lastPublishedAt[publishedUrl])
-      : null;
+    return this.buildPublishedRealmUrl(this.claimedDomain.hostname);
+  }
 
+  get claimedDomainLastPublishedTime() {
+    if (!this.claimedDomainPublishedUrl) {
+      return null;
+    }
+
+    return this.getFormattedLastPublishedTime(this.claimedDomainPublishedUrl);
+  }
+
+  get isClaimedDomainPublished() {
+    if (!this.claimedDomainPublishedUrl) {
+      return false;
+    }
+
+    return !!this.getLastPublishedTimestamp(this.claimedDomainPublishedUrl);
+  }
+
+  get shouldShowUnclaimDomainButton() {
+    return !!this.claimedDomain && !this.isClaimedDomainPublished;
+  }
+
+  get isUnclaimDomainButtonDisabled() {
+    return (
+      this.handleUnclaimCustomSubdomainTask.isRunning ||
+      this.isUnpublishingAnyRealms ||
+      this.isPublishing
+    );
+  }
+
+  private getFormattedLastPublishedTime(publishedRealmURL: string) {
+    const publishedAt = this.getLastPublishedTimestamp(publishedRealmURL);
     if (!publishedAt) {
       return null;
     }
@@ -97,12 +139,30 @@ export default class PublishRealmModal extends Component<Signature> {
       return formatDistanceToNow(publishedAt, { addSuffix: true });
     } catch (error) {
       console.warn(
-        'Failed to parse published date:',
+        `Failed to parse published date for ${publishedRealmURL}:`,
         new Date(publishedAt),
         error,
       );
       return null;
     }
+  }
+
+  private getLastPublishedTimestamp(publishedRealmURL: string) {
+    const realmInfo = this.operatorModeStateService.currentRealmInfo;
+    if (
+      !realmInfo?.lastPublishedAt ||
+      typeof realmInfo.lastPublishedAt !== 'object'
+    ) {
+      return null;
+    }
+
+    const rawPublishedAt = realmInfo.lastPublishedAt[publishedRealmURL];
+    if (!rawPublishedAt) {
+      return null;
+    }
+
+    const publishedAt = Number(rawPublishedAt);
+    return Number.isFinite(publishedAt) ? publishedAt : null;
   }
 
   get isDefaultPublishedRealmURLSelected() {
@@ -118,6 +178,10 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get customSubdomainDisplay() {
+    if (this.claimedDomain) {
+      return this.claimedDomain.subdomain;
+    }
+
     if (this.customSubdomainSelection?.subdomain) {
       return this.customSubdomainSelection.subdomain;
     }
@@ -126,15 +190,18 @@ export default class PublishRealmModal extends Component<Signature> {
       return this.customSubdomain;
     }
 
-    return 'custom-name';
+    return 'custom-site-name';
   }
 
   get customSubdomainState() {
-    return this.customSubdomainAvailability?.available
-      ? 'valid'
-      : this.customSubdomainError
-      ? 'invalid'
-      : null;
+    // Check for errors first, as they should take priority
+    if (this.customSubdomainError) {
+      return 'invalid';
+    }
+    if (this.customSubdomainAvailability?.available) {
+      return 'valid';
+    }
+    return null;
   }
 
   get isClaimCustomSubdomainDisabled() {
@@ -192,14 +259,56 @@ export default class PublishRealmModal extends Component<Signature> {
 
   private buildPublishedRealmUrl(hostname: string): string {
     let protocol = this.getProtocol();
-    let realmName = this.getRealmName();
-    return `${protocol}://${hostname}/${realmName}/`;
+    return `${protocol}://${hostname}/`;
   }
 
   private clearCustomSubdomainFeedback() {
     this.customSubdomainAvailability = null;
     this.customSubdomainError = null;
   }
+
+  private applyClaimedDomain(claim: ClaimedDomain | null) {
+    this.claimedDomain = claim;
+
+    if (claim) {
+      this.setCustomSubdomainSelection({
+        url: this.buildPublishedRealmUrl(claim.hostname),
+        subdomain: claim.subdomain,
+      });
+      this.customSubdomain = '';
+      this.isCustomSubdomainSetupVisible = false;
+    } else if (!this.isCustomSubdomainSetupVisible) {
+      this.setCustomSubdomainSelection(null);
+    }
+  }
+
+  private fetchBoxelClaimedDomain = restartableTask(async () => {
+    try {
+      let claimedDomain = await this.realmServer.fetchBoxelClaimedDomain(
+        this.currentRealmURL,
+      );
+      this.applyClaimedDomain(claimedDomain);
+    } catch (error) {
+      console.error('Failed to load claimed domain', error);
+    }
+  });
+
+  private handleUnclaimCustomSubdomainTask = restartableTask(async () => {
+    if (!this.claimedDomain) {
+      return;
+    }
+
+    this.customSubdomainError = null;
+
+    try {
+      await this.realmServer.deleteBoxelClaimedDomain(this.claimedDomain.id);
+      this.applyClaimedDomain(null);
+    } catch (error) {
+      console.error('Failed to unclaim site name', error);
+      this.customSubdomainError =
+        error instanceof Error ? error.message : 'Failed to unclaim site name';
+    }
+  });
 
   private setCustomSubdomainSelection(
     selection: CustomSubdomainSelection | null,
@@ -244,6 +353,21 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
+  toggleCustomSubdomain() {
+    if (this.claimedDomain) {
+      const customUrl = this.buildPublishedRealmUrl(
+        this.claimedDomain.hostname,
+      );
+      if (!this.selectedPublishedRealmURLs.includes(customUrl)) {
+        this.selectedPublishedRealmURLs = [
+          ...this.selectedPublishedRealmURLs,
+          customUrl,
+        ];
+      }
+    }
+  }
+
+  @action
   openCustomSubdomainSetup() {
     this.isCustomSubdomainSetupVisible = true;
     this.customSubdomain =
@@ -274,39 +398,70 @@ export default class PublishRealmModal extends Component<Signature> {
     this.clearCustomSubdomainFeedback();
   }
 
-  @action
-  async handleClaimCustomSubdomain(event: Event) {
-    event.preventDefault();
+  private handleClaimCustomSubdomainTask = restartableTask(
+    async (event: Event) => {
+      event.preventDefault();
 
-    let subdomain = this.customSubdomain;
+      let subdomain = this.customSubdomain;
 
-    this.isCheckingCustomSubdomain = true;
-    this.clearCustomSubdomainFeedback();
+      this.isCheckingCustomSubdomain = true;
+      this.clearCustomSubdomainFeedback();
 
-    try {
-      let result = await this.realmServer.checkSiteNameAvailability(subdomain);
-      this.customSubdomainAvailability = result;
+      try {
+        let result = await this.realmServer.checkDomainAvailability(subdomain);
+        this.customSubdomainAvailability = result;
 
-      if (result.available) {
-        let publishedUrl = this.buildPublishedRealmUrl(result.domain);
-        this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
-      } else {
+        if (result.available) {
+          // Strip port from base domain if present (e.g., "localhost:4201" -> "localhost")
+          let baseDomain = this.customSubdomainBase.split(':')[0];
+          let hostname = `${subdomain}.${baseDomain}`;
+          let publishedUrl = this.buildPublishedRealmUrl(hostname);
+          this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
+
+          try {
+            let claimResult = (await this.realmServer.claimBoxelDomain(
+              this.currentRealmURL,
+              hostname,
+            )) as {
+              data: {
+                id: string;
+                attributes: {
+                  subdomain: string;
+                  hostname: string;
+                  sourceRealmURL: string;
+                };
+              };
+            };
+            this.applyClaimedDomain({
+              id: claimResult.data.id,
+              subdomain: claimResult.data.attributes.subdomain,
+              hostname: claimResult.data.attributes.hostname,
+              sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
+            });
+            this.isCustomSubdomainSetupVisible = false;
+          } catch (claimError) {
+            let errorMessage = (claimError as Error).message;
+
+            this.customSubdomainError = errorMessage;
+            this.setCustomSubdomainSelection(null);
+          }
+        } else {
+          this.customSubdomainError =
+            result.error ?? 'This name is already taken';
+          this.setCustomSubdomainSelection(null);
+        }
+      } catch (error) {
         this.customSubdomainError =
-          result.error ?? 'This name is already taken';
+          error instanceof Error
+            ? error.message
+            : 'Failed to check site name availability';
+        this.customSubdomainAvailability = null;
         this.setCustomSubdomainSelection(null);
+      } finally {
+        this.isCheckingCustomSubdomain = false;
       }
-    } catch (error) {
-      console.error('Failed to check site name availability', error);
-      this.customSubdomainError =
-        error instanceof Error
-          ? error.message
-          : 'Failed to check site name availability';
-      this.customSubdomainAvailability = null;
-      this.setCustomSubdomainSelection(null);
-    } finally {
-      this.isCheckingCustomSubdomain = false;
-    }
-  }
+    },
+  );
 
   @action
   handleOpenSite() {
@@ -370,8 +525,8 @@ export default class PublishRealmModal extends Component<Signature> {
               </WithLoadedRealm>
               <div class='domain-url-container'>
                 <span class='domain-url'>
-                  <span class='url-base'>{{this.urlParts.baseUrl}}</span><span
-                    class='url-realm-name'
+                  <span class='url-part'>{{this.urlParts.baseUrl}}</span><span
+                    class='url-part-bold'
                   >{{this.urlParts.realmName}}/</span>
                 </span>
                 {{#if this.isRealmPublished}}
@@ -427,7 +582,8 @@ export default class PublishRealmModal extends Component<Signature> {
               id='custom-subdomain-checkbox'
               class='domain-checkbox'
               data-test-custom-subdomain-checkbox
-              disabled={{true}}
+              disabled={{not this.claimedDomain}}
+              {{on 'change' this.toggleCustomSubdomain}}
             />
             <label class='option-title' for='custom-subdomain-checkbox'>Custom
               Site Name</label>
@@ -442,9 +598,8 @@ export default class PublishRealmModal extends Component<Signature> {
                 Cancel
                 <IconX width='12' height='12' class='cancel-icon' />
               </BoxelButton>
-            {{else}}
             {{/if}}
-            <div class='domain-details'>
+            <div class='domain-details' data-test-custom-subdomain-details>
               {{#if this.isCustomSubdomainSetupVisible}}
                 <div class='custom-subdomain-setup'>
                   <label
@@ -473,12 +628,59 @@ export default class PublishRealmModal extends Component<Signature> {
                     </BoxelInputGroup>
                   </div>
                 </div>
-              {{else}}
-                <div class='custom-subdomain-placeholder'>
-                  {{this.customSubdomainDisplay}}<span
-                    class='placeholder-top-level'
-                  >.{{this.customSubdomainBase}}</span>
+              {{else if this.claimedDomain}}
+                <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
+                  <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                </WithLoadedRealm>
+                <div class='domain-url-container'>
+                  <span class='domain-url'>
+                    <span class='url-part'>{{this.getProtocol}}://</span><span
+                      class='url-part-bold'
+                    >{{this.customSubdomainDisplay}}</span><span
+                      class='url-part'
+                    >.{{this.customSubdomainBase}}/</span>
+                  </span>
+                  {{#if this.claimedDomain}}
+                    <div class='domain-info'>
+                      {{#if this.claimedDomainLastPublishedTime}}
+                        <span class='last-published-at'>Published
+                          {{this.claimedDomainLastPublishedTime}}</span>
+                      {{else}}
+                        <span class='not-published-yet'>Not published yet</span>
+                      {{/if}}
+                      {{#if this.shouldShowUnclaimDomainButton}}
+                        <BoxelButton
+                          @kind='text-only'
+                          @size='extra-small'
+                          class='unpublish-button unclaim-button'
+                          @disabled={{this.isUnclaimDomainButtonDisabled}}
+                          {{on
+                            'click'
+                            (perform this.handleUnclaimCustomSubdomainTask)
+                          }}
+                          data-test-unclaim-custom-subdomain-button
+                        >
+                          {{#if
+                            this.handleUnclaimCustomSubdomainTask.isRunning
+                          }}
+                            <LoadingIndicator />
+                            Unclaiming…
+                          {{else}}
+                            Unclaim Site Name
+                          {{/if}}
+                        </BoxelButton>
+                      {{/if}}
+                    </div>
+                  {{/if}}
                 </div>
+              {{else}}
+                <span class='domain-url'>
+                  <span class='url-part'>{{this.getProtocol}}://</span><span
+                    class='url-part'
+                  >{{this.customSubdomainDisplay}}</span><span
+                    class='url-part-bold'
+                  >.{{this.customSubdomainBase}}/</span>
+                </span>
               {{/if}}
             </div>
 
@@ -488,7 +690,7 @@ export default class PublishRealmModal extends Component<Signature> {
                 @size='small'
                 class='claim-custom-subdomain-button action'
                 @disabled={{this.isClaimCustomSubdomainDisabled}}
-                {{on 'click' this.handleClaimCustomSubdomain}}
+                {{on 'click' (perform this.handleClaimCustomSubdomainTask)}}
                 data-test-claim-custom-subdomain-button
               >
                 {{#if this.isCheckingCustomSubdomain}}
@@ -498,18 +700,19 @@ export default class PublishRealmModal extends Component<Signature> {
                   Claim Site Name
                 {{/if}}
               </BoxelButton>
-
             {{else}}
-              <BoxelButton
-                @kind='secondary-light'
-                @size='small'
-                class='action'
-                {{on 'click' this.openCustomSubdomainSetup}}
-                data-test-custom-subdomain-setup-button
-              >
-                <Settings width='16' height='16' class='button-icon' />
-                Set Up
-              </BoxelButton>
+              {{#unless this.claimedDomain}}
+                <BoxelButton
+                  @kind='secondary-light'
+                  @size='small'
+                  class='action'
+                  {{on 'click' this.openCustomSubdomainSetup}}
+                  data-test-custom-subdomain-setup-button
+                >
+                  <Settings width='16' height='16' class='button-icon' />
+                  Set Up
+                </BoxelButton>
+              {{/unless}}
             {{/if}}
           </div>
         </div>
@@ -634,11 +837,11 @@ export default class PublishRealmModal extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
       }
 
-      .url-base {
+      .url-part {
         color: var(--boxel-450);
       }
 
-      .url-realm-name {
+      .url-part-bold {
         color: var(--boxel-dark);
         font-weight: 500;
       }
@@ -649,14 +852,23 @@ export default class PublishRealmModal extends Component<Signature> {
         gap: var(--boxel-sp-sm);
       }
 
-      .last-published-at {
+      .last-published-at,
+      .not-published-yet {
         font: normal var(--boxel-font-xs);
-        color: #00ac00;
         position: relative;
         padding-left: calc(var(--boxel-sp-xxxs) + 3px);
       }
 
-      .last-published-at::before {
+      .last-published-at {
+        color: #00ac00;
+      }
+
+      .not-published-yet {
+        color: var(--boxel-450);
+      }
+
+      .last-published-at::before,
+      .not-published-yet::before {
         content: '•';
         position: absolute;
         left: 0;
@@ -708,15 +920,6 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         margin-left: auto;
         gap: var(--horizontal-gap);
-      }
-
-      .custom-subdomain-placeholder {
-        color: var(--boxel-450);
-        font-size: var(--boxel-font-size-sm);
-      }
-
-      .placeholder-top-level {
-        font-weight: var(--boxel-font-weight-semibold);
       }
 
       .custom-subdomain-setup {

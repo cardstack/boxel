@@ -1,4 +1,10 @@
-import { click, triggerEvent, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
@@ -11,6 +17,7 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   testRealmInfo,
 } from '../helpers';
@@ -58,6 +65,7 @@ module('Acceptance | host submode', function (hooks) {
 
   hooks.beforeEach(function () {
     realmContents = {
+      ...SYSTEM_CARD_FIXTURE_CONTENTS,
       'index.json': new CardsGrid(),
       '.realm.json': {
         name: 'Test Workspace B',
@@ -670,6 +678,153 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-open-site-button]').doesNotExist();
       });
 
+      test('can claim domain for boxel site', async function (assert) {
+        let mockDomainValidationResponse = async (request: Request) => {
+          if (!request.url.includes('_check-boxel-domain-availability')) {
+            return null;
+          }
+
+          return new Response(
+            JSON.stringify({
+              available: true,
+              domain: 'my-boxel-site.localhost',
+            }),
+            {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+        };
+
+        let mockClaimedDomainResponse = async (request: Request) => {
+          if (
+            request.method !== 'POST' ||
+            !request.url.includes('_boxel-claimed-domains')
+          ) {
+            return null;
+          }
+
+          return new Response(
+            JSON.stringify({
+              data: {
+                type: 'claimed-domain',
+                id: '1',
+                attributes: {
+                  hostname: 'my-boxel-site.localhost',
+                  subdomain: 'my-boxel-site',
+                  sourceRealmURL: testRealmURL,
+                },
+              },
+            }),
+            {
+              headers: {
+                'Content-Type': 'application/vnd.api+json',
+              },
+            },
+          );
+        };
+
+        getService('network').mount(mockDomainValidationResponse, {
+          prepend: true,
+        });
+        getService('network').mount(mockClaimedDomainResponse, {
+          prepend: true,
+        });
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+
+        assert.dom('[data-test-custom-subdomain-input]').doesNotExist();
+        await click('[data-test-custom-subdomain-setup-button]');
+        assert.dom('[data-test-boxel-button]').isDisabled();
+
+        await fillIn(
+          '[data-test-custom-subdomain-input] input',
+          'my-boxel-site',
+        );
+        assert.dom('[data-test-claim-custom-subdomain-button]').isNotDisabled();
+        await click('[data-test-claim-custom-subdomain-button]');
+
+        assert.dom('[data-test-custom-subdomain-cancel]').doesNotExist();
+        assert.dom('[data-test-custom-subdomain-setup-button]').doesNotExist();
+        assert
+          .dom('[data-test-custom-subdomain-details]')
+          .includesText(
+            'http://my-boxel-site.localhost:4201/ Not published yet',
+          );
+        assert.dom('[data-test-unclaim-custom-subdomain-button]').exists();
+      });
+
+      test('shows error when claiming domain fails with 422', async function (assert) {
+        let mockDomainValidationResponse = async (request: Request) => {
+          if (!request.url.includes('_check-boxel-domain-availability')) {
+            return null;
+          }
+
+          return new Response(
+            JSON.stringify({
+              available: true,
+              domain: 'my-boxel-site.localhost',
+            }),
+            {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+        };
+
+        let mockClaimedDomainError = async (request: Request) => {
+          if (
+            request.method !== 'POST' ||
+            !request.url.includes('_boxel-claimed-domains')
+          ) {
+            return null;
+          }
+
+          return new Response('There was an error claiming this domain', {
+            status: 422,
+            headers: {
+              'Content-Type': 'application/vnd.api+json',
+            },
+          });
+        };
+
+        getService('network').mount(mockDomainValidationResponse, {
+          prepend: true,
+        });
+        getService('network').mount(mockClaimedDomainError, {
+          prepend: true,
+        });
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-custom-subdomain-setup-button]');
+        await fillIn(
+          '[data-test-custom-subdomain-input] input',
+          'my-boxel-site',
+        );
+        await click('[data-test-claim-custom-subdomain-button]');
+
+        // Should still show the setup UI since claiming failed
+        assert.dom('[data-test-custom-subdomain-cancel]').exists();
+        assert.dom('[data-test-custom-subdomain-input]').exists();
+
+        // Should display the error message (extracted from the response)
+        assert
+          .dom('[data-test-boxel-input-group-error-message]')
+          .hasText('There was an error claiming this domain');
+      });
+
       test('open site popover shows published realms and opens them correctly', async function (assert) {
         // Mock realm info with published state
         let mockRealmInfoResponse = async (request: Request) => {
@@ -778,6 +933,84 @@ module('Acceptance | host submode', function (hooks) {
         window.open = originalWindowOpen;
 
         getService('network').resetState();
+      });
+
+      test('claimed custom site name displays details and reverts after unclaim', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+        let originalDeleteClaimed = realmServer.deleteBoxelClaimedDomain;
+
+        let deleteCalled = false;
+
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'custom-site-name.localhost:4201',
+          subdomain: 'custom-site-name',
+          sourceRealmURL: testRealmURL,
+        });
+
+        realmServer.deleteBoxelClaimedDomain = async () => {
+          deleteCalled = true;
+          realmServer.fetchBoxelClaimedDomain = async () => null;
+        };
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+
+          let customDomainOption =
+            '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)';
+          await waitFor(`${customDomainOption} .realm-icon`);
+
+          assert
+            .dom(`${customDomainOption} .realm-icon`)
+            .exists('shows realm icon when site name is claimed');
+          assert
+            .dom(`${customDomainOption} .domain-url`)
+            .hasText(
+              'http://custom-site-name.localhost:4201/',
+              'shows claimed custom site URL',
+            );
+          assert
+            .dom('[data-test-unclaim-custom-subdomain-button]')
+            .exists('shows unclaim button when domain is claimed');
+          assert
+            .dom('[data-test-custom-subdomain-setup-button]')
+            .doesNotExist('setup button hidden while domain is claimed');
+
+          await click('[data-test-unclaim-custom-subdomain-button]');
+          assert.true(deleteCalled, 'unclaim endpoint invoked');
+
+          await waitUntil(() => {
+            return (
+              !document.querySelector(`${customDomainOption} .realm-icon`) &&
+              document.querySelector(
+                '[data-test-custom-subdomain-setup-button]',
+              )
+            );
+          });
+
+          assert
+            .dom('[data-test-custom-subdomain-setup-button]')
+            .exists('setup button returns after unclaim');
+          assert
+            .dom('[data-test-unclaim-custom-subdomain-button]')
+            .doesNotExist('unclaim button removed after unclaim');
+          assert
+            .dom(`${customDomainOption} .domain-url`)
+            .hasText(
+              'http://custom-site-name.localhost:4201/',
+              'displays placeholder custom site URL after unclaim',
+            );
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
+          realmServer.deleteBoxelClaimedDomain = originalDeleteClaimed;
+        }
       });
     });
   });
