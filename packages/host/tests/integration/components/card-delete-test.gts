@@ -614,6 +614,7 @@ module('Integration | card-delete', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] [data-test-overlay-select]`,
     );
+    await waitFor('[data-test-copy-button]');
     assert
       .dom('[data-test-copy-button]')
       .containsText('Copy 2 Cards', 'button text is correct');
