@@ -3,10 +3,9 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import PlusIcon from '@cardstack/boxel-icons/plus';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
-import { IconButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { ContextButton, Tooltip } from '@cardstack/boxel-ui/components';
 
 import NewSessionSettings from './new-session-settings';
 
@@ -68,13 +67,15 @@ export default class NewSessionButton extends Component<Signature> {
     <div class='new-session-button-container {{if this.showMenu "menu-open"}}'>
       <Tooltip>
         <:trigger>
-          <IconButton
+          <ContextButton
             class='button new-session-button'
-            @icon={{PlusIcon}}
+            @disabled={{@disabled}}
+            @icon='add'
             @size='extra-small'
             @width='18'
             @height='18'
-            @disabled={{@disabled}}
+            @variant='highlight-icon'
+            @label='Create new session (Shift+Click for options)'
             aria-expanded='{{this.showMenu}}'
             {{on 'click' this.handleCreateNewSession}}
             data-test-create-room-btn
@@ -113,28 +114,11 @@ export default class NewSessionButton extends Component<Signature> {
         z-index: 1000;
       }
       .button {
-        width: var(--boxel-button-mini);
-        height: var(--boxel-button-mini);
-        padding: 0;
+        --host-outline-offset: 2px;
         transform: translateY(-1px);
       }
       .button :deep(svg) {
         stroke-width: 2.5;
-      }
-      .button :deep(.loading-icon) {
-        width: 16px;
-        height: 16px;
-      }
-      .button:not(:disabled) {
-        color: var(--boxel-highlight);
-      }
-      .button:hover:not(:disabled) {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-highlight);
-      }
-      .button[aria-expanded='true'] {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-highlight-hover);
       }
     </style>
   </template>

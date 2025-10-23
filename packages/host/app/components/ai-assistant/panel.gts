@@ -6,13 +6,12 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import HistoryIcon from '@cardstack/boxel-icons/history';
-import XIcon from '@cardstack/boxel-icons/x';
 
 import { restartableTask } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 
 import {
-  IconButton,
+  ContextButton,
   LoadingIndicator,
   ResizeHandle,
 } from '@cardstack/boxel-ui/components';
@@ -90,12 +89,16 @@ export default class AiAssistantPanel extends Component<Signature> {
             this.aiAssistantPanelService.loadingRooms
             as |pastSessionsLoading|
           }}
-            <IconButton
+            <ContextButton
               title='Past Sessions'
               class='button past-sessions-button
                 {{if this.hasOtherActiveSessions "has-other-active-sessions"}}'
               @icon={{HistoryIcon}}
+              @label='Past Sessions'
               @size='extra-small'
+              @variant='highlight-icon'
+              @width='14'
+              @height='14'
               @loading={{pastSessionsLoading}}
               @disabled={{this.aiAssistantPanelService.displayRoomError}}
               {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
@@ -104,13 +107,15 @@ export default class AiAssistantPanel extends Component<Signature> {
               aria-expanded='{{this.aiAssistantPanelService.isShowingPastSessions}}'
             />
           {{/let}}
-          <IconButton
+          <ContextButton
             title='Close AI Assistant'
-            class='button'
-            @icon={{XIcon}}
+            @icon='close'
             @size='extra-small'
             @width='18'
             @height='18'
+            @label='close ai assistant'
+            @variant='highlight-icon'
+            class='button'
             {{on 'click' @onClose}}
             data-test-close-ai-assistant
           />
@@ -294,9 +299,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .button {
-        width: var(--boxel-button-mini);
-        height: var(--boxel-button-mini);
-        padding: 0;
+        --host-outline-offset: 2px;
         transform: translateY(-1px);
       }
       .button :deep(svg) {
@@ -305,17 +308,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       .button :deep(.loading-icon) {
         width: 16px;
         height: 16px;
-      }
-      .button:not(:disabled) {
-        color: var(--boxel-highlight);
-      }
-      .button:hover:not(:disabled) {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-highlight);
-      }
-      .button[aria-expanded='true'] {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-highlight-hover);
       }
 
       .has-other-active-sessions {

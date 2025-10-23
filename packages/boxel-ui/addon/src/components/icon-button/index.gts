@@ -1,8 +1,8 @@
+import LoadingIcon from '@cardstack/boxel-icons/loader';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 
 import cn from '../../helpers/cn.ts';
-import LoadingIcon from '../../icons/loading-indicator.gts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelButton, {
   type BoxelButtonKind,
@@ -28,10 +28,10 @@ export interface Signature {
 }
 
 export const getIconSize = (size?: BoxelButtonSize) => {
-  if (size === 'tall' || size === 'touch') {
-    return '18px';
+  if (size === 'extra-small') {
+    return '16px';
   }
-  return '14px';
+  return '20px';
 };
 
 const IconButton: TemplateOnlyComponent<Signature> = <template>
@@ -66,7 +66,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     @layer boxelComponentL2 {
       .boxel-icon-button {
-        --icon-color: var(--boxel-icon-button-icon-color, currentColor);
+        --icon-color: var(--boxel-icon-button-color, currentColor);
         width: var(--boxel-icon-button-width, var(--boxel-icon-lg));
         height: var(--boxel-icon-button-height, var(--boxel-icon-lg));
         display: inline-flex;
@@ -76,23 +76,28 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
         padding: var(--boxel-icon-button-padding, 0);
         background-color: var(
           --boxel-icon-button-background,
-          var(--boxel-button-color)
+          var(--boxel-button-color, transparent)
         );
         border: none;
         border-radius: var(--boxel-border-radius);
-        color: var(--boxel-icon-button-color, var(--boxel-button-text-color));
+        color: var(
+          --boxel-icon-button-color,
+          var(--boxel-button-text-color, inherit)
+        );
         z-index: 0;
         overflow: hidden;
       }
       .boxel-icon-button--extra-small {
-        padding: 3px;
+        width: var(--boxel-button-mini);
+        height: var(--boxel-button-mini);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .boxel-icon-button--small {
         width: var(--boxel-button-xs);
         height: var(--boxel-button-xs);
         border-radius: var(--boxel-border-radius-xs);
       }
-      .boxel-icon-button--base,
-      .boxel-icon-button--small {
-        padding: 6px;
+      .boxel-icon-button--base {
         width: var(--boxel-button-sm);
         height: var(--boxel-button-sm);
         border-radius: var(--boxel-border-radius-sm);
@@ -114,10 +119,9 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
       .kind-default {
         background: var(--boxel-icon-button-background, none);
         color: var(--boxel-icon-button-color, inherit);
-        border: none;
       }
       .kind-default:disabled {
-        color: var(--muted, var(--boxel-400));
+        color: var(--boxel-400);
       }
 
       .kind-primary-dark:not(:disabled) {

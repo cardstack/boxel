@@ -13,6 +13,7 @@ import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
 import ColorPaletteUsage from './components/color-palette/usage.gts';
 import ColorPickerUsage from './components/color-picker/usage.gts';
 import ContainerUsage from './components/container/usage.gts';
+import ContextButtonUsage from './components/context-button/usage.gts';
 import CopyButtonUsage from './components/copy-button/usage.gts';
 import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
@@ -63,6 +64,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['ColorPalette', ColorPaletteUsage],
   ['ColorPicker', ColorPickerUsage],
   ['Container', ContainerUsage],
+  ['ContextButton', ContextButtonUsage],
   ['CopyButton', CopyButtonUsage],
   ['DateRangePicker', DateRangePickerUsage],
   ['DragAndDrop', DragAndDropUsage],

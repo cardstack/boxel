@@ -2,9 +2,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import XIcon from '@cardstack/boxel-icons/x';
-
-import { Button, IconButton } from '@cardstack/boxel-ui/components';
+import { Button, ContextButton } from '@cardstack/boxel-ui/components';
 
 interface Signature {
   Args: {
@@ -47,10 +45,10 @@ export default class NewSessionSettings extends Component<Signature> {
           class='new-session-settings-title'
           data-test-new-session-settings-title
         >New Session Options</div>
-        <IconButton
-          @icon={{XIcon}}
-          @variant='text-only'
-          @size='extra-small'
+        <ContextButton
+          @icon='close'
+          @variant='ghost'
+          @size='small'
           class='new-session-settings-close-button'
           data-test-new-session-settings-close-button
           {{on 'click' @onClose}}

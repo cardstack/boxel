@@ -12,7 +12,7 @@ import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
 
 import {
   BoxelDropdown,
-  IconButton,
+  ContextButton,
   Menu,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
@@ -23,8 +23,6 @@ import {
   IconCircle,
   Copy as CopyIcon,
 } from '@cardstack/boxel-ui/icons';
-
-import ThreeDotsHorizontal from '@cardstack/boxel-icons/dots';
 
 import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -93,11 +91,11 @@ export default class PastSessionItem extends Component<Signature> {
         <:trigger as |bindings|>
           <Tooltip @placement='top'>
             <:trigger>
-              <IconButton
-                @icon={{ThreeDotsHorizontal}}
-                @size='extra-small'
+              <ContextButton
                 class='menu-button'
-                aria-label='Options'
+                @variant='highlight-icon'
+                @size='extra-small'
+                @label='past session options'
                 data-test-past-session-options-button={{@session.roomId}}
                 {{bindings}}
               />
@@ -155,7 +153,6 @@ export default class PastSessionItem extends Component<Signature> {
         border-top: none;
       }
 
-      .session:focus-within,
       .session:hover {
         background-color: var(--ai-assistant-menu-hover-background);
         cursor: pointer;
@@ -194,14 +191,8 @@ export default class PastSessionItem extends Component<Signature> {
       .session:focus-within .menu-button {
         visibility: visible;
       }
-      .menu-button:hover:not(:disabled) {
-        background-color: var(--boxel-highlight);
-        color: var(--boxel-dark);
-      }
       .menu-button[aria-expanded='true'] {
         visibility: visible;
-        background-color: var(--boxel-highlight-hover);
-        color: var(--boxel-dark);
       }
 
       .menu {

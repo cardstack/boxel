@@ -1,14 +1,13 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 
+import { CopyButton } from '@cardstack/boxel-ui/components';
+
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
 import ApplyCodePatchButton, {
   type ApplyCodePatchButtonSignature,
 } from './apply-code-patch-button';
-import CopyCodeButton, {
-  type CopyCodeButtonSignature,
-} from './copy-code-button';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -19,7 +18,7 @@ export interface CodeBlockActionsSignature {
   Blocks: {
     default: [
       {
-        copyCode: ComponentLike<CopyCodeButtonSignature>;
+        copyCode: CopyButton;
         applyCodePatch: ComponentLike<ApplyCodePatchButtonSignature>;
       },
     ];
@@ -32,7 +31,9 @@ const CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature
     <div class='code-block-actions'>
       {{yield
         (hash
-          copyCode=(component CopyCodeButton code=@codeData.code)
+          copyCode=(component
+            CopyButton textToCopy=@codeData.code variant='text-only'
+          )
           applyCodePatch=(component
             ApplyCodePatchButton
             codePatch=@codeData.searchReplaceBlock

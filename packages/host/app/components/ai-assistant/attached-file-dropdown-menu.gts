@@ -15,14 +15,12 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import {
   BoxelDropdown,
-  IconButton,
+  ContextButton,
   Menu,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { IconCode } from '@cardstack/boxel-ui/icons';
-
-import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
 
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 
@@ -143,15 +141,6 @@ export default class AttachedFileDropdownMenu extends Component<{
   });
 
   <template>
-    <style scoped>
-      .context-menu-button:hover {
-        background-color: var(--boxel-highlight);
-      }
-      .context-menu-button[aria-expanded='true'] {
-        background-color: var(--boxel-highlight-hover);
-        outline-color: var(--boxel-highlight-hover);
-      }
-    </style>
     {{#if this.isRestorePatchedFileModalOpen}}
       <ToElsewhere
         @named='modal-elsewhere'
@@ -165,13 +154,12 @@ export default class AttachedFileDropdownMenu extends Component<{
     {{/if}}
     <BoxelDropdown>
       <:trigger as |bindings|>
-        <IconButton
+        <ContextButton
+          @size='extra-small'
+          @label='file options'
+          @icon='context-menu-vertical'
           data-test-attached-file-dropdown-button={{@file.name}}
           data-test-copy-file-content={{this.fileContent}}
-          class='context-menu-button'
-          @icon={{DotsVertical}}
-          @size='extra-small'
-          aria-label='file options'
           {{bindings}}
           {{on 'click' (perform this.loadFileContent)}}
         />
