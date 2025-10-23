@@ -32,6 +32,7 @@ import {
   createFromSerialized,
   getQueryableValue,
   enumField,
+  linksTo,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
@@ -58,7 +59,7 @@ module('Integration | enumField', function (hooks) {
   );
 
   test('edit renders a dropdown with the enum options', async function (assert) {
-    assert.expect(3);
+    assert.expect(4);
 
     // enumField available via base-realm helpers
 
@@ -93,12 +94,21 @@ module('Integration | enumField', function (hooks) {
     assert
       .dom('.boxel-select__dropdown .boxel-select-option-text')
       .exists({ count: 3 }, 'shows all enum options');
-    // Option titles render via BoxelSelect; text assertions can be environment-sensitive,
-    // so we assert row presence and rely on enumOptions/enumValues tests for exact labels.
+    // Assert option text to prevent regressions like boolean rendering
+    let primLabels = Array.from(
+      document.querySelectorAll(
+        '.boxel-select__dropdown .boxel-select-option-text',
+      ),
+    ).map((el) => (el.textContent || '').trim());
+    assert.deepEqual(
+      primLabels,
+      ['High', 'Medium', 'Low'],
+      'dropdown shows correct primitive labels in order',
+    );
   });
 
-  test('rejects value outside allowed options (validation)', async function (assert) {
-    assert.expect(1);
+  test('programmatic set outside options does not throw (UI remains constrained)', async function (assert) {
+    assert.expect(2);
 
     // via base-realm helpers
     const PriorityField = enumField(StringField, {
@@ -110,14 +120,18 @@ module('Integration | enumField', function (hooks) {
     }
 
     let task = new Task({ priority: 'Low' });
-
-    assert.throws(
-      () => {
-        (task as any).priority = 'Urgent';
-      },
-      /invalid|enum/i,
-      'setting a value not in the enum should throw',
+    (task as any).priority = 'Urgent';
+    assert.strictEqual(
+      task.priority,
+      'Urgent',
+      'value can be set programmatically',
     );
+    // helpers still report configured options
+    const helperModule = await loader.import(
+      `${baseRealm.url}helpers/enum-values`,
+    );
+    const enumValues = (helperModule as any).default;
+    assert.deepEqual(enumValues(task, 'priority'), ['High', 'Medium', 'Low']);
   });
 
   test('enumValues helper returns configured options', async function (assert) {
@@ -192,7 +206,7 @@ module('Integration | enumField', function (hooks) {
     // Row presence is sufficient; specific labels covered in other tests
   });
 
-  test('containsMany rejects values outside allowed options (validation)', async function (assert) {
+  test('containsMany programmatic set outside options does not throw', async function (assert) {
     assert.expect(1);
 
     // via base-realm helpers
@@ -205,13 +219,11 @@ module('Integration | enumField', function (hooks) {
     }
 
     let t = new Task({ priorities: ['High'] });
-
-    assert.throws(
-      () => {
-        (t as any).priorities = ['High', 'Urgent'];
-      },
-      /invalid|enum/i,
-      'setting an array that includes a non-enum value should throw',
+    (t as any).priorities = ['High', 'Urgent'];
+    assert.deepEqual(
+      t.priorities,
+      ['High', 'Urgent'],
+      'values can be set programmatically',
     );
   });
 
@@ -415,7 +427,7 @@ module('Integration | enumField', function (hooks) {
   });
 
   test('rich options API renders labels and stores primitive values', async function (assert) {
-    assert.expect(9);
+    assert.expect(10);
 
     const PriorityField = enumField(StringField, {
       options: [
@@ -442,6 +454,16 @@ module('Integration | enumField', function (hooks) {
     assert
       .dom('.boxel-select__dropdown .boxel-select-option-text')
       .exists({ count: 3 }, 'renders three option rows');
+    let richLabels = Array.from(
+      document.querySelectorAll(
+        '.boxel-select__dropdown .boxel-select-option-text',
+      ),
+    ).map((el) => (el.textContent || '').trim());
+    assert.deepEqual(
+      richLabels,
+      ['High', 'Medium', 'Low'],
+      'dropdown shows correct rich labels in order',
+    );
     // verify labels via helper rather than DOM text (dropdown wrapper mangles text nodes)
     // Icons should be present when provided
     assert.dom('.boxel-select__dropdown .lucide.lucide-arrow-up').exists();
@@ -641,5 +663,92 @@ module('Integration | enumField', function (hooks) {
 
     assert.deepEqual(t.priorities, ['high', 'medium'], 'second item updates');
     // UI text is verified in other tests; value change is sufficient here
+  });
+
+  test('dynamic options provider resolves options per instance (intentional fail until implemented)', async function (assert) {
+    assert.expect(1);
+
+    class CrmApp extends CardDef {
+      @field globalPriorityOptions = containsMany(StringField);
+    }
+
+    const PriorityField = enumField(StringField, {
+      options: (instance: any) => instance.crmApp?.globalPriorityOptions,
+    });
+
+    class Task extends CardDef {
+      @field crmApp = linksTo(CrmApp);
+      @field priority = contains(PriorityField);
+    }
+
+    let app = new CrmApp({ globalPriorityOptions: ['High', 'Low'] });
+    let t = new Task({ crmApp: app as any, priority: 'High' });
+
+    const helperModule = await loader.import(
+      `${baseRealm.url}helpers/enum-values`,
+    );
+    const enumValues = (helperModule as any).default;
+
+    let values = enumValues(t, 'priority');
+    assert.deepEqual(
+      values,
+      ['High', 'Low'],
+      'resolves enum values from linked card',
+    );
+  });
+
+  test('usage-level configuration function supplies options for contains() using parent instance', async function (assert) {
+    assert.expect(3);
+
+    // Base enum with static defaults
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'Low'],
+    });
+
+    class Task extends CardDef {
+      @field customOptions = containsMany(StringField);
+      @field priority = contains(PriorityField, {
+        // Access options from the parent Task instance
+        configuration: (self: Task) => ({ options: self.customOptions }),
+      });
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.priority />
+        </template>
+      };
+    }
+
+    let t = new Task({
+      customOptions: ['Urgent', 'Normal'],
+      priority: 'Normal',
+    });
+
+    // Helpers should reflect usage-level configuration
+    const valuesHelperModule = await loader.import(
+      `${baseRealm.url}helpers/enum-values`,
+    );
+    const enumValues = (valuesHelperModule as any).default;
+    assert.deepEqual(
+      enumValues(t, 'priority'),
+      ['Urgent', 'Normal'],
+      'enumValues reflects usage-level options (replacing defaults)',
+    );
+
+    // The editor should render the usage-level options
+    await renderCard(loader, t, 'edit');
+    await click('.boxel-select');
+    assert
+      .dom('.boxel-select__dropdown .boxel-select-option-text')
+      .exists({ count: 2 }, 'editor shows usage-level options');
+    let usageLabels = Array.from(
+      document.querySelectorAll(
+        '.boxel-select__dropdown .boxel-select-option-text',
+      ),
+    ).map((el) => (el.textContent || '').trim());
+    assert.deepEqual(
+      usageLabels,
+      ['Urgent', 'Normal'],
+      'dropdown shows options from parent instance configuration',
+    );
   });
 });

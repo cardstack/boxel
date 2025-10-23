@@ -13,8 +13,5 @@ export function enumAllowedValues(rawOpts: any[]): any[] {
 }
 
 // For now, only supports static options; returns normalized options synchronously.
-export function getEnumOptionsSync(fieldClass: any, _instance?: unknown): RichOption[] {
-  let opts = (fieldClass as any)?.enumOptions ?? [];
-  return normalizeEnumOptions(opts);
-}
-
+// Deprecated: static enumOptions have been removed; prefer resolving options
+// via field configuration at runtime.
