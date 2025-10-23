@@ -133,6 +133,21 @@
           "self": "../blog-app/BlogPost/ultimate-guide-remote-work"
         }
       },
+      "examples.5": {
+        "links": {
+          "self": "../blog-app/BlogCategory/urban-work"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../blog-app/BlogCategory/city-design"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../blog-app/BlogCategory/future-tech"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/developer-tools-code"
