@@ -2,7 +2,8 @@ import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, BoxelSelect } from '@cardstack/boxel-ui/components';
+import { or } from '@cardstack/boxel-ui/helpers';
 import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -665,7 +666,19 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }
 
     if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
+      // minimal enum validation for plural primitive fields
+      if ((this.card as any).isEnumField) {
+        let opts: any[] = (this.card as any).enumOptions ?? [];
+        let allowed = enumAllowedValues(opts);
+        let allowedDisplay = allowed.map(String).join(', ');
+        for (let [index, item] of values.entries()) {
+          if (item != null && !allowed.includes(item)) {
+            throw new Error(
+              `enum validation error: value '${item}' at index ${index} is not allowed for field '${this.name}'. Allowed: ${allowedDisplay}`,
+            );
+          }
+        }
+      }
     } else {
       for (let [index, item] of values.entries()) {
         if (item != null && !instanceOf(item, this.card)) {
@@ -886,7 +899,17 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   validate(_instance: BaseDef, value: any) {
     if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
+      // minimal enum validation: if field card is an enum, enforce allowed values
+      if ((this.card as any).isEnumField) {
+        let opts: any[] = (this.card as any).enumOptions ?? [];
+        let allowed = enumAllowedValues(opts);
+        if (value != null && !allowed.includes(value)) {
+          let allowedDisplay = allowed.map(String).join(', ');
+          throw new Error(
+            `enum validation error: value '${value}' is not allowed for field '${this.name}'. Allowed: ${allowedDisplay}`,
+          );
+        }
+      }
     } else {
       if (value != null && !instanceOf(value, this.card)) {
         throw new Error(
@@ -1897,6 +1920,8 @@ export function linksToMany<CardT extends CardDefConstructor>(
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
 
+// (moved below BaseDef & FieldDef declarations)
+
 // TODO: consider making this abstract
 export class BaseDef {
   // this is here because CardBase has no public instance methods, so without it
@@ -2182,6 +2207,77 @@ export class TextAreaField extends StringField {
       />
     </template>
   };
+}
+
+// Minimal enum field factory: wraps a FieldDef with a dropdown editor
+// and exposes the allowed options. Enough to support the integration test.
+// Local helpers for enum option handling
+function normalizeEnumOptions(rawOpts: any[]) {
+  return rawOpts.map((v) =>
+    v && typeof v === 'object' && 'value' in v
+      ? v
+      : { value: v, label: String(v) },
+  );
+}
+
+function enumAllowedValues(rawOpts: any[]) {
+  return normalizeEnumOptions(rawOpts).map((o) => o.value);
+}
+
+export function enumField<BaseT extends FieldDefConstructor>(
+  Base: BaseT,
+  ...values: any[]
+): BaseT {
+  const rawOpts = values;
+  const normalized = normalizeEnumOptions(rawOpts);
+  // selected item component used for trigger rendering
+  const OptionLabel = class extends GlimmerComponent<{ Args: { option: any } }> {
+    <template>
+      {{#if @option}}
+        {{#if @option.icon}}
+          <@option.icon class='option-icon' width='16' height='16' />
+        {{/if}}
+        <span class='option-title'>{{or @option.label @option.value}}</span>
+      {{/if}}
+    </template>
+  };
+  const SelectedItem = class extends GlimmerComponent<{ Args: { option: any } }> {
+    <template>
+      <OptionLabel @option={{@option}} />
+    </template>
+  };
+
+  class EnumField extends (Base as any) {
+    static isEnumField = true;
+    // Preserve original options shape for existing helpers/tests
+    static enumOptions = rawOpts;
+    static edit = class Edit extends GlimmerComponent<any> {
+      get options() {
+        return normalized;
+      }
+      get selectedOption() {
+        return normalized.find((o) => o.value === (this.args.model as any)) ?? null;
+      }
+      update = (opt: any) => {
+        this.args.set?.(opt?.value ?? null);
+      };
+      <template>
+        <BoxelSelect
+          @options={{this.options}}
+          @selected={{this.selectedOption}}
+          @onChange={{this.update}}
+          @selectedItemComponent={{component SelectedItem}}
+          @disabled={{not @canEdit}}
+          @renderInPlace={{true}}
+          @placeholder='Choose...'
+          as |opt|
+        >
+          <OptionLabel @option={{opt}} />
+        </BoxelSelect>
+      </template>
+    };
+  }
+  return EnumField as unknown as BaseT;
 }
 
 export class CSSField extends TextAreaField {
