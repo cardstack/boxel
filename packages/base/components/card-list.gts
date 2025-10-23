@@ -1,12 +1,26 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
+
+import { consume } from 'ember-provide-consume-context';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { removeFileExtension, type Query } from '@cardstack/runtime-common';
+import {
+  removeFileExtension,
+  CardCrudFunctionsContextName,
+  type Query,
+} from '@cardstack/runtime-common';
 
-import type { CardContext, BoxComponent, Format } from '../card-api';
+import type {
+  CardContext,
+  BoxComponent,
+  Format,
+  CardCrudFunctions,
+} from '../card-api';
 
 interface Signature {
   Args: {
@@ -22,6 +36,16 @@ interface Signature {
 }
 
 export default class CardList extends Component<Signature> {
+  @consume(CardCrudFunctionsContextName)
+  declare cardCrudFunctions: CardCrudFunctions | undefined;
+
+  @action
+  handleCardClick(cardUrl: string) {
+    if (this.cardCrudFunctions?.viewCard) {
+      this.cardCrudFunctions.viewCard(new URL(cardUrl));
+    }
+  }
+
   <template>
     <ul
       class={{cn
@@ -47,11 +71,16 @@ export default class CardList extends Component<Signature> {
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
               <li
-                class={{cn 'boxel-card-list-item' instance-error=card.isError}}
+                class={{cn
+                  'boxel-card-list-item'
+                  instance-error=card.isError
+                  clickable=(if this.cardCrudFunctions.viewCard true false)
+                }}
                 data-test-instance-error={{card.isError}}
                 data-test-cards-grid-item={{removeFileExtension card.url}}
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                 data-cards-grid-item={{removeFileExtension card.url}}
+                {{on 'click' (fn this.handleCardClick card.url)}}
               >
                 <card.component />
               </li>
@@ -103,6 +132,9 @@ export default class CardList extends Component<Signature> {
         gap: var(--boxel-sp) var(--boxel-sp-lg);
         width: var(--item-width);
         height: var(--item-height);
+      }
+      .boxel-card-list-item.clickable {
+        cursor: pointer;
       }
 
       .boxel-card-list-item > :deep(.field-component-card.embedded-format) {
