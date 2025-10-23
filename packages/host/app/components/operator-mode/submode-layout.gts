@@ -22,7 +22,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
-import { BoxelIcon } from '@cardstack/boxel-ui/icons';
+import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
 
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
@@ -389,23 +389,19 @@ export default class SubmodeLayout extends Component<Signature> {
         <ResizablePanel class='main-panel'>
           <div class='submode-layout-top-bar'>
             <IconButton
-              @icon={{BoxelIcon}}
-              @width='40px'
+              @icon={{BoxelIconWithText}}
+              @width='160px'
               @height='40px'
               disabled={{this.isToggleWorkspaceChooserDisabled}}
               class={{cn
                 'workspace-button'
                 workspace-button--dark=(not this.workspaceChooserOpened)
+                workspace-button--chooser-open=this.workspaceChooserOpened
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
               data-test-workspace-chooser-toggle
             />
-            {{#if this.workspaceChooserOpened}}
-              <span
-                class='boxel-title'
-                data-test-submode-layout-title
-              >BOXEL</span>
-            {{else}}
+            {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
                 @submode={{this.operatorModeStateService.state.submode}}
@@ -619,11 +615,22 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .workspace-button {
         --icon-color: var(--boxel-highlight);
+        --icon-text-color: var(--boxel-light);
+        --boxel-icon-button-width: 160px;
+        --boxel-icon-button-height: 40px;
+
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
-        box-shadow: var(--submode-bar-item-box-shadow);
         flex-shrink: 0;
+        position: relative;
       }
+
+      .workspace-button :deep(svg) {
+        position: absolute;
+        left: 0;
+        max-width: unset;
+      }
+
       .workspace-button:focus:not(:focus-visible) {
         outline-offset: unset;
       }
@@ -633,7 +640,10 @@ export default class SubmodeLayout extends Component<Signature> {
       .workspace-button--dark {
         --icon-bg-opacity: 1;
         --icon-color: var(--boxel-dark);
+        --icon-bg-color: var(--boxel-highlight);
+        --boxel-icon-button-width: 40px;
         outline: var(--submode-bar-item-outline);
+        box-shadow: var(--submode-bar-item-box-shadow);
       }
       .workspace-button--dark:focus:not(:focus-visible) {
         outline: var(--submode-bar-item-outline);

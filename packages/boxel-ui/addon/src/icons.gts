@@ -9,6 +9,7 @@ import ArrowRight from './icons/arrow-right.gts';
 import ArrowTopLeft from './icons/arrow-top-left.gts';
 import ArrowUp from './icons/arrow-up.gts';
 import BoxelIcon from './icons/boxel-icon.gts';
+import BoxelIconWithText from './icons/boxel-icon-with-text.gts';
 import Card from './icons/card.gts';
 import CardbotLg from './icons/cardbot-lg.gts';
 import CardDefinition from './icons/card-definition.gts';
@@ -81,6 +82,7 @@ export const ALL_ICON_COMPONENTS = [
   ArrowTopLeft,
   ArrowUp,
   BoxelIcon,
+  BoxelIconWithText,
   Card,
   CardbotLg,
   CardDefinition,
@@ -154,6 +156,7 @@ export {
   ArrowTopLeft,
   ArrowUp,
   BoxelIcon,
+  BoxelIconWithText,
   Card,
   CardbotLg,
   CardDefinition,
