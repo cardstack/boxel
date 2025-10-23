@@ -2283,27 +2283,35 @@ export function enumField<BaseT extends FieldDefConstructor>(
 ): BaseT {
   const rawOpts = values;
   const normalized = normalizeEnumOptions(rawOpts);
-  // selected item component used for trigger rendering
-  const OptionLabel = class extends GlimmerComponent<{ Args: { option: any } }> {
-    <template>
-      {{#if @option}}
-        {{#if @option.icon}}
-          <@option.icon class='option-icon' width='16' height='16' />
-        {{/if}}
-        <span class='option-title'>{{or @option.label @option.value}}</span>
-      {{/if}}
-    </template>
-  };
-  const SelectedItem = class extends GlimmerComponent<{ Args: { option: any } }> {
-    <template>
-      <OptionLabel @option={{@option}} />
-    </template>
-  };
 
   class EnumField extends (Base as any) {
     static isEnumField = true;
     // Preserve original options shape for existing helpers/tests
     static enumOptions = rawOpts;
+    static atom = class Atom extends GlimmerComponent<any> {
+      get option() {
+        let v = this.args.model as any;
+        return normalized.find((o) => o.value === v) ?? { value: v, label: String(v) };
+      }
+      <template>
+        {{#if this.option}}
+          {{#if this.option.icon}}
+            <this.option.icon class='option-icon' width='16' height='16' />
+          {{/if}}
+          <span class='option-title'>{{or this.option.label this.option.value}}</span>
+        {{/if}}
+      </template>
+    };
+    // selected item component used for trigger rendering; adapts BoxelSelect's `@option` to atom's `@model`
+    static selectedItem = class SelectedItem extends GlimmerComponent<{ Args: { option: any } }> {
+      <template>
+        {{#if @option}}
+          {{#let (component EnumField.atom) as |Atom|}}
+            <Atom @model={{@option.value}} />
+          {{/let}}
+        {{/if}}
+      </template>
+    };
     static edit = class Edit extends GlimmerComponent<any> {
       get options() {
         return normalized;
@@ -2319,13 +2327,15 @@ export function enumField<BaseT extends FieldDefConstructor>(
           @options={{this.options}}
           @selected={{this.selectedOption}}
           @onChange={{this.update}}
-          @selectedItemComponent={{component SelectedItem}}
+          @selectedItemComponent={{component EnumField.selectedItem}}
           @disabled={{not @canEdit}}
           @renderInPlace={{true}}
           @placeholder='Choose...'
           as |opt|
         >
-          <OptionLabel @option={{opt}} />
+          {{#let (component EnumField.atom) as |Atom|}}
+            <Atom @model={{opt.value}} />
+          {{/let}}
         </BoxelSelect>
       </template>
     };
