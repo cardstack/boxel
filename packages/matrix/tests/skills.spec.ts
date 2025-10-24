@@ -277,7 +277,7 @@ test.describe('Skills', () => {
       { from: firstUser.username, message: 'Message 1' },
       { from: firstUser.username, message: 'Message 2' },
     ]);
-    expect(page.locator('[data-test-active-skills-count]')).toHaveText(
+    await expect(page.locator('[data-test-active-skills-count]')).toHaveText(
       '0 Skills',
     );
   });
