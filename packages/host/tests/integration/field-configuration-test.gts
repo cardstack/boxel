@@ -29,7 +29,6 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 let loader: Loader;
-let _testRealm: Realm;
 
 module('Integration | field configuration', function (hooks) {
   setupRenderingTest(hooks);
@@ -164,7 +163,6 @@ module('Integration | field configuration', function (hooks) {
         },
       },
     });
-    _testRealm = setup.realm;
   });
 
   test('merged configuration is injected into field format component', async function (assert) {
