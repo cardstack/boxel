@@ -29,6 +29,13 @@ test.describe('Room messages', () => {
   });
 
   test(`it can send a message in a room`, async ({ page }) => {
+    // TODO: this tests multiple different behaviours beyond just sending a message.
+    // There are tests for:
+    // - sending messages with a button
+    // - sending messages with Enter key
+    // - handling whitespace only messages (not sending them)
+    // - persisting messages across reloads
+    // - ensuring room state doesn't leak between users
     const { username, password } = await createSubscribedUserAndLogin(
       page,
       'send-message',
@@ -40,6 +47,7 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
     await assertMessages(page, []);
 
+    // Whitespace only messages are not sent
     await page.locator('[data-test-message-field]').click();
     await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
     await page.keyboard.press('Enter');
@@ -50,6 +58,7 @@ test.describe('Room messages', () => {
     await page.keyboard.press('Enter');
     await assertMessages(page, []);
 
+    // Text messages are sent
     await writeMessage(page, room1, 'Message 1');
     await expect(
       page.locator(`[data-test-message-field="${room1}"]`),
@@ -60,11 +69,14 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-new-session]')).toHaveCount(0);
     await assertMessages(page, [{ from: username, message: 'Message 1' }]);
 
+    // Enter can send a message
     await writeMessage(page, room1, 'Message 2');
     await page.keyboard.press('Shift+Enter');
     await page.keyboard.type('!');
     await assertMessages(page, [{ from: username, message: 'Message 1' }]);
-
+    // Must wait for the send message button to appear, otherwise we hit
+    // enter when the previous message is still sending.
+    await page.locator('[data-test-send-message-btn]').waitFor();
     await page.keyboard.press('Enter');
     const messages = [
       { from: username, message: 'Message 1' },
