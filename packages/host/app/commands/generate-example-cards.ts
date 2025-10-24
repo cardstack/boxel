@@ -67,8 +67,8 @@ export default class GenerateExampleCardsCommand extends HostBaseCommand<
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
 
-  static actionVerb = 'Generate Example';
-  description = 'Create a new card instance populated with sample data';
+  static actionVerb = 'Generate Example Cards';
+  description = 'Create new cards populated with sample data';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -76,11 +76,8 @@ export default class GenerateExampleCardsCommand extends HostBaseCommand<
     return CreateInstancesInput;
   }
 
-  protected getPrompt(
-    count: number,
-    codeRef?: BaseCommandModule.CreateInstancesInput['codeRef'],
-  ) {
-    return buildExamplePrompt(count, codeRef);
+  protected getPrompt(count: number) {
+    return `Generate ${count} additional instances of the specified card definition, populated with sample data.`;
   }
 
   protected getAttachedFileURLs(input: BaseCommandModule.CreateInstancesInput) {
@@ -97,7 +94,7 @@ export default class GenerateExampleCardsCommand extends HostBaseCommand<
 
     await this.aiAssistantPanelService.openPanel();
 
-    const userPrompt = this.getPrompt(input.count || 1, input.codeRef);
+    const userPrompt = this.getPrompt(input.count || 1);
     console.debug(
       prettifyPrompts({
         scope: 'GenerateExample:Panel',
