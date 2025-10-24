@@ -5,6 +5,10 @@ import type { MiddlewareState } from '@floating-ui/dom';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import {
+  type BoxelButtonKind,
+  type BoxelButtonSize,
+} from '../button/index.gts';
 import IconButton from '../icon-button/index.gts';
 import Tooltip from '../tooltip/index.gts';
 
@@ -14,7 +18,9 @@ interface Signature {
     height?: string;
     offset?: number;
     placement?: MiddlewareState['placement'];
+    size?: BoxelButtonSize;
     textToCopy: string;
+    variant?: BoxelButtonKind;
     width?: string;
   };
   Element: HTMLElement;
@@ -44,8 +50,10 @@ export default class CopyButton extends Component<Signature> {
       <:trigger>
         <IconButton
           @icon={{Copy}}
-          @width={{@width}}
-          @height={{@height}}
+          @variant={{@variant}}
+          @size={{if @size @size 'base'}}
+          @width={{if @width @width '18'}}
+          @height={{if @height @height '18'}}
           {{on 'click' this.copyToClipboard}}
           class='boxel-copy-button'
           aria-label={{if

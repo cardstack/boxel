@@ -19,7 +19,7 @@ import {
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
-import { IconButton, Pill } from '@cardstack/boxel-ui/components';
+import { Button, IconButton, Pill } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -38,7 +38,12 @@ import {
   uuidv4,
   CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
-import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
+import {
+  IconMinusCircle,
+  IconX,
+  FourLines,
+  IconPlus,
+} from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { consume } from 'ember-provide-consume-context';
 import {
@@ -48,7 +53,6 @@ import {
 } from '@cardstack/boxel-ui/modifiers';
 
 import { action } from '@ember/object';
-import AddButton from './components/add-button';
 import { initSharedState } from './shared-state';
 
 interface Signature {
@@ -230,14 +234,18 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       {{/if}}
 
       {{#if permissions.canWrite}}
-        <AddButton
+        <Button
           class='add-new'
+          @kind='muted'
+          @size='tall'
+          @rectangular={{true}}
           {{on 'click' @add}}
           data-test-add-new={{@field.name}}
         >
+          <IconPlus class='icon' width='12px' height='12px' alt='plus' />
           Add
           {{getPlural @field.card.displayName}}
-        </AddButton>
+        </Button>
       {{/if}}
     </PermissionsConsumer>
     <style scoped>
@@ -282,7 +290,9 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           var(--shadow-lg, var(--boxel-box-shadow));
       }
       .add-new {
-        width: calc(100% - var(--boxel-icon-xxl));
+        gap: var(--boxel-sp-xxxs);
+        width: fit-content;
+        letter-spacing: var(--boxel-lsp-xs);
         margin-left: var(--boxel-icon-lg);
         /* for alignment due to sort handle */
       }
@@ -348,15 +358,18 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
           </Pill>
         {{/let}}
       {{/each}}
-      <AddButton
-        class='add-new'
-        @variant='pill'
+      <Button
+        class='compact-add-new'
+        @size='small'
+        @kind='primary'
+        @rectangular={{true}}
         {{on 'click' @add}}
         data-test-add-new={{@field.name}}
       >
+        <IconPlus class='icon' width='12px' height='12px' alt='plus' />
         Add
         {{@field.card.displayName}}
-      </AddButton>
+      </Button>
     </div>
     <style scoped>
       .boxel-pills {
@@ -390,6 +403,9 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         --icon-color: var(--muted-foreground, var(--boxel-600));
         --pill-font-color: var(--muted-foreground, var(--boxel-600));
         --pill-border-color: var(--muted-foreground, var(--boxel-600));
+      }
+      .compact-add-new {
+        gap: var(--boxel-sp-xxxs);
       }
     </style>
   </template>

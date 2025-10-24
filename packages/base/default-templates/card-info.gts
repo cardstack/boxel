@@ -258,11 +258,10 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       }
       .preview-toggle {
         position: absolute;
-        top: calc(-1 * var(--boxel-sp-sm));
+        top: calc(-1 * var(--boxel-sp-lg));
         right: 0;
-        min-width: 9.5rem;
+        min-width: 10.5rem;
         justify-content: space-between;
-        padding: var(--boxel-sp-4xs);
       }
       .preview-toggle-icon {
         transform: rotate(90deg);
@@ -300,8 +299,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .hidden-fields {
         margin-top: var(--boxel-sp);
       }
-      .theme-field :deep(.links-to-editor .field-component-card),
-      .theme-field :deep(.add-button--full-width) {
+      .theme-field :deep(.links-to-editor .field-component-card) {
         min-height: var(--boxel-form-control-height);
       }
       .thumbnail-input-container {

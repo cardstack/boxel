@@ -1,9 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
-import InfoIcon from '@cardstack/boxel-icons/info';
+import Info from '@cardstack/boxel-icons/info';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, IconButton, Tooltip } from '@cardstack/boxel-ui/components';
 
 interface Signature {
   Args: {
@@ -14,31 +14,42 @@ interface Signature {
 }
 
 const ViewCodeButton: TemplateOnlyComponent<Signature> = <template>
-  <Button
-    class='view-code-button'
-    {{on 'click' @toggleViewCode}}
-    @kind='text-only'
-    @size='extra-small'
-    aria-label={{if @isDisplayingCode 'Hide Code' 'View Code'}}
-    data-test-view-code-button
-    ...attributes
-  >
-    {{#if @isDisplayingCode}}
-      <span>Hide Info</span>
-    {{else}}
-      <InfoIcon width='18' height='18' role='presentation' />
-    {{/if}}
-  </Button>
+  {{#if @isDisplayingCode}}
+    <Button
+      class='hide-info-button'
+      {{on 'click' @toggleViewCode}}
+      @size='small'
+      @kind='text-only'
+      @rectangular={{true}}
+      data-test-view-code-button
+      ...attributes
+    >
+      Hide Info
+    </Button>
+  {{else}}
+    <Tooltip>
+      <:trigger>
+        <IconButton
+          class='view-info-button'
+          @icon={{Info}}
+          @size='base'
+          @variant='text-only'
+          {{on 'click' @toggleViewCode}}
+          aria-label='View Info'
+          data-test-view-code-button
+          ...attributes
+        />
+      </:trigger>
+      <:content>
+        View Info
+      </:content>
+    </Tooltip>
+  {{/if}}
   <style scoped>
-    .view-code-button {
-      --boxel-button-font: 600 var(--boxel-font-xs);
-      --boxel-button-min-height: auto;
+    .hide-info-button {
+      --boxel-button-padding: 0 var(--boxel-sp-xxxs);
       --boxel-button-min-width: auto;
-      --boxel-button-padding: 0 var(--boxel-sp-5xs);
-      --boxel-button-text-color: currentColor;
-      gap: var(--boxel-sp-xxs);
-      border-radius: var(--boxel-border-radius-xs);
-      flex-shrink: 0;
+      --boxel-button-font: 600 var(--boxel-font-xs);
     }
   </style>
 </template>;

@@ -15,8 +15,8 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .panel-popover {
       position: absolute;
-      top: 0;
-      left: 0;
+      top: 1.5rem;
+      right: 1.875rem;
       margin-top: var(--boxel-sp-sm);
       width: 320px;
       min-height: 12.5rem;
@@ -93,7 +93,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
     <header class='header'>
       {{yield to='header'}}
     </header>
-    <div class='body'>
+    <div class='body' tabindex='0'>
       {{yield to='body'}}
     </div>
   </div>
