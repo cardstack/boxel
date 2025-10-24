@@ -18,8 +18,9 @@ const ViewCodeButton: TemplateOnlyComponent<Signature> = <template>
     <Button
       class='hide-info-button'
       {{on 'click' @toggleViewCode}}
-      @size='base'
+      @size='small'
       @kind='text-only'
+      @rectangular={{true}}
       data-test-view-code-button
       ...attributes
     >
@@ -48,7 +49,7 @@ const ViewCodeButton: TemplateOnlyComponent<Signature> = <template>
     .hide-info-button {
       --boxel-button-padding: 0 var(--boxel-sp-xxxs);
       --boxel-button-min-width: auto;
-      border-radius: var(--boxel-border-radius-sm);
+      --boxel-button-font: 600 var(--boxel-font-xs);
     }
   </style>
 </template>;

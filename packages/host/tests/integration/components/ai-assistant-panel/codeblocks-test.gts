@@ -661,7 +661,6 @@ Above code blocks are now complete`;
     assert.dom('.cdr.line-delete').exists({ count: 4 });
     assert.dom('.cdr.line-insert').exists({ count: 5 });
     assert.dom('[data-test-apply-code-button]').exists();
-    await this.pauseTest();
 
     await percySnapshot(assert);
   });
