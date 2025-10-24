@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MembershipBenefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "partner": "The Leading Hotels of the World",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "conditions": null,
+      "statusLevel": "Gold Elite",
+      "benefitsList": [
+        "5% Leaders Club points bonus on qualifying stays",
+        "5 pre-arrival upgrades annually (subject to availability)"
+      ],
+      "autoEnrollment": false,
+      "membershipProgram": "Leaders Club",
+      "enrollmentRequired": true,
+      "enrollmentInstructions": "Enrollment required through your American Express account; terms apply."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

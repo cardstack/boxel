@@ -391,11 +391,10 @@ class RealmResource {
 
         try {
           const result = await this.realmServer.publishRealm(this.url, url);
-
           return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
-          return;
+          throw error; // Re-throw so Promise.allSettled can capture it as rejected
         } finally {
           this._publishingRealms.splice(this._publishingRealms.indexOf(url), 1);
         }

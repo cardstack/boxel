@@ -1,0 +1,52 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Adobe Credit",
+      "amount": {
+        "amount": 250,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [
+        "A $250 statement credit per calendar year after you spend $600 or more on U.S. purchases directly with Adobe in a calendar year. Enrollment required.‡"
+      ],
+      "partner": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": 600,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "Must enroll for benefit and spend minimum $600 on Adobe products/services in calendar year to earn the $250 credit. Must purchase directly from Adobe. Covers Creative Cloud, Document Cloud, and other Adobe services.",
+      "programURL": "https://www.adobe.com/creativecloud/business/teams.html",
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": true
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

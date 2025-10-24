@@ -11,7 +11,6 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import window from 'ember-window-mock';
 
 import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
@@ -29,6 +28,8 @@ import type { ViewCardFn } from 'https://cardstack.com/base/card-api';
 import HostModeContent from '../host-mode/content';
 
 import SubmodeLayout from './submode-layout';
+
+import type { PublishError } from './publish-realm-modal';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;
@@ -111,32 +112,78 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return baseURL;
   }
 
-  handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
-    await this.realm.publish(this.realmURL, publishedRealmURLs);
+  handlePublishTask = restartableTask(async (publishedRealmURLs: string[]) => {
+    const results = await this.realm.publish(this.realmURL, publishedRealmURLs);
+
+    const errors = new Map<string, string>();
+    if (results) {
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const url = publishedRealmURLs[index];
+          const error = result as PromiseRejectedResult;
+          const errorMessage =
+            error.reason?.message || 'Failed to publish to this domain';
+          errors.set(url, errorMessage);
+        }
+      });
+    }
+
+    if (errors.size > 0) {
+      const error = new Error(
+        'Failed to publish to some domains',
+      ) as PublishError;
+      error.urlErrors = errors;
+      throw error;
+    }
+
     this.isPublishingRealmPopoverOpen = false;
   });
+
+  @action
+  handlePublish(publishedRealmURLs: string[]) {
+    let promise = this.handlePublishTask.perform(publishedRealmURLs);
+    // Catch the error so it doesn't bubble
+    // to the browser (so error reporters like Bugsnag will see it).
+    // TODO: remove this after this issue (https://github.com/machty/ember-concurrency/issues/40)
+    // is resolved.
+    promise.catch((_error) => {});
+  }
+
+  get handlePublishError(): PublishError | null {
+    return this.handlePublishTask.last?.error as PublishError | null;
+  }
 
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     await this.realm.unpublish(this.realmURL, publishedRealmURL);
   });
 
+  get defaultPublishedSiteURL(): string | undefined {
+    let defaultURL = this.defaultPublishedRealmURL;
+    if (defaultURL) {
+      return this.getFullURL(defaultURL);
+    }
+    return undefined;
+  }
+
   @action
   handleOpenSiteButtonClick(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
     if (event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
       this.isOpenSitePopoverOpen = !this.isOpenSitePopoverOpen;
       return;
     }
 
-    this.isOpenSitePopoverOpen = false;
-    let defaultURL = this.defaultPublishedRealmURL;
-    if (defaultURL) {
-      window.open(this.getFullURL(defaultURL), '_blank');
-    } else {
+    // If there's no default URL, prevent navigation and show popover
+    if (!this.defaultPublishedRealmURL) {
+      event.preventDefault();
+      event.stopPropagation();
       this.isOpenSitePopoverOpen = true;
+      return;
     }
+
+    // Otherwise, let the anchor navigate naturally
+    this.isOpenSitePopoverOpen = false;
   }
 
   private parsePublishedAt(value: unknown) {
@@ -202,9 +249,13 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
             <Tooltip class='open-site-tooltip'>
               <:trigger>
                 <BoxelButton
+                  @as='anchor'
                   @kind='secondary'
                   @size='tall'
+                  @href={{this.defaultPublishedSiteURL}}
                   class='open-site-button'
+                  target='_blank'
+                  rel='noopener noreferrer'
                   {{on 'click' this.handleOpenSiteButtonClick}}
                   data-test-open-site-button
                 >
@@ -236,7 +287,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     <PublishRealmModal
       @isOpen={{this.isPublishRealmModalOpen}}
       @onClose={{this.closePublishRealmModal}}
-      @handlePublish={{perform this.handlePublish}}
+      @handlePublish={{this.handlePublish}}
+      @publishError={{this.handlePublishError}}
       @handleUnpublish={{perform this.handleUnpublish}}
     />
 

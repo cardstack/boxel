@@ -1,0 +1,42 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MembershipBenefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "partner": "Fine Hotels + Resorts",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "conditions": "Book through Amex Travel to receive benefits. Minimum 2-night stay may be required at some properties. Benefits vary by property and availability. Must book with American Express Fine Hotels + Resorts rate to be eligible.",
+      "statusLevel": "Silver",
+      "benefitsList": [
+        "Noon check-in when available",
+        "Room upgrade upon arrival when available",
+        "Daily breakfast for two guests",
+        "Guaranteed 4PM late checkout",
+        "$100 USD equivalent resort/hotel credit",
+        "Complimentary Wi-Fi when available",
+        "Regional and international partner lounges"
+      ],
+      "autoEnrollment": false,
+      "membershipProgram": "Fine Hotels + Resorts",
+      "enrollmentRequired": false,
+      "enrollmentInstructions": "No enrollment required. Benefits apply automatically when booking through Amex Travel."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
