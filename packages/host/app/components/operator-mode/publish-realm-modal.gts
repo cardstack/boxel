@@ -316,6 +316,7 @@ export default class PublishRealmModal extends Component<Signature> {
     try {
       await this.realmServer.deleteBoxelClaimedDomain(this.claimedDomain.id);
       this.applyClaimedDomain(null);
+      this.clearCustomSubdomainFeedback();
     } catch (error) {
       console.error('Failed to unclaim site name', error);
       this.customSubdomainError =
