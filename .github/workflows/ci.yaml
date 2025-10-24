@@ -186,6 +186,7 @@ jobs:
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
         working-directory: packages/postgres
         env:
+          PGHOST: localhost
           PGPORT: 5435
         run: pnpm migrate up
       - name: Run down migrations
