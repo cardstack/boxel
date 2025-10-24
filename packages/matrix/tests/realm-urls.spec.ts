@@ -39,7 +39,7 @@ test.describe('Realm URLs in Matrix account data', () => {
       .locator('[data-test-workspace-chooser]')
       .waitFor({ state: 'visible' });
 
-    expect(
+    await expect(
       page.locator('[data-test-workspace-list] [data-test-workspace]'),
     ).toHaveCount(0);
 
@@ -55,16 +55,16 @@ test.describe('Realm URLs in Matrix account data', () => {
     await page
       .locator('[data-test-workspace-list] [data-test-workspace]')
       .waitFor({ state: 'visible' });
-    expect(
+    await expect(
       page.locator('[data-test-workspace-list] [data-test-workspace]'),
     ).toHaveCount(1);
 
-    expect(
+    await expect(
       page.locator(
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-name]',
       ),
     ).toHaveText('Unknown Workspace');
-    expect(
+    await expect(
       page.locator(
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-visibility]',
       ),
