@@ -48,11 +48,12 @@ export default class LayoutCanvasModifier extends Modifier<{
           const x = round(p.x);
           const y = round(p.y);
           const w = round(p.width);
+          const h = round(p.height);
           const ah = round(p.autoHeight);
           const ch = round(p.customHeight);
           const fmt = p.format ?? '';
           const layer = p.layer ?? '';
-          return [id, x, y, w, ah, ch, fmt, layer].join(',');
+          return [id, x, y, w, h, ah, ch, fmt, layer].join(',');
         })
         .join('|');
     } catch (_) {
@@ -407,8 +408,12 @@ export default class LayoutCanvasModifier extends Modifier<{
     const pos = itemData.position || {};
     const width = Math.max(pos.width || 120, 120);
 
-    // Height always derives from autoHeight for simplicity
-    let height = Math.max(pos.autoHeight || 80, 80);
+    // Resolve initial height using available position properties
+    const resolvedHeight = Math.max(
+      pos.height || pos.customHeight || pos.autoHeight || 80,
+      80,
+    );
+    let height = resolvedHeight;
 
     overlay.style.cssText = `
         position: absolute;
@@ -569,7 +574,6 @@ export default class LayoutCanvasModifier extends Modifier<{
         cursor: ns-resize; opacity: 0;
         transition: opacity 0.15s ease;
         pointer-events: auto; z-index: 5;
-        display: none;
       `;
     overlay.appendChild(resizeBottom);
 
@@ -581,7 +585,6 @@ export default class LayoutCanvasModifier extends Modifier<{
         cursor: nwse-resize; opacity: 0;
         transition: opacity 0.15s ease;
         pointer-events: auto; z-index: 6;
-        display: none;
       `;
     resizeCorner.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 16 16" fill="white" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));">
@@ -709,20 +712,37 @@ export default class LayoutCanvasModifier extends Modifier<{
                 // Convert measured screen pixels into world units by dividing by current scale
                 const scale = this.currentTransform.k || 1;
                 const worldHeight = Math.max(actualHeight / scale, 20);
+                const hasCustomHeight =
+                  typeof itemData.position.customHeight === 'number' &&
+                  itemData.position.customHeight > 0;
+
                 // Update the autoHeight with the measured value (world units) - defer to avoid circular dependency
                 setTimeout(() => {
                   itemData.position.autoHeight = Math.round(worldHeight);
+                  if (!hasCustomHeight) {
+                    itemData.position.height = Math.round(worldHeight);
+                  }
                 }, 0);
 
                 // Update height indicator
                 heightIndicator.textContent = `H: ${Math.round(
-                  worldHeight,
-                )}px (auto)`;
-                heightIndicator.style.background = 'rgba(16, 185, 129, 0.9)';
+                  hasCustomHeight
+                    ? itemData.position.customHeight || worldHeight
+                    : worldHeight,
+                )}px${
+                  hasCustomHeight
+                    ? ` (auto: ${Math.round(worldHeight)}px)`
+                    : ' (auto)'
+                }`;
+                heightIndicator.style.background = hasCustomHeight
+                  ? 'rgba(239, 68, 68, 0.9)'
+                  : 'rgba(16, 185, 129, 0.9)';
 
-                // Update the overlay height immediately (world units)
-                overlay.style.height = `${worldHeight}px`;
-                height = worldHeight;
+                // Only update the overlay height when we're relying on auto height
+                if (!hasCustomHeight) {
+                  overlay.style.height = `${worldHeight}px`;
+                  height = worldHeight;
+                }
 
                 onItemDrag?.(itemData);
               }
@@ -754,12 +774,34 @@ export default class LayoutCanvasModifier extends Modifier<{
                   ) {
                     const scale = this.currentTransform.k || 1;
                     const worldHeight = Math.max(actualHeight / scale, 20);
+                    const hasCustomHeight =
+                      typeof itemData.position.customHeight === 'number' &&
+                      itemData.position.customHeight > 0;
+
                     // Defer to avoid circular dependency
                     setTimeout(() => {
                       itemData.position.autoHeight = Math.round(worldHeight);
+                      if (!hasCustomHeight) {
+                        itemData.position.height = Math.round(worldHeight);
+                      }
                     }, 0);
 
-                    overlay.style.height = `${worldHeight}px`;
+                    heightIndicator.textContent = `H: ${Math.round(
+                      hasCustomHeight
+                        ? itemData.position.customHeight || worldHeight
+                        : worldHeight,
+                    )}px${
+                      hasCustomHeight
+                        ? ` (auto: ${Math.round(worldHeight)}px)`
+                        : ' (auto)'
+                    }`;
+                    heightIndicator.style.background = hasCustomHeight
+                      ? 'rgba(239, 68, 68, 0.9)'
+                      : 'rgba(16, 185, 129, 0.9)';
+
+                    if (!hasCustomHeight) {
+                      overlay.style.height = `${worldHeight}px`;
+                    }
 
                     onItemDrag?.(itemData);
                   }
@@ -812,15 +854,21 @@ export default class LayoutCanvasModifier extends Modifier<{
           heightIndicator.style.display = 'block';
           // Re-measure on hover to ensure we have latest height
           measureContentHeight();
-          if (pos.customHeight) {
-            heightIndicator.textContent = `H: ${pos.customHeight}px (auto: ${
-              pos.autoHeight || 80
-            }px)`;
-            heightIndicator.style.background = 'rgba(239, 68, 68, 0.9)';
-          } else {
-            heightIndicator.textContent = `H: ${pos.autoHeight || 80}px (auto)`;
-            heightIndicator.style.background = 'rgba(16, 185, 129, 0.9)';
-          }
+          const position = itemData.position || {};
+          const hasCustomHeight =
+            typeof position.customHeight === 'number' &&
+            position.customHeight > 0;
+          const autoHeight = Math.round(
+            position.autoHeight || position.height || 80,
+          );
+          const customHeight = Math.round(position.customHeight || 0);
+          const displayHeight = hasCustomHeight ? customHeight : autoHeight;
+          heightIndicator.textContent = hasCustomHeight
+            ? `H: ${displayHeight}px (auto: ${autoHeight}px)`
+            : `H: ${displayHeight}px (auto)`;
+          heightIndicator.style.background = hasCustomHeight
+            ? 'rgba(239, 68, 68, 0.9)'
+            : 'rgba(16, 185, 129, 0.9)';
         }
       }
     });
