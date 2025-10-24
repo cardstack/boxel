@@ -7,6 +7,8 @@ import {
   containsMany,
   linksToMany,
   realmURL,
+  linksTo,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
 
@@ -22,6 +24,7 @@ import {
   or,
   not,
   pick,
+  and,
 } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
@@ -38,6 +41,13 @@ import UploadImageCommand from '../commands/upload-image';
 import type { CloudflareImage } from '../cloudflare-image';
 import { AdventureScenario } from './adventure-scenario'; // ¹ᵇ Linked Scenarios
 
+class CustomAdventureField extends FieldDef {
+  @field title = contains(StringField);
+  @field description = contains(StringField);
+  @field tags = containsMany(StringField);
+  @field imageStyles = containsMany(StringField);
+}
+
 class AdventureIsolated extends Component<typeof Adventure> {
   @tracked isProcessing = false;
   @tracked roomId: string | null = null;
@@ -53,6 +63,19 @@ class AdventureIsolated extends Component<typeof Adventure> {
   @tracked newTag: string = '';
   @tracked newStyle: string = '';
   @tracked showLinkedChooser: boolean = false;
+  @tracked setupMode: 'quick' | 'custom' = 'quick';
+  @tracked showResetMenu: boolean = false;
+
+  // Example tags and styles for suggestions
+  exampleTags = ['fantasy', 'sci-fi', 'mystery', 'horror', 'comedy', 'drama'];
+  exampleStyles = [
+    'watercolor',
+    'cinematic',
+    'anime',
+    'pixel art',
+    'photorealistic',
+    'sketch',
+  ];
 
   // Load the uploaded CloudflareImage card dynamically using getCard
   uploadedImageResource = this.args.context?.getCard(
@@ -91,9 +114,10 @@ class AdventureIsolated extends Component<typeof Adventure> {
   addTag = (raw: string) => {
     const v = (raw || '').trim();
     if (!v) return;
-    let arr = Array.isArray(this.args.model?.oneShotTags)
-      ? this.args.model.oneShotTags
-      : (this.args.model.oneShotTags = []);
+    if (!this.args.model?.customAdventure) return;
+    let arr = Array.isArray(this.args.model.customAdventure.tags)
+      ? this.args.model.customAdventure.tags
+      : (this.args.model.customAdventure.tags = []);
     if (!arr.includes(v)) arr.push(v);
     this.newTag = '';
   };
@@ -101,9 +125,10 @@ class AdventureIsolated extends Component<typeof Adventure> {
   addStyle = (raw: string) => {
     const v = (raw || '').trim();
     if (!v) return;
-    let arr = Array.isArray(this.args.model?.oneShotImageStyles)
-      ? this.args.model.oneShotImageStyles
-      : (this.args.model.oneShotImageStyles = []);
+    if (!this.args.model?.customAdventure) return;
+    let arr = Array.isArray(this.args.model.customAdventure.imageStyles)
+      ? this.args.model.customAdventure.imageStyles
+      : (this.args.model.customAdventure.imageStyles = []);
     if (!arr.includes(v)) arr.push(v);
     this.newStyle = '';
   };
@@ -123,8 +148,8 @@ class AdventureIsolated extends Component<typeof Adventure> {
   };
 
   removeTag = (idx: number) => {
-    let arr = Array.isArray(this.args.model?.oneShotTags)
-      ? this.args.model.oneShotTags
+    let arr = Array.isArray(this.args.model?.customAdventure?.tags)
+      ? this.args.model.customAdventure.tags
       : null;
     if (!arr) return;
     if (idx >= 0 && idx < arr.length) {
@@ -133,8 +158,8 @@ class AdventureIsolated extends Component<typeof Adventure> {
   };
 
   removeStyle = (idx: number) => {
-    let arr = Array.isArray(this.args.model?.oneShotImageStyles)
-      ? this.args.model.oneShotImageStyles
+    let arr = Array.isArray(this.args.model?.customAdventure?.imageStyles)
+      ? this.args.model.customAdventure.imageStyles
       : null;
     if (!arr) return;
     if (idx >= 0 && idx < arr.length) {
@@ -145,12 +170,13 @@ class AdventureIsolated extends Component<typeof Adventure> {
   sanitizeOneShotArrays = () => {
     try {
       const m = this.args?.model;
-      if (!m) return;
-      if (Array.isArray(m.oneShotTags)) {
-        m.oneShotTags = m.oneShotTags.filter(Boolean);
+      if (!m?.customAdventure) return;
+      if (Array.isArray(m.customAdventure.tags)) {
+        m.customAdventure.tags = m.customAdventure.tags.filter(Boolean);
       }
-      if (Array.isArray(m.oneShotImageStyles)) {
-        m.oneShotImageStyles = m.oneShotImageStyles.filter(Boolean);
+      if (Array.isArray(m.customAdventure.imageStyles)) {
+        m.customAdventure.imageStyles =
+          m.customAdventure.imageStyles.filter(Boolean);
       }
     } catch {}
   };
@@ -174,6 +200,18 @@ class AdventureIsolated extends Component<typeof Adventure> {
   };
   hideChooser = () => {
     this.showLinkedChooser = false;
+  };
+
+  setSetupMode = (mode: 'quick' | 'custom') => {
+    this.setupMode = mode;
+  };
+
+  toggleResetMenu = () => {
+    this.showResetMenu = !this.showResetMenu;
+  };
+
+  closeResetMenu = () => {
+    this.showResetMenu = false;
   };
 
   constructor(owner: unknown, args: any) {
@@ -230,14 +268,19 @@ class AdventureIsolated extends Component<typeof Adventure> {
   // Start adventure (same orchestration as V3; UI refreshed)
   @action
   async startAdventure() {
+    // If in custom mode, clear the selected linked scenario
+    if (this.setupMode === 'custom') {
+      this.selectedLinkedScenario = null;
+    }
+
     const hasLinked = !!this.selectedLinkedScenario;
     const hasDefault = false;
-    const hasOneShot =
-      !!this.args.model?.oneShotDescription &&
-      (this.args.model.oneShotDescription.trim?.().length || 0) > 0;
+    const hasCustom =
+      !!this.args.model?.customAdventure?.description &&
+      (this.args.model.customAdventure.description.trim?.().length || 0) > 0;
 
-    if (!hasLinked && !hasDefault && !hasOneShot) {
-      alert('Please pick a linked Scenario or craft a one‑shot first.');
+    if (!hasLinked && !hasDefault && !hasCustom) {
+      alert('Please pick a linked Scenario or craft a custom adventure first.');
       return;
     }
 
@@ -247,27 +290,27 @@ class AdventureIsolated extends Component<typeof Adventure> {
 
       if (hasLinked) {
         chosen = this.selectedLinkedScenario;
-      } else if (hasOneShot) {
+      } else if (hasCustom) {
         chosen = {
-          key: 'one-shot',
-          title: this.args.model.oneShotTitle || 'One‑Shot Scenario',
-          description: this.args.model.oneShotDescription || '',
+          key: 'custom',
+          title: this.args.model.customAdventure?.title || 'Custom Adventure',
+          description: this.args.model.customAdventure?.description || '',
         };
       }
 
       if (!chosen) throw new Error('Scenario not found');
 
-      // Derive kickoff guidance (linked preferred, else one‑shot)
+      // Derive kickoff guidance (linked preferred, else custom)
       const kickoffTags = (
         hasLinked
           ? this.selectedLinkedScenario?.tags ?? []
-          : this.args.model?.oneShotTags ?? []
+          : this.args.model?.customAdventure?.tags ?? []
       ).filter(Boolean);
 
       const kickoffStyles = (
         hasLinked
           ? this.selectedLinkedScenario?.imageStyles ?? []
-          : this.args.model?.oneShotImageStyles ?? []
+          : this.args.model?.customAdventure?.imageStyles ?? []
       ).filter(Boolean);
 
       const ctx = this.args.context?.commandContext;
@@ -282,11 +325,6 @@ class AdventureIsolated extends Component<typeof Adventure> {
         cardId: this.args.model.id,
         patch: {
           attributes: {
-            selectedScenario: {
-              key: chosen.key,
-              title: chosen.title,
-              description: chosen.description,
-            },
             // Persist guidance for ongoing turns (linked preferred, else one‑shot)
             oneShotTags: kickoffTags,
             oneShotImageStyles: kickoffStyles,
@@ -295,6 +333,14 @@ class AdventureIsolated extends Component<typeof Adventure> {
             autoGenerateImages: true,
             currentTurn: 1,
             startedAt: new Date().toISOString(),
+          },
+          relationships: {
+            selectedScenario: {
+              links: {
+                // Clear selected scenario when starting with custom
+                self: hasLinked ? this.selectedLinkedScenario?.id : null,
+              },
+            },
           },
         },
       });
@@ -308,9 +354,9 @@ class AdventureIsolated extends Component<typeof Adventure> {
 
 Start Turn 1 using the selected scenario as seed. End with 2–4 choices and allow open-ended replies.
 
-GUIDANCE FIELDS (read from oneShotTags/oneShotImageStyles on the card):
-- oneShotTags: Use as narrative guidance (tone, setting, atmosphere, POV, theme)
-- oneShotImageStyles: Include in lastImagePrompt with concrete scene nouns
+GUIDANCE FIELDS (read from customAdventure.tags/customAdventure.imageStyles on the card):
+- customAdventure.tags: Use as narrative guidance (tone, setting, atmosphere, POV, theme)
+- customAdventure.imageStyles: Include in lastImagePrompt with concrete scene nouns
 
 PATCH ONLY latest fields via patch-fields (no arrays):
 - lastTurnNumber = 1
@@ -351,9 +397,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       // Ensure agentic mode
       const set = new SetActiveLLMCommand(ctx);
       await set.execute({ roomId: this.roomId, mode: 'act' });
-
-      // Gentle toast
-      alert('🎉 Adventure started! Open the chat to continue.');
     } catch (e: any) {
       console.error('Adventure V4 start error:', e);
       alert(`Failed to start: ${e?.message || String(e)}`);
@@ -379,12 +422,11 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
 
   @action
   async resetAdventure() {
-    if (
-      !confirm(
-        'Reset this adventure? Linked Scenarios remain linked; one‑shot fields stay as entered.',
-      )
-    )
-      return;
+    const confirmed = confirm(
+      '🔄 Reset Adventure?\n\nThis will clear all progress and start over.\n\nLinked scenarios and settings will be kept.',
+    );
+
+    if (!confirmed) return;
     try {
       const ctx = this.args.context?.commandContext;
       if (!ctx)
@@ -435,10 +477,13 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       this.selectedScenarioKey = s?.key || null;
       // Sync one-shot guidance to the linked Scenario so UI and kickoff align
       if (s) {
+        if (!this.args.model.customAdventure) {
+          this.args.model.customAdventure = {};
+        }
         const tags = Array.isArray(s.tags) ? [...s.tags] : [];
         const styles = Array.isArray(s.imageStyles) ? [...s.imageStyles] : [];
-        this.args.model.oneShotTags = tags;
-        this.args.model.oneShotImageStyles = styles;
+        this.args.model.customAdventure.tags = tags;
+        this.args.model.customAdventure.imageStyles = styles;
         this.newTag = '';
         this.newStyle = '';
       }
@@ -449,8 +494,8 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
 
   @action
   async startWithLinked(s: any) {
+    await this.selectLinked(s);
     try {
-      this.selectLinked(s);
       await this.startAdventure();
     } catch (e) {
       console.error('Failed to start with linked scenario', e);
@@ -554,11 +599,31 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
     );
   }
 
-  get firstScenario() {
-    if (!this.args.model?.linkedScenarios) {
-      return;
+  // ² Get the currently selected scenario or custom adventure for display
+  get currentScenario() {
+    try {
+      // Return the linked selected scenario if it exists
+      if (this.args.model?.selectedScenario) {
+        return this.args.model.selectedScenario;
+      }
+
+      // If custom adventure has content, create a virtual scenario from it
+      const custom = this.args.model?.customAdventure;
+      if (custom?.title || custom?.description) {
+        return {
+          title: custom.title || 'Custom Adventure',
+          description: custom.description || '',
+          tags: custom.tags || [],
+          imageStyles: custom.imageStyles || [],
+        };
+      }
+
+      // Fallback to first linked scenario
+      return this.args.model?.linkedScenarios?.[0] || null;
+    } catch (e) {
+      console.error('Adventure: Error getting current scenario', e);
+      return this.args.model?.linkedScenarios?.[0] || null;
     }
-    return this.args.model.linkedScenarios[0];
   }
 
   <template>
@@ -568,129 +633,198 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         {{#if this.gameNotStarted}}
           <section class='select'>
             <h2 class='section-title'>Set Up Your Adventure</h2>
-            <p class='section-help'>Link a Scenario card or craft a one‑shot
-              below.</p>
 
-            {{#if (gt @model.linkedScenarios.length 0)}}
-              <h3 class='section-title'>Linked Scenarios</h3>
-              <div class='grid'>
-                {{#each @model.linkedScenarios as |sc|}}
-                  <div
-                    class='card
-                      {{if (eq this.selectedScenarioKey sc.key) "selected"}}'
-                  >
-                    <div class='card-title'>{{sc.title}}</div>
-                    <div class='card-desc'>{{sc.description}}</div>
-                    <div class='card-meta'>
-                      {{#if (gt sc.tags.length 0)}}
-                        <span class='meta-pill subtle'>{{get sc.tags 0}}</span>
-                      {{/if}}
-                    </div>
-                    <div class='actions-center'>
-                      <Button
-                        class='btn secondary'
-                        {{on 'click' (fn this.startWithLinked sc)}}
-                      >
-                        Use This Scenario
-                      </Button>
-                    </div>
-                  </div>
-                {{/each}}
-              </div>
-            {{else}}
-              <div class='placeholder'>
-                No scenarios linked yet. Click Add Adventure Scenario to link
-                one, or craft a one‑shot below.
-              </div>
-
-            {{/if}}
-
-            <h3 class='section-title'>Add Linked Scenarios</h3>
-            <p class='section-help'>Use the chooser to add Scenario cards.
-              Linked scenarios appear above.</p>
-            <div class='actions-center'>
-              <Button class='btn secondary' {{on 'click' this.showChooser}}>
-                Add Adventure Scenario
+            {{! Mode Toggle }}
+            <div class='mode-picker'>
+              <Button
+                class='mode-btn {{if (eq this.setupMode "quick") "active"}}'
+                {{on 'click' (fn this.setSetupMode 'quick')}}
+              >
+                Quick Start
+              </Button>
+              <Button
+                class='mode-btn {{if (eq this.setupMode "custom") "active"}}'
+                {{on 'click' (fn this.setSetupMode 'custom')}}
+              >
+                Custom Adventure
               </Button>
             </div>
-            {{#if this.showLinkedChooser}}
-              <div class='chooser-panel'>
-                <@fields.linkedScenarios @format='edit' />
+
+            {{#if (eq this.setupMode 'quick')}}
+              <p class='section-help'>Choose from pre-built scenarios to start
+                quickly.</p>
+
+              {{#if (gt @model.linkedScenarios.length 0)}}
+                <h3 class='section-title'>Linked Scenarios</h3>
+                <div class='grid'>
+                  {{#each @model.linkedScenarios as |sc|}}
+                    <div
+                      class='card
+                        {{if (eq this.selectedScenarioKey sc.key) "selected"}}'
+                    >
+                      <div class='card-title'>{{sc.title}}</div>
+                      <div class='card-desc'>{{sc.description}}</div>
+                      <div class='card-meta'>
+                        {{#if (gt sc.tags.length 0)}}
+                          <span class='meta-pill subtle'>{{get
+                              sc.tags
+                              0
+                            }}</span>
+                        {{/if}}
+                      </div>
+                      <div class='actions-center'>
+                        <Button
+                          class='btn secondary'
+                          {{on 'click' (fn this.startWithLinked sc)}}
+                        >
+                          Use This Scenario
+                        </Button>
+                      </div>
+                    </div>
+                  {{/each}}
+                </div>
+              {{else}}
+                <div class='empty-scenarios'>
+                  <div class='empty-icon'>📚</div>
+                  <h3>No Scenarios Yet</h3>
+                  <p>Link pre-built scenarios to get started quickly</p>
+                </div>
+              {{/if}}
+
+              <h3 class='section-title'>Add Linked Scenarios</h3>
+              <p class='section-help'>Use the chooser to add Scenario cards.
+                Linked scenarios appear above.</p>
+              <div class='actions-center'>
+                <Button class='btn secondary' {{on 'click' this.showChooser}}>
+                  Add Adventure Scenario
+                </Button>
+              </div>
+              {{#if this.showLinkedChooser}}
+                <div class='chooser-panel'>
+                  <@fields.linkedScenarios @format='edit' />
+                  <div class='actions-center'>
+                    <Button
+                      class='btn ghost'
+                      {{on 'click' this.hideChooser}}
+                    >Close Chooser</Button>
+                  </div>
+                </div>
+              {{/if}}
+            {{/if}}
+
+            {{#if (eq this.setupMode 'custom')}}
+              <p class='section-help'>Craft a unique adventure with custom tags
+                and image styles.</p>
+
+              <div class='card'>
+                <div class='card-title'>Title</div>
+                <@fields.customAdventure.title @format='edit' />
+                <div class='card-title'>Description</div>
+                <@fields.customAdventure.description @format='edit' />
+                <div class='card-title'>Tags</div>
+                <div class='chips'>
+                  {{#if (gt (get @model.customAdventure.tags 'length') 0)}}
+                    <div class='chip-row'>
+                      {{#each @model.customAdventure.tags as |t idx|}}
+                        <Button
+                          class='chip'
+                          {{on 'click' (fn this.removeTag idx)}}
+                        >
+                          {{t}}
+                          <span aria-hidden='true'>×</span>
+                        </Button>
+                      {{/each}}
+                    </div>
+                  {{/if}}
+                  <label for='tag-input' class='sr-only'>Add tag</label>
+                  <input
+                    id='tag-input'
+                    class='chip-input'
+                    placeholder='Add tag… (comma or Enter)'
+                    value={{this.newTag}}
+                    {{on 'input' (pick 'target.value' this.setNewTag)}}
+                    {{on 'keydown' this.onTagKey}}
+                  />
+                  {{#if
+                    (and
+                      (eq (get @model.customAdventure.tags 'length') 0)
+                      (not this.newTag)
+                    )
+                  }}
+                    <div class='chip-suggestions'>
+                      <span class='hint'>Try:</span>
+                      {{#each this.exampleTags as |tag|}}
+                        <Button
+                          class='chip suggested'
+                          {{on 'click' (fn this.addTag tag)}}
+                        >
+                          {{tag}}
+                        </Button>
+                      {{/each}}
+                    </div>
+                  {{/if}}
+                </div>
+
+                <div class='card-title'>Image Styles</div>
+                <div class='chips'>
+                  {{#if
+                    (gt (get @model.customAdventure.imageStyles 'length') 0)
+                  }}
+                    <div class='chip-row'>
+                      {{#each @model.customAdventure.imageStyles as |s idx|}}
+                        <Button
+                          class='chip'
+                          {{on 'click' (fn this.removeStyle idx)}}
+                        >
+                          {{s}}
+                          <span aria-hidden='true'>×</span>
+                        </Button>
+                      {{/each}}
+                    </div>
+                  {{/if}}
+                  <label for='style-input' class='sr-only'>Add image style</label>
+                  <input
+                    id='style-input'
+                    class='chip-input'
+                    placeholder='Add style… (comma or Enter)'
+                    value={{this.newStyle}}
+                    {{on 'input' (pick 'target.value' this.setNewStyle)}}
+                    {{on 'keydown' this.onStyleKey}}
+                  />
+                  {{#if
+                    (and
+                      (eq (get @model.customAdventure.imageStyles 'length') 0)
+                      (not this.newStyle)
+                    )
+                  }}
+                    <div class='chip-suggestions'>
+                      <span class='hint'>Try:</span>
+                      {{#each this.exampleStyles as |style|}}
+                        <Button
+                          class='chip suggested'
+                          {{on 'click' (fn this.addStyle style)}}
+                        >
+                          {{style}}
+                        </Button>
+                      {{/each}}
+                    </div>
+                  {{/if}}
+                </div>
                 <div class='actions-center'>
                   <Button
-                    class='btn ghost'
-                    {{on 'click' this.hideChooser}}
-                  >Close Chooser</Button>
+                    class='btn primary'
+                    @disabled={{this.isProcessing}}
+                    {{on 'click' this.startAdventure}}
+                  >
+                    {{#if this.isProcessing}}
+                      <span class='spinner'></span>
+                    {{/if}}
+                    {{if this.isProcessing 'Starting…' 'Begin'}}
+                  </Button>
                 </div>
               </div>
             {{/if}}
-            <h3 class='section-title'>One‑Shot Scenario</h3>
-            <div class='card'>
-              <div class='card-title'>Title</div>
-              <@fields.oneShotTitle @format='edit' />
-              <div class='card-title'>Description</div>
-              <@fields.oneShotDescription @format='edit' />
-              <div class='card-title'>Tags</div>
-              <div class='chips'>
-                {{#if (gt (get @model.oneShotTags 'length') 0)}}
-                  <div class='chip-row'>
-                    {{#each @model.oneShotTags as |t idx|}}
-                      <Button
-                        class='chip'
-                        {{on 'click' (fn this.removeTag idx)}}
-                      >
-                        {{t}}
-                        <span aria-hidden='true'>×</span>
-                      </Button>
-                    {{/each}}
-                  </div>
-                {{/if}}
-                <label for='tag-input' class='sr-only'>Add tag</label>
-                <input
-                  id='tag-input'
-                  class='chip-input'
-                  placeholder='Add tag… (comma or Enter)'
-                  value={{this.newTag}}
-                  {{on 'input' (pick 'target.value' this.setNewTag)}}
-                  {{on 'keydown' this.onTagKey}}
-                />
-              </div>
 
-              <div class='card-title'>Image Styles</div>
-              <div class='chips'>
-                {{#if (gt (get @model.oneShotImageStyles 'length') 0)}}
-                  <div class='chip-row'>
-                    {{#each @model.oneShotImageStyles as |s idx|}}
-                      <Button
-                        class='chip'
-                        {{on 'click' (fn this.removeStyle idx)}}
-                      >
-                        {{s}}
-                        <span aria-hidden='true'>×</span>
-                      </Button>
-                    {{/each}}
-                  </div>
-                {{/if}}
-                <label for='style-input' class='sr-only'>Add image style</label>
-                <input
-                  id='style-input'
-                  class='chip-input'
-                  placeholder='Add style… (comma or Enter)'
-                  value={{this.newStyle}}
-                  {{on 'input' (pick 'target.value' this.setNewStyle)}}
-                  {{on 'keydown' this.onStyleKey}}
-                />
-              </div>
-              <div class='actions-center'>
-                <Button
-                  class='btn primary'
-                  @disabled={{this.isProcessing}}
-                  {{on 'click' this.startAdventure}}
-                >
-                  {{if this.isProcessing 'Starting…' 'Begin with One‑Shot'}}
-                </Button>
-              </div>
-            </div>
           </section>
         {{/if}}
 
@@ -701,19 +835,12 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
               <div class='turn-left'>
                 <span class='turn-dot'></span>
                 <span class='turn-label'>Turn {{@model.currentTurn}}</span>
-                {{#if @model.lastTimestamp}}
-                  <span class='sep'>•</span>
-                  <time class='turn-time'>{{formatDateTime
-                      @model.lastTimestamp
-                      size='tiny'
-                    }}</time>
-                {{/if}}
               </div>
               <div class='turn-right'>
-
                 {{#if @model.totalTurns}}
-                  <span class='mini-pill subtle'>Turns:
-                    {{@model.totalTurns}}</span>
+                  <span
+                    class='mini-pill subtle'
+                  >{{@model.currentTurn}}/{{@model.totalTurns}}</span>
                 {{/if}}
               </div>
             </div>
@@ -731,24 +858,36 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
               {{/if}}
 
               <div class='action-right'>
-                <Button
-                  class='btn secondary'
-                  @disabled={{or
-                    this.isProcessing
-                    (not @model.lastImagePrompt)
-                  }}
-                  {{on 'click' this.generateSceneImage}}
-                >
-                  {{if this.isProcessing 'Generating…' 'Generate Image'}}
-                </Button>
-                {{#if (not @model.lastImagePrompt)}}
-                  <div class='micro-help'>Waiting for the GM's image prompt…</div>
+                {{! Only show manual generate button if auto-generation is disabled }}
+                {{#if (not @model.autoGenerateImages)}}
+                  <Button
+                    class='btn secondary'
+                    @disabled={{or
+                      this.isProcessing
+                      (not @model.lastImagePrompt)
+                    }}
+                    {{on 'click' this.generateSceneImage}}
+                  >
+                    {{#if this.isProcessing}}
+                      <span class='spinner'></span>
+                    {{/if}}
+                    {{if this.isProcessing 'Generating…' '🎨 Generate Image'}}
+                  </Button>
+                {{/if}}
+
+                {{#if
+                  (and
+                    (not @model.lastImagePrompt) (not @model.autoGenerateImages)
+                  )
+                }}
+                  <div class='micro-help'>Waiting for scene description…</div>
                 {{/if}}
 
                 <Button
                   class='btn ghost'
                   {{on 'click' this.resetAdventure}}
-                >Reset</Button>
+                  title='Reset Adventure'
+                >🔄</Button>
               </div>
             </div>
 
@@ -775,14 +914,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
                   <div class='overlay-controls'>
                     <div class='oc-left'>
                       <span class='oc-turn'>Turn {{@model.currentTurn}}</span>
-                      {{#if @model.lastTimestamp}}
-                        <span class='oc-sep'>•</span>
-                        <time class='oc-time'>{{formatDateTime
-                            @model.lastTimestamp
-                            size='tiny'
-                          }}</time>
-                      {{/if}}
-
                     </div>
 
                     <div class='oc-right'>
@@ -797,25 +928,40 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
                         <Button class='btn primary' @disabled={{true}}>Open Chat</Button>
                       {{/if}}
 
-                      <Button
-                        class='btn secondary'
-                        @disabled={{or
-                          this.isProcessing
-                          (not @model.lastImagePrompt)
-                        }}
-                        {{on 'click' this.generateSceneImage}}
-                      >
-                        {{if this.isProcessing 'Generating…' 'Generate Image'}}
-                      </Button>
+                      {{#if (not @model.autoGenerateImages)}}
+                        <Button
+                          class='btn secondary'
+                          @disabled={{or
+                            this.isProcessing
+                            (not @model.lastImagePrompt)
+                          }}
+                          {{on 'click' this.generateSceneImage}}
+                        >
+                          {{#if this.isProcessing}}
+                            <span class='spinner'></span>
+                          {{/if}}
+                          {{if
+                            this.isProcessing
+                            'Generating…'
+                            '🎨 Generate Image'
+                          }}
+                        </Button>
+                      {{/if}}
 
-                      {{#if (not @model.lastImagePrompt)}}
-                        <div class='micro-help'>Waiting for prompt from GM…</div>
+                      {{#if
+                        (and
+                          (not @model.lastImagePrompt)
+                          (not @model.autoGenerateImages)
+                        )
+                      }}
+                        <div class='micro-help'>Waiting for scene description…</div>
                       {{/if}}
 
                       <Button
                         class='btn ghost'
                         {{on 'click' this.resetAdventure}}
-                      >Reset</Button>
+                        title='Reset Adventure'
+                      >🔄</Button>
                     </div>
                   </div>
 
@@ -849,9 +995,12 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
                   <div class='line w-70'></div>
                 </div>
               {{else}}
-                <div class='placeholder'>
-                  The story will appear here after the GM posts Turn
-                  {{@model.currentTurn}}…
+                <div class='placeholder enchanted'>
+                  <div class='placeholder-icon'>✨</div>
+                  <h3>Your Adventure Awaits</h3>
+                  <p>The narrator is crafting Turn {{@model.currentTurn}}...</p>
+                  <div class='placeholder-hint'>Open the AI Chat to continue
+                    your journey</div>
                 </div>
               {{/if}}
             </div>
@@ -860,15 +1009,15 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
               <div class='header-top'>
                 <h1 class='title'>
                   {{if
-                    this.firstScenario.title
-                    this.firstScenario.title
+                    this.currentScenario.title
+                    this.currentScenario.title
                     'Create Your Own Adventure'
                   }}
                 </h1>
 
               </div>
-              {{#if this.firstScenario.description}}
-                <p class='subtitle'>{{this.firstScenario.description}}</p>
+              {{#if this.currentScenario.description}}
+                <p class='subtitle'>{{this.currentScenario.description}}</p>
               {{/if}}
             </footer>
 
@@ -1319,6 +1468,35 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         flex-wrap: wrap;
         pointer-events: auto; /* enable clicks inside */
       }
+
+      /* Enhanced visibility for buttons in overlay controls */
+      .image-wrap .overlay-controls .btn {
+        background: rgba(17, 24, 39, 0.75);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      }
+      .image-wrap .overlay-controls .btn.ghost {
+        background: rgba(17, 24, 39, 0.6);
+        border-color: rgba(255, 255, 255, 0.3);
+        color: #fff;
+      }
+      .image-wrap .overlay-controls .btn.ghost:hover:not([disabled]) {
+        background: rgba(17, 24, 39, 0.8);
+        border-color: rgba(255, 255, 255, 0.4);
+        transform: translateY(-1px);
+      }
+      .image-wrap .overlay-controls .btn.primary {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        border-color: rgba(37, 99, 235, 0.3);
+      }
+      .image-wrap .overlay-controls .btn.secondary {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.3);
+        color: #fff;
+      }
       .oc-turn {
         font-weight: 700;
         color: #fff;
@@ -1353,8 +1531,11 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       }
       .overlay-box {
         margin: 0.5rem;
-        /* Lighter box so the image remains clear, with strong text contrast */
-        background: rgba(17, 24, 39, 0.5);
+        /* Improved contrast with backdrop blur */
+        background: rgba(17, 24, 39, 0.75);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         color: #fff;
         border-radius: 0.5rem;
         padding: 0.75rem;
@@ -1425,6 +1606,203 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         border-width: 0;
       }
 
+      /* Loading spinner */
+      .spinner {
+        display: inline-block;
+        width: 0.875rem;
+        height: 0.875rem;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        margin-right: 0.25rem;
+      }
+      .btn.secondary .spinner {
+        border-color: rgba(31, 41, 55, 0.3);
+        border-top-color: #1f2937;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Mode picker */
+      .mode-picker {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding: 0.25rem;
+        background: #f3f4f6;
+        border-radius: 0.5rem;
+      }
+      .mode-btn {
+        flex: 1;
+        padding: 0.5rem 1rem;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #6b7280;
+        cursor: pointer;
+        transition: all 120ms ease;
+      }
+      .mode-btn:hover {
+        color: #374151;
+        background: rgba(255, 255, 255, 0.5);
+      }
+      .mode-btn.active {
+        background: #fff;
+        color: #2563eb;
+        border-color: #e5e7eb;
+        box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04);
+      }
+
+      /* Reset menu */
+      .reset-menu-wrapper {
+        position: relative;
+        /* Ensure dropdown isn't clipped */
+        overflow: visible;
+      }
+      .reset-menu {
+        position: absolute;
+        right: 0;
+        bottom: calc(100% + 0.25rem); /* Show above button instead of below */
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        min-width: 180px;
+        z-index: 50;
+        padding: 0.25rem;
+        /* Prevent clipping by parent containers */
+        clip-path: none;
+        /* Ensure visibility */
+        visibility: visible;
+        opacity: 1;
+        /* Ensure it appears above the image area */
+        transform: translateY(-0.25rem);
+      }
+
+      /* Ensure parent containers don't clip the dropdown */
+      .overlay-controls,
+      .actionbar,
+      .oc-right,
+      .action-right {
+        overflow: visible;
+      }
+      .menu-item {
+        width: 100%;
+        text-align: left;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: none;
+        background: transparent;
+        color: #374151;
+        cursor: pointer;
+        transition: background 120ms ease;
+      }
+      .menu-item:hover {
+        background: #f3f4f6;
+      }
+      .menu-item.danger {
+        color: #dc2626;
+      }
+      .menu-item.danger:hover {
+        background: #fef2f2;
+      }
+
+      /* Chip suggestions */
+      .chip-suggestions {
+        display: flex;
+        gap: 0.375rem;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 0.5rem;
+        background: #f9fafb;
+        border-radius: 0.375rem;
+        border: 1px dashed #e5e7eb;
+      }
+      .chip-suggestions .hint {
+        font-size: 0.75rem;
+        color: #6b7280;
+        font-weight: 600;
+      }
+      .chip.suggested {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 999px;
+        border: 1px solid #ddd6fe;
+        background: #f5f3ff;
+        color: #6366f1;
+        cursor: pointer;
+        transition: all 120ms ease;
+      }
+      .chip.suggested:hover {
+        background: #ede9fe;
+        border-color: #c4b5fd;
+        transform: translateY(-1px);
+      }
+
+      /* Empty scenarios state */
+      .empty-scenarios {
+        text-align: center;
+        padding: 2rem 1rem;
+        border: 1px dashed #e5e7eb;
+        border-radius: 0.5rem;
+        background: #f9fafb;
+      }
+      .empty-scenarios .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+      }
+      .empty-scenarios h3 {
+        margin: 0 0 0.25rem;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #111827;
+      }
+      .empty-scenarios p {
+        margin: 0;
+        color: #6b7280;
+        font-size: 0.875rem;
+      }
+
+      /* Enhanced placeholder for narration */
+      .placeholder.enchanted {
+        padding: 2rem 1rem;
+        text-align: center;
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border-color: #fbbf24;
+      }
+      .placeholder-icon {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .placeholder.enchanted h3 {
+        margin: 0 0 0.25rem;
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #78350f;
+      }
+      .placeholder.enchanted p {
+        margin: 0 0 0.5rem;
+        color: #92400e;
+        font-size: 0.875rem;
+      }
+      .placeholder-hint {
+        font-size: 0.75rem;
+        color: #a16207;
+        font-weight: 600;
+        padding: 0.375rem 0.75rem;
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 999px;
+        display: inline-block;
+      }
+
       /* Mobile refinements */
       @media (max-width: 768px) {
         .header {
@@ -1471,10 +1849,9 @@ export class Adventure extends CardDef {
 
   // Linked scenarios + one-shot editor
   @field linkedScenarios = linksToMany(AdventureScenario); // pick from real cards
-  @field oneShotTitle = contains(StringField);
-  @field oneShotDescription = contains(StringField);
-  @field oneShotTags = containsMany(StringField);
-  @field oneShotImageStyles = containsMany(StringField);
+  @field selectedScenario = linksTo(AdventureScenario); // ¹ Store the selected scenario as a link
+
+  @field customAdventure = contains(CustomAdventureField);
 
   @field gameStatus = contains(StringField); // 'setup' | 'playing' | 'completed'
   @field currentTurn = contains(NumberField);
@@ -1494,12 +1871,19 @@ export class Adventure extends CardDef {
   @field autoGenerateImages = contains(BooleanField);
 
   // Title
+  // ⁵ Updated title computation to use selected scenario
   @field title = contains(StringField, {
     computeVia: function (this: Adventure) {
       try {
         if (this.adventureTitle) return this.adventureTitle;
-        if (this.linkedScenarios[0]?.title)
-          return `Adventure V4: ${this.linkedScenarios[0].title}`;
+
+        // Use the selected scenario if available
+        const currentScenario =
+          this.selectedScenario || this.linkedScenarios?.[0];
+
+        if (currentScenario?.title) {
+          return `Adventure V4: ${currentScenario.title}`;
+        }
         return 'Create Your Own Adventure V4';
       } catch (e) {
         console.error('Adventure V4: Error computing title', e);
@@ -1511,11 +1895,34 @@ export class Adventure extends CardDef {
   static isolated = AdventureIsolated;
 
   static embedded = class Embedded extends Component<typeof this> {
-    get firstScenario() {
-      if (!this.args.model.linkedScenarios) {
-        return null;
+    // ³ Use currentScenario or custom adventure for display
+    get currentScenario() {
+      try {
+        // Return the linked selected scenario if it exists
+        if (this.args.model?.selectedScenario) {
+          return this.args.model.selectedScenario;
+        }
+
+        // If custom adventure has content, create a virtual scenario from it
+        const custom = this.args.model?.customAdventure;
+        if (custom?.title || custom?.description) {
+          return {
+            title: custom.title || 'Custom Adventure',
+            description: custom.description || '',
+            tags: custom.tags || [],
+            imageStyles: custom.imageStyles || [],
+          };
+        }
+
+        // Fallback to first linked scenario
+        return this.args.model?.linkedScenarios?.[0] || null;
+      } catch (e) {
+        console.error(
+          'Adventure: Error getting current scenario in embedded',
+          e,
+        );
+        return this.args.model?.linkedScenarios?.[0] || null;
       }
-      return this.args.model.linkedScenarios[0];
     }
 
     <template>
@@ -1524,8 +1931,8 @@ export class Adventure extends CardDef {
           <h3 class='name'>
             {{if @model.adventureTitle @model.adventureTitle 'Adventure'}}
           </h3>
-          {{#if this.firstScenario}}
-            <span class='pill'>{{this.firstScenario.title}}</span>
+          {{#if this.currentScenario}}
+            <span class='pill'>{{this.currentScenario.title}}</span>
           {{/if}}
         </div>
 
@@ -1540,16 +1947,10 @@ export class Adventure extends CardDef {
           {{else}}
             <span class='tag ready'>Ready</span>
           {{/if}}
-          {{#if @model.lastTimestamp}}
-            <span class='when'>{{formatDateTime
-                @model.lastTimestamp
-                size='tiny'
-              }}</span>
-          {{/if}}
         </div>
 
-        {{#if this.firstScenario.description}}
-          <p class='preview'>{{this.firstScenario.description}}</p>
+        {{#if this.currentScenario.description}}
+          <p class='preview'>{{this.currentScenario.description}}</p>
         {{/if}}
       </div>
 
@@ -1624,11 +2025,31 @@ export class Adventure extends CardDef {
   };
 
   static fitted = class Fitted extends Component<typeof this> {
-    get firstScenario() {
-      if (!this.args.model.linkedScenarios) {
-        return null;
+    // ⁴ Use currentScenario or custom adventure for display
+    get currentScenario() {
+      try {
+        // Return the linked selected scenario if it exists
+        if (this.args.model?.selectedScenario) {
+          return this.args.model.selectedScenario;
+        }
+
+        // If custom adventure has content, create a virtual scenario from it
+        const custom = this.args.model?.customAdventure;
+        if (custom?.title || custom?.description) {
+          return {
+            title: custom.title || 'Custom Adventure',
+            description: custom.description || '',
+            tags: custom.tags || [],
+            imageStyles: custom.imageStyles || [],
+          };
+        }
+
+        // Fallback to first linked scenario
+        return this.args.model?.linkedScenarios?.[0] || null;
+      } catch (e) {
+        console.error('Adventure: Error getting current scenario in fitted', e);
+        return this.args.model?.linkedScenarios?.[0] || null;
       }
-      return this.args.model.linkedScenarios[0];
     }
 
     <template>
@@ -1637,8 +2058,8 @@ export class Adventure extends CardDef {
           <div class='dot'></div>
           <div class='label'>
             <div class='title'>{{if
-                this.firstScenario.title
-                this.firstScenario.title
+                this.currentScenario.title
+                this.currentScenario.title
                 'Adventure'
               }}</div>
             <div class='sub'>
@@ -1657,8 +2078,8 @@ export class Adventure extends CardDef {
                 @model.adventureTitle
                 'Adventure'
               }}</div>
-            {{#if this.firstScenario}}
-              <div class='sub'>{{this.firstScenario.title}}</div>
+            {{#if this.currentScenario}}
+              <div class='sub'>{{this.currentScenario.title}}</div>
             {{/if}}
           </div>
           <div class='strip-status'>
@@ -1677,10 +2098,10 @@ export class Adventure extends CardDef {
               }}</h4>
 
           </div>
-          {{#if this.firstScenario}}
+          {{#if this.currentScenario}}
             <div class='desc'>
-              <strong>{{this.firstScenario.title}}</strong>
-              <p>{{this.firstScenario.description}}</p>
+              <strong>{{this.currentScenario.title}}</strong>
+              <p>{{this.currentScenario.description}}</p>
             </div>
           {{/if}}
           <div class='foot'>
@@ -1701,7 +2122,7 @@ export class Adventure extends CardDef {
           <div class='card-head'>
             <div class='main'>
               <h3>{{if
-                  this.firstScenario.title
+                  this.currentScenario.title
                   @model.adventureTitle
                   'Adventure'
                 }}</h3>
@@ -1717,8 +2138,8 @@ export class Adventure extends CardDef {
               {{/if}}
             </div>
           </div>
-          {{#if this.firstScenario}}
-            <div class='card-desc'>{{this.firstScenario.description}}</div>
+          {{#if this.currentScenario}}
+            <div class='card-desc'>{{this.currentScenario.description}}</div>
           {{/if}}
         </div>
       </div>
