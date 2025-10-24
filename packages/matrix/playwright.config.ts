@@ -8,7 +8,7 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 4 : 0,
+  retries: process.env.CI ? 0 : 0,
   workers: 2,
   globalSetup: 'tests/global.setup.ts',
   reporter: process.env.CI ? 'blob' : 'html',
@@ -17,7 +17,7 @@ export default defineConfig({
     baseURL: 'http://localhost:4202/test',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
   },
   // General timeout per test
   timeout: 60000,

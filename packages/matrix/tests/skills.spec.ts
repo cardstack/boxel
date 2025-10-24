@@ -26,16 +26,8 @@ test.describe('Skills', () => {
     test.setTimeout(120_000);
     await setSkillsRedirect(page);
 
-    await clearLocalStorage(page, appURL);
-
     firstUser = await createSubscribedUser('user-1');
     secondUser = await createSubscribedUser('user-2');
-
-    await setupPermissions(
-      firstUser.credentials.userId,
-      `${appURL}/`,
-      sharedSQLExecutor,
-    );
   });
 
   async function attachSkill(
