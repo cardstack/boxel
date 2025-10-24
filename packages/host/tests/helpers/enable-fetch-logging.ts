@@ -32,8 +32,8 @@ export default function enableFetchLogging() {
     }
   };
 
-  QUnit.on('testEnd', ({ name, failed }) => {
-    if (failed && seen.length) {
+  QUnit.on('testEnd', ({ name, status }) => {
+    if (status === 'failed' && seen.length) {
       console.group(`Fetch failures during "${name}"`);
       for (const entry of seen) {
         console.error(
