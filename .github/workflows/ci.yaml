@@ -139,25 +139,6 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.postgres-migrations == 'true' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      PGHOST: localhost
-      PGPORT: 5432
-      PGUSER: postgres
-      PGPASSWORD: postgres
-      PGDATABASE: boxel
     concurrency:
       group: postgres-migration-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -166,6 +147,10 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/init
+
+      - name: Start Postgres
+        run: pnpm start:pg
+        working-directory: packages/postgres
 
       - name: Determine changed migrations
         id: migrations
