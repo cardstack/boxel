@@ -20,16 +20,17 @@ jobs:
     name: Check which packages changed
     runs-on: ubuntu-latest
     outputs:
-      boxel: ${{ steps.filter.outputs.boxel }}
-      ai-bot: ${{ steps.filter.outputs.ai-bot }}
+      # FIXME restore
+      # boxel: ${{ steps.filter.outputs.boxel }}
+      # ai-bot: ${{ steps.filter.outputs.ai-bot }}
       postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
-      boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
-      boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
-      boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
-      matrix: ${{ steps.filter.outputs.matrix }}
-      realm-server: ${{ steps.filter.outputs.realm-server }}
-      vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
-      workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
+      # boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
+      # boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
+      # boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
+      # matrix: ${{ steps.filter.outputs.matrix }}
+      # realm-server: ${{ steps.filter.outputs.realm-server }}
+      # vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
+      # workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
