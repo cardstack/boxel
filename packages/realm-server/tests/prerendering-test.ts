@@ -126,6 +126,7 @@ module(basename(__filename), function () {
       );
 
       await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
 
       let second = await prerenderer.prerenderCard({
         realm: realmURL,

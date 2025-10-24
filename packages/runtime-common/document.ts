@@ -11,8 +11,10 @@ export async function loadDocument(
     (globalThis as any).__lazilyLoadLinks && !url.endsWith('.json')
       ? `${url}.json`
       : url;
+  let requestURL = new URL(urlWithExtension);
+  requestURL.searchParams.set('noCache', 'true');
   try {
-    response = await fetch(urlWithExtension, {
+    response = await fetch(requestURL.href, {
       // there is a bunch of realm meta that is missing when we load a document
       // in this manner (card-src), hopefully that does not come back to bite
       // us. loading a document in this manner is useful because it allows us to

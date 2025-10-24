@@ -66,8 +66,6 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 interface IndexedModule {
   type: 'module';
-  executableCode: string;
-  source: string;
   canonicalURL: string;
   lastModified: number | null;
   resourceCreatedAt: number;
@@ -86,7 +84,6 @@ interface IndexedDefinition {
 export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
-  source: string;
   canonicalURL: string;
   lastModified: number | null;
   resourceCreatedAt: number;
@@ -114,7 +111,6 @@ interface InstanceError
       | 'realmVersion'
       | 'realmURL'
       | 'instance'
-      | 'source'
       | 'lastModified'
       | 'resourceCreatedAt'
     >
@@ -124,7 +120,6 @@ interface InstanceError
   realmVersion: number;
   realmURL: string;
   instance: CardResource | null;
-  source: string | null;
   lastModified: number | null;
   resourceCreatedAt: number | null;
 }
@@ -271,26 +266,15 @@ export class IndexQueryEngine {
     if (result.type === 'error') {
       return { type: 'error', error: result.error_doc! };
     }
-    let moduleEntry = assertIndexEntrySource(result);
+    let moduleEntry = assertIndexEntry(result);
     let {
-      transpiled_code: executableCode,
-      source,
       url: canonicalURL,
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
     } = moduleEntry;
-    if (executableCode === null) {
-      throw new Error(
-        `bug: index entry for ${url.href} with opts: ${stringify(
-          opts,
-        )} has neither an error_doc nor transpiled_code`,
-      );
-    }
     return {
       type: 'module',
       canonicalURL,
-      executableCode,
-      source,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt: parseInt(resourceCreatedAt),
       deps: moduleEntry.deps,
@@ -338,7 +322,6 @@ export class IndexQueryEngine {
       indexed_at: indexedAt,
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
-      source,
       types,
       deps,
     } = maybeResult;
@@ -353,7 +336,6 @@ export class IndexQueryEngine {
       searchDoc,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
-      source,
       deps,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
@@ -364,7 +346,7 @@ export class IndexQueryEngine {
     if (maybeResult.error_doc) {
       return { ...baseResult, type: 'error', error: maybeResult.error_doc };
     }
-    let instanceEntry = assertIndexEntrySource(maybeResult);
+    let instanceEntry = assertIndexEntry(maybeResult);
     if (!instance) {
       throw new Error(
         `bug: index entry for ${url.href} with opts: ${stringify(
@@ -376,7 +358,6 @@ export class IndexQueryEngine {
       ...baseResult,
       type: 'instance',
       instance,
-      source: instanceEntry.source,
       lastModified:
         instanceEntry.last_modified != null
           ? parseInt(instanceEntry.last_modified)
@@ -1202,19 +1183,15 @@ function currentField(pathTraveled: string) {
   return cleansedPath.split('.').pop()!;
 }
 
-function assertIndexEntrySource<T>(obj: T): Omit<
+function assertIndexEntry<T>(obj: T): Omit<
   T,
   'source' | 'last_modified' | 'resource_created_at'
 > & {
-  source: string;
   last_modified: string | null;
   resource_created_at: string;
 } {
   if (!obj || typeof obj !== 'object') {
     throw new Error(`expected index entry is null or not an object`);
-  }
-  if (!('source' in obj) || typeof obj.source !== 'string') {
-    throw new Error(`expected index entry to have "source" string property`);
   }
   if (!('last_modified' in obj)) {
     throw new Error(`expected index entry to have "last_modified" property`);
@@ -1228,7 +1205,6 @@ function assertIndexEntrySource<T>(obj: T): Omit<
     );
   }
   return obj as Omit<T, 'source' | 'last_modified' | 'resource_created_at'> & {
-    source: string;
     last_modified: string;
     resource_created_at: string;
   };

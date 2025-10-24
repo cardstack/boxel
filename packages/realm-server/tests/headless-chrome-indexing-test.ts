@@ -2267,6 +2267,7 @@ module(basename(__filename), function () {
       assert.strictEqual(testFile?.type, 'instance', 'test file was indexed');
 
       await adapter.remove('test-file.json'); // incremental doesn't get triggered (like in development) here bcos there is no filewatcher enabled
+      realm.__testOnlyClearCaches();
       let fileExists = await adapter.exists('test-file.json');
       assert.false(fileExists);
       await realm.realmIndexUpdater.fullIndex();

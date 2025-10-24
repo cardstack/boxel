@@ -163,9 +163,10 @@ module(basename(__filename), function () {
           'Authorization',
           `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
         );
+      assert.ok(response.headers['etag'], 'ETag header is present');
       assert.strictEqual(
         response.headers['cache-control'],
-        'no-store, no-cache, must-revalidate',
+        'public, max-age=0',
         'cache control header is set correctly',
       );
     });
@@ -197,6 +198,182 @@ module(basename(__filename), function () {
         response.headers['cache-control'],
         'no-store, no-cache, must-revalidate',
         'cache control header is set correctly',
+      );
+    });
+
+    test('serves module requests through read-through cache', async function (assert) {
+      let modulePath = 'module-cache-test.js';
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(modulePath, `export const value = 1;`);
+
+      let firstResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(firstResponse.status, 200, 'initial request succeeds');
+      assert.true(
+        /value\s*=\s*1/.test(firstResponse.text),
+        'initial payload reflects written module',
+      );
+      assert.ok(
+        ['hit', 'miss'].includes(firstResponse.headers['x-boxel-cache']),
+        'initial response indicates cache status',
+      );
+
+      let cachedResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(
+        cachedResponse.headers['x-boxel-cache'],
+        'hit',
+        'subsequent request served from cache',
+      );
+
+      await testRealm.write(modulePath, `export const value = 2;`);
+
+      let afterWriteResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(
+        afterWriteResponse.headers['x-boxel-cache'],
+        'miss',
+        'cache repopulated after module write',
+      );
+      assert.true(
+        /value\s*=\s*2/.test(afterWriteResponse.text),
+        'module response reflects updated content',
+      );
+
+      let repopulatedResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(
+        repopulatedResponse.headers['x-boxel-cache'],
+        'hit',
+        'cache hit after repopulation',
+      );
+      assert.true(
+        /value\s*=\s*2/.test(repopulatedResponse.text),
+        'cached response preserves updated content',
+      );
+    });
+
+    test('returns 304 for module requests with matching ETag', async function (assert) {
+      let modulePath = 'module-cache-not-modified.js';
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(modulePath, `export const flag = true;`);
+
+      let initialResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      let etag = initialResponse.headers['etag'];
+      assert.ok(etag, 'initial response includes etag');
+
+      let conditionalResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', etag!);
+
+      assert.strictEqual(
+        conditionalResponse.status,
+        304,
+        'returns not modified',
+      );
+      assert.strictEqual(
+        conditionalResponse.headers['x-boxel-cache'],
+        'hit',
+        '304 response served from cache',
+      );
+    });
+
+    test('invalidating dependencies clears module cache', async function (assert) {
+      let depPath = 'module-cache-dep.js';
+      let consumerPath = 'module-cache-consumer.js';
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(depPath, `export const value = 'one';`);
+      await testRealm.write(
+        consumerPath,
+        `import { value } from './${depPath}';\nexport default value;`,
+      );
+
+      // prime cache
+      await request
+        .get(`/${consumerPath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      let cachedResponse = await request
+        .get(`/${consumerPath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(
+        cachedResponse.headers['x-boxel-cache'],
+        'hit',
+        'consumer module served from cache',
+      );
+
+      await testRealm.write(depPath, `export const value = 'two';`);
+
+      let postInvalidationResponse = await request
+        .get(`/${consumerPath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(
+        postInvalidationResponse.headers['x-boxel-cache'],
+        'miss',
+        'dependency change invalidates cached consumer module',
+      );
+
+      let finalResponse = await request
+        .get(`/${consumerPath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(
+        finalResponse.headers['x-boxel-cache'],
+        'hit',
+        'consumer module cache restored after invalidation miss',
+      );
+    });
+
+    test('module compilation errors return JSON:API response', async function (assert) {
+      let modulePath = 'module-cache-error.js';
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(modulePath, 'export default ;');
+
+      let response = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(response.status, 406, 'returns HTTP 406');
+      assert.strictEqual(
+        response.headers['content-type'],
+        SupportedMimeType.JSONAPI,
+        'error response is JSON:API',
+      );
+      let payload = JSON.parse(response.text);
+      assert.true(Array.isArray(payload.errors), 'errors array present');
+      assert.strictEqual(
+        payload.errors[0]?.status,
+        406,
+        'error payload encodes 406 status',
       );
     });
 

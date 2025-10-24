@@ -1,5 +1,9 @@
 import type Owner from '@ember/owner';
 import { getOwner, setOwner } from '@ember/owner';
+import type {
+  RouteInfo,
+  RouteInfoWithAttributes,
+} from '@ember/routing/-internals';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -248,6 +252,7 @@ export default class CardPrerender extends Component {
       if (typeof captured !== 'string') {
         return null;
       }
+      await this.#ensureRenderReady(routeInfo);
       return this.processCapturedMarkup(captured);
     },
   );
@@ -276,6 +281,7 @@ export default class CardPrerender extends Component {
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
       }
+      await this.#ensureRenderReady(routeInfo);
       return routeInfo.attributes as PrerenderMeta;
     },
   );
@@ -293,9 +299,32 @@ export default class CardPrerender extends Component {
       if (typeof captured !== 'string') {
         return null;
       }
+      await this.#ensureRenderReady(routeInfo);
       return this.processCapturedMarkup(captured);
     },
   );
+
+  // this does the work that normally the render controller is doing. we do this
+  // because we are using RouterService.recognizeAndLoad() which doesn't actually do a
+  // full transition, it just runs the model hook. so we need to emulate scheduling
+  // the ready deferred after the component is rendered.
+  #ensureRenderReady(
+    routeInfo: RouteInfo | RouteInfoWithAttributes,
+  ): Promise<void> {
+    let current: RouteInfo | RouteInfoWithAttributes | null = routeInfo;
+    while (current) {
+      if (current.name === 'render' && 'attributes' in current) {
+        let readyPromise = (current as RouteInfoWithAttributes).attributes
+          ?.readyPromise;
+        if (readyPromise && typeof readyPromise.then === 'function') {
+          return readyPromise;
+        }
+        break;
+      }
+      current = current.parent as RouteInfo | RouteInfoWithAttributes | null;
+    }
+    return Promise.resolve();
+  }
 
   private async fromScratch({
     realmURL,
