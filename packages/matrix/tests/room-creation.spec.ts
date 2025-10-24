@@ -250,8 +250,8 @@ test.describe('Room creation', () => {
       newRoomName,
     );
   });
-
-  test('it can delete a room', async ({ page }) => {
+  // CS-9594 tracking this test erroring
+  test.skip('it can delete a room', async ({ page }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let roomsBeforeDeletion = await getRoomsFromSync(

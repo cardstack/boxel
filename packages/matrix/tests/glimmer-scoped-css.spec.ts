@@ -6,6 +6,7 @@ import {
   postCardSource,
   postNewCard,
   createSubscribedUserAndLogin,
+  setSkillsRedirect,
 } from '../helpers';
 
 test.describe('glimmer-scoped-css', () => {
@@ -13,7 +14,8 @@ test.describe('glimmer-scoped-css', () => {
 
   let newCardURL: string;
 
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }) => {
+    await setSkillsRedirect(page);
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(120_000);
