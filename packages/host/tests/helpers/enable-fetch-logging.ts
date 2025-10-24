@@ -41,7 +41,9 @@ export default function enableFetchLogging() {
         console.error(
           entry.url,
           entry.status ?? 'rejected',
-          entry.error ?? entry.body,
+          entry.error
+            ? JSON.stringify(entry.error)
+            : JSON.stringify(entry.body),
         );
       }
       console.groupEnd();
