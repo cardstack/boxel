@@ -118,6 +118,14 @@ jobs:
           path: /tmp/icon-server.log
           retention-days: 30
 
+      - name: Upload host assets
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-assets-${{ matrix.shardIndex }}
+          path: packages/host/dist/assets
+          retention-days: 7
+
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
     if: always()
