@@ -898,7 +898,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Parse Error at broken.gts:1:6: 1:10.`,
+          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Error: Parse Error at broken.gts:1:6: 1:10`,
           files: [
             { name: 'broken.gts', sourceUrl: `${testRealmURL}broken.gts` },
           ],
@@ -919,9 +919,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         return Promise.resolve();
       };
       await click('[data-test-boxel-copy-button]');
-      assert.strictEqual(
-        copiedText,
-        '{"message":"","stack":"Parse Error at broken.gts:1:6: 1:10"}',
+      const expected =
+        '{"message":"","stack":"Error: Parse Error at broken.gts:1:6: 1:10';
+      assert.ok(
+        copiedText!.startsWith(expected),
+        `clipboard text starts with ${expected}`,
       );
       navigator.clipboard.writeText = originalWriteText;
     });

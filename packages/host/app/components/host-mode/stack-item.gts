@@ -151,6 +151,11 @@ export default class HostModeStackItem extends Component<Signature> {
       style={{this.styleForStackedCard}}
     >
       <div class='stack-item-card'>
+        <HostModeCard
+          @cardId={{@cardId}}
+          @displayBoundaries={{if this.isItemFullWidth false true}}
+          class='host-mode-stack-item-card'
+        />
         {{#if @close}}
           <div class='close-button-container'>
             <IconButton
@@ -162,11 +167,6 @@ export default class HostModeStackItem extends Component<Signature> {
             />
           </div>
         {{/if}}
-        <HostModeCard
-          @cardId={{@cardId}}
-          @displayBoundaries={{if this.isItemFullWidth false true}}
-          class='host-mode-stack-item-card'
-        />
       </div>
     </div>
 
@@ -256,6 +256,7 @@ export default class HostModeStackItem extends Component<Signature> {
         background-color: var(--boxel-light);
         display: flex;
         flex-direction: column;
+        position: relative;
       }
 
       .host-mode-stack-item.buried > .stack-item-card {
@@ -264,8 +265,9 @@ export default class HostModeStackItem extends Component<Signature> {
       }
 
       .close-button-container {
-        display: flex;
-        justify-content: flex-end;
+        position: absolute;
+        top: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
       }
 

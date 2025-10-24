@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Hotel Credit",
+      "partner": "Fine Hotels + Resorts / The Hotel Collection",
+      "benefitKind": "statement-credit",
+      "amount": {
+        "amount": 300,
+        "currency": { "code": "USD" }
+      },
+      "enrollmentRequired": false,
+      "minSpend": null,
+      "programURL": null,
+      "conditions": "Statement credits up to $300 semi-annually on prepaid Fine Hotels + Resorts or The Hotel Collection bookings through Amex Travel. The Hotel Collection requires a minimum two-night stay.",
+      "details": [],
+      "title": "Hotel Credit"
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/half-yearly"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../reward-card-program",
+        "name": "Benefit"
+      }
+    }
+  }
+}

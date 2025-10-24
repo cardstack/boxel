@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SignupBonus",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "bonusType": "points",
+      "description": "Earn 250,000 Membership Rewards® Points after you spend $20,000 in eligible purchases on your Card within the first 3 months of Card Membership.†",
+      "pointsAmount": 250000,
+      "bonusCurrency": "Membership Rewards",
+      "spendWindowDays": 90,
+      "spendRequirement": {
+        "amount": 20000,
+        "currency": {
+          "code": "USD"
+        }
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

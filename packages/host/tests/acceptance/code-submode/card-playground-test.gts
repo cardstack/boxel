@@ -1541,7 +1541,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-syntax-error] [data-test-error-stack]')
         .containsText(
-          `{ "additionalErrors": null, "message": "encountered error loading module \\"${testRealmURL}syntax-error.gts\\": StringField is not defined", "status": 500 }`,
+          `Encountered error while evaluating ${testRealmURL}syntax-error.gts: ReferenceError: StringField is not defined`,
           'error message is correct (and contains no "deps" field)',
         );
     });

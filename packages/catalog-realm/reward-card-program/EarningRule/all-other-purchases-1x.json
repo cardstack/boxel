@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "EarningRule",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "category": "All Other Purchases",
+      "appliesTo": "All other eligible purchases",
+      "capAmount": {
+        "amount": 0,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "1X Membership Rewards points on all other eligible purchases with no cap.",
+      "rateMultiplier": 1
+    },
+    "relationships": {
+      "capPeriod": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

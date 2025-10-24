@@ -1,0 +1,50 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Airline Fee Credit",
+      "amount": {
+        "amount": 200,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [],
+      "partner": "Selected Airline",
+      "cardInfo": {
+        "notes": null,
+        "title": "",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "conditions": "Statement credits per calendar year for incidental fees charged by your one selected qualifying airline.",
+      "programURL": "",
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": true
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/yearly"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

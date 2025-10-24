@@ -1,12 +1,7 @@
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
-
-import window from 'ember-window-mock';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
@@ -56,11 +51,6 @@ export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
     );
   }
 
-  @action
-  openSite(url: string) {
-    window.open(url, '_blank');
-  }
-
   <template>
     {{#if @isOpen}}
       <div class='open-site-popover' data-test-open-site-popover>
@@ -73,10 +63,13 @@ export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
               >
                 <div class='realm-url'>{{this.getFullURL url}}</div>
                 <BoxelButton
+                  @as='anchor'
                   @kind='secondary-light'
                   @size='small'
-                  {{on 'click' (fn this.openSite (this.getFullURL url))}}
+                  @href={{this.getFullURL url}}
                   class='open-site-button'
+                  target='_blank'
+                  rel='noopener noreferrer'
                   data-test-open-site-button
                 >
                   <ExternalLink

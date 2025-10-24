@@ -1,0 +1,42 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MembershipBenefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "partner": "The Leading Hotels of the World",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "conditions": "Complimentary Leaders Club Sterling Status from The Leading Hotels of the World®. Must enroll through American Express to activate. Status valid while cardmember in good standing. Access to over 400 independent luxury hotels globally.",
+      "statusLevel": "Diamond",
+      "benefitsList": [
+        "Complimentary Wi-Fi at all LHW properties",
+        "Room upgrade upon arrival when available",
+        "VIP guest recognition and personalized service",
+        "Late checkout when available (typically until 2PM)",
+        "Welcome amenity or experience",
+        "Flexible cancellation policies",
+        "Access to exclusive member rates and packages"
+      ],
+      "autoEnrollment": false,
+      "membershipProgram": "The Leading Hotels of the World",
+      "enrollmentRequired": true,
+      "enrollmentInstructions": "Enrollment required through American Express benefits platform. Must activate benefit and create Leaders Club account."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
