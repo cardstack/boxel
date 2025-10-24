@@ -200,11 +200,7 @@ test.describe('Room messages', () => {
 
     await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-attach-card-btn]').click();
-    await page
-      .locator(
-        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
-      )
-      .click();
+    await page.locator(`[data-test-search-field]`).fill(testCard);
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
