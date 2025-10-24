@@ -981,6 +981,9 @@ module('Acceptance | host submode', function (hooks) {
               'http://custom-site-name.localhost:4201/',
               'displays placeholder custom site URL after unclaim',
             );
+          assert
+            .dom('[data-test-boxel-input-validation-state="valid"]')
+            .doesNotExist('validation check mark not displayed after unclaim');
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
           realmServer.deleteBoxelClaimedDomain = originalDeleteClaimed;
