@@ -187,20 +187,17 @@ jobs:
         working-directory: packages/postgres
         env:
           PGPORT: 5435
-        run: |
-          pnpm migrate up
+        run: pnpm migrate up
       - name: Run down migrations
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
         working-directory: packages/postgres
         env:
           MIGRATION_COUNT: ${{ steps.migrations.outputs.count }}
-        run: |
-          pnpm migrate down "$MIGRATION_COUNT"
+        run: pnpm migrate down "$MIGRATION_COUNT"
       - name: Reapply migrations
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
         working-directory: packages/postgres
-        run: |
-          pnpm migrate up
+        run: pnpm migrate up
 
   boxel-motion-test:
     name: Boxel Motion Tests
