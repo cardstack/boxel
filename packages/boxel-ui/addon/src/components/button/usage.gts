@@ -22,8 +22,9 @@ export default class ButtonUsage extends Component {
   @tracked as = 'button';
   @tracked size?: BoxelButtonSize;
   @tracked kind?: BoxelButtonKind;
-  @tracked disabled = false;
-  @tracked loading = false;
+  @tracked disabled?: boolean;
+  @tracked loading?: boolean;
+  @tracked rectangular?: boolean;
 
   // for @as === 'anchor'
   @tracked href = '#';
@@ -57,6 +58,7 @@ export default class ButtonUsage extends Component {
             @loading={{this.loading}}
             @href={{this.href}}
             @route={{this.route}}
+            @rectangular={{this.rectangular}}
             {{on 'click' this.alert}}
           >
             Sample CTA
@@ -114,6 +116,14 @@ export default class ButtonUsage extends Component {
           @options={{this.sizeVariants}}
           @onInput={{fn (mut this.size)}}
           @value={{this.size}}
+        />
+        <Args.Bool
+          @name='rectangular'
+          @optional={{true}}
+          @description='Changes the level of border-radius roundness'
+          @onInput={{fn (mut this.rectangular)}}
+          @value={{this.rectangular}}
+          @defaultValue={{false}}
         />
         <Args.Bool
           @name='disabled'

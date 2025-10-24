@@ -57,6 +57,7 @@ interface Signature {
     loading?: boolean;
     models?: any;
     query?: any;
+    rectangular?: boolean;
     route?: any;
     size?: BoxelButtonSize;
   };
@@ -73,6 +74,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       (concat 'size-' (if @size @size 'base'))
       (concat 'kind-' (if @kind @kind 'default'))
       loading=@loading
+      rectangular=@rectangular
     )
     as |classes|
   }}
@@ -131,7 +133,10 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         justify-content: center;
         height: min-content;
         align-items: center;
-        border-radius: var(--boxel-button-border-radius, var(--radius, 100px));
+        border-radius: var(
+          --boxel-button-border-radius,
+          var(--radius, var(--boxel-border-radius))
+        );
         transition: var(
           --boxel-button-transition,
           var(--boxel-transition-properties)
@@ -150,6 +155,9 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         padding: var(--boxel-button-padding);
         letter-spacing: var(--boxel-button-letter-spacing, var(--boxel-lsp));
         box-shadow: var(--boxel-button-box-shadow);
+      }
+      .boxel-button:not(.rectangular) {
+        border-radius: var(--boxel-button-border-radius, var(--radius, 100px));
       }
       .boxel-button:not(:disabled):hover {
         background-color: color-mix(
@@ -264,6 +272,13 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-color: var(--muted, var(--boxel-100));
         --boxel-button-text-color: var(--muted-foreground, var(--boxel-dark));
       }
+      .kind-muted:not(:disabled):hover {
+        background-color: color-mix(
+          in oklab,
+          var(--muted, var(--boxel-100)) 96%,
+          var(--muted-foreground, var(--boxel-dark))
+        );
+      }
 
       .kind-destructive,
       .kind-danger {
@@ -358,12 +373,17 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }
+      .size-extra-small.rectangular {
+        border-radius: var(--boxel-border-radius-sm);
+      }
 
-      /* thinner base button */
       .size-small {
         --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-sm);
         --boxel-button-min-height: var(--boxel-button-sm);
         --boxel-button-min-width: 5rem;
+      }
+      .size-small.rectangular {
+        border-radius: var(--boxel-border-radius-sm);
       }
 
       .size-base {
@@ -374,7 +394,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
 
       /* tall but thinner button */
       .size-tall {
-        --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp);
+        --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-lg);
         --boxel-button-min-height: var(--boxel-button-tall);
         --boxel-button-min-width: 5rem;
       }
