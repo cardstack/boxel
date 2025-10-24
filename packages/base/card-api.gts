@@ -191,6 +191,12 @@ export type FieldsTypeFor<T extends BaseDef> = {
 };
 export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
+// Opaque configuration passed to field format components and validators
+export type FieldConfiguration = Record<string, any>;
+// Configuration may be provided as a static object or a function of the parent instance
+export type ConfigurationInput<T> =
+  | FieldConfiguration
+  | ((self: Readonly<T>) => FieldConfiguration | undefined);
 export type FieldFormats = {
   ['fieldDef']: Format;
   ['cardDef']: Format;
@@ -206,6 +212,8 @@ interface Options {
   // in which case we need to tell the runtime that a card is
   // explicitly being used.
   isUsed?: true;
+  // Optional: per-usage configuration provider merged with FieldDef-level configuration
+  configuration?: ConfigurationInput<any>;
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
@@ -332,6 +340,8 @@ export interface Field<
   fieldType: FieldType;
   computeVia: undefined | (() => unknown);
   description: undefined | string;
+  // Optional per-usage configuration stored on the field descriptor
+  configuration?: ConfigurationInput<any>;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -406,6 +416,8 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  // Optional per-usage configuration for this field
+  configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
@@ -719,6 +731,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  // Optional per-usage configuration for this field
+  configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
@@ -1854,15 +1868,16 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new ContainsMany({
-          cardThunk: cardThunk(field),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new ContainsMany({
+        cardThunk: cardThunk(field),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      // Save per-usage configuration on field descriptor when provided
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1875,15 +1890,16 @@ export function contains<FieldT extends FieldDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new Contains({
-          cardThunk: cardThunk(field),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new Contains({
+        cardThunk: cardThunk(field),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      // Save per-usage configuration on field descriptor when provided
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -2124,6 +2140,8 @@ export type BaseDefComponent = ComponentLike<{
     context?: CardContext;
     canEdit?: boolean;
     typeConstraint?: ResolvedCodeRef;
+    // Resolved, merged field configuration (if applicable)
+    configuration?: FieldConfiguration | undefined;
     createCard: CreateCardFn;
     viewCard: ViewCardFn;
     editCard: EditCardFn;
@@ -2137,6 +2155,9 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
+
+  // Optional provider for default configuration, merged with per-usage configuration
+  static configuration?: ConfigurationInput<any>;
 
   static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
@@ -3195,6 +3216,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     editCard?: EditCardFn;
     saveCard?: SaveCardFn;
     canEdit?: boolean;
+    configuration?: FieldConfiguration | undefined;
   };
 };
 

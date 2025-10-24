@@ -21,6 +21,7 @@ import {
 import { initSharedState } from './shared-state';
 import { flatMap } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
+import type { ConfigurationInput, FieldConfiguration } from './card-api';
 
 export interface NotLoadedValue {
   type: 'not-loaded';
@@ -35,6 +36,11 @@ const cardTracking = initSharedState(
 const deserializedData = initSharedState(
   'deserializedData',
   () => new WeakMap<BaseDef, Map<string, any>>(),
+);
+// Cache for resolved field configurations per instance/field
+const fieldConfigurationCache = initSharedState(
+  'fieldConfigurationCache',
+  () => new WeakMap<BaseDef, Map<string, FieldConfiguration | undefined>>(),
 );
 const fieldDescriptions = initSharedState(
   'fieldDescriptions',
@@ -132,6 +138,8 @@ export function entangleWithCardTracking(instance: BaseDef) {
 
 export function notifyCardTracking(instance: BaseDef) {
   cardTracking.set(instance, true);
+  // Invalidate cached field configuration for this instance so it recomputes on next access
+  fieldConfigurationCache.delete(instance);
 }
 
 export function getDataBucket<T extends BaseDef>(
@@ -143,6 +151,83 @@ export function getDataBucket<T extends BaseDef>(
     deserializedData.set(instance, deserialized);
   }
   return deserialized;
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+// One-level shallow merge with array replacement semantics; undefined keys do not overwrite
+export function shallowMerge<T extends Record<string, any>>(
+  a?: T,
+  b?: T,
+): T | undefined {
+  if (!a && !b) return undefined;
+  if (!a) return b;
+  if (!b) return a;
+  let out: Record<string, any> = { ...a };
+  for (let [k, v] of Object.entries(b)) {
+    if (v === undefined) continue; // ignore undefined values
+    if (isObject(v) && isObject(out[k])) {
+      out[k] = { ...(out[k] as Record<string, unknown>), ...v };
+    } else {
+      out[k] = v; // replace (includes null and arrays)
+    }
+  }
+  return out as T;
+}
+
+export function mergeConfigurations<T extends object>(
+  ...fragments: (T | undefined)[]
+): T | undefined {
+  return fragments.reduce<T | undefined>((acc, next) => shallowMerge(acc as any, next as any) as any, undefined);
+}
+
+// Resolves and merges configuration from FieldDef static configuration and per-usage configuration
+// Handles NotLoaded by treating the fragment as undefined for this render and relying on re-render later
+export function resolveFieldConfiguration(
+  field: Field,
+  instance: BaseDef,
+): FieldConfiguration | undefined {
+  // ensure reactive recomputation
+  entangleWithCardTracking(instance);
+
+  let cacheForInstance = fieldConfigurationCache.get(instance);
+  if (!cacheForInstance) {
+    cacheForInstance = new Map();
+    fieldConfigurationCache.set(instance, cacheForInstance);
+  }
+  let cached = cacheForInstance.get(field.name);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  function evalInput<T>(input: ConfigurationInput<T> | undefined): FieldConfiguration | undefined {
+    if (!input) return undefined;
+    try {
+      if (typeof input === 'function') {
+        return (input as (self: Readonly<T>) => FieldConfiguration | undefined)(instance as unknown as T);
+      } else {
+        return input as FieldConfiguration;
+      }
+    } catch (e) {
+      if (isNotLoadedError(e)) {
+        // Treat as undefined for now; a future notifyCardTracking will invalidate cache
+        return undefined;
+      }
+      throw e;
+    }
+  }
+
+  // field.card is the FieldDef subclass; it may optionally define a static configuration
+  let fromFieldDef = evalInput((field.card as any).configuration as ConfigurationInput<any> | undefined);
+  // per-usage configuration stored on the field descriptor
+  let fromContains = evalInput(field.configuration as ConfigurationInput<any> | undefined);
+
+  let merged = mergeConfigurations<FieldConfiguration>(fromFieldDef, fromContains);
+  // Cache result for this tick; will be invalidated on notifyCardTracking
+  cacheForInstance.set(field.name, merged);
+  return merged;
 }
 
 export function getFieldDescription(
