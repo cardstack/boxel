@@ -1,15 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { registerUser } from '../docker/synapse';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+import { appURL } from '../helpers/isolated-realm-server';
 import {
   login,
   logout,
@@ -18,7 +8,6 @@ import {
   openRoom,
   openRenameMenu,
   reloadAndOpenAiAssistant,
-  registerRealmUsers,
   clearLocalStorage,
   sendMessage,
   getRoomId,
@@ -27,7 +16,6 @@ import {
   isInRoom,
   getRoomsFromSync,
   initialRoomName,
-  setupUserSubscribed,
   setSkillsRedirect,
   waitUntil,
   createSubscribedUser,
@@ -51,8 +39,13 @@ test.describe('Room creation', () => {
   test('it can create a room', async ({ page }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });
 
-    let room1 = await getRoomId(page); // Automatically created room
-    await assertRooms(page, [room1]);
+    let room1: string;
+    await expect(async () => {
+      room1 = await getRoomId(page); // Automatically created room
+      await assertRooms(page, [room1]);
+    }).toPass();
+    // Insist to linter that this exists by this point
+    room1 = room1!;
     await sendMessage(page, room1, 'Hello');
 
     let room2 = await createRoom(page);
@@ -69,20 +62,25 @@ test.describe('Room creation', () => {
     await expect(page.locator(`[data-test-room="${room1}"]`)).toHaveCount(1);
     await expect(page2.locator(`[data-test-room="${room2}"]`)).toHaveCount(1);
 
-    await assertRooms(page, [room1, room2]);
+    await expect(async () => {
+      await assertRooms(page, [room1, room2]);
+    }).toPass();
 
     await logout(page);
     await login(page, firstUser.username, firstUser.password, { url: appURL });
-    await assertRooms(page, [room1, room2]);
+    await expect(async () => {
+      await assertRooms(page, [room1, room2]);
+    }).toPass();
 
     // user2 should not be able to see user1's room
     await logout(page);
     await login(page, secondUser.username, secondUser.password, {
       url: appURL,
     });
-
-    let room1New = await getRoomId(page); // Automatically created room
-    await assertRooms(page, [room1New]);
+    await expect(async () => {
+      let room1New = await getRoomId(page); // Automatically created room
+      await assertRooms(page, [room1New]);
+    }).toPass();
   });
 
   // SKIPPING FLAKY TEST! Re-enabled while we work on the fix.
@@ -120,10 +118,12 @@ test.describe('Room creation', () => {
     await login(page, secondUser.username, secondUser.password, {
       url: appURL,
     });
-    let user2Room = await getRoomId(page);
-    await assertRooms(page, [user2Room]);
-    expect(user2Room).not.toEqual(room);
-    expect(user2Room).not.toEqual(newRoom);
+    await expect(async () => {
+      let user2Room = await getRoomId(page);
+      await assertRooms(page, [user2Room]);
+      expect(user2Room).not.toEqual(room);
+      expect(user2Room).not.toEqual(newRoom);
+    }).toPass();
   });
 
   // skipping flaky test: re-enabled while we work on the fix.
@@ -149,15 +149,15 @@ test.describe('Room creation', () => {
     await openRenameMenu(page, room1);
     await expect(page.locator('[data-test-rename-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-past-sessions]')).toHaveCount(0);
-    let name = await page.locator(`[data-test-name-field]`).inputValue();
-    expect(name).toEqual(initialRoomName);
+    await expect(page.locator('[data-test-name-field]')).toHaveValue(
+      initialRoomName,
+    );
     await expect(page.locator(`[data-test-save-name-button]`)).toBeDisabled();
     await expect(page.locator(`[data-test-cancel-name-button]`)).toBeEnabled();
 
     const newRoom1 = 'Room 1';
     await page.locator(`[data-test-name-field]`).fill(newRoom1);
-    name = await page.locator(`[data-test-name-field]`).inputValue();
-    expect(name).toEqual(newRoom1);
+    await expect(page.locator(`[data-test-name-field]`)).toHaveValue(newRoom1);
     await expect(page.locator(`[data-test-save-name-button]`)).toBeEnabled();
     await page.locator('[data-test-save-name-button]').click();
 
@@ -289,27 +289,28 @@ test.describe('Room creation', () => {
     await deleteRoom(page, room3);
     await expect(page.locator(`[data-test-past-sessions]`)).toHaveCount(0);
 
-    await page.waitForTimeout(500); // wait for new room to be created
-    let newRoom = await getRoomId(page);
-    expect(newRoom).not.toEqual(room1);
-    expect(newRoom).not.toEqual(room2);
-    expect(newRoom).not.toEqual(room3);
-    await assertRooms(page, [newRoom]);
-    await page.locator(`[data-test-room-settled]`).waitFor();
+    await expect(async () => {
+      let newRoom = await getRoomId(page);
+      expect(newRoom).not.toEqual(room1);
+      expect(newRoom).not.toEqual(room2);
+      expect(newRoom).not.toEqual(room3);
+      await assertRooms(page, [newRoom]);
+      await page.locator(`[data-test-room-settled]`).waitFor();
 
-    // For asserting the result of the forget matrix API
-    let roomsAfterDeletion = await getRoomsFromSync(
-      firstUser.username,
-      firstUser.password,
-    );
-    let roomsAfterDeletionKeys = Object.keys(roomsAfterDeletion.join);
-    let roomsBeforeDeletionKeys = Object.keys(roomsBeforeDeletion.join);
-    expect(roomsAfterDeletionKeys.length).toEqual(
-      roomsBeforeDeletionKeys.length,
-    );
-    expect(roomsAfterDeletionKeys, 'room1 check').not.toContain(room1);
-    expect(roomsAfterDeletionKeys, 'room2 check').not.toContain(room2);
-    expect(roomsAfterDeletionKeys, 'room3 check').not.toContain(room3);
+      // For asserting the result of the forget matrix API
+      let roomsAfterDeletion = await getRoomsFromSync(
+        firstUser.username,
+        firstUser.password,
+      );
+      let roomsAfterDeletionKeys = Object.keys(roomsAfterDeletion.join);
+      let roomsBeforeDeletionKeys = Object.keys(roomsBeforeDeletion.join);
+      expect(roomsAfterDeletionKeys.length).toEqual(
+        roomsBeforeDeletionKeys.length,
+      );
+      expect(roomsAfterDeletionKeys, 'room1 check').not.toContain(room1);
+      expect(roomsAfterDeletionKeys, 'room2 check').not.toContain(room2);
+      expect(roomsAfterDeletionKeys, 'room3 check').not.toContain(room3);
+    }).toPass();
   });
 
   test('it can cancel deleting a room', async ({ page }) => {
@@ -343,6 +344,7 @@ test.describe('Room creation', () => {
     page,
   }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await page.locator(`[data-test-room-settled]`).waitFor();
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
     let room2 = await createRoomWithMessage(page, 'Room 2');
@@ -362,11 +364,12 @@ test.describe('Room creation', () => {
     await deleteRoom(page, room2); // current room is deleted
     await page.locator('[data-test-ai-assistant-panel]').click();
 
-    await page.waitForTimeout(500); // wait for new room to be created
-    let newRoom = await getRoomId(page);
-    await isInRoom(page, newRoom);
-    await assertRooms(page, [newRoom]);
-    await expect(page.locator('[data-test-room-is-empty]')).toHaveCount(1);
+    await expect(async () => {
+      let newRoom = await getRoomId(page);
+      await isInRoom(page, newRoom);
+      await assertRooms(page, [newRoom]);
+      await expect(page.locator('[data-test-room-is-empty]')).toHaveCount(1);
+    }).toPass();
   });
 
   // skipping flaky test - re-enabled while we work on the fix.

@@ -318,8 +318,16 @@ export async function logout(page: Page) {
 }
 
 export async function createRoom(page: Page) {
+  let existingRoomId = await getRoomId(page);
   await page.locator('[data-test-create-room-btn]').click();
-  let roomId = await getRoomId(page);
+  let roomId;
+  await expect(async () => {
+    roomId = await getRoomId(page);
+    expect(roomId).toBeTruthy();
+    expect(roomId).not.toEqual(existingRoomId);
+  }).toPass();
+  // insist that the room id exists
+  roomId = roomId!;
   await isInRoom(page, roomId);
   return roomId;
 }
