@@ -1221,8 +1221,8 @@ export class Realm {
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
 
     try {
-      // local requests are allowed to query the realm as the index is being built up
-      if (!isLocal) {
+      // for legacy indexer: local requests are allowed to query the realm as the index is being built up
+      if (!isLocal && !(globalThis as any).__useHeadlessChromePrerender) {
         if (!request.headers.get('X-Boxel-Building-Index')) {
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
@@ -2457,9 +2457,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
     let cardsQuery;
     if (request.method === 'QUERY') {
       cardsQuery = await request.json();
@@ -2494,7 +2491,6 @@ export class Realm {
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,
-      useWorkInProgressIndex,
     });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -2553,10 +2549,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
-
     let payload;
     let htmlFormat;
     let cardUrls;
@@ -2631,7 +2623,6 @@ export class Realm {
     let results = await this.#realmIndexQueryEngine.searchPrerendered(
       cardsQuery,
       {
-        useWorkInProgressIndex,
         htmlFormat,
         cardUrls,
         renderType,
@@ -2686,15 +2677,8 @@ export class Realm {
       });
     }
     let { codeRef } = payload;
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
-    let maybeError = await this.#realmIndexQueryEngine.getOwnDefinition(
-      codeRef,
-      {
-        useWorkInProgressIndex,
-      },
-    );
+    let maybeError =
+      await this.#realmIndexQueryEngine.getOwnDefinition(codeRef);
     if (!maybeError) {
       return notFound(request, requestContext);
     }
