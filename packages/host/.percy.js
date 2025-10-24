@@ -8,6 +8,9 @@ module.exports = {
       .monaco-editor .margin-view-overlays {
         visibility: hidden;
       }
+      .actions-overlay.selected {
+        box-shadow: none !important;
+      }
     `,
   },
 };
