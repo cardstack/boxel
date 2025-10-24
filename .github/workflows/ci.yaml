@@ -182,6 +182,40 @@ jobs:
           printf '%s\n' "$SORTED" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
+          EARLIEST_CHANGED=$(printf '%s\n' "$SORTED" | head -n 1)
+          if [[ -z "$EARLIEST_CHANGED" ]]; then
+            echo "Could not determine earliest changed migration" >&2
+            exit 1
+          fi
+          EARLIEST_BASENAME=$(basename "$EARLIEST_CHANGED")
+
+          ALL_MIGRATIONS=$(find packages/postgres/migrations -maxdepth 1 -type f \( -name '*.js' -o -name '*.ts' \) | sort)
+          if [[ -z "$ALL_MIGRATIONS" ]]; then
+            echo "No migrations found in packages/postgres/migrations" >&2
+            exit 1
+          fi
+
+          TOTAL=0
+          EARLIEST_INDEX=0
+          while IFS= read -r FILE; do
+            [[ -z "$FILE" ]] && continue
+            TOTAL=$((TOTAL + 1))
+            if [[ "$EARLIEST_INDEX" -eq 0 && "$(basename "$FILE")" == "$EARLIEST_BASENAME" ]]; then
+              EARLIEST_INDEX=$TOTAL
+            fi
+          done <<EOF
+$ALL_MIGRATIONS
+EOF
+
+          if [[ "$EARLIEST_INDEX" -eq 0 ]]; then
+            echo "Unable to locate changed migration $EARLIEST_BASENAME in migration list" >&2
+            exit 1
+          fi
+
+          DOWN_COUNT=$((TOTAL - EARLIEST_INDEX + 1))
+          echo "down_count=$DOWN_COUNT" >> "$GITHUB_OUTPUT"
+          echo "Will migrate down $DOWN_COUNT migration(s) to cover earliest changed migration"
+
       - name: Apply migrations
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
         working-directory: packages/postgres
@@ -193,8 +227,8 @@ jobs:
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
         working-directory: packages/postgres
         env:
-          MIGRATION_COUNT: ${{ steps.migrations.outputs.count }}
-        run: pnpm migrate down "$MIGRATION_COUNT"
+          MIGRATION_DOWN_COUNT: ${{ steps.migrations.outputs.down_count }}
+        run: pnpm migrate down "$MIGRATION_DOWN_COUNT"
       - name: Reapply migrations
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
         working-directory: packages/postgres
