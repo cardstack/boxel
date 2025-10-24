@@ -76,7 +76,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [{ from: username, message: 'Message 1' }]);
     // Must wait for the send message button to appear, otherwise we hit
     // enter when the previous message is still sending.
-    await page.locator('[data-test-send-message-btn]').waitFor();
+    await expect(page.locator('[data-test-send-message-btn]')).toBeEnabled();
     await page.keyboard.press('Enter');
     const messages = [
       { from: username, message: 'Message 1' },
