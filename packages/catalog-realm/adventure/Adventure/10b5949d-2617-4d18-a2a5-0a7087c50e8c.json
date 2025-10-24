@@ -14,30 +14,43 @@
         "description": null,
         "thumbnailURL": null
       },
-      "startedAt": "2025-10-22T06:09:10.740Z",
-      "chatRoomId": "!VyMqrjVRhfItsvfTri:localhost",
-      "gameStatus": "playing",
+      "startedAt": null,
+      "chatRoomId": null,
+      "gameStatus": "setup",
       "totalTurns": 3,
       "completedAt": null,
-      "currentTurn": 3,
-      "oneShotTags": [],
-      "lastImageUrl": "http://localhost:4201/catalog/CloudflareImage/76bbacc5-29f8-479e-87bc-69fb39de9bd2",
-      "oneShotTitle": "",
-      "lastNarration": "## The Containment Breach\n\nYou approach the containment unit cautiously, the humming growing louder with each step. The reinforced transparent panel reveals something that shouldn't exist—a **swirling vortex of iridescent energy**, pulsing with colors that hurt to look at directly. It's beautiful and terrifying in equal measure.\n\nThe control panel beside the unit flickers erratically, displaying impossible readings: *Dimensional Breach Detected • Containment Integrity: 47% • Unknown Entity Present*.\n\nAs you lean closer, the vortex seems to **respond to your presence**. Tendrils of light reach toward the containment wall, and for a brief moment, you see something in the swirling chaos—shapes that might be buildings, landscapes from somewhere else, somewhere *wrong*.\n\nSuddenly, your helmet comm crackles to life with static, then a distorted voice: *\"...don't touch it... Chen was right... it's trying to...\"* The message cuts out.\n\nThe containment unit's integrity drops to 42%. Warning klaxons begin blaring throughout the lab. You notice:\n- An **emergency containment override** button (red) that could strengthen the field—or overload it\n- A **data extraction port** that could download whatever the unit has recorded\n- Your workstation's analysis is still running—it might have answers\n- The exit is still clear... for now\n\n**What do you do?**\n\n1. **Hit the emergency override** to try to stabilize the containment\n2. **Extract the containment unit's data** to understand what you're dealing with\n3. **Back away and check your workstation** for the analysis results\n4. **Attempt communication** through the static—someone's trying to warn you\n\n*Or describe your own action...*",
-      "lastTimestamp": "2025-10-23T05:15:47.293Z",
-      "adventureTitle": null,
-      "lastTurnNumber": 3,
-      "lastImagePrompt": "containment unit glowing vortex iridescent energy swirling portal laboratory warning lights sci-fi",
-      "lastIsPlayerTurn": true,
-      "lastPlayerChoice": "Investigate the containment unit and the mysterious humming",
+      "currentTurn": 0,
+      "lastNarration": null,
+      "lastTimestamp": null,
+      "lastTurnNumber": null,
+      "customAdventure": {
+        "tags": [
+          "noir",
+          "mystery",
+          "gritty"
+        ],
+        "title": null,
+        "description": null,
+        "imageStyles": [
+          "film-noir",
+          "black-and-white"
+        ]
+      },
+      "lastImagePrompt": null,
+      "lastIsPlayerTurn": false,
+      "lastPlayerChoice": null,
       "autoGenerateImages": true,
-      "oneShotDescription": null,
-      "oneShotImageStyles": []
+      "lastCloudflareImage": null
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
           "self": null
+        }
+      },
+      "selectedScenario": {
+        "links": {
+          "self": "../AdventureScenario/example-scenario-detective-mystery"
         }
       },
       "linkedScenarios.0": {

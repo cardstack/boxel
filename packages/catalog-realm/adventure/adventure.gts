@@ -17,15 +17,7 @@ import DatetimeField from 'https://cardstack.com/base/datetime';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
 import { Button } from '@cardstack/boxel-ui/components';
-import {
-  formatDateTime,
-  eq,
-  gt,
-  or,
-  not,
-  pick,
-  and,
-} from '@cardstack/boxel-ui/helpers';
+import { eq, gt, or, not, pick, and } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -375,7 +367,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         openRoom: true,
         attachedCards: [this.args.model as CardDef],
         prompt: kickoffPrompt,
-        llmModel: 'anthropic/claude-sonnet-4',
+        llmModel: 'anthropic/claude-sonnet-4.5',
         llmMode: 'act',
         skillCardIds: [gmSkillId],
       };
@@ -383,7 +375,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         opts.roomId = this.args.model.chatRoomId;
       } else {
         opts.roomId = 'new';
-        opts.roomName = `Adventure V4: ${chosen.title}`;
+        opts.roomName = `Adventure: ${chosen.title}`;
       }
       const result = await use.execute(opts);
       this.roomId = result.roomId;
@@ -398,7 +390,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       const set = new SetActiveLLMCommand(ctx);
       await set.execute({ roomId: this.roomId, mode: 'act' });
     } catch (e: any) {
-      console.error('Adventure V4 start error:', e);
+      console.error('Adventure start error:', e);
       alert(`Failed to start: ${e?.message || String(e)}`);
       try {
         const ctx = this.args.context?.commandContext;
@@ -478,7 +470,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       // Sync one-shot guidance to the linked Scenario so UI and kickoff align
       if (s) {
         if (!this.args.model.customAdventure) {
-          this.args.model.customAdventure = {};
+          this.args.model.customAdventure = new CustomAdventureField();
         }
         const tags = Array.isArray(s.tags) ? [...s.tags] : [];
         const styles = Array.isArray(s.imageStyles) ? [...s.imageStyles] : [];
@@ -502,7 +494,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
     }
   }
 
-  // Generate image and upload to permanent storage
   @action
   async generateSceneImage() {
     if (this.args.model.gameStatus !== 'playing') return;
@@ -511,7 +502,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
 
     this.isProcessing = true;
     this.isImageLoading = true;
-    // keep currentImageData until new one arrives to prevent UI flicker
 
     try {
       const ctx = this.args.context?.commandContext;
@@ -547,12 +537,12 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
 
       // Show the image immediately
       this.currentImageData = dataUrl;
+      this.isImageLoading = false;
 
       // Step 2: Upload image to Cloudflare
       try {
         const uploadCmd = new UploadImageCommand(ctx);
 
-        // Get the realm URL directly from the model using realmURL symbol
         const modelRealmUrl = this.args.model?.[realmURL];
         if (!modelRealmUrl) {
           throw new Error('Realm URL not available on the model');
@@ -599,15 +589,12 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
     );
   }
 
-  // ² Get the currently selected scenario or custom adventure for display
   get currentScenario() {
     try {
-      // Return the linked selected scenario if it exists
       if (this.args.model?.selectedScenario) {
         return this.args.model.selectedScenario;
       }
 
-      // If custom adventure has content, create a virtual scenario from it
       const custom = this.args.model?.customAdventure;
       if (custom?.title || custom?.description) {
         return {
@@ -618,7 +605,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         };
       }
 
-      // Fallback to first linked scenario
       return this.args.model?.linkedScenarios?.[0] || null;
     } catch (e) {
       console.error('Adventure: Error getting current scenario', e);
@@ -702,7 +688,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
               {{#if this.showLinkedChooser}}
                 <div class='chooser-panel'>
                   <@fields.linkedScenarios @format='edit' />
-                  <div class='actions-center'>
+                  <div class='actions-center close-chooser'>
                     <Button
                       class='btn ghost'
                       {{on 'click' this.hideChooser}}
@@ -716,7 +702,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
               <p class='section-help'>Craft a unique adventure with custom tags
                 and image styles.</p>
 
-              <div class='card'>
+              <div class='card custom-form-card'>
                 <div class='card-title'>Title</div>
                 <@fields.customAdventure.title @format='edit' />
                 <div class='card-title'>Description</div>
@@ -905,7 +891,9 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
                     {{#if @model.lastNarration}}
                       <div class='overlay'>
                         <div class='overlay-box'>
-                          <@fields.lastNarration />
+                          <div class='overlay-content'>
+                            <@fields.lastNarration />
+                          </div>
                         </div>
                       </div>
                     {{/if}}
@@ -1054,15 +1042,18 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         height: 100%;
         display: flex;
         justify-content: center;
-        background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+        background: var(
+          --background,
+          linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%)
+        );
         padding: 0.75rem;
       }
       .mat {
         max-width: 52rem;
         width: 100%;
-        background: white;
-        border-radius: 0.75rem;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        background: var(--card, white);
+        border-radius: var(--radius, 0.75rem);
+        box-shadow: var(--shadow, 0 10px 24px rgba(15, 23, 42, 0.06));
         overflow-y: auto;
         max-height: 100%;
       }
@@ -1087,13 +1078,13 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         margin: 0;
         font-size: 1.25rem;
         font-weight: 800;
-        letter-spacing: -0.01em;
-        color: #111827;
+        letter-spacing: var(--tracking-normal, -0.01em);
+        color: var(--foreground, #111827);
       }
       .scenario-chip {
-        border: 1px solid #e5e7eb;
-        color: #374151;
-        background: #fff;
+        border: 1px solid var(--border, #e5e7eb);
+        color: var(--muted-foreground, #374151);
+        background: var(--card, #fff);
         border-radius: 999px;
         padding: 0.125rem 0.5rem;
         font-size: 0.75rem;
@@ -1101,7 +1092,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       }
       .subtitle {
         margin: 0.25rem 0 0;
-        color: #4b5563;
+        color: var(--muted-foreground, #4b5563);
         font-size: 0.9rem;
         line-height: 1.35;
       }
@@ -1134,12 +1125,12 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         margin: 0 0 0.25rem;
         font-size: 1rem;
         font-weight: 700;
-        color: #111827;
+        color: var(--foreground, #111827);
       }
       .section-help {
         margin: 0 0 1rem;
         font-size: 0.85rem;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
       }
 
       /* Scenario select */
@@ -1152,13 +1143,19 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         gap: 0.75rem;
         margin-bottom: 1rem;
       }
+      .custom-form-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
       .card {
         text-align: left;
         width: 100%;
-        border: 1px solid #e5e7eb;
-        background: #fff;
-        border-radius: 0.5rem;
-        padding: 0.75rem;
+        border: 1px solid var(--border, #e5e7eb);
+        background: var(--card, #fff);
+        border-radius: var(--radius, 0.5rem);
+        padding: 1rem;
         transition:
           transform 120ms ease,
           box-shadow 120ms ease,
@@ -1167,20 +1164,23 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       }
       .card:hover {
         transform: translateY(-1px);
-        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
-        border-color: #cbd5e1;
+        box-shadow: var(--shadow, 0 6px 14px rgba(15, 23, 42, 0.06));
+        border-color: var(--border, #cbd5e1);
       }
       .card.selected {
-        border-color: #6366f1;
+        border-color: var(--primary, #6366f1);
         box-shadow: 0 6px 16px rgba(99, 102, 241, 0.2);
       }
       .card-title {
         font-weight: 700;
-        color: #0f172a;
-        margin-bottom: 0.25rem;
+        color: var(--card-foreground, #0f172a);
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+        opacity: 0.8;
       }
       .card-desc {
-        color: #475569;
+        color: var(--muted-foreground, #475569);
         font-size: 0.875rem;
         line-height: 1.35;
         margin-bottom: 0.5rem;
@@ -1191,22 +1191,31 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         flex-wrap: wrap;
       }
       .meta-pill {
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--border, #e5e7eb);
         border-radius: 999px;
         padding: 0.125rem 0.5rem;
         font-size: 0.75rem;
         font-weight: 600;
-        color: #334155;
-        background: #fff;
+        color: var(--muted-foreground, #334155);
+        background: var(--card, #fff);
       }
       .meta-pill.subtle {
-        color: #64748b;
+        color: var(--muted-foreground, #64748b);
       }
 
       .actions-center {
         display: flex;
         justify-content: center;
         margin-top: 0.25rem;
+      }
+
+      .chooser-panel {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+      }
+
+      .close-chooser {
+        margin-top: 0.5rem;
       }
 
       /* Story */
@@ -1313,30 +1322,30 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         box-shadow: none;
       }
       .btn.primary {
-        background: linear-gradient(135deg, #2563eb, #1d4ed8);
-        color: #fff;
+        background: var(--primary, linear-gradient(135deg, #2563eb, #1d4ed8));
+        color: var(--primary-foreground, #fff);
       }
       .btn.primary:hover:not([disabled]) {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+        box-shadow: var(--shadow, 0 4px 12px rgba(37, 99, 235, 0.35));
       }
       .btn.secondary {
-        background: #fff;
-        color: #1f2937;
-        border-color: #cbd5e1;
+        background: var(--secondary, #fff);
+        color: var(--secondary-foreground, #1f2937);
+        border-color: var(--border, #cbd5e1);
       }
       .btn.secondary:hover:not([disabled]) {
         transform: translateY(-1px);
-        box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
-        border-color: #94a3b8;
+        box-shadow: var(--shadow-sm, 0 4px 10px rgba(15, 23, 42, 0.06));
+        border-color: var(--border, #94a3b8);
       }
       .btn.ghost {
         background: transparent;
-        color: #374151;
-        border-color: #e5e7eb;
+        color: var(--muted-foreground, #374151);
+        border-color: var(--border, #e5e7eb);
       }
       .btn.ghost:hover:not([disabled]) {
-        background: #f8fafc;
+        background: var(--muted, #f8fafc);
         transform: translateY(-1px);
       }
 
@@ -1531,7 +1540,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       }
       .overlay-box {
         margin: 0.5rem;
-        /* Improved contrast with backdrop blur */
         background: rgba(17, 24, 39, 0.75);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
@@ -1539,17 +1547,18 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         color: #fff;
         border-radius: 0.5rem;
         padding: 0.75rem;
-        /* Reserve slightly more space for the control bar */
         margin-bottom: 3rem;
-        /* Allow a bit more height; still scrolls when long */
         max-height: 60%;
         overflow: auto;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
-        pointer-events: auto; /* allow scroll/clicks inside the overlay */
+        pointer-events: auto;
         scrollbar-width: thin;
         font-size: 0.875rem;
         line-height: 1.45;
+      }
+      .overlay-content {
+        margin-top: -24px;
       }
       .overlay-box p {
         margin: 0 0 0.5rem;
@@ -1563,12 +1572,11 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         margin-bottom: 0.25rem;
       }
 
-      /* Narration readability + choice lists */
       .narration {
         color: #111827;
-        font-size: 0.875rem; /* 14px */
+        font-size: 0.875rem;
         line-height: 1.5;
-        max-width: 70ch; /* comfortable reading width */
+        max-width: 70ch;
       }
       .narration p {
         margin: 0 0 0.75rem;
@@ -1582,7 +1590,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         margin-bottom: 0.25rem;
       }
 
-      /* Placeholder / empty state */
       .placeholder {
         color: #6b7280;
         font-style: italic;
@@ -1593,7 +1600,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         background: #f9fafb;
       }
 
-      /* Screen reader only label */
       .sr-only {
         position: absolute;
         width: 1px;
@@ -1606,7 +1612,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         border-width: 0;
       }
 
-      /* Loading spinner */
       .spinner {
         display: inline-block;
         width: 0.875rem;
@@ -1627,7 +1632,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         }
       }
 
-      /* Mode picker */
       .mode-picker {
         display: flex;
         gap: 0.5rem;
@@ -1641,34 +1645,32 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         padding: 0.5rem 1rem;
         background: transparent;
         border: 1px solid transparent;
-        border-radius: 0.375rem;
+        border-radius: var(--radius, 0.375rem);
         font-size: 0.875rem;
         font-weight: 600;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
         cursor: pointer;
         transition: all 120ms ease;
       }
       .mode-btn:hover {
-        color: #374151;
+        color: var(--foreground, #374151);
         background: rgba(255, 255, 255, 0.5);
       }
       .mode-btn.active {
-        background: #fff;
-        color: #2563eb;
-        border-color: #e5e7eb;
-        box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04);
+        background: var(--card, #fff);
+        color: var(--primary, #2563eb);
+        border-color: var(--border, #e5e7eb);
+        box-shadow: var(--shadow-sm, 0 2px 4px rgba(15, 23, 42, 0.04));
       }
 
-      /* Reset menu */
       .reset-menu-wrapper {
         position: relative;
-        /* Ensure dropdown isn't clipped */
         overflow: visible;
       }
       .reset-menu {
         position: absolute;
         right: 0;
-        bottom: calc(100% + 0.25rem); /* Show above button instead of below */
+        bottom: calc(100% + 0.25rem);
         background: #fff;
         border: 1px solid #e5e7eb;
         border-radius: 0.5rem;
@@ -1676,16 +1678,12 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         min-width: 180px;
         z-index: 50;
         padding: 0.25rem;
-        /* Prevent clipping by parent containers */
         clip-path: none;
-        /* Ensure visibility */
         visibility: visible;
         opacity: 1;
-        /* Ensure it appears above the image area */
         transform: translateY(-0.25rem);
       }
 
-      /* Ensure parent containers don't clip the dropdown */
       .overlay-controls,
       .actionbar,
       .oc-right,
@@ -1715,39 +1713,40 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         background: #fef2f2;
       }
 
-      /* Chip suggestions */
       .chip-suggestions {
         display: flex;
-        gap: 0.375rem;
+        gap: 0.5rem;
         flex-wrap: wrap;
         align-items: center;
-        padding: 0.5rem;
-        background: #f9fafb;
-        border-radius: 0.375rem;
-        border: 1px dashed #e5e7eb;
+        padding: 0.75rem;
+        background: var(--muted, #f9fafb);
+        border-radius: var(--radius, 0.5rem);
+        border: 1px dashed var(--border, #e5e7eb);
       }
       .chip-suggestions .hint {
         font-size: 0.75rem;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
         font-weight: 600;
+        margin-right: 0.25rem;
       }
       .chip.suggested {
-        font-size: 0.75rem;
-        padding: 0.25rem 0.5rem;
+        font-size: 0.8125rem;
+        padding: 0.375rem 0.75rem;
         border-radius: 999px;
         border: 1px solid #ddd6fe;
         background: #f5f3ff;
         color: #6366f1;
         cursor: pointer;
         transition: all 120ms ease;
+        font-weight: 500;
       }
       .chip.suggested:hover {
         background: #ede9fe;
-        border-color: #c4b5fd;
+        border-color: #a78bfa;
         transform: translateY(-1px);
+        box-shadow: var(--shadow-sm, 0 2px 4px rgba(139, 92, 246, 0.15));
       }
 
-      /* Empty scenarios state */
       .empty-scenarios {
         text-align: center;
         padding: 2rem 1rem;
@@ -1771,7 +1770,6 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         font-size: 0.875rem;
       }
 
-      /* Enhanced placeholder for narration */
       .placeholder.enchanted {
         padding: 2rem 1rem;
         text-align: center;
@@ -1803,7 +1801,27 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         display: inline-block;
       }
 
-      /* Mobile refinements */
+      .chip-input {
+        width: 100%;
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: var(--radius, 0.5rem);
+        padding: 0.5rem 0.75rem;
+        font: inherit;
+        background-color: var(--background, var(--boxel-light));
+        color: var(--foreground, #111827);
+        font-weight: 500;
+        transition: all 180ms ease;
+        box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+        letter-spacing: 0.01em;
+        line-height: 1.5;
+        margin-bottom: 1rem;
+      }
+      .chip-input::placeholder {
+        color: var(--muted-foreground, #9ca3af);
+        font-weight: 400;
+        opacity: 0.8;
+      }
+
       @media (max-width: 768px) {
         .header {
           padding: 1rem 1rem 0.5rem;
@@ -1844,12 +1862,8 @@ export class Adventure extends CardDef {
   static icon = BookOpenIcon;
   static prefersWideFormat = true;
 
-  // Identity and state
-  @field adventureTitle = contains(StringField);
-
-  // Linked scenarios + one-shot editor
-  @field linkedScenarios = linksToMany(AdventureScenario); // pick from real cards
-  @field selectedScenario = linksTo(AdventureScenario); // ¹ Store the selected scenario as a link
+  @field linkedScenarios = linksToMany(AdventureScenario);
+  @field selectedScenario = linksTo(AdventureScenario);
 
   @field customAdventure = contains(CustomAdventureField);
 
@@ -1860,34 +1874,33 @@ export class Adventure extends CardDef {
   @field completedAt = contains(DatetimeField);
   @field chatRoomId = contains(StringField);
 
-  // Latest-only model
   @field lastTurnNumber = contains(NumberField);
   @field lastNarration = contains(MarkdownField);
   @field lastPlayerChoice = contains(StringField);
   @field lastTimestamp = contains(DatetimeField);
   @field lastIsPlayerTurn = contains(BooleanField);
   @field lastImagePrompt = contains(StringField);
-  @field lastCloudflareImage = contains(StringField); // Store uploaded image URL
+  @field lastCloudflareImage = contains(StringField);
   @field autoGenerateImages = contains(BooleanField);
 
-  // Title
-  // ⁵ Updated title computation to use selected scenario
   @field title = contains(StringField, {
     computeVia: function (this: Adventure) {
       try {
-        if (this.adventureTitle) return this.adventureTitle;
-
-        // Use the selected scenario if available
-        const currentScenario =
-          this.selectedScenario || this.linkedScenarios?.[0];
-
-        if (currentScenario?.title) {
-          return `Adventure V4: ${currentScenario.title}`;
+        console.log('this.selectedScenario', this.selectedScenario);
+        console.log('this.customAdventure', this.customAdventure);
+        if (this.selectedScenario) {
+          return this.selectedScenario.title;
         }
-        return 'Create Your Own Adventure V4';
+
+        const custom = this.customAdventure;
+        if (custom?.title) {
+          return custom.title || 'Custom Adventure';
+        }
+
+        return 'Create Your Own Adventure';
       } catch (e) {
-        console.error('Adventure V4: Error computing title', e);
-        return 'Adventure Game V4';
+        console.error('Adventure: Error computing title', e);
+        return 'Adventure Game';
       }
     },
   });
@@ -1895,15 +1908,12 @@ export class Adventure extends CardDef {
   static isolated = AdventureIsolated;
 
   static embedded = class Embedded extends Component<typeof this> {
-    // ³ Use currentScenario or custom adventure for display
     get currentScenario() {
       try {
-        // Return the linked selected scenario if it exists
         if (this.args.model?.selectedScenario) {
           return this.args.model.selectedScenario;
         }
 
-        // If custom adventure has content, create a virtual scenario from it
         const custom = this.args.model?.customAdventure;
         if (custom?.title || custom?.description) {
           return {
@@ -1928,9 +1938,6 @@ export class Adventure extends CardDef {
     <template>
       <div class='embedded-card'>
         <div class='top'>
-          <h3 class='name'>
-            {{if @model.adventureTitle @model.adventureTitle 'Adventure'}}
-          </h3>
           {{#if this.currentScenario}}
             <span class='pill'>{{this.currentScenario.title}}</span>
           {{/if}}
@@ -1966,12 +1973,6 @@ export class Adventure extends CardDef {
           align-items: center;
           justify-content: space-between;
           gap: 0.5rem;
-        }
-        .name {
-          margin: 0;
-          font-size: 0.95rem;
-          font-weight: 700;
-          color: #111827;
         }
         .pill {
           border: 1px solid #e5e7eb;
@@ -2073,11 +2074,6 @@ export class Adventure extends CardDef {
 
         <div class='strip'>
           <div class='strip-main'>
-            <div class='title'>{{if
-                @model.adventureTitle
-                @model.adventureTitle
-                'Adventure'
-              }}</div>
             {{#if this.currentScenario}}
               <div class='sub'>{{this.currentScenario.title}}</div>
             {{/if}}
@@ -2090,14 +2086,6 @@ export class Adventure extends CardDef {
         </div>
 
         <div class='tile'>
-          <div class='head'>
-            <h4>{{if
-                @model.adventureTitle
-                @model.adventureTitle
-                'Adventure'
-              }}</h4>
-
-          </div>
           {{#if this.currentScenario}}
             <div class='desc'>
               <strong>{{this.currentScenario.title}}</strong>
@@ -2121,11 +2109,7 @@ export class Adventure extends CardDef {
         <div class='card'>
           <div class='card-head'>
             <div class='main'>
-              <h3>{{if
-                  this.currentScenario.title
-                  @model.adventureTitle
-                  'Adventure'
-                }}</h3>
+              <h3>{{if this.currentScenario.title 'Adventure'}}</h3>
             </div>
             <div class='state'>
               {{#if (eq @model.gameStatus 'playing')}}
@@ -2328,27 +2312,47 @@ export class Adventure extends CardDef {
         /* Chips editor */
         .chips {
           display: grid;
-          gap: 0.375rem;
+          gap: 0.625rem;
+          margin-bottom: 1rem;
         }
         .chip-row {
           display: flex;
-          gap: 0.375rem;
+          gap: 0.5rem;
           flex-wrap: wrap;
+          padding: 0.75rem;
+          background: var(--muted, #f8fafc);
+          border-radius: var(--radius, 0.375rem);
+          border: 1px solid var(--border, #e5e7eb);
+          min-height: 2.5rem;
         }
         .chip {
-          font-size: 0.75rem;
-          padding: 0.25rem 0.5rem;
+          font-size: 0.8125rem;
+          padding: 0.375rem 0.75rem;
           border-radius: 999px;
-          border: 1px solid #e5e7eb;
-          background: #fff;
-          color: #374151;
+          border: 1px solid var(--border, #e5e7eb);
+          background: var(--card, #fff);
+          color: var(--card-foreground, #374151);
+          font-weight: 500;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          transition: all 120ms ease;
+          cursor: pointer;
         }
-        .chip-input {
-          width: 100%;
-          border: 1px solid #e5e7eb;
-          border-radius: 0.375rem;
-          padding: 0.5rem 0.625rem;
-          font-size: 0.875rem;
+        .chip:hover {
+          border-color: var(--primary, #6366f1);
+          background: var(--primary, #6366f1);
+          color: var(--primary-foreground, #fff);
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-sm, 0 2px 4px rgba(99, 102, 241, 0.2));
+        }
+        .chip span[aria-hidden] {
+          font-size: 1.125rem;
+          line-height: 1;
+          opacity: 0.6;
+        }
+        .chip:hover span[aria-hidden] {
+          opacity: 1;
         }
       </style>
     </template>
