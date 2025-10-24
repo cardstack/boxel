@@ -92,6 +92,7 @@ let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
 let CardInfoField: (typeof CardAPIModule)['CardInfoField'];
+let enumField: (typeof CardAPIModule)['enumField'];
 
 async function initialize() {
   let loader = getService('loader-service').loader;
@@ -193,6 +194,7 @@ async function initialize() {
     ReadOnlyField,
     instanceOf,
     CardInfoField,
+    enumField,
   } = cardAPI);
 }
 
@@ -242,4 +244,5 @@ export {
   Skill,
   instanceOf,
   CardInfoField,
+  enumField,
 };

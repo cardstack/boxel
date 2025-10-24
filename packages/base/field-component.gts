@@ -40,6 +40,7 @@ import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
+import { resolveFieldConfiguration } from './field-support';
 
 export interface BoxComponentSignature {
   Element: HTMLElement; // This may not be true for some field components, but it's true more often than not
@@ -263,6 +264,25 @@ export function getBoxComponent(
   }
 
   let component = class FieldComponent extends Component<BoxComponentSignature> {
+    // Compute merged configuration for this field based on the owning instance.
+    // We intentionally do not expose the instance itself to templates.
+    get resolvedConfiguration() {
+      // If there is no field context (e.g., rendering a Card), skip.
+      if (!field) return undefined;
+      // Walk up the Box chain to find the root model (owning instance)
+      let current: any = model as any;
+      let root: BaseDef | undefined;
+      try {
+        while (current?.state?.type === 'derived') {
+          current = current.state.containingBox;
+        }
+        root = current?.state?.model as BaseDef | undefined;
+      } catch (_e) {
+        root = undefined;
+      }
+      if (!root) return undefined;
+      return resolveFieldConfiguration(field, root);
+    }
     <template>
       <CardContextConsumer as |context|>
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
@@ -349,6 +369,7 @@ export function getBoxComponent(
                           @set={{model.set}}
                           @fieldName={{model.name}}
                           @context={{context}}
+                          @configuration={{this.resolvedConfiguration}}
                           @createCard={{cardCrudFunctions.createCard}}
                           @viewCard={{cardCrudFunctions.viewCard}}
                           @saveCard={{cardCrudFunctions.saveCard}}
@@ -373,6 +394,7 @@ export function getBoxComponent(
                         @set={{model.set}}
                         @fieldName={{model.name}}
                         @context={{context}}
+                        @configuration={{this.resolvedConfiguration}}
                         @createCard={{cardCrudFunctions.createCard}}
                         @viewCard={{cardCrudFunctions.viewCard}}
                         @saveCard={{cardCrudFunctions.saveCard}}

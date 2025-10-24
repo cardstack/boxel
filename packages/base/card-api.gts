@@ -2,7 +2,8 @@ import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, BoxelSelect } from '@cardstack/boxel-ui/components';
+import { or } from '@cardstack/boxel-ui/helpers';
 import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -82,6 +83,10 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+import {
+  normalizeEnumOptions as normalizeEnumOptionsUtil,
+  enumAllowedValues as enumAllowedValuesUtil,
+} from './enum-utils';
 
 import {
   callSerializeHook,
@@ -111,6 +116,7 @@ import {
   isCard,
   isCardOrField,
   isNotLoadedValue,
+  resolveFieldConfiguration,
   notifyCardTracking,
   peekAtField,
   relationshipMeta,
@@ -191,6 +197,12 @@ export type FieldsTypeFor<T extends BaseDef> = {
 };
 export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
+// Opaque configuration passed to field format components and validators
+export type FieldConfiguration = Record<string, any>;
+// Configuration may be provided as a static object or a function of the parent instance
+export type ConfigurationInput<T> =
+  | FieldConfiguration
+  | ((self: Readonly<T>) => FieldConfiguration | undefined);
 export type FieldFormats = {
   ['fieldDef']: Format;
   ['cardDef']: Format;
@@ -206,6 +218,8 @@ interface Options {
   // in which case we need to tell the runtime that a card is
   // explicitly being used.
   isUsed?: true;
+  // Optional: per-usage configuration provider merged with FieldDef-level configuration
+  configuration?: ConfigurationInput<any>;
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
@@ -332,6 +346,8 @@ export interface Field<
   fieldType: FieldType;
   computeVia: undefined | (() => unknown);
   description: undefined | string;
+  // Optional per-usage configuration stored on the field descriptor
+  configuration?: ConfigurationInput<any>;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -406,6 +422,8 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  // Optional per-usage configuration for this field
+  configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
@@ -668,7 +686,24 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }
 
     if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
+      // minimal enum validation for plural primitive fields
+      if ((this.card as any).isEnumField) {
+        let allowed: any[];
+        if (typeof (this.card as any).allowedValues === 'function') {
+          allowed = (this.card as any).allowedValues(instance);
+        } else {
+          let opts: any[] = (this.card as any).enumOptions ?? [];
+          allowed = enumAllowedValuesUtil(opts);
+        }
+        let allowedDisplay = allowed.map(String).join(', ');
+        for (let [index, item] of values.entries()) {
+          if (item != null && !allowed.includes(item)) {
+            throw new Error(
+              `enum validation error: value '${item}' at index ${index} is not allowed for field '${this.name}'. Allowed: ${allowedDisplay}`,
+            );
+          }
+        }
+      }
     } else {
       for (let [index, item] of values.entries()) {
         if (item != null && !instanceOf(item, this.card)) {
@@ -719,6 +754,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  // Optional per-usage configuration for this field
+  configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
@@ -892,7 +929,35 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   validate(_instance: BaseDef, value: any) {
     if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
+      // minimal enum validation: if field card is an enum, enforce allowed values
+      if ((this.card as any).isEnumField) {
+        let allowed: any[];
+        // Prefer merged configuration when available
+        try {
+          // lazy import to avoid circular pitfalls; resolve is already a direct import at top-level
+          let cfg = resolveFieldConfiguration(this as any, _instance);
+          let opts: any[] | undefined = (cfg as any)?.options;
+          if (Array.isArray(opts)) {
+            allowed = enumAllowedValuesUtil(opts);
+          } else if (typeof (this.card as any).allowedValues === 'function') {
+            // Fallback to class-level provider (supports dynamic function on FieldDef)
+            allowed = (this.card as any).allowedValues(_instance);
+          } else {
+            let staticOpts: any[] = (this.card as any).enumOptions ?? [];
+            allowed = enumAllowedValuesUtil(staticOpts);
+          }
+        } catch (_e) {
+          // On any unexpected error, fall back to static
+          let staticOpts: any[] = (this.card as any).enumOptions ?? [];
+          allowed = enumAllowedValuesUtil(staticOpts);
+        }
+        if (value != null && !allowed.includes(value)) {
+          let allowedDisplay = allowed.map(String).join(', ');
+          throw new Error(
+            `enum validation error: value '${value}' is not allowed for field '${this.name}'. Allowed: ${allowedDisplay}`,
+          );
+        }
+      }
     } else {
       if (value != null && !instanceOf(value, this.card)) {
         throw new Error(
@@ -1854,15 +1919,16 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new ContainsMany({
-          cardThunk: cardThunk(field),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new ContainsMany({
+        cardThunk: cardThunk(field),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      // Save per-usage configuration on field descriptor when provided
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1875,15 +1941,16 @@ export function contains<FieldT extends FieldDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new Contains({
-          cardThunk: cardThunk(field),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new Contains({
+        cardThunk: cardThunk(field),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      // Save per-usage configuration on field descriptor when provided
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1930,6 +1997,8 @@ export function linksToMany<CardT extends CardDefConstructor>(
   } as any;
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
+
+// (moved below BaseDef & FieldDef declarations)
 
 // TODO: consider making this abstract
 export class BaseDef {
@@ -2124,6 +2193,8 @@ export type BaseDefComponent = ComponentLike<{
     context?: CardContext;
     canEdit?: boolean;
     typeConstraint?: ResolvedCodeRef;
+    // Resolved, merged field configuration (if applicable)
+    configuration?: FieldConfiguration | undefined;
     createCard: CreateCardFn;
     viewCard: ViewCardFn;
     editCard: EditCardFn;
@@ -2137,6 +2208,9 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
+
+  // Optional provider for default configuration, merged with per-usage configuration
+  static configuration?: ConfigurationInput<any>;
 
   static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
@@ -2216,6 +2290,108 @@ export class TextAreaField extends StringField {
       />
     </template>
   };
+}
+
+// Minimal enum field factory: wraps a FieldDef with a dropdown editor
+// and exposes the allowed options. Enough to support the integration test.
+export function enumField<BaseT extends FieldDefConstructor>(
+  Base: BaseT,
+  config: { options: any; displayName?: string; icon?: any }
+): BaseT {
+  let rawOpts: any[] = Array.isArray((config as any)?.options)
+    ? ((config as any).options as any[])
+    : [];
+
+  class EnumField extends (Base as any) {
+    static isEnumField = true;
+    // Back-compat: retain static enumOptions for existing helpers/tests
+    static enumOptions = rawOpts;
+    // Leverage new configuration API: expose options via FieldDef.configuration
+    static configuration = typeof (config as any)?.options === 'function'
+      ? (self: any) => ({ options: (config as any).options(self) })
+      : ({ options: (config as any)?.options } as any);
+    // Allow customizing display metadata
+    static displayName = (config as any)?.displayName ?? (Base as any).displayName;
+    static icon = (config as any)?.icon ?? (Base as any).icon;
+
+    // Helper for validation fallback when resolver is not used
+    static allowedValues(instance?: unknown) {
+      let provided = (EnumField as any).configuration;
+      if (typeof provided === 'function') {
+        let fragment = provided(instance as any);
+        if (fragment && Array.isArray((fragment as any).options)) {
+          return enumAllowedValuesUtil((fragment as any).options);
+        }
+      } else if (provided && Array.isArray((provided as any).options)) {
+        return enumAllowedValuesUtil((provided as any).options);
+      }
+      return enumAllowedValuesUtil((EnumField as any).enumOptions ?? []);
+    }
+
+    static atom = class Atom extends GlimmerComponent<any> {
+      get normalizedOptions() {
+        let cfg = this.args.configuration as { options?: any[] } | undefined;
+        let opts = cfg?.options ?? (EnumField as any).enumOptions ?? [];
+        return normalizeEnumOptionsUtil(opts);
+      }
+      get option() {
+        let v = this.args.model as any;
+        let opts = this.normalizedOptions as any[];
+        return (
+          opts.find((o: any) => o.value === v) ?? { value: v, label: String(v) }
+        );
+      }
+      <template>
+        {{#if this.option}}
+          {{#if this.option.icon}}
+            <this.option.icon class='option-icon' width='16' height='16' />
+          {{/if}}
+          <span class='option-title'>{{or this.option.label this.option.value}}</span>
+        {{/if}}
+      </template>
+    };
+    // selected item component used for trigger rendering; adapts BoxelSelect's `@option` to atom's `@model`
+    static selectedItem = class SelectedItem extends GlimmerComponent<{ Args: { option: any; configuration?: any } }> {
+      <template>
+        {{#if @option}}
+          {{#let (component EnumField.atom) as |Atom|}}
+            <Atom @model={{@option.value}} @configuration={{@configuration}} />
+          {{/let}}
+        {{/if}}
+      </template>
+    };
+    static edit = class Edit extends GlimmerComponent<any> {
+      get options() {
+        let cfg = this.args.configuration as { options?: any[] } | undefined;
+        let opts = cfg?.options ?? (EnumField as any).enumOptions ?? [];
+        return normalizeEnumOptionsUtil(opts);
+      }
+      get selectedOption() {
+        let opts = this.options as any[];
+        return opts.find((o: any) => o.value === (this.args.model as any)) ?? null;
+      }
+      update = (opt: any) => {
+        this.args.set?.(opt?.value ?? null);
+      };
+      <template>
+        <BoxelSelect
+          @options={{this.options}}
+          @selected={{this.selectedOption}}
+          @onChange={{this.update}}
+          @selectedItemComponent={{component EnumField.selectedItem configuration=@configuration}}
+          @disabled={{not @canEdit}}
+          @renderInPlace={{true}}
+          @placeholder='Choose...'
+          as |opt|
+        >
+          {{#let (component EnumField.atom) as |Atom|}}
+            <Atom @model={{opt.value}} @configuration={{@configuration}} />
+          {{/let}}
+        </BoxelSelect>
+      </template>
+    };
+  }
+  return EnumField as unknown as BaseT;
 }
 
 export class CSSField extends TextAreaField {
@@ -3195,6 +3371,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     editCard?: EditCardFn;
     saveCard?: SaveCardFn;
     canEdit?: boolean;
+    configuration?: FieldConfiguration | undefined;
   };
 };
 
