@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MembershipBenefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "partner": "American Express Travel",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "conditions": "Receive a $100 credit towards eligible charges when you book two nights or more with The Hotel Collection with AmexTravel.com. The Hotel Collection requires a two-night minimum stay. Eligible charges vary by property.",
+      "statusLevel": null,
+      "benefitsList": [
+        "Daily breakfast for two guests",
+        "Complimentary Wi-Fi",
+        "Room upgrade upon arrival when available",
+        "Guaranteed 4PM late checkout",
+        "$100 USD equivalent credit towards eligible charges",
+        "Minimum 2-night stay required"
+      ],
+      "autoEnrollment": false,
+      "membershipProgram": "The Hotel Collection",
+      "enrollmentRequired": false,
+      "enrollmentInstructions": "No enrollment required. Benefits apply automatically when booking through AmexTravel.com."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

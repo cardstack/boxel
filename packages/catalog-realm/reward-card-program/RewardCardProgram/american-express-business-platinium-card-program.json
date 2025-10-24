@@ -1,0 +1,90 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RewardCardProgram",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "Premium business credit card offering over $3,500 in annual value.",
+      "issuer": "American Express",
+      "network": "American Express",
+      "cardInfo": {
+        "notes": null,
+        "title": "American Express Business Platinum Card",
+        "description": "Premium business credit card with extensive travel and business benefits",
+        "thumbnailURL": "https://icm.aexp-static.com/Internet/Acquisition/US_en/AppContent/OneSite/open/aurora/aurora-hero-card.jpg"
+      },
+      "cardName": "American Express Business Platinum Card",
+      "annualFee": {
+        "amount": 895,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "networkLogoUrl": "https://cdn.brandfetch.io/id5WXF6Iyd/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
+      "programEndDate": null,
+      "programStartDate": "2024-01-01",
+      "businessOrPersonal": "personal"
+    },
+    "relationships": {
+      "signupBonus": {
+        "links": {
+          "self": "../SignupBonus/amex-business-platinum-signup-bonus"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "earningRules.0": {
+        "links": {
+          "self": "../EarningRule/flights-5x"
+        }
+      },
+      "earningRules.1": {
+        "links": {
+          "self": "../EarningRule/prepaid-hotels-5x"
+        }
+      },
+      "earningRules.2": {
+        "links": {
+          "self": "../EarningRule/business-categories-2x"
+        }
+      },
+      "earningRules.3": {
+        "links": {
+          "self": "../EarningRule/all-other-purchases-1x"
+        }
+      },
+      "statementBenefits.0": {
+        "links": {
+          "self": "../Benefit/uber-one-credit"
+        }
+      },
+      "statementBenefits.1": {
+        "links": {
+          "self": "../Benefit/business-airline-fee-credit"
+        }
+      },
+      "statementBenefits.2": {
+        "links": {
+          "self": "../Benefit/business-amex-travel-flight-credit"
+        }
+      },
+      "membershipBenefits.0": {
+        "links": {
+          "self": "../MembershipBenefit/business-fine-hotels-resorts"
+        }
+      },
+      "membershipBenefits.1": {
+        "links": {
+          "self": "../MembershipBenefit/marriott-bonvoy-gold"
+        }
+      }
+    }
+  }
+}

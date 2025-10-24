@@ -179,6 +179,11 @@ export async function startServer(includePublishedRealm = false) {
   let realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    env: {
+      ...process.env,
+      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
+      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
+    },
   });
   realmServer.unref();
   if (realmServer.stdout) {
