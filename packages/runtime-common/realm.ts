@@ -1221,8 +1221,8 @@ export class Realm {
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
 
     try {
-      // local requests are allowed to query the realm as the index is being built up
-      if (!isLocal) {
+      // for legacy indexer: local requests are allowed to query the realm as the index is being built up
+      if (!isLocal && !(globalThis as any).__useHeadlessChromePrerender) {
         if (!request.headers.get('X-Boxel-Building-Index')) {
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
