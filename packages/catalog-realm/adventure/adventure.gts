@@ -702,7 +702,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
               {{#if this.showLinkedChooser}}
                 <div class='chooser-panel'>
                   <@fields.linkedScenarios @format='edit' />
-                  <div class='actions-center'>
+                  <div class='actions-center close-chooser'>
                     <Button
                       class='btn ghost'
                       {{on 'click' this.hideChooser}}
@@ -716,7 +716,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
               <p class='section-help'>Craft a unique adventure with custom tags
                 and image styles.</p>
 
-              <div class='card'>
+              <div class='card custom-form-card'>
                 <div class='card-title'>Title</div>
                 <@fields.customAdventure.title @format='edit' />
                 <div class='card-title'>Description</div>
@@ -1054,15 +1054,18 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         height: 100%;
         display: flex;
         justify-content: center;
-        background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+        background: var(
+          --background,
+          linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%)
+        );
         padding: 0.75rem;
       }
       .mat {
         max-width: 52rem;
         width: 100%;
-        background: white;
-        border-radius: 0.75rem;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        background: var(--card, white);
+        border-radius: var(--radius, 0.75rem);
+        box-shadow: var(--shadow, 0 10px 24px rgba(15, 23, 42, 0.06));
         overflow-y: auto;
         max-height: 100%;
       }
@@ -1087,13 +1090,13 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         margin: 0;
         font-size: 1.25rem;
         font-weight: 800;
-        letter-spacing: -0.01em;
-        color: #111827;
+        letter-spacing: var(--tracking-normal, -0.01em);
+        color: var(--foreground, #111827);
       }
       .scenario-chip {
-        border: 1px solid #e5e7eb;
-        color: #374151;
-        background: #fff;
+        border: 1px solid var(--border, #e5e7eb);
+        color: var(--muted-foreground, #374151);
+        background: var(--card, #fff);
         border-radius: 999px;
         padding: 0.125rem 0.5rem;
         font-size: 0.75rem;
@@ -1101,7 +1104,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       }
       .subtitle {
         margin: 0.25rem 0 0;
-        color: #4b5563;
+        color: var(--muted-foreground, #4b5563);
         font-size: 0.9rem;
         line-height: 1.35;
       }
@@ -1134,12 +1137,12 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         margin: 0 0 0.25rem;
         font-size: 1rem;
         font-weight: 700;
-        color: #111827;
+        color: var(--foreground, #111827);
       }
       .section-help {
         margin: 0 0 1rem;
         font-size: 0.85rem;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
       }
 
       /* Scenario select */
@@ -1152,13 +1155,19 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         gap: 0.75rem;
         margin-bottom: 1rem;
       }
+      .custom-form-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
       .card {
         text-align: left;
         width: 100%;
-        border: 1px solid #e5e7eb;
-        background: #fff;
-        border-radius: 0.5rem;
-        padding: 0.75rem;
+        border: 1px solid var(--border, #e5e7eb);
+        background: var(--card, #fff);
+        border-radius: var(--radius, 0.5rem);
+        padding: 1rem;
         transition:
           transform 120ms ease,
           box-shadow 120ms ease,
@@ -1167,20 +1176,23 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       }
       .card:hover {
         transform: translateY(-1px);
-        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
-        border-color: #cbd5e1;
+        box-shadow: var(--shadow, 0 6px 14px rgba(15, 23, 42, 0.06));
+        border-color: var(--border, #cbd5e1);
       }
       .card.selected {
-        border-color: #6366f1;
+        border-color: var(--primary, #6366f1);
         box-shadow: 0 6px 16px rgba(99, 102, 241, 0.2);
       }
       .card-title {
         font-weight: 700;
-        color: #0f172a;
-        margin-bottom: 0.25rem;
+        color: var(--card-foreground, #0f172a);
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+        opacity: 0.8;
       }
       .card-desc {
-        color: #475569;
+        color: var(--muted-foreground, #475569);
         font-size: 0.875rem;
         line-height: 1.35;
         margin-bottom: 0.5rem;
@@ -1191,22 +1203,31 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         flex-wrap: wrap;
       }
       .meta-pill {
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--border, #e5e7eb);
         border-radius: 999px;
         padding: 0.125rem 0.5rem;
         font-size: 0.75rem;
         font-weight: 600;
-        color: #334155;
-        background: #fff;
+        color: var(--muted-foreground, #334155);
+        background: var(--card, #fff);
       }
       .meta-pill.subtle {
-        color: #64748b;
+        color: var(--muted-foreground, #64748b);
       }
 
       .actions-center {
         display: flex;
         justify-content: center;
         margin-top: 0.25rem;
+      }
+
+      .chooser-panel {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+      }
+
+      .close-chooser {
+        margin-top: 0.5rem;
       }
 
       /* Story */
@@ -1313,30 +1334,30 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         box-shadow: none;
       }
       .btn.primary {
-        background: linear-gradient(135deg, #2563eb, #1d4ed8);
-        color: #fff;
+        background: var(--primary, linear-gradient(135deg, #2563eb, #1d4ed8));
+        color: var(--primary-foreground, #fff);
       }
       .btn.primary:hover:not([disabled]) {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+        box-shadow: var(--shadow, 0 4px 12px rgba(37, 99, 235, 0.35));
       }
       .btn.secondary {
-        background: #fff;
-        color: #1f2937;
-        border-color: #cbd5e1;
+        background: var(--secondary, #fff);
+        color: var(--secondary-foreground, #1f2937);
+        border-color: var(--border, #cbd5e1);
       }
       .btn.secondary:hover:not([disabled]) {
         transform: translateY(-1px);
-        box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
-        border-color: #94a3b8;
+        box-shadow: var(--shadow-sm, 0 4px 10px rgba(15, 23, 42, 0.06));
+        border-color: var(--border, #94a3b8);
       }
       .btn.ghost {
         background: transparent;
-        color: #374151;
-        border-color: #e5e7eb;
+        color: var(--muted-foreground, #374151);
+        border-color: var(--border, #e5e7eb);
       }
       .btn.ghost:hover:not([disabled]) {
-        background: #f8fafc;
+        background: var(--muted, #f8fafc);
         transform: translateY(-1px);
       }
 
@@ -1641,22 +1662,22 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         padding: 0.5rem 1rem;
         background: transparent;
         border: 1px solid transparent;
-        border-radius: 0.375rem;
+        border-radius: var(--radius, 0.375rem);
         font-size: 0.875rem;
         font-weight: 600;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
         cursor: pointer;
         transition: all 120ms ease;
       }
       .mode-btn:hover {
-        color: #374151;
+        color: var(--foreground, #374151);
         background: rgba(255, 255, 255, 0.5);
       }
       .mode-btn.active {
-        background: #fff;
-        color: #2563eb;
-        border-color: #e5e7eb;
-        box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04);
+        background: var(--card, #fff);
+        color: var(--primary, #2563eb);
+        border-color: var(--border, #e5e7eb);
+        box-shadow: var(--shadow-sm, 0 2px 4px rgba(15, 23, 42, 0.04));
       }
 
       /* Reset menu */
@@ -1718,33 +1739,36 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
       /* Chip suggestions */
       .chip-suggestions {
         display: flex;
-        gap: 0.375rem;
+        gap: 0.5rem;
         flex-wrap: wrap;
         align-items: center;
-        padding: 0.5rem;
-        background: #f9fafb;
-        border-radius: 0.375rem;
-        border: 1px dashed #e5e7eb;
+        padding: 0.75rem;
+        background: var(--muted, #f9fafb);
+        border-radius: var(--radius, 0.5rem);
+        border: 1px dashed var(--border, #e5e7eb);
       }
       .chip-suggestions .hint {
         font-size: 0.75rem;
-        color: #6b7280;
+        color: var(--muted-foreground, #6b7280);
         font-weight: 600;
+        margin-right: 0.25rem;
       }
       .chip.suggested {
-        font-size: 0.75rem;
-        padding: 0.25rem 0.5rem;
+        font-size: 0.8125rem;
+        padding: 0.375rem 0.75rem;
         border-radius: 999px;
         border: 1px solid #ddd6fe;
         background: #f5f3ff;
         color: #6366f1;
         cursor: pointer;
         transition: all 120ms ease;
+        font-weight: 500;
       }
       .chip.suggested:hover {
         background: #ede9fe;
-        border-color: #c4b5fd;
+        border-color: #a78bfa;
         transform: translateY(-1px);
+        box-shadow: var(--shadow-sm, 0 2px 4px rgba(139, 92, 246, 0.15));
       }
 
       /* Empty scenarios state */
@@ -1801,6 +1825,27 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         background: rgba(255, 255, 255, 0.5);
         border-radius: 999px;
         display: inline-block;
+      }
+
+      .chip-input {
+        width: 100%;
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: var(--radius, 0.5rem);
+        padding: 0.5rem 0.75rem;
+        font: inherit;
+        background-color: var(--background, var(--boxel-light));
+        color: var(--foreground, #111827);
+        font-weight: 500;
+        transition: all 180ms ease;
+        box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+        letter-spacing: 0.01em;
+        line-height: 1.5;
+        margin-bottom: 1rem;
+      }
+      .chip-input::placeholder {
+        color: var(--muted-foreground, #9ca3af);
+        font-weight: 400;
+        opacity: 0.8;
       }
 
       /* Mobile refinements */
@@ -2328,27 +2373,47 @@ export class Adventure extends CardDef {
         /* Chips editor */
         .chips {
           display: grid;
-          gap: 0.375rem;
+          gap: 0.625rem;
+          margin-bottom: 1rem;
         }
         .chip-row {
           display: flex;
-          gap: 0.375rem;
+          gap: 0.5rem;
           flex-wrap: wrap;
+          padding: 0.75rem;
+          background: var(--muted, #f8fafc);
+          border-radius: var(--radius, 0.375rem);
+          border: 1px solid var(--border, #e5e7eb);
+          min-height: 2.5rem;
         }
         .chip {
-          font-size: 0.75rem;
-          padding: 0.25rem 0.5rem;
+          font-size: 0.8125rem;
+          padding: 0.375rem 0.75rem;
           border-radius: 999px;
-          border: 1px solid #e5e7eb;
-          background: #fff;
-          color: #374151;
+          border: 1px solid var(--border, #e5e7eb);
+          background: var(--card, #fff);
+          color: var(--card-foreground, #374151);
+          font-weight: 500;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          transition: all 120ms ease;
+          cursor: pointer;
         }
-        .chip-input {
-          width: 100%;
-          border: 1px solid #e5e7eb;
-          border-radius: 0.375rem;
-          padding: 0.5rem 0.625rem;
-          font-size: 0.875rem;
+        .chip:hover {
+          border-color: var(--primary, #6366f1);
+          background: var(--primary, #6366f1);
+          color: var(--primary-foreground, #fff);
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-sm, 0 2px 4px rgba(99, 102, 241, 0.2));
+        }
+        .chip span[aria-hidden] {
+          font-size: 1.125rem;
+          line-height: 1;
+          opacity: 0.6;
+        }
+        .chip:hover span[aria-hidden] {
+          opacity: 1;
         }
       </style>
     </template>
