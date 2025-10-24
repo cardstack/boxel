@@ -52,9 +52,6 @@ const CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
-      :deep(.code-copy-button) {
-        justify-content: flex-end;
-      }
     </style>
   </template>;
 
