@@ -2457,9 +2457,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
     let cardsQuery;
     if (request.method === 'QUERY') {
       cardsQuery = await request.json();
@@ -2494,7 +2491,6 @@ export class Realm {
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,
-      useWorkInProgressIndex,
     });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -2553,10 +2549,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
-
     let payload;
     let htmlFormat;
     let cardUrls;
@@ -2631,7 +2623,6 @@ export class Realm {
     let results = await this.#realmIndexQueryEngine.searchPrerendered(
       cardsQuery,
       {
-        useWorkInProgressIndex,
         htmlFormat,
         cardUrls,
         renderType,
@@ -2686,15 +2677,8 @@ export class Realm {
       });
     }
     let { codeRef } = payload;
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
-    let maybeError = await this.#realmIndexQueryEngine.getOwnDefinition(
-      codeRef,
-      {
-        useWorkInProgressIndex,
-      },
-    );
+    let maybeError =
+      await this.#realmIndexQueryEngine.getOwnDefinition(codeRef);
     if (!maybeError) {
       return notFound(request, requestContext);
     }
