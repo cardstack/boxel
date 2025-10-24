@@ -90,7 +90,7 @@ export default function handlePublishRealm({
       let publishedURL = new URL(publishedRealmURL);
       if (validPublishedRealmDomains && validPublishedRealmDomains.length > 0) {
         let isValidDomain = validPublishedRealmDomains.some((domain) =>
-          publishedURL.hostname.endsWith(domain),
+          publishedURL.host.endsWith(domain),
         );
         if (!isValidDomain) {
           await sendResponseForBadRequest(

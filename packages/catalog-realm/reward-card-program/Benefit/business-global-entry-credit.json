@@ -1,0 +1,57 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Global Entry or TSA PreCheck Fee Credit",
+      "amount": {
+        "amount": "120",
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [
+        "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck® (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check.‡",
+        "Global Entry: $120 statement credit every 4 years",
+        "TSA PreCheck®: Up to $85 statement credit every 4.5 years",
+        "Must pay application fee with Business Platinum Card",
+        "Global Entry includes TSA PreCheck® at no additional charge",
+        "Credit applies to application fees paid to official government enrollment providers"
+      ],
+      "partner": "U.S. Customs and Border Protection / Transportation Security Administration",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "conditions": "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck® (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check. Credit applies to application fees only.",
+      "programURL": "https://www.cbp.gov/travel/trusted-traveler-programs/global-entry",
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": false
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/four-year-period"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

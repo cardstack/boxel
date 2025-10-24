@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "EarningRule",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "category": "Travel - Amex Travel",
+      "appliesTo": "Flights and prepaid hotels booked on AmexTravel.com",
+      "capAmount": {
+        "amount": "250000",
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "Earn 5X Membership Rewards® points on flights and prepaid hotels booked on AmexTravel.com.‡",
+      "rateMultiplier": 5
+    },
+    "relationships": {
+      "capPeriod": {
+        "links": {
+          "self": "../TimePeriod/half-yearly"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
