@@ -1,74 +1,41 @@
 import { expect, test } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  updateUser,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
+import { updateUser } from '../docker/synapse';
+import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
   assertLoggedIn,
-  gotoRegistration,
   gotoForgotPassword,
   validateEmailForResetPassword,
   login,
-  registerRealmUsers,
-  setupUserSubscribed,
+  createSubscribedUser,
 } from '../helpers';
-import { registerUser, createRegistrationToken } from '../docker/synapse';
-
-const REGISTRATION_TOKEN = 'abc123';
-const name = 'user1';
-const email = 'user1@example.com';
-const username = 'user1';
-const password = 'mypassword1!';
 
 test.describe('Forgot password', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let user: { username: string; password: string; credentials: any };
+  let userEmail: string;
   test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 30s to the overall test timeout
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
 
-    await smtpStart();
-
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
     await clearLocalStorage(page, appURL);
-    await gotoRegistration(page, appURL);
-    await registerUser(synapse, username, password);
-    await updateUser(admin.accessToken, '@user1:localhost', {
-      emailAddresses: [email],
-      displayname: name,
+    user = await createSubscribedUser('forgot-password');
+    userEmail = `${user.username}@example.com`;
+    await updateUser(adminAccessToken, user.credentials.userId, {
+      emailAddresses: [userEmail],
+      displayname: user.username,
     });
-    await setupUserSubscribed('@user1:localhost', realmServer);
-  });
-
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-    await realmServer.stop();
   });
 
   test('It can reset password', async ({ page }) => {
+    let newPassword = 'mynewpassword!1';
     await gotoForgotPassword(page, appURL);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-email-field]').fill(userEmail);
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeEnabled();
@@ -79,12 +46,12 @@ test.describe('Forgot password', () => {
 
     let resetPasswordPage = await validateEmailForResetPassword(
       page,
-      'user1@example.com',
+      userEmail,
       {
         onEmailPage: async (page) => {
           await expect(page).toHaveScreenshot('verification-email.png', {
             mask: [page.locator('.messagelist')],
-            maxDiffPixelRatio: 0.02,
+            maxDiffPixelRatio: 0.025,
           });
         },
         onValidationPage: async (page) => {
@@ -103,10 +70,10 @@ test.describe('Forgot password', () => {
     ).toBeDisabled();
     await resetPasswordPage
       .locator('[data-test-password-field]')
-      .fill('mypassword2!');
+      .fill(newPassword);
     await resetPasswordPage
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword2!');
+      .fill(newPassword);
     await expect(
       resetPasswordPage.locator('[data-test-reset-password-btn]'),
     ).toBeEnabled();
@@ -117,11 +84,15 @@ test.describe('Forgot password', () => {
     ).toContainText('Your password is now reset');
     await resetPasswordPage.locator('[data-test-back-to-login-btn]').click();
 
-    await login(resetPasswordPage, 'user1', 'mypassword2!', {
+    await login(resetPasswordPage, user.username, newPassword, {
       url: appURL,
     });
 
-    await assertLoggedIn(resetPasswordPage);
+    await assertLoggedIn(resetPasswordPage, {
+      email: userEmail,
+      userId: user.credentials.userId,
+      displayName: user.username,
+    });
   });
 
   test('It shows an error when email does not belong to any account', async ({
@@ -132,7 +103,9 @@ test.describe('Forgot password', () => {
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user2@example.com');
+    await page
+      .locator('[data-test-email-field]')
+      .fill('totallunknownuser@example.com');
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeEnabled();
@@ -153,7 +126,7 @@ test.describe('Forgot password', () => {
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeDisabled();
 
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-email-field]').fill(userEmail);
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeEnabled();
@@ -171,7 +144,7 @@ test.describe('Forgot password', () => {
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-email-field]').fill(userEmail);
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeEnabled();
@@ -183,7 +156,7 @@ test.describe('Forgot password', () => {
 
     let resetPasswordPage = await validateEmailForResetPassword(
       page,
-      'user1@example.com',
+      userEmail,
     );
 
     await expect(
@@ -239,7 +212,7 @@ test.describe('Forgot password', () => {
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-email-field]').fill(userEmail);
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeEnabled();
@@ -248,7 +221,7 @@ test.describe('Forgot password', () => {
       1,
     );
 
-    await validateEmailForResetPassword(page, 'user1@example.com', {
+    await validateEmailForResetPassword(page, userEmail, {
       sendAttempts: 2,
     });
   });

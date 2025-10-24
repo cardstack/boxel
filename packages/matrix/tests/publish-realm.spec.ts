@@ -1,36 +1,23 @@
 import { test, expect, type Page } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-  appURL,
-} from '../helpers/isolated-realm-server';
+import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
   createRealm,
-  login,
-  registerRealmUsers,
-  setupUserSubscribed,
+  createSubscribedUserAndLogin,
 } from '../helpers';
 
 test.describe('Publish realm', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let user: { username: string; password: string; credentials: any };
 
   async function openPublishRealmModal(page: Page) {
     let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
 
-    await setupUserSubscribed('@user1:localhost', realmServer);
-
-    await login(page, 'user1', 'pass', {
-      url: serverIndexUrl,
-    });
+    user = await createSubscribedUserAndLogin(
+      page,
+      'publish-realm',
+      serverIndexUrl,
+    );
 
     await createRealm(page, 'new-workspace', '1New Workspace');
     await page.locator('[data-test-workspace="1New Workspace"]').click();
@@ -58,17 +45,6 @@ test.describe('Publish realm', () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-  });
-
-  test.afterEach(async () => {
-    await realmServer?.stop();
-    await synapseStop(synapse.synapseId);
   });
 
   test('it can publish a realm to a subdirectory', async ({ page }) => {
@@ -86,7 +62,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/',
+      `http://${user.username}.localhost:4205/new-workspace/`,
     );
     await newTab.close();
     await page.bringToFront();
@@ -134,7 +110,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/index',
+      `http://${user.username}.localhost:4205/new-workspace/index`,
     );
     await newTab.close();
     await page.bringToFront();
@@ -164,7 +140,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/index',
+      `http://${user.username}.localhost:4205/new-workspace/index`,
     );
     await newTab.close();
     await page.bringToFront();

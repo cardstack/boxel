@@ -4,6 +4,7 @@ import { resolve, join } from 'path';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { v4 as uuidv4 } from 'uuid';
+import { Pool } from 'pg';
 
 setGracefulCleanup();
 
@@ -35,8 +36,10 @@ export async function startServer(includePublishedRealm = false) {
     copySync(testRealmCards, publishedRealmDir);
   }
 
+  let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
+
   process.env.PGPORT = '5435';
-  process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
+  process.env.PGDATABASE = testDBName;
   process.env.NODE_NO_WARNINGS = '1';
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
@@ -222,10 +225,41 @@ export async function startServer(includePublishedRealm = false) {
     );
   }
 
-  return new IsolatedRealmServer(realmServer, workerManager, testRealmDir);
+  return new IsolatedRealmServer(
+    realmServer,
+    workerManager,
+    testRealmDir,
+    testDBName,
+  );
 }
 
-export class IsolatedRealmServer {
+export interface SQLExecutor {
+  executeSQL(sql: string): Promise<Record<string, any>[]>;
+}
+
+export class BasicSQLExecutor implements SQLExecutor {
+  pool: Pool;
+  constructor(readonly db: string) {
+    this.pool = new Pool({
+      host: 'localhost',
+      port: 5435,
+      user: 'postgres',
+      password: '', // trust auth, so no password needed
+      database: db, // default database to connect to
+    });
+  }
+  async executeSQL(sql: string) {
+    const client = await this.pool.connect();
+    try {
+      let { rows } = await client.query(sql);
+      return rows;
+    } finally {
+      client.release();
+    }
+  }
+}
+
+export class IsolatedRealmServer implements SQLExecutor {
   private realmServerStopped: (() => void) | undefined;
   private workerManagerStopped: (() => void) | undefined;
   private sqlResults: ((results: string) => void) | undefined;
@@ -235,6 +269,7 @@ export class IsolatedRealmServer {
     private realmServerProcess: ReturnType<typeof spawn>,
     private workerManagerProcess: ReturnType<typeof spawn>,
     readonly realmPath: string, // useful for debugging
+    readonly db: string,
   ) {
     workerManagerProcess.on('message', (message) => {
       if (message === 'stopped') {
