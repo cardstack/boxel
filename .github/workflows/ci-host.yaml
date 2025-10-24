@@ -85,14 +85,6 @@ jobs:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
         working-directory: packages/host
 
-      - name: Upload Chrome netlog
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: chrome-netlog-${{ matrix.shardIndex }}
-          path: /tmp/chrome-netlog-${{ matrix.shardIndex }}.json
-          retention-days: 14
-
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
@@ -117,14 +109,6 @@ jobs:
           name: icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
           retention-days: 30
-
-      - name: Upload host assets
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: host-assets-${{ matrix.shardIndex }}
-          path: packages/host/dist/assets
-          retention-days: 7
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish

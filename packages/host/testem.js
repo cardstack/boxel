@@ -19,7 +19,6 @@ const config = {
         '--headless',
         '--disable-dbus',
         '--disable-dev-shm-usage',
-        `--log-net-log=/tmp/chrome-netlog-${process.env.HOST_TEST_PARTITION}.json`,
         '--disable-software-rasterizer',
         '--mute-audio',
         '--remote-debugging-port=0',
