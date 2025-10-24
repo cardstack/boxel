@@ -1,5 +1,7 @@
 exports.shorthands = undefined;
 
+// A placeholder comment
+
 exports.up = (pgm) => {
   pgm.createTable('claimed_domains_for_sites', {
     id: {
@@ -41,10 +43,9 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.dropIndex('claimed_domains_for_sites', ['removed_at']);
-  pgm.dropIndex(
-    'claimed_domains_for_sites',
-    'claimed_domains_for_sites_hostname_unique_index',
-  );
+  pgm.dropIndex('claimed_domains_for_sites', ['hostname'], {
+    name: 'claimed_domains_for_sites_hostname_unique_index',
+  });
   pgm.dropIndex('claimed_domains_for_sites', ['user_id']);
   pgm.dropIndex('claimed_domains_for_sites', ['source_realm_url']);
   pgm.dropTable('claimed_domains_for_sites');
