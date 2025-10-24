@@ -203,9 +203,7 @@ jobs:
             if [[ "$EARLIEST_INDEX" -eq 0 && "$(basename "$FILE")" == "$EARLIEST_BASENAME" ]]; then
               EARLIEST_INDEX=$TOTAL
             fi
-          done <<EOF
-$ALL_MIGRATIONS
-EOF
+          done <<< "$ALL_MIGRATIONS"
 
           if [[ "$EARLIEST_INDEX" -eq 0 ]]; then
             echo "Unable to locate changed migration $EARLIEST_BASENAME in migration list" >&2
