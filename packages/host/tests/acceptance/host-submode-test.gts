@@ -265,6 +265,40 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-host-mode-card]').hasText('Title: A B');
     });
 
+    test('clicking a card in card list stacks it', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}index.json`], // CardsGrid with Person cards
+      });
+
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      // Wait for the cards grid to render
+      await waitFor('[data-test-cards-grid-item]');
+
+      // Verify the person card is not in the stack initially
+      assert
+        .dom(`[data-test-host-mode-stack-item="${testRealmURL}Person/1"]`)
+        .doesNotExist();
+
+      // Click on the first person card in the list
+      await click(`[data-test-cards-grid-item="${testRealmURL}Person/1"]`);
+
+      // Wait for the card to be added to the stack
+      await waitFor(
+        `[data-test-host-mode-stack-item="${testRealmURL}Person/1"]`,
+      );
+
+      // Verify the card is now in the stack
+      assert
+        .dom(`[data-test-host-mode-stack-item="${testRealmURL}Person/1"]`)
+        .exists();
+
+      // Verify the card content is rendered
+      assert
+        .dom(`[data-test-host-mode-stack-item="${testRealmURL}Person/1"]`)
+        .hasText('Title: A B');
+    });
+
     test('wide format cards use full width', async function (assert) {
       await visitOperatorMode({
         submode: 'host',
