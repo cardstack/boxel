@@ -10,14 +10,14 @@
     "attributes": {
       "name": "Currency Field",
       "images": [
-         "https://boxel-images.boxel.ai/app-assets/catalog/currency-field-listing/screenshot_01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/currency-listing/screenshot_01.png"
       ],
       "summary": "A component that provides a visual preview of currency fields in different display formats for use within a user interface.",
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/currency-field-listing/thumbnail.png"
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/currency-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -61,14 +61,14 @@
           "self": "../Publisher/5f27bc69-6e15-4027-bff5-5c893a2642d9"
         }
       },
-      "categories.0": {
-        "links": {
-          "self": "../Category/accounting-finance"
-        }
-      },
       "examples.0": {
         "links": {
           "self": "../fields-preview/CurrencyPreview/f65a3b21-4e8a-4c9e-9e9c-6d2c8a1b7a3d"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/accounting-finance"
         }
       },
       "cardInfo.theme": {
