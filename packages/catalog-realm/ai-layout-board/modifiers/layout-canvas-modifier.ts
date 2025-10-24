@@ -35,6 +35,33 @@ export default class LayoutCanvasModifier extends Modifier<{
   >();
   private lastItemIdsFingerprint: string | null = null;
 
+  // Compute a fingerprint for items that includes positional/layout-affecting props
+  private computeItemsFingerprint(items: any[] | undefined | null): string {
+    if (!Array.isArray(items)) return '';
+    const round = (v: any) =>
+      typeof v === 'number' && isFinite(v) ? Math.round(v * 100) / 100 : '';
+    try {
+      return items
+        .map((d: any) => {
+          const id = d?.id ?? '';
+          const p = d?.position || {};
+          const x = round(p.x);
+          const y = round(p.y);
+          const w = round(p.width);
+          const ah = round(p.autoHeight);
+          const ch = round(p.customHeight);
+          const fmt = p.format ?? '';
+          const layer = p.layer ?? '';
+          return [id, x, y, w, ah, ch, fmt, layer].join(',');
+        })
+        .join('|');
+    } catch (_) {
+      // Fall back to ids-only if anything unexpected happens
+      const ids = items.map((d: any) => d?.id).filter(Boolean);
+      return Array.isArray(ids) ? ids.join('|') : '';
+    }
+  }
+
   constructor(owner: any, args: any) {
     super(owner, args);
   }
@@ -1300,17 +1327,19 @@ export default class LayoutCanvasModifier extends Modifier<{
       this.setupCanvas(element);
       this.initialized = true;
     }
-    // Rebuild overlays only if item set changed
-    try {
-      const ids = (named.itemData || []).map((d: any) => d?.id).filter(Boolean);
-      const fingerprint = Array.isArray(ids) ? ids.join('|') : '';
-      if (fingerprint !== this.lastItemIdsFingerprint) {
+    // Rebuild overlays if item set or layout-affecting properties changed.
+    // Skip rebuilds while an overlay interaction is active to prevent flicker.
+    if (!this.overlayInteractionActive) {
+      try {
+        const fingerprint = this.computeItemsFingerprint(named.itemData);
+        if (fingerprint !== this.lastItemIdsFingerprint) {
+          this.setupNodes();
+          this.lastItemIdsFingerprint = fingerprint;
+        }
+      } catch (_) {
+        // Fallback: if anything goes wrong, rebuild
         this.setupNodes();
-        this.lastItemIdsFingerprint = fingerprint;
       }
-    } catch (_) {
-      // Fallback: if anything goes wrong, rebuild
-      this.setupNodes();
     }
     // Keep selection visuals in sync with args
     this.updateSelectionVisuals(named.selectedItemIds);
