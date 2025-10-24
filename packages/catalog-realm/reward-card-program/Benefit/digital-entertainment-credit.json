@@ -1,0 +1,50 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Digital Entertainment Credit",
+      "amount": {
+        "amount": 25,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [],
+      "partner": "Participating Partners",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "conditions": "Statement credits earned monthly of up to $25 on eligible purchases at participating partners. Enrollment required.",
+      "programURL": null,
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": true
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/monthly"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

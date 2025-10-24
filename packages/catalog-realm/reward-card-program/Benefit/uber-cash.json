@@ -1,0 +1,50 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Uber Cash",
+      "amount": {
+        "amount": 15,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [],
+      "partner": "Uber / Uber Eats (U.S.)",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "conditions": "Add your Card to your Uber account and pay for rides or orders in the U.S. with an Amex Card to get $15 in Uber Cash monthly, plus a $20 bonus in December.",
+      "programURL": null,
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": true
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/monthly"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

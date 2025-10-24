@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SignupBonus",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "bonusType": "points",
+      "description": "Earn 60,000 Membership Rewards points after you spend $4,000 in purchases within the first 6 months.",
+      "pointsAmount": 60000,
+      "bonusCurrency": "Membership Rewards",
+      "spendWindowDays": 180,
+      "spendRequirement": {
+        "amount": 4000,
+        "currency": {
+          "code": "USD"
+        }
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

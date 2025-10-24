@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimePeriod",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "unit": "year",
+      "count": 4,
+      "notes": "TSA PreCheck up to $85 every 4.5 years; Global Entry includes TSA PreCheck at no additional charge.",
+      "scope": "cardmember",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minAmount": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "resetBasis": "cardmember-year",
+      "maxUsesPerPeriod": null,
+      "eligibleBookingNightsMin": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

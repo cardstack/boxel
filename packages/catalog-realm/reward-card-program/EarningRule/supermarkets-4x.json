@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "EarningRule",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "category": "Supermarkets",
+      "appliesTo": "Eligible supermarket and grocery store purchases",
+      "capAmount": {
+        "amount": "0",
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "4X Membership Rewards points on eligible supermarket purchases.",
+      "rateMultiplier": 4
+    },
+    "relationships": {
+      "capPeriod": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
