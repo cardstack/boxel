@@ -557,12 +557,6 @@ export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
 
   if (rooms && rooms.length > 0) {
-    await page.waitForFunction(
-      (rooms) =>
-        document.querySelectorAll('[data-test-joined-room]').length >=
-        rooms.length,
-      rooms,
-    );
     await Promise.all(
       rooms.map((name) =>
         expect(
