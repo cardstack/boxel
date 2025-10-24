@@ -9,14 +9,14 @@ import {
   sendMessage,
   reloadAndOpenAiAssistant,
   isInRoom,
-  clearLocalStorage,
   setSkillsRedirect,
   showAllCards,
-  setupPermissions,
   createSubscribedUser,
-  sharedSQLExecutor,
+  createSubscribedUserAndLogin,
+  createRealm,
 } from '../helpers';
 import { appURL } from '../helpers/isolated-realm-server';
+import { randomUUID } from 'crypto';
 
 test.describe('Skills', () => {
   let firstUser: { username: string; password: string; credentials: any };
@@ -62,6 +62,7 @@ test.describe('Skills', () => {
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
   const skillCard3 = `${appURL}/skill-card-title-editing`;
+  const serverIndexUrl = new URL(appURL).origin;
 
   test(`it can attach skill cards and toggle activation`, async ({ page }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });
@@ -354,7 +355,15 @@ test.describe('Skills', () => {
   test('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(
+      page,
+      'skills-overwrite',
+      serverIndexUrl,
+    );
+    const realmName = `skills-${randomUUID()}`;
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    await page.goto(realmURL);
     await showAllCards(page);
 
     // create a skill card
