@@ -33,6 +33,8 @@ export default function enableFetchLogging() {
   };
 
   QUnit.on('testEnd', ({ name, status }) => {
+    originalFetch(`http://localhost:4201/fake/${name}`, { method: 'GET' });
+
     if (status === 'failed' && seen.length) {
       console.group(`Fetch failures during "${name}"`);
       for (const entry of seen) {
