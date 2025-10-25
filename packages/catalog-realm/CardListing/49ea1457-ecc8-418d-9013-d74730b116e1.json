@@ -1,0 +1,142 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Layout Board",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/layout-board-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/layout-board-listing/screenshot_02.png"
+      ],
+      "summary": "This software defines a customizable, interactive 2D layout board for visualizing and managing spatial items such as images, notes, timers, and external links, supporting both canvas and list views, zooming, item positioning, and external card integration. Its primary purpose is to enable dynamic, visually organized content arrangements with user interactions, including adding, deleting, selecting, and linking items within a responsive, extendable interface.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/layout-board-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/1dde1711-6ba6-4ade-b34b-2ebb91b9bf4c"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/aa0df300-e866-47f8-b0b0-5375451dde17"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/0df300e8-66b7-48b0-b053-75451dde1711"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/f300e866-b7f8-40b0-9375-451dde17116b"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/00e866b7-f8b0-4053-b545-1dde17116ba6"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/e866b7f8-b0b0-4375-851d-de17116ba6ba"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/b7f8b0b0-5375-451d-9e17-116ba6badeb3"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/66b7f8b0-b053-4545-9dde-17116ba6bade"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/f8b0b053-7545-4dde-9711-6ba6badeb34b"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/b0b05375-451d-4e17-916b-a6badeb34b2e"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/b0537545-1dde-4711-aba6-badeb34b2ebb"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/5375451d-de17-416b-a6ba-deb34b2ebb91"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/75451dde-1711-4ba6-bade-b34b2ebb91b9"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/451dde17-116b-46ba-9eb3-4b2ebb91b9bf"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../AILayoutBoard/e478c721-53b2-4464-8b6e-a8b89410a4c5"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/ai-automation"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -5,7 +5,7 @@
         "allItems": [
           {
             "adoptsFrom": {
-              "name": "ImageNode",
+              "name": "PostitNote",
               "module": "../ai-layout-board/fields/board-item"
             }
           },
@@ -30,59 +30,59 @@
     },
     "type": "card",
     "attributes": {
-      "notes": [],
-      "images": [
+      "notes": [
         {
-          "imageUrl": "https://picsum.photos/300/200",
-          "caption": "New Image",
+          "content": "Piano Demo",
+          "color": "#fef08a",
           "position": {
-            "x": -809.9890549394571,
-            "y": -167,
-            "width": 381,
-            "autoHeight": 392,
-            "customHeight": 415,
+            "x": 316.98426139341797,
+            "y": -218.17852817561098,
+            "width": 421.2592813672573,
+            "autoHeight": 107,
+            "customHeight": 0,
             "layer": 1,
             "format": "isolated"
           }
         }
       ],
+      "images": [],
       "timers": [
         {
-          "targetDate": "2025-10-15T03:14:17.642Z",
+          "targetDate": "2025-10-18T08:29:30.092Z",
           "title": "New Timer",
           "position": {
-            "x": -376.23199676509273,
-            "y": -169.96988938167203,
-            "width": 308.48991663227355,
-            "autoHeight": 215,
+            "x": 864.0380747614751,
+            "y": -60.23225468188656,
+            "width": 329.75793390634584,
+            "autoHeight": 149,
             "customHeight": 166,
             "layer": 1,
-            "format": "isolated"
+            "format": "embedded"
           }
         }
       ],
       "cardInfo": {
         "notes": null,
-        "title": null,
+        "title": "Layout Board",
         "description": null,
         "thumbnailURL": null
       },
-      "gridSize": 10,
-      "transformK": 1.2927858652143038,
-      "transformX": 1324.6606820211937,
-      "transformY": 284.3739637653796,
+      "gridSize": 20,
+      "transformK": 1,
+      "transformX": -257,
+      "transformY": 178,
       "canvasHeight": 800,
       "externalCards": [
         {
-          "caption": "Advanced Space Exploration Challenge - Astronomy & Astrophysics",
+          "caption": "Untitled Piano",
           "position": {
-            "x": -370.7444517691428,
-            "y": 54.49647397396225,
-            "width": 400,
-            "autoHeight": 266,
-            "customHeight": 0,
+            "x": 316.31743151321126,
+            "y": -80.38047372073939,
+            "width": 513.7312648610828,
+            "autoHeight": 681,
+            "customHeight": 681,
             "layer": 1,
-            "format": "embedded"
+            "format": "isolated"
           }
         }
       ]
@@ -95,12 +95,12 @@
       },
       "allItems.2.externalCard": {
         "links": {
-          "self": "../GameQuizCard/advanced-space-exploration"
+          "self": "../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
         }
       },
       "externalCards.0.externalCard": {
         "links": {
-          "self": "../GameQuizCard/advanced-space-exploration"
+          "self": "../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
         }
       }
     }
