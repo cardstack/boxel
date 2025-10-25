@@ -9,6 +9,8 @@ import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
 import { isEqual, omit } from 'lodash';
 
+import { localId as localIdSymbol } from '@cardstack/runtime-common';
+
 import type CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
 
@@ -163,7 +165,10 @@ export default class Overlays extends Component<OverlaySignature> {
   }
 
   @action protected getCardId(cardDefOrId: CardDefOrId) {
-    return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+    if (typeof cardDefOrId === 'string') {
+      return cardDefOrId;
+    }
+    return cardDefOrId.id ?? cardDefOrId[localIdSymbol];
   }
 
   @action

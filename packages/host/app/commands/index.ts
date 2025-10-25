@@ -20,6 +20,7 @@ import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as ListingBuildCommandModule from './listing-action-build';
 import * as ListingInitCommandModule from './listing-action-init';
 import * as ListingCreateCommandModule from './listing-create';
+import * as ListingGenerateExampleCommandModule from './listing-generate-example';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
@@ -116,6 +117,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-remix',
     ListingRemixCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-generate-example',
+    ListingGenerateExampleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-in-interact-mode',

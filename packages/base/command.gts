@@ -113,6 +113,16 @@ export class CreateInstancesInput extends CardDef {
   @field count = contains(NumberField);
   @field exampleCard = linksTo(CardDef);
 }
+
+export class CreateInstanceResult extends CardDef {
+  @field createdCard = linksTo(CardDef);
+}
+
+export class GenerateListingExampleInput extends CardDef {
+  @field listing = linksTo(CardDef);
+  @field realm = contains(StringField);
+  @field referenceExample = linksTo(CardDef);
+}
 export class UpdateCodePathWithSelectionInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field localName = contains(StringField);
