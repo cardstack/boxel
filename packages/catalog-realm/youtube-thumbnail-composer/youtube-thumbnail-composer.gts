@@ -17,6 +17,7 @@ import { Button, BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import Modifier from 'ember-modifier';
 import { eq, gt, or, and, not, multiply } from '@cardstack/boxel-ui/helpers';
 import { concat, array, hash, fn } from '@ember/helper';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -123,6 +124,73 @@ export class BackgroundElement extends FieldDef {
   }
 }
 
+// Drag Modifier for draggable elements
+class DragModifier extends Modifier {
+  element!: HTMLElement;
+  onDrag!: (x: number, y: number) => void;
+  scaleRatio!: number;
+
+  isDragging = false;
+  startX = 0;
+  startY = 0;
+  initialX = 0;
+  initialY = 0;
+
+  modify(
+    element: HTMLElement,
+    [onDrag, scaleRatio]: [(x: number, y: number) => void, number],
+  ) {
+    this.element = element;
+    this.onDrag = onDrag;
+    this.scaleRatio = scaleRatio;
+
+    this.element.addEventListener('mousedown', this.handleMouseDown);
+  }
+
+  handleMouseDown = (e: MouseEvent) => {
+    e.stopPropagation();
+    this.isDragging = true;
+    this.startX = e.clientX;
+    this.startY = e.clientY;
+
+    // Get current position from element
+    const left = parseFloat(this.element.style.left) || 0;
+    const top = parseFloat(this.element.style.top) || 0;
+    this.initialX = left / this.scaleRatio;
+    this.initialY = top / this.scaleRatio;
+
+    document.addEventListener('mousemove', this.handleMouseMove);
+    document.addEventListener('mouseup', this.handleMouseUp);
+
+    this.element.style.cursor = 'grabbing';
+  };
+
+  handleMouseMove = (e: MouseEvent) => {
+    if (!this.isDragging) return;
+
+    const deltaX = (e.clientX - this.startX) / this.scaleRatio;
+    const deltaY = (e.clientY - this.startY) / this.scaleRatio;
+
+    const newX = this.initialX + deltaX;
+    const newY = this.initialY + deltaY;
+
+    this.onDrag(newX, newY);
+  };
+
+  handleMouseUp = () => {
+    this.isDragging = false;
+    document.removeEventListener('mousemove', this.handleMouseMove);
+    document.removeEventListener('mouseup', this.handleMouseUp);
+    this.element.style.cursor = 'grab';
+  };
+
+  cleanup() {
+    this.element.removeEventListener('mousedown', this.handleMouseDown);
+    document.removeEventListener('mousemove', this.handleMouseMove);
+    document.removeEventListener('mouseup', this.handleMouseUp);
+  }
+}
+
 export class YouTubeThumbnailComposer extends CardDef {
   static displayName = 'YouTube Thumbnail Composer';
   static icon = ImageIcon;
@@ -143,6 +211,8 @@ export class YouTubeThumbnailComposer extends CardDef {
   > {
     @tracked selectedElement = null;
     @tracked activeTab = 'elements';
+
+    dragModifier = DragModifier;
 
     get aspectRatio() {
       return (
@@ -324,6 +394,12 @@ export class YouTubeThumbnailComposer extends CardDef {
       this.selectedElement = newElement;
     }
 
+    @action
+    handleDrag(element, x, y) {
+      element.x = Math.max(0, x);
+      element.y = Math.max(0, y);
+    }
+
     <template>
       <div class='composer-app'>
         <div class='app-header'>
@@ -389,6 +465,10 @@ export class YouTubeThumbnailComposer extends CardDef {
                         ';'
                       }}
                       {{on 'click' (fn this.selectElement element)}}
+                      {{this.dragModifier
+                        (fn this.handleDrag element)
+                        this.scaleRatio
+                      }}
                     >
                     </div>
                   {{/if}}
@@ -425,6 +505,10 @@ export class YouTubeThumbnailComposer extends CardDef {
                         ';'
                       }}
                       {{on 'click' (fn this.selectElement element)}}
+                      {{this.dragModifier
+                        (fn this.handleDrag element)
+                        this.scaleRatio
+                      }}
                     >
                       {{element.content}}
                     </div>
@@ -786,8 +870,14 @@ export class YouTubeThumbnailComposer extends CardDef {
         .text-element,
         .visual-element {
           position: absolute;
-          cursor: pointer;
+          cursor: grab;
           white-space: nowrap;
+          user-select: none;
+        }
+
+        .text-element:active,
+        .visual-element:active {
+          cursor: grabbing;
         }
 
         .text-element.selected,
