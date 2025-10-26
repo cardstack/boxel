@@ -1,0 +1,81 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "YouTubeThumbnailComposer",
+        "module": "../youtube-thumbnail-composer/youtube-thumbnail-composer"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "width": null,
+      "height": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "showGrid": false,
+      "background": {
+        "type": null,
+        "opacity": null,
+        "imageUrl": null,
+        "primaryColor": "#c93131",
+        "secondaryColor": null,
+        "backgroundImage": {
+          "size": "actual",
+          "width": null,
+          "base64": null,
+          "height": null,
+          "altText": null
+        },
+        "gradientDirection": null
+      },
+      "previewMode": null,
+      "textElements": [
+        {
+          "content": "AMAZING!",
+          "x": 262.8609544162263,
+          "y": 134.9017821546827,
+          "fontSize": "42",
+          "fontFamily": "Arial, sans-serif",
+          "fontWeight": "bold",
+          "color": "#FFFFFF",
+          "strokeColor": "#000000",
+          "strokeWidth": 2,
+          "rotation": "0",
+          "opacity": 1,
+          "visible": true,
+          "layer": 1
+        }
+      ],
+      "visualElements": [
+        {
+          "type": "rectangle",
+          "x": 360.8451371292482,
+          "y": 327.44308734228173,
+          "width": 150,
+          "height": 80,
+          "rotation": 0,
+          "opacity": 1,
+          "fillColor": "#00FFFF",
+          "strokeColor": "#000000",
+          "strokeWidth": 2,
+          "visible": true,
+          "layer": 0,
+          "iconName": null
+        }
+      ],
+      "selectedElementId": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
