@@ -1,29 +1,29 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Mortgage Calculator",
-      "summary": "🏠 Mortgage Calculator\n\nEasily estimate your monthly mortgage payments and understand where your money goes — all in one simple, visual tool.\n\n💡 What It Does\n\nThis calculator helps you break down the full cost of homeownership. Just enter a few details about your potential home and loan, and you'll get:\n\nYour estimated monthly mortgage payment\n\nA clear view of how much goes to:\n- Principal & Interest\n- Property Taxes\n- Home Insurance\n- HOA Fees\n- Total lifetime costs over the life of the loan\n\n📋 What You Can Input\n- Home Price\n- Down Payment (%)\n- Loan Term (Years)\n- Interest Rate (%)\n- Monthly Property Tax\n- Monthly Insurance\n- Monthly HOA Fees\n\n📊 Visual Breakdown\n\nYou'll also see a colorful donut chart that shows exactly what portion of your monthly payment goes where — no guessing.\n\n🎯 Perfect For\n- First-time home buyers\n- Real estate agents helping clients compare options\n- Anyone planning for a big purchase\n\n⚙️ How It Helps\nKnow what to expect before you buy:\n- Set realistic budgets\n- Compare different scenarios\n- Understand the true cost of a mortgage",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/mortgage-calculator-listing/screenshot_01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/mortgage-calculator-listing/thumbnail.png"
+      "summary": "🏠 Mortgage Calculator\n\nEasily estimate your monthly mortgage payments and understand where your money goes — all in one simple, visual tool.\n\n💡 What It Does\n\nThis calculator helps you break down the full cost of homeownership. Just enter a few details about your potential home and loan, and you'll get:\n\nYour estimated monthly mortgage payment\n\nA clear view of how much goes to:\n- Principal & Interest\n- Property Taxes\n- Home Insurance\n- HOA Fees\n- Total lifetime costs over the life of the loan\n\n📋 What You Can Input\n- Home Price\n- Down Payment (%)\n- Loan Term (Years)\n- Interest Rate (%)\n- Monthly Property Tax\n- Monthly Insurance\n- Monthly HOA Fees\n\n📊 Visual Breakdown\n\nYou'll also see a colorful donut chart that shows exactly what portion of your monthly payment goes where — no guessing.\n\n🎯 Perfect For\n- First-time home buyers\n- Real estate agents helping clients compare options\n- Anyone planning for a big purchase\n\n⚙️ How It Helps\nKnow what to expect before you buy:\n- Set realistic budgets\n- Compare different scenarios\n- Understand the true cost of a mortgage",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/mortgage-calculator-listing/thumbnail.png"
+      }
     },
     "relationships": {
-      "specs.0": {
+      "skills": {
         "links": {
-          "self": "../Spec/mortgage-calculator"
-        }
-      },
-      "publisher": {
-        "links": {
-          "self": "../Publisher/acbb43d6-69c8-4833-8f2b-5539fb997d9c"
-        }
-      },
-      "categories.0": {
-        "links": {
-          "self": "../Category/accounting-finance"
+          "self": null
         }
       },
       "tags.0": {
@@ -36,16 +36,30 @@
           "self": null
         }
       },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/mortgage-calculator"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/acbb43d6-69c8-4833-8f2b-5539fb997d9c"
+        }
+      },
       "examples.0": {
         "links": {
           "self": "../mortgage-calculator/MortgageCalculator/example"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/accounting-finance"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

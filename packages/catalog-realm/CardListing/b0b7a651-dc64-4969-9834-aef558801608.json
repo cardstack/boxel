@@ -1,17 +1,37 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "EV Car Configurator",
-      "summary": "Interactive EV car configurator simulating real-time customization of a luxury electric vehicle. Choose from exterior colors, trims, ranges, wheels, interiors, and premium features like autopilot and immersive audio. Dynamic pricing updates instantly based on selections, with sleek visuals and section-based navigation for a seamless experience.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/ev-car-configurator-listing/screenshot_01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/ev-car-configurator-listing/thumbnail.png"
+      "summary": "Interactive EV car configurator simulating real-time customization of a luxury electric vehicle. Choose from exterior colors, trims, ranges, wheels, interiors, and premium features like autopilot and immersive audio. Dynamic pricing updates instantly based on selections, with sleek visuals and section-based navigation for a seamless experience.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/ev-car-configurator-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -26,31 +46,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../car-configurator-ev/CarConfiguratorEV/9436d728-e236-46cd-9632-3c9a4efbbf8a"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/software-development"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../car-configurator-ev/CarConfiguratorEV/9436d728-e236-46cd-9632-3c9a4efbbf8a"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }

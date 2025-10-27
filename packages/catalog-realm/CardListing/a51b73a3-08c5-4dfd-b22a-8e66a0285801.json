@@ -1,29 +1,29 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Chess",
-      "summary": "♟️ Players:\n\n- White pieces: Bottom (a1–h1, a2–h2)\n- Black pieces: Top (a7–h7, a8–h8)\n\n♟️Game State:\n\n- No moves have been made yet — it’s the very beginning of the game.\n\n♟️ Options:\n\nThe interface has buttons:\n- Prev Move / Next Move (for stepping through a game)\n- Back to Game Position\n- Reset",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/chess-listing/screenshot_01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chess-listing/thumbnail.png"
+      "summary": "♟️ Players:\n\n- White pieces: Bottom (a1–h1, a2–h2)\n- Black pieces: Top (a7–h7, a8–h8)\n\n♟️Game State:\n\n- No moves have been made yet — it’s the very beginning of the game.\n\n♟️ Options:\n\nThe interface has buttons:\n- Prev Move / Next Move (for stepping through a game)\n- Back to Game Position\n- Reset",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chess-listing/thumbnail.png"
+      }
     },
     "relationships": {
-      "specs.0": {
+      "skills": {
         "links": {
-          "self": "../Spec/chess"
-        }
-      },
-      "publisher": {
-        "links": {
-          "self": "../Publisher/8410bd6d-ecbe-4044-ad69-33211f396abf"
-        }
-      },
-      "categories.0": {
-        "links": {
-          "self": "../Category/video-games-interactive"
+          "self": null
         }
       },
       "tags.0": {
@@ -34,6 +34,16 @@
       "license": {
         "links": {
           "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/chess"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/8410bd6d-ecbe-4044-ad69-33211f396abf"
         }
       },
       "examples.0": {
@@ -55,12 +65,16 @@
         "links": {
           "self": "../chess/Chess/opera-game"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

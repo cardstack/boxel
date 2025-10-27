@@ -163,13 +163,15 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     const commandModule = await this.loadCommandModule();
     const listingCard = listing as CardAPI.CardDef; // ensure correct type
+    const specsPromise = this.linkSpecs(listingCard, openCardId, targetRealm);
     await Promise.all([
       this.autoPatchName(listingCard),
       this.autoPatchSummary(listingCard),
+      this.autoLinkExample(listingCard, exampleCard),
       this.autoLinkTag(listingCard),
       this.autoLinkCategory(listingCard),
       this.autoLinkLicense(listingCard),
-      this.linkSpecs(listingCard, openCardId, targetRealm),
+      specsPromise,
     ]);
     //we don't need to call this save card
     //interact stack item does auto-saving anyway
@@ -212,18 +214,22 @@ export default class ListingCreateCommand extends HostBaseCommand<
     listing: CardAPI.CardDef,
     openCardId: string,
     targetRealm: string,
-  ) {
+  ): Promise<Spec[]> {
     const response = await this.network.authedFetch(
       `${targetRealm}_dependencies?url=${openCardId}`,
       { headers: { Accept: SupportedMimeType.CardDependencies } },
     );
     if (!response.ok) {
       console.warn('Failed to fetch dependencies for specs');
-      return;
+      (listing as any).specs = [];
+      return [];
     }
     const deps = (await response.json()) as string[];
     const sanitizedDeps = this.sanitizeDeps(deps ?? []);
-    if (!sanitizedDeps.length) return;
+    if (!sanitizedDeps.length) {
+      (listing as any).specs = [];
+      return [];
+    }
     const createSpecCommand = new CreateSpecCommand(this.commandContext);
     const specResults = await Promise.all(
       sanitizedDeps.map((dep) =>
@@ -240,6 +246,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
       if (res?.specs) specs.push(...res.specs);
     }
     (listing as any).specs = specs;
+    return specs;
   }
 
   // --- Linking helpers now use SearchAndChooseCommand ---
@@ -279,6 +286,63 @@ export default class ListingCreateCommand extends HostBaseCommand<
       (listing as any).summary = summary;
     }
   }
+
+  private async autoLinkExample(
+    listing: CardAPI.CardDef,
+    exampleCard: CardAPI.CardDef,
+  ) {
+    const existingExamples = Array.isArray((listing as any).examples)
+      ? ((listing as any).examples as CardAPI.CardDef[])
+      : [];
+    const uniqueById = new Map<string, CardAPI.CardDef>();
+    const addCard = (card?: CardAPI.CardDef) => {
+      if (!card || typeof card.id !== 'string') {
+        return;
+      }
+      if (uniqueById.has(card.id)) {
+        return;
+      }
+      uniqueById.set(card.id, card);
+    };
+
+    for (const existing of existingExamples) {
+      addCard(existing);
+    }
+
+    addCard(exampleCard);
+
+    const MAX_EXAMPLES = 4;
+    if (this.adoptedCodeRef && uniqueById.size < MAX_EXAMPLES) {
+      try {
+        const searchAndChoose = new SearchAndChooseCommand(this.commandContext);
+        const existingIds = Array.from(uniqueById.keys());
+        const result = await searchAndChoose.execute({
+          codeRef: this.adoptedCodeRef,
+          max: Math.max(1, MAX_EXAMPLES - existingIds.length),
+          additionalSystemPrompt: [
+            'Prefer examples that showcase common or high-impact use cases.',
+            existingIds.length
+              ? `Do not include any id already linked: ${existingIds.join(', ')}.`
+              : '',
+            'Return [] if nothing relevant is found.',
+          ]
+            .filter(Boolean)
+            .join(' '),
+        });
+        for (const card of result.selectedCards ?? []) {
+          addCard(card as CardAPI.CardDef);
+        }
+      } catch (error) {
+        console.warn('Failed to auto-link additional examples', {
+          sourceCardId: exampleCard.id,
+          error,
+        });
+      }
+    }
+
+    (listing as any).examples = Array.from(uniqueById.values());
+  }
+
   private async autoLinkLicense(listing: CardAPI.CardDef) {
     const selected = await this.chooseCards(
       {
@@ -289,6 +353,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     );
     (listing as any).license = selected[0];
   }
+
   private async autoLinkTag(listing: CardAPI.CardDef) {
     const selected = await this.chooseCards(
       {
@@ -303,6 +368,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     );
     (listing as any).tags = selected;
   }
+
   private async autoLinkCategory(listing: CardAPI.CardDef) {
     const selected = await this.chooseCards(
       {
