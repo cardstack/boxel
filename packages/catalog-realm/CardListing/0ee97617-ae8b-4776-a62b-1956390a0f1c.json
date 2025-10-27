@@ -1,18 +1,38 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Piano",
-      "summary": "A professional 3-octave virtual piano with real-time notation recording, playback, and keyboard controls. Features include live audio synthesis, notation-to-keyboard translation, and an intuitive recording system for capturing musical ideas.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/piano-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/piano-listing/screenshot_02.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/piano-listing/thumbnail.png"
+      "summary": "A professional 3-octave virtual piano with real-time notation recording, playback, and keyboard controls. Features include live audio synthesis, notation-to-keyboard translation, and an intuitive recording system for capturing musical ideas.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/piano-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -27,31 +47,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/video-games-interactive"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }

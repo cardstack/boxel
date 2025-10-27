@@ -1,34 +1,29 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Map",
-      "summary": "This is a Map component that displays Google Maps integration. Here are its key features:\n\nIt accepts an address as input and generates a Google Maps iframe URL\n\nThe component accepts the following properties:\naddress: A complete address object containing address details:\n- mapWidth: Width of the map (defaults to 600px)\n- mapHeight: Height of the map (defaults to 400px)",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/map-listing/screenshot_01.png "
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/map-listing/thumbnail.png"
+      "summary": "This is a Map component that displays Google Maps integration. Here are its key features:\n\nIt accepts an address as input and generates a Google Maps iframe URL\n\nThe component accepts the following properties:\naddress: A complete address object containing address details:\n- mapWidth: Width of the map (defaults to 600px)\n- mapHeight: Height of the map (defaults to 400px)",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/map-listing/thumbnail.png"
+      }
     },
     "relationships": {
-      "specs.0": {
+      "skills": {
         "links": {
-          "self": "../Spec/map"
-        }
-      },
-      "publisher": {
-        "links": {
-          "self": "../Publisher/f5fd2250-8031-40fe-8f09-78e2c0f85c0a"
-        }
-      },
-      "categories.0": {
-        "links": {
-          "self": "../Category/business-development"
-        }
-      },
-      "categories.1": {
-        "links": {
-          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+          "self": null
         }
       },
       "tags.0": {
@@ -39,6 +34,16 @@
       "license": {
         "links": {
           "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/map"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/f5fd2250-8031-40fe-8f09-78e2c0f85c0a"
         }
       },
       "examples.0": {
@@ -55,12 +60,21 @@
         "links": {
           "self": "../map/Map/golden-gate-bridge"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/business-development"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
