@@ -29,8 +29,8 @@ import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
 
+import HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
@@ -59,9 +59,9 @@ interface Signature {
 }
 
 export default class PublishRealmModal extends Component<Signature> {
-  @service private declare realm: RealmService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare hostModeService: HostModeService;
   @service private declare matrixService: MatrixService;
+  @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
 
   @tracked selectedPublishedRealmURLs: string[] = [];
@@ -81,8 +81,8 @@ export default class PublishRealmModal extends Component<Signature> {
     this.fetchBoxelClaimedDomain.perform();
   }
 
-  get isRealmPublished() {
-    return !!this.lastPublishedTime;
+  get isSubdirectoryRealmPublished() {
+    return this.hostModeService.isPublished(this.subdirectoryRealmUrl);
   }
 
   get isPublishDisabled() {
@@ -94,7 +94,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get lastPublishedTime() {
-    return this.getFormattedLastPublishedTime(this.generatedUrl);
+    return this.getFormattedLastPublishedTime(this.subdirectoryRealmUrl);
   }
 
   get claimedDomainPublishedUrl() {
@@ -118,7 +118,7 @@ export default class PublishRealmModal extends Component<Signature> {
       return false;
     }
 
-    return !!this.getLastPublishedTimestamp(this.claimedDomainPublishedUrl);
+    return this.hostModeService.isPublished(this.claimedDomainPublishedUrl);
   }
 
   get shouldShowUnclaimDomainButton() {
@@ -134,7 +134,8 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private getFormattedLastPublishedTime(publishedRealmURL: string) {
-    const publishedAt = this.getLastPublishedTimestamp(publishedRealmURL);
+    const publishedAt =
+      this.hostModeService.lastPublishedTimestamp(publishedRealmURL);
     if (!publishedAt) {
       return null;
     }
@@ -151,26 +152,8 @@ export default class PublishRealmModal extends Component<Signature> {
     }
   }
 
-  private getLastPublishedTimestamp(publishedRealmURL: string) {
-    const realmInfo = this.operatorModeStateService.currentRealmInfo;
-    if (
-      !realmInfo?.lastPublishedAt ||
-      typeof realmInfo.lastPublishedAt !== 'object'
-    ) {
-      return null;
-    }
-
-    const rawPublishedAt = realmInfo.lastPublishedAt[publishedRealmURL];
-    if (!rawPublishedAt) {
-      return null;
-    }
-
-    const publishedAt = Number(rawPublishedAt);
-    return Number.isFinite(publishedAt) ? publishedAt : null;
-  }
-
-  get isDefaultPublishedRealmURLSelected() {
-    return this.selectedPublishedRealmURLs.includes(this.generatedUrl);
+  get isSubdirectoryRealmSelected() {
+    return this.selectedPublishedRealmURLs.includes(this.subdirectoryRealmUrl);
   }
 
   get isCustomSubdomainSelected() {
@@ -222,10 +205,10 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get currentRealmURL() {
-    return this.operatorModeStateService.realmURL.href;
+    return this.hostModeService.realmURL;
   }
 
-  get generatedUrl() {
+  get subdirectoryRealmUrl() {
     const protocol = this.getProtocol();
     const matrixUsername = this.getMatrixUsername();
     const domain = this.getDefaultPublishedRealmDomain();
@@ -234,7 +217,7 @@ export default class PublishRealmModal extends Component<Signature> {
     return `${protocol}://${matrixUsername}.${domain}/${realmName}/`;
   }
 
-  get urlParts() {
+  get subdirectoryRealmParts() {
     const protocol = this.getProtocol();
     const matrixUsername = this.getMatrixUsername();
     const domain = this.getDefaultPublishedRealmDomain();
@@ -357,8 +340,8 @@ export default class PublishRealmModal extends Component<Signature> {
 
   @action
   toggleDefaultDomain() {
-    const defaultUrl = this.generatedUrl;
-    if (!this.isDefaultPublishedRealmURLSelected) {
+    const defaultUrl = this.subdirectoryRealmUrl;
+    if (!this.isSubdirectoryRealmSelected) {
       this.selectedPublishedRealmURLs = [
         ...this.selectedPublishedRealmURLs,
         defaultUrl,
@@ -541,7 +524,7 @@ export default class PublishRealmModal extends Component<Signature> {
             <input
               type='checkbox'
               id='default-domain-checkbox'
-              checked={{this.isDefaultPublishedRealmURLSelected}}
+              checked={{this.isSubdirectoryRealmSelected}}
               {{on 'change' this.toggleDefaultDomain}}
               class='domain-checkbox'
               data-test-default-domain-checkbox
@@ -556,11 +539,13 @@ export default class PublishRealmModal extends Component<Signature> {
               </WithLoadedRealm>
               <div class='domain-url-container'>
                 <span class='domain-url'>
-                  <span class='url-part'>{{this.urlParts.baseUrl}}</span><span
+                  <span
+                    class='url-part'
+                  >{{this.subdirectoryRealmParts.baseUrl}}</span><span
                     class='url-part-bold'
-                  >{{this.urlParts.realmName}}/</span>
+                  >{{this.subdirectoryRealmParts.realmName}}/</span>
                 </span>
-                {{#if this.isRealmPublished}}
+                {{#if this.isSubdirectoryRealmPublished}}
                   <div class='domain-info'>
                     <span
                       class='last-published-at'
@@ -570,12 +555,19 @@ export default class PublishRealmModal extends Component<Signature> {
                     <BoxelButton
                       @kind='text-only'
                       @size='extra-small'
-                      @disabled={{this.isUnpublishingRealm this.generatedUrl}}
+                      @disabled={{this.isUnpublishingRealm
+                        this.subdirectoryRealmUrl
+                      }}
                       class='unpublish-button'
-                      {{on 'click' (fn @handleUnpublish this.generatedUrl)}}
+                      {{on
+                        'click'
+                        (fn @handleUnpublish this.subdirectoryRealmUrl)
+                      }}
                       data-test-unpublish-button
                     >
-                      {{#if (this.isUnpublishingRealm this.generatedUrl)}}
+                      {{#if
+                        (this.isUnpublishingRealm this.subdirectoryRealmUrl)
+                      }}
                         <LoadingIndicator />
                         Unpublishing…
                       {{else}}
@@ -588,12 +580,12 @@ export default class PublishRealmModal extends Component<Signature> {
                 {{/if}}
               </div>
             </div>
-            {{#if this.isRealmPublished}}
+            {{#if this.isSubdirectoryRealmPublished}}
               <BoxelButton
                 @as='anchor'
                 @kind='secondary-light'
                 @size='small'
-                @href={{this.generatedUrl}}
+                @href={{this.subdirectoryRealmUrl}}
                 @disabled={{this.isUnpublishingAnyRealms}}
                 class='action'
                 target='_blank'
@@ -604,13 +596,13 @@ export default class PublishRealmModal extends Component<Signature> {
                 Open Site
               </BoxelButton>
             {{/if}}
-            {{#if (this.getPublishErrorForUrl this.generatedUrl)}}
+            {{#if (this.getPublishErrorForUrl this.subdirectoryRealmUrl)}}
               <div
                 class='domain-publish-error'
-                data-test-domain-publish-error={{this.generatedUrl}}
+                data-test-domain-publish-error={{this.subdirectoryRealmUrl}}
               >
                 <span class='error-text'>{{this.getPublishErrorForUrl
-                    this.generatedUrl
+                    this.subdirectoryRealmUrl
                   }}</span>
               </div>
             {{/if}}

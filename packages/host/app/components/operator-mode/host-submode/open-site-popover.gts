@@ -5,50 +5,21 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import HostModeService from '@cardstack/host/services/host-mode-service';
 
 interface OpenSitePopoverArgs {
   isOpen: boolean;
 }
 
 export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
-  @service declare realm: RealmService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-
-  getFullURL = (baseURL: string) => {
-    if (this.currentCardId) {
-      return baseURL + this.currentCardId.replace(this.realmURL, '');
-    }
-    return baseURL;
-  };
+  @service declare hostModeService: HostModeService;
 
   get publishedRealms() {
-    const realmInfo = this.operatorModeStateService.currentRealmInfo;
-    if (
-      !realmInfo?.lastPublishedAt ||
-      typeof realmInfo.lastPublishedAt !== 'object'
-    ) {
-      return [];
-    }
-
-    // Return the URLs that have been published (keys of lastPublishedAt)
-    return Object.keys(realmInfo.lastPublishedAt);
+    return this.hostModeService.publishedRealmURLs;
   }
 
   get hasPublishedRealms() {
     return this.publishedRealms.length > 0;
-  }
-
-  get realmURL() {
-    return this.operatorModeStateService.realmURL.href;
-  }
-
-  get currentCardId() {
-    return this.operatorModeStateService.hostModePrimaryCard?.replace(
-      '.json',
-      '',
-    );
   }
 
   <template>
@@ -59,14 +30,18 @@ export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
             {{#each this.publishedRealms as |url|}}
               <div
                 class='realm-item'
-                data-test-published-realm-item={{this.getFullURL url}}
+                data-test-published-realm-item={{this.hostModeService.fullURL
+                  url
+                }}
               >
-                <div class='realm-url'>{{this.getFullURL url}}</div>
+                <div class='realm-url'>
+                  {{this.hostModeService.fullURL url}}
+                </div>
                 <BoxelButton
                   @as='anchor'
                   @kind='secondary-light'
                   @size='small'
-                  @href={{this.getFullURL url}}
+                  @href={{this.hostModeService.fullURL url}}
                   class='open-site-button'
                   target='_blank'
                   rel='noopener noreferrer'
