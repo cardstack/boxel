@@ -866,7 +866,6 @@ export default class Room extends Component<Signature> {
       myLastMessage.body,
       myLastMessage!.attachedCardIds || [],
       myLastMessage.attachedFiles,
-      true,
       myLastMessage.clientGeneratedId,
     );
   }
@@ -898,7 +897,6 @@ export default class Room extends Component<Signature> {
       prompt ?? this.messageToSend,
       cards.length ? cards : undefined,
       files.length ? files : undefined,
-      Boolean(prompt),
     );
   }
 
@@ -983,21 +981,19 @@ export default class Room extends Component<Signature> {
       message: string | undefined,
       cardsOrIds?: CardDef[] | string[],
       files?: FileDef[],
-      keepInputAndAttachments: boolean = false,
       clientGeneratedId: string = uuidv4(),
     ) => {
-      let shouldResetDraft = !keepInputAndAttachments;
-      let previousMessage = this.matrixService.getMessageToSend(
-        this.args.roomId,
-      );
-      let previousCards =
+      let messageToSend = this.matrixService.getMessageToSend(this.args.roomId);
+      let cardsToSend =
         this.matrixService.cardsToSend.get(this.args.roomId) ?? undefined;
-      let previousCardsCopy = previousCards ? [...previousCards] : undefined;
-      if (shouldResetDraft) {
-        // Clear the pending draft and attachments before the send attempt
-        this.matrixService.setMessageToSend(this.args.roomId, undefined);
-        this.matrixService.cardsToSend.set(this.args.roomId, undefined);
-      }
+      let cardsToSendCopy = cardsToSend ? [...cardsToSend] : undefined;
+
+      // We copy the draft and attachments into local variables before clearing them.
+      // Clearing immediately empties the input and attachment pills so the user sees that their message is “in flight”.
+      // If the send fails, we restore those saved values in the catch block so nothing is lost.
+      this.matrixService.setMessageToSend(this.args.roomId, undefined);
+      this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+
       let openCardIds = new Set([
         ...(this.operatorModeStateService.getOpenCardIds() || []),
         ...this.autoAttachedCardIds,
@@ -1035,8 +1031,6 @@ export default class Room extends Component<Signature> {
           cards = cardsOrIds as CardDef[] | undefined;
         }
 
-        // throw new Error('test');
-
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,
@@ -1047,17 +1041,10 @@ export default class Room extends Component<Signature> {
         );
       } catch (e) {
         console.error('Error sending message', e);
-        if (shouldResetDraft) {
-          this.matrixService.setMessageToSend(
-            this.args.roomId,
-            previousMessage,
-          );
-          if (previousCardsCopy && previousCardsCopy.length > 0) {
-            this.matrixService.cardsToSend.set(
-              this.args.roomId,
-              previousCardsCopy,
-            );
-          }
+
+        this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
+        if (cardsToSendCopy && cardsToSendCopy.length > 0) {
+          this.matrixService.cardsToSend.set(this.args.roomId, cardsToSendCopy);
         }
       }
     },
