@@ -721,7 +721,7 @@ export default class MatrixService extends Service {
         } catch (err) {
           console.warn(
             `Unable to establish session with realm ${realmURL}`,
-            err,
+            JSON.stringify(err, null, 2),
           );
         }
       }),
