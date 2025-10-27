@@ -479,7 +479,7 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get customSubdomainIndexUrl() {
     if (this.claimedDomainPublishedUrl) {
-      return this.claimedDomainPublishedUrl + 'index';
+      return this.claimedDomainPublishedUrl;
     }
     return null;
   }
