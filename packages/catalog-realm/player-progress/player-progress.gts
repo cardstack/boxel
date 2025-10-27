@@ -50,6 +50,10 @@ export class PlayerProgress extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: PlayerProgress) {
+      if (!this.player) {
+        return undefined;
+      }
+
       return this.player.title + ' - ' + this.game.title;
     },
   });
