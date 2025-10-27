@@ -2,7 +2,7 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "CardListing",
+        "name": "AppListing",
         "module": "../catalog-app/listing/listing"
       }
     },
@@ -18,7 +18,7 @@
         "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/story-board-listing/thumbnail.png"
       }
     },
     "relationships": {
