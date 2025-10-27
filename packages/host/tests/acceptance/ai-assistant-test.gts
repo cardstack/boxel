@@ -2556,6 +2556,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Enabling create new session button',
     );
     await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-create-room-btn]:not([disabled])');
     await click('[data-test-create-room-btn]');
     await waitFor('[data-room-settled]');
 
@@ -3143,5 +3144,139 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
       },
     ]);
+  });
+
+  test('restores chat input of unsent messages', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    const matrixService = getService('matrix-service');
+    await waitUntil(() => Boolean(matrixService.currentRoomId));
+
+    let firstRoomId = matrixService.currentRoomId;
+    assert.ok(firstRoomId, 'Should have an initial room ID');
+    if (!firstRoomId) {
+      throw new Error('Missing room ID for initial session');
+    }
+
+    await waitFor(`[data-test-message-field="${firstRoomId}"]`);
+
+    await fillIn(
+      `[data-test-message-field="${firstRoomId}"]`,
+      'hey, could you do something for me?',
+    );
+    await click('[data-test-send-message-btn]');
+    await fillIn(
+      `[data-test-message-field="${firstRoomId}"]`,
+      'how old is the sun?',
+    );
+
+    // user does not click send, and moves on to a new room
+
+    await click('[data-test-create-room-btn]');
+    await waitFor(`[data-room-settled]`);
+
+    let secondRoomId = matrixService.currentRoomId;
+    assert.ok(secondRoomId, 'Should have a second room ID');
+    if (!secondRoomId) {
+      throw new Error('Missing room ID for new session');
+    }
+    assert.notStrictEqual(
+      secondRoomId,
+      firstRoomId,
+      'Second room should be different from first room',
+    );
+
+    await waitFor(`[data-test-message-field="${secondRoomId}"]`);
+    assert
+      .dom(`[data-test-message-field="${secondRoomId}"]`)
+      .hasValue('', 'New room starts with an empty chat input');
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor(`[data-test-enter-room="${firstRoomId}"]`);
+    await click(`[data-test-enter-room="${firstRoomId}"]`);
+    await waitFor(`[data-room-settled]`);
+    await waitUntil(() => matrixService.currentRoomId === firstRoomId);
+    await waitFor(`[data-test-message-field="${firstRoomId}"]`);
+    assert
+      .dom(`[data-test-message-field="${firstRoomId}"]`)
+      .hasValue(
+        'how old is the sun?',
+        'Draft message is restored when returning to the original room',
+      );
+  });
+
+  test('shows an error and persists the prompt in case the message failed to send', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    const matrixService = getService('matrix-service');
+
+    let roomId = matrixService.currentRoomId;
+    assert.ok(roomId, 'Should have a room ID');
+    if (!roomId) {
+      throw new Error('Missing room ID for message failure test');
+    }
+
+    await waitFor(`[data-test-message-field="${roomId}"]`);
+
+    const originalSendMessage = matrixService.sendMessage;
+    let sendAttempts = 0;
+    matrixService.sendMessage = async function (
+      ..._args: Parameters<typeof originalSendMessage>
+    ) {
+      sendAttempts++;
+      throw new Error('Intentional failure for test');
+    };
+
+    const failingMessage = 'This message should trigger an error';
+    try {
+      await fillIn(`[data-test-message-field="${roomId}"]`, failingMessage);
+      await waitUntil(
+        () => matrixService.getMessageToSend(roomId!) === failingMessage,
+      );
+
+      await click('[data-test-send-message-btn]');
+
+      await waitFor('[data-test-boxel-alert="error"]');
+      assert.strictEqual(sendAttempts, 1, 'sendMessage was attempted once');
+      assert
+        .dom('[data-test-boxel-alert="error"] [data-test-alert-message="0"]')
+        .hasText('There was an error sending your message. Please try again.');
+
+      await waitUntil(
+        () => matrixService.getMessageToSend(roomId!) === failingMessage,
+      );
+      assert
+        .dom(`[data-test-message-field="${roomId}"]`)
+        .hasValue(
+          failingMessage,
+          'Draft message is restored after a failed send attempt',
+        );
+    } finally {
+      matrixService.sendMessage = originalSendMessage;
+    }
   });
 });

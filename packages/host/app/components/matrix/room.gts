@@ -29,7 +29,7 @@ import { TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -81,6 +81,7 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
+import { array } from '@ember/helper';
 
 interface Signature {
   Element: HTMLElement;
@@ -177,6 +178,12 @@ export default class Room extends Component<Signature> {
             {{else}}
               <NewSession @sendPrompt={{this.sendMessage}} />
             {{/each}}
+
+            {{#if this.messageSendError}}
+              <Alert @type='error' as |Alert|>
+                <Alert.Messages @messages={{array this.messageSendError}} />
+              </Alert>
+            {{/if}}
           {{/if}}
         </AiAssistantConversation>
 
@@ -465,6 +472,8 @@ export default class Room extends Component<Signature> {
       isConversationScrollable: boolean;
     }
   > = new WeakMap();
+
+  @tracked private messageSendError: string | undefined = undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -983,6 +992,7 @@ export default class Room extends Component<Signature> {
       files?: FileDef[],
       clientGeneratedId: string = uuidv4(),
     ) => {
+      this.messageSendError = undefined;
       let messageToSend = this.matrixService.getMessageToSend(this.args.roomId);
       let cardsToSend =
         this.matrixService.cardsToSend.get(this.args.roomId) ?? undefined;
@@ -1040,7 +1050,9 @@ export default class Room extends Component<Signature> {
           context,
         );
       } catch (e) {
-        console.error('Error sending message', e);
+        console.error(e);
+        this.messageSendError =
+          'There was an error sending your message. Please try again.';
 
         this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
         if (cardsToSendCopy && cardsToSendCopy.length > 0) {
