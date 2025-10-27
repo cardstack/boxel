@@ -2,8 +2,7 @@ import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
-import { BoxelInput, BoxelSelect } from '@cardstack/boxel-ui/components';
-import { or } from '@cardstack/boxel-ui/helpers';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -83,7 +82,7 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
-import { normalizeEnumOptions as normalizeEnumOptionsUtil } from './enum-utils';
+// normalizeEnumOptions used by enum moved to packages/base/enum.gts
 
 import {
   callSerializeHook,
@@ -2237,95 +2236,7 @@ export class TextAreaField extends StringField {
   };
 }
 
-// Minimal enum field factory: wraps a FieldDef with a dropdown editor
-// and exposes the allowed options. Enough to support the integration test.
-export function enumField<BaseT extends FieldDefConstructor>(
-  Base: BaseT,
-  config: { options: any; displayName?: string; icon?: any },
-): BaseT {
-  class EnumField extends (Base as any) {
-    // Leverage new configuration API: expose options via FieldDef.configuration
-    static configuration =
-      typeof (config as any)?.options === 'function'
-        ? (self: any) => ({ options: (config as any).options(self) })
-        : ({ options: (config as any)?.options } as any);
-    // Allow customizing display metadata
-    static displayName =
-      (config as any)?.displayName ?? (Base as any).displayName;
-    static icon = (config as any)?.icon ?? (Base as any).icon;
-
-    static atom = class Atom extends GlimmerComponent<any> {
-      get normalizedOptions() {
-        let cfg = this.args.configuration as { options?: any[] } | undefined;
-        let opts = cfg?.options ?? [];
-        return normalizeEnumOptionsUtil(opts);
-      }
-      get option() {
-        let v = this.args.model as any;
-        let opts = this.normalizedOptions as any[];
-        return (
-          opts.find((o: any) => o.value === v) ?? { value: v, label: String(v) }
-        );
-      }
-      <template>
-        {{#if this.option}}
-          {{#if this.option.icon}}
-            <this.option.icon class='option-icon' width='16' height='16' />
-          {{/if}}
-          <span class='option-title'>{{if this.option.label this.option.label this.option.value}}</span>
-        {{/if}}
-      </template>
-    };
-    // selected item component used for trigger rendering; adapts BoxelSelect's `@option` to atom's `@model`
-    static selectedItem = class SelectedItem extends GlimmerComponent<{
-      Args: { option: any; configuration?: any };
-    }> {
-      <template>
-        {{#if @option}}
-          {{#let (component EnumField.atom) as |Atom|}}
-            <Atom @model={{@option.value}} @configuration={{@configuration}} />
-          {{/let}}
-        {{/if}}
-      </template>
-    };
-    static edit = class Edit extends GlimmerComponent<any> {
-      get options() {
-        let cfg = this.args.configuration as { options?: any[] } | undefined;
-        let opts = cfg?.options ?? [];
-        return normalizeEnumOptionsUtil(opts);
-      }
-      get selectedOption() {
-        let opts = this.options as any[];
-        return (
-          opts.find((o: any) => o.value === (this.args.model as any)) ?? null
-        );
-      }
-      update = (opt: any) => {
-        this.args.set?.(opt?.value ?? null);
-      };
-      <template>
-        <BoxelSelect
-          @options={{this.options}}
-          @selected={{this.selectedOption}}
-          @onChange={{this.update}}
-          @selectedItemComponent={{component
-            EnumField.selectedItem
-            configuration=@configuration
-          }}
-          @disabled={{not @canEdit}}
-          @renderInPlace={{true}}
-          @placeholder='Choose...'
-          as |opt|
-        >
-          {{#let (component EnumField.atom) as |Atom|}}
-            <Atom @model={{opt.value}} @configuration={{@configuration}} />
-          {{/let}}
-        </BoxelSelect>
-      </template>
-    };
-  }
-  return EnumField as unknown as BaseT;
-}
+// enumField has moved to packages/base/enum.gts
 
 export class CSSField extends TextAreaField {
   static displayName = 'CSS Field';

@@ -10,6 +10,7 @@ import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
 import type * as CodeRefModule from 'https://cardstack.com/base/code-ref';
 import type * as DateFieldModule from 'https://cardstack.com/base/date';
 import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
+import type * as EnumModule from 'https://cardstack.com/base/enum';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
@@ -92,7 +93,10 @@ let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
 let CardInfoField: (typeof CardAPIModule)['CardInfoField'];
-let enumField: (typeof CardAPIModule)['enumField'];
+let enumField: (typeof EnumModule)['default'];
+let enumOptions: (typeof EnumModule)['enumOptions'];
+let enumValues: (typeof EnumModule)['enumValues'];
+let enumConfig: (typeof EnumModule)['enumConfig'];
 
 async function initialize() {
   let loader = getService('loader-service').loader;
@@ -194,8 +198,16 @@ async function initialize() {
     ReadOnlyField,
     instanceOf,
     CardInfoField,
-    enumField,
   } = cardAPI);
+
+  enumField = (await loader.import<typeof EnumModule>(`${baseRealm.url}enum`))
+    .default;
+  const enumModule = await loader.import<typeof EnumModule>(
+    `${baseRealm.url}enum`,
+  );
+  enumOptions = enumModule.enumOptions;
+  enumValues = enumModule.enumValues;
+  enumConfig = enumModule.enumConfig;
 }
 
 export async function setupBaseRealm(hooks: NestedHooks) {
@@ -245,4 +257,7 @@ export {
   instanceOf,
   CardInfoField,
   enumField,
+  enumOptions,
+  enumValues,
+  enumConfig,
 };

@@ -32,6 +32,9 @@ import {
   createFromSerialized,
   getQueryableValue,
   enumField,
+  enumOptions,
+  enumValues,
+  enumConfig,
   linksTo,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -127,10 +130,6 @@ module('Integration | enumField', function (hooks) {
       'value can be set programmatically',
     );
     // helpers still report configured options
-    const helperModule = await loader.import(
-      `${baseRealm.url}helpers/enum-values`,
-    );
-    const enumValues = (helperModule as any).default;
     assert.deepEqual(enumValues(task, 'priority'), ['High', 'Medium', 'Low']);
   });
 
@@ -145,11 +144,6 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priority = contains(PriorityField);
     }
-
-    const helperModule = await loader.import(
-      `${baseRealm.url}helpers/enum-values`,
-    );
-    const enumValues = (helperModule as any).default;
 
     let t = new Task({ priority: 'High' });
     let values = enumValues(t, 'priority');
@@ -471,10 +465,6 @@ module('Integration | enumField', function (hooks) {
     assert.dom('.boxel-select__dropdown .lucide.lucide-arrow-down').exists();
 
     // enumValues returns the primitive values (in order)
-    const helperModule = await loader.import(
-      `${baseRealm.url}helpers/enum-options`,
-    );
-    const enumOptions = (helperModule as any).default;
     let rich = enumOptions(t, 'priority');
     assert.ok(Array.isArray(rich), 'enumOptions returns an array');
     assert.strictEqual(rich[0]?.value, 'high', 'enumOptions exposes value');
@@ -492,10 +482,6 @@ module('Integration | enumField', function (hooks) {
     }
     let t = new Ticket({ status: 'Open' });
 
-    const helperModule = await loader.import(
-      `${baseRealm.url}helpers/enum-options`,
-    );
-    const enumOptions = (helperModule as any).default;
     let options = enumOptions(t, 'status');
     assert.ok(Array.isArray(options), 'returns array');
     assert.strictEqual(options[0]?.value, 'Open', 'value preserved');
@@ -523,10 +509,6 @@ module('Integration | enumField', function (hooks) {
 
     let t = new Task({ priority: 'medium' });
 
-    const helperModule = await loader.import(
-      `${baseRealm.url}helpers/enum-values`,
-    );
-    const enumValues = (helperModule as any).default;
     let values = enumValues(t, 'priority');
     assert.ok(Array.isArray(values), 'returns array');
     assert.deepEqual(
@@ -551,10 +533,6 @@ module('Integration | enumField', function (hooks) {
     }
     let t = new Task({ priority: 'high' });
 
-    const helperModule = await loader.import(
-      `${baseRealm.url}helpers/enum-options`,
-    );
-    const enumOptions = (helperModule as any).default;
     let options = enumOptions(t, 'priority');
     assert.strictEqual(options[0]?.icon, ArrowUpIcon, 'icon is propagated');
     assert.strictEqual(options[1]?.icon, MinusIcon, 'icon is propagated');
@@ -684,16 +662,287 @@ module('Integration | enumField', function (hooks) {
     let app = new CrmApp({ globalPriorityOptions: ['High', 'Low'] });
     let t = new Task({ crmApp: app as any, priority: 'High' });
 
-    const helperModule = await loader.import(
-      `${baseRealm.url}helpers/enum-values`,
-    );
-    const enumValues = (helperModule as any).default;
+    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumValues = (enumModule as any).enumValues;
 
     let values = enumValues(t, 'priority');
     assert.deepEqual(
       values,
       ['High', 'Low'],
       'resolves enum values from linked card',
+    );
+  });
+
+  test('single-value: explicit null option renders with label and can be selected (intentional fail until implemented)', async function (assert) {
+    assert.expect(5);
+
+    const PriorityField = enumField(StringField, {
+      options: [{ value: null, label: 'None' }, 'High'],
+    });
+
+    class Task extends CardDef {
+      @field priority = contains(PriorityField);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.priority />
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Task },
+      },
+    });
+
+    let t = new Task({ priority: null });
+
+    // Helpers include null only when provided explicitly
+    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumValues = (enumModule as any).enumValues;
+    assert.deepEqual(
+      enumValues(t, 'priority'),
+      [null, 'High'],
+      'enumValues includes explicit null',
+    );
+
+    await renderCard(loader, t, 'edit');
+    await click('.boxel-select');
+    let labels = Array.from(
+      document.querySelectorAll(
+        '.boxel-select__dropdown .boxel-select-option-text',
+      ),
+    ).map((el) => (el.textContent || '').trim());
+    assert.deepEqual(
+      labels,
+      ['None', 'High'],
+      'dropdown renders explicit null label and other options',
+    );
+
+    // Select the null option
+    await click('[data-test-option="0"]');
+    assert.strictEqual(
+      t.priority,
+      null,
+      'selecting labeled null sets value to null',
+    );
+
+    // Round-trip serialization preserves null
+    let doc = serializeCard(t);
+    let t2 = (await createFromSerialized(
+      doc.data,
+      doc,
+      new URL('http://localhost:4202/test/'),
+    )) as Task;
+    assert.strictEqual(
+      t2.priority,
+      null,
+      'serialized/deserialized value stays null',
+    );
+
+    // Trigger should show the label for null (not placeholder)
+    assert
+      .dom('.boxel-select .option-title')
+      .hasText('None', 'trigger shows null label');
+  });
+
+  test('single-value: placeholder shown when value is null and null is not in options; can be customized via unsetLabel (intentional fail until implemented)', async function (assert) {
+    assert.expect(5);
+
+    const PriorityField = enumField(StringField, { options: ['High', 'Low'] });
+
+    class TaskA extends CardDef {
+      @field priority = contains(PriorityField);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.priority />
+        </template>
+      };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.priority @format='atom' />
+        </template>
+      };
+    }
+
+    let a = new TaskA({ priority: null });
+    await renderCard(loader, a, 'edit');
+    // Default placeholder (Boxel trigger renders placeholder text with this class)
+    assert
+      .dom('.boxel-select .boxel-trigger-placeholder')
+      .hasText('Choose…', 'uses default placeholder');
+
+    // Atom fallback in embedded/atom format renders a dash; also carries a marker
+    await renderCard(loader, a, 'embedded');
+    assert.dom('.option-title').hasText('—', 'atom renders unset fallback dash');
+
+    // Usage-level override via configuration.enum.unsetLabel
+    class TaskB extends CardDef {
+      @field priority = contains(PriorityField, {
+        configuration: () => ({
+          enum: { options: ['High', 'Low'], unsetLabel: 'Select one' },
+        }),
+      });
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.priority />
+        </template>
+      };
+    }
+    let b = new TaskB({ priority: null });
+    await renderCard(loader, b, 'edit');
+    assert
+      .dom('.boxel-select .boxel-trigger-placeholder')
+      .hasText('Select one', 'uses configured unsetLabel');
+
+    // Helpers do not synthesize null when not in options
+    assert.deepEqual(
+      enumValues(a, 'priority'),
+      ['High', 'Low'],
+      'enumValues excludes null when not provided',
+    );
+    assert.deepEqual(
+      enumValues(b, 'priority'),
+      ['High', 'Low'],
+      'enumValues excludes null even with unsetLabel',
+    );
+  });
+
+  test('containsMany: explicit null option can be chosen per item (intentional fail until implemented)', async function (assert) {
+    assert.expect(3);
+
+    const PriorityField = enumField(StringField, {
+      options: [{ value: null, label: 'None' }, 'High'],
+    });
+
+    class Task extends CardDef {
+      @field priorities = containsMany(PriorityField);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.priorities />
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Task },
+      },
+    });
+
+    let t = new Task({ priorities: ['High', 'High'] });
+    await renderCard(loader, t, 'edit');
+
+    // Open second select and choose the explicit null option
+    let triggers = document.querySelectorAll(
+      '[data-test-contains-many="priorities"] .boxel-select',
+    );
+    await click(triggers[1] as Element);
+    await click('[data-test-option="0"]');
+    assert.deepEqual(t.priorities, ['High', null], 'second item set to null');
+
+    // Helpers include null only when provided
+    assert.deepEqual(
+      enumValues(t, 'priorities'),
+      [null, 'High'],
+      'enumValues includes null when provided',
+    );
+
+    // Round-trip (array containing null should persist)
+    let doc = serializeCard(t);
+    let t2 = (await createFromSerialized(
+      doc.data,
+      doc,
+      new URL('http://localhost:4202/test/'),
+    )) as Task;
+    assert.deepEqual(
+      t2.priorities,
+      ['High', null],
+      'plural serialization preserves null items',
+    );
+  });
+
+  test('atom-only: renders dash for null when unsetLabel is not provided', async function (assert) {
+    assert.expect(1);
+
+    const PriorityField = enumField(StringField, { options: ['High', 'Low'] });
+
+    class Task extends CardDef {
+      @field priority = contains(PriorityField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.priority @format='atom' />
+        </template>
+      };
+    }
+
+    let t = new Task({ priority: null });
+    await renderCard(loader, t, 'embedded');
+    assert.dom('.option-title').hasText('—', 'atom renders default dash for null');
+  });
+
+  test('atom-only: renders String(@model) when value not in options (value fallback)', async function (assert) {
+    assert.expect(2);
+
+    const PriorityField = enumField(StringField, { options: ['High', 'Low'] });
+
+    class Task extends CardDef {
+      @field priority = contains(PriorityField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.priority @format='atom' />
+        </template>
+      };
+    }
+
+    let t = new Task({ priority: 'Unexpected' as any });
+    await renderCard(loader, t, 'embedded');
+    assert
+      .dom('.option-title')
+      .hasText('Unexpected', 'atom renders raw value when no matching option');
+    assert
+      .dom('[data-test-enum-atom-fallback]')
+      .exists('atom sets fallback marker for unmatched value');
+  });
+
+  test('throws error for duplicate primitive option values', async function (assert) {
+    assert.expect(1);
+
+    const PriorityField = enumField(StringField, {
+      options: ['High', 'High'],
+    });
+    class Task extends CardDef {
+      @field priority = contains(PriorityField);
+    }
+    let t = new Task({ priority: 'High' });
+    assert.throws(
+      () => {
+        // Accessing options triggers normalization and should throw
+        enumOptions(t, 'priority');
+      },
+      /duplicate option value/i,
+      'duplicate values should throw',
+    );
+  });
+
+  test('throws error for duplicate values provided via usage-level configuration', async function (assert) {
+    assert.expect(1);
+
+    const PriorityField = enumField(StringField, { options: ['High', 'Low'] });
+    class Task extends CardDef {
+      @field priority = contains(PriorityField, {
+        configuration: enumConfig(() => ({ options: ['Low', 'Low'] })),
+      });
+    }
+    let t = new Task({ priority: 'Low' });
+    assert.throws(
+      () => {
+        enumOptions(t, 'priority');
+      },
+      /duplicate option value/i,
+      'duplicate values via usage-level config should throw',
     );
   });
 
@@ -706,10 +955,12 @@ module('Integration | enumField', function (hooks) {
     });
 
     class Task extends CardDef {
-      @field customOptions = containsMany(StringField);
-      @field priority = contains(PriorityField, {
+      @field customOptions: string[] = containsMany(StringField);
+      @field priority: string = contains(PriorityField, {
         // Access options from the parent Task instance
-        configuration: (self: Task) => ({ options: self.customOptions }),
+        configuration: enumConfig((self: Task) => ({
+          options: self.customOptions,
+        })),
       });
       static edit = class Edit extends Component<typeof this> {
         <template>
@@ -724,10 +975,8 @@ module('Integration | enumField', function (hooks) {
     });
 
     // Helpers should reflect usage-level configuration
-    const valuesHelperModule = await loader.import(
-      `${baseRealm.url}helpers/enum-values`,
-    );
-    const enumValues = (valuesHelperModule as any).default;
+    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumValues = (enumModule as any).enumValues;
     assert.deepEqual(
       enumValues(t, 'priority'),
       ['Urgent', 'Normal'],
