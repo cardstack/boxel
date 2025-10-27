@@ -3079,11 +3079,26 @@ module('Integration | operator-mode', function (hooks) {
       .exists({ count: 3 });
 
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="0"] [data-test-card="${testRealmURL}Pet/jackie"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="0"]`)
       .hasText('Jackie');
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="1"] [data-test-card="${testRealmURL}Pet/woody"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="1"]`)
       .hasText('Woody');
+    assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="2"] [data-test-card="${testRealmURL}Pet/buzz"]`,
+      )
+      .exists();
     assert
       .dom(`[data-test-list="friends"] [data-test-item="2"]`)
       .hasText('Buzz');
@@ -3141,11 +3156,26 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-list="friends"] [data-test-item]')
       .exists({ count: 3 });
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="0"] [data-test-card="${testRealmURL}Pet/woody"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="0"]`)
       .hasText('Woody');
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="1"] [data-test-card="${testRealmURL}Pet/buzz"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="1"]`)
       .hasText('Buzz');
+    assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="2"] [data-test-card="${testRealmURL}Pet/jackie"]`,
+      )
+      .exists();
     assert
       .dom(`[data-test-list="friends"] [data-test-item="2"]`)
       .hasText('Jackie');

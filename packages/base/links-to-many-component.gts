@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import {
@@ -166,16 +167,29 @@ interface LinksToManyStandardEditorSignature {
 
 class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEditorSignature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  @tracked private reorderNonce = 0;
   private sortableGroupId = uuidv4();
 
   @action
   setItems(items: any) {
     this.args.arrayField.set(items);
+    this.reorderNonce++;
+  }
+
+  get decoratedChildren() {
+    // Returning a fresh wrapper object with a nonce-backed key ensures we refresh
+    // the child component identity after reordering. That keeps templates that
+    // read directly from @model (instead of <@fields>) in sync.
+    return this.args.arrayField.children.map((child, index) => ({
+      box: child,
+      index,
+      key: `${this.reorderNonce}-${index}`,
+    }));
   }
 
   <template>
     <PermissionsConsumer as |permissions|>
-      {{#if @arrayField.children.length}}
+      {{#if this.decoratedChildren.length}}
         <ul
           {{sortableGroup
             groupName=this.sortableGroupId
@@ -185,13 +199,13 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           data-test-list={{@field.name}}
           ...attributes
         >
-          {{#each @arrayField.children as |boxedElement i|}}
+          {{#each this.decoratedChildren key='key' as |entry|}}
             <li
               class='editor {{if permissions.canWrite "can-write" "read-only"}}'
-              data-test-item={{i}}
+              data-test-item={{entry.index}}
               {{sortableItem
                 groupName=this.sortableGroupId
-                model=boxedElement.value
+                model=entry.box.value
               }}
             >
               {{#if permissions.canWrite}}
@@ -203,22 +217,22 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                   class='sort'
                   aria-label='Sort'
                   data-test-sort-card
-                  data-test-sort={{i}}
+                  data-test-sort={{entry.index}}
                 />
                 <IconButton
                   @icon={{IconMinusCircle}}
                   @width='20px'
                   @height='20px'
                   class='remove'
-                  {{on 'click' (fn @remove i)}}
+                  {{on 'click' (fn @remove entry.index)}}
                   aria-label='Remove'
                   data-test-remove-card
-                  data-test-remove={{i}}
+                  data-test-remove={{entry.index}}
                 />
               {{/if}}
               {{#let
                 (getBoxComponent
-                  (@cardTypeFor @field boxedElement) boxedElement @field
+                  (@cardTypeFor @field entry.box) entry.box @field
                 )
                 as |Item|
               }}
