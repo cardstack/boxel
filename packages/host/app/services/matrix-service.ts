@@ -433,11 +433,15 @@ export default class MatrixService extends Service {
     displayName: string,
     registrationToken?: string,
   ) {
+    await this.ready;
+
     displayName = displayName.trim();
     this._isInitializingNewUser = true;
-    this.start({ auth });
-    this.setDisplayName(displayName);
-    let userId = this.client.getUserId();
+
+    this.configureClientWithAuth(auth);
+
+    let userId = auth.user_id;
+
     if (!userId) {
       throw new Error(
         `bug: there is no userId associated with the matrix client`,
@@ -445,6 +449,11 @@ export default class MatrixService extends Service {
     }
 
     await this.realmServer.createUser(userId, registrationToken);
+
+    await this.start({ auth });
+    this.setDisplayName(displayName);
+
+    await this.realmServer.authenticateToAllAccessibleRealms();
 
     await Promise.all([
       this.createPersonalRealmForUser({
@@ -458,6 +467,52 @@ export default class MatrixService extends Service {
 
     this.router.refresh();
     this._isInitializingNewUser = false;
+  }
+
+  private configureClientWithAuth(auth: LoginResponse) {
+    let {
+      access_token: accessToken,
+      user_id: userId,
+      device_id: deviceId,
+    } = auth;
+
+    if (!accessToken) {
+      throw new Error(
+        `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
+          auth,
+          null,
+          2,
+        )}`,
+      );
+    }
+    if (!userId) {
+      throw new Error(
+        `Cannot create matrix client from auth that has no user id: ${JSON.stringify(
+          auth,
+          null,
+          2,
+        )}`,
+      );
+    }
+    if (!deviceId) {
+      throw new Error(
+        `Cannot create matrix client from auth that has no device id: ${JSON.stringify(
+          auth,
+          null,
+          2,
+        )}`,
+      );
+    }
+
+    this._client = this.matrixSDK.createClient({
+      baseUrl: matrixURL,
+      accessToken,
+      userId,
+      deviceId,
+    });
+
+    this.realmServer.setClient(this.client);
+    this.saveAuth(auth);
   }
 
   public async createPersonalRealmForUser({
@@ -506,6 +561,8 @@ export default class MatrixService extends Service {
       refreshRoutes?: true;
     } = {},
   ) {
+    await this.ready;
+
     let { auth, refreshRoutes } = opts;
     if (!auth) {
       auth = this.getAuth();
@@ -514,54 +571,17 @@ export default class MatrixService extends Service {
       }
     }
 
-    let {
-      access_token: accessToken,
-      user_id: userId,
-      device_id: deviceId,
-    } = auth;
+    this.configureClientWithAuth(auth);
 
-    if (!accessToken) {
-      throw new Error(
-        `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
-          auth,
-          null,
-          2,
-        )}`,
-      );
-    }
-    if (!userId) {
-      throw new Error(
-        `Cannot create matrix client from auth that has no user id: ${JSON.stringify(
-          auth,
-          null,
-          2,
-        )}`,
-      );
-    }
-    if (!deviceId) {
-      throw new Error(
-        `Cannot create matrix client from auth that has no device id: ${JSON.stringify(
-          auth,
-          null,
-          2,
-        )}`,
-      );
-    }
-    this._client = this.matrixSDK.createClient({
-      baseUrl: matrixURL,
-      accessToken,
-      userId,
-      deviceId,
-    });
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
       this.saveAuth(auth);
       this.bindEventListeners();
 
       try {
-        let deviceId = this._client.getDeviceId();
+        let deviceId = this.client.getDeviceId();
         if (deviceId) {
-          let { last_seen_ts } = await this._client.getDevice(deviceId);
+          let { last_seen_ts } = await this.client.getDevice(deviceId);
           if (last_seen_ts) {
             this.startedAtTs = last_seen_ts;
           }
@@ -569,7 +589,7 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        let accountDataContent = (await this._client.getAccountDataFromServer(
+        let accountDataContent = (await this.client.getAccountDataFromServer(
           APP_BOXEL_REALMS_EVENT_TYPE,
         )) as { realms: string[] } | null;
 
@@ -592,10 +612,9 @@ export default class MatrixService extends Service {
           ),
         ]);
 
-        let systemCardAccountData =
-          (await this._client.getAccountDataFromServer(
-            APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
-          )) as { id?: string } | null;
+        let systemCardAccountData = (await this.client.getAccountDataFromServer(
+          APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
+        )) as { id?: string } | null;
 
         await this.setSystemCard(systemCardAccountData?.id);
 
