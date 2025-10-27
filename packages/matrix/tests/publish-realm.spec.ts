@@ -90,7 +90,7 @@ test.describe('Publish realm', () => {
     );
     await expect(
       newTab.locator(
-        '[data-test-card="http://user1.localhost:4205/new-workspace/"]',
+        '[data-test-card="http://user1.localhost:4205/new-workspace/index"]',
       ),
     ).toBeVisible();
     await newTab.close();
@@ -141,7 +141,7 @@ test.describe('Publish realm', () => {
     );
     await expect(
       newTab.locator(
-        '[data-test-card="http://acceptable-subdomain.localhost:4205/"]',
+        '[data-test-card="http://acceptable-subdomain.localhost:4205/index"]',
       ),
     ).toBeVisible();
     await newTab.close();
