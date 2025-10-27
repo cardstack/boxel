@@ -17,7 +17,7 @@ export default function enableFetchLogging() {
     const request = new Request(args[0] as RequestInfo, args[1]);
     try {
       const response = await originalFetch(request);
-      if (!response.ok) {
+      if (!response.ok && !(response.status >= 300 && response.status < 400)) {
         const cloned = response.clone();
         seen.push({
           url: request.url,
