@@ -17,7 +17,7 @@ export default async function percySnapshot(
   await settled();
 
   // Adapted from: https://github.com/GoogleForCreators/web-stories-wp/pull/6324/files#diff-970412cd35c9346699038fab952d3c0c9a0e5060a60ed528813def9a00ca157b
-  const weights = ['400', '500', '700'];
+  const weights = ['400', '500', '600', '700'];
   const font = '12px Poppins';
   const fonts = weights.map((weight) => `${weight} ${font}`);
 

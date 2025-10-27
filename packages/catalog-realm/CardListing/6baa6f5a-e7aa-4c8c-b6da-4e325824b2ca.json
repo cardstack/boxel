@@ -1,35 +1,65 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Tennis Camp",
-      "summary": "Premium tennis camp website with vibrant youth-focused design - configure camp details, pricing, and schedules while viewing animated marketing presentations. Features animated gradient backgrounds, floating tennis elements, comprehensive pricing cards, parent testimonials integration, and energetic color schemes optimized for child enrollment experiences.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/tennis-camp-listing/screenshot_01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/tennis-camp-listing/thumbnail.png"
+      "summary": "Premium tennis camp website with vibrant youth-focused design - configure camp details, pricing, and schedules while viewing animated marketing presentations. Features animated gradient backgrounds, floating tennis elements, comprehensive pricing cards, parent testimonials integration, and energetic color schemes optimized for child enrollment experiences.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/tennis-camp-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
       "specs.0": {
-        "links": { "self": "../Spec/a05956e5-e590-4d26-8eb1-63f4c16c263a" }
+        "links": {
+          "self": "../Spec/a05956e5-e590-4d26-8eb1-63f4c16c263a"
+        }
       },
       "publisher": {
-        "links": { "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0" }
-      },
-      "categories.0": {
-        "links": { "self": "../Category/sports-fitness" }
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
       },
       "examples.0": {
         "links": {
           "self": "../tennis-camp/TennisCamp/3e49a817-b623-43f0-8848-b9475b14993c"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/sports-fitness"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

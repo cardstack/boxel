@@ -967,6 +967,9 @@ class Edit extends Component<typeof Spec> {
         font-weight: 500;
         margin-block: 0;
       }
+      :deep(.add-new) {
+        border: 1px solid var(--border, var(--boxel-border-color));
+      }
     </style>
   </template>
 }

@@ -1,17 +1,37 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Golf Scorecard",
-      "summary": "This card logs strokes, pars, and putts across all 18 holes—auto-computing birdies, bogeys, and total scores. Includes live leaderboard views, TV-style overlays, and PGA/USGA branding support. Ideal for tournaments, sports apps, and golf analytics dashboards.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/golf-scorecard-listing/screenshot_01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/golf-scorecard-listing/thumbnail.png"
+      "summary": "This card logs strokes, pars, and putts across all 18 holes—auto-computing birdies, bogeys, and total scores. Includes live leaderboard views, TV-style overlays, and PGA/USGA branding support. Ideal for tournaments, sports apps, and golf analytics dashboards.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/golf-scorecard-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -26,31 +46,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../golf-scorecard/GolfScorecard/428b992e-9e00-42ae-976b-ae08bcd73e4e"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/sports-fitness"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../golf-scorecard/GolfScorecard/428b992e-9e00-42ae-976b-ae08bcd73e4e"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }

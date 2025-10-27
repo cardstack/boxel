@@ -6,13 +6,12 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import HistoryIcon from '@cardstack/boxel-icons/history';
-import XIcon from '@cardstack/boxel-icons/x';
 
 import { restartableTask } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 
 import {
-  Button,
+  ContextButton,
   LoadingIndicator,
   ResizeHandle,
 } from '@cardstack/boxel-ui/components';
@@ -90,33 +89,36 @@ export default class AiAssistantPanel extends Component<Signature> {
             this.aiAssistantPanelService.loadingRooms
             as |pastSessionsLoading|
           }}
-            <Button
+            <ContextButton
               title='Past Sessions'
               class='button past-sessions-button
                 {{if this.hasOtherActiveSessions "has-other-active-sessions"}}'
-              @kind='text-only'
+              @icon={{HistoryIcon}}
+              @label='Past Sessions'
               @size='extra-small'
+              @variant='highlight-icon'
+              @width='14'
+              @height='14'
               @loading={{pastSessionsLoading}}
               @disabled={{this.aiAssistantPanelService.displayRoomError}}
               {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
               data-test-past-sessions-button
               data-test-has-active-sessions={{this.hasOtherActiveSessions}}
-            >
-              {{#unless pastSessionsLoading}}
-                <HistoryIcon />
-              {{/unless}}
-            </Button>
+              aria-expanded='{{this.aiAssistantPanelService.isShowingPastSessions}}'
+            />
           {{/let}}
-          <Button
+          <ContextButton
             title='Close AI Assistant'
-            class='button'
-            @kind='text-only'
+            @icon='close'
             @size='extra-small'
+            @width='18'
+            @height='18'
+            @label='close ai assistant'
+            @variant='highlight-icon'
+            class='button'
             {{on 'click' @onClose}}
             data-test-close-ai-assistant
-          >
-            <XIcon />
-          </Button>
+          />
         </header>
 
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
@@ -297,44 +299,15 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .button {
-        --boxel-button-text-color: var(--boxel-highlight);
-        --boxel-button-padding: 1px 0;
-        --boxel-button-min-width: 0;
-        --boxel-button-min-height: 0;
-        --boxel-loading-indicator-size: 16px;
-
-        border: none;
-        border-radius: var(--boxel-border-radius-xs);
+        --host-outline-offset: 2px;
         transform: translateY(-1px);
       }
-
-      .button:hover {
-        --boxel-button-text-color: var(--boxel-dark);
-
-        background-color: var(--boxel-highlight);
-      }
-
-      .button[disabled] {
-        --boxel-button-text-color: var(--boxel-400);
-
-        background-color: transparent;
-        border-color: transparent;
-      }
-
-      .button svg {
-        width: 18px;
-        height: 18px;
+      .button :deep(svg) {
         stroke-width: 2.5;
       }
-
-      /* This icon looks slightly bigger so this makes it match */
-      .button.past-sessions-button svg {
-        padding: 2px;
-      }
-
-      .button :deep(.loading-indicator) {
-        margin-right: 0;
-        padding-top: 1px;
+      .button :deep(.loading-icon) {
+        width: 16px;
+        height: 16px;
       }
 
       .has-other-active-sessions {

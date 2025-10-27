@@ -50,6 +50,7 @@ import {
   cardTypeIcon,
   CommandContext,
   realmURL,
+  localId as localIdSymbol,
   CardContextName,
   CardCrudFunctionsContextName,
   getCardMenuItems,
@@ -130,7 +131,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked private selectedCards = new TrackedSet<string>();
 
   private normalizeCardId(cardDefOrId: CardDefOrId): string {
-    return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+    if (typeof cardDefOrId === 'string') {
+      return cardDefOrId;
+    }
+    return cardDefOrId.id ?? cardDefOrId[localIdSymbol];
   }
 
   @tracked private showDeleteModal = false;

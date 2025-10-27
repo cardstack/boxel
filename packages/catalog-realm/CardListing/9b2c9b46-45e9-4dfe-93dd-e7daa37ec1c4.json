@@ -10,15 +10,15 @@
     "attributes": {
       "name": "Product Rotator",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/product-rotator-listing/screenshot_01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/product-rotator-listing/screenshot_02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/product-rotater-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/product-rotater-listing/screenshot_02.png"
       ],
       "summary": "This software enables users to upload reference images and describe a product to generate, rotate, and export high-quality 360-degree digital representations for use in product catalogs.",
       "cardInfo": {
         "notes": null,
         "title": "Product Rotator",
         "description": "This software enables users to upload reference images and describe a product to generate, rotate, and export high-quality 360-degree digital representations for use in product catalogs.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/product-rotator-listing/thumbnail.png"
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/product-rotater-listing/thumbnail.png"
       }
     },
     "relationships": {
