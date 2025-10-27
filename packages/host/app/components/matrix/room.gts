@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -81,7 +82,6 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
-import { array } from '@ember/helper';
 
 interface Signature {
   Element: HTMLElement;
@@ -179,7 +179,7 @@ export default class Room extends Component<Signature> {
               <NewSession @sendPrompt={{this.sendMessage}} />
             {{/each}}
 
-            {{#if this.messageSendError}}
+            {{#if this.shouldShowMessageSendError}}
               <Alert @type='error' as |Alert|>
                 <Alert.Messages @messages={{array this.messageSendError}} />
               </Alert>
@@ -474,7 +474,13 @@ export default class Room extends Component<Signature> {
   > = new WeakMap();
 
   @tracked private messageSendError: string | undefined = undefined;
-
+  private get shouldShowMessageSendError() {
+    if (!this.messageSendError) {
+      return false;
+    }
+    let lastMessage = this.messages[this.messages.length - 1];
+    return lastMessage?.errorMessage === undefined;
+  }
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
@@ -999,7 +1005,7 @@ export default class Room extends Component<Signature> {
       let cardsToSendCopy = cardsToSend ? [...cardsToSend] : undefined;
 
       // We copy the draft and attachments into local variables before clearing them.
-      // Clearing immediately empties the input and attachment pills so the user sees that their message is “in flight”.
+      // Clearing immediately empties the input so the user sees that their message is “in flight”.
       // If the send fails, we restore those saved values in the catch block so nothing is lost.
       this.matrixService.setMessageToSend(this.args.roomId, undefined);
       this.matrixService.cardsToSend.set(this.args.roomId, undefined);
@@ -1050,6 +1056,7 @@ export default class Room extends Component<Signature> {
           context,
         );
       } catch (e) {
+        // debugger;
         console.error(e);
         this.messageSendError =
           'There was an error sending your message. Please try again.';

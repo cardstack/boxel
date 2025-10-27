@@ -211,6 +211,8 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       .dom('[data-test-message-field]')
       .hasValue(failingMessage, 'prompt is not lost after sending failed');
 
+    await settled();
+
     assert.dom('[data-test-card-error]').containsText('Failed to send');
     assert.dom('[data-test-alert-action-button="Retry"]').exists();
     assert
