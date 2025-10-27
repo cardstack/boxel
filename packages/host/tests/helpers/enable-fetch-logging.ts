@@ -2,6 +2,65 @@ import QUnit from 'qunit';
 
 let teardown: (() => void) | undefined;
 
+function describeError(error: unknown): string {
+  if (!error) {
+    return '<unknown error>';
+  }
+
+  if (error instanceof Error) {
+    const segments: string[] = [`${error.name}: ${error.message}`];
+
+    const cause = (error as { cause?: unknown }).cause;
+    if (cause && typeof cause === 'object') {
+      const causeObj = cause as Record<string, unknown>;
+      const causeSegments: string[] = [];
+      if (typeof causeObj.message === 'string') {
+        causeSegments.push(causeObj.message);
+      }
+      if (typeof causeObj.code === 'string') {
+        causeSegments.push(`code=${causeObj.code}`);
+      }
+      if (
+        typeof causeObj.errno === 'number' ||
+        typeof causeObj.errno === 'string'
+      ) {
+        causeSegments.push(`errno=${causeObj.errno}`);
+      }
+      if (typeof causeObj.syscall === 'string') {
+        causeSegments.push(`syscall=${causeObj.syscall}`);
+      }
+      if (typeof causeObj.address === 'string') {
+        causeSegments.push(`address=${causeObj.address}`);
+      }
+      if (
+        typeof causeObj.port === 'number' ||
+        (typeof causeObj.port === 'string' && causeObj.port !== '')
+      ) {
+        causeSegments.push(`port=${causeObj.port}`);
+      }
+      if (causeSegments.length > 0) {
+        segments.push(`(cause: ${causeSegments.join(', ')})`);
+      }
+    }
+
+    if (error.stack) {
+      segments.push(`stack=${error.stack}`);
+    }
+
+    return segments.join(' ');
+  }
+
+  if (typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return '<non-serializable error object>';
+    }
+  }
+
+  return String(error);
+}
+
 export default function enableFetchLogging() {
   if (teardown) return;
 
@@ -42,8 +101,8 @@ export default function enableFetchLogging() {
           entry.url,
           entry.status ?? 'rejected',
           entry.error
-            ? JSON.stringify(entry.error)
-            : JSON.stringify(entry.body),
+            ? describeError(entry.error)
+            : (entry.body ?? '<empty body>'),
         );
       }
       console.groupEnd();
