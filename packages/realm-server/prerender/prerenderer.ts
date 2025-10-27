@@ -766,7 +766,7 @@ export class Prerenderer {
             `Recovered prerender output for ${url} after timeout; proceeding with captured DOM`,
           );
         } else {
-          let { html, ...loggableDiagnostics } = diagnostics;
+          let { html: _remove, ...loggableDiagnostics } = diagnostics;
           log.warn(
             `Could not recover prerender output for ${url} after timeout:\n${JSON.stringify(loggableDiagnostics, null, 2)}`,
           );
