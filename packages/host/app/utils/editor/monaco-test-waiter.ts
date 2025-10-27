@@ -4,6 +4,17 @@ import { isTesting } from '@embroider/macros';
 
 import type * as MonacoSDK from 'monaco-editor';
 
+interface MonacoTokenization {
+  forceTokenization(lineCount: number): void;
+  backgroundTokenizationState?: number;
+}
+
+type TokenizationCapableModel = MonacoSDK.editor.ITextModel & {
+  tokenization?: MonacoTokenization;
+};
+
+const BACKGROUND_TOKENIZATION_STATE_COMPLETED = 2;
+
 /**
  * Monaco Editor Test Waiter Strategy
  *
@@ -69,41 +80,73 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       const targetEditor =
         'getModifiedEditor' in editor ? editor.getModifiedEditor() : editor;
 
-      // Synchronously add syntax highlighting
+      // Synchronously add syntax highlighting and tokenization (for indentation lines)
       const forceFullTokenization = (
         codeEditor: MonacoSDK.editor.ICodeEditor,
       ) => {
-        const model = codeEditor.getModel();
+        const model = codeEditor.getModel() as TokenizationCapableModel | null;
         if (!model) return;
 
         const lineCount = model.getLineCount();
         if (lineCount <= 0) return;
 
-        type TokenizationCapableModel = MonacoSDK.editor.ITextModel & {
-          tokenization?: { forceTokenization(lineCount: number): void };
-        };
+        model.tokenization?.forceTokenization(lineCount);
+      };
 
-        (model as TokenizationCapableModel).tokenization?.forceTokenization(
-          lineCount,
-        );
+      const editorsToValidate: MonacoSDK.editor.ICodeEditor[] =
+        'getOriginalEditor' in editor
+          ? [editor.getOriginalEditor(), targetEditor]
+          : [targetEditor];
+
+      const editorHasCompleteContent = (
+        codeEditor: MonacoSDK.editor.ICodeEditor,
+      ): boolean => {
+        const layoutInfo = codeEditor.getLayoutInfo();
+        const contentHeight = codeEditor.getContentHeight();
+
+        if (layoutInfo.width <= 0 || layoutInfo.height <= 0) {
+          return false;
+        }
+
+        if (contentHeight <= 0) {
+          return false;
+        }
+
+        const model = codeEditor.getModel() as TokenizationCapableModel | null;
+        if (!model) {
+          return true;
+        }
+
+        const tokenizationState =
+          model.tokenization?.backgroundTokenizationState;
+        if (
+          tokenizationState !== undefined &&
+          tokenizationState !== BACKGROUND_TOKENIZATION_STATE_COMPLETED
+        ) {
+          return false;
+        }
+
+        const lineCount = model.getLineCount();
+        if (lineCount === 0) {
+          return true;
+        }
+
+        const expectedHeight =
+          codeEditor.getTopForLineNumber(lineCount + 1) ?? contentHeight;
+
+        return contentHeight >= expectedHeight;
       };
 
       const checkInitComplete = () => {
         if (isInitialized) return;
 
-        // Editor is considered initialized when it has content dimensions
-        // and layout is complete
-        const contentHeight = targetEditor.getContentHeight();
-        const layoutInfo = targetEditor.getLayoutInfo();
+        const allEditorsReady = editorsToValidate.every(
+          editorHasCompleteContent,
+        );
 
-        if (
-          contentHeight > 0 &&
-          layoutInfo.width > 0 &&
-          layoutInfo.height > 0
-        ) {
-          forceFullTokenization(targetEditor);
-          if ('getOriginalEditor' in editor) {
-            forceFullTokenization(editor.getOriginalEditor());
+        if (allEditorsReady) {
+          for (const codeEditor of editorsToValidate) {
+            forceFullTokenization(codeEditor);
           }
 
           isInitialized = true;
@@ -132,9 +175,8 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       // Fallback timeout to prevent hanging tests
       const timeoutId = setTimeout(() => {
         if (!isInitialized) {
-          forceFullTokenization(targetEditor);
-          if ('getOriginalEditor' in editor) {
-            forceFullTokenization(editor.getOriginalEditor());
+          for (const codeEditor of editorsToValidate) {
+            forceFullTokenization(codeEditor);
           }
           isInitialized = true;
           layoutDisposable.dispose();
