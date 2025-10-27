@@ -57,19 +57,22 @@ export class Pet extends CardDef {
 // authored per-owner, and preferredSpecies enum options come from that list.
 export class PetOwner extends CardDef {
   @field name = contains(StringField);
-  @field allowedSpecies = containsMany(StringField);
-  @field preferredSpecies = contains(SpeciesField, {
+  @field allowedSpecies: string[] = containsMany(StringField);
+  @field preferredSpecies: string = contains(SpeciesField, {
     configuration: enumConfig((self: PetOwner) => ({
       enum: { options: self.allowedSpecies, unsetLabel: 'Pick a pal…' },
     })),
   });
 
   static embedded = class Embedded extends Component<typeof this> {
+    get allowedList() {
+      return (this.args.model.allowedSpecies ?? []).join(', ');
+    }
     <template>
       <div class='owner-card'>
         <strong>{{@model.name}}</strong>
         <div class='meta'>
-          Allowed: {{@model.allowedSpecies}}
+          Allowed: {{this.allowedList}}
         </div>
         <div>
           Preferred: <@fields.preferredSpecies @format='atom' />

@@ -775,7 +775,9 @@ module('Integration | enumField', function (hooks) {
 
     // Atom fallback in embedded/atom format renders a dash; also carries a marker
     await renderCard(loader, a, 'embedded');
-    assert.dom('.option-title').hasText('—', 'atom renders unset fallback dash');
+    assert
+      .dom('.option-title')
+      .hasText('—', 'atom renders unset fallback dash');
 
     // Usage-level override via configuration.enum.unsetLabel
     class TaskB extends CardDef {
@@ -880,7 +882,9 @@ module('Integration | enumField', function (hooks) {
 
     let t = new Task({ priority: null });
     await renderCard(loader, t, 'embedded');
-    assert.dom('.option-title').hasText('—', 'atom renders default dash for null');
+    assert
+      .dom('.option-title')
+      .hasText('—', 'atom renders default dash for null');
   });
 
   test('atom-only: renders String(@model) when value not in options (value fallback)', async function (assert) {
