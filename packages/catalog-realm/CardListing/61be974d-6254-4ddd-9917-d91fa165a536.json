@@ -24,9 +24,9 @@
       }
     },
     "relationships": {
-      "skills": {
+      "skills.0": {
         "links": {
-          "self": null
+          "self": "../adventure/Skill/adventure-game-master"
         }
       },
       "tags.0": {

@@ -23,6 +23,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { restartableTask, timeout } from 'ember-concurrency';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open';
+import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
 import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-instance';
@@ -337,33 +338,29 @@ class AdventureIsolated extends Component<typeof Adventure> {
         },
       });
 
-      // Open assistant with GM skill (latest-only fields)
       const gmSkillId = new URL(
         './Skill/adventure-game-master',
         import.meta.url,
       ).href;
-      const kickoffPrompt = `You are the Adventure Game Master. Use the attached Adventure card.
+      const kickoffPrompt = `Let's begin the adventure`;
 
-Start Turn 1 using the selected scenario as seed. End with 2–4 choices and allow open-ended replies.
+      const { roomId } = await new CreateAiAssistantRoomCommand(ctx).execute({
+        name: `Adventure: ${chosen.title}`,
+      });
 
-GUIDANCE FIELDS (read from customAdventure.tags/customAdventure.imageStyles on the card):
-- customAdventure.tags: Use as narrative guidance (tone, setting, atmosphere, POV, theme)
-- customAdventure.imageStyles: Include in lastImagePrompt with concrete scene nouns
-
-PATCH ONLY latest fields via patch-fields (no arrays):
-- lastTurnNumber = 1
-- lastNarration = your Markdown story (shaped by non-visual tags)
-- lastIsPlayerTurn = false
-- lastTimestamp = new ISO string
-- lastImagePrompt = short, concrete prompt (include imageStyles + visual tags; ≤120 chars)
-- lastCloudflareImage = null
-- currentTurn = 1
-- totalTurns = max(totalTurns, 1)
-
-Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
+      if (roomId) {
+        this.roomId = roomId;
+        await patch.execute({
+          cardId: this.args.model.id,
+          patch: { attributes: { chatRoomId: this.roomId } },
+        });
+        const set = new SetActiveLLMCommand(ctx);
+        await set.execute({ roomId, mode: 'act' });
+      }
 
       const use = new UseAiAssistantCommand(ctx);
       const opts: any = {
+        roomId: this.roomId || 'new',
         openRoom: true,
         attachedCards: [this.args.model as CardDef],
         prompt: kickoffPrompt,
@@ -377,18 +374,7 @@ Do NOT call image APIs; UI handles rendering from lastImagePrompt.`;
         opts.roomId = 'new';
         opts.roomName = `Adventure: ${chosen.title}`;
       }
-      const result = await use.execute(opts);
-      this.roomId = result.roomId;
-
-      // Persist room id
-      await patch.execute({
-        cardId: this.args.model.id,
-        patch: { attributes: { chatRoomId: this.roomId } },
-      });
-
-      // Ensure agentic mode
-      const set = new SetActiveLLMCommand(ctx);
-      await set.execute({ roomId: this.roomId, mode: 'act' });
+      await use.execute(opts);
     } catch (e: any) {
       console.error('Adventure start error:', e);
       alert(`Failed to start: ${e?.message || String(e)}`);
