@@ -3303,9 +3303,6 @@ module('Integration | operator-mode', function (hooks) {
     document
       .querySelector('[data-test-list="nicknames"]')
       ?.scrollIntoView({ block: 'center' });
-    document
-      .querySelector('[data-test-list="favoriteGames"]')
-      ?.scrollIntoView({ block: 'center' });
 
     assert
       .dom('[data-test-list="nicknames"] [data-test-item]')
@@ -3373,7 +3370,7 @@ module('Integration | operator-mode', function (hooks) {
       });
     };
     await dragAndDrop(
-      '[data-test-list="nicknames"] [data-test-sort="2"]',
+      '[data-test-list="nicknames"] [data-test-sort="1"]',
       '[data-test-list="nicknames"] [data-test-sort="0"]',
     );
 
@@ -3382,13 +3379,13 @@ module('Integration | operator-mode', function (hooks) {
       .exists({ count: 3 });
     assert
       .dom(`[data-test-list="nicknames"] [data-test-item="0"] input`)
-      .hasValue('Comet');
+      .hasValue('Bolt');
     assert
       .dom(`[data-test-list="nicknames"] [data-test-item="1"] input`)
       .hasValue('Ace');
     assert
       .dom(`[data-test-list="nicknames"] [data-test-item="2"] input`)
-      .hasValue('Bolt');
+      .hasValue('Comet');
 
     assert
       .dom(`[data-test-list="favoriteGames"] [data-test-item="0"] input`)
@@ -3407,11 +3404,11 @@ module('Integration | operator-mode', function (hooks) {
       .exists({ count: 3 });
     assert
       .dom(`[data-test-plural-view-field="nicknames"]`)
-      .containsText('Comet');
+      .containsText('Bolt');
     assert.dom(`[data-test-plural-view-field="nicknames"]`).containsText('Ace');
     assert
       .dom(`[data-test-plural-view-field="nicknames"]`)
-      .containsText('Bolt');
+      .containsText('Comet');
 
     assert
       .dom(
