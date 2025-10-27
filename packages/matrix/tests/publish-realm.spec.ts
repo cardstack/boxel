@@ -134,7 +134,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/index',
+      'http://user1.localhost:4205/new-workspace/',
     );
     await newTab.close();
     await page.bringToFront();
@@ -164,7 +164,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/index',
+      'http://user1.localhost:4205/new-workspace/',
     );
     await newTab.close();
     await page.bringToFront();
