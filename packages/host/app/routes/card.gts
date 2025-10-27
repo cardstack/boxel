@@ -42,7 +42,8 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
   }
 
   async model(params: { path: string; hostModeStack?: string }) {
-    let cardUrl = `${this.hostModeService.hostModeOrigin}/${params.path}`;
+    let path = params.path ?? '';
+    let cardUrl = `${this.hostModeService.hostModeOrigin}/${path}`;
 
     return this.store.get(cardUrl);
   }

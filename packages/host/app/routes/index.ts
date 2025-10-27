@@ -18,7 +18,6 @@ import RealmServerService from '../services/realm-server';
 
 import type BillingService from '../services/billing-service';
 import type CardService from '../services/card-service';
-import type HostModeService from '../services/host-mode-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
@@ -36,7 +35,6 @@ export default class Index extends Route {
     clientSecret: { refreshModel: true },
   };
 
-  @service declare private hostModeService: HostModeService;
   @service declare private matrixService: MatrixService;
   @service declare private billingService: BillingService;
   @service declare private cardService: CardService;
@@ -59,15 +57,6 @@ export default class Index extends Route {
     path: string;
     operatorModeState: string;
   }) {
-    if (this.hostModeService.isActive) {
-      // Duplicated from routes/card
-      await this.realmServer.ready;
-
-      let cardUrl = `${this.hostModeService.hostModeOrigin}/`;
-
-      return this.store.get(cardUrl);
-    }
-
     let { operatorModeState, cardPath } = params;
 
     if (!this.didMatrixServiceStart) {
