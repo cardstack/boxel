@@ -206,7 +206,7 @@ class AdventureIsolated extends Component<typeof Adventure> {
     this.showResetMenu = false;
   };
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: any, args: any) {
     super(owner, args);
     this.autoImageLoop.perform();
     this.sanitizeOneShotArrays();
