@@ -337,6 +337,7 @@ export function getBoxComponent(
                             @set={{model.set}}
                             @fieldName={{model.name}}
                             @context={{context}}
+                            @configuration={{this.resolvedConfiguration}}
                             @createCard={{cardCrudFunctions.createCard}}
                             @viewCard={{cardCrudFunctions.viewCard}}
                             @saveCard={{cardCrudFunctions.saveCard}}

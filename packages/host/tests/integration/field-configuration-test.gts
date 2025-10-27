@@ -5,7 +5,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from '@cardstack/runtime-common/realm';
 
 import {
   testRealmURL,
@@ -20,6 +19,7 @@ import {
   field,
   contains,
   linksTo,
+  linksToMany,
   CardDef,
   FieldDef,
   Component,
@@ -127,7 +127,7 @@ module('Integration | field configuration', function (hooks) {
       };
     }
 
-    let setup = await setupIntegrationTestRealm({
+    await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'parent.gts': { ParentCard },
@@ -347,5 +347,164 @@ module('Integration | field configuration', function (hooks) {
     assert
       .dom('[data-test-reactive-parent-self] [data-test-has-purple]')
       .hasText('no', 'configuration updates when parent field changes');
+  });
+
+  test('linksTo field passes configuration to embedded card formats', async function (assert) {
+    class InnerCard extends CardDef {
+      static displayName = 'Inner';
+      static embedded = class Embedded extends Component<typeof this> {
+        get tag() {
+          return (this.args.configuration as any)?.presentation?.tag;
+        }
+        <template>
+          <span data-test-inner-config>{{this.tag}}</span>
+        </template>
+      };
+      static fitted = InnerCard.embedded;
+      static atom = InnerCard.embedded;
+    }
+
+    class ParentWithLink extends CardDef {
+      @field title = contains(StringField);
+      @field child = linksTo(InnerCard, {
+        configuration: { presentation: { tag: 'from-linksTo' } },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-parent-links-to>
+            <@fields.child />
+          </div>
+        </template>
+      };
+    }
+
+    let inner = new InnerCard({});
+    let parent = new ParentWithLink({ title: 't', child: inner });
+    await renderCard(loader, parent, 'isolated');
+
+    assert
+      .dom('[data-test-parent-links-to] [data-test-inner-config]')
+      .hasText(
+        'from-linksTo',
+        'embedded card receives configuration from linksTo field',
+      );
+  });
+
+  test('linksToMany field passes configuration to embedded card formats', async function (assert) {
+    class InnerCardMany extends CardDef {
+      static displayName = 'InnerMany';
+      static embedded = class Embedded extends Component<typeof this> {
+        get tag() {
+          return (this.args.configuration as any)?.presentation?.tag;
+        }
+        <template>
+          <span data-test-inner-many-config>{{this.tag}}</span>
+        </template>
+      };
+      static fitted = InnerCardMany.embedded;
+      static atom = InnerCardMany.embedded;
+    }
+
+    class ParentWithLinksMany extends CardDef {
+      @field title = contains(StringField);
+      @field children = linksToMany(InnerCardMany, {
+        configuration: { presentation: { tag: 'from-linksToMany' } },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-parent-links-to-many>
+            <@fields.children />
+          </div>
+        </template>
+      };
+    }
+
+    let child1 = new InnerCardMany({});
+    let child2 = new InnerCardMany({});
+    let parent = new ParentWithLinksMany({
+      title: 't',
+      children: [child1, child2],
+    });
+    await renderCard(loader, parent, 'isolated');
+
+    assert
+      .dom('[data-test-parent-links-to-many] [data-test-inner-many-config]')
+      .exists({ count: 2 }, 'renders two embedded cards from linksToMany');
+    assert
+      .dom('[data-test-parent-links-to-many] [data-test-inner-many-config]')
+      .hasText(
+        'from-linksToMany',
+        'embedded cards receive configuration from linksToMany field',
+      );
+  });
+
+  test('merges CardDef-level configuration with linksTo per-usage configuration', async function (assert) {
+    class InnerCardWithConfig extends CardDef {
+      static displayName = 'InnerWithConfig';
+      // Provide CardDef-level configuration that the field resolver will pick up
+      static configuration = (_self: any) => ({
+        presentation: { tag: 'from-carddef', extra: 'keep-me' },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        get tag() {
+          return (this.args.configuration as any)?.presentation?.tag;
+        }
+        get extra() {
+          return (this.args.configuration as any)?.presentation?.extra;
+        }
+        get other() {
+          return (this.args.configuration as any)?.presentation?.other;
+        }
+        <template>
+          <span data-test-merged-tag>{{this.tag}}</span>
+          <span data-test-merged-extra>{{this.extra}}</span>
+          <span data-test-merged-other>{{this.other}}</span>
+        </template>
+      };
+      static fitted = InnerCardWithConfig.embedded;
+      static atom = InnerCardWithConfig.embedded;
+    }
+
+    class ParentWithMergedLink extends CardDef {
+      @field title = contains(StringField);
+      @field child = linksTo(InnerCardWithConfig, {
+        configuration: {
+          presentation: { tag: 'from-linksTo', other: 'present' },
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-parent-merged>
+            <@fields.child />
+          </div>
+        </template>
+      };
+    }
+
+    let inner = new InnerCardWithConfig({});
+    let parent = new ParentWithMergedLink({ title: 't', child: inner });
+    await renderCard(loader, parent, 'isolated');
+
+    // tag should be overridden by per-usage config
+    assert
+      .dom('[data-test-parent-merged] [data-test-merged-tag]')
+      .hasText(
+        'from-linksTo',
+        'per-usage configuration overrides CardDef configuration for overlapping keys',
+      );
+    // extra should be preserved from CardDef configuration due to shallow merge
+    assert
+      .dom('[data-test-parent-merged] [data-test-merged-extra]')
+      .hasText(
+        'keep-me',
+        'non-overlapping keys from CardDef configuration are preserved',
+      );
+    // other should be present from per-usage configuration
+    assert
+      .dom('[data-test-parent-merged] [data-test-merged-other]')
+      .hasText(
+        'present',
+        'non-overlapping keys from per-usage configuration are included',
+      );
   });
 });

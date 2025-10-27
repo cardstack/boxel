@@ -416,7 +416,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
-  // Optional per-usage configuration for this field
   configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
@@ -731,7 +730,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
-  // Optional per-usage configuration for this field
   configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
@@ -934,6 +932,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
     computeVia,
@@ -1299,6 +1298,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
     computeVia,
@@ -1875,7 +1875,6 @@ export function containsMany<FieldT extends FieldDefConstructor>(
         description,
         isUsed,
       });
-      // Save per-usage configuration on field descriptor when provided
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
@@ -1897,7 +1896,6 @@ export function contains<FieldT extends FieldDefConstructor>(
         description,
         isUsed,
       });
-      // Save per-usage configuration on field descriptor when provided
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
@@ -1912,15 +1910,15 @@ export function linksTo<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new LinksTo({
-          cardThunk: cardThunk(cardOrThunk),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new LinksTo({
+        cardThunk: cardThunk(cardOrThunk),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1933,15 +1931,15 @@ export function linksToMany<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new LinksToMany({
-          cardThunk: cardThunk(cardOrThunk),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new LinksToMany({
+        cardThunk: cardThunk(cardOrThunk),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }

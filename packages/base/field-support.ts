@@ -180,7 +180,10 @@ export function shallowMerge<T extends Record<string, any>>(
 export function mergeConfigurations<T extends object>(
   ...fragments: (T | undefined)[]
 ): T | undefined {
-  return fragments.reduce<T | undefined>((acc, next) => shallowMerge(acc as any, next as any) as any, undefined);
+  return fragments.reduce<T | undefined>(
+    (acc, next) => shallowMerge(acc as any, next as any) as any,
+    undefined,
+  );
 }
 
 // Resolves and merges configuration from FieldDef static configuration and per-usage configuration
@@ -202,11 +205,15 @@ export function resolveFieldConfiguration(
     return cached;
   }
 
-  function evalInput<T>(input: ConfigurationInput<T> | undefined): FieldConfiguration | undefined {
+  function evalInput<T>(
+    input: ConfigurationInput<T> | undefined,
+  ): FieldConfiguration | undefined {
     if (!input) return undefined;
     try {
       if (typeof input === 'function') {
-        return (input as (self: Readonly<T>) => FieldConfiguration | undefined)(instance as unknown as T);
+        return (input as (self: Readonly<T>) => FieldConfiguration | undefined)(
+          instance as unknown as T,
+        );
       } else {
         return input as FieldConfiguration;
       }
@@ -220,11 +227,18 @@ export function resolveFieldConfiguration(
   }
 
   // field.card is the FieldDef subclass; it may optionally define a static configuration
-  let fromFieldDef = evalInput((field.card as any).configuration as ConfigurationInput<any> | undefined);
+  let fromFieldDef = evalInput(
+    (field.card as any).configuration as ConfigurationInput<any> | undefined,
+  );
   // per-usage configuration stored on the field descriptor
-  let fromContains = evalInput(field.configuration as ConfigurationInput<any> | undefined);
+  let fromFieldUsage = evalInput(
+    field.configuration as ConfigurationInput<any> | undefined,
+  );
 
-  let merged = mergeConfigurations<FieldConfiguration>(fromFieldDef, fromContains);
+  let merged = mergeConfigurations<FieldConfiguration>(
+    fromFieldDef,
+    fromFieldUsage,
+  );
   // Cache result for this tick; will be invalidated on notifyCardTracking
   cacheForInstance.set(field.name, merged);
   return merged;
