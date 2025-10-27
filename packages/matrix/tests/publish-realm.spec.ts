@@ -88,6 +88,11 @@ test.describe('Publish realm', () => {
     await expect(newTab).toHaveURL(
       'http://user1.localhost:4205/new-workspace/',
     );
+    await expect(
+      newTab.locator(
+        '[data-test-card="http://user1.localhost:4205/new-workspace/"]',
+      ),
+    ).toBeVisible();
     await newTab.close();
     await page.bringToFront();
   });
