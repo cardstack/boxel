@@ -1889,7 +1889,10 @@ export default class MatrixService extends Service {
     }
     let systemCard = await this.store.get<SystemCard>(systemCardId);
     if (isCardErrorJSONAPI(systemCard)) {
-      console.error('Error loading system card:', systemCard);
+      console.error(
+        'Error loading system card:',
+        JSON.stringify(systemCard, null, 2),
+      );
       return;
     }
 
