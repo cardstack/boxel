@@ -334,6 +334,7 @@ export function getContainsManyComponent({
                 {{effectiveFormat}}-format
                 {{unless arrayField.children.length "empty"}}'
               data-test-plural-view={{field.fieldType}}
+              data-test-plural-view-field={{field.name}}
               data-test-plural-view-format={{effectiveFormat}}
               ...attributes
             >
