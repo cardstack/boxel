@@ -10,7 +10,7 @@ import { type Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
-export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 15_000);
+export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 10_000);
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
 
@@ -20,6 +20,7 @@ export interface RenderCapture {
   alive?: 'true' | 'false';
   id?: string;
   nonce?: string;
+  timedOut?: boolean;
 }
 
 export interface CaptureOptions {
@@ -499,18 +500,36 @@ export async function withTimeout<T>(
 
     let dom = await page.evaluate(() => {
       let el = document.querySelector('[data-prerender]');
-      return el?.outerHTML;
+      if (el) {
+        return el.outerHTML;
+      }
+      let err = document.querySelector('[data-prerender-error]');
+      return err?.outerHTML ?? null;
     });
-    log.warn(`render of ${id} timed out with DOM:\n${dom?.trim()}`);
-    return {
+    let docsInFlight = await page.evaluate(() => {
+      try {
+        return (globalThis as any).__docsInFlight();
+      } catch (error) {
+        return null;
+      }
+    });
+    log.warn(
+      `render of ${id} timed out with DOM:\n${dom?.trim()}\nDocs in flight: ${docsInFlight}`,
+    );
+    let timeoutError: RenderError = {
+      type: 'error',
       error: {
         id,
         status: 504,
         title: 'Render timeout',
         message,
+        additionalErrors: null,
       },
       evict: true,
-    } as RenderError;
+    };
+    (timeoutError as any).capturedDom = dom ?? null;
+    (timeoutError as any).docsInFlight = docsInFlight ?? null;
+    return timeoutError;
   } else {
     return result as T;
   }
