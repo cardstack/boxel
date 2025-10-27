@@ -727,21 +727,20 @@ module(basename(__filename), function () {
           recovered.pool.timedOut,
           'pool still notes timeout when recovery occurs',
         );
-        assert.true(
+        assert.false(
           recovered.pool.evicted,
-          'realm evicted after recovering from timeout',
+          'realm not evicted after recovering from timeout',
         );
 
-        // ensure we can render again after eviction
         let next = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: `${realmURL2}1`,
           userId: testUserId,
           permissions,
         });
-        assert.false(
+        assert.true(
           next.pool.reused,
-          'subsequent render uses a fresh page after eviction',
+          'subsequent render reuses pooled page after recovery',
         );
       });
 

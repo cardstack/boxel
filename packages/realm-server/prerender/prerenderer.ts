@@ -732,6 +732,7 @@ export class Prerenderer {
     );
     let recoveredFromTimeout = false;
     let timeoutErrorForEviction: RenderError | undefined;
+    let shouldEvictAfterTimeout = true;
     if (isRenderError(result) && result.error.title === 'Render timeout') {
       timeoutErrorForEviction = result;
       let capturedDom = (result as any)?.capturedDom as string | undefined;
@@ -760,15 +761,10 @@ export class Prerenderer {
         if (recovered) {
           recoveredFromTimeout = true;
           result = recovered;
-          pendingEviction = timeoutErrorForEviction;
+          shouldEvictAfterTimeout = false;
           captureOptions.simulateTimeoutMs = undefined;
           log.warn(
             `Recovered prerender output for ${url} after timeout; proceeding with captured DOM`,
-          );
-        } else {
-          let { html: _remove, ...loggableDiagnostics } = diagnostics;
-          log.warn(
-            `Could not recover prerender output for ${url} after timeout:\n${JSON.stringify(loggableDiagnostics, null, 2)}`,
           );
         }
       }
@@ -794,7 +790,9 @@ export class Prerenderer {
           markTimeout(timeoutErrorForEviction);
           poolInfo.timedOut = true;
           capture.timedOut = true;
-          pendingEviction = pendingEviction ?? timeoutErrorForEviction;
+          if (shouldEvictAfterTimeout) {
+            pendingEviction = pendingEviction ?? timeoutErrorForEviction;
+          }
         }
       } else {
         let capErr = this.#captureToError(capture);
