@@ -23,6 +23,11 @@ if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
 }
 
+if (process.env.USE_HEADLESS_CHROME_INDEXING) {
+  // in node context this is a boolean
+  (globalThis as any).__useHeadlessChromePrerender = true;
+}
+
 const REALM_SERVER_SECRET_SEED = process.env.REALM_SERVER_SECRET_SEED;
 if (!REALM_SERVER_SECRET_SEED) {
   console.error(
