@@ -97,8 +97,12 @@ test.describe('Publish realm', () => {
     await page.bringToFront();
   });
 
-  test('it validates and claims a custom subdomain', async ({ page }) => {
+  test('it validates, claims, and publishes to a custom subdomain', async ({
+    page,
+  }) => {
     await openPublishRealmModal(page);
+
+    let newTabPromise = page.waitForEvent('popup');
 
     await page.locator('[data-test-custom-subdomain-setup-button]').click();
 
@@ -125,6 +129,23 @@ test.describe('Publish realm', () => {
     await expect(
       page.locator('[data-test-custom-subdomain-input]'),
     ).toHaveCount(0);
+
+    await page.locator('[data-test-custom-subdomain-checkbox]').click();
+    await page.locator('[data-test-publish-button]').click();
+
+    let newTab = await newTabPromise;
+    await newTab.waitForLoadState();
+
+    await expect(newTab).toHaveURL(
+      'http://acceptable-subdomain.localhost:4205/',
+    );
+    await expect(
+      newTab.locator(
+        '[data-test-card="http://acceptable-subdomain.localhost:4205/"]',
+      ),
+    ).toBeVisible();
+    await newTab.close();
+    await page.bringToFront();
   });
 
   test('open site popover opens with shift-click', async ({ page }) => {
