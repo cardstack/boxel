@@ -3,7 +3,10 @@ import Service from '@ember/service';
 import window from 'ember-window-mock';
 import { v4 as uuidv4 } from 'uuid';
 
-import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';
+import {
+  AiAssistantMessageDrafts,
+  CurrentRoomIdPersistenceKey,
+} from '../utils/local-storage-keys';
 
 export default class LocalPersistenceService extends Service {
   // Using sessionStorage for agent id because we want:
@@ -40,6 +43,48 @@ export default class LocalPersistenceService extends Service {
     }
     window.sessionStorage.setItem('currentRoomId', roomId);
     window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
+  }
+
+  getMessageDraft(roomId: string) {
+    return this.readMessageDrafts()[roomId];
+  }
+
+  setMessageDraft(roomId: string, message: string | undefined) {
+    let drafts = this.readMessageDrafts();
+    if (message && message.length > 0) {
+      drafts[roomId] = message;
+    } else {
+      delete drafts[roomId];
+    }
+    this.writeMessageDrafts(drafts);
+  }
+
+  private readMessageDrafts() {
+    let drafts = window.localStorage.getItem(AiAssistantMessageDrafts);
+    if (!drafts) {
+      return {} as Record<string, string>;
+    }
+
+    try {
+      let parsed = JSON.parse(drafts);
+      return parsed && typeof parsed === 'object'
+        ? (parsed as Record<string, string>)
+        : {};
+    } catch {
+      window.localStorage.removeItem(AiAssistantMessageDrafts);
+      return {};
+    }
+  }
+
+  private writeMessageDrafts(drafts: Record<string, string>) {
+    if (Object.keys(drafts).length === 0) {
+      window.localStorage.removeItem(AiAssistantMessageDrafts);
+      return;
+    }
+    window.localStorage.setItem(
+      AiAssistantMessageDrafts,
+      JSON.stringify(drafts),
+    );
   }
 }
 

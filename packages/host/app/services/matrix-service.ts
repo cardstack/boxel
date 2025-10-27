@@ -207,6 +207,23 @@ export default class MatrixService extends Service {
     this.#ready = this.loadState.perform();
   }
 
+  setMessageToSend(roomId: string, message: string | undefined) {
+    if (message === undefined) {
+      this.messagesToSend.delete(roomId);
+    } else {
+      this.messagesToSend.set(roomId, message);
+    }
+    this.localPersistenceService.setMessageDraft(roomId, message);
+  }
+
+  getMessageToSend(roomId: string) {
+    if (this.messagesToSend.has(roomId)) {
+      return this.messagesToSend.get(roomId);
+    }
+
+    return this.localPersistenceService.getMessageDraft(roomId);
+  }
+
   private setAgentId() {
     this.agentId = this.localPersistenceService.getAgentId();
   }
