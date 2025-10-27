@@ -1221,9 +1221,24 @@ export class Realm {
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
 
     try {
-      // for legacy indexer: local requests are allowed to query the realm as the index is being built up
-      if (!isLocal && !(globalThis as any).__useHeadlessChromePrerender) {
-        if (!request.headers.get('X-Boxel-Building-Index')) {
+      let headlessChromeFlag = (globalThis as any).__useHeadlessChromePrerender;
+      let isHeadlessChromePrerender =
+        typeof headlessChromeFlag === 'function'
+          ? headlessChromeFlag()
+          : Boolean(headlessChromeFlag);
+      let isCardSourceRequest =
+        request.headers.get('accept')?.includes(SupportedMimeType.CardSource) ??
+        false;
+      // Headless Chrome prerenders read card source directly from disk, so we can skip the startup wait but must still enforce permissions.
+      let shouldSkipStartupWait =
+        isHeadlessChromePrerender && isCardSourceRequest;
+
+      if (!isLocal) {
+        if (
+          !shouldSkipStartupWait &&
+          !request.headers.get('X-Boxel-Building-Index')
+        ) {
+          // for legacy indexer: local requests are allowed to query the realm as the index is being built up
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
             new Promise((resolve) =>
