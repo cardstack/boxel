@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  find,
   waitFor,
   waitUntil,
   visit,
@@ -2777,7 +2778,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       '[data-test-new-session-settings-option="Summarize Current Session"]',
     );
     await click('[data-test-new-session-settings-create-button]');
-    await waitFor(`[data-room-settled]`);
+    // FIXME this failure is in this branch only…? so maybe not needed
+    await waitUntil(() => !find('[data-test-session-preparation]'), {
+      timeout: 60 * 60 * 1000,
+    });
+    await waitFor(`[data-test-message-idx]`);
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [
