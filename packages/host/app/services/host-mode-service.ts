@@ -108,7 +108,14 @@ export default class HostModeService extends Service {
       return baseURL;
     }
 
-    return baseURL + cardId.replace(this.realmURL, '');
+    let fullURL = baseURL + cardId.replace(this.realmURL, '');
+
+    if (fullURL === `${baseURL}index`) {
+      // Strip trailing `/index` for host mode links
+      fullURL = baseURL;
+    }
+
+    return fullURL;
   }
 
   lastPublishedTimestamp(url: string) {
