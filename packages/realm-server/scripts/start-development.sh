@@ -40,15 +40,15 @@ NODE_ENV=development \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/' \
   \
-  --path='../skills-realm/contents' \
-  --username='skills_realm' \
-  --fromUrl='http://localhost:4201/skills/' \
-  --toUrl='http://localhost:4201/skills/' \
-  \
   --path='../catalog-realm' \
   --username='catalog_realm' \
   --fromUrl="${CATALOG_REALM_URL}" \
   --toUrl="${CATALOG_REALM_URL}" \
+  \
+  --path='../skills-realm/contents' \
+  --username='skills_realm' \
+  --fromUrl='http://localhost:4201/skills/' \
+  --toUrl='http://localhost:4201/skills/' \
   \
   ${START_EXPERIMENTS:+--path='../experiments-realm'} \
   ${START_EXPERIMENTS:+--username='experiments_realm'} \
