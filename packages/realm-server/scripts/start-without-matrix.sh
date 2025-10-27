@@ -15,7 +15,7 @@ TEST_REALM_READY="$TEST_REALM$READY_PATH"
 SYNAPSE_URL="http://localhost:8008"
 SMTP_4_DEV_URL="http://localhost:5001"
 
-WAIT_ON_TIMEOUT=1200000 NODE_NO_WARNINGS=1 start-server-and-test \
+WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 start-server-and-test \
   'run-p start:pg start:prerender-dev start:worker-development start:development' \
   "$BASE_REALM_READY|$EXPERIMENTS_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL" \
   'run-p start:worker-test start:test-realms' \
