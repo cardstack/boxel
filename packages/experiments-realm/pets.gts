@@ -60,7 +60,8 @@ export class PetOwner extends CardDef {
   @field allowedSpecies: string[] = containsMany(StringField);
   @field preferredSpecies: string = contains(SpeciesField, {
     configuration: enumConfig((self: PetOwner) => ({
-      enum: { options: self.allowedSpecies, unsetLabel: 'Pick a pal…' },
+      options: self.allowedSpecies,
+      unsetLabel: 'Pick a pal…',
     })),
   });
 
@@ -72,15 +73,23 @@ export class PetOwner extends CardDef {
       <div class='owner-card'>
         <strong>{{@model.name}}</strong>
         <div class='meta'>
-          Allowed: {{this.allowedList}}
+          Allowed:
+          {{this.allowedList}}
         </div>
         <div>
-          Preferred: <@fields.preferredSpecies @format='atom' />
+          Preferred:
+          <@fields.preferredSpecies @format='atom' />
         </div>
       </div>
       <style scoped>
-        .owner-card { display: grid; gap: 0.25rem; }
-        .meta { color: var(--boxel-700); font-size: 0.9em; }
+        .owner-card {
+          display: grid;
+          gap: 0.25rem;
+        }
+        .meta {
+          color: var(--boxel-700);
+          font-size: 0.9em;
+        }
       </style>
     </template>
   };
@@ -110,7 +119,7 @@ const PriorityEnumField = enumField(StringField, {
 export class AppTask extends BaseTask {
   // Override priority with an enum based on StringField
   @field priority = contains(PriorityEnumField, {
-    configuration: enumConfig({ enum: { unsetLabel: 'Choose…' } }),
+    configuration: enumConfig({ unsetLabel: 'Choose…' }),
   });
 
   static embedded = class Embedded extends Component<typeof this> {
@@ -118,7 +127,8 @@ export class AppTask extends BaseTask {
       <div class='task-card'>
         <strong>{{@model.title}}</strong>
         <span>
-          Priority: <@fields.priority @format='atom' />
+          Priority:
+          <@fields.priority @format='atom' />
         </span>
       </div>
     </template>
