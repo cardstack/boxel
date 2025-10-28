@@ -5,7 +5,7 @@ import type { ComponentLike } from '@glint/template';
 
 import { cn, eq } from '../../helpers.ts';
 import { FailureBordered, Warning } from '../../icons.gts';
-import Button from '../button/index.gts';
+import Button, { type BoxelButtonKind } from '../button/index.gts';
 
 interface MessagesSignature {
   Args: {
@@ -19,6 +19,7 @@ interface ActionSignature {
   Args: {
     action?: () => void;
     actionName?: string;
+    kind?: BoxelButtonKind;
   };
   Element: HTMLDivElement;
 }
@@ -87,8 +88,8 @@ const Action: TemplateOnlyComponent<ActionSignature> = <template>
     <Button
       {{on 'click' @action}}
       class='action-button'
-      @size='small'
-      @kind='primary'
+      @size='extra-small'
+      @kind={{@kind}}
       data-test-alert-action-button={{@actionName}}
     >
       {{@actionName}}
@@ -96,13 +97,9 @@ const Action: TemplateOnlyComponent<ActionSignature> = <template>
   {{/if}}
   <style scoped>
     .action-button {
-      --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-      --boxel-button-min-height: max-content;
       --boxel-button-min-width: max-content;
-      border-color: transparent;
       width: fit-content;
       margin-left: auto;
-      font-size: var(--boxel-font-size-xs);
       font-weight: 500;
     }
   </style>
@@ -119,7 +116,12 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     {{yield
-      (hash Messages=(component Messages type=@type) Action=(component Action))
+      (hash
+        Messages=(component Messages type=@type)
+        Action=(component
+          Action kind=(if (eq @type 'warning') 'primary-dark' 'primary')
+        )
+      )
     }}
   </div>
 

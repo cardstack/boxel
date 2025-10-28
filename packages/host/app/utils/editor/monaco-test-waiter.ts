@@ -69,6 +69,25 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       const targetEditor =
         'getModifiedEditor' in editor ? editor.getModifiedEditor() : editor;
 
+      // Synchronously add syntax highlighting
+      const forceFullTokenization = (
+        codeEditor: MonacoSDK.editor.ICodeEditor,
+      ) => {
+        const model = codeEditor.getModel();
+        if (!model) return;
+
+        const lineCount = model.getLineCount();
+        if (lineCount <= 0) return;
+
+        type TokenizationCapableModel = MonacoSDK.editor.ITextModel & {
+          tokenization?: { forceTokenization(lineCount: number): void };
+        };
+
+        (model as TokenizationCapableModel).tokenization?.forceTokenization(
+          lineCount,
+        );
+      };
+
       const checkInitComplete = () => {
         if (isInitialized) return;
 
@@ -82,6 +101,11 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           layoutInfo.width > 0 &&
           layoutInfo.height > 0
         ) {
+          forceFullTokenization(targetEditor);
+          if ('getOriginalEditor' in editor) {
+            forceFullTokenization(editor.getOriginalEditor());
+          }
+
           isInitialized = true;
           this.endAsync(operationId);
         }
@@ -108,6 +132,10 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       // Fallback timeout to prevent hanging tests
       const timeoutId = setTimeout(() => {
         if (!isInitialized) {
+          forceFullTokenization(targetEditor);
+          if ('getOriginalEditor' in editor) {
+            forceFullTokenization(editor.getOriginalEditor());
+          }
           isInitialized = true;
           layoutDisposable.dispose();
           contentSizeDisposable.dispose();

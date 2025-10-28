@@ -151,16 +151,12 @@ export default class RenderRoute extends Route<Model> {
     { id, nonce }: { id: string; nonce: string },
     parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
   ): Promise<Model> {
-    // Opt in to reading the in-progress index, as opposed to the last completed
-    // index. This matters for any related cards that we will be loading, not
-    // for our own card, which we're going to load directly from source.
     if (parsedOptions.clearCache) {
       this.loaderService.resetLoader({
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
     }
-    this.loaderService.setIsIndexing(true);
     if (parsedOptions.clearCache) {
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
