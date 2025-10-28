@@ -17,7 +17,7 @@
         "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/todo-mvc-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -46,14 +46,14 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
-      "categories.0": {
-        "links": {
-          "self": "../Category/project-management"
-        }
-      },
       "examples.0": {
         "links": {
           "self": "../todo-mvc/TodoMvc/56ed8571-7774-4829-989a-ce8fd4530737"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/project-management"
         }
       },
       "cardInfo.theme": {

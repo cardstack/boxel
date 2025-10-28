@@ -1,18 +1,38 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Photo Collage - Minimalist Photography Collection",
-      "summary": "Dynamic photo collage with masonry grid layout - upload multiple images with captions while viewing an adaptive grid display. Features varied sizing patterns, hover-reveal captions, smooth scaling animations, and elegant dark mode aesthetics for professional photo presentations.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/screenshot_02.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/thumbnail.png"
+      "summary": "Dynamic photo collage with masonry grid layout - upload multiple images with captions while viewing an adaptive grid display. Features varied sizing patterns, hover-reveal captions, smooth scaling animations, and elegant dark mode aesthetics for professional photo presentations.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -27,31 +47,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../photo-collage/PhotoCollage/a2c50a4a-67ee-4c84-9a53-fe17243bbc24"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/design-creative"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../photo-collage/PhotoCollage/a2c50a4a-67ee-4c84-9a53-fe17243bbc24"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }

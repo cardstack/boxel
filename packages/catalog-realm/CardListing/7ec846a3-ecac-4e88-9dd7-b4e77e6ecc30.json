@@ -1,19 +1,39 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Cocktail Recipe",
-      "summary": "Professional cocktail recipe manager with authentic speakeasy design - configure ingredients, garnishes, and preparation methods while viewing Waldorf-inspired presentations. Features difficulty ratings, preparation timers, bartender notes, cocktail origin stories, and luxurious dark theme styling for immersive mixology experiences.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/screenshot_02.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/screenshot_03.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/thumbnail.png"
+      "summary": "Professional cocktail recipe manager with authentic speakeasy design - configure ingredients, garnishes, and preparation methods while viewing Waldorf-inspired presentations. Features difficulty ratings, preparation timers, bartender notes, cocktail origin stories, and luxurious dark theme styling for immersive mixology experiences.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -38,21 +58,6 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
-      "categories.0": {
-        "links": {
-          "self": "../Category/home-living"
-        }
-      },
-      "tags": {
-        "links": {
-          "self": null
-        }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
       "examples.0": {
         "links": {
           "self": "../cocktail-recipe/CocktailRecipe/6300ecf1-1577-415e-8802-f0b699d77206"
@@ -67,12 +72,16 @@
         "links": {
           "self": "../cocktail-recipe/CocktailRecipe/d8e252fe-f078-4409-a33a-1fbd088eb26c"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/home-living"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

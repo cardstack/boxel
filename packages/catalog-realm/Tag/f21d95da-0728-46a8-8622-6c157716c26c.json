@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Tag",
+        "module": "../catalog-app/listing/tag"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Poster",
+      "color": null,
+      "cardInfo": {
+        "notes": null,
+        "title": "",
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
