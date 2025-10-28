@@ -1,4 +1,3 @@
-import Route from '@ember/routing/route';
 import RouterService from '@ember/routing/router-service';
 
 import { service } from '@ember/service';
@@ -9,6 +8,10 @@ import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 
 import ENV from '@cardstack/host/config/environment';
+
+import CardRoute from '@cardstack/host/routes/card';
+
+import type HostModeService from '@cardstack/host/services/host-mode-service';
 import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -24,7 +27,8 @@ import type StoreService from '../services/store';
 
 const { hostsOwnAssets } = ENV;
 
-export default class Index extends Route {
+// Extending card route because we want its host mode handling
+export default class Index extends CardRoute {
   queryParams = {
     operatorModeState: {
       refreshModel: true, // Enabled so that back-forward navigation works in operator mode
@@ -40,6 +44,7 @@ export default class Index extends Route {
   @service declare private cardService: CardService;
   @service declare private router: RouterService;
   @service declare private store: StoreService;
+  @service declare private hostModeService: HostModeService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
@@ -57,6 +62,10 @@ export default class Index extends Route {
     path: string;
     operatorModeState: string;
   }) {
+    if (this.hostModeService.isActive) {
+      return super.model(params);
+    }
+
     let { operatorModeState, cardPath } = params;
 
     if (!this.didMatrixServiceStart) {

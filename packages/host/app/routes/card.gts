@@ -29,18 +29,6 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
   @service declare router: RouterService;
   @service declare store: StoreService;
 
-  async beforeModel(transition: Transition) {
-    if (this.hostModeService.isActive) {
-      return this.realmServer.ready;
-    } else {
-      let path = transition.to?.params?.path;
-
-      await this.router.replaceWith('index', {
-        queryParams: { cardPath: path },
-      });
-    }
-  }
-
   async model(params: { path: string; hostModeStack?: string }) {
     let path = params.path ?? '';
     let cardUrl = `${this.hostModeService.hostModeOrigin}/${path}`;

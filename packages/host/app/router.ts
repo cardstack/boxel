@@ -16,14 +16,7 @@ Router.map(function () {
     this.route('error');
   });
   this.route('connect', { path: '/connect/:origin' });
-
   this.route('card', { path: '/*path' });
-
-  // This is needed to serve the index card in host mode, when there is no path
-  this.route('card', { path: '/' });
-
-  // This lets the index route be served by name but not at '/' by default
-  this.route('index');
 
   // this route is empty but lets the application.hbs render, so that the CardPrerender
   // component exists to support the indexer
