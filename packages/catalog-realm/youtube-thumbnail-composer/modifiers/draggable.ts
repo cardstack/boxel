@@ -1,138 +1,111 @@
 import Modifier from 'ember-modifier';
 
-interface DraggableModifierSignature {
+interface DragModifierSignature {
   Element: HTMLElement;
   Args: {
-    Positional: [
-      (deltaX: number, deltaY: number) => void,
-      (() => void)?,
-      (() => void)?,
-    ];
+    Positional: [(x: number, y: number) => void, number, ((w: number, h: number) => void)?];
     Named: Record<string, never>;
   };
 }
 
-export default class DraggableModifier extends Modifier<DraggableModifierSignature> {
+export class DragModifier extends Modifier<DragModifierSignature> {
   modify(
     element: HTMLElement,
-    [
-      onDrag,
-      onDragStart,
-      onDragEnd,
-    ]: DraggableModifierSignature['Args']['Positional'],
+    [onDrag, scaleRatio, onResize]: DragModifierSignature['Args']['Positional'],
   ) {
     if (typeof onDrag !== 'function') {
-      console.warn('DraggableModifier: onDrag callback missing');
+      console.warn('DragModifier: onDrag callback missing');
       return;
     }
 
     let isDragging = false;
+    let isResizing = false;
     let startX = 0;
     let startY = 0;
+    let initialX = 0;
+    let initialY = 0;
+    let initialWidth = 0;
+    let initialHeight = 0;
 
-    const handleMouseDown = (event: MouseEvent) => {
-      // Only handle left mouse button
-      if (event.button !== 0) {
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // Check if clicking on resize handle
+      if (target.classList.contains('resize-handle')) {
+        if (!onResize) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        isResizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+
+        // Get current dimensions
+        const computedStyle = window.getComputedStyle(element);
+        initialWidth = parseFloat(computedStyle.width) / scaleRatio;
+        initialHeight = parseFloat(computedStyle.height) / scaleRatio;
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
         return;
       }
 
+      // Regular dragging
+      e.stopPropagation();
       isDragging = true;
-      startX = event.clientX;
-      startY = event.clientY;
+      startX = e.clientX;
+      startY = e.clientY;
 
-      if (typeof onDragStart === 'function') {
-        onDragStart();
-      }
+      // Get current position from element
+      const left = parseFloat(element.style.left) || 0;
+      const top = parseFloat(element.style.top) || 0;
+      initialX = left / scaleRatio;
+      initialY = top / scaleRatio;
 
-      event.preventDefault();
-      event.stopPropagation();
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+
+      element.style.cursor = 'grabbing';
     };
 
-    const handleMouseMove = (event: MouseEvent) => {
-      if (!isDragging) {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizing && onResize) {
+        const deltaX = (e.clientX - startX) / scaleRatio;
+        const deltaY = (e.clientY - startY) / scaleRatio;
+
+        const newWidth = Math.max(20, initialWidth + deltaX);
+        const newHeight = Math.max(20, initialHeight + deltaY);
+
+        onResize(newWidth, newHeight);
         return;
       }
 
-      const deltaX = event.clientX - startX;
-      const deltaY = event.clientY - startY;
+      if (!isDragging) return;
 
-      onDrag(deltaX, deltaY);
+      const deltaX = (e.clientX - startX) / scaleRatio;
+      const deltaY = (e.clientY - startY) / scaleRatio;
 
-      startX = event.clientX;
-      startY = event.clientY;
+      const newX = initialX + deltaX;
+      const newY = initialY + deltaY;
+
+      onDrag(newX, newY);
     };
 
     const handleMouseUp = () => {
-      if (isDragging) {
-        isDragging = false;
-        if (typeof onDragEnd === 'function') {
-          onDragEnd();
-        }
-      }
+      isDragging = false;
+      isResizing = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      element.style.cursor = 'grab';
     };
 
-    const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length === 0) {
-        return;
-      }
-
-      isDragging = true;
-      startX = event.touches[0].clientX;
-      startY = event.touches[0].clientY;
-
-      if (typeof onDragStart === 'function') {
-        onDragStart();
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-    };
-
-    const handleTouchMove = (event: TouchEvent) => {
-      if (!isDragging || event.touches.length === 0) {
-        return;
-      }
-
-      const deltaX = event.touches[0].clientX - startX;
-      const deltaY = event.touches[0].clientY - startY;
-
-      onDrag(deltaX, deltaY);
-
-      startX = event.touches[0].clientX;
-      startY = event.touches[0].clientY;
-    };
-
-    const handleTouchEnd = () => {
-      if (isDragging) {
-        isDragging = false;
-        if (typeof onDragEnd === 'function') {
-          onDragEnd();
-        }
-      }
-    };
-
-    // Add event listeners
     element.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    element.addEventListener('touchstart', handleTouchStart, {
-      passive: false,
-    });
-    element.addEventListener('touchmove', handleTouchMove, { passive: false });
-    element.addEventListener('touchend', handleTouchEnd);
-
-    // Set cursor style
-    element.style.cursor = 'move';
 
     // Return cleanup function
     return () => {
       element.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      element.removeEventListener('touchstart', handleTouchStart);
-      element.removeEventListener('touchmove', handleTouchMove);
-      element.removeEventListener('touchend', handleTouchEnd);
     };
   }
 }
