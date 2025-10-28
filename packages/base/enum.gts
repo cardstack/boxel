@@ -28,16 +28,15 @@ export function enumConfig<T>(
   input:
     | EnumConfigurationInput<T>
     | ({ options?: any[]; unsetLabel?: string } | undefined)
-    | ((self: Readonly<T>) =>
+    | ((
+        self: Readonly<T>,
+      ) =>
         | EnumConfiguration
         | { options?: any[]; unsetLabel?: string }
         | undefined),
 ): EnumConfigurationInput<T> {
   function normalize(
-    v:
-      | EnumConfiguration
-      | { options?: any[]; unsetLabel?: string }
-      | undefined,
+    v: EnumConfiguration | { options?: any[]; unsetLabel?: string } | undefined,
   ): EnumConfiguration | undefined {
     if (!v) return undefined;
     if (typeof v === 'object' && 'enum' in v) {
@@ -64,7 +63,9 @@ export function normalizeEnumOptions(rawOpts: any[]): RichOption[] {
     let key = opt.value;
     if (seen.has(key)) {
       throw new Error(
-        `enum configuration error: duplicate option value '${String(key)}' detected`,
+        `enum configuration error: duplicate option value '${String(
+          key,
+        )}' detected`,
       );
     }
     seen.add(key);
@@ -133,13 +134,18 @@ function enumField<BaseT extends FieldDefConstructor>(
           if (explicit) return explicit;
           return { value: null, label: this.unsetLabel ?? '—' };
         }
-        return opts.find((o: any) => o.value === v) ?? {
-          value: v,
-          label: String(v),
-        };
+        return (
+          opts.find((o: any) => o.value === v) ?? {
+            value: v,
+            label: String(v),
+          }
+        );
       }
       get isUnsetFallback() {
-        return this.args.model == null && !this.normalizedOptions.find((o: any) => o.value === null);
+        return (
+          this.args.model == null &&
+          !this.normalizedOptions.find((o: any) => o.value === null)
+        );
       }
       get isValueFallback() {
         let v = this.args.model as any;
@@ -207,9 +213,9 @@ function enumField<BaseT extends FieldDefConstructor>(
           @options={{this.options}}
           @selected={{this.selectedOption}}
           @onChange={{this.update}}
-          @selectedItemComponent={{component
-            EnumField.selectedItem
-            configuration=@configuration
+          @selectedItemComponent={{if
+            this.selectedOption
+            (component EnumField.selectedItem configuration=@configuration)
           }}
           @disabled={{not @canEdit}}
           @renderInPlace={{true}}
