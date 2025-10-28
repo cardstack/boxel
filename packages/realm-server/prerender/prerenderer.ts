@@ -740,7 +740,8 @@ export class Prerenderer {
         page,
         capturedDom,
       );
-      const docsSettled = (diagnostics.docsInFlight ?? 0) === 0;
+      const docsSettled =
+        diagnostics.docsInFlight !== null && diagnostics.docsInFlight === 0;
       if (!diagnostics.hasError && docsSettled) {
         let recovered: RenderCapture | null = null;
         if (diagnostics.hasContainer) {
