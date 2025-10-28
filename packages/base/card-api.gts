@@ -197,7 +197,7 @@ export type FieldConfiguration = Record<string, any>;
 // Configuration may be provided as a static object or a function of the parent instance
 export type ConfigurationInput<T> =
   | FieldConfiguration
-  | ((self: Readonly<T>) => FieldConfiguration | undefined);
+  | ((this: Readonly<T>) => FieldConfiguration | undefined);
 export type FieldFormats = {
   ['fieldDef']: Format;
   ['cardDef']: Format;

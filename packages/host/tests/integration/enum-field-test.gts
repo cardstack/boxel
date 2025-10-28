@@ -651,7 +651,9 @@ module('Integration | enumField', function (hooks) {
     }
 
     const PriorityField = enumField(StringField, {
-      options: (instance: any) => instance.crmApp?.globalPriorityOptions,
+      options: function (this: any) {
+        return this.crmApp?.globalPriorityOptions;
+      },
     });
 
     class Task extends CardDef {
@@ -959,12 +961,12 @@ module('Integration | enumField', function (hooks) {
     });
 
     class Task extends CardDef {
-      @field customOptions: string[] = containsMany(StringField);
-      @field priority: string = contains(PriorityField, {
+      @field customOptions = containsMany(StringField);
+      @field priority = contains(PriorityField, {
         // Access options from the parent Task instance
-        configuration: enumConfig((self: Task) => ({
-          options: self.customOptions,
-        })),
+        configuration: enumConfig(function (this: Task) {
+          return { options: this.customOptions };
+        }),
       });
       static edit = class Edit extends Component<typeof this> {
         <template>

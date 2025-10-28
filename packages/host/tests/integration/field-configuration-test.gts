@@ -51,9 +51,9 @@ module('Integration | field configuration', function (hooks) {
     class ColorField extends FieldDef {
       static displayName = 'Color';
       // FieldDef-level default configuration (function form)
-      static configuration = (_self: any) => ({
-        presentation: { palette: ['blue', 'green'] },
-      });
+      static configuration = function (this: any) {
+        return { presentation: { palette: ['blue', 'green'] } };
+      };
 
       static edit = class Edit extends Component<typeof this> {
         get firstColor() {
@@ -114,9 +114,9 @@ module('Integration | field configuration', function (hooks) {
     class ParentReactive extends CardDef {
       @field theme = linksTo(ThemeCard);
       @field color = contains(ReactiveColorField, {
-        configuration: (self) => ({
-          presentation: { palette: self.theme?.palette },
-        }),
+        configuration: function (this: ParentReactive) {
+          return { presentation: { palette: this.theme?.palette } };
+        },
       });
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -322,9 +322,9 @@ module('Integration | field configuration', function (hooks) {
     class ParentSelfReactive extends CardDef {
       @field preferredColor = contains(StringField);
       @field color = contains(LocalReactiveColorField, {
-        configuration: (self) => ({
-          presentation: { palette: self.preferredColor },
-        }),
+        configuration: function (this: ParentSelfReactive) {
+          return { presentation: { palette: this.preferredColor } };
+        },
       });
       static isolated = class Isolated extends Component<typeof this> {
         <template>

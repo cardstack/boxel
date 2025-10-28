@@ -59,10 +59,12 @@ export class PetOwner extends CardDef {
   @field name = contains(StringField);
   @field allowedSpecies: string[] = containsMany(StringField);
   @field preferredSpecies: string = contains(SpeciesField, {
-    configuration: enumConfig((self: PetOwner) => ({
-      options: self.allowedSpecies,
-      unsetLabel: 'Pick a pal…',
-    })),
+    configuration: enumConfig(function (this: PetOwner) {
+      return {
+        options: this.allowedSpecies,
+        unsetLabel: 'Pick a pal…',
+      };
+    }),
   });
 
   static embedded = class Embedded extends Component<typeof this> {
