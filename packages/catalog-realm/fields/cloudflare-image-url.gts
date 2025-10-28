@@ -13,8 +13,8 @@ import { on } from '@ember/modifier';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 
-import UploadImageCommand from '../../commands/upload-image';
-import { CloudflareImage } from '../../cloudflare-image';
+import UploadImageCommand from '../commands/upload-image';
+import { CloudflareImage } from '../cloudflare-image';
 
 class Edit extends Component<typeof CloudflareImageUrlField> {
   @tracked isUploading = false;
@@ -155,6 +155,7 @@ class Edit extends Component<typeof CloudflareImageUrlField> {
   }
 
   <template>
+    {{! template-lint-disable no-invalid-interactive }}
     <div class='cf-url-field'>
       <div class='input-grid'>
         <FieldContainer @label='Source Image'>
@@ -163,11 +164,10 @@ class Edit extends Component<typeof CloudflareImageUrlField> {
             class='file-input__native'
             type='file'
             accept='image/*'
-            aria-label='Select image file'
             {{on 'change' this.handleFileSelection}}
           />
           <div class='file-input'>
-            <label class='file-button' for={{this.fileInputId}}>Choose File</label>
+            <label for={{this.fileInputId}} class='file-button'>Choose File</label>
             <span class='file-input__label'>
               {{if this.selectedFile this.selectedFile.name 'No file selected'}}
             </span>
@@ -232,8 +232,10 @@ class Edit extends Component<typeof CloudflareImageUrlField> {
         align-items: center;
         justify-content: center;
         padding: 6px 12px;
+        border: 2px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         background: var(--boxel-highlight);
+        font-weight: 600;
         color: var(--boxel-900);
         cursor: pointer;
         user-select: none;
@@ -258,7 +260,8 @@ class Edit extends Component<typeof CloudflareImageUrlField> {
       }
       .result {
         padding: var(--boxel-sp);
-        background: var(--boxel-highlight);
+        background: var(--boxel-purple);
+        color: var(--boxel-50);
         border-radius: var(--boxel-border-radius);
       }
       .result__url {

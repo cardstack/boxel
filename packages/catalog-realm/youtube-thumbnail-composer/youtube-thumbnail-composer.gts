@@ -1,3 +1,38 @@
+// Glimmer and Ember
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { concat, fn } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
+
+// Boxel UI Components
+import {
+  Button,
+  FieldContainer,
+  BoxelInput,
+} from '@cardstack/boxel-ui/components';
+import { eq, multiply } from '@cardstack/boxel-ui/helpers';
+import { FourLines } from '@cardstack/boxel-ui/icons';
+import {
+  SortableGroupModifier as sortableGroup,
+  SortableHandleModifier as sortableHandle,
+  SortableItemModifier as sortableItem,
+} from '@cardstack/boxel-ui/modifiers';
+
+// Boxel Icons
+import ImageIcon from '@cardstack/boxel-icons/image';
+import TypeIcon from '@cardstack/boxel-icons/type';
+import LayersIcon from '@cardstack/boxel-icons/layers';
+import EyeIcon from '@cardstack/boxel-icons/eye';
+import EyeOffIcon from '@cardstack/boxel-icons/eye-off';
+import CopyIcon from '@cardstack/boxel-icons/copy';
+import TrashIcon from '@cardstack/boxel-icons/trash-2';
+import CheckIcon from '@cardstack/boxel-icons/check';
+
+// Runtime Common
+import { uuidv4 } from '@cardstack/runtime-common';
+
+// Base Card API
 import {
   CardDef,
   field,
@@ -8,36 +43,12 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import {
-  Button,
-  FieldContainer,
-  BoxelInput,
-} from '@cardstack/boxel-ui/components';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { eq, multiply } from '@cardstack/boxel-ui/helpers';
-import { concat, fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import ImageIcon from '@cardstack/boxel-icons/image';
-import TypeIcon from '@cardstack/boxel-icons/type';
-import LayersIcon from '@cardstack/boxel-icons/layers';
-import EyeIcon from '@cardstack/boxel-icons/eye';
-import EyeOffIcon from '@cardstack/boxel-icons/eye-off';
-import CopyIcon from '@cardstack/boxel-icons/copy';
-import TrashIcon from '@cardstack/boxel-icons/trash-2';
-import CheckIcon from '@cardstack/boxel-icons/check';
-import { FourLines } from '@cardstack/boxel-ui/icons';
+
+// Local imports
 import { VisualElement } from './fields/visual-element';
 import { TextElement } from './fields/text-element';
 import { BackgroundElement } from './fields/background-element';
 import { DragModifier } from './modifiers/draggable';
-import {
-  SortableGroupModifier as sortableGroup,
-  SortableHandleModifier as sortableHandle,
-  SortableItemModifier as sortableItem,
-} from '@cardstack/boxel-ui/modifiers';
-import { uuidv4 } from '@cardstack/runtime-common';
 
 class Isolated extends Component<typeof YouTubeThumbnailComposer> {
   @tracked selectedElement: TextElement | VisualElement | null = null;
@@ -748,7 +759,7 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
             {{if @model.showGrid 'Grid On' 'Grid Off'}}
           </Button>
           <Button
-            @kind='primary'
+            @kind='primary-dark'
             @size='small'
             {{on 'click' this.exportThumbnail}}
           >
@@ -1628,7 +1639,10 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
             <h3>Layers (Drag to Reorder)</h3>
             <ul
               class='layers-list'
-              {{sortableGroup groupName=this.sortableGroupId onChange=this.reorderLayers}}
+              {{sortableGroup
+                groupName=this.sortableGroupId
+                onChange=this.reorderLayers
+              }}
             >
               {{#each this.allElements as |element|}}
                 <li

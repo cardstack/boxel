@@ -1,3 +1,8 @@
+// Boxel UI Components
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+
+// Base Card API
 import {
   FieldDef,
   field,
@@ -7,11 +12,10 @@ import {
 import ColorField from 'https://cardstack.com/base/color';
 import NumberField from 'https://cardstack.com/base/number';
 import UrlField from 'https://cardstack.com/base/url';
-import { CloudflareImageUrlField } from './cloudflare-image-url';
 
+// Local imports
+import { CloudflareImageUrlField } from '../../fields/cloudflare-image-url';
 import { createOptionSelectField } from '../../utils/create-option-select';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 const BackgroundTypeField = createOptionSelectField({
   displayName: 'Background Type',
@@ -31,8 +35,6 @@ const GradientDirectionField = createOptionSelectField({
   view: 'boxel-select',
   placeholder: 'Select direction',
 });
-
-// Replaced by CloudflareImageUrlField in its own module
 
 export class BackgroundElement extends FieldDef {
   static displayName = 'Background';

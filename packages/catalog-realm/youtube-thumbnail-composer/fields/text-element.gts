@@ -1,3 +1,11 @@
+// Ember helpers
+import { concat } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
+
+// Boxel UI Components
+import { FieldContainer, BoxelInput } from '@cardstack/boxel-ui/components';
+
+// Base Card API
 import {
   FieldDef,
   field,
@@ -8,9 +16,8 @@ import StringField from 'https://cardstack.com/base/string';
 import ColorField from 'https://cardstack.com/base/color';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
-import { concat } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { FieldContainer, BoxelInput } from '@cardstack/boxel-ui/components';
+
+// Local imports
 import { createOptionSelectField } from '../../utils/create-option-select';
 
 const FontFamilyField = createOptionSelectField({
