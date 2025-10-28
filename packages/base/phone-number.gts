@@ -70,6 +70,7 @@ export class PhoneNumberType extends FieldDef {
 
 export default class PhoneNumberField extends FieldDef {
   static displayName = 'Phone Number';
+  static icon = PhoneIcon;
   @field number = contains(StringField);
   @field countryCode = contains(StringField);
 

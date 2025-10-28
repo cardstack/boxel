@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "key": "undersea-kingdom",
+      "title": "The Sunken Kingdom",
+      "description": "An ancient realm beneath the waves stirs once more.",
+      "tags": [],
+      "imageStyles": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../adventure-scenario",
+        "name": "AdventureScenario"
+      }
+    }
+  }
+}
