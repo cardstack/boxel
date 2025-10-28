@@ -1,0 +1,119 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Youtube Thumnail Composer",
+      "images": ["https://boxel-images.boxel.ai/app-assets/catalog/youtube-thumbnail-composer-listing/screenshot_01.png"],
+      "summary": "This listing provides a comprehensive visual editor for creating and customizing YouTube thumbnails, enabling users to add, manipulate, and layer text and shape elements, and export high-quality images for online sharing. Its primary purpose is to simplify thumbnail design with intuitive drag-and-drop and property editing features.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/youtube-thumbnail-composer-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/c56a8a0c-9b8f-4f7f-ae84-fb4a63774cc4"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/a635bb19-354c-43a6-a7cf-415b7726b6fb"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/b934d0c2-7c20-4e61-b7af-1e03684213ff"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/35bb1935-4ca3-4667-8f41-5b7726b6fbd8"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/bb19354c-a3a6-47cf-815b-7726b6fbd816"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/56a635bb-1935-4ca3-a667-cf415b7726b6"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/84fb4a63-774c-44e7-ae37-527c4185efb2"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/fb4a6377-4cc4-47ee-b752-7c4185efb2dd"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/4a63774c-c4e7-4e37-927c-4185efb2dd0c"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/527c4185-efb2-4d0c-ab59-881ec9d51570"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/4ca3a667-cf41-4b77-a6b6-fbd81693e2c5"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../youtube-thumbnail-composer/YouTubeThumbnailComposer/d5e75129-8239-47cc-839e-76da6b5a9969"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
