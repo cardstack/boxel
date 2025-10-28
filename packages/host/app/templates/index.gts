@@ -29,7 +29,7 @@ import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-s
 
 import config from '@cardstack/host/config/environment';
 
-import type CardController from '@cardstack/host/controllers/card';
+import type IndexController from '@cardstack/host/controllers/index';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -164,8 +164,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         element.classList.remove('not-loaded');
       } else if (event.data === 'login') {
         let indexController = getOwner(this)!.lookup(
-          'controller:card',
-        ) as CardController;
+          'controller:index',
+        ) as IndexController;
 
         let transitionQueryParameters = new URLSearchParams({
           authRedirect: window.location.href,
