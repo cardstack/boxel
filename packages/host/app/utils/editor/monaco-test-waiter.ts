@@ -7,6 +7,7 @@ import type * as MonacoSDK from 'monaco-editor';
 interface MonacoTokenization {
   forceTokenization(lineCount: number): void;
   backgroundTokenizationState?: number;
+  hasTokens?: boolean;
 }
 
 type TokenizationCapableModel = MonacoSDK.editor.ITextModel & {
@@ -106,66 +107,14 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           ? [editor.getOriginalEditor(), targetEditor]
           : [targetEditor];
 
-      const tokenizationReadiness = new Map<
-        MonacoSDK.editor.ICodeEditor,
-        boolean
-      >();
-      const tokenizationDisposables: MonacoSDK.IDisposable[] = [];
-
-      const markTokensReady = (codeEditor: MonacoSDK.editor.ICodeEditor) => {
-        tokenizationReadiness.set(codeEditor, true);
-        checkInitComplete();
+      const disposables: MonacoSDK.IDisposable[] = [];
+      const register = (disposable?: MonacoSDK.IDisposable) => {
+        if (disposable) {
+          disposables.push(disposable);
+        }
       };
 
-      const ensureTokenizationReady = (
-        codeEditor: MonacoSDK.editor.ICodeEditor,
-      ) => {
-        const model = codeEditor.getModel() as TokenizationCapableModel | null;
-        if (!model) {
-          tokenizationReadiness.set(codeEditor, true);
-          return;
-        }
-
-        const languageId = model.getLanguageId();
-        const tokenizationState =
-          model.tokenization?.backgroundTokenizationState;
-
-        if (languageId === 'plaintext') {
-          markTokensReady(codeEditor);
-          return;
-        }
-
-        if (tokenizationState === BACKGROUND_TOKENIZATION_STATE_COMPLETED) {
-          markTokensReady(codeEditor);
-          return;
-        }
-
-        tokenizationReadiness.set(codeEditor, false);
-
-        const disposable = model.onDidChangeTokens(() => {
-          const currentState =
-            model.tokenization?.backgroundTokenizationState;
-          if (
-            currentState === undefined ||
-            currentState === BACKGROUND_TOKENIZATION_STATE_COMPLETED
-          ) {
-            markTokensReady(codeEditor);
-            disposable.dispose();
-            const idx = tokenizationDisposables.indexOf(disposable);
-            if (idx !== -1) {
-              tokenizationDisposables.splice(idx, 1);
-            }
-          }
-        });
-
-        tokenizationDisposables.push(disposable);
-      };
-
-      editorsToValidate.forEach(ensureTokenizationReady);
-
-      const editorHasCompleteContent = (
-        codeEditor: MonacoSDK.editor.ICodeEditor,
-      ): boolean => {
+      const isEditorReady = (codeEditor: MonacoSDK.editor.ICodeEditor) => {
         const layoutInfo = codeEditor.getLayoutInfo();
         const contentHeight = codeEditor.getContentHeight();
 
@@ -182,99 +131,103 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           return true;
         }
 
-        const tokenizationState =
-          model.tokenization?.backgroundTokenizationState;
-        if (
-          tokenizationState !== undefined &&
-          tokenizationState !== BACKGROUND_TOKENIZATION_STATE_COMPLETED
-        ) {
-          return false;
-        }
-
-        if (tokenizationReadiness.get(codeEditor) === false) {
-          return false;
-        }
-
         const lineCount = model.getLineCount();
         if (lineCount === 0) {
           return true;
         }
 
-        const expectedHeight =
-          codeEditor.getTopForLineNumber(lineCount + 1) ?? contentHeight;
+        const languageId = model.getLanguageId();
+        if (languageId === 'plaintext') {
+          return true;
+        }
 
-        return contentHeight >= expectedHeight;
-      };
-
-      const checkInitComplete = () => {
-        if (isInitialized) return;
-
-        const allEditorsReady = editorsToValidate.every(
-          editorHasCompleteContent,
-        );
-
-        if (allEditorsReady) {
-          for (const codeEditor of editorsToValidate) {
-            forceFullTokenization(codeEditor);
+        const tokenization = model.tokenization;
+        if (tokenization) {
+          const backgroundState = tokenization.backgroundTokenizationState;
+          if (
+            backgroundState !== undefined &&
+            backgroundState !== BACKGROUND_TOKENIZATION_STATE_COMPLETED
+          ) {
+            return false;
           }
 
-          isInitialized = true;
-          this.endAsync(operationId);
+          if ('hasTokens' in tokenization && !tokenization.hasTokens) {
+            return false;
+          }
+        }
+
+        return true;
+      };
+
+      const originalEndAsync = this.endAsync.bind(this);
+
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = undefined;
+        }
+        while (disposables.length) {
+          disposables.pop()?.dispose();
+        }
+        this.endAsync = originalEndAsync;
+      };
+
+      const hardFinalize = () => {
+        if (isInitialized) return;
+        isInitialized = true;
+        editorsToValidate.forEach(forceFullTokenization);
+        cleanup();
+        originalEndAsync(operationId);
+      };
+
+      const tryFinalize = () => {
+        if (isInitialized) return;
+        if (editorsToValidate.every(isEditorReady)) {
+          hardFinalize();
         }
       };
 
-      // Listen for layout changes to detect when initialization is complete
-      const layoutDisposable = targetEditor.onDidLayoutChange(() => {
-        checkInitComplete();
+      const observeModel = (codeEditor: MonacoSDK.editor.ICodeEditor) => {
+        const model = codeEditor.getModel() as TokenizationCapableModel | null;
+        if (!model) return;
+
+        register(model.onDidChangeContent(tryFinalize));
+        register(model.onDidChangeTokens(tryFinalize));
+        register(model.onDidChangeLanguage(tryFinalize));
+      };
+
+      editorsToValidate.forEach((codeEditor) => {
+        observeModel(codeEditor);
+        register(
+          codeEditor.onDidChangeModel(() => {
+            observeModel(codeEditor);
+            tryFinalize();
+          }),
+        );
+        register(codeEditor.onDidLayoutChange(tryFinalize));
+        register(codeEditor.onDidContentSizeChange(tryFinalize));
       });
 
-      // Listen for content size changes as well
-      const contentSizeDisposable = targetEditor.onDidContentSizeChange(() => {
-        checkInitComplete();
-      });
-
-      // For diff editors, also listen to diff updates
-      let diffDisposable: MonacoSDK.IDisposable | undefined;
       if ('getModifiedEditor' in editor) {
-        diffDisposable = editor.onDidUpdateDiff(() => {
-          checkInitComplete();
-        });
+        register(editor.onDidUpdateDiff(tryFinalize));
       }
 
-      // Fallback timeout to prevent hanging tests
-      const timeoutId = setTimeout(() => {
+      timeoutId = setTimeout(() => {
         if (!isInitialized) {
-          for (const codeEditor of editorsToValidate) {
-            forceFullTokenization(codeEditor);
-            tokenizationReadiness.set(codeEditor, true);
-          }
-          tokenizationDisposables.splice(0).forEach((disposable) =>
-            disposable.dispose(),
-          );
-          isInitialized = true;
-          layoutDisposable.dispose();
-          contentSizeDisposable.dispose();
-          diffDisposable?.dispose();
-          this.endAsync(operationId);
+          hardFinalize();
         }
       }, 2000);
 
-      // Override endAsync for this specific operation to ensure cleanup
-      const originalEndAsync = this.endAsync.bind(this);
       this.endAsync = (operation: string) => {
         if (operation === operationId) {
-          clearTimeout(timeoutId);
-          layoutDisposable.dispose();
-          contentSizeDisposable.dispose();
-          diffDisposable?.dispose();
-          tokenizationDisposables.splice(0).forEach((disposable) =>
-            disposable.dispose(),
-          );
-          // Restore original endAsync
-          this.endAsync = originalEndAsync;
+          cleanup();
         }
         originalEndAsync(operation);
       };
+
+      tryFinalize();
     },
   };
 }
