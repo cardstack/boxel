@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "YouTubeThumbnailComposer",
-        "module": "../youtube-thumbnail-composer/youtube-thumbnail-composer"
+        "module": "../youtube-thumbnail-composer"
       }
     },
     "type": "card",
