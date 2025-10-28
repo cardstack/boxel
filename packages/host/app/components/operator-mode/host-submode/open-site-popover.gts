@@ -14,12 +14,8 @@ interface OpenSitePopoverArgs {
 export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
   @service declare hostModeService: HostModeService;
 
-  get publishedRealms() {
-    return this.hostModeService.publishedRealmURLs;
-  }
-
   get hasPublishedRealms() {
-    return this.publishedRealms.length > 0;
+    return this.hostModeService.publishedRealmMetadata.length > 0;
   }
 
   <template>
@@ -27,21 +23,22 @@ export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
       <div class='open-site-popover' data-test-open-site-popover>
         {{#if this.hasPublishedRealms}}
           <div class='published-realms'>
-            {{#each this.publishedRealms as |url|}}
+            {{#each
+              this.hostModeService.publishedRealmMetadata
+              as |realmMetadata|
+            }}
               <div
                 class='realm-item'
-                data-test-published-realm-item={{this.hostModeService.fullURL
-                  url
-                }}
+                data-test-published-realm-item={{realmMetadata.currentCardUrlString}}
               >
                 <div class='realm-url'>
-                  {{this.hostModeService.fullURL url}}
+                  {{realmMetadata.currentCardUrlString}}
                 </div>
                 <BoxelButton
                   @as='anchor'
                   @kind='secondary-light'
                   @size='small'
-                  @href={{this.hostModeService.fullURL url}}
+                  @href={{realmMetadata.currentCardUrlString}}
                   class='open-site-button'
                   target='_blank'
                   rel='noopener noreferrer'

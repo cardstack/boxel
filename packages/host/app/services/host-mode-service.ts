@@ -5,6 +5,12 @@ import window from 'ember-window-mock';
 import config from '@cardstack/host/config/environment';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+interface PublishedRealmMetadata {
+  urlString: string;
+  publishedAt: number;
+  currentCardUrlString: string | undefined;
+}
+
 export default class HostModeService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -71,7 +77,7 @@ export default class HostModeService extends Service {
     return this.operatorModeStateService.hostModePrimaryCard ?? undefined;
   }
 
-  get publishedRealmEntries() {
+  get publishedRealmMetadata() {
     let realmInfo = this.operatorModeStateService.currentRealmInfo;
     if (
       !realmInfo?.lastPublishedAt ||
@@ -81,12 +87,21 @@ export default class HostModeService extends Service {
     }
 
     return Object.entries(realmInfo.lastPublishedAt)
-      .map(([url, value]) => [url, this.parsePublishedAt(value)] as const)
-      .sort(([, a], [, b]) => b - a);
+      .map(
+        ([url, publishedAt]) =>
+          ({
+            urlString: url,
+            publishedAt: this.parsePublishedAt(publishedAt),
+            currentCardUrlString: this.fullURL(url),
+          }) as PublishedRealmMetadata,
+      )
+      .sort((a, b) => b.publishedAt - a.publishedAt);
   }
 
   get publishedRealmURLs() {
-    return this.publishedRealmEntries.map(([url]) => url);
+    return this.publishedRealmMetadata.map(
+      (publishedRealmMetadata) => publishedRealmMetadata.urlString,
+    );
   }
 
   get defaultPublishedRealmURL() {
@@ -119,10 +134,10 @@ export default class HostModeService extends Service {
   }
 
   lastPublishedTimestamp(url: string) {
-    let entry = this.publishedRealmEntries.find(
-      ([publishedUrl]) => publishedUrl === url,
+    let metadata = this.publishedRealmMetadata.find(
+      (entry) => entry.urlString === url,
     );
-    return entry ? entry[1] : null;
+    return metadata ? metadata.publishedAt : null;
   }
 
   isPublished(url: string) {
