@@ -10,6 +10,7 @@ export default class IndexController extends Controller {
     // `sid` and `clientSecret` come from email verification process to reset password
     'sid',
     'clientSecret',
+    'card',
     'cardPath',
     'debug', // temporary debug param for debugging AI assistant code patches
   ];
