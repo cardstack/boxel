@@ -11,10 +11,10 @@ import stringify from 'safe-stable-stringify';
 
 import ENV from '@cardstack/host/config/environment';
 
-import {
-  applyHostModeAfterModel,
-  fetchHostModeModel,
-} from '@cardstack/host/routes/utils/host-mode-route';
+// import {
+//   applyHostModeAfterModel,
+//   fetchHostModeModel,
+// } from '@cardstack/host/routes/utils/host-mode-route';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
@@ -68,7 +68,7 @@ export default class Index extends Route {
     operatorModeState: string;
   }) {
     if (this.hostModeService.isActive) {
-      return fetchHostModeModel(this.hostModeService, this.store, params.path);
+      // return fetchHostModeModel(this.hostModeService, this.store, params.path);
     }
 
     let { operatorModeState, cardPath } = params;
@@ -159,12 +159,12 @@ export default class Index extends Route {
       | Awaited<ReturnType<StoreService['get']>>
       | undefined;
 
-    applyHostModeAfterModel({
-      hostModeService: this.hostModeService,
-      hostModeStateService: this.hostModeStateService,
-      transition,
-      model: resolvedModel,
-    });
+    // applyHostModeAfterModel({
+    //   hostModeService: this.hostModeService,
+    //   hostModeStateService: this.hostModeStateService,
+    //   transition,
+    //   model: resolvedModel,
+    // });
   }
 
   private async getCardUrl(cardPath: string): Promise<string | undefined> {
