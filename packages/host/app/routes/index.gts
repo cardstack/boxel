@@ -30,7 +30,7 @@ export type ErrorModel = {
   operatorModeState: string;
 };
 
-export default class Card extends Route<ReturnType<StoreService['get']>> {
+export default class Card extends Route {
   queryParams = {
     hostModeStack: {
       refreshModel: true,
