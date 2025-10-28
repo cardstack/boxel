@@ -12,6 +12,7 @@ import {
   type Permissions,
   baseRealm,
   getField,
+  primitive,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -947,6 +948,95 @@ module('Integration | enumField', function (hooks) {
       },
       /duplicate option value/i,
       'duplicate values via usage-level config should throw',
+    );
+  });
+
+  test('deep equality matches compound enum values (single contains)', async function (assert) {
+    assert.expect(5);
+
+    // Define a primitive object field to use as the base for json values
+    class ObjectField extends CardDef {
+      static [primitive]: Record<string, any>;
+    }
+
+    const PairEnumField = enumField(ObjectField as any, {
+      options: [
+        { value: { a: 1, b: 2 }, label: 'OneTwo' },
+        { value: { a: 3, b: 4 }, label: 'ThreeFour' },
+      ],
+    });
+
+    class Holder extends CardDef {
+      @field pair = contains(PairEnumField as any);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.pair />
+        </template>
+      };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.pair @format='atom' />
+        </template>
+      };
+    }
+
+    // Model value is a different object instance but deep-equal to first option
+    let h = new Holder({ pair: { a: 1, b: 2 } as any });
+    await renderCard(loader, h, 'edit');
+
+    // Trigger should show the matching label (no value-fallback)
+    assert
+      .dom('.boxel-select .option-title')
+      .hasText('OneTwo', 'trigger shows label resolved via deep match');
+    assert
+      .dom('.boxel-select .option-title [data-test-enum-atom-fallback]')
+      .doesNotExist('no value-fallback marker when deep match');
+
+    // Opening dropdown should preselect the matching option
+    await click('.boxel-select');
+    // Choose the second option; model should update to that value
+    await click('[data-test-option="1"]');
+    assert.deepEqual(
+      h.pair,
+      { a: 3, b: 4 },
+      'model updates to newly selected compound value',
+    );
+
+    // Atom format should also resolve via deep match
+    await renderCard(loader, h, 'embedded');
+    assert
+      .dom('.option-title')
+      .hasText('ThreeFour', 'atom renders label for deep-matched value');
+
+    // Helpers normalize options and should include both entries
+    let opts = enumOptions(h, 'pair');
+    assert.deepEqual(
+      opts.map((o: any) => o.label),
+      ['OneTwo', 'ThreeFour'],
+      'enumOptions exposes normalized option labels',
+    );
+  });
+
+  test('throws error for duplicate compound option values (deep equal)', async function (assert) {
+    assert.expect(1);
+
+    class ObjectField extends CardDef {
+      static [primitive]: Record<string, any>;
+    }
+
+    const DupEnumField = enumField(ObjectField as any, {
+      options: [{ value: { x: 1 } }, { value: { x: 1 } }],
+    });
+
+    class Holder extends CardDef {
+      @field v = contains(DupEnumField as any);
+    }
+
+    let h = new Holder({ v: { x: 1 } as any });
+    assert.throws(
+      () => enumOptions(h, 'v'),
+      /duplicate option value/i,
+      'duplicate deep-equal values should throw',
     );
   });
 

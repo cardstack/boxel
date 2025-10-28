@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { isEqual } from 'lodash';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { getField } from '@cardstack/runtime-common';
 import { resolveFieldConfiguration } from './field-support';
@@ -58,16 +59,16 @@ export function normalizeEnumOptions(rawOpts: any[]): RichOption[] {
       ? (v as RichOption)
       : ({ value: v, label: String(v) } as RichOption),
   );
-  // Detect duplicate values (by strict equality on value)
-  let seen = new Set<any>();
+  // Detect duplicate values (deep equality on value to support compound types)
+  let seen: any[] = [];
   for (let opt of normalized) {
-    let key = opt.value;
-    if (seen.has(key)) {
+    let dup = seen.find((v) => isEqual(v, opt.value));
+    if (dup !== undefined) {
       throw new Error(
-        `enum configuration error: duplicate option value '${String(key)}' detected`,
+        `enum configuration error: duplicate option value '${String(opt.value)}' detected`,
       );
     }
-    seen.add(key);
+    seen.push(opt.value);
   }
   return normalized;
 }
@@ -133,7 +134,7 @@ function enumField<BaseT extends FieldDefConstructor>(
           if (explicit) return explicit;
           return { value: null, label: this.unsetLabel ?? '—' };
         }
-        return opts.find((o: any) => o.value === v) ?? {
+        return opts.find((o: any) => isEqual(o.value, v)) ?? {
           value: v,
           label: String(v),
         };
@@ -144,7 +145,7 @@ function enumField<BaseT extends FieldDefConstructor>(
       get isValueFallback() {
         let v = this.args.model as any;
         if (v == null) return false;
-        return !this.normalizedOptions.find((o: any) => o.value === v);
+        return !this.normalizedOptions.find((o: any) => isEqual(o.value, v));
       }
       <template>
         {{#if this.option}}
@@ -196,7 +197,7 @@ function enumField<BaseT extends FieldDefConstructor>(
       }
       get selectedOption() {
         let opts = this.options as any[];
-        let found = opts.find((o: any) => o.value === (this.args.model as any));
+        let found = opts.find((o: any) => isEqual(o.value, (this.args.model as any)));
         return found === undefined ? undefined : found;
       }
       update = (opt: any) => {
