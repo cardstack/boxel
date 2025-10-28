@@ -3,12 +3,12 @@ import type RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
+
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 
-import ENV from '@cardstack/host/config/environment';
-
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import ENV from '@cardstack/host/config/environment';
 
 import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
@@ -16,11 +16,10 @@ import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
-
-import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
 const { hostsOwnAssets } = ENV;
 

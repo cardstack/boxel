@@ -36,17 +36,19 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
-import type HostModeService from '../services/host-mode-service';
+
 import HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 import type {
   CardContext,
   CardDef,
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
+
+import type HostModeService from '../services/host-mode-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export interface IndexComponentComponentSignature {
   Args: {
