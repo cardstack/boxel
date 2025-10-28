@@ -131,18 +131,12 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           return true;
         }
 
-        const lineCount = model.getLineCount();
-        if (lineCount === 0) {
-          return true;
-        }
-
-        const languageId = model.getLanguageId();
-        if (languageId === 'plaintext') {
-          return true;
-        }
-
         const tokenization = model.tokenization;
         if (tokenization) {
+          if (model.getLanguageId() === 'plaintext') {
+            return true;
+          }
+
           const backgroundState = tokenization.backgroundTokenizationState;
           if (
             backgroundState !== undefined &&
