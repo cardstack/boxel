@@ -35,8 +35,89 @@
         }
       },
       "previewMode": null,
-      "textElements": [],
-      "visualElements": [],
+      "textElements": [
+        {
+          "content": "HI ME IN 10 YEARS",
+          "x": 131.56937142857143,
+          "y": 78.23725714285715,
+          "width": 846.7291428571428,
+          "height": 315.77234285714286,
+          "fontSize": 138,
+          "fontFamily": "Impact, sans-serif",
+          "fontWeight": "700",
+          "color": "#ff7b00",
+          "strokeColor": "#ffffff",
+          "strokeWidth": 6,
+          "rotation": 0,
+          "opacity": 1,
+          "visible": true,
+          "layer": 2
+        },
+        {
+          "content": "AMAZING!",
+          "x": 209.82635422911602,
+          "y": 181.48039319427457,
+          "width": 300,
+          "height": 100,
+          "fontSize": 48,
+          "fontFamily": "Impact, sans-serif",
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "strokeColor": "#000000",
+          "strokeWidth": 2,
+          "rotation": 0,
+          "opacity": 1,
+          "visible": true,
+          "layer": 4
+        }
+      ],
+      "visualElements": [
+        {
+          "type": "rectangle",
+          "x": -238.01417142857142,
+          "y": 201.1264,
+          "width": 1106.3149714285714,
+          "height": 228.1142857142857,
+          "rotation": -55,
+          "opacity": null,
+          "fillColor": "#f7cd73",
+          "strokeColor": "#000000",
+          "strokeWidth": 0,
+          "visible": true,
+          "layer": 1,
+          "iconName": null
+        },
+        {
+          "type": "rectangle",
+          "x": -128.41325714285713,
+          "y": 233.9254857142857,
+          "width": 1106.3149714285714,
+          "height": 228.1142857142857,
+          "rotation": -55,
+          "opacity": null,
+          "fillColor": "#055694",
+          "strokeColor": "#000000",
+          "strokeWidth": 0,
+          "visible": true,
+          "layer": 1,
+          "iconName": null
+        },
+        {
+          "type": "rectangle",
+          "x": 155.31337142857143,
+          "y": 457.1794285714286,
+          "width": 502.89920000000006,
+          "height": 105.6,
+          "rotation": 0,
+          "opacity": null,
+          "fillColor": "#ff0000",
+          "strokeColor": "#000000",
+          "strokeWidth": 2,
+          "visible": true,
+          "layer": 3,
+          "iconName": null
+        }
+      ],
       "selectedElementId": null
     },
     "relationships": {
