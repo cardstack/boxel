@@ -179,9 +179,11 @@ export default class Room extends Component<Signature> {
               <NewSession @sendPrompt={{this.sendMessage}} />
             {{/each}}
 
-            {{#if this.shouldShowMessageSendError}}
+            {{#if this.shouldShowUnknownMessageSendError}}
               <Alert @type='error' as |Alert|>
-                <Alert.Messages @messages={{array this.messageSendError}} />
+                <Alert.Messages
+                  @messages={{array this.unknownMessageSendError}}
+                />
               </Alert>
             {{/if}}
           {{/if}}
@@ -473,9 +475,13 @@ export default class Room extends Component<Signature> {
     }
   > = new WeakMap();
 
-  @tracked private messageSendError: string | undefined = undefined;
-  private get shouldShowMessageSendError() {
-    if (!this.messageSendError) {
+  @tracked private unknownMessageSendError: string | undefined = undefined;
+  private get shouldShowUnknownMessageSendError() {
+    // Since unknownMessageSendError error is coming from the catch-all block in doSendMessage,
+    // we need to check if there already exists an error message in the last message, which is
+    // more specific and would take precedence (we don't want to show the generic unknown error
+    // message if there is a more specific error message in the last message)
+    if (!this.unknownMessageSendError) {
       return false;
     }
     let lastMessage = this.messages[this.messages.length - 1];
@@ -998,7 +1004,7 @@ export default class Room extends Component<Signature> {
       files?: FileDef[],
       clientGeneratedId: string = uuidv4(),
     ) => {
-      this.messageSendError = undefined;
+      this.unknownMessageSendError = undefined;
       let messageToSend = this.matrixService.getMessageToSend(this.args.roomId);
       let cardsToSend =
         this.matrixService.cardsToSend.get(this.args.roomId) ?? undefined;
@@ -1056,10 +1062,9 @@ export default class Room extends Component<Signature> {
           context,
         );
       } catch (e) {
-        // debugger;
         console.error(e);
-        this.messageSendError =
-          'There was an error sending your message. Please try again.';
+        this.unknownMessageSendError =
+          'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.';
 
         this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
         if (cardsToSendCopy && cardsToSendCopy.length > 0) {

@@ -993,6 +993,7 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: BoxelContext,
   ): Promise<void> {
+    // throw new Error('Failed to send message, deliberately');
     let tools: Tool[] = [];
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
