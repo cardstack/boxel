@@ -9,7 +9,7 @@ interface Signature {
   Args: { model: CardRouteErrorModel };
 }
 
-const CardErrorRouteComponent: TemplateOnlyComponent<Signature> = <template>
+const IndexErrorRouteComponent: TemplateOnlyComponent<Signature> = <template>
   <CardError
     @type={{@model.loadType}}
     @message={{@model.message}}
@@ -17,4 +17,4 @@ const CardErrorRouteComponent: TemplateOnlyComponent<Signature> = <template>
   />
 </template>;
 
-export default RouteTemplate(CardErrorRouteComponent);
+export default RouteTemplate(IndexErrorRouteComponent);

@@ -48,13 +48,13 @@ import type {
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 
-export interface HostModeComponentSignature {
+export interface IndexComponentComponentSignature {
   Args: {
     model: CardDef | CardErrorJSONAPI | undefined;
   };
 }
 
-export class HostModeComponent extends Component<HostModeComponentSignature> {
+export class IndexComponent extends Component<IndexComponentComponentSignature> {
   @service private declare commandService: CommandService;
   @service private declare hostModeService: HostModeService;
   @service private declare hostModeStateService: HostModeStateService;
@@ -224,7 +224,7 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   </template>
 }
 
-export default RouteTemplate(HostModeComponent);
+export default RouteTemplate(IndexComponent);
 
 function eventHasValidOrigin(event: MessageEvent) {
   if (isDevelopingApp()) {
