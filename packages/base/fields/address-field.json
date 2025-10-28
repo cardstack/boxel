@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Email Field",
-      "description": "Email string field",
+      "title": "Address Field",
+      "description": "A field that validates physical addresses and provides a suitable editor.",
       "specType": "field",
       "ref": {
-        "module": "../../email",
-        "name": "EmailField"
+        "module": "https://cardstack.com/base/address",
+        "name": "default"
       }
     },
     "meta": {

@@ -177,6 +177,12 @@ export default class DateRangeField extends FieldDef {
       </style>
     </template>
   };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <@fields.start /> - <@fields.end />
+    </template>
+  };
 }
 
 interface DateRangeConfig {

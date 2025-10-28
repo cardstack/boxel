@@ -100,7 +100,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       }
       .card-info-header {
         --boxel-header-min-height: 9.375rem; /* 150px */
-        --boxel-header-padding: var(--boxel-sp-xl);
+        --boxel-header-padding: var(--boxel-sp-xxl) var(--boxel-sp-xl)
+          var(--boxel-sp-xl);
         --boxel-header-gap: var(--boxel-sp-lg);
         --boxel-header-border-color: var(--hr-color);
         align-items: flex-start;
@@ -109,7 +110,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       .card-info-header :deep(.info) {
         align-self: center;
       }
-      .card-info-header :deep(.add-button--full-width) {
+      .card-info-header :deep(.add-new) {
         border: 1px solid var(--border, var(--boxel-form-control-border-color));
         grid-column: -1 / 1;
       }

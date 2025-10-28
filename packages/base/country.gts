@@ -1,6 +1,7 @@
 import { contains, field, Component, CardDef, FieldDef } from './card-api';
 import StringField from './string';
 import World from '@cardstack/boxel-icons/world';
+import MapPinned from '@cardstack/boxel-icons/map-pinned';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -98,8 +99,9 @@ class CountryFieldEdit extends Component<typeof CountryField> {
   </template>
 }
 
-export class CountryField extends FieldDef {
+export default class CountryField extends FieldDef {
   static displayName = 'Country';
+  static icon = MapPinned;
   @field name = contains(StringField);
   @field code = contains(StringField);
   static edit = CountryFieldEdit;
@@ -109,6 +111,12 @@ export class CountryField extends FieldDef {
       {{#if @model.name}}
         {{@model.name}}
       {{/if}}
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model.name}}
     </template>
   };
 }

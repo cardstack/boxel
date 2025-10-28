@@ -1,6 +1,6 @@
 import { contains, field, Component, FieldDef } from './card-api';
 import StringField from './string';
-import { CountryField } from './country';
+import CountryField from './country';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import { EntityDisplayWithIcon } from '@cardstack/boxel-ui/components';
 
