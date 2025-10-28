@@ -17,30 +17,21 @@
       "startedAt": null,
       "chatRoomId": null,
       "gameStatus": "setup",
-      "totalTurns": 3,
       "completedAt": null,
       "currentTurn": 0,
       "lastNarration": null,
       "lastTimestamp": null,
       "lastTurnNumber": null,
       "customAdventure": {
-        "tags": [
-          "noir",
-          "mystery",
-          "gritty"
-        ],
+        "tags": [],
         "title": null,
         "description": null,
-        "imageStyles": [
-          "film-noir",
-          "black-and-white"
-        ]
+        "imageStyles": []
       },
       "lastImagePrompt": null,
       "lastIsPlayerTurn": false,
       "lastPlayerChoice": null,
-      "autoGenerateImages": true,
-      "lastCloudflareImage": null
+      "autoGenerateImages": true
     },
     "relationships": {
       "cardInfo.theme": {
@@ -50,7 +41,7 @@
       },
       "selectedScenario": {
         "links": {
-          "self": "../AdventureScenario/example-scenario-detective-mystery"
+          "self": null
         }
       },
       "linkedScenarios.0": {
@@ -71,6 +62,11 @@
       "linkedScenarios.3": {
         "links": {
           "self": "../AdventureScenario/example-scenario-undersea-kingdom"
+        }
+      },
+      "lastCloudflareImage": {
+        "links": {
+          "self": null
         }
       }
     }

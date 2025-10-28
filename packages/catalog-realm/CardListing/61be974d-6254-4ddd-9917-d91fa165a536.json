@@ -79,6 +79,11 @@
           "self": "../Spec/7db80aa6-4d4e-443b-9720-f75ed6f7d438"
         }
       },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/a377bdf6-c1c4-487b-9431-5a93feea3e51"
+        }
+      },
       "publisher": {
         "links": {
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"

@@ -17,7 +17,7 @@ import DatetimeField from 'https://cardstack.com/base/datetime';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
 import { Button } from '@cardstack/boxel-ui/components';
-import { eq, gt, or, not, pick, and } from '@cardstack/boxel-ui/helpers';
+import { eq, gt, or, not, and } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -31,7 +31,8 @@ import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-requ
 import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 import UploadImageCommand from '../commands/upload-image';
 
-import type { CloudflareImage } from '../cloudflare-image';
+import { ChipsEditor } from '../components/chips-editor';
+import { CloudflareImage } from '../cloudflare-image';
 import { AdventureScenario } from './adventure-scenario'; // ¹ᵇ Linked Scenarios
 
 class CustomAdventureField extends FieldDef {
@@ -70,22 +71,14 @@ class AdventureIsolated extends Component<typeof Adventure> {
     'sketch',
   ];
 
-  // Load the uploaded CloudflareImage card dynamically using getCard
-  uploadedImageResource = this.args.context?.getCard(
-    this,
-    () => this.args.model?.lastCloudflareImage,
-  );
-
   // Comprehensive getter for current image display
   get currentDisplayImageUrl(): string | null {
     try {
       if (this.currentImageData) {
         return this.currentImageData;
       }
-      if (this.uploadedImageResource?.card) {
-        const uploadedUrl = (
-          this.uploadedImageResource?.card as CloudflareImage
-        )?.url;
+      if (this.args.model?.lastCloudflareImage) {
+        const uploadedUrl = this.args.model.lastCloudflareImage.url;
         if (uploadedUrl) {
           return uploadedUrl;
         }
@@ -96,13 +89,6 @@ class AdventureIsolated extends Component<typeof Adventure> {
       return this.currentImageData;
     }
   }
-
-  setNewTag = (value: string) => {
-    this.newTag = value ?? '';
-  };
-  setNewStyle = (value: string) => {
-    this.newStyle = value ?? '';
-  };
 
   addTag = (raw: string) => {
     const v = (raw || '').trim();
@@ -124,40 +110,6 @@ class AdventureIsolated extends Component<typeof Adventure> {
       : (this.args.model.customAdventure.imageStyles = []);
     if (!arr.includes(v)) arr.push(v);
     this.newStyle = '';
-  };
-
-  onTagKey = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      this.addTag(this.newTag);
-    }
-  };
-
-  onStyleKey = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      this.addStyle(this.newStyle);
-    }
-  };
-
-  removeTag = (idx: number) => {
-    let arr = Array.isArray(this.args.model?.customAdventure?.tags)
-      ? this.args.model.customAdventure.tags
-      : null;
-    if (!arr) return;
-    if (idx >= 0 && idx < arr.length) {
-      arr.splice(idx, 1);
-    }
-  };
-
-  removeStyle = (idx: number) => {
-    let arr = Array.isArray(this.args.model?.customAdventure?.imageStyles)
-      ? this.args.model.customAdventure.imageStyles
-      : null;
-    if (!arr) return;
-    if (idx >= 0 && idx < arr.length) {
-      arr.splice(idx, 1);
-    }
   };
 
   sanitizeOneShotArrays = () => {
@@ -417,7 +369,6 @@ class AdventureIsolated extends Component<typeof Adventure> {
         patch: {
           attributes: {
             gameStatus: 'setup',
-            selectedScenario: null,
             currentTurn: 0,
             startedAt: null,
             completedAt: null,
@@ -428,7 +379,10 @@ class AdventureIsolated extends Component<typeof Adventure> {
             lastTimestamp: null,
             lastIsPlayerTurn: null,
             lastImagePrompt: null,
-            lastCloudflareImage: null,
+          },
+          relationships: {
+            lastCloudflareImage: { links: { self: null } },
+            selectedScenario: { links: { self: null } },
           },
         },
       });
@@ -469,6 +423,16 @@ class AdventureIsolated extends Component<typeof Adventure> {
       this.selectedLinkedScenario = null;
     }
   }
+
+  updateTags = (items: string[]) => {
+    if (!this.args.model?.customAdventure) return;
+    this.args.model.customAdventure.tags = items;
+  };
+
+  updateImageStyles = (items: string[]) => {
+    if (!this.args.model?.customAdventure) return;
+    this.args.model.customAdventure.imageStyles = items;
+  };
 
   @action
   async startWithLinked(s: any) {
@@ -546,7 +510,11 @@ class AdventureIsolated extends Component<typeof Adventure> {
           });
           await patch.execute({
             cardId: this.args.model.id,
-            patch: { attributes: { lastCloudflareImage: uploadResult.cardId } },
+            patch: {
+              relationships: {
+                lastCloudflareImage: { links: { self: uploadResult.cardId } },
+              },
+            },
           });
         }
       } catch (uploadError: any) {
@@ -694,29 +662,13 @@ class AdventureIsolated extends Component<typeof Adventure> {
                 <div class='card-title'>Description</div>
                 <@fields.customAdventure.description @format='edit' />
                 <div class='card-title'>Tags</div>
+                <ChipsEditor
+                  @name='Tags'
+                  @items={{@model.customAdventure.tags}}
+                  @onItemsUpdate={{this.updateTags}}
+                  @placeholder='Add tag... (Enter)'
+                />
                 <div class='chips'>
-                  {{#if (gt (get @model.customAdventure.tags 'length') 0)}}
-                    <div class='chip-row'>
-                      {{#each @model.customAdventure.tags as |t idx|}}
-                        <Button
-                          class='chip'
-                          {{on 'click' (fn this.removeTag idx)}}
-                        >
-                          {{t}}
-                          <span aria-hidden='true'>×</span>
-                        </Button>
-                      {{/each}}
-                    </div>
-                  {{/if}}
-                  <label for='tag-input' class='sr-only'>Add tag</label>
-                  <input
-                    id='tag-input'
-                    class='chip-input'
-                    placeholder='Add tag… (comma or Enter)'
-                    value={{this.newTag}}
-                    {{on 'input' (pick 'target.value' this.setNewTag)}}
-                    {{on 'keydown' this.onTagKey}}
-                  />
                   {{#if
                     (and
                       (eq (get @model.customAdventure.tags 'length') 0)
@@ -739,29 +691,11 @@ class AdventureIsolated extends Component<typeof Adventure> {
 
                 <div class='card-title'>Image Styles</div>
                 <div class='chips'>
-                  {{#if
-                    (gt (get @model.customAdventure.imageStyles 'length') 0)
-                  }}
-                    <div class='chip-row'>
-                      {{#each @model.customAdventure.imageStyles as |s idx|}}
-                        <Button
-                          class='chip'
-                          {{on 'click' (fn this.removeStyle idx)}}
-                        >
-                          {{s}}
-                          <span aria-hidden='true'>×</span>
-                        </Button>
-                      {{/each}}
-                    </div>
-                  {{/if}}
-                  <label for='style-input' class='sr-only'>Add image style</label>
-                  <input
-                    id='style-input'
-                    class='chip-input'
-                    placeholder='Add style… (comma or Enter)'
-                    value={{this.newStyle}}
-                    {{on 'input' (pick 'target.value' this.setNewStyle)}}
-                    {{on 'keydown' this.onStyleKey}}
+                  <ChipsEditor
+                    @name='Image style'
+                    @items={{@model.customAdventure.imageStyles}}
+                    @onItemsUpdate={{this.updateImageStyles}}
+                    @placeholder='Add style... (Enter)'
                   />
                   {{#if
                     (and
@@ -807,13 +741,6 @@ class AdventureIsolated extends Component<typeof Adventure> {
               <div class='turn-left'>
                 <span class='turn-dot'></span>
                 <span class='turn-label'>Turn {{@model.currentTurn}}</span>
-              </div>
-              <div class='turn-right'>
-                {{#if @model.totalTurns}}
-                  <span
-                    class='mini-pill subtle'
-                  >{{@model.currentTurn}}/{{@model.totalTurns}}</span>
-                {{/if}}
               </div>
             </div>
 
@@ -1133,6 +1060,9 @@ class AdventureIsolated extends Component<typeof Adventure> {
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+      }
+      :deep(.chips-component) {
+        padding: 0;
       }
 
       .card {
@@ -1855,7 +1785,6 @@ export class Adventure extends CardDef {
 
   @field gameStatus = contains(StringField); // 'setup' | 'playing' | 'completed'
   @field currentTurn = contains(NumberField);
-  @field totalTurns = contains(NumberField);
   @field startedAt = contains(DatetimeField);
   @field completedAt = contains(DatetimeField);
   @field chatRoomId = contains(StringField);
@@ -1866,7 +1795,7 @@ export class Adventure extends CardDef {
   @field lastTimestamp = contains(DatetimeField);
   @field lastIsPlayerTurn = contains(BooleanField);
   @field lastImagePrompt = contains(StringField);
-  @field lastCloudflareImage = contains(StringField);
+  @field lastCloudflareImage = linksTo(CloudflareImage);
   @field autoGenerateImages = contains(BooleanField);
 
   @field title = contains(StringField, {
@@ -1933,10 +1862,6 @@ export class Adventure extends CardDef {
           {{#if (eq @model.gameStatus 'playing')}}
             <span class='tag active'>Playing • Turn
               {{@model.currentTurn}}</span>
-          {{else if (eq @model.gameStatus 'completed')}}
-            <span class='tag done'>Completed •
-              {{@model.totalTurns}}
-              turns</span>
           {{else}}
             <span class='tag ready'>Ready</span>
           {{/if}}
@@ -2081,11 +2006,8 @@ export class Adventure extends CardDef {
           <div class='foot'>
             {{#if (eq @model.gameStatus 'playing')}}
               <span>Turn {{@model.currentTurn}}</span>
-              {{#if (gt @model.totalTurns 0)}}<span>•
-                  {{@model.totalTurns}}
-                  turns</span>{{/if}}
             {{else if (eq @model.gameStatus 'completed')}}
-              <span>Completed • {{@model.totalTurns}} turns</span>
+              <span>Completed</span>
             {{else}}
               <span>Ready</span>
             {{/if}}
@@ -2300,16 +2222,6 @@ export class Adventure extends CardDef {
           display: grid;
           gap: 0.625rem;
           margin-bottom: 1rem;
-        }
-        .chip-row {
-          display: flex;
-          gap: 0.5rem;
-          flex-wrap: wrap;
-          padding: 0.75rem;
-          background: var(--muted, #f8fafc);
-          border-radius: var(--radius, 0.375rem);
-          border: 1px solid var(--border, #e5e7eb);
-          min-height: 2.5rem;
         }
         .chip {
           font-size: 0.8125rem;
