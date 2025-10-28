@@ -128,7 +128,7 @@ export default class Card extends Route {
         operatorModeStateObject.stacks.length === 0 &&
         operatorModeStateObject.workspaceChooserOpened !== true)
     ) {
-      this.router.transitionTo('index', '', {
+      this.router.transitionTo('index-root', {
         queryParams: {
           cardPath: undefined,
           operatorModeState: stringify({
