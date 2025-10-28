@@ -888,6 +888,7 @@ export default class Room extends Component<Signature> {
       myLastMessage!.attachedCardIds || [],
       myLastMessage.attachedFiles,
       myLastMessage.clientGeneratedId,
+      true,
     );
   }
 
@@ -1003,18 +1004,23 @@ export default class Room extends Component<Signature> {
       cardsOrIds?: CardDef[] | string[],
       files?: FileDef[],
       clientGeneratedId: string = uuidv4(),
+      keepInputAndAttachments = false,
     ) => {
       this.unknownMessageSendError = undefined;
       let messageToSend = this.matrixService.getMessageToSend(this.args.roomId);
       let cardsToSend =
         this.matrixService.cardsToSend.get(this.args.roomId) ?? undefined;
       let cardsToSendCopy = cardsToSend ? [...cardsToSend] : undefined;
+      const shouldClearDraft = !keepInputAndAttachments;
 
-      // We copy the draft and attachments into local variables before clearing them.
+      // We copy the draft and attachments into local variables before clearing them
+      // (unless we're intentionally preserving the user's current draft for a retry).
       // Clearing immediately empties the input so the user sees that their message is “in flight”.
       // If the send fails, we restore those saved values in the catch block so nothing is lost.
-      this.matrixService.setMessageToSend(this.args.roomId, undefined);
-      this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+      if (shouldClearDraft) {
+        this.matrixService.setMessageToSend(this.args.roomId, undefined);
+        this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+      }
 
       let openCardIds = new Set([
         ...(this.operatorModeStateService.getOpenCardIds() || []),
@@ -1066,9 +1072,14 @@ export default class Room extends Component<Signature> {
         this.unknownMessageSendError =
           'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.';
 
-        this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
-        if (cardsToSendCopy && cardsToSendCopy.length > 0) {
-          this.matrixService.cardsToSend.set(this.args.roomId, cardsToSendCopy);
+        if (shouldClearDraft) {
+          this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
+          if (cardsToSendCopy && cardsToSendCopy.length > 0) {
+            this.matrixService.cardsToSend.set(
+              this.args.roomId,
+              cardsToSendCopy,
+            );
+          }
         }
       }
     },

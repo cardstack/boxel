@@ -225,6 +225,9 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     await waitFor('[data-test-ai-assistant-message-pending]');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     await settled();
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue(failingMessage, 'prompt is not lost after retry');
   });
 
   test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
