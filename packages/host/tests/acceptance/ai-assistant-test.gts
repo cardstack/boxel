@@ -3162,7 +3162,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     const matrixService = getService('matrix-service');
-    await waitUntil(() => Boolean(matrixService.currentRoomId));
+    await waitFor(`[data-room-settled]`);
 
     let firstRoomId = matrixService.currentRoomId;
     assert.ok(firstRoomId, 'Should have an initial room ID');
@@ -3264,7 +3264,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       assert.strictEqual(sendAttempts, 1, 'sendMessage was attempted once');
       assert
         .dom('[data-test-boxel-alert="error"] [data-test-alert-message="0"]')
-        .hasText('There was an error sending your message. Please try again.');
+        .hasText(
+          'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.',
+        );
 
       await waitUntil(
         () => matrixService.getMessageToSend(roomId!) === failingMessage,
