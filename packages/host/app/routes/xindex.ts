@@ -1,4 +1,6 @@
+import Route from '@ember/routing/route';
 import RouterService from '@ember/routing/router-service';
+import Transition from '@ember/routing/transition';
 
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
@@ -9,9 +11,12 @@ import stringify from 'safe-stable-stringify';
 
 import ENV from '@cardstack/host/config/environment';
 
-import CardRoute from '@cardstack/host/routes/card';
-
+import {
+  applyHostModeAfterModel,
+  fetchHostModeModel,
+} from '@cardstack/host/routes/utils/host-mode-route';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
+import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -27,8 +32,7 @@ import type StoreService from '../services/store';
 
 const { hostsOwnAssets } = ENV;
 
-// Extending card route because we want its host mode handling
-export default class Index extends CardRoute {
+export default class Index extends Route {
   queryParams = {
     operatorModeState: {
       refreshModel: true, // Enabled so that back-forward navigation works in operator mode
@@ -45,6 +49,7 @@ export default class Index extends CardRoute {
   @service declare private router: RouterService;
   @service declare private store: StoreService;
   @service declare private hostModeService: HostModeService;
+  @service declare private hostModeStateService: HostModeStateService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
@@ -63,7 +68,7 @@ export default class Index extends CardRoute {
     operatorModeState: string;
   }) {
     if (this.hostModeService.isActive) {
-      return super.model(params);
+      return fetchHostModeModel(this.hostModeService, this.store, params.path);
     }
 
     let { operatorModeState, cardPath } = params;
@@ -145,6 +150,21 @@ export default class Index extends CardRoute {
 
       return;
     }
+  }
+
+  async afterModel(model: unknown, transition: Transition) {
+    await super.afterModel(model, transition);
+
+    let resolvedModel = (await Promise.resolve(model)) as
+      | Awaited<ReturnType<StoreService['get']>>
+      | undefined;
+
+    applyHostModeAfterModel({
+      hostModeService: this.hostModeService,
+      hostModeStateService: this.hostModeStateService,
+      transition,
+      model: resolvedModel,
+    });
   }
 
   private async getCardUrl(cardPath: string): Promise<string | undefined> {

@@ -23,21 +23,24 @@ import {
 } from '@cardstack/runtime-common';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
+import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
 
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import config from '@cardstack/host/config/environment';
 
-import type IndexController from '@cardstack/host/controllers/index';
+import type CardController from '@cardstack/host/controllers/card';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
+import type HostModeService from '../services/host-mode-service';
 import HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 import type {
   CardContext,
@@ -53,8 +56,10 @@ export interface HostModeComponentSignature {
 
 export class HostModeComponent extends Component<HostModeComponentSignature> {
   @service private declare commandService: CommandService;
+  @service private declare hostModeService: HostModeService;
   @service private declare hostModeStateService: HostModeStateService;
   @service private declare matrixService: MatrixService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare router: RouterService;
   @service private declare store: StoreService;
 
@@ -76,6 +81,11 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   @provide(CommandContextName)
   private get commandContext() {
     return this.commandService.commandContext;
+  }
+
+  // Remove this and onClose argument in OperatorModeContainer once we remove host mode and the card route, where closing operator mode will not be a thing anymore
+  @action closeOperatorMode() {
+    // noop
   }
 
   get connectUrl() {
@@ -154,8 +164,8 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
         element.classList.remove('not-loaded');
       } else if (event.data === 'login') {
         let indexController = getOwner(this)!.lookup(
-          'controller:index',
-        ) as IndexController;
+          'controller:card',
+        ) as CardController;
 
         let transitionQueryParameters = new URLSearchParams({
           authRedirect: window.location.href,
@@ -184,20 +194,26 @@ export class HostModeComponent extends Component<HostModeComponentSignature> {
   });
 
   <template>
-    {{pageTitle this.title}}
-    {{#if this.isError}}
-      <div data-test-error='not-found'>
-        Card not found:
-        {{@model.id}}
-      </div>
+    {{#if this.hostModeService.isActive}}
+      {{pageTitle this.title}}
+
+      {{#if this.isError}}
+        <div data-test-error='not-found'>
+          Card not found:
+          {{@model.id}}
+        </div>
+      {{else}}
+        <HostModeContent
+          @primaryCardId={{this.hostModeStateService.primaryCard}}
+          @stackItemCardIds={{this.hostModeStateService.stackItems}}
+          @removeCardFromStack={{this.removeCardFromStack}}
+          @viewCard={{this.viewCard}}
+          class='host-mode-content'
+        />
+      {{/if}}
     {{else}}
-      <HostModeContent
-        @primaryCardId={{this.hostModeStateService.primaryCard}}
-        @stackItemCardIds={{this.hostModeStateService.stackItems}}
-        @removeCardFromStack={{this.removeCardFromStack}}
-        @viewCard={{this.viewCard}}
-        class='host-mode-content'
-      />
+      {{pageTitle this.operatorModeStateService.title}}
+      <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
     {{/if}}
 
     <style scoped>

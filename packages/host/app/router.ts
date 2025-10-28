@@ -16,7 +16,9 @@ Router.map(function () {
     this.route('error');
   });
   this.route('connect', { path: '/connect/:origin' });
+
   this.route('card', { path: '/*path' });
+  this.route('card', { path: '/' });
 
   // this route is empty but lets the application.hbs render, so that the CardPrerender
   // component exists to support the indexer
