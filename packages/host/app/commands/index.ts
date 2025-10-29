@@ -35,6 +35,7 @@ import * as PopulateWithSampleDataCommandModule from './populate-with-sample-dat
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
+import * as ReadTextFileCommandModule from './read-text-file';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
@@ -149,6 +150,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
     ReadFileForAiAssistantCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/read-text-file',
+    ReadTextFileCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/save-card',
@@ -281,6 +286,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SetUserSystemCardCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
+  ReadTextFileCommandModule.default,
   SaveCardCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,
   SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
