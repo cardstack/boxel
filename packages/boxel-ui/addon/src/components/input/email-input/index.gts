@@ -4,7 +4,9 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { debounce } from 'lodash';
 
-import validateEmail from '../../../helpers/validate-email.ts';
+import isValidEmail, {
+  validateEmail as describeEmailValidation,
+} from '../../../helpers/validate-email.ts';
 import BoxelInput, { type InputValidationState } from '../index.gts';
 
 interface Signature {
@@ -19,6 +21,7 @@ interface Signature {
 }
 
 const DEFAULT_FALLBACK_MESSAGE = 'Enter a valid email address';
+const DEFAULT_REQUIRED_MESSAGE = 'Enter an email address';
 
 export default class EmailInput extends Component<Signature> {
   @tracked validationState: InputValidationState = 'initial';
@@ -32,12 +35,16 @@ export default class EmailInput extends Component<Signature> {
     const initial = this.args.value ?? '';
     this.draftValue = initial;
     if (initial !== '') {
-      this.validationState = validateEmail(initial) ? 'valid' : 'initial';
+      this.validationState = isValidEmail(initial) ? 'valid' : 'initial';
     }
   }
 
   private get fallbackErrorMessage() {
     return this.args.fallbackErrorMessage ?? DEFAULT_FALLBACK_MESSAGE;
+  }
+
+  private get requiredErrorMessage() {
+    return this.args.fallbackErrorMessage ?? DEFAULT_REQUIRED_MESSAGE;
   }
 
   private notify(value: string | null) {
@@ -48,7 +55,7 @@ export default class EmailInput extends Component<Signature> {
     if (!input || input === '') {
       if (this.args.required && this.hasBlurred) {
         this.validationState = 'invalid';
-        this.errorMessage = this.fallbackErrorMessage;
+        this.errorMessage = this.requiredErrorMessage;
       } else {
         this.validationState = 'initial';
         this.errorMessage = undefined;
@@ -57,7 +64,8 @@ export default class EmailInput extends Component<Signature> {
       return;
     }
 
-    if (validateEmail(input)) {
+    const validation = describeEmailValidation(input);
+    if (!validation) {
       this.validationState = 'valid';
       this.errorMessage = undefined;
       this.notify(input);
@@ -65,7 +73,7 @@ export default class EmailInput extends Component<Signature> {
       this.validationState = this.hasBlurred ? 'invalid' : 'initial';
       this.errorMessage =
         this.validationState === 'invalid'
-          ? this.fallbackErrorMessage
+          ? validation.message ?? this.fallbackErrorMessage
           : undefined;
       this.notify(null);
     }
@@ -91,7 +99,7 @@ export default class EmailInput extends Component<Signature> {
         const input = event.target as HTMLInputElement | null;
         const message = input?.validationMessage?.trim();
         this.errorMessage =
-          message && message.length > 0 ? message : this.fallbackErrorMessage;
+          message && message.length > 0 ? message : this.requiredErrorMessage;
         this.notify(null);
       } else {
         this.validationState = 'initial';
@@ -100,12 +108,15 @@ export default class EmailInput extends Component<Signature> {
       return;
     }
 
-    if (!validateEmail(this.draftValue)) {
+    const validation = describeEmailValidation(this.draftValue);
+    if (validation) {
       this.validationState = 'invalid';
       const input = event.target as HTMLInputElement | null;
       const message = input?.validationMessage?.trim();
       this.errorMessage =
-        message && message.length > 0 ? message : this.fallbackErrorMessage;
+        validation.message ??
+        (message && message.length > 0 ? message : undefined) ??
+        this.fallbackErrorMessage;
       this.notify(null);
     } else {
       this.validationState = 'valid';
