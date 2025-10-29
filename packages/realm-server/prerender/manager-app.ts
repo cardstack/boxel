@@ -116,7 +116,7 @@ export function buildPrerenderManagerApp(): {
         log.warn('Registration rejected: prerender server URL not provided');
         ctxt.status = 400;
         ctxt.body = {
-          errors: [{ status: 400, message: 'Cannot infer URL' }],
+          errors: [{ status: 400, message: 'URL is required' }],
         };
         return;
       }
