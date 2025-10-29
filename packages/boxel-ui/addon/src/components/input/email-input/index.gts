@@ -14,6 +14,7 @@ interface Signature {
     disabled?: boolean;
     fallbackErrorMessage?: string;
     onChange?: (value: string | null) => void;
+    placeholder?: string;
     required?: boolean;
     value: string | null;
   };
@@ -134,6 +135,7 @@ export default class EmailInput extends Component<Signature> {
       @state={{this.validationState}}
       @errorMessage={{this.errorMessage}}
       @disabled={{@disabled}}
+      @placeholder={{if @placeholder @placeholder 'Enter email'}}
       @required={{@required}}
       data-test-boxel-email-input
       ...attributes
