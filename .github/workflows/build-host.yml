@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-8-core
     concurrency:
       group: build-host-${{ inputs.environment }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
