@@ -213,6 +213,10 @@ export default class StoreService extends Service implements StoreInterface {
     return this.store.loaded();
   }
 
+  get docsInFlight() {
+    return this.store.docsInFlight;
+  }
+
   // This method creates a new instance in the store and return the new card ID
   async create(
     doc: LooseSingleCardDocument,
