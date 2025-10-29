@@ -211,7 +211,7 @@ export function resolveFieldConfiguration(
     if (!input) return undefined;
     try {
       if (typeof input === 'function') {
-        return (input as (self: Readonly<T>) => FieldConfiguration | undefined)(
+        return (input as (this: Readonly<T>) => FieldConfiguration | undefined).call(
           instance as unknown as T,
         );
       } else {

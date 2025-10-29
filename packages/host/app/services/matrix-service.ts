@@ -408,7 +408,7 @@ export default class MatrixService extends Service {
       // when user logs out we transition them back to an empty stack with the
       // workspace chooser open. this way we don't inadvertently leak private
       // card id's in the URL
-      this.router.transitionTo('index', {
+      this.router.transitionTo('index-root', {
         queryParams: {
           operatorModeState: stringify({
             stacks: [],
@@ -1800,16 +1800,20 @@ export default class MatrixService extends Service {
   }
 
   async setLLMForCodeMode() {
-    return this.setLLMModel(DEFAULT_CODING_LLM);
+    let preferredModel =
+      this.systemCard?.defaultModelConfiguration?.modelId ??
+      this.systemCard?.modelConfigurations?.[0]?.modelId ??
+      DEFAULT_CODING_LLM;
+    return this.setLLMModel(preferredModel);
   }
 
   async setLLMForInteractMode() {
-    if (this.systemCard?.modelConfigurations?.length) {
-      let preferredModel = this.systemCard.modelConfigurations[0].modelId;
-      return this.setLLMModel(preferredModel);
-    } else {
-      return this.setLLMModel(DEFAULT_LLM);
-    }
+    let preferredModel =
+      this.systemCard?.defaultModelConfiguration?.modelId ??
+      this.systemCard?.modelConfigurations?.[0]?.modelId ??
+      DEFAULT_LLM;
+
+    return this.setLLMModel(preferredModel);
   }
 
   private async setLLMModel(model: string) {

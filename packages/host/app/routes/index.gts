@@ -1,32 +1,39 @@
 import Route from '@ember/routing/route';
-import RouterService from '@ember/routing/router-service';
-
+import type RouterService from '@ember/routing/router-service';
+import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
 import window from 'ember-window-mock';
-
 import stringify from 'safe-stable-stringify';
 
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
-import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
+
+import type BillingService from '@cardstack/host/services/billing-service';
+import type CardService from '@cardstack/host/services/card-service';
+import type HostModeService from '@cardstack/host/services/host-mode-service';
+import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import { Submodes } from '../components/submode-switcher';
-
-import RealmServerService from '../services/realm-server';
-
-import type BillingService from '../services/billing-service';
-import type CardService from '../services/card-service';
-import type HostModeService from '../services/host-mode-service';
-import type MatrixService from '../services/matrix-service';
-import type RealmService from '../services/realm';
-import type StoreService from '../services/store';
+import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
+import type StoreService from '@cardstack/host/services/store';
 
 const { hostsOwnAssets } = ENV;
 
-export default class Index extends Route {
+export type ErrorModel = {
+  message: string;
+  loadType: 'index' | 'card' | 'stack';
+  operatorModeState: string;
+};
+
+export default class Card extends Route {
   queryParams = {
+    hostModeStack: {
+      refreshModel: true,
+    },
     operatorModeState: {
       refreshModel: true, // Enabled so that back-forward navigation works in operator mode
     },
@@ -34,15 +41,16 @@ export default class Index extends Route {
     // `sid` and `clientSecret` come from email verification process to reset password
     sid: { refreshModel: true },
     clientSecret: { refreshModel: true },
-  };
+  } as const;
 
-  @service declare private hostModeService: HostModeService;
-  @service declare private matrixService: MatrixService;
-  @service declare private billingService: BillingService;
-  @service declare private cardService: CardService;
-  @service declare private router: RouterService;
-  @service declare private store: StoreService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service private declare billingService: BillingService;
+  @service private declare cardService: CardService;
+  @service private declare hostModeService: HostModeService;
+  @service private declare hostModeStateService: HostModeStateService;
+  @service private declare matrixService: MatrixService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare router: RouterService;
+  @service private declare store: StoreService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 
@@ -60,10 +68,8 @@ export default class Index extends Route {
     operatorModeState: string;
   }) {
     if (this.hostModeService.isActive) {
-      // Duplicated from routes/card
-      await this.realmServer.ready;
-
-      let cardUrl = `${this.hostModeService.hostModeOrigin}/`;
+      let normalizedPath = params.path ?? '';
+      let cardUrl = `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
 
       return this.store.get(cardUrl);
     }
@@ -95,8 +101,10 @@ export default class Index extends Route {
     // and when fetching cards or files we have reauthentication mechanism.
     this.matrixService.loginToRealms();
 
-    let cardUrl: string | undefined = cardPath
-      ? await this.getCardUrl(cardPath)
+    let pathOrCardPath = cardPath ?? params.path;
+
+    let cardUrl: string | undefined = pathOrCardPath
+      ? await this.getCardUrl(pathOrCardPath)
       : undefined;
     let stacks: { id: string; format: string }[][] = [];
     if (cardUrl) {
@@ -118,7 +126,10 @@ export default class Index extends Route {
         operatorModeStateObject.stacks.length === 0 &&
         operatorModeStateObject.workspaceChooserOpened !== true)
     ) {
-      this.router.transitionTo('index', {
+      let routeName = params.path ? 'index' : 'index-root';
+      let routeArgs = params.path ? [params.path] : [];
+
+      this.router.transitionTo(routeName, ...routeArgs, {
         queryParams: {
           cardPath: undefined,
           operatorModeState: stringify({
@@ -147,6 +158,31 @@ export default class Index extends Route {
 
       return;
     }
+  }
+
+  async afterModel(
+    model: ReturnType<StoreService['get']>,
+    transition: Transition,
+  ) {
+    await super.afterModel(model, transition);
+
+    if (!this.hostModeService.isActive) {
+      return;
+    }
+
+    let stackParam = transition.to?.queryParams?.hostModeStack as
+      | string
+      | undefined;
+    let primaryCardId = (model && 'id' in model ? model.id : null) as
+      | string
+      | null;
+    let routePath = (transition.to?.params?.path as string) ?? '';
+
+    this.hostModeStateService.restore({
+      primaryCardId,
+      routePath,
+      serializedStack: stackParam,
+    });
   }
 
   private async getCardUrl(cardPath: string): Promise<string | undefined> {

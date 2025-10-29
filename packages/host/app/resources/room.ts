@@ -351,14 +351,12 @@ export class RoomResource extends Resource<Args> {
   }
 
   private get defaultLLM(): string {
-    // Use the first model from the system card if available
     let systemCard = this.matrixService.systemCard;
-    if (systemCard?.modelConfigurations?.[0]?.modelId) {
-      let defaultModel = systemCard.modelConfigurations[0].modelId;
-      return defaultModel;
-    }
-    // Fallback to hardcoded default
-    return DEFAULT_LLM;
+    return (
+      systemCard?.defaultModelConfiguration?.modelId ??
+      systemCard?.modelConfigurations?.[0]?.modelId ??
+      DEFAULT_LLM
+    );
   }
 
   @cached
