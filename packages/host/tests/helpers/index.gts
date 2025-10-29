@@ -426,18 +426,18 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
     },
   },
-  'ModelConfiguration/test-claude-sonnet-4.json': {
+  'ModelConfiguration/test-claude-sonnet-45.json': {
     data: {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'Anthropic: Claude Sonnet 4',
+          title: 'Anthropic: Claude Sonnet 4.5',
           description:
-            'Test fixture model configuration referencing Claude Sonnet 4.',
+            'Test fixture model configuration referencing Claude Sonnet 4.5.',
           thumbnailURL: null,
           notes: null,
         },
-        modelId: 'anthropic/claude-sonnet-4',
+        modelId: 'anthropic/claude-sonnet-4.5',
         toolsSupported: true,
       },
       relationships: {
@@ -489,6 +489,11 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {},
       relationships: {
+        defaultModelConfiguration: {
+          links: {
+            self: '../ModelConfiguration/test-claude-sonnet-45',
+          },
+        },
         'modelConfigurations.0': {
           links: {
             self: '../ModelConfiguration/test-gpt',
@@ -496,7 +501,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         },
         'modelConfigurations.1': {
           links: {
-            self: '../ModelConfiguration/test-claude-sonnet-4',
+            self: '../ModelConfiguration/test-claude-sonnet-45',
           },
         },
         'modelConfigurations.2': {

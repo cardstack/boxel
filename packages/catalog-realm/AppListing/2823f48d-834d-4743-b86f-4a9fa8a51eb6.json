@@ -1,0 +1,104 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Table App",
+      "images": [],
+      "summary": "A configurable data table application for displaying and managing card collections in a structured tabular format",
+      "cardInfo": {
+        "notes": "Features: Configurable field display, computed field support, primitive field filtering, direct card creation, query-based data loading",
+        "title": "Table App",
+        "description": "Table App provides a powerful and flexible way to display card collections in a structured table format. It allows users to configure display options, show computed fields, filter data, and create new cards directly from the table interface. Perfect for data management, inventory tracking, and organized content display.",
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/6961c8be-50e1-476d-bd34-100fc1813d73"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/61c8be50-e137-4dbd-b410-0fc1813d7328"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/50e1376d-bd34-400f-8181-3d732823f48d"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/6dbd3410-0fc1-413d-b328-23f48d834dc7"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/100fc181-3d73-4823-b48d-834dc743b86f"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/0fc1813d-7328-43f4-8d83-4dc743b86f4a"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/3d732823-f48d-434d-8743-b86f4a9fa8a5"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../TableApp/1d3f55f1-aeb0-4bb6-8427-78ddb189fa2a"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/data-management"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/data-analytics"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

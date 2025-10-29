@@ -408,9 +408,10 @@ const notFoundAdoptionInstance = `{
 }
 `;
 
+let personalRealmURL: string;
+
 module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
-    let personalRealmURL: string;
     let additionalRealmURL: string;
     let catalogRealmURL: string;
 

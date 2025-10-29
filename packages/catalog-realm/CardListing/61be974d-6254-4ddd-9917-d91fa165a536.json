@@ -1,0 +1,134 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Adventure ",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/screenshot_03.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/screenshot_04.png"
+      ],
+      "summary": "A comprehensive interactive adventure card component enabling scenario selection, custom storytelling, image generation, and real-time management of game state and user interactions for immersive narrative experiences.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills.0": {
+        "links": {
+          "self": "../adventure/Skill/adventure-game-master"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/597db80a-a64d-4ea4-bb97-20f75ed6f7d4"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/32597db8-0aa6-4d4e-a43b-9720f75ed6f7"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/20f75ed6-f7d4-4806-98cf-71a2b3471688"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/f75ed6f7-d438-4698-8f71-a2b3471688bf"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/5ed6f7d4-3806-48cf-b1a2-b3471688bfed"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/d6f7d438-0698-4f71-a2b3-471688bfed91"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/7db80aa6-4d4e-443b-9720-f75ed6f7d438"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/a377bdf6-c1c4-487b-9431-5a93feea3e51"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../adventure/Adventure/10b5949d-2617-4d18-a2a5-0a7087c50e8c"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../adventure/AdventureScenario/example-scenario-detective-mystery"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../adventure/AdventureScenario/example-scenario-enchanted-forest"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../adventure/AdventureScenario/example-scenario-space-station"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../adventure/AdventureScenario/example-scenario-undersea-kingdom"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../adventure/AdventureScenario/example-scenario-time-traveler"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/creative-projects"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

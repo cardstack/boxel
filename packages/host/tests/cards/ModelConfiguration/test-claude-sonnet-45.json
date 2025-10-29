@@ -3,12 +3,12 @@
     "type": "card",
     "attributes": {
       "cardInfo": {
-        "title": "Anthropic: Claude Sonnet 4",
-        "description": "Test fixture model configuration referencing Claude Sonnet 4.",
+        "title": "Anthropic: Claude Sonnet 4.5",
+        "description": "Test fixture model configuration referencing Claude Sonnet 4.5.",
         "thumbnailURL": null,
         "notes": null
       },
-      "modelId": "anthropic/claude-sonnet-4",
+      "modelId": "anthropic/claude-sonnet-4.5",
       "toolsSupported": true
     },
     "relationships": {

@@ -1,0 +1,74 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Adventure",
+        "module": "../adventure"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "startedAt": null,
+      "chatRoomId": null,
+      "gameStatus": "setup",
+      "completedAt": null,
+      "currentTurn": 0,
+      "lastNarration": null,
+      "lastTimestamp": null,
+      "lastTurnNumber": null,
+      "customAdventure": {
+        "tags": [],
+        "title": null,
+        "description": null,
+        "imageStyles": []
+      },
+      "lastImagePrompt": null,
+      "lastIsPlayerTurn": false,
+      "lastPlayerChoice": null,
+      "autoGenerateImages": true
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "selectedScenario": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedScenarios.0": {
+        "links": {
+          "self": "../AdventureScenario/example-scenario-space-station"
+        }
+      },
+      "linkedScenarios.1": {
+        "links": {
+          "self": "../AdventureScenario/example-scenario-enchanted-forest"
+        }
+      },
+      "linkedScenarios.2": {
+        "links": {
+          "self": "../AdventureScenario/example-scenario-detective-mystery"
+        }
+      },
+      "linkedScenarios.3": {
+        "links": {
+          "self": "../AdventureScenario/example-scenario-undersea-kingdom"
+        }
+      },
+      "lastCloudflareImage": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
