@@ -84,7 +84,9 @@ export default class LocalPersistenceService extends Service {
       let now = Date.now();
       let sanitized: Record<string, StoredMessageDraft> = {};
 
-      for (let [roomId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      for (let [roomId, value] of Object.entries(
+        parsed as Record<string, unknown>,
+      )) {
         if (!value) {
           continue;
         }
