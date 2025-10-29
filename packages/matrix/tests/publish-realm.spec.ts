@@ -102,8 +102,6 @@ test.describe('Publish realm', () => {
   }) => {
     await openPublishRealmModal(page);
 
-    let newTabPromise = page.waitForEvent('popup');
-
     await page.locator('[data-test-custom-subdomain-setup-button]').click();
 
     let customSubdomainInput = page.locator(
@@ -133,14 +131,15 @@ test.describe('Publish realm', () => {
     await page.locator('[data-test-custom-subdomain-checkbox]').click();
     await page.locator('[data-test-publish-button]').click();
 
-    let newTab = await newTabPromise;
+    let newTabPromise = page.waitForEvent('popup');
 
     await page
       .locator(
-        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
+        '[data-test-publish-realm-modal] [data-test-open-custom-subdomain-button]',
       )
       .click();
 
+    let newTab = await newTabPromise;
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
