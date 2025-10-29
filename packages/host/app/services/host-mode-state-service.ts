@@ -130,7 +130,7 @@ export default class HostModeStateService extends Service {
 
     let serialized = this.serialize();
     // Preserve the param if there is a stack, otherwise remove it to keep the URL clean.
-    this.router.transitionTo('card', this.currentRoutePath, {
+    this.router.transitionTo('index', this.currentRoutePath, {
       queryParams: {
         hostModeStack: serialized,
       },
