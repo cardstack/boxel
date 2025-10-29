@@ -67,7 +67,7 @@ module('Integration | Component | email-input', function (hooks) {
       .hasAttribute('data-test-boxel-input-validation-state', 'valid');
   });
 
-  test('it surfaces native browser validation message when invalid on blur', async function (assert) {
+  test('it shows a descriptive validation message when invalid on blur', async function (assert) {
     let value: string | null;
     const set = (newValue: string) => (value = newValue);
 
@@ -79,15 +79,10 @@ module('Integration | Component | email-input', function (hooks) {
     await waitForDebounce();
     await triggerEvent('[data-test-boxel-input]', 'blur');
 
-    let inputElement = document.querySelector(
-      '[data-test-boxel-input]',
-    ) as HTMLInputElement;
-    let expectedMessage =
-      inputElement.validationMessage || 'Enter a valid email address';
-
     assert
       .dom('[data-test-boxel-input-error-message]')
-      .hasText(expectedMessage);
+      .hasText('Domain must include a period, like "example.com"');
+    assert.strictEqual(value, null, 'invalid value not committed');
   });
 
   test('it allows clearing an optional email input without showing an error', async function (assert) {
