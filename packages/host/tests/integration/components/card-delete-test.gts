@@ -17,6 +17,7 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 import {
   percySnapshot,
   testRealmURL,
+  testModuleRealm,
   setupCardLogs,
   setupLocalIndexing,
   setupOnSave,
@@ -70,7 +71,11 @@ module('Integration | card-delete', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealm.url, testRealmURL, testModuleRealm],
+    realmPermissions: {
+      [testRealmURL]: ['read', 'write'],
+      [testModuleRealm]: ['read', 'write'],
+    },
     autostart: true,
   });
 

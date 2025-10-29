@@ -1,32 +1,27 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Talk Like a Pirate",
-      "summary": null,
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/talk-like-a-pirate-listing/thumbnail.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/talk-like-a-pirate-listing/thumbnail.png"
+      "summary": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/talk-like-a-pirate-listing/thumbnail.png"
+      }
     },
     "relationships": {
-      "skills.0": {
-        "links": {
-          "self": "../Skill/skill-pirate-speak"
-        }
-      },
       "specs": {
-        "links": {
-          "self": null
-        }
-      },
-      "publisher": {
-        "links": {
-          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
-        }
-      },
-      "categories": {
         "links": {
           "self": null
         }
@@ -50,12 +45,26 @@
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "SkillListing"
+      },
+      "skills.0": {
+        "links": {
+          "self": "../Skill/skill-pirate-speak"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

@@ -82,6 +82,7 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+// normalizeEnumOptions used by enum moved to packages/base/enum.gts
 
 import {
   callSerializeHook,
@@ -191,6 +192,12 @@ export type FieldsTypeFor<T extends BaseDef> = {
 };
 export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
+// Opaque configuration passed to field format components and validators
+export type FieldConfiguration = Record<string, any>;
+// Configuration may be provided as a static object or a function of the parent instance
+export type ConfigurationInput<T> =
+  | FieldConfiguration
+  | ((this: Readonly<T>) => FieldConfiguration | undefined);
 export type FieldFormats = {
   ['fieldDef']: Format;
   ['cardDef']: Format;
@@ -206,6 +213,8 @@ interface Options {
   // in which case we need to tell the runtime that a card is
   // explicitly being used.
   isUsed?: true;
+  // Optional: per-usage configuration provider merged with FieldDef-level configuration
+  configuration?: ConfigurationInput<any>;
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
@@ -332,6 +341,8 @@ export interface Field<
   fieldType: FieldType;
   computeVia: undefined | (() => unknown);
   description: undefined | string;
+  // Optional per-usage configuration stored on the field descriptor
+  configuration?: ConfigurationInput<any>;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -406,6 +417,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
@@ -667,9 +679,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       return values;
     }
 
-    if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
-    } else {
+    if (!(primitive in this.card)) {
       for (let [index, item] of values.entries()) {
         if (item != null && !instanceOf(item, this.card)) {
           throw new Error(
@@ -719,6 +729,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
@@ -891,9 +902,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 
   validate(_instance: BaseDef, value: any) {
-    if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
-    } else {
+    if (!(primitive in this.card)) {
       if (value != null && !instanceOf(value, this.card)) {
         throw new Error(
           `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
@@ -920,6 +929,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
     computeVia,
@@ -1285,6 +1295,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
     computeVia,
@@ -1854,15 +1865,15 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new ContainsMany({
-          cardThunk: cardThunk(field),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new ContainsMany({
+        cardThunk: cardThunk(field),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1875,15 +1886,15 @@ export function contains<FieldT extends FieldDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new Contains({
-          cardThunk: cardThunk(field),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new Contains({
+        cardThunk: cardThunk(field),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1896,15 +1907,15 @@ export function linksTo<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new LinksTo({
-          cardThunk: cardThunk(cardOrThunk),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new LinksTo({
+        cardThunk: cardThunk(cardOrThunk),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1917,19 +1928,21 @@ export function linksToMany<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new LinksToMany({
-          cardThunk: cardThunk(cardOrThunk),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new LinksToMany({
+        cardThunk: cardThunk(cardOrThunk),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
+
+// (moved below BaseDef & FieldDef declarations)
 
 // TODO: consider making this abstract
 export class BaseDef {
@@ -2124,6 +2137,8 @@ export type BaseDefComponent = ComponentLike<{
     context?: CardContext;
     canEdit?: boolean;
     typeConstraint?: ResolvedCodeRef;
+    // Resolved, merged field configuration (if applicable)
+    configuration?: FieldConfiguration | undefined;
     createCard: CreateCardFn;
     viewCard: ViewCardFn;
     editCard: EditCardFn;
@@ -2137,6 +2152,9 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
+
+  // Optional provider for default configuration, merged with per-usage configuration
+  static configuration?: ConfigurationInput<any>;
 
   static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
@@ -2217,6 +2235,8 @@ export class TextAreaField extends StringField {
     </template>
   };
 }
+
+// enumField has moved to packages/base/enum.gts
 
 export class CSSField extends TextAreaField {
   static displayName = 'CSS Field';
@@ -3195,6 +3215,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     editCard?: EditCardFn;
     saveCard?: SaveCardFn;
     canEdit?: boolean;
+    configuration?: FieldConfiguration | undefined;
   };
 };
 

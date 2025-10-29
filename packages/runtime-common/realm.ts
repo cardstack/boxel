@@ -14,6 +14,7 @@ import {
   badRequest,
   CardError,
   ErrorDetails,
+  formattedError,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
@@ -87,6 +88,7 @@ import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
+import { AliasCache } from './cache/alias-cache';
 import { fetcher } from './fetcher';
 import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
@@ -144,6 +146,48 @@ export interface FileRef {
 
   [key: symbol]: object;
 }
+
+const CACHE_HEADER = 'X-Boxel-Cache';
+const CACHE_HIT_VALUE = 'hit';
+const CACHE_MISS_VALUE = 'miss';
+
+type CachedSourceFileEntry = {
+  type: 'file';
+  ref: FileRef;
+  defaultHeaders: Record<string, string>;
+  canonicalPath: LocalPath;
+};
+
+type CachedSourceRedirectEntry = {
+  type: 'redirect';
+  status: number;
+  headers: Record<string, string>;
+  canonicalPath: LocalPath;
+};
+
+type SourceCacheEntry = CachedSourceFileEntry | CachedSourceRedirectEntry;
+
+type ModuleCacheEntry = {
+  canonicalPath: LocalPath;
+  body: string;
+  headers: Record<string, string>;
+};
+
+type ModuleLoadResult =
+  | { kind: 'not-found'; response: ResponseWithNodeStream }
+  | { kind: 'non-module'; response: ResponseWithNodeStream }
+  | { kind: 'shimmed'; response: ResponseWithNodeStream }
+  | {
+      kind: 'not-modified';
+      canonicalPath: LocalPath;
+      headers: Record<string, string>;
+    }
+  | {
+      kind: 'module';
+      canonicalPath: LocalPath;
+      body: string;
+      headers: Record<string, string>;
+    };
 
 export interface TokenClaims {
   user: string;
@@ -263,6 +307,8 @@ export class Realm {
   #realmServerMatrixUserId: string;
   #definitionsCache: DefinitionsCache;
   #copiedFromRealm: URL | undefined;
+  #sourceCache = new AliasCache<SourceCacheEntry>();
+  #moduleCache = new AliasCache<ModuleCacheEntry>();
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -546,6 +592,11 @@ export class Realm {
     return this.#flushUpdateEvents;
   }
 
+  __testOnlyClearCaches() {
+    this.#sourceCache.clear();
+    this.#moduleCache.clear();
+  }
+
   createJWT(claims: TokenClaims, expiration: string): string {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
@@ -582,9 +633,7 @@ export class Realm {
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          if (invalidatedURLs.find((u) => hasExecutableExtension(u.href))) {
-            this.#definitionsCache.invalidate();
-          }
+          this.handleExecutableInvalidations(invalidatedURLs);
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
@@ -633,6 +682,10 @@ export class Realm {
         }
       }
       let { lastModified } = await this.#adapter.write(path, content);
+      this.#sourceCache.invalidate(path);
+      if (hasExecutableExtension(path)) {
+        this.#moduleCache.invalidate(path);
+      }
       results.push({ path, lastModified });
       fileMetaRows.push({ path });
       urls.push(url);
@@ -933,14 +986,16 @@ export class Realm {
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
+    this.#sourceCache.invalidate(path);
+    if (hasExecutableExtension(path)) {
+      this.#moduleCache.invalidate(path);
+    }
     // Remove file meta for this path
     await this.removeFileMeta([path]);
     await this.#realmIndexUpdater.update([url], {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
-        if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
-          this.#definitionsCache.invalidate();
-        }
+        this.handleExecutableInvalidations(invalidatedURLs);
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -961,6 +1016,10 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       trackPromises.push(this.trackOwnWrite(path, { isDelete: true }));
       removePromises.push(this.#adapter.remove(path));
+      this.#sourceCache.invalidate(path);
+      if (hasExecutableExtension(path)) {
+        this.#moduleCache.invalidate(path);
+      }
     }
 
     await Promise.all(trackPromises);
@@ -970,9 +1029,7 @@ export class Realm {
     await this.#realmIndexUpdater.update(urls, {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
-        if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
-          this.#definitionsCache.invalidate();
-        }
+        this.handleExecutableInvalidations(invalidatedURLs);
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -993,6 +1050,7 @@ export class Realm {
   async reindex() {
     await this.#realmIndexUpdater.fullIndex();
     this.#definitionsCache.invalidate();
+    this.#moduleCache.clear();
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'full',
@@ -1163,9 +1221,14 @@ export class Realm {
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
 
     try {
-      // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
-        if (!request.headers.get('X-Boxel-Building-Index')) {
+        // Headless Chrome prerenders often run while the realm is still starting up, so they need to bypass
+        // the startup wait. We still enforce permissions below.
+        if (
+          !(globalThis as any).__useHeadlessChromePrerender &&
+          !request.headers.get('X-Boxel-Building-Index')
+        ) {
+          // for legacy indexer: local requests are allowed to query the realm as the index is being built up
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
             new Promise((resolve) =>
@@ -1256,41 +1319,42 @@ export class Realm {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-    if (
-      !this.#disableModuleCaching &&
-      !request.headers.get('X-Boxel-Disable-Module-Cache')
-    ) {
-      let useWorkInProgressIndex = Boolean(
-        request.headers.get('X-Boxel-Building-Index'),
-      );
-      let module = await this.#realmIndexQueryEngine.module(url, {
-        useWorkInProgressIndex,
-      });
-      if (module?.type === 'module') {
+    let moduleCachingDisabled =
+      this.#disableModuleCaching ||
+      Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
+
+    if (!moduleCachingDisabled) {
+      let cached = this.#moduleCache.get(localPath);
+      if (cached) {
         try {
-          if (
-            module.lastModified != null &&
-            request.headers.get('if-none-match') === String(module.lastModified)
-          ) {
+          let etag = cached.headers.etag;
+          if (etag && request.headers.get('if-none-match') === etag) {
+            let headers: Record<string, string> = {
+              [CACHE_HEADER]: CACHE_HIT_VALUE,
+            };
+            for (let [key, value] of Object.entries(cached.headers)) {
+              if (key.toLowerCase() === 'content-type') {
+                continue;
+              }
+              headers[key] = value;
+            }
             return createResponse({
               body: null,
-              init: { status: 304 },
+              init: {
+                status: 304,
+                headers,
+              },
               requestContext,
             });
           }
 
           return createResponse({
-            body: module.executableCode,
+            body: cached.body,
             init: {
               status: 200,
               headers: {
-                'content-type': 'text/javascript',
-                ...(module.lastModified != null
-                  ? {
-                      etag: String(module.lastModified),
-                      'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
-                    }
-                  : {}),
+                ...cached.headers,
+                [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
             },
             requestContext,
@@ -1299,64 +1363,173 @@ export class Realm {
           this.#logRequestPerformance(request, start, 'cache hit');
         }
       }
-      if (module?.type === 'error') {
-        try {
-          // using "Not Acceptable" here because no text/javascript representation
-          // can be made and we're sending text/html error page instead
-          return createResponse({
-            body: JSON.stringify(module.error, null, 2),
+    }
+
+    let response: ResponseWithNodeStream;
+    try {
+      let result = await this.loadModuleFromDisk(
+        localPath,
+        request,
+        requestContext,
+      );
+      switch (result.kind) {
+        case 'module': {
+          if (!moduleCachingDisabled) {
+            this.#moduleCache.set(localPath, {
+              canonicalPath: result.canonicalPath,
+              body: result.body,
+              headers: result.headers,
+            });
+          }
+          response = createResponse({
+            body: result.body,
             init: {
-              status: 406,
-              headers: { 'content-type': 'text/html' },
+              status: 200,
+              headers: {
+                ...result.headers,
+                [CACHE_HEADER]: CACHE_MISS_VALUE,
+              },
             },
             requestContext,
           });
-        } finally {
-          this.#logRequestPerformance(request, start, 'cache hit');
+          break;
+        }
+        case 'not-modified': {
+          response = createResponse({
+            body: null,
+            init: {
+              status: 304,
+              headers: {
+                ...result.headers,
+                [CACHE_HEADER]: CACHE_MISS_VALUE,
+              },
+            },
+            requestContext,
+          });
+          break;
+        }
+        case 'not-found':
+        case 'non-module':
+        case 'shimmed': {
+          response = result.response;
+          break;
         }
       }
+    } catch (err) {
+      this.#logRequestPerformance(request, start, 'cache miss');
+      return this.moduleErrorResponse(url.href, err, requestContext);
     }
-    return this.serveModuleFromDisk(localPath, start, request, requestContext);
+
+    this.#logRequestPerformance(request, start, 'cache miss');
+    return response;
   }
-  private async serveModuleFromDisk(
+  private async loadModuleFromDisk(
     localPath: LocalPath,
-    start: number,
     request: Request,
     requestContext: RequestContext,
-  ) {
-    try {
-      let maybeFileRef = await this.getFileWithFallbacks(
-        localPath,
-        executableExtensions,
-      );
-      if (!maybeFileRef) {
-        return notFound(request, requestContext, `${request.url} not found`);
-      }
-
-      let fileRef = maybeFileRef;
-      if (hasExecutableExtension(fileRef.path)) {
-        if (fileRef[Symbol.for('shimmed-module')]) {
-          // this response is ultimately thrown away and only the symbol value
-          // is preserved. so what is inside this response is not important
-          let response = createResponse({ requestContext });
-          (response as any)[Symbol.for('shimmed-module')] =
-            fileRef[Symbol.for('shimmed-module')];
-          return response;
-        }
-        // fallback to the file system only after trying the index. during the
-        // initial index we need to use the API to run the indexer whose modules
-        // would otherwise live in index (this conundrum would go away if the
-        // API could be statically loaded and not come from the base realm.)
-        return this.makeJS(
-          await fileContentToText(fileRef),
-          fileRef.path,
-          requestContext,
-        );
-      }
-      return await this.serveLocalFile(request, fileRef, requestContext);
-    } finally {
-      this.#logRequestPerformance(request, start, 'cache miss');
+  ): Promise<ModuleLoadResult> {
+    let maybeFileRef = await this.getFileWithFallbacks(
+      localPath,
+      executableExtensions,
+    );
+    if (!maybeFileRef) {
+      return {
+        kind: 'not-found',
+        response: notFound(request, requestContext, `${request.url} not found`),
+      };
     }
+
+    let fileRef = maybeFileRef;
+    if (!hasExecutableExtension(fileRef.path)) {
+      return {
+        kind: 'non-module',
+        response: await this.serveLocalFile(request, fileRef, requestContext),
+      };
+    }
+
+    if (fileRef[Symbol.for('shimmed-module')]) {
+      let response = createResponse({
+        requestContext,
+      }) as ResponseWithNodeStream;
+      (response as any)[Symbol.for('shimmed-module')] =
+        fileRef[Symbol.for('shimmed-module')];
+      return { kind: 'shimmed', response };
+    }
+
+    let etag =
+      fileRef.lastModified != null ? String(fileRef.lastModified) : undefined;
+    if (etag && request.headers.get('if-none-match') === etag) {
+      let headers: Record<string, string> = {
+        'cache-control': 'public, max-age=0',
+        etag,
+      };
+      if (fileRef.lastModified != null) {
+        headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
+      }
+      return {
+        kind: 'not-modified',
+        canonicalPath: fileRef.path,
+        headers,
+      };
+    }
+
+    let fileWithContent = await this.materializeFileRef(fileRef);
+    let source = await fileContentToText(fileWithContent);
+    let transpiled: string;
+    try {
+      transpiled = transpileJS(source, fileWithContent.path);
+    } catch (err: any) {
+      let cardError =
+        err instanceof CardError
+          ? err
+          : new CardError(err?.message ?? 'Module transpilation failed', {
+              status: 406,
+              title: 'Module transpilation failed',
+            });
+      cardError.stack = err?.stack ?? cardError.stack;
+      throw cardError;
+    }
+
+    let headers: Record<string, string> = {
+      'content-type': 'text/javascript',
+      'cache-control': 'public, max-age=0',
+    };
+    if (etag) {
+      headers.etag = etag;
+    }
+    if (fileRef.lastModified != null) {
+      headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
+    }
+
+    return {
+      kind: 'module',
+      canonicalPath: fileRef.path,
+      body: transpiled,
+      headers,
+    };
+  }
+
+  private moduleErrorResponse(
+    url: string,
+    error: unknown,
+    requestContext: RequestContext,
+  ): Response {
+    let cardError =
+      error instanceof CardError
+        ? error
+        : new CardError(
+            error instanceof Error ? error.message : String(error),
+            { status: 406, title: 'Module transpilation failed' },
+          );
+    let errorJSON = formattedError(url, undefined, cardError);
+    return createResponse({
+      body: JSON.stringify(errorJSON),
+      init: {
+        status: 406,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
   }
 
   private async serveLocalFile(
@@ -1541,137 +1714,113 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
-    if (!request.headers.get('X-Boxel-Building-Index')) {
-      let indexedSource = await this.getSourceFromIndex(new URL(request.url));
-      if (indexedSource) {
-        let { canonicalURL, lastModified, source } = indexedSource;
-        if (request.url !== canonicalURL.href) {
-          return createResponse({
-            body: null,
-            init: {
-              status: 302,
-              headers: {
-                Location: `${new URL(this.url).pathname}${this.paths.local(
-                  canonicalURL,
-                )}`,
+    let url = new URL(request.url);
+    let bypassCache =
+      url.searchParams.has('noCache') ||
+      (!url.pathname.endsWith('.json') &&
+        !hasExecutableExtension(url.pathname));
+    let localName = this.paths.local(url);
+    if (bypassCache) {
+      let cachedEntry = this.#sourceCache.get(localName);
+      if (cachedEntry) {
+        this.#sourceCache.invalidate(cachedEntry.canonicalPath);
+      }
+    } else {
+      let cached = this.#sourceCache.get(localName);
+      if (cached) {
+        let start = Date.now();
+        try {
+          if (cached.type === 'redirect') {
+            return createResponse({
+              body: null,
+              init: {
+                status: cached.status,
+                headers: {
+                  ...cached.headers,
+                  [CACHE_HEADER]: CACHE_HIT_VALUE,
+                },
+              },
+              requestContext,
+            });
+          }
+          return await this.serveLocalFile(
+            request,
+            cached.ref,
+            requestContext,
+            {
+              defaultHeaders: {
+                ...cached.defaultHeaders,
+                [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
             },
-            requestContext,
-          });
+          );
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
         }
-        // Build headers, adding x-created from DB when possible
-        let dbPath = this.paths.local(canonicalURL);
-        let createdAt = await this.getCreatedTime(dbPath);
-        let createdHeader: Record<string, string> =
-          createdAt != null
-            ? { 'x-created': formatRFC7231(createdAt * 1000) }
-            : {};
-
-        return createResponse({
-          body: source,
-          init: {
-            headers: {
-              ...(lastModified != null
-                ? { 'last-modified': formatRFC7231(lastModified * 1000) }
-                : {}),
-              ...createdHeader,
-            },
-          },
-          requestContext,
-        });
       }
     }
 
-    // fallback to file system if there is an error document or this is the
-    // first time index
-    let localName = this.paths.local(new URL(request.url));
-    let handle = await this.getFileWithFallbacks(localName, [
-      ...executableExtensions,
-      '.json',
-    ]);
     let start = Date.now();
     try {
+      let handle = await this.getFileWithFallbacks(localName, [
+        ...executableExtensions,
+        '.json',
+      ]);
       if (!handle) {
         return notFound(request, requestContext, `${localName} not found`);
       }
 
       if (handle.path !== localName) {
-        return createResponse({
+        let headers = {
+          Location: `${new URL(this.url).pathname}${handle.path}`,
+          [CACHE_HEADER]: CACHE_MISS_VALUE,
+        };
+        let response = createResponse({
           body: null,
           init: {
             status: 302,
-            headers: {
-              Location: `${new URL(this.url).pathname}${handle.path}`,
-            },
+            headers,
           },
           requestContext,
         });
+        if (!bypassCache) {
+          this.#sourceCache.set(localName, {
+            type: 'redirect',
+            status: 302,
+            headers,
+            canonicalPath: handle.path,
+          });
+        }
+        return response;
       }
 
-      // Build headers, adding x-created from DB when possible
       let createdAt = await this.getCreatedTime(handle.path);
-      let createdHeader: Record<string, string> =
-        createdAt != null
+      let defaultHeaders: Record<string, string> = {
+        'content-type': 'text/plain; charset=utf-8',
+        ...(createdAt != null
           ? { 'x-created': formatRFC7231(createdAt * 1000) }
-          : {};
-      return await this.serveLocalFile(request, handle, requestContext, {
-        defaultHeaders: {
-          'content-type': 'text/plain; charset=utf-8',
-          ...createdHeader,
-        },
-      });
-    } finally {
-      this.#logRequestPerformance(request, start);
-    }
-  }
-
-  private async getSourceFromIndex(url: URL): Promise<
-    | {
-        source: string;
-        lastModified: number | null;
-        canonicalURL: URL;
-      }
-    | undefined
-  > {
-    let [module, instance] = await Promise.all([
-      this.#realmIndexQueryEngine.module(url),
-      this.#realmIndexQueryEngine.instance(url),
-    ]);
-    if (module?.type === 'module' || instance?.type === 'instance') {
-      let canonicalURL =
-        module?.type === 'module'
-          ? module.canonicalURL
-          : instance?.type === 'instance'
-            ? instance.canonicalURL
-            : undefined;
-      let source =
-        module?.type === 'module'
-          ? module.source
-          : instance?.type === 'instance'
-            ? instance.source
-            : undefined;
-      let lastModified =
-        module?.type === 'module'
-          ? module.lastModified
-          : instance?.type === 'instance'
-            ? instance.lastModified
-            : null;
-      if (canonicalURL == null || source == null) {
-        throw new Error(
-          `missing 'canonicalURL' and/or 'source' from index entry ${
-            url.href
-          }, where type is ${
-            module?.type === 'module' ? 'module' : 'instance'
-          }`,
-        );
-      }
-      return {
-        canonicalURL: new URL(canonicalURL),
-        lastModified,
-        source,
+          : {}),
+        [CACHE_HEADER]: CACHE_MISS_VALUE,
       };
+      if (bypassCache) {
+        return await this.serveLocalFile(request, handle, requestContext, {
+          defaultHeaders,
+        });
+      } else {
+        let cachedRef = await this.materializeFileRef(handle);
+        this.#sourceCache.set(localName, {
+          type: 'file',
+          ref: cachedRef,
+          defaultHeaders,
+          canonicalPath: handle.path,
+        });
+        return await this.serveLocalFile(request, cachedRef, requestContext, {
+          defaultHeaders,
+        });
+      }
+    } finally {
+      this.#logRequestPerformance(request, start, 'cache miss');
     }
-    return undefined;
   }
 
   private async removeCardSource(
@@ -1694,35 +1843,6 @@ export class Realm {
     });
   }
 
-  private makeJS(
-    content: string,
-    debugFilename: string,
-    requestContext: RequestContext,
-  ): Response {
-    try {
-      content = transpileJS(content, debugFilename);
-    } catch (err: any) {
-      // using "Not Acceptable" here because no text/javascript representation
-      // can be made and we're sending text/html error page instead
-      return createResponse({
-        body: err.message,
-        init: {
-          status: 406,
-          headers: { 'content-type': 'text/html' },
-        },
-        requestContext,
-      });
-    }
-    return createResponse({
-      body: content,
-      init: {
-        status: 200,
-        headers: { 'content-type': 'text/javascript' },
-      },
-      requestContext,
-    });
-  }
-
   // we bother with this because typescript is picky about allowing you to use
   // explicit file extensions in your source code
   private async getFileWithFallbacks(
@@ -1734,6 +1854,60 @@ export class Realm {
       this.#adapter.openFile.bind(this.#adapter),
       fallbackExtensions,
     );
+  }
+
+  private cloneFileRefWithContent(
+    ref: FileRef,
+    content: string | Uint8Array,
+  ): FileRef {
+    let clone: FileRef = {
+      path: ref.path,
+      content,
+      lastModified: ref.lastModified,
+    };
+    for (let symbol of Object.getOwnPropertySymbols(ref)) {
+      (clone as any)[symbol] = (ref as any)[symbol];
+    }
+    return clone;
+  }
+
+  private async materializeFileRef(ref: FileRef): Promise<FileRef> {
+    let content = ref.content;
+    if (typeof content === 'string') {
+      return this.cloneFileRefWithContent(ref, content);
+    }
+    if (content instanceof Uint8Array) {
+      return this.cloneFileRefWithContent(ref, content);
+    }
+    if (
+      typeof ReadableStream !== 'undefined' &&
+      content instanceof ReadableStream
+    ) {
+      let text = await fileContentToText({ content });
+      return this.cloneFileRefWithContent(ref, text);
+    }
+    if (isNode && typeof (content as any)?.pipe === 'function') {
+      let text = await fileContentToText({ content } as Pick<
+        FileRef,
+        'content'
+      >);
+      return this.cloneFileRefWithContent(ref, text);
+    }
+    let text = await fileContentToText(ref);
+    return this.cloneFileRefWithContent(ref, text);
+  }
+
+  private handleExecutableInvalidations(invalidatedURLs: URL[]): void {
+    let definitionsInvalidated = false;
+    for (let invalidatedURL of invalidatedURLs) {
+      if (hasExecutableExtension(invalidatedURL.href)) {
+        definitionsInvalidated = true;
+        this.#moduleCache.invalidate(this.paths.local(invalidatedURL));
+      }
+    }
+    if (definitionsInvalidated) {
+      this.#definitionsCache.invalidate();
+    }
   }
 
   private async createCard(
@@ -2288,9 +2462,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
     let cardsQuery;
     if (request.method === 'QUERY') {
       cardsQuery = await request.json();
@@ -2325,7 +2496,6 @@ export class Realm {
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,
-      useWorkInProgressIndex,
     });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -2384,10 +2554,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
-
     let payload;
     let htmlFormat;
     let cardUrls;
@@ -2462,7 +2628,6 @@ export class Realm {
     let results = await this.#realmIndexQueryEngine.searchPrerendered(
       cardsQuery,
       {
-        useWorkInProgressIndex,
         htmlFormat,
         cardUrls,
         renderType,
@@ -2517,15 +2682,8 @@ export class Realm {
       });
     }
     let { codeRef } = payload;
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
-    let maybeError = await this.#realmIndexQueryEngine.getOwnDefinition(
-      codeRef,
-      {
-        useWorkInProgressIndex,
-      },
-    );
+    let maybeError =
+      await this.#realmIndexQueryEngine.getOwnDefinition(codeRef);
     if (!maybeError) {
       return notFound(request, requestContext);
     }
@@ -3005,9 +3163,7 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update([url], {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
-            this.#definitionsCache.invalidate();
-          }
+          this.handleExecutableInvalidations(invalidatedURLs);
           this.broadcastRealmEvent({
             eventName: 'index',
             indexType: 'incremental',

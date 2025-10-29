@@ -339,3 +339,63 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   }
   return resolved;
 }
+
+export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
+  let metadata = (card as any)[meta];
+  let adoptsFrom = metadata?.adoptsFrom as CodeRef | undefined;
+  let baseURL = (() => {
+    let id = (card as any).id;
+    if (typeof id !== 'string') {
+      return undefined;
+    }
+    if (typeof URL.canParse === 'function' && !URL.canParse(id)) {
+      return undefined;
+    }
+    try {
+      return new URL(id);
+    } catch {
+      return undefined;
+    }
+  })();
+  let resolveRelativeRef = (ref: CodeRef): ResolvedCodeRef | undefined => {
+    if (!baseURL) {
+      return undefined;
+    }
+    let resolved = codeRefWithAbsoluteURL(ref, baseURL);
+    return isResolvedCodeRef(resolved) ? resolved : undefined;
+  };
+  if (isResolvedCodeRef(adoptsFrom)) {
+    if (!isRelativePath(adoptsFrom.module)) {
+      return adoptsFrom;
+    }
+    return resolveRelativeRef(adoptsFrom);
+  }
+  if (!isCodeRef(adoptsFrom)) {
+    return undefined;
+  }
+  if (!hasRelativeModule(adoptsFrom)) {
+    return undefined;
+  }
+  return resolveRelativeRef(adoptsFrom);
+}
+
+function hasRelativeModule(ref: CodeRef): boolean {
+  if (!('type' in ref)) {
+    return isRelativePath(ref.module);
+  }
+  return hasRelativeModule(ref.card);
+}
+
+function isRelativePath(moduleId: unknown): moduleId is string {
+  if (typeof moduleId !== 'string') {
+    return false;
+  }
+  if (typeof URL.canParse === 'function') {
+    return !URL.canParse(moduleId);
+  }
+  return (
+    !moduleId.includes('://') &&
+    !moduleId.startsWith('/') &&
+    !moduleId.startsWith('data:')
+  );
+}

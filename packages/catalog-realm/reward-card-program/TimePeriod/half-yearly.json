@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimePeriod",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "unit": "half-year",
+      "count": 1,
+      "notes": "The Hotel Collection requires minimum two-night stay",
+      "scope": "cardmember",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minAmount": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "resetBasis": "cardmember-year",
+      "maxUsesPerPeriod": null,
+      "eligibleBookingNightsMin": 2
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

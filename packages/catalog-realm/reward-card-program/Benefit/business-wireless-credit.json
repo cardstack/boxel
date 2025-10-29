@@ -1,0 +1,52 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Wireless Credit",
+      "amount": {
+        "amount": 120,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [
+        "Statement credits up to $10 per month for wireless phone service purchases made directly with a U.S. wireless telephone service provider. Enrollment required.‡"
+      ],
+      "partner": "",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": 10,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "Must enroll for benefit. Up to $10 credit per month ($120 annual maximum). Covers monthly wireless service charges from eligible U.S. carriers. Must pay carrier directly with the card.",
+      "programURL": null,
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": true
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -18,7 +18,7 @@ import {
   DefaultFormatsConsumer,
   PermissionsConsumer,
 } from './field-component';
-import { IconButton } from '@cardstack/boxel-ui/components';
+import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import {
   getPlural,
   fields,
@@ -28,7 +28,7 @@ import {
   uuidv4,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { IconTrash, FourLines } from '@cardstack/boxel-ui/icons';
+import { IconTrash, FourLines, IconPlus } from '@cardstack/boxel-ui/icons';
 import { task } from 'ember-concurrency';
 import { action } from '@ember/object';
 import {
@@ -36,7 +36,6 @@ import {
   SortableHandleModifier as sortableHandle,
   SortableItemModifier as sortableItem,
 } from '@cardstack/boxel-ui/modifiers';
-import AddButton from './components/add-button';
 
 interface ContainsManyEditorSignature {
   Args: {
@@ -118,10 +117,18 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
           </ul>
         {{/if}}
         {{#if permissions.canWrite}}
-          <AddButton class='add-new' {{on 'click' this.add}} data-test-add-new>
+          <Button
+            class='add-new'
+            @kind='muted'
+            @size='tall'
+            @rectangular={{true}}
+            {{on 'click' this.add}}
+            data-test-add-new
+          >
+            <IconPlus class='icon' width='12px' height='12px' alt='plus' />
             Add
             {{getPlural @field.card.displayName}}
-          </AddButton>
+          </Button>
         {{/if}}
       </div>
     </PermissionsConsumer>
@@ -129,8 +136,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       .contains-many-editor {
         --remove-icon-size: var(--boxel-icon-lg);
       }
-      .contains-many-editor
-        :deep(.compound-field.edit-format .add-button--full-width) {
+      .contains-many-editor :deep(.compound-field.edit-format .add-new) {
         border: 1px solid var(--border, var(--boxel-border-color));
       }
       .list {
@@ -180,7 +186,9 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         box-shadow: var(--boxel-box-shadow-hover);
       }
       .add-new {
-        width: calc(100% - var(--boxel-icon-xxl));
+        gap: var(--boxel-sp-xxxs);
+        width: fit-content;
+        letter-spacing: var(--boxel-lsp-xs);
         margin-left: var(--boxel-icon-lg);
         /* for alignment due to sort handle */
       }

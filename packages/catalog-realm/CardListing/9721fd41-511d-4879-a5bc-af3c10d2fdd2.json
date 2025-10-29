@@ -1,17 +1,37 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Chrome Rebel",
-      "summary": "Premium custom motorcycle showcase with garage-themed presentation - display engine specs, build details, and chrome styling while viewing interactive tank display and rebel aesthetics. Features chrome skull badges, engine controls, custom features listing, garage environment theming, and authentic motorcycle culture styling for complete bike enthusiast experiences.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/chrome-rebel-listing/screenshot_01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chrome-rebel-listing/thumbnail.png"
+      "summary": "Premium custom motorcycle showcase with garage-themed presentation - display engine specs, build details, and chrome styling while viewing interactive tank display and rebel aesthetics. Features chrome skull badges, engine controls, custom features listing, garage environment theming, and authentic motorcycle culture styling for complete bike enthusiast experiences.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": "",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chrome-rebel-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -26,31 +46,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../chrome-rebel/ChromeRebel/ac23bfbb-a2db-4497-9b33-3e5647eeb3ab"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/developer-tools-code"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../chrome-rebel/ChromeRebel/ac23bfbb-a2db-4497-9b33-3e5647eeb3ab"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }

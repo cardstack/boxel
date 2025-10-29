@@ -1,18 +1,48 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Blog App",
-      "summary": "A modern, card-based blogging platform built with Cardstack framework.\n\n### Features\n\n- Create and manage blog posts, author profiles, and categories\n- Track publish dates, update history, word counts, and content status\n- Easy content creation with one-click \"New\" button",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/screenshot-01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/screenshot-02.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/screenshot-04.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/thumbnail.png"
+      "summary": "A modern, card-based blogging platform built with Cardstack framework.\n\n### Features\n\n- Create and manage blog posts, author profiles, and categories\n- Track publish dates, update history, word counts, and content status\n- Easy content creation with one-click \"New\" button",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
       "specs.0": {
         "links": {
           "self": "../Spec/user"
@@ -78,26 +108,6 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
-      "categories.0": {
-        "links": {
-          "self": "../Category/developer-tools-code"
-        }
-      },
-      "tags.0": {
-        "links": {
-          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
-        }
-      },
-      "tags.1": {
-        "links": {
-          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
-        }
-      },
-      "license": {
-        "links": {
-          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
-        }
-      },
       "examples.0": {
         "links": {
           "self": "../blog-app/BlogApp/ramped"
@@ -107,12 +117,46 @@
         "links": {
           "self": "../blog-app/Author/alice-enwunder"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "AppListing"
+      },
+      "examples.2": {
+        "links": {
+          "self": "../blog-app/Author/jane-doe"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../blog-app/BlogPost/urban-living-future-sustainable"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../blog-app/BlogPost/ultimate-guide-remote-work"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../blog-app/BlogCategory/urban-work"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../blog-app/BlogCategory/city-design"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../blog-app/BlogCategory/future-tech"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/developer-tools-code"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

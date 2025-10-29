@@ -1,18 +1,38 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Premium Fashion Influencer Linktree",
-      "summary": "Professional social media link aggregator with premium fashion influencer design - configure profile details, custom links, and brand colors while viewing animated Brooklyn-to-Austin aesthetic presentations. Features floating sparkle animations, premium ring effects, crown badges, agency representation indicators, and luxury gradient styling for sophisticated influencer brand management.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/premium-fashion-influencer-linktree-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/premium-fashion-influencer-linktree-listing/screenshot_02.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/premium-fashion-influencer-linktree-listing/thumbnail.png"
+      "summary": "Professional social media link aggregator with premium fashion influencer design - configure profile details, custom links, and brand colors while viewing animated Brooklyn-to-Austin aesthetic presentations. Features floating sparkle animations, premium ring effects, crown badges, agency representation indicators, and luxury gradient styling for sophisticated influencer brand management.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/premium-fashion-influencer-linktree-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -27,31 +47,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../link-tree/LinkTree/cfeae6c9-84c4-4f01-b56b-cfff68a01b0c"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/marketing-growth"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../link-tree/LinkTree/cfeae6c9-84c4-4f01-b56b-cfff68a01b0c"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }

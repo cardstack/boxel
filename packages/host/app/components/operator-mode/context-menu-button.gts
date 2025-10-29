@@ -3,14 +3,11 @@ import { array } from '@ember/helper';
 
 import {
   BoxelDropdown,
-  IconButton,
+  ContextButton,
   Menu,
 } from '@cardstack/boxel-ui/components';
 import { menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  ThreeDotsHorizontal,
-  Warning as WarningIcon,
-} from '@cardstack/boxel-ui/icons';
+import { Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {
@@ -26,10 +23,11 @@ interface Signature {
 const ContextMenuButton: TemplateOnlyComponent<Signature> = <template>
   <BoxelDropdown @contentClass='context-menu'>
     <:trigger as |bindings|>
-      <IconButton
+      <ContextButton
         class='context-menu-trigger'
-        @icon={{ThreeDotsHorizontal}}
-        aria-label='field options'
+        @icon='context-menu-vertical'
+        @size='small'
+        @label='field options'
         {{bindings}}
         ...attributes
       />
@@ -64,12 +62,7 @@ const ContextMenuButton: TemplateOnlyComponent<Signature> = <template>
     }
 
     .context-menu-trigger {
-      rotate: 90deg;
-      --boxel-icon-button-width: 20px;
-      --boxel-icon-button-height: 20px;
-    }
-    .context-menu-trigger:hover {
-      --icon-color: var(--boxel-highlight);
+      margin-left: 2px;
     }
 
     .context-menu-list {

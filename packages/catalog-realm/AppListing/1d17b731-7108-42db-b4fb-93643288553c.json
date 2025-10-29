@@ -1,17 +1,42 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Sprint Planner",
-      "summary": "Plan, prioritize, and execute your sprints with ease using Sprint Planner, a powerful drag-and-drop editor designed for agile teams. Built for speed and clarity, Sprint Planner transforms the way your team organizes user stories, tasks, and goals—all in a visual, intuitive interface.",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/screenshot-01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/screenshot-02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/screenshot-02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/screenshot-01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/thumbnail.png"
+      "summary": "Plan, prioritize, and execute your sprints with ease using Sprint Planner, a powerful drag-and-drop editor designed for agile teams. Built for speed and clarity, Sprint Planner transforms the way your team organizes user stories, tasks, and goals—all in a visual, intuitive interface.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
       "specs.0": {
         "links": {
           "self": "../Spec/sprint-planner"
@@ -82,21 +107,6 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
-      "categories.0": {
-        "links": {
-          "self": "../Category/business-development"
-        }
-      },
-      "tags": {
-        "links": {
-          "self": null
-        }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
       "examples.0": {
         "links": {
           "self": "../sprint-planner/SprintPlanner/6a51360f-431c-446a-8db6-f608d3f3e079"
@@ -107,16 +117,20 @@
           "self": "../sprint-planner/Project/f379cb36-a323-4213-8477-572a31d5d21d"
         }
       },
-      "skills": {
+      "examples.2": {
+        "links": {
+          "self": "../sprint-planner/SprintTask/f81ea9a1-0b94-4e12-8e2e-c84fba78c551"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/business-development"
+        }
+      },
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "AppListing"
       }
     }
   }

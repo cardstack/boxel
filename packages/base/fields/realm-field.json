@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Realm Field",
+      "description": "A field that captures realm values.",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/realm",
+        "name": "default"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

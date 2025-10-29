@@ -151,16 +151,12 @@ export default class RenderRoute extends Route<Model> {
     { id, nonce }: { id: string; nonce: string },
     parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
   ): Promise<Model> {
-    // Opt in to reading the in-progress index, as opposed to the last completed
-    // index. This matters for any related cards that we will be loading, not
-    // for our own card, which we're going to load directly from source.
     if (parsedOptions.clearCache) {
       this.loaderService.resetLoader({
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
     }
-    this.loaderService.setIsIndexing(true);
     if (parsedOptions.clearCache) {
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
@@ -509,6 +505,24 @@ export default class RenderRoute extends Route<Model> {
         {},
       );
       return entries as T;
+    }
+
+    // also strip out query params in URL like ?noCache
+    if (
+      value &&
+      typeof value === 'string' &&
+      !value.includes(' ') &&
+      (value.startsWith('http://') || value.startsWith('https://'))
+    ) {
+      let parsed: URL | undefined;
+      try {
+        parsed = new URL(value);
+      } catch (e) {
+        return value;
+      }
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.href as T;
     }
     return value;
   }

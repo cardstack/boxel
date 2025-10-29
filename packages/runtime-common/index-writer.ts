@@ -14,7 +14,6 @@ import {
   logger,
   isUrlLike,
 } from './index';
-import { transpileJS } from './transpile';
 import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
   type Expression,
@@ -76,7 +75,6 @@ export type LastModifiedTimes = Map<
 
 export interface InstanceEntry {
   type: 'instance';
-  source: string;
   lastModified: number;
   resourceCreatedAt: number;
   resource: CardResource;
@@ -100,7 +98,6 @@ export interface ErrorEntry {
 
 interface ModuleEntry {
   type: 'module';
-  source: string;
   lastModified: number;
   resourceCreatedAt: number;
   deps: Set<string>;
@@ -121,7 +118,6 @@ export class Batch {
   #invalidations = new Set<string>();
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
-  #log = logger('index-writer');
   declare private realmVersion: number;
 
   constructor(
@@ -202,21 +198,6 @@ export class Batch {
         new URL(entry.url),
       ).href;
       this.#invalidations.add(destURL);
-      if (entry.type === 'instance' && entry.source) {
-        let json: { data: CardResource<string> } | undefined;
-        try {
-          json = JSON.parse(entry.source);
-        } catch (e: any) {
-          this.#log.info(
-            `${jobIdentity(this.jobInfo)} Cannot parse instance source for ${entry.url}: ${e.message}`,
-          );
-        }
-        if (json) {
-          json.data.id = destURL.replace(/\.json$/, '');
-          entry.source = JSON.stringify(json);
-        }
-      }
-
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.realm_version = this.realmVersion;
@@ -324,7 +305,6 @@ export class Batch {
             deps: [...entry.deps],
             types: entry.types,
             display_names: entry.displayNames,
-            source: entry.source,
             last_modified: entry.lastModified,
             resource_created_at: entry.resourceCreatedAt,
             error_doc: null,
@@ -333,13 +313,8 @@ export class Batch {
           ? {
               type: 'module',
               deps: [...entry.deps],
-              source: entry.source,
               last_modified: entry.lastModified,
               resource_created_at: entry.resourceCreatedAt,
-              transpiled_code: transpileJS(
-                entry.source,
-                new RealmPaths(this.realmURL).local(url),
-              ),
               error_doc: null,
             }
           : entry.type === 'definition'

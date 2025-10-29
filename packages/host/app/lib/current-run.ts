@@ -79,6 +79,18 @@ const log = logger('current-run');
 const perfLog = logger('index-perf');
 const { renderTimeoutMs } = ENV;
 
+function canonicalURL(url: string, relativeTo?: string): string {
+  try {
+    let parsed = new URL(url, relativeTo);
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.href;
+  } catch (_e) {
+    let stripped = url.split('#')[0] ?? url;
+    return stripped.split('?')[0] ?? stripped;
+  }
+}
+
 interface CardType {
   refURL: string;
   codeRef: CodeRef;
@@ -519,7 +531,6 @@ export class CurrentRun {
           }
           await this.indexCard({
             path: localPath,
-            source: content,
             lastModified,
             resourceCreatedAt,
             resource,
@@ -595,7 +606,6 @@ export class CurrentRun {
     let moduleCreatedAt = await this.batch.ensureFileCreatedAt(moduleLocalPath);
     await this.batch.updateEntry(url, {
       type: 'module',
-      source: ref.content,
       lastModified: ref.lastModified,
       resourceCreatedAt: moduleCreatedAt,
       deps: new Set(deps),
@@ -709,14 +719,12 @@ export class CurrentRun {
 
   private async indexCard({
     path,
-    source,
     lastModified,
     resourceCreatedAt,
     resource,
     store,
   }: {
     path: LocalPath;
-    source: string;
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
@@ -796,7 +804,9 @@ export class CurrentRun {
             renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
           ) {
             renderError.error.deps = renderError.error.deps ?? [];
-            renderError.error.deps.push(renderError.error.id);
+            renderError.error.deps.push(
+              canonicalURL(renderError.error.id, instanceURL.href),
+            );
           }
           if (!renderError) {
             log.error(
@@ -808,8 +818,8 @@ export class CurrentRun {
           // always include the modules that we see in serialized as deps
           renderError.error.deps = renderError.error.deps ?? [];
           renderError.error.deps.push(
-            ...modulesConsumedInMeta(resource.meta).map(
-              (m) => new URL(m, instanceURL.href).href,
+            ...modulesConsumedInMeta(resource.meta).map((m) =>
+              canonicalURL(m, instanceURL.href),
             ),
           );
           renderError.error.deps = [...new Set(renderError.error.deps)];
@@ -834,7 +844,6 @@ export class CurrentRun {
           } = renderResult;
           await this.updateEntry(instanceURL, {
             type: 'instance',
-            source,
             resource: serialized!.data as CardResource,
             searchData: searchDoc!,
             isolatedHtml: isolatedHTML ?? undefined,
@@ -1017,6 +1026,9 @@ export class CurrentRun {
                   : []),
               ]),
             ];
+            error.error.deps = error.error.deps.map((dep) =>
+              canonicalURL(dep, instanceURL.href),
+            );
           } else if (typesMaybeError?.type === 'error') {
             error = { type: 'error', error: typesMaybeError.error };
           } else {
@@ -1032,7 +1044,6 @@ export class CurrentRun {
         } else if (searchData && doc && typesMaybeError?.type === 'types') {
           await this.updateEntry(instanceURL, {
             type: 'instance',
-            source,
             resource: doc.data,
             searchData,
             isolatedHtml,

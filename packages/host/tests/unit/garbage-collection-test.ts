@@ -41,6 +41,8 @@ module('Unit | identity-context garbage collection', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     api = await loader.import(`${baseRealm.url}card-api`);
+    delete (globalThis as any).__lazilyLoadLinks;
+    delete (globalThis as any).__boxelRenderContext;
   });
 
   function makeError(id: string): CardError {

@@ -1,17 +1,37 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Minecraft Birthday Party",
-      "summary": "Pixelated Minecraft-themed birthday invitation with authentic game aesthetics - customize celebrant details, party information, and background imagery while viewing pixel-perfect retro styling. Features blocky typography, vibrant color schemes, game-inspired iconography, responsive mobile layouts, and nostalgic gaming visual elements for immersive birthday party invitations.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/minecraft-birthday-party-listing/screenshot_01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/minecraft-birthday-party-listing/thumbnail.png"
+      "summary": "Pixelated Minecraft-themed birthday invitation with authentic game aesthetics - customize celebrant details, party information, and background imagery while viewing pixel-perfect retro styling. Features blocky typography, vibrant color schemes, game-inspired iconography, responsive mobile layouts, and nostalgic gaming visual elements for immersive birthday party invitations.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/minecraft-birthday-party-listing/thumbnail.png"
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
       "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -26,31 +46,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
+      "examples.0": {
+        "links": {
+          "self": "../minecraft-invite/MinecraftInvite/636b6b18-c0a4-449b-bf1c-e125dd730f5a"
+        }
+      },
       "categories.0": {
         "links": {
           "self": "../Category/video-games-interactive"
         }
       },
-      "tags": {
+      "cardInfo.theme": {
         "links": {
           "self": null
         }
-      },
-      "license": {
-        "links": {
-          "self": null
-        }
-      },
-      "examples.0": {
-        "links": {
-          "self": "../minecraft-invite/MinecraftInvite/636b6b18-c0a4-449b-bf1c-e125dd730f5a"
-        }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
       }
     }
   }

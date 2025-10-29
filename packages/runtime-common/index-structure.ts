@@ -21,8 +21,6 @@ export interface BoxelIndexTable {
   definition: Definition | null;
   types: string[] | null;
   display_names: string[] | null;
-  transpiled_code: string | null;
-  source: string | null;
   embedded_html: Record<string, string> | null;
   fitted_html: Record<string, string> | null;
   isolated_html: string | null;

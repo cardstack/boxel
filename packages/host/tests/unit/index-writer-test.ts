@@ -1,5 +1,3 @@
-import merge from 'lodash/merge';
-
 import { module, test } from 'qunit';
 
 import {
@@ -15,11 +13,6 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
-import {
-  cardSrc,
-  compiledCard,
-} from '@cardstack/runtime-common/etc/test-fixtures';
-import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
@@ -447,7 +440,6 @@ module('Unit | index-writer', function (hooks) {
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
       resource,
-      source: JSON.stringify(resource),
       lastModified: Date.now(),
       resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh' },
@@ -603,7 +595,6 @@ module('Unit | index-writer', function (hooks) {
         },
       },
     };
-    let source = JSON.stringify({ data: resource });
     await setupIndex(
       adapter,
       [
@@ -617,8 +608,6 @@ module('Unit | index-writer', function (hooks) {
           realm_url: testRealmURL,
           type: 'instance',
           pristine_doc: resource,
-          source,
-          transpiled_code: null,
           search_doc: {
             id: `${testRealmURL}1`,
             name: 'Mango',
@@ -657,8 +646,6 @@ module('Unit | index-writer', function (hooks) {
           realm_version: 1,
           realm_url: testRealmURL,
           type: 'module',
-          source: `// person.gts source`,
-          transpiled_code: `// person.gts transpiled code`,
           pristine_doc: null,
           search_doc: null,
           display_names: null,
@@ -677,8 +664,6 @@ module('Unit | index-writer', function (hooks) {
           realm_version: 1,
           realm_url: testRealmURL,
           type: 'definition',
-          source: null,
-          transpiled_code: null,
           pristine_doc: null,
           search_doc: null,
           display_names: null,
@@ -756,11 +741,7 @@ module('Unit | index-writer', function (hooks) {
             realmInfo: testRealmInfo,
           },
         },
-        source: JSON.stringify(
-          merge(JSON.parse(source), { data: { id: `${testRealmURL2}1` } }),
-        ),
         error_doc: null,
-        transpiled_code: null,
         search_doc: {
           id: `${testRealmURL2}1`,
           name: 'Mango',
@@ -806,8 +787,6 @@ module('Unit | index-writer', function (hooks) {
         realm_version: 2,
         realm_url: testRealmURL2,
         type: 'module',
-        source: `// person.gts source`,
-        transpiled_code: `// person.gts transpiled code`,
         error_doc: null,
         pristine_doc: null,
         search_doc: null,
@@ -835,8 +814,6 @@ module('Unit | index-writer', function (hooks) {
         realm_version: 2,
         realm_url: testRealmURL2,
         type: 'definition',
-        source: null,
-        transpiled_code: null,
         error_doc: null,
         pristine_doc: null,
         search_doc: null,
@@ -918,7 +895,6 @@ module('Unit | index-writer', function (hooks) {
         },
       },
     };
-    let source = JSON.stringify(resource);
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -928,7 +904,6 @@ module('Unit | index-writer', function (hooks) {
           realm_version: 1,
           realm_url: testRealmURL,
           pristine_doc: resource,
-          source,
           search_doc: { name: 'Mango' },
           display_names: [`Person`],
           deps: [`${testRealmURL}person`],
@@ -977,13 +952,11 @@ module('Unit | index-writer', function (hooks) {
         realm_url: testRealmURL,
         type: 'error',
         pristine_doc: resource,
-        source,
         error_doc: {
           message: 'test error',
           status: 500,
           additionalErrors: [],
         },
-        transpiled_code: null,
         search_doc: { name: 'Mango' },
         display_names: [`Person`],
         deps: [`${testRealmURL}person`],
@@ -1042,13 +1015,11 @@ module('Unit | index-writer', function (hooks) {
         realm_url: testRealmURL,
         type: 'error',
         pristine_doc: null,
-        source: null,
         error_doc: {
           message: 'test error',
           status: 500,
           additionalErrors: [],
         },
-        transpiled_code: null,
         search_doc: null,
         display_names: null,
         deps: [],
@@ -1096,7 +1067,6 @@ module('Unit | index-writer', function (hooks) {
         realmVersion: 1,
         realmURL: testRealmURL,
         instance: null,
-        source: null,
         lastModified: null,
         resourceCreatedAt: null,
         isolatedHtml: null,
@@ -1128,7 +1098,6 @@ module('Unit | index-writer', function (hooks) {
         },
       },
     };
-    let originalSource = JSON.stringify(originalResource);
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -1138,7 +1107,6 @@ module('Unit | index-writer', function (hooks) {
           realm_version: 1,
           realm_url: testRealmURL,
           pristine_doc: originalResource,
-          source: originalSource,
           last_modified: String(originalModified),
           resource_created_at: String(originalModified),
         },
@@ -1163,7 +1131,6 @@ module('Unit | index-writer', function (hooks) {
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
       resource,
-      source: JSON.stringify(resource),
       lastModified: Date.now(),
       resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh' },
@@ -1192,7 +1159,6 @@ module('Unit | index-writer', function (hooks) {
             },
           },
         },
-        source: originalSource,
         lastModified: originalModified,
         resourceCreatedAt: originalModified,
         searchDoc: null,
@@ -1246,14 +1212,12 @@ module('Unit | index-writer', function (hooks) {
         },
       },
     };
-    let source = JSON.stringify(resource);
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
       resource,
-      source,
       lastModified: now,
       resourceCreatedAt: now,
       searchData: { name: 'Van Gogh' },
@@ -1289,7 +1253,6 @@ module('Unit | index-writer', function (hooks) {
             },
           },
         },
-        source,
         lastModified: now,
         resourceCreatedAt: now,
         searchDoc: { name: 'Van Gogh' },
@@ -1385,7 +1348,6 @@ module('Unit | index-writer', function (hooks) {
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'module',
-      source: cardSrc,
       lastModified: now,
       resourceCreatedAt: now,
       deps: new Set(),
@@ -1396,13 +1358,7 @@ module('Unit | index-writer', function (hooks) {
       new URL(`${testRealmURL}person.gts`),
     );
     if (result?.type === 'module') {
-      let { executableCode, source, lastModified } = result;
-      assert.codeEqual(
-        stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
-        stripModuleDebugInfo(compiledCard()),
-        'compiled card is correct',
-      );
-      assert.strictEqual(cardSrc, source, 'source code is correct');
+      let { lastModified } = result;
       assert.strictEqual(lastModified, now, 'lastModified is correct');
     } else {
       assert.ok(false, `expected module not to be an error document`);
@@ -1415,7 +1371,6 @@ module('Unit | index-writer', function (hooks) {
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'module',
-      source: cardSrc,
       lastModified: now,
       resourceCreatedAt: now,
       deps: new Set(),
@@ -1426,13 +1381,7 @@ module('Unit | index-writer', function (hooks) {
       new URL(`${testRealmURL}person`),
     );
     if (result?.type === 'module') {
-      let { executableCode, source, lastModified } = result;
-      assert.codeEqual(
-        stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
-        stripModuleDebugInfo(compiledCard()),
-        'compiled card is correct',
-      );
-      assert.strictEqual(cardSrc, source, 'source code is correct');
+      let { lastModified } = result;
       assert.strictEqual(lastModified, now, 'lastModified is correct');
     } else {
       assert.ok(false, `expected module not to be an error document`);
@@ -1445,7 +1394,6 @@ module('Unit | index-writer', function (hooks) {
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'module',
-      source: cardSrc,
       lastModified: now,
       resourceCreatedAt: now,
       deps: new Set(),
@@ -1458,13 +1406,7 @@ module('Unit | index-writer', function (hooks) {
       },
     );
     if (result?.type === 'module') {
-      let { executableCode, source, lastModified } = result;
-      assert.codeEqual(
-        stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
-        stripModuleDebugInfo(compiledCard()),
-        'compiled card is correct',
-      );
-      assert.strictEqual(cardSrc, source, 'source code is correct');
+      let { lastModified } = result;
       assert.strictEqual(lastModified, now, 'lastModified is correct');
     } else {
       assert.ok(false, `expected module not to be an error document`);
@@ -1734,7 +1676,6 @@ module('Unit | index-writer', function (hooks) {
     await batch.updateEntry(new URL(`${testRealmURL}2.json`), {
       type: 'instance',
       resource: resource2,
-      source: JSON.stringify(resource2),
       lastModified: Date.now(),
       resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh' },
@@ -1830,7 +1771,6 @@ module('Unit | index-writer', function (hooks) {
     await batch.updateEntry(new URL(`${testRealmURL}3.json`), {
       type: 'instance',
       resource: resource3,
-      source: JSON.stringify(resource3),
       lastModified: Date.now(),
       resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh2' },
@@ -1860,7 +1800,6 @@ module('Unit | index-writer', function (hooks) {
     await batch.updateEntry(new URL(`${testRealmURL}4.json`), {
       type: 'instance',
       resource: resource4,
-      source: JSON.stringify(resource4),
       lastModified: Date.now(),
       resourceCreatedAt: Date.now(),
       searchData: { name: 'Mango' },
@@ -1929,9 +1868,3 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 });
-
-function stripModuleDebugInfo(code: string) {
-  return code
-    .replace(/\s*"id": [^\n]+,\n/m, '')
-    .replace(/\s*"moduleName": [^\n]+,\n/m, '');
-}

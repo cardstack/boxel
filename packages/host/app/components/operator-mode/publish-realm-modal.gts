@@ -14,7 +14,6 @@ import Undo2 from '@cardstack/boxel-icons/undo-2';
 import { formatDistanceToNow } from 'date-fns';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import window from 'ember-window-mock';
 
 import {
   BoxelButton,
@@ -44,12 +43,17 @@ type CustomSubdomainSelection = {
   subdomain: string;
 };
 
+export type PublishError = Error & {
+  urlErrors: Map<string, string>;
+};
+
 interface Signature {
   Element: HTMLElement;
   Args: {
     isOpen: boolean;
     onClose: () => void;
     handlePublish: (publishedRealmURLs: string[]) => void;
+    publishError?: PublishError | null;
     handleUnpublish: (publishedRealmURL: string) => void;
   };
 }
@@ -167,6 +171,15 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get isDefaultPublishedRealmURLSelected() {
     return this.selectedPublishedRealmURLs.includes(this.generatedUrl);
+  }
+
+  get isCustomSubdomainSelected() {
+    if (!this.claimedDomainPublishedUrl) {
+      return false;
+    }
+    return this.selectedPublishedRealmURLs.includes(
+      this.claimedDomainPublishedUrl,
+    );
   }
 
   get hasSelectedPublishedRealmURLs() {
@@ -303,6 +316,7 @@ export default class PublishRealmModal extends Component<Signature> {
     try {
       await this.realmServer.deleteBoxelClaimedDomain(this.claimedDomain.id);
       this.applyClaimedDomain(null);
+      this.clearCustomSubdomainFeedback();
     } catch (error) {
       console.error('Failed to unclaim site name', error);
       this.customSubdomainError =
@@ -412,8 +426,8 @@ export default class PublishRealmModal extends Component<Signature> {
         this.customSubdomainAvailability = result;
 
         if (result.available) {
-          // Strip port from base domain if present (e.g., "localhost:4201" -> "localhost")
-          let baseDomain = this.customSubdomainBase.split(':')[0];
+          // Keep the full domain including port if present (e.g., "localhost:4201")
+          let baseDomain = this.customSubdomainBase;
           let hostname = `${subdomain}.${baseDomain}`;
           let publishedUrl = this.buildPublishedRealmUrl(hostname);
           this.setCustomSubdomainSelection({ url: publishedUrl, subdomain });
@@ -463,9 +477,11 @@ export default class PublishRealmModal extends Component<Signature> {
     },
   );
 
-  @action
-  handleOpenSite() {
-    window.open(this.generatedUrl, '_blank');
+  get customSubdomainIndexUrl() {
+    if (this.claimedDomainPublishedUrl) {
+      return this.claimedDomainPublishedUrl + 'index';
+    }
+    return null;
   }
 
   @action
@@ -486,6 +502,21 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get isPublishing() {
     return this.realm.isPublishing(this.currentRealmURL);
+  }
+
+  getPublishErrorForUrl = (url: string): string | null => {
+    const error = this.args.publishError;
+    if (error?.urlErrors) {
+      return error.urlErrors.get(url) || null;
+    }
+    return null;
+  };
+
+  get publishErrorForCustomSubdomain() {
+    if (!this.claimedDomainPublishedUrl) {
+      return null;
+    }
+    return this.getPublishErrorForUrl(this.claimedDomainPublishedUrl);
   }
 
   <template>
@@ -559,28 +590,38 @@ export default class PublishRealmModal extends Component<Signature> {
             </div>
             {{#if this.isRealmPublished}}
               <BoxelButton
+                @as='anchor'
                 @kind='secondary-light'
                 @size='small'
+                @href={{this.generatedUrl}}
                 @disabled={{this.isUnpublishingAnyRealms}}
-                {{on 'click' this.handleOpenSite}}
                 class='action'
+                target='_blank'
+                rel='noopener noreferrer'
                 data-test-open-boxel-space-button
               >
                 <ExternalLink width='16' height='16' class='button-icon' />
                 Open Site
               </BoxelButton>
             {{/if}}
+            {{#if (this.getPublishErrorForUrl this.generatedUrl)}}
+              <div
+                class='domain-publish-error'
+                data-test-domain-publish-error={{this.generatedUrl}}
+              >
+                <span class='error-text'>{{this.getPublishErrorForUrl
+                    this.generatedUrl
+                  }}</span>
+              </div>
+            {{/if}}
           </div>
 
-          <div
-            class='domain-option
-              {{if this.isCustomSubdomainSetupVisible "claiming"}}
-              '
-          >
+          <div class='domain-option'>
             <input
               type='checkbox'
               id='custom-subdomain-checkbox'
               class='domain-checkbox'
+              checked={{this.isCustomSubdomainSelected}}
               data-test-custom-subdomain-checkbox
               disabled={{not this.claimedDomain}}
               {{on 'change' this.toggleCustomSubdomain}}
@@ -599,7 +640,11 @@ export default class PublishRealmModal extends Component<Signature> {
                 <IconX width='12' height='12' class='cancel-icon' />
               </BoxelButton>
             {{/if}}
-            <div class='domain-details' data-test-custom-subdomain-details>
+            <div
+              class='domain-details
+                {{if this.isCustomSubdomainSetupVisible "full-width"}}'
+              data-test-custom-subdomain-details
+            >
               {{#if this.isCustomSubdomainSetupVisible}}
                 <div class='custom-subdomain-setup'>
                   <label
@@ -626,6 +671,24 @@ export default class PublishRealmModal extends Component<Signature> {
                         >.{{this.customSubdomainBase}}</Accessories.Text>
                       </:after>
                     </BoxelInputGroup>
+                    <BoxelButton
+                      @kind='primary'
+                      @size='small'
+                      class='claim-custom-subdomain-button'
+                      @disabled={{this.isClaimCustomSubdomainDisabled}}
+                      {{on
+                        'click'
+                        (perform this.handleClaimCustomSubdomainTask)
+                      }}
+                      data-test-claim-custom-subdomain-button
+                    >
+                      {{#if this.isCheckingCustomSubdomain}}
+                        <LoadingIndicator />
+                        Checking…
+                      {{else}}
+                        Claim Site Name
+                      {{/if}}
+                    </BoxelButton>
                   </div>
                 </div>
               {{else if this.claimedDomain}}
@@ -645,6 +708,39 @@ export default class PublishRealmModal extends Component<Signature> {
                       {{#if this.claimedDomainLastPublishedTime}}
                         <span class='last-published-at'>Published
                           {{this.claimedDomainLastPublishedTime}}</span>
+                        {{#if this.claimedDomainPublishedUrl}}
+                          <BoxelButton
+                            @kind='text-only'
+                            @size='extra-small'
+                            @disabled={{this.isUnpublishingRealm
+                              this.claimedDomainPublishedUrl
+                            }}
+                            class='unpublish-button'
+                            {{on
+                              'click'
+                              (fn
+                                @handleUnpublish this.claimedDomainPublishedUrl
+                              )
+                            }}
+                            data-test-unpublish-custom-subdomain-button
+                          >
+                            {{#if
+                              (this.isUnpublishingRealm
+                                this.claimedDomainPublishedUrl
+                              )
+                            }}
+                              <LoadingIndicator />
+                              Unpublishing…
+                            {{else}}
+                              <Undo2
+                                width='11'
+                                height='11'
+                                class='unpublish-icon'
+                              />
+                              Unpublish
+                            {{/if}}
+                          </BoxelButton>
+                        {{/if}}
                       {{else}}
                         <span class='not-published-yet'>Not published yet</span>
                       {{/if}}
@@ -684,24 +780,23 @@ export default class PublishRealmModal extends Component<Signature> {
               {{/if}}
             </div>
 
-            {{#if this.isCustomSubdomainSetupVisible}}
-              <BoxelButton
-                @kind='primary'
-                @size='small'
-                class='claim-custom-subdomain-button action'
-                @disabled={{this.isClaimCustomSubdomainDisabled}}
-                {{on 'click' (perform this.handleClaimCustomSubdomainTask)}}
-                data-test-claim-custom-subdomain-button
-              >
-                {{#if this.isCheckingCustomSubdomain}}
-                  <LoadingIndicator />
-                  Checking…
-                {{else}}
-                  Claim Site Name
-                {{/if}}
-              </BoxelButton>
-            {{else}}
-              {{#unless this.claimedDomain}}
+            {{#if (not this.isCustomSubdomainSetupVisible)}}
+              {{#if this.isClaimedDomainPublished}}
+                <BoxelButton
+                  @as='anchor'
+                  @kind='secondary-light'
+                  @size='small'
+                  @href={{this.customSubdomainIndexUrl}}
+                  @disabled={{this.isUnpublishingAnyRealms}}
+                  class='action'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  data-test-open-custom-subdomain-button
+                >
+                  <ExternalLink width='16' height='16' class='button-icon' />
+                  Open Site
+                </BoxelButton>
+              {{else if (not this.claimedDomain)}}
                 <BoxelButton
                   @kind='secondary-light'
                   @size='small'
@@ -712,7 +807,17 @@ export default class PublishRealmModal extends Component<Signature> {
                   <Settings width='16' height='16' class='button-icon' />
                   Set Up
                 </BoxelButton>
-              {{/unless}}
+              {{/if}}
+            {{/if}}
+            {{#if this.publishErrorForCustomSubdomain}}
+              <div
+                class='domain-publish-error'
+                data-test-domain-publish-error={{this.claimedDomainPublishedUrl}}
+              >
+                <span
+                  class='error-text'
+                >{{this.publishErrorForCustomSubdomain}}</span>
+              </div>
             {{/if}}
           </div>
         </div>
@@ -781,15 +886,15 @@ export default class PublishRealmModal extends Component<Signature> {
         display: grid;
         grid-template-areas:
           'checkbox . title   cancel'
-          '.        . details action';
+          '.        . details action'
+          '.        . error   error';
 
         grid-template-columns: auto var(--boxel-sp-sm) 1fr auto;
 
         align-items: center;
-
-        background-color: var(--boxel-50);
         padding-top: var(--boxel-sp-lg);
         padding-bottom: var(--boxel-sp-xl);
+        border: 1px solid transparent;
       }
 
       .domain-option:not(:last-child) {
@@ -819,7 +924,11 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        margin-top: var(--boxel-sp-xxs);
+        margin-top: var(--boxel-sp);
+      }
+
+      .domain-details.full-width {
+        grid-column: 3 / -1;
       }
 
       .realm-icon {
@@ -880,6 +989,7 @@ export default class PublishRealmModal extends Component<Signature> {
         gap: var(--boxel-sp-xxxs);
         background-color: transparent;
         border: none;
+        --boxel-button-min-height: 0;
       }
 
       .unpublish-icon {
@@ -906,6 +1016,12 @@ export default class PublishRealmModal extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         font-size: var(--boxel-font-size-xs);
+        text-decoration: none;
+      }
+
+      .action.disabled {
+        pointer-events: none;
+        opacity: 0.5;
       }
 
       .domain-option.claiming .action {
@@ -939,11 +1055,14 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
-        padding-right: var(--boxel-sp);
       }
 
       .custom-subdomain-row :deep(.container) {
-        width: 100%;
+        flex: 1;
+      }
+
+      .custom-subdomain-row .claim-custom-subdomain-button {
+        flex-shrink: 0;
       }
 
       .custom-domain-suffix {
@@ -953,6 +1072,21 @@ export default class PublishRealmModal extends Component<Signature> {
       .custom-subdomain-cancel {
         gap: var(--boxel-sp-xxxs);
         margin-left: auto;
+      }
+
+      .domain-publish-error {
+        grid-area: error;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+        margin-top: var(--boxel-sp-xs);
+      }
+
+      .domain-publish-error .error-text {
+        flex: 1;
+        color: var(--boxel-error-200);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
       }
     </style>
   </template>
