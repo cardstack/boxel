@@ -320,6 +320,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Create system card with model configurations
     let defaultSystemCard = new SystemCard({
+      defaultModelConfiguration: anthropicClaudeSonnet45Model,
       modelConfigurations: [
         openAiGpt5Model,
         openAiGpt4oMiniModel,
@@ -345,6 +346,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     let alternateSystemCard = new SystemCard({
+      defaultModelConfiguration: deepseekModel,
       modelConfigurations: [deepseekModel, geminiFlashModel, openAiGpt5Model],
     });
 
@@ -629,8 +631,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
-    // Default model should be the first one in the system card
-    let defaultModelName = modelNameFor('openai/gpt-5');
+    // Default model should come from the system card's default configuration
+    let defaultModelId = 'anthropic/claude-sonnet-4.5';
+    let defaultModelName = modelNameFor(defaultModelId);
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
@@ -686,7 +689,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
   });
 
-  test('defaults to the first system card model in interact mode', async function (assert) {
+  test('defaults to the system card default in interact mode', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -701,24 +704,25 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
     let matrixService = getService('matrix-service');
-    let firstSystemModelId =
+    let defaultSystemModelId =
+      matrixService.systemCard?.defaultModelConfiguration?.modelId ??
       matrixService.systemCard?.modelConfigurations?.[0]?.modelId;
 
-    assert.ok(firstSystemModelId, 'system card provides a first model');
-    let expectedName = modelNameFor(firstSystemModelId!);
+    assert.ok(defaultSystemModelId, 'system card provides a default model');
+    let expectedName = modelNameFor(defaultSystemModelId!);
 
     assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
     assert.strictEqual(
-      firstSystemModelId,
-      'openai/gpt-5',
-      'gpt-5 remains the leading option',
+      defaultSystemModelId,
+      'anthropic/claude-sonnet-4.5',
+      'sonnet 4.5 remains the leading option',
     );
 
     await click('[data-test-close-ai-assistant]');
   });
 
-  test('switching back to interact mode uses openai/gpt-5', async function (assert) {
+  test('switching back to interact mode uses the system default model', async function (assert) {
     let interactFallbackName = modelNameFor(DEFAULT_LLM);
 
     await visitOperatorMode({
@@ -735,10 +739,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
-    // Initial interact mode defaults to first system card model
+    // Initial interact mode defaults to the system card default
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('openai/gpt-5'));
+      .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
 
     // Switch to Code mode and confirm coding default is applied
     await click('[data-test-submode-switcher] button');
@@ -747,7 +751,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom('[data-test-llm-select-selected]')
       .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
 
-    // Switch back to Interact mode and ensure we fall back to GPT-5
+    // Switch back to Interact mode and ensure we fall back to the default
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-llm-select-selected]').hasText(interactFallbackName);
