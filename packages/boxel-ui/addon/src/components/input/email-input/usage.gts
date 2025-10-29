@@ -11,7 +11,6 @@ export default class EmailInputUsage extends Component {
   @tracked disabled = false;
   @tracked required = false;
   @tracked placeholder?: string;
-  @tracked fallbackErrorMessage?: string;
 
   @action handleChange(newValue: string | null): void {
     this.value = newValue;
@@ -24,8 +23,8 @@ export default class EmailInputUsage extends Component {
           <code>EmailInput</code>
           wraps
           <code>BoxelInput</code>
-          with lightweight validation logic for email addresses. Valid values
-          are committed via
+          with client-side validation for email addresses. Valid values are
+          committed via
           <code>@onChange</code>; invalid input leaves the nested field in place
           and surfaces descriptive error text.
         </p>
@@ -37,7 +36,6 @@ export default class EmailInputUsage extends Component {
           @disabled={{this.disabled}}
           @placeholder={{this.placeholder}}
           @required={{this.required}}
-          @fallbackErrorMessage={{this.fallbackErrorMessage}}
         />
       </:example>
       <:api as |Args|>
@@ -48,6 +46,17 @@ export default class EmailInputUsage extends Component {
           @onInput={{this.handleChange}}
           @optional={{true}}
         />
+        <Args.Action
+          @name='onChange'
+          @description='Called with the committed value (string) or null when invalid'
+        />
+        <Args.String
+          @name='placeholder'
+          @description='Empty input placeholder'
+          @value={{this.placeholder}}
+          @onInput={{fn (mut this.placeholder)}}
+          @defaultValue='Enter email'
+        />
         <Args.Bool
           @name='disabled'
           @value={{this.disabled}}
@@ -57,24 +66,6 @@ export default class EmailInputUsage extends Component {
           @name='required'
           @value={{this.required}}
           @onInput={{fn (mut this.required)}}
-        />
-        <Args.String
-          @name='placeholder'
-          @description='Empty input placeholder'
-          @value={{this.placeholder}}
-          @onInput={{fn (mut this.placeholder)}}
-          @defaultValue='Enter email'
-        />
-        <Args.String
-          @name='fallbackErrorMessage'
-          @description='Message shown when native validity text is unavailable'
-          @value={{this.fallbackErrorMessage}}
-          @onInput={{fn (mut this.fallbackErrorMessage)}}
-          @defaultValue='Enter a valid email address'
-        />
-        <Args.Action
-          @name='onChange'
-          @description='Called with the committed value (string) or null when invalid'
         />
       </:api>
     </FreestyleUsage>

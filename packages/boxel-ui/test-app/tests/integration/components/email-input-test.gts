@@ -26,25 +26,25 @@ module('Integration | Component | email-input', function (hooks) {
       <EmailInput @value={{value}} @onChange={{set}} />
     </template>);
 
-    await typeIn('[data-test-boxel-input]', 'user@example');
+    await typeIn('[data-test-boxel-email-input]', 'user@example');
     await waitForDebounce();
 
     assert
-      .dom('[data-test-boxel-input]')
+      .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'initial');
     assert.strictEqual(value, null, 'value not committed while typing');
 
-    await triggerEvent('[data-test-boxel-input]', 'blur');
+    await triggerEvent('[data-test-boxel-email-input]', 'blur');
 
     assert
-      .dom('[data-test-boxel-input]')
+      .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'invalid');
 
-    await typeIn('[data-test-boxel-input]', '.com');
+    await typeIn('[data-test-boxel-email-input]', '.com');
     await waitForDebounce();
 
     assert
-      .dom('[data-test-boxel-input]')
+      .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'valid');
     assert.strictEqual(value, 'user@example.com');
   });
@@ -60,24 +60,24 @@ module('Integration | Component | email-input', function (hooks) {
     await waitForDebounce();
 
     assert
-      .dom('[data-test-boxel-input]')
+      .dom('[data-test-boxel-email-input]')
       .hasValue('first.last+tag@sub.domain.co');
     assert
-      .dom('[data-test-boxel-input]')
+      .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'valid');
   });
 
   test('it shows a descriptive validation message when invalid on blur', async function (assert) {
-    let value: string | null;
+    let value: string | null = '';
     const set = (newValue: string) => (value = newValue);
 
     await render(<template>
       <EmailInput @value={{value}} @onChange={{set}} />
     </template>);
 
-    await typeIn('[data-test-boxel-input]', 'user@example');
+    await typeIn('[data-test-boxel-email-input]', 'user@example');
     await waitForDebounce();
-    await triggerEvent('[data-test-boxel-input]', 'blur');
+    await triggerEvent('[data-test-boxel-email-input]', 'blur');
 
     assert
       .dom('[data-test-boxel-input-error-message]')
@@ -93,14 +93,14 @@ module('Integration | Component | email-input', function (hooks) {
       <EmailInput @value={{value}} @onChange={{set}} />
     </template>);
 
-    await typeIn('[data-test-boxel-input]', 'user@example.com');
+    await typeIn('[data-test-boxel-email-input]', 'user@example.com');
     await waitForDebounce();
-    await fillIn('[data-test-boxel-input]', '');
+    await fillIn('[data-test-boxel-email-input]', '');
     await waitForDebounce();
-    await triggerEvent('[data-test-boxel-input]', 'blur');
+    await triggerEvent('[data-test-boxel-email-input]', 'blur');
 
     assert
-      .dom('[data-test-boxel-input]')
+      .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'initial');
     assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
     assert.strictEqual(value, null, 'value cleared when input emptied');
@@ -114,14 +114,14 @@ module('Integration | Component | email-input', function (hooks) {
       <EmailInput @value={{value}} @onChange={{set}} @required={{true}} />
     </template>);
 
-    await triggerEvent('[data-test-boxel-input]', 'blur');
+    await triggerEvent('[data-test-boxel-email-input]', 'blur');
 
     assert
-      .dom('[data-test-boxel-input]')
+      .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'invalid');
 
     let inputElement = document.querySelector(
-      '[data-test-boxel-input]',
+      '[data-test-boxel-email-input]',
     ) as HTMLInputElement;
     let expectedMessage =
       inputElement.validationMessage || 'Enter a valid email address';
