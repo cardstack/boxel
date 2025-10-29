@@ -61,7 +61,6 @@ export default class Card extends Route {
   // OperatorModeStateService.schedulePersist() is called (due to the fact we
   // care about the back button, see note at bottom). Because of that make sure
   // that there is as little async as possible in this model hook.
-
   async model(params: {
     authRedirect?: string;
     cardPath?: string;
@@ -118,7 +117,6 @@ export default class Card extends Route {
         ],
       ];
     }
-
     let operatorModeStateObject = operatorModeState
       ? JSON.parse(operatorModeState)
       : undefined;
