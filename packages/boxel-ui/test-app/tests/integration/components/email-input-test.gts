@@ -1,6 +1,12 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
-import { render, settled, triggerEvent, typeIn } from '@ember/test-helpers';
+import {
+  fillIn,
+  render,
+  settled,
+  triggerEvent,
+  typeIn,
+} from '@ember/test-helpers';
 
 import { EmailInput } from '@cardstack/boxel-ui/components';
 
@@ -82,5 +88,52 @@ module('Integration | Component | email-input', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText(expectedMessage);
+  });
+
+  test('it allows clearing an optional email input without showing an error', async function (assert) {
+    let value: string | null = null;
+    const set = (newValue: string) => (value = newValue);
+
+    await render(<template>
+      <EmailInput @value={{value}} @onChange={{set}} />
+    </template>);
+
+    await typeIn('[data-test-boxel-input]', 'user@example.com');
+    await waitForDebounce();
+    await fillIn('[data-test-boxel-input]', '');
+    await waitForDebounce();
+    await triggerEvent('[data-test-boxel-input]', 'blur');
+
+    assert
+      .dom('[data-test-boxel-input]')
+      .hasAttribute('data-test-boxel-input-validation-state', 'initial');
+    assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+    assert.strictEqual(value, null, 'value cleared when input emptied');
+  });
+
+  test('it requires a value when marked as required', async function (assert) {
+    let value: string | null = null;
+    const set = (newValue: string) => (value = newValue);
+
+    await render(<template>
+      <EmailInput @value={{value}} @onChange={{set}} @required={{true}} />
+    </template>);
+
+    await triggerEvent('[data-test-boxel-input]', 'blur');
+
+    assert
+      .dom('[data-test-boxel-input]')
+      .hasAttribute('data-test-boxel-input-validation-state', 'invalid');
+
+    let inputElement = document.querySelector(
+      '[data-test-boxel-input]',
+    ) as HTMLInputElement;
+    let expectedMessage =
+      inputElement.validationMessage || 'Enter a valid email address';
+
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .hasText(expectedMessage);
+    assert.strictEqual(value, null, 'required empty input not committed');
   });
 });

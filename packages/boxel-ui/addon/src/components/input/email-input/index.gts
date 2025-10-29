@@ -12,6 +12,7 @@ interface Signature {
     disabled?: boolean;
     fallbackErrorMessage?: string;
     onChange?: (value: string | null) => void;
+    required?: boolean;
     value: string | null;
   };
   Element: HTMLElement;
@@ -44,9 +45,14 @@ export default class EmailInput extends Component<Signature> {
   }
 
   private debouncedInput = debounce((input: string) => {
-    if (input === '') {
-      this.validationState = 'initial';
-      this.errorMessage = undefined;
+    if (!input || input === '') {
+      if (this.args.required && this.hasBlurred) {
+        this.validationState = 'invalid';
+        this.errorMessage = this.fallbackErrorMessage;
+      } else {
+        this.validationState = 'initial';
+        this.errorMessage = undefined;
+      }
       this.notify(null);
       return;
     }
@@ -79,9 +85,18 @@ export default class EmailInput extends Component<Signature> {
     this.hasBlurred = true;
     this.debouncedInput.flush();
 
-    if (this.draftValue === '') {
-      this.validationState = 'initial';
-      this.errorMessage = undefined;
+    if (!this.draftValue || this.draftValue === '') {
+      if (this.args.required) {
+        this.validationState = 'invalid';
+        const input = event.target as HTMLInputElement | null;
+        const message = input?.validationMessage?.trim();
+        this.errorMessage =
+          message && message.length > 0 ? message : this.fallbackErrorMessage;
+        this.notify(null);
+      } else {
+        this.validationState = 'initial';
+        this.errorMessage = undefined;
+      }
       return;
     }
 
@@ -108,6 +123,7 @@ export default class EmailInput extends Component<Signature> {
       @state={{this.validationState}}
       @errorMessage={{this.errorMessage}}
       @disabled={{@disabled}}
+      @required={{@required}}
       data-test-boxel-email-input
       ...attributes
     />
