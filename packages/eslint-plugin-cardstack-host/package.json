@@ -1,7 +1,7 @@
 {
-  "name": "eslint-plugin-window-mock",
+  "name": "eslint-plugin-cardstack-host",
   "version": "1.0.0",
-  "description": "",
+  "description": "Custom ESLint rules for the Boxel host app",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
