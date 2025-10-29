@@ -8,6 +8,13 @@ import {
   CurrentRoomIdPersistenceKey,
 } from '../utils/local-storage-keys';
 
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+type StoredMessageDraft = {
+  message: string;
+  createdAt: number;
+};
+
 export default class LocalPersistenceService extends Service {
   // Using sessionStorage for agent id because we want:
   // - to keep the same agent id if user reloads the page (or tab)
@@ -46,44 +53,91 @@ export default class LocalPersistenceService extends Service {
   }
 
   getMessageDraft(roomId: string) {
-    return this.readMessageDrafts()[roomId];
+    return this.readMessageDrafts()[roomId]?.message;
   }
 
   setMessageDraft(roomId: string, message: string | undefined) {
     let drafts = this.readMessageDrafts();
     if (message && message.length > 0) {
-      drafts[roomId] = message;
+      drafts[roomId] = {
+        message,
+        createdAt: Date.now(),
+      };
     } else {
       delete drafts[roomId];
     }
     this.writeMessageDrafts(drafts);
   }
 
-  private readMessageDrafts() {
+  private readMessageDrafts(): Record<string, StoredMessageDraft> {
     let drafts = window.localStorage.getItem(AiAssistantMessageDrafts);
     if (!drafts) {
-      return {} as Record<string, string>;
+      return {} as Record<string, StoredMessageDraft>;
     }
 
     try {
       let parsed = JSON.parse(drafts);
-      return parsed && typeof parsed === 'object'
-        ? (parsed as Record<string, string>)
-        : {};
+      if (!parsed || typeof parsed !== 'object') {
+        return {} as Record<string, StoredMessageDraft>;
+      }
+
+      let now = Date.now();
+      let sanitized: Record<string, StoredMessageDraft> = {};
+
+      for (let [roomId, value] of Object.entries(parsed as Record<string, unknown>)) {
+        if (!value) {
+          continue;
+        }
+
+        if (typeof value === 'object') {
+          let message = (value as { message?: unknown }).message;
+          let createdAt = Number((value as { createdAt?: unknown }).createdAt);
+          if (typeof message !== 'string') {
+            continue;
+          }
+
+          if (!Number.isFinite(createdAt)) {
+            createdAt = now;
+          }
+
+          sanitized[roomId] = { message, createdAt };
+          continue;
+        }
+      }
+
+      return sanitized;
     } catch {
       window.localStorage.removeItem(AiAssistantMessageDrafts);
-      return {};
+      return {} as Record<string, StoredMessageDraft>;
     }
   }
 
-  private writeMessageDrafts(drafts: Record<string, string>) {
-    if (Object.keys(drafts).length === 0) {
+  private writeMessageDrafts(drafts: Record<string, StoredMessageDraft>) {
+    let now = Date.now();
+    let prunedEntries = Object.entries(drafts).filter(([, draft]) => {
+      if (!draft || typeof draft.message !== 'string') {
+        return false;
+      }
+      let createdAt = Number(draft?.createdAt);
+      if (!Number.isFinite(createdAt)) {
+        return false;
+      }
+      return now - createdAt <= ONE_WEEK_MS;
+    });
+
+    if (prunedEntries.length === 0) {
       window.localStorage.removeItem(AiAssistantMessageDrafts);
       return;
     }
+
+    let prunedDrafts = Object.fromEntries(prunedEntries) as Record<
+      string,
+      StoredMessageDraft
+    >;
+
     window.localStorage.setItem(
       AiAssistantMessageDrafts,
-      JSON.stringify(drafts),
+      JSON.stringify(prunedDrafts),
     );
   }
 }
