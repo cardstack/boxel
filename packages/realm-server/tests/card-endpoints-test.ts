@@ -28,6 +28,7 @@ import {
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
+import { PgAdapter } from '@cardstack/postgres';
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
@@ -35,17 +36,20 @@ module(basename(__filename), function () {
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
 
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dir: DirResult;
+      dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dir = args.dir;
+      dbAdapter = args.dbAdapter;
     }
 
     function getRealmSetup() {
@@ -54,6 +58,7 @@ module(basename(__filename), function () {
         testRealmHttpServer,
         request,
         dir,
+        dbAdapter,
       };
     }
 
@@ -454,6 +459,10 @@ module(basename(__filename), function () {
           let id = incrementalEventContent.invalidations[0].split('/').pop()!;
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.ok(
+            response.get('x-created'),
+            'created header should be set for new card',
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -1269,6 +1278,118 @@ module(basename(__filename), function () {
             );
           }
         });
+
+        test('creates card instance when it encounters "lid" in the primary resource', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                lid: 'local-id-1',
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://localhost:4202/node-test/friend',
+                    name: 'Friend',
+                  },
+                  realmURL: testRealmHref.replace(/\/$/, ''),
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          let json = response.body as SingleCardDocument;
+          console.log(json);
+          let id = json.data.id!.split('/').pop()!;
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            `${id}.json`,
+          );
+          assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+          let card = readJSONSync(cardFile);
+          assert.deepEqual(
+            card,
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://localhost:4202/node-test/friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument,
+            `file contents ${cardFile} are correct`,
+          );
+          {
+            let response = await request
+              .get(`/Friend/${id}`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json.data, {
+              id: `${testRealmHref}Friend/${id}`,
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                title: 'Hassan',
+                description: null,
+                thumbnailURL: null,
+                cardInfo,
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: null,
+                  },
+                },
+                'cardInfo.theme': {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  name: 'Friend',
+                  module: 'http://localhost:4202/node-test/friend',
+                },
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
+                realmURL: testRealmHref,
+              },
+              links: {
+                self: `${testRealmHref}Friend/${id}`,
+              },
+            });
+          }
+        });
       });
 
       module('permissioned realm', function (hooks) {
@@ -1380,6 +1501,10 @@ module(basename(__filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.ok(
+            response.get('x-created'),
+            'created header should be set for updated card',
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -2718,6 +2843,43 @@ module(basename(__filename), function () {
           );
           let cardFile = join(dir.name, entry);
           assert.false(existsSync(cardFile), 'card json does not exist');
+        });
+
+        test('removes file meta when card is deleted', async function (assert) {
+          // confirm meta.resourceCreatedAt exists prior to deletion
+          let initial = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(initial.status, 200, 'precondition GET 200');
+          let initialCreatedAt = initial.body?.data?.meta?.resourceCreatedAt;
+          assert.ok(initialCreatedAt, 'resourceCreatedAt exists before delete');
+
+          // delete the card
+          let delResp = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(delResp.status, 204, 'delete succeeds with 204');
+
+          // subsequent GET should not expose resourceCreatedAt (file meta removed)
+          let after = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          // Depending on implementation could be 404 Not Found; just assert it's not 200
+          assert.notStrictEqual(
+            after.status,
+            200,
+            'GET after delete is not 200',
+          );
+          let afterCreatedAt = after.body?.data?.meta?.resourceCreatedAt;
+          assert.strictEqual(
+            afterCreatedAt,
+            undefined,
+            'resourceCreatedAt is absent after deletion',
+          );
+          assert.false(
+            JSON.stringify(after.body).includes('resourceCreatedAt'),
+            'No resourceCreatedAt key present anywhere in error payload',
+          );
         });
       });
 

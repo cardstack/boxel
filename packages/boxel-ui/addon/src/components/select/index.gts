@@ -258,7 +258,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --select-placeholder-color: var(
           --boxel-select-placeholder-color,
-          var(--foreground, var(--boxel-450))
+          var(--muted-foreground, var(--boxel-450))
         );
         --select-focus-border-color: var(
           --boxel-select-focus-border-color,
@@ -268,29 +268,27 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         position: relative;
         display: flex;
         align-items: stretch;
+        padding: 0;
         overflow: hidden;
         border: 1px solid var(--select-border-color);
         border-radius: var(--boxel-form-control-border-radius);
-        border-bottom-left-radius: var(
-          --boxel-form-control-border-radius
-        ) !important;
-        border-bottom-right-radius: var(
-          --boxel-form-control-border-radius
-        ) !important;
         max-width: 100%;
         width: 100%;
         background-color: var(--select-background-color);
         color: var(--select-text-color);
         transition: border-color var(--boxel-transition);
       }
+      .boxel-select[aria-expanded='true'] {
+        border-radius: var(--boxel-form-control-border-radius);
+      }
 
-      .boxel-select:hover {
+      .boxel-select:not([aria-disabled='true']):hover {
         cursor: pointer;
         border-color: var(--select-focus-border-color);
       }
 
-      .boxel-select:focus-within {
-        border-color: var(--select-focus-border-color);
+      .boxel-select:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight-hover));
       }
 
       .boxel-select :deep(.boxel-trigger) {
@@ -393,23 +391,16 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
       }
 
-      .ember-power-select-trigger {
-        padding: 0;
-      }
-
-      .ember-power-select-trigger[aria-disabled='true'] {
-        background-color: #eeeeee;
+      .boxel-select[aria-disabled='true'] {
+        background-color: var(--muted, var(--boxel-100));
         color: var(--select-placeholder-color);
         cursor: not-allowed;
-      }
-
-      .ember-power-select-trigger[aria-disabled='true']:hover {
-        border-color: none;
+        pointer-events: none;
       }
     </style>
     {{! template-lint-disable require-scoped-style }}
     <style>
-      .boxel-select__dropdown {
+      .boxel-select__dropdown.ember-power-select-dropdown {
         --dropdown-background-color: var(
           --boxel-dropdown-background-color,
           var(--background, var(--boxel-light))
@@ -436,7 +427,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-focus-border-color: var(
           --boxel-dropdown-focus-border-color,
-          var(--border, var(--boxel-border-color))
+          var(--ring, var(--boxel-highlight-hover))
         );
         --dropdown-selected-text-color: var(
           --boxel-dropdown-selected-text-color,
@@ -446,15 +437,9 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         box-shadow: var(--boxel-box-shadow);
         border-radius: var(--boxel-form-control-border-radius);
         background-color: var(--dropdown-background-color);
-        border: 1px solid var(--dropdown-border-color) !important;
+        border: 1px solid var(--dropdown-border-color);
         z-index: var(--boxel-layer-modal-urgent);
-        max-height: 200px;
-        border-top-left-radius: var(
-          --boxel-form-control-border-radius
-        ) !important;
-        border-top-right-radius: var(
-          --boxel-form-control-border-radius
-        ) !important;
+        max-height: var(--boxel-select-max-height, 12.5rem);
         overflow: hidden;
         font-family: inherit;
       }
@@ -474,7 +459,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       }
 
       .boxel-select__dropdown .ember-power-select-option {
-        padding: var(--boxel-sp-xxs) !important;
+        padding: var(--boxel-sp-xxs);
         background-color: var(--dropdown-background-color);
         color: var(--dropdown-text-color);
         transition: background-color var(--boxel-transition);
@@ -556,7 +541,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-highlight-hover-color: var(
           --boxel-dropdown-hover-color,
-          var(--theme-highlight-hover, var(--boxel-light-100))
+          var(--theme-highlight-hover, var(--boxel-highlight-hover))
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
@@ -748,12 +733,18 @@ export class BoxelSelectOptions extends PowerSelectOptions {
           <span class='boxel-select-option-text'>
             {{yield option @select}}
           </span>
-          {{#if (eq option @select.selected)}}
-            <Check
-              class='boxel-select-option-checkmark'
-              role='presentation'
-              aria-hidden='true'
-            />
+          {{#if @select.selected}}
+            <span class='boxel-select-option-checkmark-container'>
+              {{#if (eq option @select.selected)}}
+                <Check
+                  class='boxel-select-option-checkmark'
+                  role='presentation'
+                  width='var(--boxel-icon-xs)'
+                  height='var(--boxel-icon-xs)'
+                  aria-hidden='true'
+                />
+              {{/if}}
+            </span>
           {{/if}}
         </li>
       {{/each}}
@@ -767,19 +758,21 @@ export class BoxelSelectOptions extends PowerSelectOptions {
         display: flex;
         flex-direction: column;
         gap: 1px;
-        overflow: auto;
-        max-height: inherit;
+        overflow-y: auto;
+        max-width: 100%;
+        max-height: var(--boxel-select-options-list-max-height, 12.25rem);
         position: relative;
         box-sizing: border-box;
       }
 
       .boxel-select-option-item {
         margin: 0;
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto;
         align-items: center;
-        justify-content: space-between;
-        width: 100%;
-        padding: var(--boxel-sp-xxs) !important;
+        gap: var(--boxel-sp-xxs);
+        max-width: 100%;
+        padding: var(--boxel-sp-xxs);
         margin-bottom: 1px;
         font-family: inherit;
         font-size: var(--boxel-font-size-sm);
@@ -788,14 +781,19 @@ export class BoxelSelectOptions extends PowerSelectOptions {
         background-color: var(--dropdown-background-color);
         color: var(--dropdown-text-color);
         border: none;
-        border-radius: var(--boxel-border-radius-sm);
-        cursor: pointer;
-        transition: background-color var(--boxel-transition);
-        outline: none;
+        transition:
+          background-color var(--boxel-transition),
+          color var(--boxel-transition);
         box-sizing: border-box;
       }
 
-      .boxel-select-option-item:hover {
+      .boxel-select-option-item:not([aria-disabled='true']):hover {
+        background-color: var(--dropdown-hover-color);
+        color: var(--dropdown-selected-text-color);
+        cursor: pointer;
+      }
+
+      .boxel-select-option-item.ember-power-select-option--highlighted {
         background-color: var(--dropdown-hover-color);
         color: var(--dropdown-selected-text-color);
       }
@@ -805,16 +803,13 @@ export class BoxelSelectOptions extends PowerSelectOptions {
         color: var(--dropdown-selected-text-color);
       }
 
-      .boxel-select-option-item.ember-power-select-option--highlighted {
-        background-color: var(--dropdown-highlight-hover-color);
-        color: var(--dropdown-selected-text-color);
-      }
-
-      .boxel-select-option-item:focus {
-        background-color: var(--dropdown-highlight-color);
-        color: var(--dropdown-selected-text-color);
-        outline: 2px solid var(--dropdown-focus-border-color);
-        outline-offset: -2px;
+      .boxel-select-option-item.ember-power-select-option--selected.ember-power-select-option--highlighted,
+      .boxel-select-option-item.ember-power-select-option--selected:hover {
+        background-color: color-mix(
+          in oklab,
+          var(--dropdown-highlight-color) 95%,
+          var(--dropdown-selected-text-color)
+        );
       }
 
       .boxel-select-option-item[aria-disabled='true'] {
@@ -824,8 +819,8 @@ export class BoxelSelectOptions extends PowerSelectOptions {
       }
 
       .boxel-select-option-icon {
-        width: 16px;
-        height: 16px;
+        width: var(--boxel-icon-xs);
+        height: var(--boxel-icon-xs);
         flex-shrink: 0;
         margin-right: var(--boxel-sp-xxs);
         display: flex;
@@ -834,12 +829,23 @@ export class BoxelSelectOptions extends PowerSelectOptions {
       }
 
       .boxel-select-option-text {
-        flex: 1;
+        padding: 1px; /* spacing for 1px card box-shadow border */
+        overflow: hidden;
+      }
+
+      .boxel-select-option-checkmark-container {
+        /* maintain space for icon and keep content widths the same */
+        width: var(--boxel-icon-med);
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .boxel-select-option-checkmark {
-        width: 16px;
-        height: 16px;
+        height: var(--boxel-icon-xs);
+        max-width: 100%;
+        aspect-ratio: 1;
         flex-shrink: 0;
         --icon-color: currentColor;
       }

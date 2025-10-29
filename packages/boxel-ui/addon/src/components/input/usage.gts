@@ -28,6 +28,7 @@ export default class InputUsage extends Component {
   @tracked id = 'sample-input';
   @tracked value = '';
   @tracked disabled = false;
+  @tracked readonly = false;
   @tracked required = false;
   @tracked optional = false;
   @tracked placeholder = 'Please enter';
@@ -81,6 +82,7 @@ export default class InputUsage extends Component {
           @value={{this.value}}
           @onInput={{this.logValue}}
           @disabled={{this.disabled}}
+          @readonly={{this.readonly}}
           @required={{this.required}}
           @optional={{this.optional}}
           @type={{this.type}}
@@ -126,6 +128,11 @@ export default class InputUsage extends Component {
           @name='disabled'
           @value={{this.disabled}}
           @onInput={{fn (mut this.disabled)}}
+        />
+        <Args.Bool
+          @name='readonly'
+          @value={{this.readonly}}
+          @onInput={{fn (mut this.readonly)}}
         />
         <Args.Bool
           @name='required'

@@ -52,7 +52,9 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
 
@@ -100,7 +102,8 @@ module('Acceptance | Commands tests', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -355,6 +358,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person, Meeting },
         'pet.gts': { Pet },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
@@ -477,7 +481,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click(
-      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"] .field-component-card`,
     );
     await click('[data-test-schedule-meeting-button]');
     await waitUntil(() => getRoomIds().length > 0);
@@ -1337,7 +1341,7 @@ module('Acceptance | Commands tests', function (hooks) {
       let commandResultEvents = await getRoomEvents(roomId).filter(
         (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
-      assert.equal(
+      assert.strictEqual(
         commandResultEvents.length,
         0,
         'No command result event dispatched',
@@ -1347,7 +1351,7 @@ module('Acceptance | Commands tests', function (hooks) {
       commandResultEvents = await getRoomEvents(roomId).filter(
         (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
-      assert.equal(
+      assert.strictEqual(
         commandResultEvents.length,
         1,
         'Command result event was dispatched',

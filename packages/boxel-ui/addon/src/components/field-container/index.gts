@@ -129,12 +129,11 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       .vertical {
         grid-template-rows: auto 1fr;
+        gap: var(--boxel-sp-4xs);
       }
 
       .vertical .label {
         grid-column: 2;
-        line-height: 1rem;
-        margin-bottom: var(--boxel-sp-4xs);
       }
 
       .boxel-field :deep(.boxel-field .boxel-label:not(.boxel-label--default)) {

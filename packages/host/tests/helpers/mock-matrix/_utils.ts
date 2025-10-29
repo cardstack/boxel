@@ -6,6 +6,8 @@ import RealmService from '@cardstack/host/services/realm';
 
 import type { RealmEvent } from 'https://cardstack.com/base/matrix-event';
 
+import { setupAuthEndpoints } from '../';
+
 import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
 
@@ -37,6 +39,10 @@ export class MockUtils {
     );
   };
 
+  getSystemCardAccountData = () => {
+    return this.testState.opts?.systemCardAccountData;
+  };
+
   getRealmEventMessagesSince = (roomId: string, since: number) => {
     return this.testState
       .sdk!.serverState.getRoomEvents(roomId)
@@ -48,6 +54,8 @@ export class MockUtils {
   setRealmPermissions = (permissions: Record<string, string[]>) => {
     this.testState.opts!.realmPermissions = permissions;
     (this.testState.owner!.lookup('service:realm') as RealmService).logout();
+
+    setupAuthEndpoints(permissions);
   };
   simulateRemoteMessage = (
     roomId: string,

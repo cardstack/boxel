@@ -1,5 +1,5 @@
 import { RealmInfo } from './realm';
-import { type CodeRef, isCodeRef } from './code-ref';
+import { type CodeRef, isCodeRef, moduleFrom } from './code-ref';
 
 // resource
 export type Resource = ModuleResource | CardResource | PrerenderedCardResource;
@@ -256,4 +256,21 @@ export function isPrerenderedCardResource(
     return false;
   }
   return true;
+}
+
+export function modulesConsumedInMeta(meta: Partial<Meta>): string[] {
+  let modules: string[] = [];
+  if (meta.adoptsFrom) {
+    modules.push(moduleFrom(meta.adoptsFrom));
+  }
+  for (let fieldMeta of Object.values(meta.fields ?? {})) {
+    if (Array.isArray(fieldMeta)) {
+      for (let item of fieldMeta) {
+        modules.push(...modulesConsumedInMeta(item));
+      }
+    } else {
+      modules.push(...modulesConsumedInMeta(fieldMeta));
+    }
+  }
+  return [...new Set(modules)];
 }

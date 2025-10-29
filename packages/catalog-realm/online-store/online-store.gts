@@ -593,12 +593,6 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                           {{else}}
                             <card.component
                               class='product-card-container'
-                              {{@context.cardComponentModifier
-                                cardId=card.url
-                                format='data'
-                                fieldType=undefined
-                                fieldName=undefined
-                              }}
                             />
                           {{/if}}
                         {{/each}}
@@ -676,12 +670,6 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                             </div>
                           {{else}}
                             <card.component
-                              {{@context.cardComponentModifier
-                                cardId=card.url
-                                format='data'
-                                fieldType=undefined
-                                fieldName=undefined
-                              }}
                               class='order-card-container'
                             />
                           {{/if}}
@@ -762,12 +750,6 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                             </div>
                           {{else}}
                             <card.component
-                              {{@context.cardComponentModifier
-                                cardId=card.url
-                                format='data'
-                                fieldType=undefined
-                                fieldName=undefined
-                              }}
                               class='customer-card-container'
                             />
                           {{/if}}

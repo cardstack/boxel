@@ -331,4 +331,29 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
       .dom(`[data-room-id='${roomId}']`)
       .doesNotHaveAttribute('data-is-current-room');
   });
+
+  test('can copy room id to clipboard', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    await click('[data-test-past-sessions-button]');
+    assert.dom('[data-test-past-sessions]').exists();
+
+    await click(`[data-test-past-session-options-button="${roomId}"]`);
+    assert.dom('[data-test-boxel-menu-item-text="Copy Room Id"]').exists();
+
+    let originalWriteText = navigator.clipboard.writeText;
+    let clipboardText;
+    navigator.clipboard.writeText = async (text: string) => {
+      clipboardText = text;
+      return Promise.resolve();
+    };
+    await click('[data-test-boxel-menu-item-text="Copy Room Id"]');
+    assert.strictEqual(
+      clipboardText,
+      roomId,
+      'Room ID was copied to clipboard',
+    );
+    assert.dom('[data-test-boxel-menu-item-text="Copied!"]').exists();
+    navigator.clipboard.writeText = originalWriteText;
+  });
 });

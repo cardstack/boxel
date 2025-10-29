@@ -1,9 +1,9 @@
-minimumReleaseAge: 1440 # Don’t install versions newer than 1 day
 packages:
   - packages/*
   - packages/boxel-motion/*
   - packages/boxel-ui/*
   - vendor/*
+
 catalog:
   "@actions/core": ^1.2.6
   "@actions/github": ^4.0.0
@@ -29,8 +29,10 @@ catalog:
   "@eslint/eslintrc": ^2.1.4
   "@eslint/js": ^8.57.1
   "@floating-ui/dom": ^1.6.3
+  "@glimmer/component": ^2.0.0
+  "@glint/environment-ember-loose": ^1.5.2
   "@koa/cors": ^4.0.0
-  "@koa/router": ^12.0.0
+  "@koa/router": ^14.0.0
   "@lucide/lab": ^0.1.2
   "@lukeed/uuid": ^2.0.1
   "@percy/cli": ^1.31.1
@@ -39,6 +41,7 @@ catalog:
   "@rollup/plugin-babel": ^6.0.4
   "@sentry/node": ^8.31.0
   "@simple-dom/interface": ^1.4.0
+  "@simple-dom/parser": ^1.4.0
   "@simple-dom/serializer": ^1.4.0
   "@simple-dom/void-map": ^1.4.0
   "@sinonjs/fake-timers": ^11.2.2
@@ -67,6 +70,7 @@ catalog:
   "@types/matrix-js-sdk": ^11.0.1
   "@types/mime-types": ^2.1.1
   "@types/ms": ^0.7.34
+  "@types/node": "^24.3.0"
   "@types/pg": ^8.11.5
   "@types/pluralize": ^0.0.30
   "@types/qs": ^6.9.17
@@ -114,24 +118,24 @@ catalog:
   ember-concurrency: ^4.0.3
   ember-concurrency-ts: ^0.3.1
   ember-modify-based-class-resource: ^1.1.0
-  ember-resources: ^7.0.2
-  ember-source: ~5.4.0
-  ember-template-lint: ^7.8.1
   ember-qunit: ^8.0.1
+  ember-resources: ^7.0.7
+  ember-source: ~5.4.1
+  ember-template-lint: ^7.8.1
   esbuild: ^0.24.0
   eslint: ^8.57.1
-  eslint-config-prettier: ^9.0.0
+  eslint-config-prettier: ^9.1.2
   eslint-doc-generator: ^1.7.1
   eslint-plugin-ember: ^12.5.0
   eslint-plugin-eslint-comments: ^3.2.0
   eslint-plugin-eslint-plugin: ^5.5.1
   eslint-plugin-filenames: ^1.3.2
-  eslint-plugin-import: ^2.31.0
+  eslint-plugin-import: ^2.32.0
   eslint-plugin-markdown: ^5.1.0
   eslint-plugin-n: ^17.17.0
   eslint-plugin-node: ^11.1.0
   eslint-plugin-prefer-let: ^3.0.1
-  eslint-plugin-prettier: ^5.2.6
+  eslint-plugin-prettier: ^5.5.4
   eslint-plugin-qunit: ^8.0.1
   eslint-plugin-qunit-dom: mainmatter/eslint-plugin-qunit-dom#d66c841
   eslint-plugin-simple-import-sort: ^8.0.0
@@ -167,7 +171,7 @@ catalog:
   macro-decorators: ^0.1.2
   magic-string: 0.25.9
   marked: ^12.0.1
-  matrix-js-sdk: ^31.0.0
+  matrix-js-sdk: ^38.3.0
   mime-types: ^2.1.35
   moment: ^2.29.4
   moment-locales-webpack-plugin: ^1.2.0
@@ -182,7 +186,7 @@ catalog:
   path-browserify: ^1.0.1
   pg: ^8.11.5
   pluralize: ^8.0.0
-  prettier: ^3.5.3
+  prettier: ^3.6.2
   prettier-plugin-ember-template-tag: ^1.1.0
   process: ^0.11.10
   qs: ^6.13.0
@@ -196,6 +200,7 @@ catalog:
   rollup-plugin-copy: ^3.5.0
   safe-stable-stringify: ^2.4.3
   sane: ^5.0.1
+  simple-html-tokenizer: ^0.5.11
   sinon: ^19.0.2
   sql-parser-cst: ^0.28.0
   start-server-and-test: ^1.14.0
@@ -212,6 +217,8 @@ catalog:
   testem: ^3.10.1
   testem-multi-reporter: ^1.2.0
   tmp: ^0.2.1
+  tracked-built-ins: ^4.0.0
+  typescript: ~5.8.3
   typescript-memoize: ^1.1.1
   uuid: ^9.0.1
   validate-peer-dependencies: ^1.1.0
@@ -221,3 +228,5 @@ catalog:
   webpack: ^5.99.6
   yaml: ^2.5.1
   yargs: ^17.5.1
+
+minimumReleaseAge: 1440

@@ -18,9 +18,11 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
 } from '../../helpers';
@@ -240,7 +242,6 @@ const ambiguousDisplayNamesCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let monacoService: MonacoService;
 
@@ -256,17 +257,19 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.gts': indexCardSource,
         'empty.gts': ' ',
         'pet-person.gts': personCardSource,
@@ -547,6 +550,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
 
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+    );
+
     // Click on card definition button
     await click(
       '[data-test-card-schema="Person"] [data-test-card-schema-navigational-button]',
@@ -562,12 +569,24 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
 
+    await click(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="Employee"]',
+    );
     await waitFor(
-      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
 
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"]',
+    );
+    assert
+      .dom(
+        '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name]',
+      )
+      .hasText('String');
+
     await click(
-      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name]',
     );
 
     await waitFor('[data-test-current-module-name="card-api.gts"]');

@@ -88,8 +88,14 @@ export default class AiAssistantPanelService extends Service {
     return this.commandModuleResource.module as typeof CommandModule;
   }
 
+  get isAiAssistantHidden() {
+    return this.operatorModeStateService.state.submode === Submodes.Host;
+  }
+
   get isOpen() {
-    return this.operatorModeStateService.aiAssistantOpen;
+    return (
+      this.operatorModeStateService.aiAssistantOpen && !this.isAiAssistantHidden
+    );
   }
 
   get isFocusPillVisible() {
@@ -199,8 +205,15 @@ export default class AiAssistantPanelService extends Service {
   @action
   enterRoom(roomId: string, hidePastSessionsList = true) {
     this.matrixService.currentRoomId = roomId;
-    if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      this.matrixService.setLLMForCodeMode();
+    switch (this.operatorModeStateService.state.submode) {
+      case Submodes.Code:
+        this.matrixService.setLLMForCodeMode();
+        break;
+      case Submodes.Interact:
+        this.matrixService.setLLMForInteractMode();
+        break;
+      default:
+        break;
     }
 
     this.localPersistenceService.setCurrentRoomId(roomId);
@@ -502,6 +515,7 @@ export default class AiAssistantPanelService extends Service {
   }
 
   private loadRoomsTask = restartableTask(async () => {
+    await this.matrixService.waitForInitialSync();
     await this.matrixService.flushAll;
     await allSettled(
       [...this.matrixService.roomResources.values()].map((r) => r.processing),
@@ -529,7 +543,9 @@ export default class AiAssistantPanelService extends Service {
                 clearInterval(interval);
                 resolve();
               }
-            }, 250);
+              // cast here is because @types/node is polluting our definition of
+              // setInterval on the browser.
+            }, 250) as unknown as number;
           }),
         ]);
       }
@@ -554,21 +570,7 @@ export default class AiAssistantPanelService extends Service {
       if (!resource.matrixRoom) {
         continue;
       }
-      let isAiBotInvited = !!resource.invitedMembers.find(
-        (m) => this.matrixService.aiBotUserId === m.userId,
-      );
-      let isAiBotJoined = !!resource.joinedMembers.find(
-        (m) => this.matrixService.aiBotUserId === m.userId,
-      );
-      let isUserJoined = !!resource.joinedMembers.find(
-        (m) => this.matrixService.userId === m.userId,
-      );
-      if (
-        (isAiBotInvited || isAiBotJoined) &&
-        isUserJoined &&
-        resource.name &&
-        resource.roomId
-      ) {
+      if (resource.name && resource.roomId) {
         sessions.push({
           roomId: resource.roomId,
           name: resource.name,

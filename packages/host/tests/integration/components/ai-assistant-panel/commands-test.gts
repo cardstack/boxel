@@ -541,7 +541,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
@@ -566,7 +566,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       1,
       'command result event is dispatched',
@@ -625,7 +625,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
@@ -644,7 +644,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     commandResultEvents = getRoomEvents(roomId).filter(
       (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       1,
       'command result event is dispatched',
@@ -1227,7 +1227,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
@@ -1250,7 +1250,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       1,
       'command result event is dispatched',
@@ -1325,7 +1325,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       0,
       'command result event is not dispatched',
@@ -1348,7 +1348,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
-    assert.equal(
+    assert.strictEqual(
       commandResultEvents.length,
       1,
       'command result event is dispatched',

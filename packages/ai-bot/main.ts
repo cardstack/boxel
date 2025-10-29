@@ -49,13 +49,11 @@ import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
 import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireLock, releaseLock } from './lib/queries';
-import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
+import { DebugLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import { type MatrixClient } from 'matrix-js-sdk';
-
-// Silence FetchHttpApi Matrix SDK logs
-matrixLogger.setLevel('warn');
+import { debug } from 'debug';
 
 let log = logger('ai-bot');
 
@@ -134,17 +132,31 @@ class Assistant {
       (prompt.model && !this.toolCallCapableModels.has(prompt.model))
     ) {
       return this.openai.chat.completions.stream({
-        model: prompt.model ?? DEFAULT_LLM,
+        model: this.getModel(prompt),
         messages: prompt.messages as ChatCompletionMessageParam[],
+        reasoning_effort: this.getReasoningEffort(prompt),
       });
     } else {
       return this.openai.chat.completions.stream({
-        model: prompt.model ?? DEFAULT_LLM,
+        model: this.getModel(prompt),
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
         tool_choice: prompt.toolChoice,
+        reasoning_effort: this.getReasoningEffort(prompt),
       });
     }
+  }
+
+  getModel(prompt: PromptParts) {
+    return prompt.model ?? DEFAULT_LLM;
+  }
+
+  // TODO: This function is used to avoid a thinking model of gpt-5.
+  // This should use the reasoning effort defined in the ModelConfiguration card instead.
+  // once this is supported.
+  getReasoningEffort(prompt: PromptParts) {
+    let model = this.getModel(prompt);
+    return model === 'openai/gpt-5' ? 'minimal' : undefined;
   }
 
   async handleDebugCommands(
@@ -176,8 +188,12 @@ let assistant: Assistant;
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
+  let matrixDebugLogger = !process.env.DISABLE_MATRIX_JS_LOGGING
+    ? new DebugLogger(debug(`matrix-js-sdk:${aiBotUsername}`))
+    : undefined;
   let client = createClient({
     baseUrl: matrixUrl,
+    logger: matrixDebugLogger,
   });
   let auth = await client
     .loginWithPassword(
@@ -297,179 +313,191 @@ Common issues are:
           return;
         }
 
-        if (!Responder.eventMayTriggerResponse(event)) {
-          return; // early exit for events that will not trigger a response
-        }
-
-        log.info(
-          '(%s) (Room: "%s" %s) (Message: %s %s)',
-          event.getType(),
-          room?.name,
-          room?.roomId,
-          senderMatrixUserId,
-          eventBody,
-        );
-
-        let promptParts: PromptParts;
-        let eventList: DiscreteMatrixEvent[];
         try {
-          eventList = await getRoomEvents(room.roomId, client, event.getId());
-        } catch (e) {
-          log.error(e);
-          Sentry.captureException(e, {
-            extra: {
-              roomId: room.roomId,
-              eventId: eventId,
-              eventBody: eventBody,
-              senderMatrixUserId: senderMatrixUserId,
-            },
-          });
-          return;
-        }
+          if (!Responder.eventMayTriggerResponse(event)) {
+            return; // early exit for events that will not trigger a response
+          }
 
-        // Return early here if it's a debug event
-        if (isRecognisedDebugCommand(eventBody)) {
-          return await assistant.handleDebugCommands(
+          log.info(
+            '(%s) (Room: "%s" %s) (Message: %s %s)',
+            event.getType(),
+            room?.name,
+            room?.roomId,
+            senderMatrixUserId,
             eventBody,
-            room.roomId,
-            eventList,
           );
-        }
 
-        let contentData =
-          typeof event.getContent().data === 'string'
-            ? JSON.parse(event.getContent().data)
-            : event.getContent().data;
-        const agentId = contentData.context?.agentId;
-        const responder = new Responder(client, room.roomId, agentId);
-
-        if (Responder.eventWillDefinitelyTriggerResponse(event)) {
-          await responder.ensureThinkingMessageSent();
-        }
-
-        try {
-          promptParts = await getPromptParts(eventList, aiBotUserId, client);
-          if (!promptParts.shouldRespond) {
-            return;
-          }
-          // if debug, send message with promptParts and event list
-          if (isInDebugMode(eventList, aiBotUserId)) {
-            // create files in memory
-            sendPromptAsDebugMessage(client, room.roomId, promptParts);
-          }
-          await responder.ensureThinkingMessageSent();
-        } catch (e) {
-          log.error(e);
-          Sentry.captureException(e, {
-            extra: {
-              roomId: room.roomId,
-              eventId: eventId,
-              eventBody: eventBody,
-              senderMatrixUserId: senderMatrixUserId,
-            },
-          });
-          await responder.onError(
-            new Error(
-              'There was an error processing chat history. Please open another session.',
-            ),
-          );
-          await responder.finalize();
-          return;
-        }
-
-        // Do not generate new responses if previous ones' cost is still being reported
-        let pendingCreditsConsumptionPromise = trackAiUsageCostPromises.get(
-          senderMatrixUserId!,
-        );
-        if (pendingCreditsConsumptionPromise) {
+          let promptParts: PromptParts;
+          let eventList: DiscreteMatrixEvent[];
           try {
-            await pendingCreditsConsumptionPromise;
+            eventList = await getRoomEvents(room.roomId, client, event.getId());
           } catch (e) {
             log.error(e);
-            return responder.onError(
-              'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+            Sentry.captureException(e, {
+              extra: {
+                roomId: room.roomId,
+                eventId: eventId,
+                eventBody: eventBody,
+                senderMatrixUserId: senderMatrixUserId,
+              },
+            });
+            return;
+          }
+
+          // Return early here if it's a debug event
+          if (isRecognisedDebugCommand(eventBody)) {
+            return await assistant.handleDebugCommands(
+              eventBody,
+              room.roomId,
+              eventList,
             );
           }
-        }
 
-        const creditValidation = await validateAICredits(
-          assistant.pgAdapter,
-          senderMatrixUserId,
-        );
+          let contentData =
+            typeof event.getContent().data === 'string'
+              ? JSON.parse(event.getContent().data)
+              : event.getContent().data;
+          const agentId = contentData.context?.agentId;
+          const responder = new Responder(client, room.roomId, agentId);
 
-        if (!creditValidation.hasEnoughCredits) {
-          // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
-          return responder.onError(
-            `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
-          );
-        }
+          if (Responder.eventWillDefinitelyTriggerResponse(event)) {
+            await responder.ensureThinkingMessageSent();
+          }
 
-        let chunkHandlingError: string | undefined;
-        let generationId: string | undefined;
-        const runner = assistant
-          .getResponse(promptParts)
-          .on('chunk', async (chunk, snapshot) => {
-            generationId = chunk.id;
-            let activeGeneration = activeGenerations.get(room.roomId);
-            if (activeGeneration) {
-              activeGeneration.lastGeneratedChunkId = generationId;
+          try {
+            promptParts = await getPromptParts(eventList, aiBotUserId, client);
+            if (!promptParts.shouldRespond) {
+              return;
             }
-
-            let chunkProcessingResult = await responder.onChunk(
-              chunk,
-              snapshot,
+            // if debug, send message with promptParts and event list
+            if (isInDebugMode(eventList, aiBotUserId)) {
+              // create files in memory
+              sendPromptAsDebugMessage(client, room.roomId, promptParts);
+            }
+            await responder.ensureThinkingMessageSent();
+          } catch (e) {
+            log.error(e);
+            Sentry.captureException(e, {
+              extra: {
+                roomId: room.roomId,
+                eventId: eventId,
+                eventBody: eventBody,
+                senderMatrixUserId: senderMatrixUserId,
+              },
+            });
+            await responder.onError(
+              new Error(
+                'There was an error processing chat history. Please open another session.',
+              ),
             );
-            let chunkProcessingResultError = chunkProcessingResult.find(
-              (promiseResult) =>
-                promiseResult &&
-                'errorMessage' in promiseResult &&
-                promiseResult.errorMessage != null,
-            ) as { errorMessage: string } | undefined;
+            await responder.finalize();
+            return;
+          }
 
-            if (chunkProcessingResultError) {
-              chunkHandlingError = chunkProcessingResultError.errorMessage;
-
-              // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
-              // then we want to stop accepting more chunks by aborting the runner. This will throw an error
-              // where the await responder.finalize() is called (the catch block below will handle this)
-              runner.abort();
+          // Do not generate new responses if previous ones' cost is still being reported
+          let pendingCreditsConsumptionPromise = trackAiUsageCostPromises.get(
+            senderMatrixUserId!,
+          );
+          if (pendingCreditsConsumptionPromise) {
+            try {
+              await pendingCreditsConsumptionPromise;
+            } catch (e) {
+              log.error(e);
+              return responder.onError(
+                'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+              );
             }
-          })
-          .on('error', async (error) => {
-            await responder.onError(error);
+          }
+
+          const creditValidation = await validateAICredits(
+            assistant.pgAdapter,
+            senderMatrixUserId,
+          );
+
+          if (!creditValidation.hasEnoughCredits) {
+            // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
+            return responder.onError(
+              `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
+            );
+          }
+
+          let chunkHandlingError: string | undefined;
+          let generationId: string | undefined;
+          log.info(
+            `[${eventId}] Starting generation with model %s`,
+            promptParts.model,
+          );
+          const runner = assistant
+            .getResponse(promptParts)
+            .on('chunk', async (chunk, snapshot) => {
+              log.info(`[${eventId}] Received chunk %s`, chunk.id);
+              generationId = chunk.id;
+              let activeGeneration = activeGenerations.get(room.roomId);
+              if (activeGeneration) {
+                activeGeneration.lastGeneratedChunkId = generationId;
+              }
+
+              let chunkProcessingResult = await responder.onChunk(
+                chunk,
+                snapshot,
+              );
+              let chunkProcessingResultError = chunkProcessingResult.find(
+                (promiseResult) =>
+                  promiseResult &&
+                  'errorMessage' in promiseResult &&
+                  promiseResult.errorMessage != null,
+              ) as { errorMessage: string } | undefined;
+
+              if (chunkProcessingResultError) {
+                chunkHandlingError = chunkProcessingResultError.errorMessage;
+
+                // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+                // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+                // where the await responder.finalize() is called (the catch block below will handle this)
+                runner.abort();
+              }
+            })
+            .on('error', async (error) => {
+              await responder.onError(error);
+            });
+
+          activeGenerations.set(room.roomId, {
+            responder,
+            runner,
+            lastGeneratedChunkId: generationId,
           });
 
-        activeGenerations.set(room.roomId, {
-          responder,
-          runner,
-          lastGeneratedChunkId: generationId,
-        });
+          try {
+            await runner.finalChatCompletion();
+            log.info(`[${eventId}] Generation complete`);
+            await responder.finalize();
+            log.info(`[${eventId}] Response finalized`);
+          } catch (error) {
+            log.error(`[${eventId}] Error during generation or finalization`);
+            log.error(error);
+            if (chunkHandlingError) {
+              await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+            } else {
+              await responder.onError(error as OpenAIError);
+            }
+          } finally {
+            if (generationId) {
+              assistant.trackAiUsageCost(senderMatrixUserId, generationId);
+            }
+            activeGenerations.delete(room.roomId);
+          }
 
-        try {
-          await runner.finalChatCompletion();
-          await responder.finalize();
-        } catch (error) {
-          if (chunkHandlingError) {
-            await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
-          } else {
-            await responder.onError(error as OpenAIError);
+          if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
+            return await assistant.setTitle(
+              room.roomId,
+              promptParts.history,
+              event,
+            );
           }
+          return;
         } finally {
-          if (generationId) {
-            assistant.trackAiUsageCost(senderMatrixUserId, generationId);
-          }
-          activeGenerations.delete(room.roomId);
           await releaseLock(assistant.pgAdapter, eventId);
         }
-
-        if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-          return await assistant.setTitle(
-            room.roomId,
-            promptParts.history,
-            event,
-          );
-        }
-        return;
       } catch (e) {
         log.error(e);
         Sentry.captureException(e, {

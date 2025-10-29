@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Structured Theme",
+      "description": "A card for defining a structured theme with CSS variables",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/structured-theme",
+        "name": "default"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

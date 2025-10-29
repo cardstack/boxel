@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "outcome": {
+        "outcome": {
+          "label": "Win"
+        }
+      },
+      "ref": {
+        "module": "http://localhost:4201/catalog/blackjack/blackjack",
+        "name": "BlackjackGame"
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../blackjack/BlackjackGame/7afce4bc-c331-48ca-bc53-3b9cc2e81333"
+        }
+      },
+      "outcome.player": {
+        "links": {
+          "self": "../player/Player/31247758-d5e2-4cd7-a0e2-594c1932b36a"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../game-result/game-result",
+        "name": "GameResult"
+      }
+    }
+  }
+}

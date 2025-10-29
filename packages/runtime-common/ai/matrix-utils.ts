@@ -181,6 +181,8 @@ interface CacheEntry {
 
 const fileCache: Map<string, CacheEntry> = new Map();
 const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
+// In-flight fetch promises keyed by URL so concurrent requests dedupe
+const inFlightFetches: Map<string, Promise<string>> = new Map();
 
 function cleanupCache() {
   const now = Date.now();
@@ -246,34 +248,59 @@ export async function downloadFile(
     );
   }
 
-  const cachedEntry = fileCache.get(attachedFile.url!);
+  const canonicalKey = canonicalizeMatrixMediaKey(attachedFile.url);
+
+  // Check cache by canonical key first
+  const cachedEntry = canonicalKey
+    ? fileCache.get(canonicalKey)
+    : fileCache.get(attachedFile.url!);
   if (cachedEntry) {
+    // cache hit - minimal logging
     cachedEntry.timestamp = Date.now();
     return cachedEntry.content;
   }
 
-  // Download the file if not in cache
-  let response = await (globalThis as any).fetch(attachedFile.url, {
-    headers: {
-      Authorization: `Bearer ${client.getAccessToken()}`,
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`HTTP error. Status: ${response.status}`);
+  // If a fetch for this canonical key is already in-flight, wait for it instead
+  const inFlightKey = canonicalKey || attachedFile.url!;
+  const inFlight = inFlightFetches.get(inFlightKey);
+  if (inFlight) {
+    return await inFlight;
   }
 
-  const content = await response.text();
+  // cache miss
 
-  fileCache.set(attachedFile.url!, {
-    content,
-    timestamp: Date.now(),
-  });
+  // create an in-flight promise and store it so others can await
+  const fetchPromise = (async () => {
+    let response = await (globalThis as any).fetch(attachedFile.url, {
+      headers: {
+        Authorization: `Bearer ${client.getAccessToken()}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error. Status: ${response.status}`);
+    }
 
-  if (fileCache.size > 100) {
-    cleanupCache();
+    const content = await response.text();
+
+    // store in cache under canonical key when available
+    const cacheKey = canonicalKey || attachedFile.url!;
+    fileCache.set(cacheKey, {
+      content,
+      timestamp: Date.now(),
+    });
+    if (fileCache.size > 100) {
+      cleanupCache();
+    }
+
+    return content;
+  })();
+
+  inFlightFetches.set(inFlightKey, fetchPromise);
+  try {
+    return await fetchPromise;
+  } finally {
+    inFlightFetches.delete(inFlightKey);
   }
-
-  return content;
 }
 
 export function isCommandOrCodePatchResult(
@@ -297,4 +324,42 @@ export function extractCodePatchBlocks(s: string) {
     ),
   ];
   return matches.map((match) => match[0]);
+}
+
+// Normalize a Matrix media URL (HTTP download URL or mxc://) into a canonical key.
+// Returns an mxc://host/id style canonical key when possible; otherwise returns the input URL.
+export function canonicalizeMatrixMediaKey(url?: string | null): string | null {
+  if (!url) return null;
+  // If it's already an mxc URL, return as-is
+  if (url.startsWith('mxc://')) return url;
+
+  try {
+    const u = new URL(url);
+
+    // Strip query params and trailing filename segments for normalization
+    // so that URLs like /download/<host>/<id>/<fileName>?v=1 and
+    // /download/<host>/<id> map to the same canonical key.
+    const pathname = u.pathname.replace(/\/+$|\?.*$/g, '');
+    const parts = pathname.split('/').filter(Boolean);
+
+    // Look for the download segment
+    const downloadIdx = parts.indexOf('download');
+    if (downloadIdx !== -1 && parts.length >= downloadIdx + 3) {
+      const host = parts[downloadIdx + 1];
+      const id = parts[downloadIdx + 2];
+      return `mxc://${host}/${id}`;
+    }
+
+    // Handle thumbnail path variants
+    const thumbIdx = parts.indexOf('thumbnail');
+    if (thumbIdx !== -1 && parts.length >= thumbIdx + 3) {
+      const host = parts[thumbIdx + 1];
+      const id = parts[thumbIdx + 2];
+      return `mxc://${host}/${id}`;
+    }
+  } catch (e) {
+    // fall through and return original URL
+  }
+
+  return url;
 }

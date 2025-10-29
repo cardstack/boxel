@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StudyGoal",
+        "module": "../study-goal"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "subject": "Mathematics",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "priority": "high",
+      "progress": 75,
+      "createdAt": "2025-01-05T12:00:00.000Z",
+      "goalTitle": "Linear Algebra Review",
+      "targetDate": "2025-01-20",
+      "completedAt": null,
+      "description": "Complete comprehensive review of linear algebra concepts before starting ML course.",
+      "isCompleted": false,
+      "actualTimeSpent": null,
+      "studyTimeEstimate": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

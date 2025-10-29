@@ -14,7 +14,7 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
@@ -24,6 +24,8 @@ import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
 } from '../services/module-contents-service';
+
+import GenerateReadmeSpecCommand from './generate-readme-spec';
 
 import type CardService from '../services/card-service';
 import type ModuleContentsService from '../services/module-contents-service';
@@ -143,10 +145,12 @@ export default class CreateSpecCommand extends HostBaseCommand<
     targetRealm: string,
     SpecKlass: typeof BaseDef,
     createIfExists: boolean = false,
+    autoGenerateReadme: boolean = false,
   ): Promise<CreateSpecResult> {
     const title = codeRef.name;
     const specType = new SpecTypeGuesser(declaration).type;
 
+    let createdSpecRes: CreateSpecResult;
     if (!createIfExists) {
       // Check if a spec already exists for this code ref
       const existingSpecsQuery: Query = {
@@ -162,30 +166,55 @@ export default class CreateSpecCommand extends HostBaseCommand<
         existingSpecsQuery,
         new URL(targetRealm),
       );
-
       if (existingSpecs.length > 0) {
         console.warn(`Spec already exists for ${title}, skipping`);
-        return { spec: existingSpecs[0] as Spec, new: false };
+        let savedSpec = existingSpecs[0] as Spec;
+        createdSpecRes = { spec: savedSpec, new: false };
+      } else {
+        let spec = new SpecKlass({
+          specType,
+          ref: codeRef,
+          title,
+        }) as Spec;
+        let savedSpec = (await this.store.add<Spec>(spec, {
+          realm: targetRealm,
+        })) as Spec;
+        createdSpecRes = { spec: savedSpec, new: true };
       }
+    } else {
+      let spec = new SpecKlass({
+        specType,
+        ref: codeRef,
+        title,
+      }) as Spec;
+
+      let savedSpec = (await this.store.add<Spec>(spec, {
+        realm: targetRealm,
+      })) as Spec;
+      createdSpecRes = { spec: savedSpec, new: true };
     }
 
-    let spec = new SpecKlass({
-      specType,
-      ref: codeRef,
-      title,
-    }) as Spec;
+    if (!createdSpecRes.spec) {
+      throw new Error('Failed to create or retrieve spec');
+    }
 
-    let savedSpec = (await this.store.add<Spec>(spec, {
-      realm: targetRealm,
-    })) as Spec;
+    if (autoGenerateReadme && !createdSpecRes.spec.readMe) {
+      // we populate the readme when is not already set even when spec is already created
+      let generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
+        this.commandContext,
+      );
+      await generateReadmeSpecCommand.execute({
+        spec: createdSpecRes.spec,
+      });
+    }
 
-    return { spec: savedSpec, new: true };
+    return createdSpecRes;
   }
 
   protected async run(
     input: BaseCommandModule.CreateSpecsInput,
   ): Promise<BaseCommandModule.CreateSpecsResult> {
-    let { codeRef, targetRealm, module } = input;
+    let { codeRef, targetRealm, module, autoGenerateReadme } = input;
 
     if (!targetRealm) {
       throw new Error('targetRealm is required');
@@ -231,6 +260,8 @@ export default class CreateSpecCommand extends HostBaseCommand<
         codeRef,
         targetRealm,
         SpecKlass,
+        false,
+        autoGenerateReadme ?? false,
       );
 
       if (savedSpec.new) {
@@ -255,6 +286,9 @@ export default class CreateSpecCommand extends HostBaseCommand<
             specCodeRef,
             targetRealm,
             SpecKlass,
+            false,
+            false,
+            // intentionally not generating readme for multiple spec creation
           );
         } catch (e) {
           console.warn(

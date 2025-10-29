@@ -58,13 +58,14 @@ import {
   type Definition,
   type FieldDefinition,
 } from './index-structure';
-import { DefinitionsCache } from './definitions-cache';
+import {
+  DefinitionsCache,
+  isFilterRefersToNonexistentTypeError,
+} from './definitions-cache';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 interface IndexedModule {
   type: 'module';
-  executableCode: string;
-  source: string;
   canonicalURL: string;
   lastModified: number | null;
   resourceCreatedAt: number;
@@ -83,7 +84,6 @@ interface IndexedDefinition {
 export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
-  source: string;
   canonicalURL: string;
   lastModified: number | null;
   resourceCreatedAt: number;
@@ -111,7 +111,6 @@ interface InstanceError
       | 'realmVersion'
       | 'realmURL'
       | 'instance'
-      | 'source'
       | 'lastModified'
       | 'resourceCreatedAt'
     >
@@ -121,7 +120,6 @@ interface InstanceError
   realmVersion: number;
   realmURL: string;
   instance: CardResource | null;
-  source: string | null;
   lastModified: number | null;
   resourceCreatedAt: number | null;
 }
@@ -268,26 +266,15 @@ export class IndexQueryEngine {
     if (result.type === 'error') {
       return { type: 'error', error: result.error_doc! };
     }
-    let moduleEntry = assertIndexEntrySource(result);
+    let moduleEntry = assertIndexEntry(result);
     let {
-      transpiled_code: executableCode,
-      source,
       url: canonicalURL,
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
     } = moduleEntry;
-    if (executableCode === null) {
-      throw new Error(
-        `bug: index entry for ${url.href} with opts: ${stringify(
-          opts,
-        )} has neither an error_doc nor transpiled_code`,
-      );
-    }
     return {
       type: 'module',
       canonicalURL,
-      executableCode,
-      source,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt: parseInt(resourceCreatedAt),
       deps: moduleEntry.deps,
@@ -335,7 +322,6 @@ export class IndexQueryEngine {
       indexed_at: indexedAt,
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
-      source,
       types,
       deps,
     } = maybeResult;
@@ -350,7 +336,6 @@ export class IndexQueryEngine {
       searchDoc,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
-      source,
       deps,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
@@ -361,7 +346,7 @@ export class IndexQueryEngine {
     if (maybeResult.error_doc) {
       return { ...baseResult, type: 'error', error: maybeResult.error_doc };
     }
-    let instanceEntry = assertIndexEntrySource(maybeResult);
+    let instanceEntry = assertIndexEntry(maybeResult);
     if (!instance) {
       throw new Error(
         `bug: index entry for ${url.href} with opts: ${stringify(
@@ -373,7 +358,6 @@ export class IndexQueryEngine {
       ...baseResult,
       type: 'instance',
       instance,
-      source: instanceEntry.source,
       lastModified:
         instanceEntry.last_modified != null
           ? parseInt(instanceEntry.last_modified)
@@ -404,66 +388,80 @@ export class IndexQueryEngine {
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
   }> {
-    let conditions: CardExpression[] = [
-      ['i.realm_url = ', param(realmURL.href)],
-      ['is_deleted = FALSE OR is_deleted IS NULL'],
-    ];
+    try {
+      let conditions: CardExpression[] = [
+        ['i.realm_url = ', param(realmURL.href)],
+        ['is_deleted = FALSE OR is_deleted IS NULL'],
+      ];
 
-    if (opts.includeErrors) {
-      conditions.push(
-        any([
-          ['i.type =', param('instance')],
-          every([
-            ['i.type =', param('error')],
-            ['i.url ILIKE', param('%.json')],
+      if (opts.includeErrors) {
+        conditions.push(
+          any([
+            ['i.type =', param('instance')],
+            every([
+              ['i.type =', param('error')],
+              ['i.url ILIKE', param('%.json')],
+            ]),
           ]),
-        ]),
-      );
-    } else {
-      conditions.push(['i.type =', param('instance')]);
-    }
+        );
+      } else {
+        conditions.push(['i.type =', param('instance')]);
+      }
 
-    if (opts.cardUrls && opts.cardUrls.length > 0) {
-      conditions.push([
-        'i.url IN',
-        ...addExplicitParens(
-          separatedByCommas(opts.cardUrls.map((url) => [param(url)])),
-        ),
+      if (opts.cardUrls && opts.cardUrls.length > 0) {
+        conditions.push([
+          'i.url IN',
+          ...addExplicitParens(
+            separatedByCommas(opts.cardUrls.map((url) => [param(url)])),
+          ),
+        ]);
+      }
+
+      if (filter) {
+        conditions.push(this.filterCondition(filter, baseCardRef));
+      }
+
+      let everyCondition = every(conditions);
+      let query = [
+        ...selectClauseExpression,
+        `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+        'WHERE',
+        ...everyCondition,
+        'GROUP BY url',
+        ...this.orderExpression(sort),
+        ...(page
+          ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`]
+          : []),
+      ];
+      let queryCount = [
+        'SELECT COUNT(DISTINCT url) AS total',
+        `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
+        'WHERE',
+        ...everyCondition,
+      ];
+
+      let [results, totalResults] = await Promise.all([
+        this.#queryCards(query),
+        this.#queryCards(queryCount),
       ]);
+
+      return {
+        results,
+        meta: {
+          page: { total: Number(totalResults[0].total) },
+        },
+      };
+    } catch (error) {
+      if (isFilterRefersToNonexistentTypeError(error)) {
+        return {
+          results: [],
+          meta: {
+            page: { total: 0 },
+          },
+        };
+      }
+      throw error;
     }
-
-    if (filter) {
-      conditions.push(this.filterCondition(filter, baseCardRef));
-    }
-
-    let everyCondition = every(conditions);
-    let query = [
-      ...selectClauseExpression,
-      `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
-      'WHERE',
-      ...everyCondition,
-      'GROUP BY url',
-      ...this.orderExpression(sort),
-      ...(page ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`] : []),
-    ];
-    let queryCount = [
-      'SELECT COUNT(DISTINCT url) AS total',
-      `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
-      'WHERE',
-      ...everyCondition,
-    ];
-
-    let [results, totalResults] = await Promise.all([
-      this.#queryCards(query),
-      this.#queryCards(queryCount),
-    ]);
-
-    return {
-      results,
-      meta: {
-        page: { total: Number(totalResults[0].total) },
-      },
-    };
   }
 
   async search(
@@ -1185,19 +1183,15 @@ function currentField(pathTraveled: string) {
   return cleansedPath.split('.').pop()!;
 }
 
-function assertIndexEntrySource<T>(obj: T): Omit<
+function assertIndexEntry<T>(obj: T): Omit<
   T,
   'source' | 'last_modified' | 'resource_created_at'
 > & {
-  source: string;
   last_modified: string | null;
   resource_created_at: string;
 } {
   if (!obj || typeof obj !== 'object') {
     throw new Error(`expected index entry is null or not an object`);
-  }
-  if (!('source' in obj) || typeof obj.source !== 'string') {
-    throw new Error(`expected index entry to have "source" string property`);
   }
   if (!('last_modified' in obj)) {
     throw new Error(`expected index entry to have "last_modified" property`);
@@ -1211,7 +1205,6 @@ function assertIndexEntrySource<T>(obj: T): Omit<
     );
   }
   return obj as Omit<T, 'source' | 'last_modified' | 'resource_created_at'> & {
-    source: string;
     last_modified: string;
     resource_created_at: string;
   };

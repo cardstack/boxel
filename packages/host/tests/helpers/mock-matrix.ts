@@ -3,11 +3,13 @@ import Owner from '@ember/owner';
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { MockSDK } from './mock-matrix/_sdk';
 import { MockSlidingSync } from './mock-matrix/_sliding-sync';
-import { MockUtils } from './mock-matrix/_utils';
+import { MockUtils, getRoomIdForRealmAndUser } from './mock-matrix/_utils';
 
 export const testRealmServerMatrixUsername = 'realm_server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
@@ -21,6 +23,7 @@ export interface Config {
   autostart?: boolean;
   now?: () => number;
   directRooms?: string[];
+  systemCardAccountData?: { id?: string };
 }
 
 export function setupMockMatrix(
@@ -53,14 +56,32 @@ export function setupMockMatrix(
   });
 
   hooks.beforeEach(async function () {
+    if (!opts.directRooms && opts.loggedInAs) {
+      opts.directRooms = [
+        ...(opts.activeRealms?.map((realmURL) =>
+          getRoomIdForRealmAndUser(realmURL, opts.loggedInAs!),
+        ) ?? []),
+        getRoomIdForRealmAndUser(baseRealm.url, opts.loggedInAs),
+      ];
+    }
+
     testState.owner = this.owner;
-    testState.opts = { ...opts };
+
+    // Start with initial directRooms from opts
+    const directRooms = [...(opts.directRooms || [])];
+
+    // Always add the auth room to directRooms to ensure it's treated as a DM
+    const authRoomId = 'test-auth-realm-server-session-room';
+    if (!directRooms.includes(authRoomId)) {
+      directRooms.push(authRoomId);
+    }
+
+    testState.opts = { ...opts, directRooms };
     let sdk = new MockSDK(testState.opts, this.owner);
     testState.sdk = sdk;
 
     // Needed for realm event subscriptions to receive events
     getService('message-service').register();
-
     const { loggedInAs } = opts;
     if (loggedInAs) {
       window.localStorage.setItem(
@@ -72,14 +93,14 @@ export function setupMockMatrix(
         }),
       );
 
+      let { createAndJoinRoom, getRoomIds } = mockUtils;
+
       if (opts.activeRealms) {
         for (let realmURL of opts.activeRealms) {
           let realmSessionRoomId = mockUtils.getRoomIdForRealmAndUser(
             realmURL,
             loggedInAs,
           );
-
-          let { createAndJoinRoom, getRoomIds } = mockUtils;
 
           if (!getRoomIds().includes(realmSessionRoomId)) {
             createAndJoinRoom({
@@ -90,6 +111,12 @@ export function setupMockMatrix(
           }
         }
       }
+
+      createAndJoinRoom({
+        sender: loggedInAs,
+        name: 'test-auth-realm-server-session-room',
+        id: 'test-auth-realm-server-session-room',
+      });
     }
 
     this.owner.register(

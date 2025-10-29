@@ -38,6 +38,7 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const testRealm2URL = `http://test-realm/test2/`;
+const readOnlyRealmURL = `http://test-realm/test-read-only/`;
 let loader: Loader;
 let setCardInOperatorModeState: (
   leftCards: string[],
@@ -63,7 +64,15 @@ module('Integration | card-copy', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs,
-    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
+    activeRealms: [
+      baseRealm.url,
+      testRealmURL,
+      testRealm2URL,
+      readOnlyRealmURL,
+    ],
+    realmPermissions: {
+      [readOnlyRealmURL]: ['read'],
+    },
     autostart: true,
   });
 
@@ -319,12 +328,10 @@ module('Integration | card-copy', function (hooks) {
     );
 
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Person/hassan"]`);
     assert
       .dom('[data-test-copy-button]')
       .doesNotExist('copy button does not exist');
@@ -380,18 +387,22 @@ module('Integration | card-copy', function (hooks) {
       `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+    await click(`[data-test-overlay-select="${testRealmURL}Person/hassan"]`);
+    await waitFor(
+      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/paper"]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealm2URL}Pet/paper"]`,
+      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/paper"] .field-component-card`,
       'mouseenter',
     );
+    await waitFor(
+      `[data-test-operator-mode-stack="1"] [data-test-overlay-select="${testRealm2URL}Pet/paper"]`,
+    );
     await click(
-      `[data-test-overlay-card="${testRealm2URL}Pet/paper"] button.actions-item__button`,
+      `[data-test-operator-mode-stack="1"] [data-test-overlay-select="${testRealm2URL}Pet/paper"]`,
     );
     assert
       .dom('[data-test-copy-button]')
@@ -413,11 +424,11 @@ module('Integration | card-copy', function (hooks) {
     );
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"] .field-component-card`,
       'mouseenter',
     );
     await click(
-      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+      `[data-test-operator-mode-stack="0"] [data-test-overlay-select="${testRealmURL}Person/hassan"]`,
     );
     assert
       .dom('[data-test-copy-button]')
@@ -459,11 +470,11 @@ module('Integration | card-copy', function (hooks) {
     );
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"] .field-component-card`,
       'mouseenter',
     );
     await click(
-      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+      `[data-test-operator-mode-stack="0"] [data-test-overlay-select="${testRealmURL}Person/hassan"]`,
     );
     assert
       .dom('[data-test-copy-button]')
@@ -485,12 +496,10 @@ module('Integration | card-copy', function (hooks) {
     );
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Person/hassan"]`);
     assert
       .dom('[data-test-copy-button="right"]')
       .exists('copy button with right arrow exists');
@@ -519,12 +528,10 @@ module('Integration | card-copy', function (hooks) {
       `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealm2URL}Pet/paper"]`,
+      `[data-test-cards-grid-item="${testRealm2URL}Pet/paper"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      ` [data-test-overlay-card="${testRealm2URL}Pet/paper"] button.actions-item__button`,
-    );
+    await click(` [data-test-overlay-select="${testRealm2URL}Pet/paper"]`);
     assert
       .dom('[data-test-copy-button="left"]')
       .exists('copy button with left arrow exists');
@@ -548,26 +555,20 @@ module('Integration | card-copy', function (hooks) {
     );
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Person/hassan"]`);
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Pet/mango"]`);
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Pet/vangogh"]`);
     await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="right"]')
@@ -607,6 +608,77 @@ module('Integration | card-copy', function (hooks) {
     assert
       .dom('[data-test-copy-button]')
       .containsText('Copy 1 Card', 'button text is correct');
+  });
+
+  test('copy button does not appear when destination index belongs to read-only realm', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: readOnlyRealmURL,
+      permissions: {
+        '@testuser:localhost': ['read'],
+        '*': ['read'],
+      },
+      contents: {
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'Pet/paper.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Paper',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        '.realm.json': {
+          name: 'Read Only Workspace',
+          backgroundURL:
+            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+        },
+      },
+    });
+
+    await setCardInOperatorModeState(
+      [`${testRealmURL}index`, `${testRealmURL}Person/hassan`],
+      [`${readOnlyRealmURL}index`],
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await waitFor('[data-test-operator-mode-stack="0"] [data-test-person]');
+    await waitFor(
+      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+    );
+
+    assert
+      .dom('[data-test-copy-button]')
+      .doesNotExist('copy button does not exist for read-only destination');
   });
 
   test('copy button appears when left stack is an index card and right stack is single card item', async function (assert) {
@@ -680,12 +752,10 @@ module('Integration | card-copy', function (hooks) {
       `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Pet/mango"]`);
     assert
       .dom(`.selected[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
       .exists('souce card is selected');
@@ -765,11 +835,14 @@ module('Integration | card-copy', function (hooks) {
       .doesNotExist('souce card is not selected');
 
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealm2URL}Pet/paper"]`,
+      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/${id}"] .field-component-card`,
       'mouseenter',
     );
+    await waitFor(
+      `[data-test-operator-mode-stack="1"] [data-test-overlay-select="${testRealm2URL}Pet/${id}"]`,
+    );
     await click(
-      `[data-test-overlay-card="${testRealm2URL}Pet/paper"] button.actions-item__button`,
+      `[data-test-operator-mode-stack="1"] [data-test-overlay-select="${testRealm2URL}Pet/${id}"]`,
     );
     assert
       .dom('[data-test-copy-button="left"]')
@@ -807,19 +880,15 @@ module('Integration | card-copy', function (hooks) {
       `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Pet/mango"]`);
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Pet/vangogh"]`);
 
     assert.strictEqual(
       document.querySelectorAll(
@@ -976,12 +1045,10 @@ module('Integration | card-copy', function (hooks) {
       `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Person/hassan"]`);
 
     assert.strictEqual(
       document.querySelectorAll(
@@ -1122,12 +1189,10 @@ module('Integration | card-copy', function (hooks) {
       `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Person/sakura"]`,
+      `[data-test-cards-grid-item="${testRealmURL}Person/sakura"] .field-component-card`,
       'mouseenter',
     );
-    await click(
-      `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.actions-item__button`,
-    );
+    await click(`[data-test-overlay-select="${testRealmURL}Person/sakura"]`);
 
     assert.strictEqual(
       document.querySelectorAll(

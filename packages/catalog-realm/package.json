@@ -15,7 +15,7 @@
     "ember-concurrency": "catalog:",
     "ember-modifier": "^4.1.0",
     "ember-template-lint": "catalog:",
-    "tracked-built-ins": "^3.3.0"
+    "tracked-built-ins": "catalog:"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:"

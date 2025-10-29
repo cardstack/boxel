@@ -2,16 +2,21 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
+import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import NameIcon from '@cardstack/boxel-icons/folder-pen';
 import SummaryIcon from '@cardstack/boxel-icons/notepad-text';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 
-import type { CardOrFieldTypeIcon, CardInfoField } from '../card-api';
+import type { CardOrFieldTypeIcon, CardDef, FieldsTypeFor } from '../card-api';
 
 import setBackgroundImage from '../helpers/set-background-image';
 
 import { FieldContainer, Button } from '@cardstack/boxel-ui/components';
+import { cn } from '@cardstack/boxel-ui/helpers';
+import { ChevronRight } from '@cardstack/boxel-ui/icons';
+
+import { getFieldIcon } from '@cardstack/runtime-common';
 
 class CardInfoImageContainer extends GlimmerComponent<{
   Args: {
@@ -103,9 +108,8 @@ class CardInfoView extends GlimmerComponent<ViewSignature> {
 
 interface EditSignature {
   Args: {
-    icon?: CardOrFieldTypeIcon;
-    fields?: Record<string, new () => GlimmerComponent>;
-    model?: CardInfoField;
+    fields?: FieldsTypeFor<CardDef>;
+    model?: CardDef;
     hideThemeChooser?: boolean;
   };
 }
@@ -113,13 +117,61 @@ interface EditSignature {
 class CardInfoEditor extends GlimmerComponent<EditSignature> {
   <template>
     <div class='cardInfo-editor'>
-      <FieldContainer>
+      <Button
+        class={{cn 'preview-toggle' is-preview-visible=this.isPreviewVisible}}
+        @size='extra-small'
+        @kind='text-only'
+        {{on 'click' this.togglePreview}}
+        data-test-toggle-preview
+      >
+        {{if this.isPreviewVisible 'Hide' 'Show'}}
+        Default Preview
+        <ChevronRight
+          class='preview-toggle-icon'
+          width='14'
+          height='14'
+          role='presentation'
+        />
+      </Button>
+      {{#if this.isPreviewVisible}}
+        <div class='default-preview'>
+          <FieldContainer
+            @label='Card Type'
+            @icon={{CaptionsIcon}}
+            data-test-edit-preview='cardType'
+          >
+            {{@model.constructor.displayName}}
+          </FieldContainer>
+          <FieldContainer
+            @label='Title'
+            @icon={{getFieldIcon @model 'title'}}
+            data-test-edit-preview='cardTitle'
+          >
+            <@fields.title @format='embedded' />
+          </FieldContainer>
+          <FieldContainer
+            @label='Description'
+            @icon={{getFieldIcon @model 'description'}}
+            data-test-edit-preview='cardDescription'
+          >
+            <@fields.description @format='embedded' />
+          </FieldContainer>
+          <FieldContainer
+            @label='Thumbnail URL'
+            @icon={{LinkIcon}}
+            data-test-edit-preview='cardThumbnailURL'
+          >
+            <@fields.thumbnailURL @format='embedded' />
+          </FieldContainer>
+        </div>
+      {{/if}}
+      <FieldContainer class='main-fields'>
         <:label>
           <div class='cardInfo-thumbnail-container'>
             <CardInfoImageContainer
               class='cardInfo-thumbnail-preview'
-              @thumbnailURL={{@model.thumbnailURL}}
-              @icon={{@icon}}
+              @thumbnailURL={{@model.cardInfo.thumbnailURL}}
+              @icon={{@model.constructor.icon}}
               data-test-thumbnail-image
             />
             <Button
@@ -145,7 +197,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
               @vertical={{true}}
               data-test-field='cardInfo-name'
             >
-              <@fields.title />
+              <@fields.cardInfo.title />
             </FieldContainer>
             <FieldContainer
               class='card-info-field'
@@ -156,7 +208,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
               @vertical={{true}}
               data-test-field='cardInfo-summary'
             >
-              <@fields.description />
+              <@fields.cardInfo.description />
             </FieldContainer>
           </div>
         </:default>
@@ -170,17 +222,28 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
             @icon={{LinkIcon}}
             data-test-field='cardInfo-thumbnailURL'
           >
-            <@fields.thumbnailURL />
+            <div class='thumbnail-input-container'>
+              {{#if this.showThumbnailPlaceholder}}
+                <span
+                  class='thumbnail-placeholder'
+                  data-test-thumbnail-placeholder
+                >
+                  <@fields.thumbnailURL />
+                </span>
+              {{/if}}
+              <span class='boxel-contents-only' data-test-thumbnail-input>
+                <@fields.cardInfo.thumbnailURL />
+              </span>
+            </div>
           </FieldContainer>
           {{#unless @hideThemeChooser}}
             <FieldContainer
               class='card-info-field theme-field'
               @label='Theme'
-              @tag='label'
               @icon={{ThemeIcon}}
               data-test-field='cardInfo-theme'
             >
-              <@fields.theme />
+              <@fields.cardInfo.theme />
             </FieldContainer>
           {{/unless}}
         </div>
@@ -192,6 +255,31 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         position: relative;
         width: 100%;
         max-width: 100%;
+      }
+      .preview-toggle {
+        position: absolute;
+        top: calc(-1 * var(--boxel-sp-lg));
+        right: 0;
+        min-width: 10.5rem;
+        justify-content: space-between;
+      }
+      .preview-toggle-icon {
+        transform: rotate(90deg);
+      }
+      .is-preview-visible .preview-toggle-icon {
+        transform: rotate(-90deg);
+      }
+      .preview-toggle + .default-preview {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .default-preview + .main-fields {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .default-preview {
+        padding: var(--boxel-sp-lg);
+        background-color: var(--accent, var(--boxel-200));
+        border-radius: var(--radius, var(--boxel-border-radius));
+        color: var(--accent-foreground, var(--boxel-dark));
       }
       .cardInfo-thumbnail-container {
         display: flex;
@@ -211,18 +299,40 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .hidden-fields {
         margin-top: var(--boxel-sp);
       }
-      .theme-field :deep(.links-to-editor .field-component-card),
-      .theme-field :deep(.add-button--full-width) {
+      .theme-field :deep(.links-to-editor .field-component-card) {
         min-height: var(--boxel-form-control-height);
+      }
+      .thumbnail-input-container {
+        position: relative;
+      }
+      .thumbnail-placeholder :deep(input) {
+        position: absolute;
+        left: 0;
+        right: 0;
+        width: 99%;
+        padding-block: 0;
+        background: none;
+        border: none;
       }
     </style>
   </template>
 
+  @tracked private isPreviewVisible = false;
   @tracked private isThumbnailEditorVisible = false;
+
+  private togglePreview = () => {
+    this.isPreviewVisible = !this.isPreviewVisible;
+  };
 
   private toggleThumbnailEditor = () => {
     this.isThumbnailEditorVisible = !this.isThumbnailEditorVisible;
   };
+
+  private get showThumbnailPlaceholder() {
+    return (
+      !this.args.model?.cardInfo?.thumbnailURL && this.args.model?.thumbnailURL
+    );
+  }
 }
 
 const CardInfoTemplates = {

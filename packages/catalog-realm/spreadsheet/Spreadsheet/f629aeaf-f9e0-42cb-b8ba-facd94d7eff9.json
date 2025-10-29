@@ -1,0 +1,29 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spreadsheet",
+        "module": "../spreadsheet"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Users",
+      "csvData": "Username; Identifier;First name;Last name\nbooker12;9012;Rachel;Booker\ngrey07;2070;Laura;Grey\njohnson81;4081;Craig;Johnson\njenkins46;9346;Mary;Jenkins\nsmith79;5079;Jamie;Smith",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "delimiter": ";"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

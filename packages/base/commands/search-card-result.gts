@@ -21,6 +21,7 @@ import {
   type CardContext,
   type Format,
   FieldDef,
+  linksToMany,
 } from '../card-api';
 import CodeRefField from '../code-ref';
 
@@ -303,10 +304,17 @@ class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
   @tracked showAllResults = true;
 }
 
+export class SearchCardSummaryField extends FieldDef {
+  @field id = contains(StringField); //since it is field, it doesn't conflict with id
+  @field title = contains(StringField);
+}
+
 export class SearchCardsResult extends CardDef {
   static displayName = 'Search Results';
   static icon = IconSearchThick;
   @field cardIds = containsMany(StringField);
+  @field instances = linksToMany(CardDef);
+  @field summaries = containsMany(SearchCardSummaryField);
   static embedded = SearchCardsResultEmbeddedView;
   static isolated = SearchCardsResultIsolatedView;
   @field title = contains(StringField, {

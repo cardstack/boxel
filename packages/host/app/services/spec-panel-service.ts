@@ -10,10 +10,7 @@ import { isCardInstance, isLocalId } from '@cardstack/runtime-common';
 
 import { SpecSelection } from '@cardstack/host/utils/local-storage-keys';
 
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from './card-service';
 import type StoreService from './store';

@@ -32,12 +32,12 @@
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@types/node": "^18.18.5",
+    "@types/node": "catalog:",
     "@types/qunit": "catalog:",
     "esbuild": "^0.19.0",
     "tsx": "^4.0.0",
     "ts-node": "^10.9.1",
-    "typescript": "~5.1.6",
+    "typescript": "catalog:",
     "concurrently": "catalog:",
     "ignore": "^5.3.0",
     "qunit": "^2.24.1"

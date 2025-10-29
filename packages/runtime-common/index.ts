@@ -1,7 +1,9 @@
 import { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
+import type { RenderRouteOptions } from './render-route-options';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { ErrorEntry } from './index-writer';
 
 // a card resource but with optional "id" and "type" props
 export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
@@ -25,10 +27,38 @@ export type PatchData = {
 // Shared type produced by the host app when visiting the render.meta route and
 // consumed by the server.
 export interface PrerenderMeta {
-  serialized: LooseSingleCardDocument | null;
+  serialized: SingleCardDocument | null;
   searchDoc: Record<string, any> | null;
-  displayName: string | null;
+  displayNames: string[] | null;
+  deps: string[] | null;
   types: string[] | null;
+}
+
+export interface RenderResponse extends PrerenderMeta {
+  isolatedHTML: string | null;
+  atomHTML: string | null;
+  embeddedHTML: Record<string, string> | null;
+  fittedHTML: Record<string, string> | null;
+  iconHTML: string | null;
+  error?: RenderError;
+}
+
+export interface RenderError extends ErrorEntry {
+  evict?: boolean;
+}
+
+export type Prerenderer = (args: {
+  realm: string;
+  url: string;
+  userId: string;
+  permissions: RealmPermissions;
+  renderOptions?: RenderRouteOptions;
+}) => Promise<RenderResponse>;
+
+export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
+
+export interface RealmPermissions {
+  [username: string]: RealmAction[];
 }
 
 export { Deferred } from './deferred';
@@ -62,6 +92,7 @@ export interface DirectoryEntryRelationship {
 export interface FileMeta {
   kind: 'file';
   lastModified: number | null;
+  resourceCreatedAt?: number;
 }
 
 export interface DirectoryMeta {
@@ -106,11 +137,12 @@ export * from './stream';
 export * from './realm';
 export * from './fetcher';
 export * from './scoped-css';
+export * from './html-utils';
 export * from './utils';
 export * from './authorization-middleware';
+export * from './resource-types';
 export * from './query';
 export * from './formats';
-export * from './db-types';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
@@ -120,13 +152,17 @@ export {
   cardTypeIcon,
   getFieldIcon,
 } from './helpers/card-type-display-name';
+export * from './helpers/ensure-extension';
 export * from './url';
+export * from './render-route-options';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
 
-export * from './realm-permission-queries';
-export * from './user-queries';
+export * from './db-queries/db-types';
+export * from './db-queries/realm-permission-queries';
+export * from './db-queries/session-room-queries';
+export * from './db-queries/user-queries';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -147,7 +183,6 @@ export type {
   FileRef,
   RealmInfo,
   TokenClaims,
-  RealmPermissions,
   RealmSession,
 } from './realm';
 
@@ -280,6 +315,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
 }
 
 import { type CardErrorJSONAPI } from './error';
+import { SingleCardDocument } from './document-types';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;

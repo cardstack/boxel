@@ -22,6 +22,7 @@ import {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
+  SearchCardSummaryField,
 } from './commands/search-card-result';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
@@ -102,10 +103,26 @@ export class WriteTextFileInput extends CardDef {
 }
 
 export class CreateInstanceInput extends CardDef {
-  @field module = contains(CodeRefField);
+  @field codeRef = contains(CodeRefField);
   @field realm = contains(StringField);
 }
 
+export class CreateInstancesInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field realm = contains(StringField);
+  @field count = contains(NumberField);
+  @field exampleCard = linksTo(CardDef);
+}
+
+export class CreateInstanceResult extends CardDef {
+  @field createdCard = linksTo(CardDef);
+}
+
+export class GenerateListingExampleInput extends CardDef {
+  @field listing = linksTo(CardDef);
+  @field realm = contains(StringField);
+  @field referenceExample = linksTo(CardDef);
+}
 export class UpdateCodePathWithSelectionInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field localName = contains(StringField);
@@ -263,6 +280,10 @@ export class ListingCreateInput extends CardDef {
   @field targetRealm = contains(StringField);
 }
 
+export class ListingCreateResult extends CardDef {
+  @field listing = linksTo(CardDef);
+}
+
 export class VisitCardsInput extends CardDef {
   @field query = contains(QueryField);
   @field commandRef = contains(CodeRefField);
@@ -300,6 +321,7 @@ export class SendRequestViaProxyInput extends CardDef {
   @field method = contains(StringField);
   @field requestBody = contains(StringField);
   @field headers = contains(JsonField); // optional
+  @field multipart = contains(BooleanField); // optional
 }
 
 export class SendRequestViaProxyResult extends CardDef {
@@ -327,6 +349,7 @@ export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
+  SearchCardSummaryField,
 };
 
 export class RealmInfoField extends FieldDef {
@@ -372,11 +395,12 @@ export class CreateSpecsInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field module = contains(StringField);
   @field targetRealm = contains(StringField);
+  @field autoGenerateReadme = contains(BooleanField);
 }
 
 export class CreateSpecsResult extends CardDef {
-  @field newSpecs = linksToMany(Spec); // only newly created specs
-  @field specs = linksToMany(Spec); // all specs newly created and pre-existing ones
+  @field newSpecs = linksToMany(Spec);
+  @field specs = linksToMany(Spec);
 }
 
 export class PatchFieldsInput extends CardDef {
@@ -450,4 +474,17 @@ export class OneShotLLMRequestInput extends CardDef {
 
 export class OneShotLLMRequestResult extends CardDef {
   @field output = contains(StringField);
+}
+
+// Select up to N cards of a given type using an LLM heuristic
+export class SearchAndChooseInput extends CardDef {
+  @field codeRef = contains(CodeRefField); // module + name of card type to search instances of
+  @field max = contains(NumberField); // optional, default 2
+  @field additionalSystemPrompt = contains(StringField); // optional extra hard rules
+  @field llmModel = contains(StringField); // optional model override
+}
+
+export class SearchAndChooseResult extends CardDef {
+  @field selectedIds = containsMany(StringField);
+  @field selectedCards = linksToMany(CardDef);
 }

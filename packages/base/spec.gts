@@ -23,13 +23,19 @@ import {
   BoxelButton,
 } from '@cardstack/boxel-ui/components';
 import {
+  getCardMenuItems,
   codeRefWithAbsoluteURL,
-  Loader,
-  loadCardDef,
-  isResolvedCodeRef,
+  ensureExtension,
   isPrimitive,
+  isResolvedCodeRef,
+  loadCardDef,
+  Loader,
+  realmURL,
+  type CommandContext,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
 
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
@@ -46,8 +52,46 @@ import LayoutList from '@cardstack/boxel-icons/layout-list';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
+import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
+import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
+import { type GetCardMenuItemParams } from './card-menu-items';
 
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
+
+class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
+  constructor(commandContext: CommandContext) {
+    super(commandContext);
+  }
+  protected get prompt() {
+    return `Fill in sample data for this example on the card's spec.`;
+  }
+
+  protected getAttachedFileURLs(card: CardDef) {
+    let codeRef: ResolvedCodeRef | undefined = (card as Spec).ref;
+    if (!codeRef) {
+      return [];
+    }
+    codeRef = codeRefWithAbsoluteURL(
+      codeRef,
+      new URL(card.id!),
+    )! as ResolvedCodeRef;
+    let cardOrFieldModuleURL = codeRef.module
+      ? ensureExtension(codeRef.module, { default: '.gts' })
+      : undefined;
+    return cardOrFieldModuleURL ? [cardOrFieldModuleURL] : [];
+  }
+}
+
+class GenerateExamplesForFieldSpecCommand extends GenerateExampleCardsCommand {
+  constructor(commandContext: CommandContext) {
+    super(commandContext);
+  }
+  protected getPrompt(count: number) {
+    return `Generate ${count} additional examples on this card's spec.`;
+  }
+}
+
+const GENERATED_EXAMPLE_COUNT = 3;
 
 class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
@@ -923,6 +967,9 @@ class Edit extends Component<typeof Spec> {
         font-weight: 500;
         margin-block: 0;
       }
+      :deep(.add-new) {
+        border: 1px solid var(--border, var(--boxel-border-color));
+      }
     </style>
   </template>
 }
@@ -1034,6 +1081,56 @@ export class Spec extends CardDef {
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
   @field title = contains(SpecTitleField);
   @field description = contains(SpecDescriptionField);
+
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getCardMenuItems](params);
+    if (this.specType !== 'field') {
+      return menuItems;
+    }
+    let sampleDataStartIndex = menuItems.findIndex((item: MenuItemOptions) =>
+      item.tags?.includes('playground-sample-data'),
+    );
+    let sampleDataItemCount = menuItems.filter((item: MenuItemOptions) =>
+      item.tags?.includes('playground-sample-data'),
+    ).length;
+    menuItems.splice(
+      sampleDataStartIndex,
+      sampleDataItemCount,
+      ...[
+        {
+          label: 'Fill in sample data with AI',
+          action: async () => {
+            await new PopulateFieldSpecExampleCommand(
+              params.commandContext,
+            ).execute({
+              cardId: this.id,
+            });
+          },
+          icon: AiBwIcon,
+          tags: ['playground-sample-data'],
+        },
+        {
+          label: `Generate ${GENERATED_EXAMPLE_COUNT} examples with AI`,
+          action: async () => {
+            await new GenerateExamplesForFieldSpecCommand(
+              params.commandContext,
+            ).execute({
+              count: GENERATED_EXAMPLE_COUNT,
+              codeRef: codeRefWithAbsoluteURL(
+                this.ref,
+                new URL(this.id),
+              ) as ResolvedCodeRef,
+              realm: this[realmURL]?.href,
+              exampleCard: this,
+            });
+          },
+          icon: AiBwIcon,
+          tags: ['playground-sample-data'],
+        },
+      ],
+    );
+    return menuItems;
+  }
 
   static isolated = Isolated;
 

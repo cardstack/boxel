@@ -408,7 +408,8 @@ export default class CodeSubmode extends Component<Signature> {
       }
       let displayName = capitalize(startCase(id));
       return [
-        new MenuItem(displayName, 'action', {
+        new MenuItem({
+          label: displayName,
           action: () => this.createFile.perform({ id, displayName }),
           subtext: description,
           icon,
@@ -625,204 +626,206 @@ export default class CodeSubmode extends Component<Signature> {
       @selectedCardRef={{this.selectedCodeRef}}
       @newFileOptions={{this.newFileOptions}}
       data-test-code-submode
-      as |search|
     >
-      <div
-        class='code-mode'
-        data-test-code-mode
-        data-test-save-idle={{not this.isSaving}}
-      >
-        <div class='code-mode-top-bar'>
-          <CardURLBar
-            @loadFileError={{this.loadFileError}}
-            @resetLoadFileError={{this.resetLoadFileError}}
-            @userHasDismissedError={{this.userHasDismissedURLError}}
-            @dismissURLError={{this.dismissURLError}}
-            @realmURL={{this.realmURL}}
-          />
-        </div>
-        <ResizablePanelGroup
-          @orientation='horizontal'
-          @onLayoutChange={{this.onHorizontalLayoutChange}}
-          class='columns'
-          as |ResizablePanel ResizeHandle|
+      <:topBar>
+        <CardURLBar
+          @loadFileError={{this.loadFileError}}
+          @resetLoadFileError={{this.resetLoadFileError}}
+          @userHasDismissedError={{this.userHasDismissedURLError}}
+          @dismissURLError={{this.dismissURLError}}
+          @realmURL={{this.realmURL}}
+        />
+      </:topBar>
+      <:default as |search|>
+        <div
+          class='code-mode'
+          data-test-code-mode
+          data-test-save-idle={{not this.isSaving}}
         >
-          <ResizablePanel @defaultSize={{this.defaultPanelWidths.leftPanel}}>
-            <div class='column'>
-              <ResizablePanelGroup
-                @orientation='vertical'
-                @onLayoutChange={{this.onVerticalLayoutChange}}
-                @reverseCollapse={{true}}
-                as |VerticallyResizablePanel VerticallyResizeHandle|
-              >
-                <VerticallyResizablePanel
-                  @defaultSize={{this.defaultPanelHeights.filePanel}}
+          <ResizablePanelGroup
+            @orientation='horizontal'
+            @onLayoutChange={{this.onHorizontalLayoutChange}}
+            class='columns'
+            as |ResizablePanel ResizeHandle|
+          >
+            <ResizablePanel @defaultSize={{this.defaultPanelWidths.leftPanel}}>
+              <div class='column'>
+                <ResizablePanelGroup
+                  @orientation='vertical'
+                  @onLayoutChange={{this.onVerticalLayoutChange}}
+                  @reverseCollapse={{true}}
+                  as |VerticallyResizablePanel VerticallyResizeHandle|
                 >
-                  <CodeSubmodeLeftPanelToggle
-                    @realmURL={{this.realmURL}}
-                    @fileView={{this.fileView}}
-                    @setFileView={{this.setFileView}}
-                    @isFileOpen={{this.isFileOpen}}
-                    @selectedDeclaration={{this.selectedDeclaration}}
+                  <VerticallyResizablePanel
+                    @defaultSize={{this.defaultPanelHeights.filePanel}}
                   >
-                    <:inspector>
-                      {{#if this.isReady}}
-                        <DetailPanel
-                          @moduleAnalysis={{this.moduleAnalysis}}
-                          @cardInstance={{this.card}}
-                          @readyFile={{this.readyFile}}
-                          @selectedDeclaration={{this.selectedDeclaration}}
-                          @selectDeclaration={{this.selectDeclaration}}
-                          @delete={{this.setItemToDelete}}
-                          @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
-                          @createFile={{perform this.createFile}}
-                          @openSearch={{search.openSearchToResults}}
-                          @cardError={{this.cardError}}
+                    <CodeSubmodeLeftPanelToggle
+                      @realmURL={{this.realmURL}}
+                      @fileView={{this.fileView}}
+                      @setFileView={{this.setFileView}}
+                      @isFileOpen={{this.isFileOpen}}
+                      @selectedDeclaration={{this.selectedDeclaration}}
+                    >
+                      <:inspector>
+                        {{#if this.isReady}}
+                          <DetailPanel
+                            @moduleAnalysis={{this.moduleAnalysis}}
+                            @cardInstance={{this.card}}
+                            @readyFile={{this.readyFile}}
+                            @selectedDeclaration={{this.selectedDeclaration}}
+                            @selectDeclaration={{this.selectDeclaration}}
+                            @delete={{this.setItemToDelete}}
+                            @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
+                            @createFile={{perform this.createFile}}
+                            @openSearch={{search.openSearchToResults}}
+                            @cardError={{this.cardError}}
+                          />
+                        {{else if this.isLoading}}
+                          <LoadingIndicator class='loading-indicator' />
+                        {{/if}}
+                      </:inspector>
+                      <:browser>
+                        <FileTree
+                          @realmURL={{this.realmURL}}
+                          @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
+                          @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
+                          @onFileSelected={{this.operatorModeStateService.onFileSelected}}
+                          @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
+                          @scrollPositionKey={{this.operatorModeStateService.codePathString}}
                         />
-                      {{else if this.isLoading}}
-                        <LoadingIndicator class='loading-indicator' />
-                      {{/if}}
-                    </:inspector>
-                    <:browser>
-                      <FileTree
-                        @realmURL={{this.realmURL}}
-                        @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
-                        @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
-                        @onFileSelected={{this.operatorModeStateService.onFileSelected}}
-                        @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
-                        @scrollPositionKey={{this.operatorModeStateService.codePathString}}
-                      />
-                    </:browser>
-                  </CodeSubmodeLeftPanelToggle>
-                </VerticallyResizablePanel>
-                <VerticallyResizeHandle class='handle' />
-                <VerticallyResizablePanel
-                  @defaultSize={{this.defaultPanelHeights.recentPanel}}
-                  @minSize={{20}}
-                >
-                  <InnerContainer
-                    class='recent-files-panel'
-                    as |InnerContainerContent InnerContainerHeader|
+                      </:browser>
+                    </CodeSubmodeLeftPanelToggle>
+                  </VerticallyResizablePanel>
+                  <VerticallyResizeHandle class='handle' />
+                  <VerticallyResizablePanel
+                    @defaultSize={{this.defaultPanelHeights.recentPanel}}
+                    @minSize={{20}}
                   >
-                    <InnerContainerHeader aria-label='Recent Files Header'>
-                      Recent Files
-                    </InnerContainerHeader>
-                    <InnerContainerContent>
-                      <RecentFiles />
-                    </InnerContainerContent>
-                  </InnerContainer>
-                </VerticallyResizablePanel>
-              </ResizablePanelGroup>
-            </div>
-          </ResizablePanel>
-          <ResizeHandle class='handle' />
-          {{#if this.codePath}}
-            <ResizablePanel
-              @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
-              @minSize={{20}}
-            >
-              <InnerContainer class='monaco-editor-panel'>
-                {{#if this.isReady}}
-                  <CodeEditor
-                    @file={{this.currentOpenFile}}
-                    @moduleAnalysis={{this.moduleAnalysis}}
-                    @selectedDeclaration={{this.selectedDeclaration}}
-                    @saveSourceOnClose={{@saveSourceOnClose}}
-                    @selectDeclaration={{this.selectDeclaration}}
-                    @onFileSave={{this.onSourceFileSave}}
-                    @onSetup={{this.setupCodeEditor}}
-                    @isReadOnly={{this.isReadOnly}}
-                  />
-
-                  <CodeSubmodeEditorIndicator
-                    @isSaving={{this.isSaving}}
-                    @isReadOnly={{this.isReadOnly}}
-                  />
-                {{else if this.isLoading}}
-                  <LoadingIndicator class='loading-indicator' />
-                {{/if}}
-              </InnerContainer>
+                    <InnerContainer
+                      class='recent-files-panel'
+                      as |InnerContainerContent InnerContainerHeader|
+                    >
+                      <InnerContainerHeader aria-label='Recent Files Header'>
+                        Recent Files
+                      </InnerContainerHeader>
+                      <InnerContainerContent>
+                        <RecentFiles />
+                      </InnerContainerContent>
+                    </InnerContainer>
+                  </VerticallyResizablePanel>
+                </ResizablePanelGroup>
+              </div>
             </ResizablePanel>
             <ResizeHandle class='handle' />
-            <ResizablePanel
-              @defaultSize={{this.defaultPanelWidths.rightPanel}}
-              {{! TODO in CS-8713: make this have a minimum width }}
-              @collapsible={{false}}
-            >
-              <InnerContainer class='module-inspector-container'>
-                {{#if this.isReady}}
-                  <ModuleInspector
-                    @card={{this.card}}
-                    @cardError={{this.cardError}}
-                    @currentOpenFile={{this.currentOpenFile}}
-                    @goToDefinitionAndResetCursorPosition={{this.goToDefinitionAndResetCursorPosition}}
-                    @isCard={{this.isCard}}
-                    @isIncompatibleFile={{this.isIncompatibleFile}}
-                    @isModule={{this.isModule}}
-                    @isReadOnly={{this.isReadOnly}}
-                    @moduleAnalysis={{this.moduleAnalysis}}
-                    @previewFormat={{this.cardPreviewFormat}}
-                    @readyFile={{this.readyFile}}
-                    @selectedCardOrField={{this.selectedCardOrField}}
-                    @selectedCodeRef={{this.selectedCodeRef}}
-                    @selectedDeclaration={{this.selectedDeclaration}}
-                    @setPreviewFormat={{this.setCardPreviewFormat}}
-                  />
-                {{else if this.isLoading}}
-                  <LoadingIndicator class='loading-indicator' />
-                {{/if}}
-              </InnerContainer>
-            </ResizablePanel>
-          {{else}}
-            <ResizablePanel
-              @defaultLengthFraction={{this.defaultPanelWidths.emptyCodeModePanel}}
-            >
-              <InnerContainer class='empty-container' data-test-empty-code-mode>
-                <File width='40' height='40' role='presentation' />
-                <h3 class='choose-file-prompt'>
-                  Choose a file on the left to open it
-                </h3>
-              </InnerContainer>
-            </ResizablePanel>
-          {{/if}}
-        </ResizablePanelGroup>
-      </div>
-      {{#if this.itemToDelete}}
-        <DeleteModal
-          @itemToDelete={{hash id=this.itemToDeleteId}}
-          @onConfirm={{perform this.delete}}
-          @onCancel={{this.onCancelDelete}}
-          @isDeleteRunning={{this.delete.isRunning}}
-        >
-          <:content>
-            {{#if this.isCard}}
-              Delete the card
-              <strong>{{this.itemToDeleteAsCard.title}}</strong>?
+            {{#if this.codePath}}
+              <ResizablePanel
+                @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
+                @minSize={{20}}
+              >
+                <InnerContainer class='monaco-editor-panel'>
+                  {{#if this.isReady}}
+                    <CodeEditor
+                      @file={{this.currentOpenFile}}
+                      @moduleAnalysis={{this.moduleAnalysis}}
+                      @selectedDeclaration={{this.selectedDeclaration}}
+                      @saveSourceOnClose={{@saveSourceOnClose}}
+                      @selectDeclaration={{this.selectDeclaration}}
+                      @onFileSave={{this.onSourceFileSave}}
+                      @onSetup={{this.setupCodeEditor}}
+                      @isReadOnly={{this.isReadOnly}}
+                    />
+
+                    <CodeSubmodeEditorIndicator
+                      @isSaving={{this.isSaving}}
+                      @isReadOnly={{this.isReadOnly}}
+                    />
+                  {{else if this.isLoading}}
+                    <LoadingIndicator
+                      @color='var(--boxel-light)'
+                      class='loading-indicator'
+                    />
+                  {{/if}}
+                </InnerContainer>
+              </ResizablePanel>
+              <ResizeHandle class='handle' />
+              <ResizablePanel
+                @defaultSize={{this.defaultPanelWidths.rightPanel}}
+                {{! TODO in CS-8713: make this have a minimum width }}
+                @collapsible={{false}}
+              >
+                <InnerContainer class='module-inspector-container'>
+                  {{#if this.isReady}}
+                    <ModuleInspector
+                      @card={{this.card}}
+                      @cardError={{this.cardError}}
+                      @currentOpenFile={{this.currentOpenFile}}
+                      @goToDefinitionAndResetCursorPosition={{this.goToDefinitionAndResetCursorPosition}}
+                      @isCard={{this.isCard}}
+                      @isIncompatibleFile={{this.isIncompatibleFile}}
+                      @isModule={{this.isModule}}
+                      @isReadOnly={{this.isReadOnly}}
+                      @moduleAnalysis={{this.moduleAnalysis}}
+                      @previewFormat={{this.cardPreviewFormat}}
+                      @readyFile={{this.readyFile}}
+                      @selectedCardOrField={{this.selectedCardOrField}}
+                      @selectedCodeRef={{this.selectedCodeRef}}
+                      @selectedDeclaration={{this.selectedDeclaration}}
+                      @setPreviewFormat={{this.setCardPreviewFormat}}
+                    />
+                  {{else if this.isLoading}}
+                    <LoadingIndicator class='loading-indicator' />
+                  {{/if}}
+                </InnerContainer>
+              </ResizablePanel>
             {{else}}
-              Delete the file
-              <strong>{{urlToFilename this.itemToDeleteAsFile}}</strong>?
+              <ResizablePanel
+                @defaultLengthFraction={{this.defaultPanelWidths.emptyCodeModePanel}}
+              >
+                <InnerContainer
+                  class='empty-container'
+                  data-test-empty-code-mode
+                >
+                  <File width='40' height='40' role='presentation' />
+                  <h3 class='choose-file-prompt'>
+                    Choose a file on the left to open it
+                  </h3>
+                </InnerContainer>
+              </ResizablePanel>
             {{/if}}
-          </:content>
-        </DeleteModal>
-      {{/if}}
-      <CreateFileModal
-        @owner={{this}}
-        @onCreate={{this.setupCreateFileModal}}
-      />
-      <FromElseWhere @name='schema-editor-modal' />
-      <FromElseWhere @name='playground-field-picker' />
+          </ResizablePanelGroup>
+        </div>
+        {{#if this.itemToDelete}}
+          <DeleteModal
+            @itemToDelete={{hash id=this.itemToDeleteId}}
+            @onConfirm={{perform this.delete}}
+            @onCancel={{this.onCancelDelete}}
+            @isDeleteRunning={{this.delete.isRunning}}
+          >
+            <:content>
+              {{#if this.isCard}}
+                Delete the card
+                <strong>{{this.itemToDeleteAsCard.title}}</strong>?
+              {{else}}
+                Delete the file
+                <strong>{{urlToFilename this.itemToDeleteAsFile}}</strong>?
+              {{/if}}
+            </:content>
+          </DeleteModal>
+        {{/if}}
+      </:default>
     </SubmodeLayout>
+
+    <CreateFileModal @owner={{this}} @onCreate={{this.setupCreateFileModal}} />
+    <FromElseWhere @name='schema-editor-modal' />
+    <FromElseWhere @name='playground-field-picker' />
 
     <style scoped>
       :global(:root) {
+        --code-submode-background: #74707d;
         --code-mode-panel-background-color: #ebeaed;
         --code-mode-container-border-radius: 10px;
         --code-mode-realm-icon-size: 1.125rem;
         --code-mode-active-box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.16);
-        --code-mode-padding-top: calc(
-          var(--operator-mode-top-bar-item-height) +
-            (2 * (var(--operator-mode-spacing)))
-        );
         --monaco-background: var(--boxel-600);
         --monaco-selection-background: var(--boxel-500);
         --monaco-inactive-selection-background: var(--boxel-550);
@@ -832,17 +835,13 @@ export default class CodeSubmode extends Component<Signature> {
       .code-submode-layout {
         --submode-bar-item-outline: 2px solid transparent;
         --submode-bar-item-box-shadow: none;
+        background-color: var(--code-submode-background);
       }
 
       .code-mode {
-        height: 100%;
-        max-height: 100vh;
-        left: 0;
-        right: 0;
-        padding-top: var(--code-mode-padding-top);
         overflow: auto;
         flex: 1;
-        background-color: #74707d;
+        background-color: var(--code-submode-background);
       }
 
       .columns {
@@ -879,26 +878,11 @@ export default class CodeSubmode extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .code-mode-top-bar {
+      .code-submode-layout
+        :deep(
+          .submode-layout-top-bar .ember-basic-dropdown-content-wormhole-origin
+        ) {
         position: absolute;
-        top: 0;
-        right: 0;
-        left: var(--operator-mode-left-column);
-        padding-block: var(--operator-mode-spacing);
-        padding-right: var(--operator-mode-spacing);
-        display: flex;
-        z-index: 1;
-        width: calc(
-          100% -
-            calc(
-              var(--operator-mode-left-column) + var(--container-button-size) +
-                var(--operator-mode-spacing)
-            )
-        );
-      }
-      .code-mode-top-bar
-        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
-        margin-left: var(--operator-mode-spacing);
       }
 
       .module-inspector-container {

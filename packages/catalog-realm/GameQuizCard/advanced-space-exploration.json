@@ -1,0 +1,120 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GameQuizCard",
+        "module": "../game-quiz/game-quiz"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "subject": "Astronomy & Astrophysics",
+      "cardInfo": {
+        "notes": "Designed for astronomy enthusiasts and students seeking to test their knowledge of cutting-edge space science.",
+        "title": "Space Exploration Quiz",
+        "description": "An expert-level quiz exploring advanced concepts in astronomy, astrophysics, and space exploration missions.",
+        "thumbnailURL": null
+      },
+      "gameScore": 37.5,
+      "quizTitle": "Advanced Space Exploration Challenge",
+      "timeLimit": 25,
+      "difficulty": {
+        "index": 3,
+        "label": "Expert"
+      },
+      "completedAt": "2025-10-06T14:23:45.123Z",
+      "isCompleted": false,
+      "quizQuestions": [
+        {
+          "question": "What is the approximate distance to the nearest star system, Alpha Centauri?",
+          "choices": [
+            "2.2 light-years",
+            "4.37 light-years",
+            "8.6 light-years",
+            "12.4 light-years"
+          ],
+          "correctAnswer": "4.37 light-years"
+        },
+        {
+          "question": "Which phenomenon occurs when a massive star collapses at the end of its life?",
+          "choices": [
+            "Planetary nebula formation",
+            "White dwarf creation",
+            "Supernova explosion",
+            "Red giant expansion"
+          ],
+          "correctAnswer": "Supernova explosion"
+        },
+        {
+          "question": "What is the primary component of Jupiter's atmosphere?",
+          "choices": [
+            "Carbon dioxide",
+            "Nitrogen",
+            "Hydrogen",
+            "Methane"
+          ],
+          "correctAnswer": "Hydrogen"
+        },
+        {
+          "question": "Which space telescope was specifically designed to observe infrared radiation?",
+          "choices": [
+            "Hubble Space Telescope",
+            "James Webb Space Telescope",
+            "Kepler Space Telescope",
+            "Chandra X-ray Observatory"
+          ],
+          "correctAnswer": "James Webb Space Telescope"
+        },
+        {
+          "question": "What causes the auroras (Northern and Southern Lights) on Earth?",
+          "choices": [
+            "Solar wind interacting with Earth's magnetosphere",
+            "Reflection of sunlight off ice crystals",
+            "Volcanic ash in the upper atmosphere",
+            "Meteor showers burning in the atmosphere"
+          ],
+          "correctAnswer": "Solar wind interacting with Earth's magnetosphere"
+        },
+        {
+          "question": "Which planet has the most eccentric orbit in our solar system?",
+          "choices": [
+            "Pluto",
+            "Mercury",
+            "Mars",
+            "Neptune"
+          ],
+          "correctAnswer": "Mercury"
+        },
+        {
+          "question": "What is the theoretical boundary around a black hole called?",
+          "choices": [
+            "Photon sphere",
+            "Event horizon",
+            "Accretion disk",
+            "Schwarzschild radius"
+          ],
+          "correctAnswer": "Event horizon"
+        },
+        {
+          "question": "Which space mission was the first to successfully land on a comet?",
+          "choices": [
+            "Rosetta/Philae",
+            "Deep Impact",
+            "Stardust",
+            "DART"
+          ],
+          "correctAnswer": "Rosetta/Philae"
+        }
+      ],
+      "correctAnswers": 3,
+      "highestGameScore": "87.5"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

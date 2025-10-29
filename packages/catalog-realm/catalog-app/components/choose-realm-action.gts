@@ -25,7 +25,8 @@ interface ChooseRealmActionSignature {
 export default class ChooseRealmAction extends GlimmerComponent<ChooseRealmActionSignature> {
   get realmOptions() {
     return this.args.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
+      return new MenuItem({
+        label: realm.name,
         action: () => {
           this.runAction.perform(realm.url);
         },

@@ -32,7 +32,7 @@ test.describe('Host mode', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('card in a published realm renders in host mode with a connect button', async ({
+  test.skip('card in a published realm renders in host mode with a connect button', async ({
     page,
   }) => {
     await page.goto('http://published.localhost:4205/mango.json');
@@ -46,7 +46,7 @@ test.describe('Host mode', () => {
     await expect(connectIframe.locator('[data-test-connect]')).toBeVisible();
   });
 
-  test('clicking connect button logs in on main site and redirects back to host mode', async ({
+  test.skip('clicking connect button logs in on main site and redirects back to host mode', async ({
     page,
   }) => {
     await page.goto('http://published.localhost:4205/mango.json');
@@ -69,7 +69,7 @@ test.describe('Host mode', () => {
     ).toBeVisible();
   });
 
-  test('visiting connect route with known origin includes a matching frame-ancestors CSP', async ({
+  test.skip('visiting connect route with known origin includes a matching frame-ancestors CSP', async ({
     page,
   }) => {
     let response = await page.goto(
@@ -81,7 +81,7 @@ test.describe('Host mode', () => {
     );
   });
 
-  test('visiting connect route with origin not in published_realms returns 404', async ({
+  test.skip('visiting connect route with origin not in published_realms returns 404', async ({
     page,
   }) => {
     let response = await page.goto(

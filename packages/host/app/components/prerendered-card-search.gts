@@ -1,11 +1,14 @@
+import { setComponentTemplate } from '@ember/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { service } from '@ember/service';
+import { precompileTemplate } from '@ember/template-compilation';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { didCancel, restartableTask } from 'ember-concurrency';
+import { consume } from 'ember-provide-consume-context';
 import { flatMap, isEqual } from 'lodash';
 import { trackedFunction } from 'reactiveweb/function';
 
@@ -20,13 +23,14 @@ import {
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
   QueryResultsMeta,
+  CardContextName,
 } from '@cardstack/runtime-common';
 import {
   PrerenderedCardCollectionDocument,
   isPrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
-import { type Format } from 'https://cardstack.com/base/card-api';
+import type { CardContext, Format } from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -40,15 +44,26 @@ const waiter = buildWaiter('prerendered-card-search:waiter');
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
-  constructor(public data: PrerenderedCardData) {
+  constructor(
+    public data: PrerenderedCardData,
+    cardComponentModifier?: CardContext['cardComponentModifier'],
+  ) {
     if (data.isError && !data.html) {
-      this.component = getErrorComponent(data.realmUrl, data.url);
+      this.component = wrapWithModifier(
+        getErrorComponent(data.realmUrl, data.url),
+        cardComponentModifier,
+        data.url,
+      );
     } else {
       let extraAttributes: Record<string, string> = {};
       if (data.isError) {
         extraAttributes['data-is-error'] = 'true';
       }
-      this.component = htmlComponent(data.html, extraAttributes);
+      this.component = wrapWithModifier(
+        htmlComponent(data.html, extraAttributes),
+        cardComponentModifier,
+        data.url,
+      );
     }
   }
   get url() {
@@ -125,7 +140,44 @@ interface SearchResult {
   meta: QueryResultsMeta;
 }
 
+function wrapWithModifier(
+  innerComponent: HTMLComponent,
+  modifier: CardContext['cardComponentModifier'] | undefined,
+  cardId: string,
+): HTMLComponent {
+  if (!modifier) {
+    return innerComponent;
+  }
+
+  let cardIdForModifier = cardId;
+
+  class DecoratedPrerenderedCard extends Component {
+    component = innerComponent;
+    cardModifier = modifier!;
+    cardId = cardIdForModifier;
+  }
+
+  setComponentTemplate(
+    precompileTemplate(
+      `<this.component
+        {{this.cardModifier
+          cardId=this.cardId
+          format='data'
+          fieldType=undefined
+          fieldName=undefined
+        }}
+        ...attributes
+      />`,
+      { strictMode: true, scope: () => ({}) },
+    ),
+    DecoratedPrerenderedCard,
+  );
+
+  return DecoratedPrerenderedCard as unknown as HTMLComponent;
+}
+
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
+  @consume(CardContextName) private declare cardContext?: CardContext;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
@@ -135,6 +187,10 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
   realmsNeedingRefresh = new TrackedSet<string>(
     normalizeRealms(this.args.realms),
   );
+
+  private get cardComponentModifier() {
+    return this.cardContext?.cardComponentModifier;
+  }
 
   async searchPrerendered(
     query: Query,
@@ -170,14 +226,19 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       ),
     );
 
+    let modifier = this.cardComponentModifier;
+
     return {
       instances: json.data.filter(Boolean).map((r) => {
-        return new PrerenderedCard({
-          url: r.id,
-          realmUrl: realmURL,
-          html: r.attributes?.html,
-          isError: !!r.attributes?.isError,
-        });
+        return new PrerenderedCard(
+          {
+            url: r.id,
+            realmUrl: realmURL,
+            html: r.attributes?.html,
+            isError: !!r.attributes?.isError,
+          },
+          modifier,
+        );
       }),
       meta: json.meta,
     };

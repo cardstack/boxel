@@ -1,4 +1,5 @@
 import { fn } from '@ember/helper';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -61,7 +62,7 @@ export default class RoomMessage extends Component<Signature> {
     | ReturnType<getCardCollection>
     | undefined;
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
@@ -149,6 +150,7 @@ export default class RoomMessage extends Component<Signature> {
         @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
+        {{! @glint-ignore }}
         @profileAvatar={{component
           Avatar
           isReady=true

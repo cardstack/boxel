@@ -11,9 +11,11 @@ import {
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -171,7 +173,6 @@ const filesB: Record<string, any> = {
   },
 };
 
-let matrixRoomId: string;
 module('Acceptance | code submode | create-file tests', function (hooks) {
   async function openNewFileModal(
     menuSelection: string,
@@ -207,20 +208,21 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     await setupAcceptanceTestRealm({
-      contents: filesB,
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
       realmURL: testRealmURL2,
       mockMatrixUtils,
     });
     ({ adapter } = await setupAcceptanceTestRealm({
-      contents: files,
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
       mockMatrixUtils,
     }));
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     getService('network').mount(
       async (req: Request) => {

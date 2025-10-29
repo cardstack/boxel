@@ -1,17 +1,15 @@
 import GlimmerComponent from '@glimmer/component';
-import type { CardDef, Format } from '../card-api';
+import type { CardDef, FieldsTypeFor, Format } from '../card-api';
 import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
 import { getFieldIcon, getField } from '@cardstack/runtime-common';
 import CardInfoTemplates from './card-info';
 
-type Fields = Record<string, new () => GlimmerComponent>;
-
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
-    fields: Fields & { cardInfo: Fields };
+    fields: FieldsTypeFor<CardDef>;
     format: Format;
   };
 }> {
@@ -35,7 +33,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   }
 
   // Fields to display in between the cardInfo header and notes footer
-  private get displayFields(): Fields | undefined {
+  private get displayFields(): FieldsTypeFor<CardDef> | undefined {
     let excludedFields = this.excludedFields.filter(
       (name) => !this.specialDisplayFieldNames?.includes(name),
     );
@@ -45,7 +43,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     if (!fields.length) {
       return;
     }
-    return Object.fromEntries(fields) as Fields;
+    return Object.fromEntries(fields) as FieldsTypeFor<CardDef>;
   }
 
   private get isThemeCard() {
@@ -66,9 +64,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
           />
         {{else}}
           <CardInfoTemplates.edit
-            @fields={{@fields.cardInfo}}
-            @model={{@model.cardInfo}}
-            @icon={{@model.constructor.icon}}
+            @fields={{@fields}}
+            @model={{@model}}
             @hideThemeChooser={{this.isThemeCard}}
           />
         {{/if}}
@@ -81,7 +78,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
               @icon={{getFieldIcon @model key}}
               data-test-field={{key}}
             >
-              {{! @glint-ignore: unknown not assignable to type Element }}
               <Field class='in-isolated' />
             </FieldContainer>
           {{/each-in}}
@@ -104,7 +100,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       }
       .card-info-header {
         --boxel-header-min-height: 9.375rem; /* 150px */
-        --boxel-header-padding: var(--boxel-sp-lg);
+        --boxel-header-padding: var(--boxel-sp-xxl) var(--boxel-sp-xl)
+          var(--boxel-sp-xl);
         --boxel-header-gap: var(--boxel-sp-lg);
         --boxel-header-border-color: var(--hr-color);
         align-items: flex-start;
@@ -113,7 +110,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       .card-info-header :deep(.info) {
         align-self: center;
       }
-      .card-info-header :deep(.add-button--full-width) {
+      .card-info-header :deep(.add-new) {
         border: 1px solid var(--border, var(--boxel-form-control-border-color));
         grid-column: -1 / 1;
       }

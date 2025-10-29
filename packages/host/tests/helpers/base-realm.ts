@@ -10,11 +10,14 @@ import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
 import type * as CodeRefModule from 'https://cardstack.com/base/code-ref';
 import type * as DateFieldModule from 'https://cardstack.com/base/date';
 import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
+import type * as EnumModule from 'https://cardstack.com/base/enum';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
+import type * as RealmFieldModule from 'https://cardstack.com/base/realm';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
+import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
 
 type StringField = (typeof StringFieldModule)['default'];
@@ -50,11 +53,20 @@ let MarkdownField: MarkdownField;
 type TextAreaField = (typeof TextAreaFieldModule)['default'];
 let TextAreaField: TextAreaField;
 
+type RealmField = (typeof RealmFieldModule)['default'];
+let RealmField: RealmField;
+
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
 
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
+
+type ModelConfiguration = (typeof SystemCardModule)['ModelConfiguration'];
+let ModelConfiguration: ModelConfiguration;
+
+type SystemCard = (typeof SystemCardModule)['SystemCard'];
+let SystemCard: SystemCard;
 
 let field: (typeof CardAPIModule)['field'];
 let CardDef: (typeof CardAPIModule)['CardDef'];
@@ -81,6 +93,10 @@ let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
 let CardInfoField: (typeof CardAPIModule)['CardInfoField'];
+let enumField: (typeof EnumModule)['default'];
+let enumOptions: (typeof EnumModule)['enumOptions'];
+let enumValues: (typeof EnumModule)['enumValues'];
+let enumConfig: (typeof EnumModule)['enumConfig'];
 
 async function initialize() {
   let loader = getService('loader-service').loader;
@@ -133,12 +149,24 @@ async function initialize() {
     await loader.import<typeof TextAreaFieldModule>(`${baseRealm.url}text-area`)
   ).default;
 
+  RealmField = (
+    await loader.import<typeof RealmFieldModule>(`${baseRealm.url}realm`)
+  ).default;
+
   CardsGrid = (
     await loader.import<typeof CardsGridModule>(`${baseRealm.url}cards-grid`)
   ).CardsGrid;
 
   Skill = (await loader.import<typeof SkillModule>(`${baseRealm.url}skill`))
     .Skill;
+
+  ModelConfiguration = (
+    await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
+  ).ModelConfiguration;
+
+  SystemCard = (
+    await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
+  ).SystemCard;
 
   let cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,
@@ -171,6 +199,15 @@ async function initialize() {
     instanceOf,
     CardInfoField,
   } = cardAPI);
+
+  enumField = (await loader.import<typeof EnumModule>(`${baseRealm.url}enum`))
+    .default;
+  const enumModule = await loader.import<typeof EnumModule>(
+    `${baseRealm.url}enum`,
+  );
+  enumOptions = enumModule.enumOptions;
+  enumValues = enumModule.enumValues;
+  enumConfig = enumModule.enumConfig;
 }
 
 export async function setupBaseRealm(hooks: NestedHooks) {
@@ -189,7 +226,10 @@ export {
   BooleanField,
   MarkdownField,
   TextAreaField,
+  RealmField,
   CardsGrid,
+  SystemCard,
+  ModelConfiguration,
   field,
   CardDef,
   Component,
@@ -216,4 +256,8 @@ export {
   Skill,
   instanceOf,
   CardInfoField,
+  enumField,
+  enumOptions,
+  enumValues,
+  enumConfig,
 };

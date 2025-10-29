@@ -9,12 +9,13 @@ import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
   testRealmURL,
+  setupAuthEndpoints,
   setupUserSubscription,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-let matrixRoomId: string;
 module('Acceptance | basic tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -27,11 +28,12 @@ module('Acceptance | basic tests', function (hooks) {
   let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
@@ -83,6 +85,7 @@ module('Acceptance | basic tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.gts': { Index },
         'person.gts': { Person },
         'person-entry.json': new Spec({

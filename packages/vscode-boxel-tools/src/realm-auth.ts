@@ -131,8 +131,10 @@ export class RealmAuth {
         });
 
         // Use race to implement timeout
-        const realmsEventData =
-          (await Promise.race([accountDataPromise, dataTimeoutPromise])) || {};
+        const realmsEventData = (await Promise.race([
+          accountDataPromise,
+          dataTimeoutPromise,
+        ])) || { realms: undefined };
 
         console.log('[RealmAuth] Processing realm data:', realmsEventData);
         let realms = realmsEventData.realms || [];

@@ -1,0 +1,66 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Study Resource",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/study-resource-listing/screenshot_01.png"
+      ],
+      "summary": "A comprehensive card for managing study resources including textbooks, courses, and learning materials with progress tracking",
+      "cardInfo": {
+        "notes": null,
+        "title": "Study Resource",
+        "description": "Track and manage your study resources with this card that includes support for different resource types, difficulty levels, progress tracking, and completion status. Perfect for students and learners organizing their educational materials.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-resource-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/e083dc9d-112a-4701-859f-84bcca3aa2e5"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../study-resource/StudyResource/dsa-textbook"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/knowledge-management"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

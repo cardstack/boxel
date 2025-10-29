@@ -16,8 +16,8 @@ declare const config: {
 
   realmServerURL: string;
   resolvedBaseRealmURL: string;
+  resolvedCatalogRealmURL: string;
   resolvedSkillsRealmURL: string;
-  validPublishedRealmDomains: string | undefined;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
@@ -35,4 +35,7 @@ declare const config: {
   featureFlags?: {
     SHOW_ASK_AI?: boolean;
   };
+  publishedRealmBoxelSpaceDomain: string;
+  publishedRealmBoxelSiteDomain: string;
+  defaultSystemCardId: string;
 };

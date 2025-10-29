@@ -3,10 +3,10 @@ import Service, { service } from '@ember/service';
 
 import {
   VirtualNetwork,
+  authorizationMiddleware,
   baseRealm,
   fetcher,
   RunnerOpts,
-  authorizationMiddleware,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -77,14 +77,21 @@ export default class NetworkService extends Service {
   private makeVirtualNetwork() {
     let virtualNetwork = new VirtualNetwork(getNativeFetch());
     if (!this.fastboot.isFastBoot) {
+      let resolvedBaseRealmURL = new URL(
+        withTrailingSlash(config.resolvedBaseRealmURL),
+      );
       virtualNetwork.addURLMapping(
         new URL(baseRealm.url),
-        new URL(config.resolvedBaseRealmURL),
+        resolvedBaseRealmURL,
       );
     }
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
+    });
+    virtualNetwork.addImportMap('@cardstack/catalog/', (rest) => {
+      return new URL(rest, withTrailingSlash(config.resolvedCatalogRealmURL))
+        .href;
     });
     return virtualNetwork;
   }
@@ -98,4 +105,8 @@ declare module '@ember/service' {
   interface Registry {
     network: NetworkService;
   }
+}
+
+function withTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`;
 }

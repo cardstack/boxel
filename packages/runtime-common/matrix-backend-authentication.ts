@@ -10,6 +10,7 @@ export interface Utils {
     responseInit: ResponseInit | undefined,
   ): Response;
   createJWT(user: string, sessionRoom?: string): Promise<string>;
+  ensureSessionRoom(user: string): Promise<string>;
 }
 
 export class MatrixBackendAuthentication {
@@ -70,17 +71,7 @@ export class MatrixBackendAuthentication {
       );
     }
 
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let roomId = dmRooms[user];
-
-    if (!roomId) {
-      roomId = await this.matrixClient.createDM(user);
-      dmRooms[user] = roomId;
-      await this.matrixClient.setAccountData('boxel.session-rooms', dmRooms);
-    }
+    let roomId = await this.utils.ensureSessionRoom(user);
 
     let hash = new Sha256();
     hash.update(challenge);
@@ -135,18 +126,7 @@ export class MatrixBackendAuthentication {
       }
     }
 
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let roomId = dmRooms[user];
-    if (!roomId) {
-      return this.utils.badRequest(
-        JSON.stringify({
-          errors: [`No challenge previously issued for user ${user}`],
-        }),
-      );
-    }
+    let roomId = await this.utils.ensureSessionRoom(user);
 
     // The messages look like this:
     // --- Matrix Room Messages ---:

@@ -110,10 +110,11 @@ export class SortMenu extends GlimmerComponent<SortMenuSignature> {
 
   private get sortOptions() {
     return this.args.options.map((option) => {
-      return new MenuItem(option.displayName, 'action', {
+      return new MenuItem({
+        label: option.displayName,
         action: () => this.args.onSort(option),
         icon: option.sort?.[0].direction === 'desc' ? ArrowDown : ArrowUp,
-        selected:
+        checked:
           option.displayName === this.args.selected.displayName &&
           option.sort?.[0].direction === this.args.selected.sort?.[0].direction,
       });

@@ -1,0 +1,38 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "FocusTimerCard",
+        "module": "../focus-timer"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "subject": "Computer Science",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "isActive": true,
+      "startTime": null,
+      "completedAt": null,
+      "sessionName": "Deep Algorithm Analysis Session",
+      "currentPhase": "focus",
+      "breakDuration": 10,
+      "focusDuration": 50,
+      "timeRemaining": 2941,
+      "targetSessions": 4,
+      "totalFocusTime": 50,
+      "sessionsCompleted": 1
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

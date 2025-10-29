@@ -56,7 +56,6 @@ export async function fileContentToText({
 export interface TextFileRef {
   content: string;
   lastModified: number;
-  created: number;
   path: string;
   isShimmed?: true;
 }
@@ -78,7 +77,6 @@ export async function readFileAsText(
   return {
     content: await fileContentToText(ref),
     lastModified: ref.lastModified,
-    created: ref.created,
     path: ref.path,
     ...(Symbol.for('shimmed-module') in ref ? { isShimmed: true } : {}),
   };

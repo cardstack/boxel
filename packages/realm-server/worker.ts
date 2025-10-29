@@ -7,6 +7,7 @@ import {
   RunnerOptionsManager,
   IndexWriter,
   type StatusArgs,
+  type Prerenderer,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import { makeFastBootIndexRunner } from './fastboot';
@@ -16,6 +17,7 @@ import {
   PgQueuePublisher,
   PgQueueRunner,
 } from '@cardstack/postgres';
+import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 
 let log = logger('worker');
 
@@ -50,6 +52,7 @@ let {
   toUrl: toUrls,
   priority = 0,
   migrateDB,
+  prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
   .options({
@@ -83,10 +86,26 @@ let {
         'The minimum priority of jobs that the worker should process (defaults to 0)',
       type: 'number',
     },
+    prerendererUrl: {
+      // TODO make this required when feature flag is removed
+      description: 'URL of the prerender server to invoke',
+      type: 'string',
+    },
   })
   .parseSync();
 
 log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
+let prerenderer: Prerenderer;
+if (process.env.USE_HEADLESS_CHROME_INDEXING && prerendererUrl) {
+  // in node context this is a boolean
+  (globalThis as any).__useHeadlessChromePrerender = true;
+  log.info(`Using prerender server ${prerendererUrl}`);
+  prerenderer = createRemotePrerenderer(prerendererUrl);
+} else {
+  prerenderer = async () => {
+    throw new Error(`Prerenderer server has not been configured/enabled`);
+  };
+}
 
 if (fromUrls.length !== toUrls.length) {
   log.error(
@@ -134,6 +153,7 @@ let autoMigrate = migrateDB || undefined;
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
+    prerenderer,
   });
 
   await worker.run();

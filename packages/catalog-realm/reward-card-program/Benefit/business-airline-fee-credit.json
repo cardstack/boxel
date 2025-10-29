@@ -1,0 +1,52 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Benefit",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Airline Fee Credit",
+      "amount": {
+        "amount": 200,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "details": [
+        "Statement credits up to $200 per calendar year for incidental fees charged by your one selected qualifying airline.‡"
+      ],
+      "partner": "",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minSpend": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "conditions": "Select one qualifying airline per calendar year. Covers incidental fees like baggage fees, seat upgrades, in-flight purchases. Does not cover airfare. Must purchase directly from airline.",
+      "programURL": "https://www.americanexpress.com/us/credit-cards/benefits/detail/airline-fee-credit/",
+      "benefitKind": "statement-credit",
+      "enrollmentRequired": false
+    },
+    "relationships": {
+      "timePeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

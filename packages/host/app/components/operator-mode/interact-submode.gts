@@ -192,15 +192,25 @@ export default class InteractSubmode extends Component {
 
   private viewCard = (
     stackIndex: number,
-    cardOrURL: CardDef | URL,
-    format: Format = 'isolated',
+    cardOrURL: CardDef | URL | string,
+    format: Format | Event = 'isolated',
     opts?: { openCardInRightMostStack?: boolean },
   ): void => {
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
     }
+    if (format instanceof Event) {
+      // common when invoked from template {{on}} modifier
+      format = 'isolated';
+    }
+    let cardId =
+      typeof cardOrURL === 'string'
+        ? cardOrURL
+        : cardOrURL instanceof URL
+        ? cardOrURL.href
+        : cardOrURL.id;
     let newItem = new StackItem({
-      id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
+      id: cardId,
       format,
       stackIndex,
     });
@@ -397,12 +407,7 @@ export default class InteractSubmode extends Component {
       } else {
         let error = loadedCard;
         if (error.meta != null) {
-          let cardTitle = error.meta.cardTitle;
-          if (!cardTitle) {
-            throw new Error(
-              `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
-            );
-          }
+          let cardTitle = error.meta.cardTitle || 'Unknown';
           cardToDelete = {
             id: cardUrl.href,
             title: cardTitle,
@@ -605,7 +610,8 @@ export default class InteractSubmode extends Component {
     if (cardTypes.length) {
       cardTypes.map(({ name, icon, ref }) => {
         menuItems.push(
-          new MenuItem(name, 'action', {
+          new MenuItem({
+            label: name,
             action: () => this.createNewFromRecentType.perform(ref),
             icon,
           }),
@@ -618,12 +624,14 @@ export default class InteractSubmode extends Component {
   private get createNewMenuItems(): (MenuItem | MenuDivider)[] {
     let recentCardMenuItems = this.getRecentCardMenuItems();
     let menuItems = [
-      new MenuItem('Choose a card type...', 'action', {
+      new MenuItem({
+        label: 'Choose a card type...',
         action: () => this.createCardInstance.perform(),
         icon: IconSearch,
       }),
       new MenuDivider(),
-      new MenuItem('Open Code Mode', 'action', {
+      new MenuItem({
+        label: 'Open Code Mode',
         action: this.createFileInCodeSubmode,
         subtextComponent: CodeSubmodeNewFileOptions,
         icon: IconCode,
@@ -740,7 +748,7 @@ export default class InteractSubmode extends Component {
                 @viewCard={{fn this.viewCard stackIndex}}
                 @saveCard={{this.saveCard}}
                 @editCard={{fn this.editCard stackIndex}}
-                @requestDeleteCard={{this.requestDeleteCard}}
+                @deleteCard={{this.requestDeleteCard}}
                 @commandContext={{this.commandService.commandContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
@@ -787,6 +795,11 @@ export default class InteractSubmode extends Component {
         --submode-bar-item-outline: var(--boxel-border-flexible);
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
       }
+
+      .interact-submode-layout :deep(.submode-layout-top-bar) {
+        position: absolute;
+      }
+
       .interact-submode {
         display: flex;
         justify-content: center;

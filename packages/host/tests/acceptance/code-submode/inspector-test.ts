@@ -33,8 +33,10 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setupOnSave,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
   setMonacoContent,
@@ -396,7 +398,6 @@ const localInheritSource = `
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
-  let matrixRoomId: string;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -416,22 +417,24 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       [testRealmURL2]: ['read', 'write'],
     });
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
-      contents: realmAFiles,
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
       realmURL: testRealmURL2,
     });
     ({ adapter } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
         'person.gts': personCardSource,
@@ -444,6 +447,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'imports.gts': importsSource,
         're-export.gts': reExportSource,
         'local-inherit.gts': localInheritSource,
+        'empty-file.gts': '',
         'person-entry.json': {
           data: {
             type: 'card',
@@ -2098,6 +2102,22 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a Find instances button');
   });
 
+  test('inspector shows empty file panel with delete button when file is empty', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}empty-file.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name="empty-file.gts"]');
+
+    assert.dom('[data-test-current-module-name="empty-file.gts"]').exists();
+    assert.dom('[data-test-in-this-file-selector]').doesNotExist();
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+    assert.dom('[data-test-delete-module-button]').exists();
+  });
+
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
       setRealmPermissions({ [testRealmURL]: ['read'] });
@@ -2127,6 +2147,16 @@ export class ExportedCard extends ExportedCardParent {
         codePath: `${testRealmURL}readme.md`,
       });
       assert.dom('[data-test-action-button="Delete"]').doesNotExist();
+    });
+
+    test('delete button is not displayed for empty file when user does not have permission to write to realm', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}empty-file.gts`,
+      });
+      await waitFor('[data-test-current-module-name="empty-file.gts"]');
+      assert.dom('[data-test-delete-module-button]').doesNotExist();
     });
   });
 });

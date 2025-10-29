@@ -1,0 +1,152 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Avatar Creator",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/avatar-creator-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/avatar-creator-listing/screenshot_02.png"
+      ],
+      "summary": "Create customizable avatar- avatars with various appearance options including hair styles, colors, facial features, and clothing.",
+      "cardInfo": {
+        "notes": "Includes AI-powered avatar- suggestion feature for creative inspiration.",
+        "title": "Avatar Creator",
+        "description": "An interactive tool for designing and customizing avatar- avatars. Choose from different hair styles, hair colors, facial expressions, skin tones, eyebrows, and clothing options to create unique avatars. Perfect for games, storytelling, or creative projects.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/avatar-creator-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/1b023c94-c534-43bf-8a09-3db1f6f70967"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/94c53473-bfca-493d-b1f6-f70967d4714d"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/bfca093d-b1f6-4709-a7d4-714d86bdb90e"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/ca093db1-f6f7-4967-9471-4d86bdb90e9a"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/73bfca09-3db1-46f7-8967-d4714d86bdb9"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/093db1f6-f709-47d4-b14d-86bdb90e9a95"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/b1f6f709-67d4-414d-86bd-b90e9a95eb3e"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/3db1f6f7-0967-4471-8d86-bdb90e9a95eb"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/f6f70967-d471-4d86-bdb9-0e9a95eb3e97"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/938e0b02-5259-4ae3-956f-a568ea6adf2f"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/67d4714d-86bd-490e-9a95-eb3e97e8960c"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/4d86bdb9-0e9a-45eb-be97-e8960cfb907e"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/b90e9a95-eb3e-47e8-960c-fb907eed22d7"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/0252595a-e315-4fa5-a8ea-6adf2fda9ca6"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/5f27bc69-6e15-4027-bff5-5c893a2642d9"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../avatar-creator/AvatarCreator/luna-starweaver"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../avatar-creator/AvatarCreator/magnus-stormbeard"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../avatar-creator/AvatarCreator/pichu"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../avatar-creator/AvatarCreator/zara-nightshade"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/design-creative"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

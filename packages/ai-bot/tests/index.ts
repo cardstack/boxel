@@ -5,3 +5,4 @@ import './prompt-construction-test';
 import './chat-titling-test';
 import './responding-test';
 import './matrix-util-test';
+import './locking-test';

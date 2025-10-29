@@ -82,7 +82,8 @@ module(basename(__filename), function () {
            VALUES 
              (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'openrouter-api-key', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
              (gen_random_uuid(), 'https://api.example.com', 'example-api-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-             (gen_random_uuid(), 'https://www.googleapis.com/customsearch/v1', 'google-api-key', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             (gen_random_uuid(), 'https://www.googleapis.com/customsearch/v1', 'google-api-key', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+             (gen_random_uuid(), 'https://gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/', 'cloudflare-api-key', 'no-credit', true, 'header', 'cf-aig-authorization', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
            ON CONFLICT (url) 
            DO UPDATE SET 
              api_key = EXCLUDED.api_key,
@@ -621,6 +622,221 @@ module(basename(__filename), function () {
         mockFetch.restore();
         global.fetch = originalFetch;
       }
+    });
+
+    test('should forward request to Cloudflare AI Gateway with custom header token authentication', async function (assert) {
+      // Mock external fetch calls
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      // Mock Cloudflare AI Gateway response
+      const mockResponse = {
+        example: 'ok',
+      };
+
+      // Set up fetch to return Cloudflare response
+      mockFetch.callsFake(
+        async (input: string | URL | Request, _init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+
+          if (
+            url.includes(
+              'gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/',
+            )
+          ) {
+            return new Response(JSON.stringify(mockResponse), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
+          } else {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+        },
+      );
+
+      try {
+        // Create JWT token for authentication
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        // Make request to _request-forward endpoint
+        const response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/replicate/predictions',
+            method: 'POST',
+            requestBody: JSON.stringify({
+              input: { prompt: 'What is Cloudflare?' },
+            }),
+          });
+
+        // Verify response
+        assert.strictEqual(response.status, 200, 'Should return 200 status');
+        assert.deepEqual(
+          response.body,
+          mockResponse,
+          'Should return AI Gateway response',
+        );
+
+        // Verify fetch was called correctly
+        assert.true(mockFetch.calledOnce, 'Fetch should be called once');
+        const calls = mockFetch.getCalls();
+
+        // Check that the URL includes the API key as a parameter
+        const callHeaders = calls[0].args[1]?.headers as Record<string, string>;
+        assert.strictEqual(
+          callHeaders['cf-aig-authorization'],
+          'Bearer cloudflare-api-key',
+          'request should include API key as cf-aig-authorization header',
+        );
+
+        // Verify no authorization header was set (since we're storing the replicate token at cloudflare)
+        assert.notOk(
+          callHeaders.Authorization,
+          'Should not set authorization header when using header auth with authParameterName set',
+        );
+      } finally {
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('should forward multipart form data when multipart flag is set', async function (assert) {
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      let capturedInit: RequestInit | undefined;
+      mockFetch.callsFake(
+        async (_input: string | URL | Request, init?: RequestInit) => {
+          capturedInit = init;
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+      );
+
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        const response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://api.example.com/upload',
+            method: 'POST',
+            multipart: true,
+            requestBody: JSON.stringify({
+              name: 'Test',
+              requireSigned: false,
+              file: {
+                filename: 'hello.txt',
+                content: Buffer.from('hello world', 'utf-8').toString('base64'),
+                contentType: 'text/plain',
+              },
+            }),
+          });
+
+        assert.strictEqual(response.status, 200, 'Should return 200 status');
+        assert.deepEqual(
+          response.body,
+          { ok: true },
+          'Should pass along API response',
+        );
+
+        assert.ok(capturedInit, 'fetch init should be captured');
+
+        const headersRecord =
+          capturedInit?.headers instanceof Headers
+            ? Object.fromEntries(capturedInit.headers.entries())
+            : ((capturedInit?.headers as Record<string, string> | undefined) ??
+              {});
+        const contentTypeHeader = headersRecord['Content-Type'];
+
+        assert.ok(contentTypeHeader, 'Content-Type header should be set');
+
+        const boundaryMatch = /multipart\/form-data; boundary=(.*)$/.exec(
+          contentTypeHeader as string,
+        );
+        assert.ok(
+          boundaryMatch,
+          'Content-Type should include multipart boundary',
+        );
+
+        const boundary = boundaryMatch?.[1];
+        assert.ok(boundary, 'Boundary should be present in header');
+
+        const bodyText = Buffer.from(capturedInit?.body as Uint8Array).toString(
+          'utf-8',
+        );
+        assert.true(
+          bodyText.includes(`--${boundary}`),
+          'Body should include boundary markers',
+        );
+        assert.true(
+          bodyText.includes(`Content-Disposition: form-data; name="name"`),
+          'Body should include normal field part',
+        );
+        assert.true(
+          bodyText.includes('Test'),
+          'Body should include name value',
+        );
+        assert.true(
+          bodyText.includes(`name="file"; filename="hello.txt"`),
+          'Body should include file part with filename',
+        );
+        assert.true(
+          bodyText.includes('Content-Type: text/plain'),
+          'Body should include file content type',
+        );
+        assert.true(
+          bodyText.includes('hello world'),
+          'Body should include decoded file content',
+        );
+      } finally {
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('should return a 400 when multipart payload is not an object', async function (assert) {
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+
+      const response = await request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          url: 'https://api.example.com/upload',
+          method: 'POST',
+          multipart: true,
+          requestBody: JSON.stringify(['not-an-object']),
+        });
+
+      assert.strictEqual(response.status, 400, 'Should return 400 status');
+      assert.true(
+        response.body.errors?.[0]?.includes(
+          'requestBody must be a JSON object when multipart is true',
+        ),
+        'Should return multipart validation error message',
+      );
     });
   });
 });

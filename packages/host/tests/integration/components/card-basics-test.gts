@@ -100,7 +100,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   module('cards are read-only', function (_hooks) {
-    test('input fields are disabled', async function (assert) {
+    test('input fields are disabled or readonly', async function (assert) {
       class Person extends CardDef {
         @field string = contains(StringField);
         @field number = contains(NumberField);
@@ -141,10 +141,10 @@ module('Integration | card-basics', function (hooks) {
         .hasAttribute('disabled');
       assert
         .dom('[data-test-field="markdown"] textarea')
-        .hasAttribute('disabled');
+        .hasAttribute('readonly');
       assert
         .dom('[data-test-field="textArea"] textarea')
-        .hasAttribute('disabled');
+        .hasAttribute('readonly');
     });
 
     test('linksToMany field with computeVia is not editable in edit format', async function (assert) {
@@ -377,7 +377,7 @@ module('Integration | card-basics', function (hooks) {
         name: 'Person',
       });
       let readBoolean: boolean = card.boolean;
-      assert.deepEqual(readBoolean, true);
+      assert.true(readBoolean);
     });
 
     test('access @model for primitive and composite fields', async function (assert) {
@@ -1783,6 +1783,8 @@ module('Integration | card-basics', function (hooks) {
             '## Meeting Notes\n\nDate: January 15, 2024<br>\nParticipants: John Doe, Jane Smith, Alice Johnson\n\n### Key Points Discussed\n<ul>\n<li>Project timeline was reviewed and adjusted for Q2</li>\n<li> Budget allocation confirmed</li>\n<li> Risk assessment introduced, with mitigation strategies \n   identified</li>\n</ul>\n\n### Actions Items\n<ol>\n<li> <strong>John Doe:</strong> Update project timeline by January 20</li>\n<li> <strong>Jane Smith:</strong> Finalize budget report by January 22</li>\n<li> <strong>Alice Johnson:</strong> Conduct a follow-up meeting with  \n    stakeholders by January 30</li>\n</ol>',
         }),
       });
+
+      // isolated format
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').exists();
       assert.dom('[data-test-field="cardTitle"]').hasText(title);
@@ -1791,6 +1793,7 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-field="cardInfo-notes"]')
         .containsText('Meeting Notes');
 
+      // edit format
       await renderCard(loader, instance, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasValue(title);
       assert
@@ -1805,8 +1808,25 @@ module('Integration | card-basics', function (hooks) {
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="cardInfo-thumbnailURL"]').doesNotExist();
       assert.dom('[data-test-links-to-editor="theme"]').doesNotExist();
-
       assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
+
+      // default preview (on edit template)
+      await click('[data-test-toggle-preview]');
+      assert
+        .dom('[data-test-edit-preview="cardType"]')
+        .hasText('Card Type Card');
+      assert.dom('[data-test-edit-preview="cardTitle"]').containsText(title);
+      assert
+        .dom('[data-test-edit-preview="cardDescription"]')
+        .containsText(description);
+      assert
+        .dom('[data-test-edit-preview="cardThumbnailURL"]')
+        .hasText('Thumbnail URL');
+      assert
+        .dom('[data-test-edit-preview] input')
+        .doesNotExist('preview fields are not editable');
+      await click('[data-test-toggle-preview]');
+      assert.dom('[data-test-edit-preview]').doesNotExist();
     });
 
     test('render card-def instance with cardInfo overrides', async function (assert) {
@@ -1855,21 +1875,36 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('Volleyball player');
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
       await click('[data-test-toggle-thumbnail-editor]');
+      assert.dom('[data-test-thumbnail-placeholder]').doesNotExist();
       assert
         .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasValue('http://pic/of/volleyball');
       assert.dom('[data-test-links-to-editor="theme"]').exists();
-      await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
       assert.dom('[data-test-field="firstName"] input').hasValue('John');
       assert
         .dom('[data-test-field="profilePic"] input')
         .hasValue('http://john/pic.jpg');
+
+      // default preview (on edit template)
+      await click('[data-test-toggle-preview]');
+      assert.dom('[data-test-edit-preview="cardType"]').containsText('Person');
+      assert
+        .dom('[data-test-edit-preview="cardTitle"]')
+        .containsText('John Doe');
+      assert
+        .dom('[data-test-edit-preview="cardDescription"]')
+        .containsText('Volleyball player');
+      assert
+        .dom('[data-test-edit-preview="cardThumbnailURL"]')
+        .containsText('http://john/pic.jpg');
+
+      await percySnapshot(assert);
     });
 
     test('render card-def instance with cardInfo overrides variation', async function (assert) {
       class Book extends CardDef {
-        static displayName = 'Person';
+        static displayName = 'Book';
         @field bookTitle = contains(StringField);
         @field blurb = contains(StringField);
         @field bookCoverImage = contains(StringField);
@@ -1917,17 +1952,31 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-thumbnail-icon]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
-        .hasNoValue();
+        .dom('[data-test-thumbnail-placeholder] input')
+        .hasValue('http://book/pic.jpg');
+      assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
         .dom('[data-test-field="bookCoverImage"] input')
         .hasValue('http://book/pic.jpg');
+
+      // default preview (on edit template)
+      await click('[data-test-toggle-preview]');
+      assert.dom('[data-test-edit-preview="cardType"]').containsText('Book');
+      assert
+        .dom('[data-test-edit-preview="cardTitle"]')
+        .containsText('Insomniac');
+      assert
+        .dom('[data-test-edit-preview="cardDescription"]')
+        .containsText('This book will keep you up at night');
+      assert
+        .dom('[data-test-edit-preview="cardThumbnailURL"]')
+        .containsText('http://book/pic.jpg');
     });
 
     test('render card-def instance with cardInfo overrides (not computed)', async function (assert) {
       class Book extends CardDef {
-        static displayName = 'Person';
+        static displayName = 'Book';
         @field title = contains(StringField);
         @field description = contains(StringField);
         @field thumbnailURL = contains(StringField);
@@ -1965,8 +2014,9 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('The latest novel from John Doe');
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
-        .hasNoValue();
+        .dom('[data-test-thumbnail-placeholder] input')
+        .hasValue('http://book/pic.jpg');
+      assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="title"] input').hasValue('Insomniac');
       assert
@@ -1975,6 +2025,19 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="thumbnailURL"] input')
         .hasValue('http://book/pic.jpg');
+
+      // default preview (on edit template)
+      await click('[data-test-toggle-preview]');
+      assert.dom('[data-test-edit-preview="cardType"]').containsText('Book');
+      assert
+        .dom('[data-test-edit-preview="cardTitle"]')
+        .containsText('Insomniac');
+      assert
+        .dom('[data-test-edit-preview="cardDescription"]')
+        .containsText('This book will keep you up at night');
+      assert
+        .dom('[data-test-edit-preview="cardThumbnailURL"]')
+        .containsText('http://book/pic.jpg');
     });
 
     test('render card-def instance with cardInfo overrides (complex)', async function (assert) {
@@ -2053,6 +2116,20 @@ module('Integration | card-basics', function (hooks) {
         .hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="destination"] input').hasValue('LAX');
+
+      // default preview (in edit mode)
+      await click('[data-test-toggle-preview]');
+      assert
+        .dom('[data-test-edit-preview="cardType"]')
+        .containsText('Flight Booking');
+      assert
+        .dom('[data-test-edit-preview="cardTitle"]')
+        .containsText('JFK to LAX (12/25/25) Flt. 101');
+      assert
+        .dom('[data-test-edit-preview="cardDescription"]')
+        .containsText(
+          'Smith Wedding Flight - John, Jane + kids to LA for holiday wedding',
+        );
     });
 
     test('render default isolated template', async function (assert) {
@@ -3232,16 +3309,8 @@ module('Integration | card-basics', function (hooks) {
       assertRadioInput(assert, 'isHuman', 'true', true);
       assertRadioInput(assert, 'isHuman', 'false', false);
 
-      assert.strictEqual(
-        mango.isCool,
-        true,
-        'the isCool field has the correct value',
-      );
-      assert.strictEqual(
-        mango.isHuman,
-        true,
-        'the isHuman field has the correct value',
-      );
+      assert.true(mango.isCool, 'the isCool field has the correct value');
+      assert.true(mango.isHuman, 'the isHuman field has the correct value');
     });
 
     test('can adopt a card', async function (assert) {
@@ -3699,9 +3768,8 @@ module('Integration | card-basics', function (hooks) {
         1,
         'The queryable value from user supplied data is correct (number)',
       );
-      assert.strictEqual(
+      assert.true(
         getQueryableValue(TestField, { firstName: true, age: 6 }),
-        true,
         'The queryable value from user supplied data is correct (boolean)',
       );
       assert.strictEqual(
@@ -3840,8 +3908,8 @@ module('Integration | card-basics', function (hooks) {
       }
 
       assert.strictEqual(
-        'The place where the person was born',
         getFieldDescription(Person, 'hometown'),
+        'The place where the person was born',
       );
     });
 

@@ -1,0 +1,38 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StudyNoteCard",
+        "module": "../study-note"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": [
+        "Linear algebra",
+        "Matrices",
+        "Operations",
+        "Eigenvalues",
+        "Determinant"
+      ],
+      "content": "# Matrix Operations\n\n## Multiplication Rules\n- **(AB)C = A(BC)** - Associative property\n- **A(B + C) = AB + AC** - Distributive property\n- **AB ≠ BA** in general - Not commutative (order matters!)\n- **Dimensions matter**: (m×n) × (n×p) = (m×p)\n\n## Special Matrices\n- **Identity Matrix (I)**: Acts like the number 1\n  - AI = IA = A for any compatible matrix A\n- **Inverse Matrix (A⁻¹)**: Where AA⁻¹ = A⁻¹A = I\n  - Only exists for square matrices with non-zero determinant\n- **Transpose (Aᵀ)**: Flip across main diagonal\n  - (AB)ᵀ = BᵀAᵀ (order reverses!)\n\n## Determinant Properties\n- det(AB) = det(A) × det(B)\n- det(Aᵀ) = det(A)\n- If det(A) = 0, matrix is singular (no inverse)\n\n## Eigenvalue Applications\n- Principal Component Analysis (PCA)\n- Stability analysis in differential equations\n- Google's PageRank algorithm\n- Image compression and processing",
+      "subject": "Mathematics",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "createdAt": "2025-01-12T11:00:00.000Z",
+      "noteTitle": "Matrix Operations Notes",
+      "lastModified": "2025-01-14T15:45:00.000Z"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

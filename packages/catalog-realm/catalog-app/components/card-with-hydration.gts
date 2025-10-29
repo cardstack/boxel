@@ -7,6 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import {
   type CardContext,
   type BaseDef,
+  type BoxComponent,
 } from 'https://cardstack.com/base/card-api';
 
 import { type PrerenderedCardLike } from '@cardstack/runtime-common';
@@ -41,12 +42,14 @@ export class CardWithHydration extends GlimmerComponent<CardWithHydrationSignatu
     {{#if this.isHydrated}}
       {{#if this.cardResource.card}}
         {{#let (getComponent this.cardResource.card) as |Component|}}
-          <Component
-            class='card'
-            data-test-cards-grid-item={{removeFileExtension @card.url}}
-            data-cards-grid-item={{removeFileExtension @card.url}}
-            data-test-hydrated-card
-          />
+          {{#if Component}}
+            <Component
+              class='card'
+              data-test-cards-grid-item={{removeFileExtension @card.url}}
+              data-cards-grid-item={{removeFileExtension @card.url}}
+              data-test-hydrated-card
+            />
+          {{/if}}
         {{/let}}
       {{/if}}
     {{else if @card.isError}}
@@ -101,10 +104,20 @@ export class CardWithHydration extends GlimmerComponent<CardWithHydrationSignatu
   </template>
 }
 
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
+function getComponent(cardOrField: BaseDef | undefined | null): BoxComponent | undefined {
+  if (!cardOrField) {
+    return;
+  }
+  let constructor = cardOrField.constructor as typeof BaseDef | undefined;
+  if (typeof constructor?.getComponent !== 'function') {
+    return;
+  }
+  return constructor.getComponent(cardOrField);
 }
 
-function removeFileExtension(cardUrl: string) {
-  return cardUrl?.replace(/\.[^/.]+$/, '');
+function removeFileExtension(cardUrl: string | undefined | null) {
+  if (typeof cardUrl !== 'string') {
+    return '';
+  }
+  return cardUrl.replace(/\.[^/.]+$/, '');
 }

@@ -1,0 +1,66 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Study Note",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/study-note-listing/screenshot_01.png"
+      ],
+      "summary": "A comprehensive card system for organizing study notes with markdown support, subject categorization, and tagging functionality. Perfect for students, educators, and lifelong learners.",
+      "cardInfo": {
+        "notes": "Ideal for computer science students, algorithm study, and technical concept documentation",
+        "title": "Study Note",
+        "description": "Create and organize study notes with structured content, subject classification, and searchable tags. Features markdown support for rich formatting and timestamp tracking for study progress.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-note-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/bcca3aa2-e5ef-4d2d-a4e9-2e220300fa0e"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../study-note/StudyNoteCard/big-o-notation-summary"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/knowledge-management"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

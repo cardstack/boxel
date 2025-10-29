@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "question": "Define eigenvalues and eigenvectors",
+      "answer": "For a square matrix A, eigenvalues λ are scalars such that Av = λv for some non-zero vector v (the eigenvector). They represent directions that don't change under the transformation.",
+      "difficulty": "hard",
+      "subject": "Mathematics",
+      "tags": "linear-algebra,eigenvalues,vectors,matrix-theory",
+      "reviewCount": 8,
+      "correctCount": 5,
+      "lastReviewed": "2025-01-14T16:00:00.000Z",
+      "nextReview": "2025-01-16T16:00:00.000Z",
+      "mastery": 62
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../flashcard",
+        "name": "FlashcardCard"
+      }
+    }
+  }
+}

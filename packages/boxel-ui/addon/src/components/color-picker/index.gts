@@ -1,70 +1,125 @@
+import IconX from '@cardstack/boxel-icons/x';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+
+import cn from '../../helpers/cn.ts';
+import IconButton from '../icon-button/index.gts';
+import BoxelInput from '../input/index.gts';
+import Swatch from '../swatch/index.gts';
 
 interface Signature {
   Args: {
     color: string | null;
     disabled?: boolean;
     onChange: (color: string | null) => void;
-    showHexString?: boolean;
+    placeholder?: string;
   };
   Element: HTMLDivElement;
 }
 
 export default class ColorPicker extends Component<Signature> {
-  private handleColorChange = (event: Event) => {
-    let input = event.target as HTMLInputElement;
-    this.args.onChange(input.value);
-  };
-
   <template>
     <div class='color-picker' ...attributes>
-      <input
-        type='color'
-        value={{if @color @color '#ffffff'}}
-        class='input'
-        disabled={{@disabled}}
-        aria-label='Choose color'
-        {{on 'input' this.handleColorChange}}
+      <label class={{cn 'color-input-container' disabled=@disabled}}>
+        <span class='boxel-sr-only'>Color Picker</span>
+        <Swatch
+          class='color-preview'
+          @color={{@color}}
+          @hideLabel={{true}}
+          @style='round'
+        />
+        <BoxelInput
+          type='color'
+          @value={{@color}}
+          @onInput={{@onChange}}
+          @disabled={{@disabled}}
+          data-test-color-input
+        />
+      </label>
+
+      <BoxelInput
+        class='color-text-input'
+        @value={{@color}}
+        @onInput={{@onChange}}
+        @disabled={{@disabled}}
+        @placeholder={{@placeholder}}
+        data-test-color-text-input
       />
-      {{#if @showHexString}}
-        <code class='hex-value'>{{@color}}</code>
+
+      {{#if @color}}
+        {{#unless @disabled}}
+          <IconButton
+            class='remove'
+            @icon={{IconX}}
+            @width='16px'
+            @height='16px'
+            {{on 'click' this.remove}}
+            aria-label='Unset color'
+            data-test-remove-color
+          />
+        {{/unless}}
       {{/if}}
     </div>
 
     <style scoped>
-      .color-picker {
-        --swatch-size: 1.4rem;
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-
-      .input {
-        width: var(--swatch-size);
-        height: var(--swatch-size);
-        padding: 0;
-        cursor: pointer;
-        border: var(--boxel-border);
-        border-radius: 50%;
-      }
-
-      .input:disabled {
-        pointer-events: none;
-      }
-
-      .input::-webkit-color-swatch-wrapper {
-        padding: 0;
-      }
-
-      .input::-webkit-color-swatch {
-        border: 1px solid transparent;
-        border-radius: 50%;
-      }
-
-      .hex-value {
-        text-transform: uppercase;
+      @layer boxelComponentL3 {
+        .color-picker {
+          --color-picker-width: 2.5rem;
+          --color-picker-height: 2.5rem;
+          position: relative;
+        }
+        .color-text-input {
+          padding-inline: var(--color-picker-width);
+          transition: none;
+        }
+        .color-input-container {
+          position: absolute;
+          top: 0;
+          left: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: var(--color-picker-width);
+          height: 100%;
+          z-index: 1;
+        }
+        .color-input-container > :deep(.input-container) {
+          visibility: collapse;
+          position: absolute;
+          top: 0;
+          left: 0;
+          display: block;
+        }
+        .color-input-container:not(.disabled):hover {
+          cursor: pointer;
+        }
+        .color-input-container:not(.disabled):hover :deep(.preview) {
+          box-shadow: var(--shadow-xs, var(--boxel-box-shadow));
+        }
+        .remove {
+          position: absolute;
+          top: 0;
+          right: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: var(--color-picker-width);
+          height: 100%;
+          z-index: 1;
+          opacity: 0.5;
+        }
+        .remove:focus,
+        .remove:hover {
+          opacity: 1;
+          outline: 0;
+        }
       }
     </style>
   </template>
+
+  private remove = (ev: Event) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.args.onChange?.(null);
+  };
 }

@@ -31,6 +31,22 @@ ruleTester.run('missing-card-api-import', rule, {
         @field address = contains(StringField);
       }
   `,
+    {
+      code: `
+        import { FieldDef } from 'https://cardstack.com/base/card-api';
+
+        export class AddressField extends FieldDef {}
+
+        export class SolanaAddressField extends AddressField {}
+      `,
+      options: [
+        {
+          importMappings: {
+            AddressField: ['AddressField', 'https://cardstack.com/base/card-api'],
+          },
+        },
+      ],
+    },
   ],
 
   invalid: [

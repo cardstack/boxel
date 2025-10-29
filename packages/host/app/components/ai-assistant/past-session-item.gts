@@ -1,8 +1,10 @@
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 
@@ -10,16 +12,16 @@ import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
 
 import {
   BoxelDropdown,
-  IconButton,
+  ContextButton,
   Menu,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { menuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import {
   IconPencil,
   IconTrash,
-  ThreeDotsHorizontal,
   IconCircle,
+  Copy as CopyIcon,
 } from '@cardstack/boxel-ui/icons';
 
 import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
@@ -29,6 +31,8 @@ export type RoomActions = {
   open: (roomId: string) => void;
   rename: (room: SessionRoomData) => void;
   delete: (room: SessionRoomData) => void;
+  copyRoomId: (roomId: string) => void;
+  getCopiedRoomId: () => string | null;
 };
 
 interface Signature {
@@ -40,6 +44,8 @@ interface Signature {
 }
 
 export default class PastSessionItem extends Component<Signature> {
+  @tracked private preventMenuClose = false;
+
   <template>
     <li
       class='session'
@@ -85,12 +91,11 @@ export default class PastSessionItem extends Component<Signature> {
         <:trigger as |bindings|>
           <Tooltip @placement='top'>
             <:trigger>
-              <IconButton
-                @icon={{ThreeDotsHorizontal}}
-                @width='16px'
-                @height='16px'
+              <ContextButton
                 class='menu-button'
-                aria-label='Options'
+                @variant='highlight-icon'
+                @size='extra-small'
+                @label='past session options'
                 data-test-past-session-options-button={{@session.roomId}}
                 {{bindings}}
               />
@@ -103,7 +108,7 @@ export default class PastSessionItem extends Component<Signature> {
         <:content as |dd|>
           <Menu
             class='menu past-session-menu'
-            @closeMenu={{dd.close}}
+            @closeMenu={{fn this.handleCloseMenu dd.close}}
             @items={{array
               (menuItem
                 'Open Session'
@@ -111,6 +116,15 @@ export default class PastSessionItem extends Component<Signature> {
                 icon=ExternalLink
               )
               (menuItem 'Rename' (fn @actions.rename @session) icon=IconPencil)
+              (menuItem
+                (if
+                  (eq (@actions.getCopiedRoomId) @session.roomId)
+                  'Copied!'
+                  'Copy Room Id'
+                )
+                (fn this.handleCopyRoomId @session.roomId)
+                icon=CopyIcon
+              )
               (menuItem 'Delete' (fn @actions.delete @session) icon=IconTrash)
             }}
           />
@@ -160,31 +174,25 @@ export default class PastSessionItem extends Component<Signature> {
       .view-session-button {
         color: var(--boxel-light);
         background-color: transparent;
+        border-radius: var(--boxel-border-radius-xs);
         border: none;
         width: 100%;
+        margin-right: 1px;
         text-align: left;
+      }
+      .view-session-button:focus:focus-visible {
+        outline-offset: 1px;
       }
 
       .menu-button {
         visibility: hidden;
-        display: flex;
-        width: auto;
-        height: auto;
-        padding: 2px;
-        border-radius: var(--boxel-border-radius-xs);
       }
-
-      .session:hover .menu-button {
+      .session:hover .menu-button,
+      .session:focus-within .menu-button {
         visibility: visible;
       }
-
-      .menu-button:hover:not(:disabled) {
-        background-color: var(--boxel-highlight);
-      }
-
-      .menu-button :deep(svg) {
-        stroke: var(--boxel-dark);
-        stroke-width: 1px;
+      .menu-button[aria-expanded='true'] {
+        visibility: visible;
       }
 
       .menu {
@@ -210,7 +218,7 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .menu :deep(.boxel-menu__item:hover) {
-        background-color: var(--past-sessions-hover-background);
+        background-color: var(--ai-assistant-menu-hover-background);
         border-radius: var(--boxel-border-radius-xs);
       }
 
@@ -252,6 +260,23 @@ export default class PastSessionItem extends Component<Signature> {
   </template>
 
   @service declare matrixService: MatrixService;
+
+  @action
+  private handleCopyRoomId(roomId: string) {
+    this.preventMenuClose = true;
+    this.args.actions.copyRoomId(roomId);
+    // Reset the flag after a short delay to allow normal closing for other actions
+    setTimeout(() => {
+      this.preventMenuClose = false;
+    }, 200);
+  }
+
+  @action
+  private handleCloseMenu(originalClose: () => void) {
+    if (!this.preventMenuClose) {
+      originalClose();
+    }
+  }
 
   get createDate() {
     if (!this.args.session.created) {

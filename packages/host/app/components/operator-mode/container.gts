@@ -34,7 +34,7 @@ import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
 
-import { type CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
 import PrerenderedCardSearch from '../prerendered-card-search';
@@ -173,13 +173,14 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-spacing: var(--boxel-sp-xs);
         --operator-mode-top-bar-item-height: var(--container-button-size);
         --operator-mode-bottom-bar-item-height: var(--container-button-size);
+        --submode-new-file-button-width: 96px;
       }
       :global(button:focus:not(:disabled)) {
         outline-color: var(
           --boxel-header-text-color,
           var(--ring, var(--boxel-highlight))
         );
-        outline-offset: -2px;
+        outline-offset: var(--host-outline-offset, -2px);
       }
       :global(button:focus:not(:focus-visible)) {
         outline-color: transparent;

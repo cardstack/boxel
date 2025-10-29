@@ -94,10 +94,17 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
     );
 
     let commandModule = await this.loadCommandModule();
-    const { SearchCardsResult } = commandModule;
-
+    const { SearchCardsResult, SearchCardSummaryField } = commandModule;
     let resultCard = new SearchCardsResult({
       cardIds: instances.map((c) => c.id),
+      instances,
+      summaries: instances.map(
+        (c) =>
+          new SearchCardSummaryField({
+            id: c.id,
+            title: c.title,
+          }),
+      ),
       description: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,
     });
     return resultCard;

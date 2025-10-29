@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MusicCoder",
+        "module": "../music-coder"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "bpm": 128,
+      "title": "Classic Video Game Music",
+      "pattern": "stack(\n  // Main melody - the complete theme!\n  note(\"<[e5 e5 ~ e5 ~ c5 e5 ~] [g5 ~ ~ ~ g4 ~ ~ ~] [c5 ~ ~ g4 ~ ~ e4 ~] [a4 ~ b4 ~ bb4 a4 ~ ~] [g4 e5 ~ g5 a5 ~ f5 g5] [~ e5 ~ c5 d5 b4 ~ ~] [c5 ~ ~ g4 ~ ~ e4 ~] [a4 ~ b4 ~ bb4 a4 ~ ~] [g4 e5 ~ g5 a5 ~ f5 g5] [~ e5 ~ c5 d5 b4 ~ ~]>\").sound(\"square\").gain(0.5),\n  \n  // Bass line\n  note(\"<[c3 ~ ~ ~] [g2 ~ ~ ~] [c3 ~ ~ ~] [f2 ~ ~ ~] [c3 ~ ~ ~] [g2 ~ ~ ~] [c3 ~ ~ ~] [f2 ~ ~ ~] [c3 ~ ~ ~] [g2 ~ ~ ~]>\").sound(\"sawtooth\").gain(0.4).lpf(600),\n  \n  // Kick and snare pattern\n  s(\"bd ~ ~ ~, ~ ~ sd ~\").gain(0.5),\n  \n  // Hi-hat for groove\n  s(\"~ hh ~ hh\").gain(0.3)\n)",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "A fun 8-bit style melody inspired by classic video game music"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

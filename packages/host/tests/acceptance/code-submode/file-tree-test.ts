@@ -1,6 +1,7 @@
 import {
   click,
   waitFor,
+  waitUntil,
   find,
   fillIn,
   settled,
@@ -22,7 +23,9 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -194,7 +197,6 @@ const realmInfo = {
   publishable: null,
 };
 
-let matrixRoomId: string;
 module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -209,11 +211,12 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     const numStubFiles = 100;
     let stubFiles: Record<string, string> = {};
@@ -226,6 +229,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
         'person.gts': personCardSource,
@@ -818,6 +822,56 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
         'expected previously-stored scroll position to have been forgotten',
       );
     }
+  });
+
+  test('collapsing and reopening a directory restores nested open directories', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
+
+    let rootDirectorySelector = '[data-test-directory="zzz/"]';
+    let nestedDirectorySelector = '[data-test-directory="zzz/zzz/"]';
+    let nestedFileSelector = '[data-test-file="zzz/zzz/file.json"]';
+
+    await waitFor(rootDirectorySelector);
+    await click(rootDirectorySelector);
+    assert.dom(`${rootDirectorySelector} .icon`).hasClass('open');
+
+    await waitFor(nestedDirectorySelector);
+    await click(nestedDirectorySelector);
+    assert.dom(`${nestedDirectorySelector} .icon`).hasClass('open');
+    await waitFor(nestedFileSelector);
+
+    await click(rootDirectorySelector);
+    assert.dom(`${rootDirectorySelector} .icon`).hasClass('closed');
+    await waitUntil(() => !document.querySelector(nestedFileSelector));
+    assert
+      .dom(nestedFileSelector)
+      .doesNotExist('nested file disappears when root directory collapses');
+
+    await click(rootDirectorySelector);
+    assert.dom(`${rootDirectorySelector} .icon`).hasClass('open');
+
+    await waitFor(nestedDirectorySelector);
+    assert
+      .dom(`${nestedDirectorySelector} .icon`)
+      .hasClass('open', 'nested directory stays open after reopening root');
+    await waitFor(nestedFileSelector);
+    assert
+      .dom(nestedFileSelector)
+      .exists('nested file is visible again without toggling nested directory');
   });
 
   test('scroll position does not change when switching to another file within view', async function (assert) {

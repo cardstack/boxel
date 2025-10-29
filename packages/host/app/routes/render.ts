@@ -1,28 +1,59 @@
+import type Controller from '@ember/controller';
 import { action } from '@ember/object';
 import Route from '@ember/routing/route';
 import RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
+import { join, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
   formattedError,
-  isCardErrorJSONAPI,
+  CardError,
+  baseRealm,
+  SupportedMimeType,
   isCardError,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
+  type RenderError,
+  parseRenderRouteOptions,
+  serializeRenderRouteOptions,
 } from '@cardstack/runtime-common';
+import { Deferred } from '@cardstack/runtime-common/deferred';
+import { serializableError } from '@cardstack/runtime-common/error';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import LoaderService from '../services/loader-service';
-import NetworkService from '../services/network';
-import RealmService from '../services/realm';
-import RealmServerService from '../services/realm-server';
-import StoreService from '../services/store';
+import {
+  windowErrorHandler,
+  errorJsonApiToErrorEntry,
+} from '../lib/window-error-handler';
 
-export type Model = { instance: CardDef; ready: boolean };
+import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
+import type RealmServerService from '../services/realm-server';
+import type RenderErrorStateService from '../services/render-error-state';
+import type StoreService from '../services/store';
+
+type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
+
+export type Model = {
+  instance: CardDef;
+  nonce: string;
+  cardId: string;
+  readonly status: RenderStatus;
+  readonly ready: boolean;
+  readyPromise: Promise<void>;
+};
+
+type ModelState = {
+  state: TrackedMap<string, unknown>;
+  readyDeferred: Deferred<void>;
+  isReady: boolean;
+};
 
 export default class RenderRoute extends Route<Model> {
   @service declare store: StoreService;
@@ -31,47 +62,55 @@ export default class RenderRoute extends Route<Model> {
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare private network: NetworkService;
+  @service declare renderErrorState: RenderErrorStateService;
+
+  private currentTransition: Transition | undefined;
+  private lastStoreResetKey: string | undefined;
+  private renderBaseParams: [string, string, string] | undefined;
+  private lastRenderErrorSignature: string | undefined;
+  #modelStates = new Map<Model, ModelState>();
+  #pendingReadyModels = new Set<Model>();
+  #modelPromises = new Map<string, Promise<Model>>();
 
   errorHandler = (event: Event) => {
-    let [_a, _b, encodedId] = (this.router.currentURL ?? '').split('/');
-    let id = encodedId ? decodeURIComponent(encodedId) : undefined;
-    let reason =
-      'reason' in event
-        ? (event as any).reason
-        : (event as CustomEvent).detail?.reason;
-    let element: HTMLElement = document.querySelector('[data-prerender]')!;
-    element.innerHTML = `
-      ${
-        reason
-          ? JSON.stringify(
-              isCardErrorJSONAPI(reason)
-                ? reason
-                : isCardError(reason)
-                  ? reason
-                  : formattedError(id, reason).errors[0],
-            )
-          : '{"message": "indexing failed"}'
-      }
-    `;
-    element.dataset.prerenderStatus = 'error';
-
-    event.preventDefault?.();
-    (globalThis as any)._lazilyLoadLinks = undefined;
-    (globalThis as any)._boxelRenderContext = undefined;
+    windowErrorHandler({
+      event,
+      setStatusToUnusable() {
+        let element: HTMLElement = document.querySelector('[data-prerender]')!;
+        element.dataset.prerenderStatus = 'unusable';
+      },
+      setError(error) {
+        let element: HTMLElement = document.querySelector('[data-prerender]')!;
+        element.innerHTML = error;
+      },
+      currentURL: this.router.currentURL,
+    });
+    this.#setAllModelStatuses('unusable');
+    (globalThis as any).__lazilyLoadLinks = undefined;
+    (globalThis as any).__boxelRenderContext = undefined;
   };
 
   activate() {
     window.addEventListener('error', this.errorHandler);
     window.addEventListener('unhandledrejection', this.errorHandler);
-    window.addEventListener('boxel-render-error', this.errorHandler);
+    // this is for route errors, not window level error
+    window.addEventListener('boxel-render-error', this.handleRenderError);
   }
 
   deactivate() {
-    (globalThis as any)._lazilyLoadLinks = undefined;
-    (globalThis as any)._boxelRenderContext = undefined;
+    (globalThis as any).__lazilyLoadLinks = undefined;
+    (globalThis as any).__boxelRenderContext = undefined;
+    (globalThis as any).__renderInstance = undefined;
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
-    window.removeEventListener('boxel-render-error', this.errorHandler);
+    window.removeEventListener('boxel-render-error', this.handleRenderError);
+    this.lastStoreResetKey = undefined;
+    this.renderBaseParams = undefined;
+    this.lastRenderErrorSignature = undefined;
+    this.renderErrorState.clear();
+    this.#modelStates.clear();
+    this.#pendingReadyModels.clear();
+    this.#modelPromises.clear();
   }
 
   beforeModel() {
@@ -81,23 +120,57 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderContext = true;
   }
 
-  async model({ id }: { id: string }) {
-    // Make it easy for Puppeteer to do regular Ember transitions
-    (globalThis as any).boxelTransitionTo = (
-      ...args: Parameters<RouterService['transitionTo']>
-    ) => {
-      this.router.transitionTo(...args);
-    };
+  async model(
+    { id, nonce, options }: { id: string; nonce: string; options?: string },
+    transition: Transition,
+  ) {
+    this.lastRenderErrorSignature = undefined;
+    this.renderErrorState.clear();
+    this.currentTransition = transition;
+    let parsedOptions = parseRenderRouteOptions(options);
+    let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
+    this.#setupTransitionHelper(id, nonce, canonicalOptions);
+    let key = `${id}|${nonce}|${canonicalOptions}`;
+    let existing = this.#modelPromises.get(key);
+    if (existing) {
+      return await existing;
+    }
 
-    // Opt in to reading the in-progress index, as opposed to the last completed
-    // index. This matters for any related cards that we will be loading, not
-    // for our own card, which we're going to load directly from source.
-    this.loaderService.setIsIndexing(true);
+    // the window.boxelTransitionTo() function helper first normalizes the base
+    // params by transitioning the router back to 'render' before it goes on to
+    // 'render.html', 'render.meta', etc. That’s why you see the /render model
+    // hook fire twice per prerender step: every format capture goes through a
+    // parent transition (render), then to the actual child route, so the parent
+    // model executes twice per prerender, hence the need to share the work.
+    let promise = this.#buildModel({ id, nonce }, parsedOptions);
+    this.#modelPromises.set(key, promise);
+    return await promise;
+  }
+
+  async #buildModel(
+    { id, nonce }: { id: string; nonce: string },
+    parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
+  ): Promise<Model> {
+    if (parsedOptions.clearCache) {
+      this.loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'render-route clearCache',
+      });
+    }
+    if (parsedOptions.clearCache) {
+      let resetKey = `${id}:${nonce}`;
+      if (this.lastStoreResetKey !== resetKey) {
+        this.store.resetCache();
+        this.lastStoreResetKey = resetKey;
+      }
+    }
+    // This is for host tests
+    (globalThis as any).__renderInstance = undefined;
 
     let response = await this.network.authedFetch(id, {
       method: 'GET',
       headers: {
-        Accept: 'application/vnd.card+source',
+        Accept: SupportedMimeType.CardSource,
       },
     });
 
@@ -105,17 +178,52 @@ export default class RenderRoute extends Route<Model> {
     let lastModified = new Date(response.headers.get('last-modified')!);
     let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
       await response.json();
+    let state = new TrackedMap<string, unknown>();
+    state.set('status', 'loading');
+
+    // the rendering of the templates is what pulls on the linked fields to load
+    // them. before the card templates are rendered there are no in-flight
+    // requests for linked fields. so in order to properly wait for the linked
+    // fields to load we must first render the /render/html route (preferably
+    // the isolated format), and then the store will start tracking the
+    // in-flight link requests. after the store settles the prerendered output
+    // will be ready to capture. this readyDeferred will let us know when the
+    // prerendered output is ready for capture.
+    let readyDeferred = new Deferred<void>();
+    let modelState: ModelState = {
+      state,
+      readyDeferred,
+      isReady: false,
+    };
+    let canonicalId = id.replace(/\.json$/, '');
+    let model: Model = {
+      instance: undefined as unknown as CardDef,
+      nonce,
+      cardId: canonicalId,
+      get status(): RenderStatus {
+        return (state.get('status') as RenderStatus) ?? 'loading';
+      },
+      get ready(): boolean {
+        return (state.get('status') as RenderStatus) === 'ready';
+      },
+      readyPromise: readyDeferred.promise,
+    };
+    this.#modelStates.set(model, modelState);
+
     let instance: CardDef | undefined;
-    if ('errors' in doc) {
-      throw new Error(JSON.stringify(doc.errors[0], null, 2));
-    } else {
+    try {
+      if ('errors' in doc) {
+        this.#dispositionModel(model, 'error');
+        throw new Error(JSON.stringify(doc.errors[0], null, 2));
+      }
+
       await this.realm.ensureRealmMeta(realmURL);
 
       let enhancedDoc: LooseSingleCardDocument = {
         ...doc,
         data: {
           ...doc.data,
-          id: id.replace(/\.json$/, ''),
+          id: canonicalId,
           type: 'card',
           meta: {
             ...doc.data.meta,
@@ -128,31 +236,229 @@ export default class RenderRoute extends Route<Model> {
 
       instance = await this.store.add(enhancedDoc, {
         relativeTo: new URL(id),
+        realm: realmURL,
         doNotPersist: true,
       });
+      model.instance = instance;
+    } catch (e: any) {
+      console.warn(
+        `Encountered error when deserializing doc for ${id}: ${e.message}: ${e.responseText}`,
+      );
+      this.#dispositionModel(model, 'error');
+      throw e;
     }
-
-    let state = new TrackedMap();
-    state.set('ready', false);
+    if (instance) {
+      await this.#touchIsUsedFields(instance);
+    }
     await this.store.loaded();
-    state.set('ready', true);
+    if (instance) {
+      model.instance = instance;
+    }
+    this.#scheduleReady(model);
 
-    return {
-      instance,
-      get ready(): boolean {
-        return Boolean(state.get('ready'));
-      },
+    // this is to support in-browser rendering, where we actually don't have the
+    // ability to lookup the parent route using RouterService.recognizeAndLoad()
+    (globalThis as any).__renderInstance = instance;
+    this.currentTransition = undefined;
+    return model;
+  }
+
+  async #touchIsUsedFields(instance: CardDef): Promise<void> {
+    let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    // a computed linksTo/linksToMany isn't a thing yet, but some day it
+    // probably will be, so just optimistically including those
+    let fields = cardApi.getFields(instance, { includeComputeds: true });
+    for (let [fieldName, field] of Object.entries(fields)) {
+      if (field?.isUsed) {
+        try {
+          // accessing the field triggers the lazy loading of the linked field
+          (instance as any)[fieldName];
+        } catch (error) {
+          console.warn(
+            `Failed to touch field '${fieldName}' on ${instance.constructor.name} for isUsed=true:`,
+            error,
+          );
+        }
+      }
+    }
+  }
+
+  setupController(controller: Controller, model: Model) {
+    super.setupController(controller, model);
+    this.#scheduleReady(model);
+  }
+
+  #scheduleReady(model: Model) {
+    let modelState = this.#modelStates.get(model);
+    if (!modelState || modelState.isReady) {
+      return;
+    }
+    this.#pendingReadyModels.add(model);
+    scheduleOnce('afterRender', this, this.#processPendingReadyModels);
+  }
+
+  #processPendingReadyModels() {
+    if (this.isDestroying || this.isDestroyed) {
+      this.#pendingReadyModels.clear();
+      return;
+    }
+    for (let model of this.#pendingReadyModels) {
+      void this.#settleModelAfterRender(model).catch((error) => {
+        this.#dispositionModel(model, 'error');
+        this.handleRenderError(error);
+      });
+    }
+    this.#pendingReadyModels.clear();
+  }
+
+  async #settleModelAfterRender(model: Model): Promise<void> {
+    let modelState = this.#modelStates.get(model);
+    if (!modelState || modelState.isReady) {
+      return;
+    }
+    await this.store.loaded();
+    modelState.state.set('status', 'ready');
+    modelState.isReady = true;
+    modelState.readyDeferred.fulfill();
+  }
+
+  #dispositionModel(model: Model, status: RenderStatus = 'error') {
+    let modelState = this.#modelStates.get(model);
+    if (!modelState) {
+      return;
+    }
+    this.#pendingReadyModels.delete(model);
+    modelState.state.set('status', status);
+    if (!modelState.isReady) {
+      modelState.isReady = true;
+      modelState.readyDeferred.fulfill();
+    }
+  }
+
+  #rejectAllModelStates(status: RenderStatus = 'error') {
+    for (let model of this.#modelStates.keys()) {
+      this.#dispositionModel(model, status);
+    }
+  }
+
+  #setAllModelStatuses(status: RenderStatus) {
+    for (let model of this.#modelStates.keys()) {
+      this.#dispositionModel(model, status);
+    }
+  }
+
+  // Headless prerendering drives Ember via this hook, and it may repeatedly
+  // transition between render subroutes while the parent render route is
+  // already active. Ember already provides the contexts (id, nonce,
+  // options) for nested routes, so blindly calling
+  // transitionTo(...args) can end up with duplicate or stale arguments,
+  // triggering "More context objects were passed" errors. This wrapper
+  // normalizes the parameter list: if we get a full render transition we
+  // pass the canonical base params; for render.* routes we strip any existing
+  // base params (or establish them first if they changed) before handing off
+  // to the router. Everything runs inside Ember's run loop via join().
+  #setupTransitionHelper(id: string, nonce: string, options: string) {
+    let baseParams: [string, string, string] = [id, nonce, options];
+    this.renderBaseParams = baseParams;
+    (globalThis as any).boxelTransitionTo = (
+      routeName: Parameters<RouterService['transitionTo']>[0],
+      ...params: any[]
+    ) => {
+      if (routeName === 'render') {
+        if (params.length >= 3) {
+          baseParams = params.slice(0, 3) as [string, string, string];
+        }
+        this.renderBaseParams = baseParams;
+        join(() =>
+          this.router.transitionTo(
+            routeName as never,
+            ...(baseParams as unknown as never[]),
+          ),
+        );
+        return;
+      }
+      if (typeof routeName === 'string' && routeName.startsWith('render.')) {
+        let normalized = [...params];
+        if (
+          normalized.length >= 3 &&
+          normalized[0] === baseParams[0] &&
+          normalized[1] === baseParams[1] &&
+          normalized[2] === baseParams[2]
+        ) {
+          normalized = normalized.slice(3);
+        } else if (normalized.length >= 3) {
+          let targetBase = normalized.slice(0, 3) as [string, string, string];
+          join(() => this.router.transitionTo('render', ...targetBase));
+          baseParams = targetBase;
+          this.renderBaseParams = baseParams;
+          normalized = normalized.slice(3);
+        }
+        join(() => this.router.transitionTo(routeName, ...normalized));
+        return;
+      }
+      join(() =>
+        this.router.transitionTo(routeName as never, ...(params as never[])),
+      );
     };
   }
 
   @action
   error(error: any, transition: Transition) {
     transition.abort();
-    let serializedError: string;
+    this.handleRenderError(error, transition);
+    return false;
+  }
+
+  private handleRenderError = (errorOrEvent: any, transition?: Transition) => {
+    let event =
+      'reason' in errorOrEvent || 'detail' in errorOrEvent
+        ? errorOrEvent
+        : undefined;
+    let error: any;
+    if (event) {
+      error =
+        'reason' in event
+          ? (event as any).reason
+          : (event as CustomEvent).detail?.reason;
+    } else {
+      error = errorOrEvent;
+    }
+    this.#processRenderError(error, transition);
+  };
+
+  #processRenderError(error: any, transition?: Transition) {
+    this.currentTransition?.abort();
+    this.#rejectAllModelStates('error');
+    let context = this.#deriveErrorContext(transition);
+    let serializedError = this.#serializeRenderError(error, transition);
+    let signature = this.#makeErrorSignature(serializedError, context);
+    if (signature === this.lastRenderErrorSignature) {
+      return;
+    }
+    this.lastRenderErrorSignature = signature;
+    this.renderErrorState.setError({
+      reason: serializedError,
+      cardId: context.cardId,
+      nonce: context.nonce,
+    });
+    this.#applyErrorMetadata(context);
+    this.#transitionToErrorRoute(transition);
+  }
+
+  #serializeRenderError(error: any, transition?: Transition): string {
     try {
-      JSON.parse(error.message);
-      serializedError = error.message;
-    } catch (e) {
+      let cardError: CardError = JSON.parse(error.message);
+      return JSON.stringify(
+        this.#stripLastKnownGoodHtml({
+          type: 'error',
+          error: cardError,
+        } as RenderError),
+        null,
+        2,
+      );
+    } catch (_e) {
       let current: Transition['to'] | null = transition?.to;
       let id: string | undefined;
       do {
@@ -161,13 +467,164 @@ export default class RenderRoute extends Route<Model> {
           current = current?.parent;
         }
       } while (current && !id);
-      serializedError = JSON.stringify(
-        formattedError(id, error).errors[0],
+      if (isCardError(error)) {
+        return JSON.stringify(
+          this.#stripLastKnownGoodHtml({
+            type: 'error',
+            error: serializableError(error),
+          }),
+          null,
+          2,
+        );
+      }
+      let errorJSONAPI = formattedError(id, error).errors[0];
+      let errorPayload = errorJsonApiToErrorEntry(errorJSONAPI);
+      return JSON.stringify(
+        this.#stripLastKnownGoodHtml(errorPayload),
         null,
         2,
       );
     }
-    this.router.transitionTo('render-error', serializedError);
-    return false;
+  }
+
+  #stripLastKnownGoodHtml<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.map((item) =>
+        this.#stripLastKnownGoodHtml(item),
+      ) as unknown as T;
+    }
+    if (value && typeof value === 'object') {
+      let entries = Object.entries(value).reduce<Record<string, unknown>>(
+        (acc, [key, val]) => {
+          if (key === 'lastKnownGoodHtml') {
+            return acc;
+          }
+          acc[key] = this.#stripLastKnownGoodHtml(val);
+          return acc;
+        },
+        {},
+      );
+      return entries as T;
+    }
+
+    // also strip out query params in URL like ?noCache
+    if (
+      value &&
+      typeof value === 'string' &&
+      !value.includes(' ') &&
+      (value.startsWith('http://') || value.startsWith('https://'))
+    ) {
+      let parsed: URL | undefined;
+      try {
+        parsed = new URL(value);
+      } catch (e) {
+        return value;
+      }
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.href as T;
+    }
+    return value;
+  }
+
+  #deriveErrorContext(transition?: Transition): {
+    cardId?: string;
+    nonce?: string;
+  } {
+    let cardId: string | undefined;
+    let nonce: string | undefined;
+    let base = this.renderBaseParams;
+    if (base) {
+      cardId = this.#normalizeCardId(base[0]);
+      nonce = base[1];
+    }
+    if ((!cardId || !nonce) && transition) {
+      let current: Transition['to'] | null = transition.to;
+      while (current) {
+        let params = current.params as Record<string, unknown> | undefined;
+        if (params) {
+          if (!cardId && typeof params.id === 'string') {
+            cardId = this.#normalizeCardId(params.id);
+          }
+          if (!nonce && typeof params.nonce === 'string') {
+            nonce = params.nonce;
+          }
+        }
+        current = current.parent;
+      }
+    }
+    return { cardId, nonce };
+  }
+
+  #makeErrorSignature(
+    serializedError: string,
+    context: { cardId?: string; nonce?: string },
+  ): string {
+    return JSON.stringify({
+      reason: serializedError,
+      cardId: context.cardId ?? null,
+      nonce: context.nonce ?? null,
+    });
+  }
+
+  #normalizeCardId(id: string): string {
+    try {
+      let decoded = decodeURIComponent(id);
+      return decoded.replace(/\.json$/, '');
+    } catch {
+      return id.replace(/\.json$/, '');
+    }
+  }
+
+  #applyErrorMetadata(context: { cardId?: string; nonce?: string }) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    if (container) {
+      container.dataset.prerenderStatus = 'error';
+      if (context.cardId) {
+        container.dataset.prerenderId = context.cardId;
+      }
+      if (context.nonce) {
+        container.dataset.prerenderNonce = context.nonce;
+      }
+    }
+    let errorElement = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    if (errorElement) {
+      if (context.cardId) {
+        errorElement.dataset.prerenderId = context.cardId;
+      }
+      if (context.nonce) {
+        errorElement.dataset.prerenderNonce = context.nonce;
+      }
+    }
+  }
+
+  #transitionToErrorRoute(transition?: Transition) {
+    let baseParams = this.renderBaseParams;
+    if (baseParams) {
+      if (transition) {
+        // During the initial render transition Ember expects to finalize the
+        // parent route, so stick with intermediateTransitionTo to avoid
+        // queueing a second render transition with missing params.
+        this.intermediateTransitionTo('render.error', ...baseParams);
+      } else {
+        // Once the render route is already active we can safely let the router
+        // handle the subroute transition, but schedule it within the run loop to
+        // avoid the hangs we saw when using intermediateTransitionTo.
+        join(() => this.router.transitionTo('render.error', ...baseParams));
+      }
+      return;
+    }
+    if (transition) {
+      this.intermediateTransitionTo('render.error');
+    } else {
+      join(() => this.router.transitionTo('render.error'));
+    }
   }
 }

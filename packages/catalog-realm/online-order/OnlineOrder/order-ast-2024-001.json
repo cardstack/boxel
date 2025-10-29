@@ -1,29 +1,44 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OnlineOrder",
+        "module": "../online-order"
+      }
+    },
     "type": "card",
     "attributes": {
-      "orderNumber": "AST-2024-001",
-      "customerEmail": "sophia.nakamura@university.edu",
-      "orderStatus": "completed",
-      "orderTotal": 156.90,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
       "orderDate": "2024-12-28T09:15:00.000Z",
-      "shippingAddress": "Dr. Sophia Nakamura\n1847 Pine Street, Apt 204\nSeattle, WA 98101\nUnited States",
+      "orderTotal": 156.9,
+      "orderNumber": "AST-2024-001",
+      "orderStatus": "completed",
+      "customerEmail": "sophia.nakamura@university.edu",
       "paymentMethod": "Credit Card (**** 4567)",
       "trackingNumber": "1Z999AA1234567890",
-      "title": "AST-2024-001",
-      "description": "Completed order for wellness research supplies including sage bundle and essential oils."
+      "shippingAddress": {
+        "city": "Seattle",
+        "state": "Washington",
+        "country": {
+          "code": "US",
+          "name": "United States"
+        },
+        "postalCode": "98195",
+        "poBoxNumber": "352350",
+        "addressLine1": "University of Washington",
+        "addressLine2": "Computer Science Department"
+      }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../online-order",
-        "name": "OnlineOrder"
       }
     }
   }

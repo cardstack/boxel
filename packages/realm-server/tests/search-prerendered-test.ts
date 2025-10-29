@@ -939,6 +939,38 @@ module(basename(__filename), function () {
           ]);
         });
 
+        test('gets no results when asking for a type that the realm does not have knowledge of', async function (assert) {
+          let complexQuery = {
+            filter: {
+              on: {
+                module: `http://some-realm-server/some-realm/some-card`,
+                name: 'SomeCard',
+              },
+              not: {
+                eq: {
+                  firstName: 'Peter',
+                },
+              },
+            },
+            prerenderedHtmlFormat: 'embedded',
+          };
+
+          let response = await request
+            .post('/_search-prerendered')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(complexQuery);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+
+          assert.strictEqual(
+            json.data.length,
+            0,
+            'returned results count is correct',
+          );
+        });
+
         test('can sort prerendered instances using QUERY method', async function (assert) {
           let query = {
             sort: [

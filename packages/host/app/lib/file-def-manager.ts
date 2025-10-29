@@ -16,10 +16,11 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import type { default as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import type {
@@ -99,6 +100,9 @@ export default class FileDefManagerImpl
   implements FileDefManager, PrivilegedFileDefManager
 {
   private downloadCache: Map<string, CacheEntry> = new Map();
+  // In-flight fetch promises so concurrent callers share the same network request
+  private inFlightTextFetches: Map<string, Promise<string>> = new Map();
+  private inFlightBlobFetches: Map<string, Promise<Blob>> = new Map();
   contentHashCache: Map<string, string> = new Map(); // Maps content hash to URL
   invalidUrlCache: Set<string> = new Set(); // Cache for URLs where content hash validation failed
   private client: ExtendedClient;
@@ -158,7 +162,15 @@ export default class FileDefManagerImpl
     let response = await this.client.uploadContent(content, {
       type: contentType,
     });
-    let url = this.client.mxcUrlToHttp(response.content_uri);
+    let url = this.client.mxcUrlToHttp(
+      response.content_uri,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
     if (!url) {
       throw new Error('Failed to convert mxcUrl to http');
     }
@@ -172,22 +184,49 @@ export default class FileDefManagerImpl
 
   // Validates the content hash against the contents of the URL and then updates the cache
   async recacheContentHash(contentHash: string, url: string) {
-    if (this.invalidUrlCache.has(url)) {
+    const canonicalKey = canonicalizeMatrixMediaKey(url) || url;
+    if (this.invalidUrlCache.has(canonicalKey)) {
       // Skipping re-caching for this url as it was previously checked and is invalid
       return;
     }
+
     let content = await this.downloadContentAsText(url);
     const fetchedContentHash = await this.getContentHash(content);
     if (fetchedContentHash !== contentHash) {
       console.warn(
         `Content hash mismatch for URL: ${url}, skipping re-caching step`,
       );
-      this.invalidUrlCache.add(url);
+      // mark the canonical key as invalid so other URL variants won't retry
+      this.invalidUrlCache.add(canonicalKey);
       return;
     }
 
-    // Update the cache with the new URL for the content hash
-    this.contentHashCache.set(contentHash, url);
+    // Normalize the URL we store in the content hash cache so consumers
+    // get a usable HTTP URL. If we have an mxc:// canonical key, convert
+    // it back to an HTTP download URL via the client; otherwise store the
+    // original provided url.
+    let storedUrl = url;
+    if (canonicalKey.startsWith('mxc://')) {
+      try {
+        const maybeHttp = this.client.mxcUrlToHttp(
+          canonicalKey,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          true,
+        );
+        if (maybeHttp) {
+          storedUrl = maybeHttp;
+        }
+      } catch (e) {
+        // fallback to original url
+      }
+    }
+
+    // Update the cache with the normalized URL for the content hash
+    this.contentHashCache.set(contentHash, storedUrl);
   }
 
   async uploadCards(cards: CardDef[]): Promise<FileDef[]> {
@@ -342,27 +381,90 @@ export default class FileDefManagerImpl
   }
 
   async downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob> {
-    const response = await fetch(serializedFile.url, {
-      headers: {
-        Authorization: `Bearer ${this.client.getAccessToken()}`,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error. Status: ${response.status}`);
+    const canonicalKey =
+      canonicalizeMatrixMediaKey(serializedFile.url) || serializedFile.url;
+    // if there's already an in-flight blob fetch for this canonical key, await it
+    const inFlight = this.inFlightBlobFetches.get(canonicalKey);
+    if (inFlight) {
+      return await inFlight;
     }
-    return await response.blob();
+
+    const fetchPromise = (async () => {
+      const response = await fetch(serializedFile.url, {
+        headers: {
+          Authorization: `Bearer ${this.client.getAccessToken()}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error. Status: ${response.status}`);
+      }
+      return await response.blob();
+    })();
+
+    this.inFlightBlobFetches.set(canonicalKey, fetchPromise);
+    try {
+      return await fetchPromise;
+    } finally {
+      this.inFlightBlobFetches.delete(canonicalKey);
+    }
   }
 
   async downloadContentAsText(url: string): Promise<string> {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${this.client.getAccessToken()}`,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error. Status: ${response.status}`);
+    const canonicalKey = canonicalizeMatrixMediaKey(url) || url;
+
+    // Check the cache first (text cache entries stored under canonicalKey)
+    const cachedEntry = this.downloadCache.get(canonicalKey);
+    if (
+      cachedEntry &&
+      Date.now() - cachedEntry.timestamp < CACHE_EXPIRATION_MS
+    ) {
+      return cachedEntry.content;
     }
-    return await response.text();
+
+    // if there's already an in-flight text fetch for this canonical key, await it
+    const inFlight = this.inFlightTextFetches.get(canonicalKey);
+    if (inFlight) {
+      return await inFlight;
+    }
+
+    const fetchPromise = (async () => {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${this.client.getAccessToken()}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error. Status: ${response.status}`);
+      }
+      const text = await response.text();
+
+      // store text in the cache under canonicalKey for future callers
+      try {
+        this.downloadCache.set(canonicalKey, {
+          content: text,
+          timestamp: Date.now(),
+        });
+        if (this.downloadCache.size > 100) {
+          this.cleanupCache();
+        }
+      } catch (e) {
+        // ignore cache set failures; we still return the text
+        console.warn('downloadContentAsText: failed to cache', {
+          url,
+          canonicalKey,
+          err: e,
+        });
+      }
+
+      return text;
+    })();
+
+    this.inFlightTextFetches.set(canonicalKey, fetchPromise);
+    try {
+      return await fetchPromise;
+    } finally {
+      this.inFlightTextFetches.delete(canonicalKey);
+    }
   }
 
   async downloadAsFileInBrowser(serializedFile: SerializedFile) {
@@ -397,29 +499,7 @@ export default class FileDefManagerImpl
     ) {
       throw new Error(`Unsupported file type: ${serializedFile.contentType}`);
     }
-
-    // Check cache first
-    const cachedEntry = this.downloadCache.get(serializedFile.url);
-    if (
-      cachedEntry &&
-      Date.now() - cachedEntry.timestamp < CACHE_EXPIRATION_MS
-    ) {
-      return JSON.parse(cachedEntry.content) as LooseSingleCardDocument;
-    }
-
     const content = await this.downloadContentAsText(serializedFile.url);
-
-    // Update cache
-    this.downloadCache.set(serializedFile.url, {
-      content,
-      timestamp: Date.now(),
-    });
-
-    // Clean up cache if it gets too large
-    if (this.downloadCache.size > 100) {
-      this.cleanupCache();
-    }
-
     return JSON.parse(content) as LooseSingleCardDocument;
   }
 

@@ -1,120 +1,109 @@
-import { isTesting } from '@embroider/macros';
+import {
+  type CssGroups,
+  type CssRuleMap,
+  normalizeCssValue,
+  normalizeSelector,
+} from './theme-css.ts';
 
-function normalizeSelector(selectorName: string): string {
-  const selector = selectorName.trim();
-  if (selector === ':root' || selector === 'root') {
-    return ':root';
-  }
-  if (selector === '.dark') {
-    return '.dark';
-  }
-  if (selector.startsWith('@theme')) {
-    return selector;
-  }
-  return selector;
-}
+const COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
+const BLOCK_PATTERN = /(.*?)\{([\s\S]*?)\}/g;
+const PROPERTY_PATTERN = /^[a-z-]+$/i;
 
-function parseCssRules(rules?: string): Map<string, string> | undefined {
+// Turns a CSS declaration block into a property-value map.
+const parseCssDeclarations = (rules?: string): CssRuleMap | undefined => {
   if (!rules?.trim()) {
     return;
   }
-  const cssMap = new Map<string, string>();
-  const declarations = rules.split(';').filter((decl) => decl.trim());
-  for (const declaration of declarations) {
+
+  const cssMap: CssRuleMap = new Map();
+  for (const declaration of rules.split(';')) {
+    if (!declaration.trim()) {
+      continue;
+    }
     const colonIndex = declaration.indexOf(':');
-    if (colonIndex > 0) {
-      const property = declaration.substring(0, colonIndex).trim();
-      const value = declaration.substring(colonIndex + 1).trim();
-      if (property.startsWith('--') || property.match(/^[a-z-]+$/)) {
-        cssMap.set(property, value);
-      }
+    if (colonIndex <= 0) {
+      continue;
     }
+    const property = declaration.slice(0, colonIndex).trim();
+    const value = declaration.slice(colonIndex + 1).trim();
+    if (
+      !property ||
+      (!property.startsWith('--') && !PROPERTY_PATTERN.test(property))
+    ) {
+      continue;
+    }
+    const normalizedValue = normalizeCssValue(value);
+    if (!normalizedValue) {
+      continue;
+    }
+    cssMap.set(property, normalizedValue);
   }
-  return cssMap;
-}
 
-function parseCSSGroups(
-  cssString: string,
-): Map<string, Map<string, string>> | undefined {
-  const groups = new Map<string, Map<string, string>>();
-  const css = cssString
-    .replace(/\/\*[\s\S]*?\*\//g, '') // remove comments
-    .replace(/\s+/g, ' ') // replace multiple spaces with a single space
-    .trim();
+  return cssMap.size ? cssMap : undefined;
+};
 
-  if (!css?.length) {
+// Groups selectors and their declaration maps from raw CSS text.
+export function parseCssGroups(
+  cssString?: string | null,
+): CssGroups | undefined {
+  const sanitized = cssString
+    ? cssString.replace(COMMENT_PATTERN, ' ').trim()
+    : '';
+  if (!sanitized) {
     return;
   }
 
-  const blockRegex = /(.*?)\{(.*?)\}/g;
-  let matches = [...css.matchAll(blockRegex)];
-  if (!matches?.length) {
-    const rules = parseCssRules(css);
-    if (rules) {
-      groups.set(':root', rules);
+  const groups: CssGroups = new Map();
+  for (const match of sanitized.matchAll(BLOCK_PATTERN)) {
+    const selectorSource = match[1]?.trim();
+    const selector = selectorSource
+      ? (normalizeSelector(selectorSource) ?? ':root')
+      : ':root';
+    const rules = parseCssDeclarations(match[2]);
+    if (!rules?.size) {
+      continue;
     }
-  } else {
-    for (let match of matches) {
-      const selector = match[1]?.trim()
-        ? normalizeSelector(match[1].trim())
-        : ':root';
-      const rules = parseCssRules(match[2]?.trim());
-      if (rules?.size) {
-        groups.set(selector, rules);
-      }
+    const existing = groups.get(selector) ?? new Map();
+    for (const [property, value] of rules) {
+      existing.set(property, value);
+    }
+    groups.set(selector, existing);
+  }
+
+  if (!groups.size) {
+    const fallbackRules = parseCssDeclarations(sanitized);
+    if (fallbackRules?.size) {
+      groups.set(':root', fallbackRules);
     }
   }
-  return groups;
+
+  return groups.size ? groups : undefined;
 }
 
-export function extractCssVariables(cssString?: string | null) {
+// Returns the variables for a requested selector as `--name: value;` string.
+export function extractCssVariables(
+  cssString?: string | null,
+  selector = ':root',
+): string | undefined {
   try {
-    if (!cssString?.trim()?.length) {
+    const groups = parseCssGroups(cssString);
+    if (!groups?.size) {
       return;
     }
-    const groups = parseCSSGroups(cssString);
-    const rootRules = groups?.get(':root'); // only considering :root for now
-    if (!rootRules?.size) {
+
+    const normalizedSelector = selector
+      ? (normalizeSelector(selector) ?? ':root')
+      : ':root';
+    const rules = groups.get(normalizedSelector);
+    if (!rules?.size) {
       return;
     }
-    const inlineDeclarations: string[] = [];
-    for (const [property, value] of rootRules) {
-      if (property.startsWith('--')) {
-        inlineDeclarations.push(`${property}: ${value}`);
-      }
-    }
-    return inlineDeclarations.join('; ');
-  } catch (e) {
-    console.error('Error extracting CSS variables:', e);
+    return [...rules.entries()]
+      .filter(([property]) => property.startsWith('--'))
+      .map(([property, value]) => `${property}: ${value}`)
+      .join('; ');
+  } catch (error) {
+    console.error('Error extracting CSS variables:', error);
     return;
   }
-}
-
-export function getStyleConversions() {
-  if (isTesting()) {
-    return '--boxel-example: 1px;'; // stable, concise output for matching in tests
-  }
-  return `/* spacing */
---boxel-spacing: calc(var(--spacing, var(--_boxel-sp-unit)) * 4);
---boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio));
---boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio));
---boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio));
---boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio));
---boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));
---boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio));
---boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio));
---boxel-sp: var(--boxel-spacing);
---boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio));
---boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio));
---boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));
---boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio));
-/* border-radius */
---boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
---boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
---boxel-border-radius-sm: calc(var(--boxel-border-radius) - 3px);
---boxel-border-radius: var(--radius, var(--_boxel-radius));
---boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
---boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
---boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
---boxel-form-control-border-radius: var(--radius, var(--_boxel-radius));`;
 }

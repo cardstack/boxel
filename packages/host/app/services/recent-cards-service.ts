@@ -12,10 +12,7 @@ import {
   trimJsonExtension,
 } from '@cardstack/runtime-common';
 
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { RecentCards } from '../utils/local-storage-keys';

@@ -11,6 +11,7 @@ import CircleSpinner from './components/circle-spinner/index.gts';
 import ColorPalette from './components/color-palette/index.gts';
 import ColorPicker from './components/color-picker/index.gts';
 import BoxelContainer from './components/container/index.gts';
+import ContextButton from './components/context-button/index.gts';
 import CopyButton from './components/copy-button/index.gts';
 import DateRangePicker from './components/date-range-picker/index.gts';
 import DndKanbanBoard, {
@@ -59,6 +60,7 @@ import SkeletonPlaceholder from './components/skeleton-placeholder/index.gts';
 import SortDropdown, {
   type SortOption,
 } from './components/sort-dropdown/index.gts';
+import Swatch from './components/swatch/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import BoxelTag from './components/tag/index.gts';
@@ -99,6 +101,7 @@ export {
   CircleSpinner,
   ColorPalette,
   ColorPicker,
+  ContextButton,
   CopyButton,
   DateRangePicker,
   DndColumn,
@@ -127,6 +130,7 @@ export {
   ResizeHandle,
   SkeletonPlaceholder,
   SortDropdown,
+  Swatch,
   Switch,
   TabbedHeader,
   TagList,

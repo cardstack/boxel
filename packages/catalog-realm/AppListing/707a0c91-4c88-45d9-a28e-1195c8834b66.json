@@ -1,0 +1,258 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Study Hub",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/study-hub-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/study-hub-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/study-hub-listing/screenshot_03.png"
+      ],
+      "summary": "A complete study management platform with goals, resources, sessions, flashcards, notes, quizzes, timers, and calendar integration",
+      "cardInfo": {
+        "notes": null,
+        "title": "Study Hub",
+        "description": "StudyHub is a comprehensive study management system that helps students organize their learning journey. It includes features for setting weekly goals, managing study resources, tracking study sessions, creating flashcards, taking notes, practicing with quizzes, using focus timers, and managing study schedules through an integrated calendar. Perfect for students, professionals, and lifelong learners who want to optimize their study efficiency and track their progress.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-hub-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/ca2f3de0-83dc-4d11-aa87-01459f84bcca"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/e083dc9d-112a-4701-859f-84bcca3aa2e5"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/eee8f5cb-51ac-4bf2-93cc-668bd8ab4393"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/2a870145-9f84-4cca-baa2-e5ef5d2d24e9"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/dd1b56b8-d8ba-42cb-96de-dcd03a5ea4ef"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/bcca3aa2-e5ef-4d2d-a4e9-2e220300fa0e"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/2dc9afda-d18c-4ad1-962f-3e3c769f101a"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/c9afdad1-8caa-41d6-af3e-3c769f101a87"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/7287d325-38bd-4243-8433-362a10a445d1"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/cb92d052-87e5-406e-b2de-ca40e62dddee"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/50cb92d0-5287-45a0-ae72-deca40e62ddd"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/30980469-41a0-4ac1-beca-2ede6a59eac4"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../study-hub/StudyHub/my-study-hub"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../annotation/AnnotationCard/dsa-textbook-annotations"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../calendar/CalendarCard/2c3c78cd-fa4f-4988-b098-c8d099557fba"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../calendar/CalendarEvent/61c055c6-d258-4283-af57-0a61b5afc2a0"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../calendar/CalendarEvent/374c08c6-211e-4306-b6f8-3b8aa4a21356"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../calendar/CalendarEvent/biology-exam-review-sept12"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../calendar/CalendarEvent/calculus-study-group-sept2"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../calendar/CalendarEvent/chemistry-lab-prep-sept3"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../calendar/CalendarEvent/cs-project-meeting-sept10"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../calendar/CalendarEvent/literature-discussion-sept9"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../calendar/CalendarEvent/physics-tutoring-sept5"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../flashcard/FlashcardCard/binary-search-complexity"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../flashcard/FlashcardCard/eigenvalues-definition"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../focus-timer/FocusTimerCard/algorithm-study-timer"
+        }
+      },
+      "examples.14": {
+        "links": {
+          "self": "../practice-quiz/PracticeQuizCard/data-structures-quiz"
+        }
+      },
+      "examples.15": {
+        "links": {
+          "self": "../study-goal/StudyGoal/algebra-review"
+        }
+      },
+      "examples.16": {
+        "links": {
+          "self": "../study-goal/StudyGoal/complete-textbook"
+        }
+      },
+      "examples.17": {
+        "links": {
+          "self": "../study-goal/StudyGoal/daily-coding"
+        }
+      },
+      "examples.18": {
+        "links": {
+          "self": "../study-note/StudyNoteCard/big-o-notation-summary"
+        }
+      },
+      "examples.19": {
+        "links": {
+          "self": "../study-note/StudyNoteCard/matrix-operations-notes"
+        }
+      },
+      "examples.20": {
+        "links": {
+          "self": "../study-session/StudySession/algorithm-analysis"
+        }
+      },
+      "examples.21": {
+        "links": {
+          "self": "../study-resource/StudyResource/dsa-textbook"
+        }
+      },
+      "examples.22": {
+        "links": {
+          "self": "../study-resource/StudyResource/linear-algebra"
+        }
+      },
+      "examples.23": {
+        "links": {
+          "self": "../study-resource/StudyResource/ml-course"
+        }
+      },
+      "examples.24": {
+        "links": {
+          "self": "../study-session/StudySession/algorithm-analysis"
+        }
+      },
+      "examples.25": {
+        "links": {
+          "self": "../study-session/StudySession/coding-prep"
+        }
+      },
+      "examples.26": {
+        "links": {
+          "self": "../study-session/StudySession/math-problems"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/knowledge-management"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/skills-training"
+        }
+      }
+    }
+  }
+}

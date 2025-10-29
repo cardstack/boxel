@@ -1,0 +1,77 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Practice Quiz",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/practice-quiz-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/practice-quiz-listing/screenshot_02.png"
+      ],
+      "summary": "Interactive quiz card for testing knowledge and skills with customizable questions, time limits, and difficulty levels",
+      "cardInfo": {
+        "notes": "Supports customizable difficulty levels, time limits, and subject categorization. Tracks completion status and scores.",
+        "title": "Practice Quiz",
+        "description": "A comprehensive quiz application that allows users to create and take interactive quizzes with multiple-choice questions, time tracking, and progress monitoring. Perfect for educational assessments, skill testing, and knowledge verification.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/practice-quiz-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/2dc9afda-d18c-4ad1-962f-3e3c769f101a"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/c9afdad1-8caa-41d6-af3e-3c769f101a87"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../practice-quiz/PracticeQuizCard/data-structures-quiz"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/developer-tools-code"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

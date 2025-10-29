@@ -1515,6 +1515,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .doesNotExist('Menu should be hidden after clicking create button');
 
     // Make create button enabled
+    await waitFor('[data-test-room-settled]');
     await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
     await click('[data-test-send-message-btn]');
     // Test menu opens again and create with options selected
@@ -1536,6 +1537,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       );
 
     // Make create button enabled
+    await waitFor('[data-test-room-settled]');
     await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
     await click('[data-test-send-message-btn]');
     // Test click outside functionality
@@ -1560,6 +1562,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .doesNotExist('Menu should not open on normal click');
 
     // Make create button enalebed
+    await waitFor('[data-test-room-settled]');
     await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
     await click('[data-test-send-message-btn]');
     // Verify tooltip shows correct text after normal click

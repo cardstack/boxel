@@ -190,7 +190,7 @@ module('Integration | card-prerender', function (hooks) {
           cleanWhiteSpace(`<div
             class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
             data-test-boxel-card-container
-            style="--boxel-example: 1px;"
+            style
             data-test-card="http://test-realm/test/Pet/mango"
             data-test-card-format="isolated"
             data-test-field-component-card>
@@ -212,7 +212,7 @@ module('Integration | card-prerender', function (hooks) {
           cleanWhiteSpace(`<div
             class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
             data-test-boxel-card-container
-            style="--boxel-example: 1px;"
+            style
             data-test-card="http://test-realm/test/Pet/vangogh"
             data-test-card-format="isolated"
             data-test-field-component-card>
@@ -307,7 +307,7 @@ module('Integration | card-prerender', function (hooks) {
                 stroke-linejoin="round"
                 stroke-width="2"
                 class="lucide lucide-captions card-type-icon"
-                viewBox="0 0 24 24"
+                viewbox="0 0 24 24"
                 data-test-card-type-icon><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>
             </div>
             <div class="info-section">

@@ -48,6 +48,7 @@
 - To run a subset of the tests:
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
+- run `pnpm lint` in this directory to lint changes made to this package
 
 ### packages/matrix
 
@@ -75,11 +76,17 @@
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
   Make sure not to commit `.only` to source control
+- run `pnpm lint` directly in this directory to lint changes made to this package
 
 ### packages/runtime-common
 
 - Functionality is tested via host and/or realm-server tests
+- run `pnpm lint` directly in packages/host or directly in packages/realm-server to lint for changes made in this package. This package will be linted since both packages/host and package/realm-server consume this package.
 
 ## PR Instructions
 
 - Always run `pnpm lint` in modified packages before committing
+
+## Base realm imports
+
+- Only card definitions (files run through the card loader) can use static ESM imports from `https://cardstack.com/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.

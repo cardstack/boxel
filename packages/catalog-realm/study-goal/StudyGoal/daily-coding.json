@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "goalTitle": "Daily Coding Practice",
+      "description": "Solve at least 2 coding problems every day to maintain problem-solving skills.",
+      "targetDate": "2025-01-18",
+      "priority": "medium",
+      "category": "daily",
+      "isCompleted": false,
+      "progress": 85,
+      "subject": "Programming",
+      "createdAt": "2025-01-08T08:00:00.000Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../study-goal",
+        "name": "StudyGoal"
+      }
+    }
+  }
+}

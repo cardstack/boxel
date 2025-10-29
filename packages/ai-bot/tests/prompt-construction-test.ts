@@ -17,12 +17,13 @@ import type {
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { EventStatus } from 'matrix-js-sdk';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { readFileSync } from 'fs-extra';
 import * as path from 'path';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
 import {
   type LooseCardResource,
+  ensureTrailingSlash,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import {
@@ -32,6 +33,15 @@ import {
   getTools,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
+
+const DEFAULT_CATALOG_REALM_URL = 'http://localhost:4201/catalog/';
+const catalogRealmURL = ensureTrailingSlash(
+  process.env.RESOLVED_CATALOG_REALM_URL ?? DEFAULT_CATALOG_REALM_URL,
+);
+
+function replaceCatalogRealmURL(value: string): string {
+  return value.split(DEFAULT_CATALOG_REALM_URL).join(catalogRealmURL);
+}
 
 function oldPatchTool(card: CardDef, properties: any): Tool {
   return {
@@ -1899,11 +1909,12 @@ Attached Files (files with newer versions don't show their content):
   });
 
   test('should include instructions in system prompt for skill cards', async () => {
+    const rawEvents = readFileSync(
+      path.join(__dirname, 'resources/chats/added-skill.json'),
+      'utf-8',
+    );
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(__dirname, 'resources/chats/added-skill.json'),
-        'utf-8',
-      ),
+      replaceCatalogRealmURL(rawEvents),
     );
 
     // Set up mock responses for the skill card downloads
@@ -1932,7 +1943,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'http://localhost:4201/catalog/Skill/generate-product-requirements',
+          id: `${catalogRealmURL}Skill/generate-product-requirements`,
           attributes: {
             instructions:
               'Given a prompt, fill in the product requirements document. Update the appTitle. Update the prompt to be grammatically accurate. Description should be 1 or 2 short sentences. In overview, provide 1 or 2 paragraph summary. In schema, make a list of the schema for the app. In Layout & Navigation, provide brief information for the layout and navigation of the app. Offer to update the attached card with this info.',
@@ -2048,8 +2059,7 @@ Attached Files (files with newer versions don't show their content):
           },
           meta: {
             adoptsFrom: {
-              module:
-                'http://localhost:4201/catalog/product-requirement-document',
+              module: `${catalogRealmURL}product-requirement-document`,
               name: 'ProductRequirementDocument',
             },
           },

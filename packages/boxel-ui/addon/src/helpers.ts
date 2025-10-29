@@ -1,3 +1,4 @@
+import { copyCardURLToClipboard } from './helpers/clipboard.ts';
 import cn from './helpers/cn.ts';
 import compact from './helpers/compact.ts';
 import { getContrastColor } from './helpers/contrast-color.ts';
@@ -7,7 +8,7 @@ import { dayjsFormat } from './helpers/dayjs-format.ts';
 import element from './helpers/element.ts';
 import {
   extractCssVariables,
-  getStyleConversions,
+  parseCssGroups,
 } from './helpers/extract-css-variables.ts';
 import formatAge from './helpers/format-age.ts';
 import formatCountdown from './helpers/format-countdown.ts';
@@ -21,13 +22,28 @@ import formatNumber from './helpers/format-number.ts';
 import formatOrdinal from './helpers/format-ordinal.ts';
 import formatPeriod from './helpers/format-period.ts';
 import formatRelativeTime from './helpers/format-relative-time.ts';
+import { generateCssVariables } from './helpers/generate-css-variables.ts';
 import { add, divide, multiply, subtract } from './helpers/math-helpers.ts';
 import menuDivider, { MenuDivider } from './helpers/menu-divider.ts';
-import menuItem, { MenuItem, menuItemFunc } from './helpers/menu-item.ts';
+import menuItem, {
+  type MenuItemOptions,
+  MenuItem,
+  menuItemFunc,
+  toMenuItems,
+} from './helpers/menu-item.ts';
 import optional from './helpers/optional.ts';
 import pick from './helpers/pick.ts';
 import { sanitizeHtml, sanitizeHtmlSafe } from './helpers/sanitize-html.ts';
 import { substring } from './helpers/string.ts';
+import {
+  type CssGroupInput,
+  type CssGroups,
+  type CssRuleMap,
+  type CssVariableEntry,
+  buildCssGroups,
+  entriesToCssRuleMap,
+  normalizeCssRuleMap,
+} from './helpers/theme-css.ts';
 import {
   and,
   bool,
@@ -44,13 +60,16 @@ export {
   add,
   and,
   bool,
+  buildCssGroups,
   cn,
   compact,
+  copyCardURLToClipboard,
   cssVar,
   currencyFormat,
   dayjsFormat,
   divide,
   element,
+  entriesToCssRuleMap,
   eq,
   extractCssVariables,
   formatAge,
@@ -65,8 +84,8 @@ export {
   formatOrdinal,
   formatPeriod,
   formatRelativeTime,
+  generateCssVariables,
   getContrastColor,
-  getStyleConversions,
   gt,
   gte,
   lt,
@@ -77,12 +96,23 @@ export {
   menuItem,
   menuItemFunc,
   multiply,
+  normalizeCssRuleMap,
   not,
   optional,
   or,
+  parseCssGroups,
   pick,
   sanitizeHtml,
   sanitizeHtmlSafe,
   substring,
   subtract,
+  toMenuItems,
+};
+
+export type {
+  CssGroupInput,
+  CssGroups,
+  CssRuleMap,
+  CssVariableEntry,
+  MenuItemOptions,
 };

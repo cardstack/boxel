@@ -1,6 +1,10 @@
 #! /bin/sh
 
+DEFAULT_CATALOG_REALM_URL='https://app.boxel.ai/catalog/'
+CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+
 NODE_NO_WARNINGS=1 \
+  NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
@@ -15,9 +19,8 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://app.boxel.ai/experiments/' \
   --toUrl='https://app.boxel.ai/experiments/' \
   \
-  --fromUrl='https://app.boxel.ai/catalog/' \
-  --toUrl='https://app.boxel.ai/catalog/' \
+  --fromUrl="${CATALOG_REALM_URL}" \
+  --toUrl="${CATALOG_REALM_URL}" \
   \
   --fromUrl='https://app.boxel.ai/skills/' \
   --toUrl='https://app.boxel.ai/skills/'
-

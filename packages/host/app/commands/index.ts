@@ -12,6 +12,7 @@ import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
+import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
@@ -19,24 +20,29 @@ import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as ListingBuildCommandModule from './listing-action-build';
 import * as ListingInitCommandModule from './listing-action-init';
 import * as ListingCreateCommandModule from './listing-create';
+import * as ListingGenerateExampleCommandModule from './listing-generate-example';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
+import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
 import * as PatchFieldsCommandModule from './patch-fields';
+import * as PopulateWithSampleDataCommandModule from './populate-with-sample-data';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
 import * as SaveCardCommandModule from './save-card';
+import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
+import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
 import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
@@ -113,6 +119,14 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ListingRemixCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-generate-example',
+    ListingGenerateExampleCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/open-in-interact-mode',
+    OpenInInteractModeModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-card-instance',
     PatchCardInstanceCommandModule,
   );
@@ -143,6 +157,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/search-cards',
     SearchCardsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/search-and-choose',
+    SearchAndChooseCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-ai-assistant-room',
@@ -209,6 +227,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     UseAiAssistantCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/generate-example-cards',
+    GenerateExampleCardsCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/generate-readme-spec',
     GenerateReadmeSpecCommandModule,
   );
@@ -228,30 +250,46 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/one-shot-llm-request',
     OneShotLlmRequestCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/populate-with-sample-data',
+    PopulateWithSampleDataCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/set-user-system-card',
+    SetUserSystemCardCommandModule,
+  );
 }
 
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AddFieldToCardDefinitionCommandModule.default,
   AddSkillsToRoomCommandModule.default,
-  AskAiCommandModule.default,
   ApplySearchReplaceBlockCommandModule.default,
+  AskAiCommandModule.default,
   CopyCardToStackCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
   CreateSpecCommandModule.default,
+  GenerateExampleCardsCommandModule.default,
   GetCardCommandModule.default,
+  OneShotLlmRequestCommandModule.default,
   OpenAiAssistantRoomCommandModule.default,
+  OpenAiAssistantRoomCommandModule.default,
+  OpenInInteractModeModule.default,
+  OpenWorkspaceCommandModule.default,
   OpenWorkspaceCommandModule.default,
   PatchFieldsCommandModule.default,
+  PopulateWithSampleDataCommandModule.default,
+  SetUserSystemCardCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
   SaveCardCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,
   SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
-  OpenAiAssistantRoomCommandModule.default,
-  OpenWorkspaceCommandModule.default,
+  SearchAndChooseCommandModule.default,
+  SearchGoogleImagesCommandModule.default,
   SendAiAssistantMessageModule.default,
   SetActiveLlmModule.default,
   ShowCardCommandModule.default,
+  SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
   TransformCardsCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
@@ -259,7 +297,4 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdateSkillActivationCommandModule.default,
   UseAiAssistantCommandModule.default,
   WriteTextFileCommandModule.default,
-  SearchGoogleImagesCommandModule.default,
-  SummarizeSessionCommandModule.default,
-  OneShotLlmRequestCommandModule.default,
 ];

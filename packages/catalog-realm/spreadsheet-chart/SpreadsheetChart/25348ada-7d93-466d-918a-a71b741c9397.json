@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SpreadsheetChart",
+        "module": "../spreadsheet-chart"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "topN": null,
+      "xHeader": "",
+      "yHeader": "",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "chartType": "line",
+      "binaryHeader": null,
+      "categoryHeader": ""
+    },
+    "relationships": {
+      "source": {
+        "links": {
+          "self": "../../spreadsheet/Spreadsheet/9a9c0aae-c998-46c2-a14c-c59c974a06b2"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -23,6 +23,8 @@ import {
   createJWT,
   cardInfo,
 } from './helpers';
+import { query, param } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
@@ -36,17 +38,20 @@ module(basename(__filename), function () {
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
 
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dir: DirResult;
+      dbAdapter: PgAdapter;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dir = args.dir;
+      dbAdapter = args.dbAdapter;
     }
 
     function getRealmSetup() {
@@ -55,6 +60,7 @@ module(basename(__filename), function () {
         testRealmHttpServer,
         request,
         dir,
+        dbAdapter,
       };
     }
     setupBaseRealmServer(hooks, matrixURL);
@@ -89,6 +95,134 @@ module(basename(__filename), function () {
           assert.ok(
             response.headers['last-modified'],
             'last-modified header exists',
+          );
+        });
+
+        test('caches responses and invalidates on write', async function (assert) {
+          let cacheTestPath = 'cache-test.gts';
+          let initialContent = '// initial cache test content';
+
+          await testRealm.write(cacheTestPath, initialContent);
+
+          let firstResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            firstResponse.status,
+            200,
+            'initial request succeeds',
+          );
+          assert.strictEqual(
+            firstResponse.text,
+            initialContent,
+            'initial response body matches',
+          );
+          let cachedResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            cachedResponse.status,
+            200,
+            'second request succeeds',
+          );
+          assert.strictEqual(
+            cachedResponse.headers['x-boxel-cache'],
+            'hit',
+            'second request served from cache',
+          );
+          assert.strictEqual(
+            cachedResponse.text,
+            initialContent,
+            'cached response matches original content',
+          );
+
+          let updatedContent = `${initialContent}\n// updated by test`;
+          await testRealm.write(cacheTestPath, updatedContent);
+
+          let afterWriteResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            afterWriteResponse.status,
+            200,
+            'request after write succeeds',
+          );
+          assert.strictEqual(
+            afterWriteResponse.text,
+            updatedContent,
+            'response reflects updated content',
+          );
+
+          let repopulatedResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            repopulatedResponse.status,
+            200,
+            'subsequent request succeeds',
+          );
+          assert.strictEqual(
+            repopulatedResponse.headers['x-boxel-cache'],
+            'hit',
+            'cache repopulated after miss',
+          );
+          assert.strictEqual(
+            repopulatedResponse.text,
+            updatedContent,
+            'cached response returns updated content',
+          );
+        });
+
+        test('supports noCache query param to bypass cache', async function (assert) {
+          let cacheTestPath = 'cache-test-nocache.gts';
+          let initialContent = '// initial cache test content';
+
+          await testRealm.write(cacheTestPath, initialContent);
+
+          await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          let updatedContent = `${initialContent}\n// updated by test`;
+          await testRealm.write(cacheTestPath, updatedContent);
+
+          let noCacheResponse = await request
+            .get(`/${cacheTestPath}?noCache=true`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            noCacheResponse.status,
+            200,
+            'noCache request succeeds',
+          );
+          assert.strictEqual(
+            noCacheResponse.headers['x-boxel-cache'],
+            'miss',
+            'noCache request reported cache miss',
+          );
+          assert.strictEqual(
+            noCacheResponse.text,
+            updatedContent,
+            'noCache request sees updated content',
+          );
+
+          let cachedResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            cachedResponse.headers['x-boxel-cache'],
+            'miss',
+            'subsequent request fetches from disk because noCache call did not seed cache',
+          );
+          assert.strictEqual(
+            cachedResponse.text,
+            updatedContent,
+            'cache serves updated content after miss repopulates cache',
           );
         });
 
@@ -137,7 +271,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             response.headers['content-type'],
-            'text/plain;charset=UTF-8',
+            'text/plain; charset=utf-8',
             'content type is correct',
           );
           assert.strictEqual(
@@ -432,6 +566,10 @@ module(basename(__filename), function () {
             .send(`//TEST UPDATE\n${cardSrc}`);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.ok(
+            response.headers['x-created'],
+            'created date should be set for new GTS file',
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -480,6 +618,14 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
 
+          let fileResponse = await request
+            .get('/hello-world.txt')
+            .set('Accept', 'application/vnd.card+source');
+          assert.ok(
+            fileResponse.headers['x-created'],
+            'created date should be set for new TXT file',
+          );
+
           let txtFile = join(
             dir.name,
             'realm_server_1',
@@ -489,6 +635,53 @@ module(basename(__filename), function () {
           assert.ok(existsSync(txtFile), 'file exists');
           let src = readFileSync(txtFile, { encoding: 'utf8' });
           assert.strictEqual(src, 'Hello World');
+        });
+
+        test('removes file meta on delete', async function (assert) {
+          // ensure an existing file (write like hello-world first)
+          let reqPath = '/hello-world.txt';
+          let dbPath = 'hello-world.txt';
+          let post = await request
+            .post(reqPath)
+            .set('Accept', 'application/vnd.card+source')
+            .send('hello-world');
+          assert.strictEqual(post.status, 204, 'HTTP 204 status');
+          assert.ok(
+            post.headers['x-created'],
+            'created header present on POST',
+          );
+
+          // row exists in realm_file_meta
+          let rowsBefore = await query(dbAdapter, [
+            'SELECT created_at FROM realm_file_meta WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param(dbPath),
+          ]);
+          assert.strictEqual(
+            rowsBefore.length,
+            1,
+            'meta row exists after POST',
+          );
+
+          // delete the file
+          let del = await request
+            .delete(reqPath)
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(del.status, 204, 'HTTP 204 status');
+
+          // row removed from realm_file_meta
+          let rowsAfter = await query(dbAdapter, [
+            'SELECT 1 FROM realm_file_meta WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param(dbPath),
+          ]);
+          assert.strictEqual(
+            rowsAfter.length,
+            0,
+            'meta row removed after DELETE',
+          );
         });
 
         test('can serialize a card instance correctly after card definition is changed', async function (assert) {

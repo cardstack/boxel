@@ -14,6 +14,9 @@ import {
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
   PUBLISHED_DIRECTORY_NAME,
+  RealmInfo,
+  fetchSessionRoom,
+  REALM_SERVER_REALM,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -67,7 +70,12 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
-  private validPublishedRealmDomains: string[] | undefined;
+  private domainsForPublishedRealms:
+    | {
+        boxelSpace?: string;
+        boxelSite?: string;
+      }
+    | undefined;
 
   constructor({
     serverURL,
@@ -85,7 +93,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
-    validPublishedRealmDomains,
+    domainsForPublishedRealms,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -102,7 +110,10 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
-    validPublishedRealmDomains?: string[];
+    domainsForPublishedRealms?: {
+      boxelSpace?: string;
+      boxelSite?: string;
+    };
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -127,7 +138,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
-    this.validPublishedRealmDomains = validPublishedRealmDomains;
+    this.domainsForPublishedRealms = domainsForPublishedRealms;
     this.realms = [...realms];
   }
 
@@ -155,7 +166,7 @@ export class RealmServer {
             // Actually, we want to use HTTP caching for executable modules which
             // are requested with the "*/*" accept header
             .filter((m) => m !== '*/*')
-            .includes(mimeType as SupportedMimeType)
+            .includes(mimeType as any)
         ) {
           ctx.set('Cache-Control', 'no-store, no-cache, must-revalidate');
         }
@@ -184,7 +195,7 @@ export class RealmServer {
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           createAndMountRealm: this.createAndMountRealm,
-          validPublishedRealmDomains: this.validPublishedRealmDomains,
+          domainsForPublishedRealms: this.domainsForPublishedRealms,
         }),
       )
       .use(this.serveIndex)
@@ -209,7 +220,16 @@ export class RealmServer {
 
   async start() {
     let loadedRealms = await this.loadRealms();
-    this.realms.push(...loadedRealms);
+    for (let loadedRealm of loadedRealms) {
+      const existingIndex = this.realms.findIndex(
+        (r) => r.url === loadedRealm.url,
+      );
+      if (existingIndex === -1) {
+        this.realms.push(loadedRealm);
+      } else {
+        this.realms[existingIndex] = loadedRealm;
+      }
+    }
 
     // ideally we'd like to use a Promise.all to start these and the ordering
     // will just fall out naturally from cross realm invalidation. Until we have
@@ -292,6 +312,21 @@ export class RealmServer {
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
+
+        if (config.publishedRealmBoxelSpaceDomain === 'localhost:4201') {
+          // if this is the default, this needs to be the realm server’s host
+          // to work in Matrix tests, since publishedRealmBoxelSpaceDomain is currently
+          // the default domain for publishing a realm
+          config.publishedRealmBoxelSpaceDomain = this.serverURL.host;
+        }
+
+        if (config.publishedRealmBoxelSiteDomain === 'localhost:4201') {
+          // if this is the default, this needs to be the realm server’s host
+          // to work in Matrix tests, since publishedRealmBoxelSiteDomain is currently
+          // the default domain for publishing a realm
+          config.publishedRealmBoxelSiteDomain = this.serverURL.host;
+        }
+
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
@@ -342,7 +377,7 @@ export class RealmServer {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }): Promise<Realm> => {
+  }): Promise<{ realm: Realm; info: Partial<RealmInfo> }> => {
     let realmAtServerRoot = this.realms.find((r) => {
       let realmUrl = new URL(r.url);
 
@@ -400,11 +435,13 @@ export class RealmServer {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    writeJSONSync(join(realmPath, '.realm.json'), {
+    let info = {
       name,
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
-    });
+      publishable: true,
+    };
+    writeJSONSync(join(realmPath, '.realm.json'), info);
     writeJSONSync(join(realmPath, 'index.json'), {
       data: {
         type: 'card',
@@ -417,7 +454,13 @@ export class RealmServer {
       },
     });
 
-    return this.createAndMountRealm(realmPath, url, username);
+    let realm = this.createAndMountRealm(realmPath, url, username);
+    await realm.ensureSessionRoom(ownerUserId);
+
+    return {
+      realm,
+      info,
+    };
   };
 
   private createAndMountRealm = (
@@ -425,8 +468,12 @@ export class RealmServer {
     url: string,
     username: string,
     copiedFromRealm?: URL,
+    enableFileWatcher?: boolean,
   ) => {
-    let adapter = new NodeAdapter(resolve(path), this.enableFileWatcher);
+    let adapter = new NodeAdapter(
+      resolve(path),
+      enableFileWatcher ?? this.enableFileWatcher,
+    );
     let realm = new Realm(
       {
         url,
@@ -488,6 +535,11 @@ export class RealmServer {
             )}/${owner}/${realmName}/`,
             this.serverURL,
           ).href;
+          let existingRealm = this.realms.find((realm) => realm.url === url);
+          if (existingRealm) {
+            realms.push(existingRealm);
+            continue;
+          }
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = `realm/${owner}_${realmName}`;
           let realm = new Realm({
@@ -607,6 +659,14 @@ export class RealmServer {
             continue;
           }
 
+          let existingRealm = this.realms.find(
+            (realm) => realm.url === publishedRealmUrl,
+          );
+          if (existingRealm) {
+            realms.push(existingRealm);
+            continue;
+          }
+
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = publishedRealmRow.owner_username;
 
@@ -658,20 +718,24 @@ export class RealmServer {
     return realms;
   }
 
-  private sendEvent = async (user: string, eventType: string) => {
-    let dmRooms =
-      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
-        'boxel.session-rooms',
-      )) ?? {};
-    let roomId = dmRooms[user];
+  private sendEvent = async (
+    user: string,
+    eventType: string,
+    data?: Record<string, any>,
+  ) => {
+    let roomId = await fetchSessionRoom(
+      this.dbAdapter,
+      REALM_SERVER_REALM,
+      user,
+    );
     if (!roomId) {
       console.error(
         `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
       );
     }
 
-    await this.matrixClient.sendEvent(roomId, 'm.room.message', {
-      body: JSON.stringify({ eventType }),
+    await this.matrixClient.sendEvent(roomId!, 'm.room.message', {
+      body: JSON.stringify({ eventType, data }),
       msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
     });
   };

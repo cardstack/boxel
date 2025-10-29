@@ -22,7 +22,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
-import { BoxelIcon } from '@cardstack/boxel-ui/icons';
+import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
 
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
@@ -75,6 +75,7 @@ interface Signature {
         updateSubmode: (submode: Submode) => void;
       },
     ];
+    topBar: [];
   };
 }
 
@@ -197,36 +198,38 @@ export default class SubmodeLayout extends Component<Signature> {
 
             if (card && this.isCardInstance(card)) {
               // Current code path is a card instance, use it directly
-              this.operatorModeStateService.updateTrail([codePathString]);
+              this.operatorModeStateService.setHostModePrimaryCard(
+                codePathString,
+              );
             } else {
               // Current code path is a card definition, try to get card ID from playground panel
               let playgroundSelection =
                 this.operatorModeStateService.playgroundPanelSelection;
               if (playgroundSelection?.cardId) {
-                this.operatorModeStateService.updateTrail([
+                this.operatorModeStateService.setHostModePrimaryCard(
                   playgroundSelection.cardId + '.json',
-                ]);
+                );
               } else {
                 // Try to find any card instance related to this definition
                 let relatedCardId =
                   await this.findRelatedCardInstance(codePathString);
                 if (relatedCardId) {
-                  this.operatorModeStateService.updateTrail([
+                  this.operatorModeStateService.setHostModePrimaryCard(
                     relatedCardId + '.json',
-                  ]);
+                  );
                 } else {
-                  this.operatorModeStateService.updateTrail([]);
+                  this.operatorModeStateService.setHostModePrimaryCard();
                 }
               }
             }
           } else {
-            this.operatorModeStateService.updateTrail([]);
+            this.operatorModeStateService.setHostModePrimaryCard();
           }
         } else if (currentSubmode === Submodes.Interact) {
-          this.operatorModeStateService.updateTrail(
+          this.operatorModeStateService.setHostModePrimaryCard(
             this.lastCardIdInRightMostStack
-              ? [this.lastCardIdInRightMostStack + '.json']
-              : [],
+              ? this.lastCardIdInRightMostStack + '.json'
+              : undefined,
           );
         }
 
@@ -384,25 +387,21 @@ export default class SubmodeLayout extends Component<Signature> {
         as |ResizablePanel ResizeHandle|
       >
         <ResizablePanel class='main-panel'>
-          <div class='top-left-menu'>
+          <div class='submode-layout-top-bar'>
             <IconButton
-              @icon={{BoxelIcon}}
-              @width='40px'
+              @icon={{BoxelIconWithText}}
+              @width='160px'
               @height='40px'
               disabled={{this.isToggleWorkspaceChooserDisabled}}
               class={{cn
                 'workspace-button'
                 workspace-button--dark=(not this.workspaceChooserOpened)
+                workspace-button--chooser-open=this.workspaceChooserOpened
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
               data-test-workspace-chooser-toggle
             />
-            {{#if this.workspaceChooserOpened}}
-              <span
-                class='boxel-title'
-                data-test-submode-layout-title
-              >BOXEL</span>
-            {{else}}
+            {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
                 @submode={{this.operatorModeStateService.state.submode}}
@@ -417,7 +416,20 @@ export default class SubmodeLayout extends Component<Signature> {
                   }}
                 />
               {{/if}}
+              {{yield to='topBar'}}
             {{/if}}
+
+            <button
+              class='profile-icon-button'
+              {{on 'click' this.toggleProfileSummary}}
+              data-test-profile-icon-button
+            >
+              <Avatar
+                @isReady={{this.matrixService.profile.loaded}}
+                @userId={{this.matrixService.userId}}
+                @displayName={{this.matrixService.profile.displayName}}
+              />
+            </button>
           </div>
           {{#if this.workspaceChooserOpened}}
             <WorkspaceChooser />
@@ -430,17 +442,6 @@ export default class SubmodeLayout extends Component<Signature> {
               updateSubmode=this.updateSubmode
             )
           }}
-          <button
-            class='profile-icon-button'
-            {{on 'click' this.toggleProfileSummary}}
-            data-test-profile-icon-button
-          >
-            <Avatar
-              @isReady={{this.matrixService.profile.loaded}}
-              @userId={{this.matrixService.userId}}
-              @displayName={{this.matrixService.profile.displayName}}
-            />
-          </button>
           {{#if @onCardSelectFromSearch}}
             <SearchSheet
               @mode={{this.searchSheetMode}}
@@ -462,18 +463,20 @@ export default class SubmodeLayout extends Component<Signature> {
               <AskAiContainer />
             {{/if}}
           {{/if}}
-          <AiAssistantButton
-            class='chat-btn'
-            @isActive={{this.aiAssistantPanelService.isOpen}}
-            {{on
-              'click'
-              (if
-                this.aiAssistantPanelService.isOpen
-                this.aiAssistantPanelService.closePanel
-                this.aiAssistantPanelService.openPanel
-              )
-            }}
-          />
+          {{#if (not this.aiAssistantPanelService.isAiAssistantHidden)}}
+            <AiAssistantButton
+              class='chat-btn'
+              @isActive={{this.aiAssistantPanelService.isOpen}}
+              {{on
+                'click'
+                (if
+                  this.aiAssistantPanelService.isOpen
+                  this.aiAssistantPanelService.closePanel
+                  this.aiAssistantPanelService.openPanel
+                )
+              }}
+            />
+          {{/if}}
           {{#if this.profileSummaryOpened}}
             <ProfileInfoPopover
               {{onClickOutside
@@ -535,6 +538,8 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .main-panel {
+        display: flex;
+        flex-direction: column;
         position: relative;
       }
 
@@ -555,24 +560,16 @@ export default class SubmodeLayout extends Component<Signature> {
         z-index: var(--host-ai-panel-z-index);
       }
 
-      .top-left-menu {
-        width: var(--operator-mode-left-column);
-        position: absolute;
-        top: 0;
-        left: 0;
+      .submode-layout-top-bar {
+        position: relative;
+        width: 100%;
+        max-width: 100%;
         padding: var(--operator-mode-spacing);
-        z-index: var(--host-top-left-menu-z-index);
+        z-index: var(--host-top-bar-z-index);
 
         display: flex;
         align-items: center;
-      }
-      .top-left-menu
-        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
-        margin-left: var(--operator-mode-spacing);
-      }
-
-      .code-submode-layout .top-left-menu {
-        background-color: var(--code-mode-top-bar-background-color);
+        gap: var(--operator-mode-spacing);
       }
 
       .boxel-title {
@@ -598,16 +595,18 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
+        width: var(--submode-new-file-button-width);
       }
 
       .profile-icon-button {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
-        position: absolute;
-        top: var(--operator-mode-spacing);
-        right: var(--operator-mode-spacing);
-        padding: 0;
+
         background: none;
+
+        padding: 0;
+        margin-left: auto;
+
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
@@ -616,11 +615,22 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .workspace-button {
         --icon-color: var(--boxel-highlight);
+        --icon-text-color: var(--boxel-light);
+        --boxel-icon-button-width: 160px;
+        --boxel-icon-button-height: 40px;
+
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
-        box-shadow: var(--submode-bar-item-box-shadow);
         flex-shrink: 0;
+        position: relative;
       }
+
+      .workspace-button :deep(svg) {
+        position: absolute;
+        left: 0;
+        max-width: unset;
+      }
+
       .workspace-button:focus:not(:focus-visible) {
         outline-offset: unset;
       }
@@ -630,7 +640,10 @@ export default class SubmodeLayout extends Component<Signature> {
       .workspace-button--dark {
         --icon-bg-opacity: 1;
         --icon-color: var(--boxel-dark);
+        --icon-bg-color: var(--boxel-highlight);
+        --boxel-icon-button-width: 40px;
         outline: var(--submode-bar-item-outline);
+        box-shadow: var(--submode-bar-item-box-shadow);
       }
       .workspace-button--dark:focus:not(:focus-visible) {
         outline: var(--submode-bar-item-outline);

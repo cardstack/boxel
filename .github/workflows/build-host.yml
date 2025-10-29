@@ -26,16 +26,22 @@ jobs:
         run: |
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
             echo "RESOLVED_BASE_REALM_URL=https://app.boxel.ai/base/" >> $GITHUB_ENV
+            echo "RESOLVED_CATALOG_REALM_URL=https://app.boxel.ai/catalog/" >> $GITHUB_ENV
             echo "RESOLVED_SKILLS_REALM_URL=https://app.boxel.ai/skills/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix.boxel.ai" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=boxel.ai" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
+            echo "PUBLISHED_REALM_BOXEL_SPACE_DOMAIN=boxel.space" >> $GITHUB_ENV
+            echo "PUBLISHED_REALM_BOXEL_SITE_DOMAIN=boxel.site" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/" >> $GITHUB_ENV
+            echo "RESOLVED_CATALOG_REALM_URL=https://realms-staging.stack.cards/catalog/" >> $GITHUB_ENV
             echo "RESOLVED_SKILLS_REALM_URL=https://realms-staging.stack.cards/skills/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=stack.cards" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
+            echo "PUBLISHED_REALM_BOXEL_SPACE_DOMAIN=staging.boxel.dev" >> $GITHUB_ENV
+            echo "PUBLISHED_REALM_BOXEL_SITE_DOMAIN=staging.boxel.build" >> $GITHUB_ENV
           else
             echo "unrecognized environment"
             exit 1;

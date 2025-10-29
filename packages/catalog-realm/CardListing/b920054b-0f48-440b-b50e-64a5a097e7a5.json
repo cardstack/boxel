@@ -1,0 +1,107 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Game Quiz",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/game-quiz-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/game-quiz-listing/screenshot_02.png"
+      ],
+      "summary": "This listing provides a comprehensive framework for creating, managing, and displaying interactive game-based quizzes, including user interface components, scoring logic, game state management, responsive styling, and multimedia effects to facilitate engaging educational or entertainment experiences.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/game-quiz-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/cb9d559d-3b0b-450b-ae4d-8187dd88d1dc"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/b2cf74b3-00d3-4a98-b650-2dc4cb9d559d"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/cf74b300-d30a-48b6-902d-c4cb9d559d3b"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/74b300d3-0a98-4650-adc4-cb9d559d3b0b"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/0a98b650-2dc4-4b9d-959d-3b0b750bee4d"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/5f27bc69-6e15-4027-bff5-5c893a2642d9"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../GameQuizCard/advanced-space-exploration"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../GameQuizCard/culinary-world-tour"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../GameQuizCard/renewable-energy-basics"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/content-creation"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/education-courses"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import Koa from 'koa';
 import {
+  fetchUserPermissions,
   query,
   SupportedMimeType,
   logger,
@@ -13,15 +14,17 @@ import {
   fetchRealmPermissions,
   uuidv4,
 } from '@cardstack/runtime-common';
-import { ensureDirSync, copySync } from 'fs-extra';
+import { ensureDirSync, copySync, readJsonSync, writeJsonSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
+  sendResponseForUnprocessableEntity,
   setContextResponse,
 } from '../middleware';
+import { createJWT } from '../jwt';
 import { type CreateRoutesArgs } from '../routes';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
@@ -38,7 +41,7 @@ export default function handlePublishRealm({
   realmsRootPath,
   getMatrixRegistrationSecret,
   createAndMountRealm,
-  validPublishedRealmDomains,
+  domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -73,19 +76,21 @@ export default function handlePublishRealm({
       return;
     }
 
-    let sourceRealmURL = json.sourceRealmURL.endsWith('/')
+    let sourceRealmURL: string = json.sourceRealmURL.endsWith('/')
       ? json.sourceRealmURL
       : `${json.sourceRealmURL}/`;
     let publishedRealmURL = json.publishedRealmURL.endsWith('/')
       ? json.publishedRealmURL
       : `${json.publishedRealmURL}/`;
 
-    // Validate publishedRealmURL domain
+    let validPublishedRealmDomains = Object.values(
+      domainsForPublishedRealms || {},
+    );
     try {
       let publishedURL = new URL(publishedRealmURL);
       if (validPublishedRealmDomains && validPublishedRealmDomains.length > 0) {
         let isValidDomain = validPublishedRealmDomains.some((domain) =>
-          publishedURL.hostname.endsWith(domain),
+          publishedURL.host.endsWith(domain),
         );
         if (!isValidDomain) {
           await sendResponseForBadRequest(
@@ -103,7 +108,7 @@ export default function handlePublishRealm({
       return;
     }
 
-    let { user: ownerUserId } = token;
+    let { user: ownerUserId, sessionRoom: tokenSessionRoom } = token;
     let permissions = await fetchRealmPermissions(
       dbAdapter,
       new URL(sourceRealmURL),
@@ -117,10 +122,46 @@ export default function handlePublishRealm({
     }
 
     try {
-      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
-      if (!sourceRealm) {
-        throw new Error(`Source realm ${sourceRealmURL} not found`);
+      let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
+        userId: ownerUserId,
+      });
+
+      let sourceRealmSession = createJWT(
+        {
+          user: ownerUserId,
+          realm: sourceRealmURL,
+          permissions: permissionsForAllRealms[sourceRealmURL],
+          sessionRoom: tokenSessionRoom,
+        },
+        '1h',
+        realmSecretSeed,
+      );
+
+      let realmInfoResponse = await virtualNetwork.handle(
+        new Request(`${sourceRealmURL}_info`, {
+          headers: {
+            Accept: SupportedMimeType.RealmInfo,
+            Authorization: sourceRealmSession,
+          },
+        }),
+      );
+
+      if (!realmInfoResponse || realmInfoResponse.status !== 200) {
+        log.warn(
+          `Failed to fetch realm info for realm ${sourceRealmURL}: ${realmInfoResponse?.status}`,
+        );
+        throw new Error(`Could not fetch info for realm ${sourceRealmURL}`);
       }
+
+      let realmInfoJson = await realmInfoResponse.json();
+
+      if (realmInfoJson.data.attributes.publishable !== true) {
+        return sendResponseForUnprocessableEntity(
+          ctxt,
+          `Realm ${sourceRealmURL} is not publishable`,
+        );
+      }
+
       let existingPublishedRealm = realms.find(
         (r) => r.url === publishedRealmURL,
       );
@@ -143,7 +184,7 @@ export default function handlePublishRealm({
         publishedRealmData = results[0];
         realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
 
-        let lastPublishedAt = new Date().toISOString();
+        let lastPublishedAt = Date.now().toString();
         await query(dbAdapter, [
           `UPDATE published_realms SET last_published_at =`,
           param(lastPublishedAt),
@@ -159,7 +200,7 @@ export default function handlePublishRealm({
           owner_username: realmUsername,
           source_realm_url: sourceRealmURL,
           published_realm_url: publishedRealmURL,
-          last_published_at: new Date(),
+          last_published_at: Date.now().toString(),
         });
 
         let results = (await query(
@@ -206,7 +247,17 @@ export default function handlePublishRealm({
       copySync(sourceRealmPath, publishedRealmPath);
       ensureDirSync(publishedRealmPath);
 
+      let newlyPublishedRealmConfig = readJsonSync(
+        join(publishedRealmPath, '.realm.json'),
+      );
+      newlyPublishedRealmConfig.publishable = false;
+      writeJsonSync(
+        join(publishedRealmPath, '.realm.json'),
+        newlyPublishedRealmConfig,
+      );
+
       if (existingPublishedRealm) {
+        realms.splice(realms.indexOf(existingPublishedRealm), 1);
         virtualNetwork.unmount(existingPublishedRealm.handle);
       }
       let realm = createAndMountRealm(
@@ -214,6 +265,7 @@ export default function handlePublishRealm({
         publishedRealmURL,
         realmUsername,
         new URL(sourceRealmURL),
+        false,
       );
       await realm.start();
 

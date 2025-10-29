@@ -79,7 +79,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     })(),
   });
 
-  let { simulateRemoteMessage } = mockMatrixUtils;
+  let { simulateRemoteMessage, createAndJoinRoom } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -173,6 +173,11 @@ export default class MyComponent extends Component {
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
+
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
   });
 
   function setCardInOperatorModeState(
@@ -229,7 +234,7 @@ export default class MyComponent extends Component {
 
     await waitFor('[data-test-message-idx="0"]');
     assert
-      .dom('button.code-copy-button')
+      .dom('[data-test-code-block-index="0"] [data-test-boxel-copy-button]')
       .exists('the copy code to clipboard button exists');
 
     // assert that new messages don't destabilize the RoomMessage component
@@ -249,7 +254,7 @@ export default class MyComponent extends Component {
     await settled();
 
     assert
-      .dom('button.code-copy-button')
+      .dom('[data-test-code-block-index="0"] [data-test-boxel-copy-button]')
       .exists('the copy code to clipboard button exists');
 
     assert.dom('[data-test-apply-code-button]').doesNotExist(); // no apply for code that is not a search/replace block
@@ -435,7 +440,7 @@ const data = {
     );
 
     await waitUntil(() => document.getElementsByClassName('view-lines')[1]);
-    assert.equal(
+    assert.strictEqual(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
         .innerText,
       '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',

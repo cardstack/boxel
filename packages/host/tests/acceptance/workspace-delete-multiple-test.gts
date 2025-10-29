@@ -1,7 +1,6 @@
 import { click, findAll, triggerEvent, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { pauseTest } from 'ember-testing/lib/helpers/pause_test';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -10,14 +9,14 @@ import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
   testRealmURL,
+  setupAuthEndpoints,
   setupUserSubscription,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-
-let matrixRoomId: string;
 
 module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupApplicationTest(hooks);
@@ -33,11 +32,12 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
@@ -71,6 +71,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
         'pet.gts': { Pet },
         'Pet/1.json': new Pet({
@@ -95,17 +96,15 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
   });
 
   async function selectCard(cardPath: string) {
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}${cardPath}"]`,
-      'mouseenter',
+    let cardSelector = `[data-test-cards-grid-item="${testRealmURL}${cardPath}"] .field-component-card`;
+    await triggerEvent(cardSelector, 'mouseenter');
+    await waitFor(
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
     );
     await click(
       `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
     );
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}${cardPath}"]`,
-      'mouseleave',
-    );
+    await triggerEvent(cardSelector, 'mouseleave');
   }
 
   test('can select multiple cards and delete them via bulk delete', async function (assert) {
@@ -125,7 +124,8 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await waitFor('[data-test-cards-grid-item]');
 
     let cards = findAll('[data-test-cards-grid-item]');
-    assert.ok(cards.length >= 3, 'Multiple cards are available');
+    let initialCardCount = cards.length;
+    assert.ok(initialCardCount >= 3, 'Multiple cards are available');
 
     // Enter selection mode by clicking the first card's checkbox
     await selectCard('Pet/1');
@@ -158,11 +158,17 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await click('[data-test-confirm-delete-button]');
 
     // Wait for deletion to complete
-    await waitFor('[data-test-cards-grid-item]', { count: 1 });
+    await waitFor('[data-test-cards-grid-item]', {
+      count: initialCardCount - 2,
+    });
 
     // Verify cards were deleted
     let remainingCards = findAll('[data-test-cards-grid-item]');
-    assert.equal(remainingCards.length, 1, 'Two cards were deleted');
+    assert.strictEqual(
+      remainingCards.length,
+      initialCardCount - 2,
+      'Two cards were deleted',
+    );
 
     // Verify selection mode is cleared
     assert
@@ -208,7 +214,6 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .dom('.utility-menu-trigger')
       .doesNotExist('Selection summary is cleared after deselect');
 
-    pauseTest();
     // Verify overlay checkboxes are not checked
     assert.dom('[data-test-overlay-card]').doesNotExist();
   });
@@ -319,7 +324,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify no cards were deleted
     let remainingCards = findAll('[data-test-cards-grid-item]');
-    assert.equal(
+    assert.strictEqual(
       remainingCards.length,
       initialCardCount,
       'No cards were deleted after canceling',

@@ -70,12 +70,6 @@ export class PersonCard extends CardDef {
             {{#each cards as |card|}}
               <li
                 class='card'
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                 data-cards-grid-item={{removeFileExtension card.url}}
               >

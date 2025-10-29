@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -29,7 +30,7 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
 
   @tracked storageAccess: boolean | undefined = undefined;
 
-  constructor(owner: unknown, args: ConnectComponentSignature['Args']) {
+  constructor(owner: Owner, args: ConnectComponentSignature['Args']) {
     super(owner, args);
     this.storeAccessPermissions();
   }

@@ -48,7 +48,6 @@ export default class RecordGameResultCommand extends Command<
       await new SaveCardCommand(this.commandContext).execute({
         card,
         realm,
-        localDir: 'game-result',
       });
     } catch (error: any) {
       throw new Error(`❌ Failed to record game result: ${error.message}`);

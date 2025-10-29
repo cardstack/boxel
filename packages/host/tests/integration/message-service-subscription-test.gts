@@ -111,6 +111,6 @@ module('Integration | message service subscription', function (hooks) {
 
     await settled();
 
-    assert.equal(messageCount, messageCountAfterRender);
+    assert.strictEqual(messageCount, messageCountAfterRender);
   });
 });

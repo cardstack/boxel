@@ -105,17 +105,14 @@ puts "💎"
       '.message',
     ) as HTMLElement;
     let directChildren = messageElement.children;
-    assert.ok(directChildren[0]?.tagName == 'P');
-    assert.ok(
-      directChildren[1]?.tagName == 'SECTION' &&
-        directChildren[1]?.classList.contains('code-block'),
-    );
-    assert.ok(directChildren[2]?.tagName == 'P');
-    assert.ok(
-      directChildren[3]?.tagName == 'SECTION' &&
-        directChildren[3]?.classList.contains('code-block'),
-    );
-    assert.ok(directChildren[4]?.tagName == 'P');
+    assert.strictEqual(directChildren[0]?.tagName, 'P');
+    assert.strictEqual(directChildren[1]?.tagName, 'SECTION');
+    assert.true(directChildren[1]?.classList.contains('code-block'));
+
+    assert.strictEqual(directChildren[2]?.tagName, 'P');
+    assert.strictEqual(directChildren[3]?.tagName, 'SECTION');
+    assert.true(directChildren[3]?.classList.contains('code-block'));
+    assert.strictEqual(directChildren[4]?.tagName, 'P');
 
     assert.dom('.monaco-editor').exists({ count: 2 });
     assert.dom('pre').doesNotExist();
@@ -156,7 +153,7 @@ ${SEARCH_MARKER}
     });
     await waitUntil(() => document.querySelectorAll('.view-line').length > 3);
 
-    assert.equal(
+    assert.strictEqual(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
         .innerText,
       '// existing code ... \nlet a = 1;\nlet b = 2;\nlet c = 3;',
@@ -185,7 +182,7 @@ ${SEPARATOR_MARKER}
 
     await waitUntil(() => document.querySelectorAll('.view-line').length > 4);
 
-    assert.equal(
+    assert.strictEqual(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
         .innerText,
       '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
@@ -464,7 +461,7 @@ ${REPLACE_MARKER}
     assert.dom('.code-block-diff').doesNotExist();
     await waitUntil(() => document.querySelectorAll('.view-line').length == 1);
 
-    assert.equal(
+    assert.strictEqual(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
         .innerText,
       'https://example.com/some-url',

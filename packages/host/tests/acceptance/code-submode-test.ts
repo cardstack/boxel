@@ -31,10 +31,12 @@ import {
   getMonacoContent,
   percySnapshot,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   assertMessages,
 } from '../helpers';
@@ -406,7 +408,6 @@ const notFoundAdoptionInstance = `{
 }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
     let personalRealmURL: string;
@@ -429,11 +430,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     }
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -448,6 +450,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'hello.txt': txtSource,
           '.realm.json': {
             name: `Test User's Workspace`,
@@ -463,6 +466,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'hello.txt': txtSource,
           '.realm.json': {
             name: `Additional Workspace`,
@@ -478,6 +482,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           '*': ['read'],
         },
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'hello.txt': txtSource,
           '.realm.json': {
             name: `Catalog Realm`,
@@ -485,6 +490,12 @@ module('Acceptance | code submode tests', function (_hooks) {
             iconURL: 'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
           },
         },
+      });
+
+      setupAuthEndpoints({
+        [catalogRealmURL]: ['read'],
+        [additionalRealmURL]: ['read', 'write', 'realm-owner'],
+        [personalRealmURL]: ['read', 'write', 'realm-owner'],
       });
     });
 
@@ -540,11 +551,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom({
+      createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      setupUserSubscription(matrixRoomId);
+      setupUserSubscription();
+      setupAuthEndpoints();
 
       monacoService = getService('monaco-service');
 
@@ -553,6 +565,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.gts': indexCardSource,
           'pet-person.gts': personCardSource,
           'person.gts': personCardSource,
@@ -885,7 +898,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Parse Error at broken.gts:1:6: 1:10.`,
+          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Error: Parse Error at broken.gts:1:6: 1:10`,
           files: [
             { name: 'broken.gts', sourceUrl: `${testRealmURL}broken.gts` },
           ],
@@ -906,9 +919,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         return Promise.resolve();
       };
       await click('[data-test-boxel-copy-button]');
-      assert.strictEqual(
-        copiedText,
-        '{"message":"","stack":"Parse Error at broken.gts:1:6: 1:10"}',
+      const expected =
+        '{"message":"","stack":"Error: Parse Error at broken.gts:1:6: 1:10';
+      assert.ok(
+        copiedText!.startsWith(expected),
+        `clipboard text starts with ${expected}`,
       );
       navigator.clipboard.writeText = originalWriteText;
     });

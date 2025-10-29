@@ -17,16 +17,13 @@ import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  Eye,
-  Folder,
-  IconCode,
-  IconLink,
-  IconPlusThin,
-} from '@cardstack/boxel-ui/icons';
+import { eq, MenuItem, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  cardTypeDisplayName,
+  getCardMenuItems,
+} from '@cardstack/runtime-common';
 
 import {
   baseCardRef,
@@ -45,8 +42,6 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
-import ListingCreateCommand from '@cardstack/host/commands/listing-create';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
@@ -76,12 +71,9 @@ import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 
-import AiAssistantIcon from './ai-assistant-icon-bw';
 import FieldPickerModal from './field-chooser-modal';
 
-import InstanceSelectDropdown, {
-  BULK_GENERATED_ITEM_COUNT,
-} from './instance-chooser-dropdown';
+import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
 
@@ -147,23 +139,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.canWriteRealm && this.args.isFieldDef && !this.card;
   }
 
-  private copyToClipboard = task(async (id?: string) => {
-    if (!id) {
-      return;
-    }
-    await navigator.clipboard.writeText(id);
-  });
-
-  private openInInteractMode = (id?: string) => {
-    if (!id) {
-      return;
-    }
-    this.operatorModeStateService.openCardInInteractMode(
-      id,
-      this.format === 'edit' ? 'edit' : 'isolated',
-    );
-  };
-
   private get showError() {
     // in edit format, prefer showing the stale card if possible so user can
     // attempt to fix the card error
@@ -175,80 +150,41 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private get contextMenuItems() {
     let cardId = this.card?.id;
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy Card URL', 'action', {
-        action: () => this.copyToClipboard.perform(cardId),
-        icon: IconLink,
-        disabled: !cardId,
-      }),
-      new MenuItem('Open in Code Mode', 'action', {
-        action: async () =>
-          await this.operatorModeStateService.updateCodePath(
-            cardId ? new URL(cardId) : null,
-          ),
-        icon: IconCode,
-        disabled: !cardId,
-      }),
-      new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode(cardId),
-        icon: Eye,
-        disabled: !cardId,
-      }),
-      new MenuItem('Fill in sample data with AI', 'action', {
-        action: () => this.generateSampleData.perform(),
-        icon: AiAssistantIcon,
-        disabled: !this.canEditCard,
-      }),
-      new MenuItem(
-        `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`,
-        'action',
-        {
-          action: () =>
-            this.generateSampleData.perform({
-              bulkGenerate: true,
-            }),
-          icon: AiAssistantIcon,
-          disabled: !this.canWriteRealm,
-        },
-      ),
-      new MenuItem(`Create listing with AI`, 'action', {
-        action: () => this.createListingWithAI.perform(),
-        icon: AiAssistantIcon,
-        disabled: !this.canWriteRealm,
-      }),
-    ];
-    return menuItems;
+    if (!cardId) {
+      return [];
+    }
+    return toMenuItems(
+      this.card?.[getCardMenuItems]?.({
+        canEdit: this.realm.canWrite(cardId),
+        cardCrudFunctions: {},
+        menuContext: 'code-mode-playground',
+        commandContext: this.commandService.commandContext,
+        format: this.format,
+      }) || [],
+    );
   }
 
   private get afterMenuOptions(): MenuItem[] {
     let menuItems: MenuItem[] = [
-      new MenuItem('Create new instance', 'action', {
+      new MenuItem({
+        label: 'Create new instance',
         action: () => this.createNew(),
         icon: this.createNewIsRunning ? LoadingIndicator : IconPlusThin,
         disabled: this.createNewIsRunning || !this.canWriteRealm,
       }),
-      new MenuItem('Choose another instance', 'action', {
+      new MenuItem({
+        label: 'Choose another instance',
         action: () => this.chooseInstance(),
         icon: Folder,
       }),
-      new MenuItem('Fill in sample data with AI', 'action', {
-        action: () => this.generateSampleData.perform(),
-        icon: AiAssistantIcon,
-        disabled: !this.canEditCard,
-      }),
-      new MenuItem(
-        `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`,
-        'action',
-        {
-          action: () =>
-            this.generateSampleData.perform({
-              bulkGenerate: true,
-            }),
-          icon: AiAssistantIcon,
-          disabled: !this.canWriteRealm,
-        },
-      ),
     ];
+    if (this.card) {
+      menuItems = menuItems.concat(
+        ...this.contextMenuItems.filter((item: MenuItem) =>
+          item.tags.includes('playground-sample-data'),
+        ),
+      );
+    }
     return menuItems;
   }
 
@@ -772,64 +708,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
   };
 
-  private generateSampleData = restartableTask(
-    async (opts?: { bulkGenerate: boolean }) => {
-      if (!this.operatorModeStateService.openFileURL) {
-        throw new Error('Please open a file');
-      }
-
-      let card = this.card;
-
-      await this.aiAssistantPanelService.openPanel();
-
-      let { commandContext } = this.commandService;
-      let sendMessageCommand = new SendAiAssistantMessageCommand(
-        commandContext,
-      );
-
-      let prompt: string;
-
-      if (opts?.bulkGenerate) {
-        prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples`;
-        if (this.args.isFieldDef) {
-          prompt += ` on this card's spec.`;
-        } else {
-          prompt += ` of the attached card instance.`;
-        }
-      } else {
-        prompt = `Fill in sample data`;
-        if (this.args.isFieldDef) {
-          prompt += ` for this example on the card's spec.`;
-        } else if (card) {
-          prompt += ` for the attached card instance.`;
-        } else {
-          // if there is no selected card for some reason (maybe an error case),
-          // AI can generate sample card instances using the specified moduleId
-          // otherwise it complains about not having an open card or
-          // generates instances for all card definitions on the file
-          prompt += ` for the selected module ${this.moduleId} in the attached file.`;
-        }
-      }
-
-      await sendMessageCommand.execute({
-        roomId: this.matrixService.currentRoomId,
-        prompt,
-        openCardIds: card?.id ? [card.id] : undefined,
-        attachedCards: card ? [card] : undefined,
-        attachedFileURLs: [this.operatorModeStateService.openFileURL],
-        realmUrl: this.operatorModeStateService.realmURL.href,
-      });
-      this.closeInstanceChooser();
-    },
-  );
-
-  private createListingWithAI = restartableTask(async () => {
-    let { commandContext } = this.commandService;
-    await new ListingCreateCommand(commandContext).execute({
-      openCardId: this.card?.id,
-    });
-  });
-
   <template>
     {{consumeContext this.makeCardResource}}
 
@@ -1001,6 +879,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         border: 1px solid var(--boxel-450);
         margin: 0 auto;
         width: 380px;
+        max-width: 100%;
         justify-content: space-between;
 
         /* It’s meant to have two rounded borders, this removes a gap */

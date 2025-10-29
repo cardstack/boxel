@@ -3,6 +3,7 @@ import {
   Component,
   field,
   contains,
+  getCardMeta,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
@@ -11,136 +12,194 @@ import { realmURL } from '@cardstack/runtime-common';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { ResolvedCodeRef, Query } from '@cardstack/runtime-common';
+
+interface GameStatusField {
+  label: string;
+}
+
+interface PlayerOutcomeField {
+  player: CardDef;
+  outcome: GameStatusField;
+}
+
+interface GameResult extends CardDef {
+  game: CardDef;
+  outcome: PlayerOutcomeField;
+  ref: {
+    module: string;
+    name: string;
+  };
+  title: string;
+}
+
+interface GameResultRef {
+  adoptsFrom: ResolvedCodeRef;
+  ref: ResolvedCodeRef;
+  title: string;
+}
 
 class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
-  @tracked selectedGame: string | null = null;
+  @tracked selectedGameRef: GameResultRef | null = null;
 
-  get gameTitlesQuery() {
+  get allGameRecordsQuery(): Query {
     return {
       filter: {
-        type: {
-          module: new URL('../game-result/game-result', import.meta.url).href,
-          name: 'GameResult',
+        eq: {
+          _cardType: 'Game Result',
         },
       },
+      sort: [
+        {
+          by: 'lastModified' as const,
+          direction: 'desc' as const,
+        },
+      ],
     };
   }
 
-  gameTitlesData = this.args.context?.getCards(
-    this,
-    () => this.gameTitlesQuery,
-    () => this.realms,
-    { isLive: true },
-  );
+  get selectedGameRecordsQuery(): Query {
+    if (!this.selectedGameRef) {
+      return this.allGameRecordsQuery;
+    }
 
-  get gameTitles() {
-    const titles =
-      this.gameTitlesData?.instances?.map((game) => game?.title) ?? [];
-    return [...new Set(titles)].sort();
-  }
+    const adoptsFromModule = new URL(
+      this.selectedGameRef.adoptsFrom.module,
+      import.meta.url,
+    ).href;
+    const adoptsFromName = this.selectedGameRef.adoptsFrom.name;
+    const refModule = new URL(this.selectedGameRef.ref.module, import.meta.url)
+      .href;
+    const refName = this.selectedGameRef.ref.name;
 
-  get gameTitlesLoading() {
-    return this.gameTitlesData?.isLoading;
-  }
-
-  get statsQuery() {
-    const baseQuery = {
+    return {
       filter: {
-        type: {
-          module: new URL('../game-result/game-result', import.meta.url).href,
-          name: 'GameResult',
+        on: {
+          module: adoptsFromModule,
+          name: adoptsFromName,
+        },
+        eq: {
+          ref: {
+            module: refModule,
+            name: refName,
+          },
         },
       },
-    };
-
-    // If a game is selected, filter by that game's title
-    if (this.selectedGame) {
-      return {
-        ...baseQuery,
-        filter: {
-          ...baseQuery.filter,
-          on: {
-            module: new URL('../game-result/game-result', import.meta.url).href,
-            name: 'GameResult',
-          },
-          eq: {
-            'game.title': this.selectedGame,
-          },
+      sort: [
+        {
+          by: 'lastModified' as const,
+          direction: 'desc' as const,
         },
-      };
-    }
-
-    return baseQuery;
+      ],
+    };
   }
 
-  statsData = this.args.context?.getCards(
-    this,
-    () => this.statsQuery,
-    () => this.realms,
-    { isLive: true },
-  );
-
-  get gameStats() {
-    if (!this.statsData?.instances) {
-      return { wins: 0, losses: 0, draws: 0, total: 0 };
-    }
-
-    const results = this.statsData.instances;
-    const wins = results.filter(
-      (result: any) => result.status?.label === 'Win',
-    ).length;
-    const losses = results.filter(
-      (result: any) => result.status?.label === 'Lose',
-    ).length;
-    const draws = results.filter(
-      (result: any) => result.status?.label === 'Draw',
-    ).length;
-    const total = results.length;
-
-    return { wins, losses, draws, total };
-  }
-
-  get gameRecordsQuery() {
-    const baseQuery = {
-      filter: {
-        type: {
-          module: new URL('../game-result/game-result', import.meta.url).href,
-          name: 'GameResult',
-        },
-      },
-    };
-
-    // If a game is selected, filter by that game's title
-    if (this.selectedGame) {
-      return {
-        ...baseQuery,
-        filter: {
-          ...baseQuery.filter,
-          on: {
-            module: new URL('../game-result/game-result', import.meta.url).href,
-            name: 'GameResult',
-          },
-          eq: {
-            'game.title': this.selectedGame,
-          },
-        },
-      };
-    }
-
-    return baseQuery;
+  //Prerendered Search
+  get gameRecordsQuery(): Query {
+    return this.selectedGameRef
+      ? this.selectedGameRecordsQuery
+      : this.allGameRecordsQuery;
   }
 
   get realms() {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
+  //getCards - Game Titles for dropdown
+  gameRecordsData = this.args.context?.getCards(
+    this,
+    () => this.allGameRecordsQuery,
+    () => this.realms,
+    { isLive: true },
+  );
+
+  get gameTitles() {
+    if (!this.gameRecordsData || this.gameRecordsData.isLoading) {
+      return [];
+    }
+
+    return [
+      'All Games',
+      ...new Set(this.gameRecordsData.instances?.map((game) => game.title)),
+    ];
+  }
+
+  get gameOptions() {
+    if (!this.gameRecordsData || this.gameRecordsData.isLoading) {
+      return [];
+    }
+    // Create a map of unique game references with their titles
+    const gameMap = new Map<
+      string,
+      { adoptsFrom: ResolvedCodeRef; ref: ResolvedCodeRef; title: string }
+    >();
+
+    (this.gameRecordsData.instances as GameResult[]).forEach((gameResult) => {
+      const adoptsFrom = getCardMeta(gameResult, 'adoptsFrom');
+      const key = `${gameResult.ref.module}#${gameResult.ref.name}`;
+
+      if (!gameMap.has(key)) {
+        gameMap.set(key, {
+          adoptsFrom: adoptsFrom as ResolvedCodeRef,
+          ref: {
+            module: gameResult.ref.module,
+            name: gameResult.ref.name,
+          },
+          title: gameResult.game.title,
+        });
+      }
+    });
+
+    return Array.from(gameMap.values());
+  }
+
+  //getCards - stats, based on selected game
+  gameStatsData = this.args.context?.getCards(
+    this,
+    () => this.gameRecordsQuery,
+    () => this.realms,
+    { isLive: true },
+  );
+
+  get gameStats() {
+    if (!this.gameStatsData || this.gameStatsData.isLoading) {
+      return { wins: 0, losses: 0, draws: 0, total: 0 };
+    }
+
+    const results = (this.gameStatsData.instances ?? []) as GameResult[];
+
+    const wins = results.filter(
+      (result) => result.outcome.outcome.label === 'Win',
+    ).length;
+    const losses = results.filter(
+      (result) => result.outcome.outcome.label === 'Lose',
+    ).length;
+    const draws = results.filter(
+      (result) => result.outcome.outcome.label === 'Draw',
+    ).length;
+    const total = results.length;
+
+    return { wins, losses, draws, total };
+  }
+
+  @action
+  onGameSelect(gameTitle: string | null) {
+    if (gameTitle && gameTitle !== 'All Games') {
+      const selectedOption = this.gameOptions.find(
+        (option) => option.title === gameTitle,
+      );
+      this.selectedGameRef = selectedOption ?? null;
+    } else {
+      this.selectedGameRef = null;
+    }
+  }
+
   get currentTime() {
     return new Date().toLocaleTimeString();
   }
 
-  @action
-  onGameSelect(game: string | null) {
-    this.selectedGame = game;
+  get getSelectedGameTitle() {
+    return this.selectedGameRef?.title || 'All Games';
   }
 
   <template>
@@ -171,16 +230,16 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
           </div>
           <div class='title-stack'>
             <h1 class='main-title'>GAME RECORDS</h1>
-            <h2 class='sub-title'>COMMAND CENTER</h2>
             <div class='title-underline'></div>
           </div>
         </div>
       </header>
 
       <section class='stats-grid'>
-        {{#if this.selectedGame}}
+        {{#if this.selectedGameRef}}
           <div class='stats-header'>
-            <div class='stats-title'>STATISTICS FOR: {{this.selectedGame}}</div>
+            <div class='stats-title'>STATISTICS FOR:
+              {{this.getSelectedGameTitle}}</div>
             <div class='stats-subtitle'>Game-specific performance metrics</div>
           </div>
         {{else}}
@@ -193,25 +252,49 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
           <div class='stat-card primary'>
             <div class='stat-icon'>🏆</div>
             <div class='stat-label'>VICTORIES</div>
-            <div class='stat-value'>{{this.gameStats.wins}}</div>
+            <div class='stat-value'>
+              {{#if this.gameRecordsData.isLoading}}
+                Loading...
+              {{else}}
+                {{this.gameStats.wins}}
+              {{/if}}
+            </div>
             <div class='stat-pulse'></div>
           </div>
           <div class='stat-card danger'>
             <div class='stat-icon'>💀</div>
             <div class='stat-label'>DEFEATS</div>
-            <div class='stat-value'>{{this.gameStats.losses}}</div>
+            <div class='stat-value'>
+              {{#if this.gameRecordsData.isLoading}}
+                Loading...
+              {{else}}
+                {{this.gameStats.losses}}
+              {{/if}}
+            </div>
             <div class='stat-pulse'></div>
           </div>
           <div class='stat-card warning'>
             <div class='stat-icon'>🤝</div>
             <div class='stat-label'>DRAWS</div>
-            <div class='stat-value'>{{this.gameStats.draws}}</div>
+            <div class='stat-value'>
+              {{#if this.gameRecordsData.isLoading}}
+                Loading...
+              {{else}}
+                {{this.gameStats.draws}}
+              {{/if}}
+            </div>
             <div class='stat-pulse'></div>
           </div>
           <div class='stat-card info'>
             <div class='stat-icon'>🎮</div>
             <div class='stat-label'>TOTAL GAMES</div>
-            <div class='stat-value'>{{this.gameStats.total}}</div>
+            <div class='stat-value'>
+              {{#if this.gameRecordsData.isLoading}}
+                Loading...
+              {{else}}
+                {{this.gameStats.total}}
+              {{/if}}
+            </div>
             <div class='stat-pulse'></div>
           </div>
         </div>
@@ -219,37 +302,22 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
 
       <main class='data-terminal'>
         <div class='terminal-header'>
-          <div class='terminal-tabs'>
-            <div class='tab active'>
-              <span class='tab-icon'>📊</span>
-              GAME HISTORY
-            </div>
-            <div class='tab-indicators'>
-              <div class='indicator'></div>
-              <div class='indicator'></div>
-              <div class='indicator'></div>
-            </div>
-          </div>
           <div class='game-filter-section'>
             <div class='filter-label'>FILTER BY GAME:</div>
+
             <BoxelSelect
               @placeholder='Select a game'
-              @selected={{this.selectedGame}}
+              @selected={{this.selectedGameRef.title}}
               @onChange={{this.onGameSelect}}
               @options={{this.gameTitles}}
               @searchEnabled={{true}}
-              @disabled={{this.gameTitlesLoading}}
+              @disabled={{this.gameRecordsData.isLoading}}
               class='game-selector'
               aria-label='Filter by game'
               as |gameTitle|
             >
               {{gameTitle}}
             </BoxelSelect>
-          </div>
-          <div class='terminal-controls'>
-            <div class='control-btn'></div>
-            <div class='control-btn'></div>
-            <div class='control-btn'></div>
           </div>
         </div>
 
@@ -270,8 +338,6 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
       .dashboard-arena {
         position: relative;
         width: 100%;
-        height: 100%;
-        max-height: 100vh;
         background:
           radial-gradient(
             circle at 20% 80%,
@@ -293,8 +359,13 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
         color: #00ffff;
         font-family: 'Inter', sans-serif;
         padding: 2rem;
-        overflow-y: auto;
         box-sizing: border-box;
+        container-type: inline-size;
+        overflow: hidden;
+      }
+
+      .dashboard-arena :deep(.ember-basic-dropdown-content-wormhole-origin) {
+        position: absolute;
       }
 
       /* Animated background layers */
@@ -763,7 +834,6 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
         border: 1px solid rgba(0, 255, 255, 0.4);
         border-radius: 20px;
         backdrop-filter: blur(20px);
-        overflow: hidden;
         box-shadow:
           0 20px 40px rgba(0, 0, 0, 0.3),
           inset 0 1px 0 rgba(255, 255, 255, 0.1);
@@ -772,25 +842,19 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
       .terminal-header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: flex-end;
         padding: 1rem 2rem;
         background: rgba(0, 255, 255, 0.1);
         border-bottom: 1px solid rgba(0, 255, 255, 0.3);
         gap: 2rem;
       }
 
-      .terminal-tabs {
-        display: flex;
-        align-items: center;
-        gap: 2rem;
-      }
-
       .game-filter-section {
         display: flex;
         align-items: center;
-        gap: 1rem;
         flex: 1;
-        justify-content: center;
+        justify-content: flex-end;
+        gap: 1rem;
       }
 
       .filter-label {
@@ -860,40 +924,10 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
         }
       }
 
-      .terminal-controls {
-        display: flex;
-        gap: 0.5rem;
-      }
-
-      .control-btn {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: linear-gradient(45deg, #ff0000, #ffff00, #00ff00);
-        animation: controlPulse 3s ease-in-out infinite;
-      }
-
-      .control-btn:nth-child(2) {
-        animation-delay: 1s;
-      }
-      .control-btn:nth-child(3) {
-        animation-delay: 2s;
-      }
-
-      @keyframes controlPulse {
-        0%,
-        100% {
-          opacity: 0.6;
-        }
-        50% {
-          opacity: 1;
-        }
-      }
-
       .terminal-content {
         position: relative;
         padding: 2rem;
-        min-height: 400px;
+        max-height: 500px;
         overflow-y: auto;
         --embedded-card-min-height: auto;
       }
@@ -921,7 +955,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
       }
 
       /* Responsive design */
-      @media (max-width: 768px) {
+      @container (max-width: 768px) {
         .dashboard-arena {
           padding: 1rem;
         }
@@ -941,18 +975,12 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
           font-size: 2rem;
         }
 
-        .terminal-header {
-          padding: 1rem;
-          flex-direction: column;
-          gap: 1rem;
-        }
-
         .terminal-content {
           padding: 1rem;
         }
       }
 
-      @media (max-width: 480px) {
+      @container (max-width: 480px) {
         .stats-grid {
           grid-template-columns: 1fr 1fr;
         }

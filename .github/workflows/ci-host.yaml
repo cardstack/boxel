@@ -31,8 +31,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-        shardTotal: [14]
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shardTotal: [16]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -66,15 +66,25 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
+
+      - name: Install D-Bus helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 upower
+          sudo service dbus restart
+          sudo service upower restart
+
       - name: host test suite (shard ${{ matrix.shardIndex }})
-        run: pnpm test-with-percy
+        run: dbus-run-session -- pnpm test-with-percy
         env:
           PERCY_GZIP: true
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
+          DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
         working-directory: packages/host
+
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()

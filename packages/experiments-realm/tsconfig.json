@@ -22,7 +22,9 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"]
+      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/catalog/commands/*": ["../catalog-realm/commands/*"],
+      "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"]
     },
     "types": ["@cardstack/local-types"]
   },

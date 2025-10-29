@@ -7,6 +7,7 @@ import {
 } from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -21,16 +22,20 @@ import {
   RealmPermissions,
   Worker,
   RunnerOptionsManager,
+  IndexWriter,
   type RealmInfo,
   type TokenClaims,
-  IndexWriter,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
+  type Prerenderer,
+  type FromScratchArgsWithPermissions,
+  type IncrementalArgsWithPermissions,
   insertPermissions,
   unixTime,
+  RealmAction,
 } from '@cardstack/runtime-common';
-
+import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 import {
   testHostModeRealmURL,
   testRealmInfo,
@@ -57,11 +62,10 @@ import {
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
+import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
-
-import type { MockUtils } from './mock-matrix/_utils';
 
 export {
   visitOperatorMode,
@@ -214,15 +218,64 @@ export async function capturePrerenderResult(
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
   expectedStatus: 'ready' | 'error' = 'ready',
 ): Promise<{ status: 'ready' | 'error'; value: string }> {
-  await waitFor(`[data-prerender-status="${expectedStatus}"]`);
-  let element = document.querySelector('[data-prerender]') as HTMLElement;
-  let status = element.dataset.prerenderStatus as 'ready' | 'error';
-  if (status === 'error') {
-    // there is a strange <anonymous> tag that is being appended to the innerHTML that this strips out
-    return { status, value: element.innerHTML!.replace(/}[^}].*$/, '}') };
-  } else {
-    return { status, value: element.children[0][capture]! };
+  await waitUntil(() => {
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    let errorElement = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    let errorText = (errorElement?.textContent ?? errorElement?.innerHTML ?? '')
+      .trim()
+      .trim();
+    if (expectedStatus === 'error') {
+      if (container) {
+        let status = container.dataset.prerenderStatus ?? '';
+        if (status === 'error' || status === 'unusable') {
+          return true;
+        }
+      }
+      return errorText.length > 0;
+    }
+    if (errorText.length > 0) {
+      return true;
+    }
+    if (!container) {
+      return false;
+    }
+    return (container.dataset.prerenderStatus ?? '') === expectedStatus;
+  });
+  let container = document.querySelector(
+    '[data-prerender]',
+  ) as HTMLElement | null;
+  let errorElement = document.querySelector(
+    '[data-prerender-error]',
+  ) as HTMLElement | null;
+  let errorText = (
+    errorElement?.textContent ??
+    errorElement?.innerHTML ??
+    ''
+  ).trim();
+  if (errorText.length > 0) {
+    return { status: 'error', value: errorText };
   }
+  if (!container) {
+    throw new Error(
+      'capturePrerenderResult: missing [data-prerender] container after wait',
+    );
+  }
+  let status = container.dataset.prerenderStatus as
+    | 'ready'
+    | 'error'
+    | 'unusable'
+    | undefined;
+  if (status === 'error' || status === 'unusable') {
+    return {
+      status: 'error',
+      value: container.innerHTML!.replace(/}[^}]*$/, '}'),
+    };
+  }
+  return { status: 'ready', value: container.children[0][capture]! };
 }
 
 async function makeRenderer() {
@@ -237,29 +290,30 @@ async function makeRenderer() {
 }
 
 class MockLocalIndexer extends Service {
+  @tracked renderError: string | undefined;
+  @tracked prerenderStatus: 'ready' | 'loading' | 'unusable' | undefined;
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
   #indexWriter: IndexWriter | undefined;
-  #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
+  #prerenderer: Prerenderer | undefined;
+  #fromScratch:
+    | ((args: FromScratchArgsWithPermissions) => Promise<IndexResults>)
+    | undefined;
   #incremental:
-    | ((
-        urls: URL[],
-        realmURL: URL,
-        operation: 'update' | 'delete',
-        ignoreData: Record<string, string>,
-      ) => Promise<IndexResults>)
+    | ((args: IncrementalArgsWithPermissions) => Promise<IndexResults>)
     | undefined;
   setup(
-    fromScratch: (realmURL: URL) => Promise<IndexResults>,
-    incremental: (
-      urls: URL[],
-      realmURL: URL,
-      operation: 'update' | 'delete',
-      ignoreData: Record<string, string>,
+    fromScratch: (
+      args: FromScratchArgsWithPermissions,
     ) => Promise<IndexResults>,
+    incremental: (
+      args: IncrementalArgsWithPermissions,
+    ) => Promise<IndexResults>,
+    prerenderer: Prerenderer,
   ) {
     this.#fromScratch = fromScratch;
     this.#incremental = incremental;
+    this.#prerenderer = prerenderer;
   }
   async configureRunner(
     registerRunner: RunnerRegistration,
@@ -290,6 +344,18 @@ class MockLocalIndexer extends Service {
     }
     return this.#indexWriter;
   }
+  get prerenderer() {
+    if (!this.#prerenderer) {
+      throw new Error(`prerenderer not registered with MockLocalIndexer`);
+    }
+    return this.#prerenderer;
+  }
+  setPrerenderStatus(status: 'ready' | 'loading' | 'unusable') {
+    this.prerenderStatus = status;
+  }
+  setRenderError(error: string) {
+    this.renderError = error;
+  }
 }
 
 export function setupLocalIndexing(hooks: NestedHooks) {
@@ -319,7 +385,6 @@ export function setupOnSave(hooks: NestedHooks) {
     this.unregisterOnSave = store._unregisterSaveSubscriber.bind(store);
   });
 }
-
 let runnerOptsMgr = new RunnerOptionsManager();
 
 interface RealmContents {
@@ -331,8 +396,126 @@ interface RealmContents {
     | Record<string, unknown>
     | string;
 }
+
+export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
+  'ModelConfiguration/test-gpt.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'OpenAI: GPT-5',
+          description: 'Test fixture model configuration referencing GPT-5.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'openai/gpt-5',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'ModelConfiguration/test-claude-sonnet-4.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Anthropic: Claude Sonnet 4',
+          description:
+            'Test fixture model configuration referencing Claude Sonnet 4.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-sonnet-4',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'ModelConfiguration/test-claude-37-sonnet.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Anthropic: Claude 3.7 Sonnet',
+          description:
+            'Test fixture model configuration referencing Claude 3.7 Sonnet.',
+          thumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-3.7-sonnet',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
+  'SystemCard/default.json': {
+    data: {
+      type: 'card',
+      attributes: {},
+      relationships: {
+        'modelConfigurations.0': {
+          links: {
+            self: '../ModelConfiguration/test-gpt',
+          },
+        },
+        'modelConfigurations.1': {
+          links: {
+            self: '../ModelConfiguration/test-claude-sonnet-4',
+          },
+        },
+        'modelConfigurations.2': {
+          links: {
+            self: '../ModelConfiguration/test-claude-37-sonnet',
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'SystemCard',
+        },
+      },
+    },
+  },
+};
 export async function setupAcceptanceTestRealm({
-  contents,
+  contents = {},
   realmURL,
   permissions,
   mockMatrixUtils,
@@ -342,6 +525,7 @@ export async function setupAcceptanceTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  setupAuthEndpoints();
   return await setupTestRealm({
     contents,
     realmURL,
@@ -352,18 +536,22 @@ export async function setupAcceptanceTestRealm({
 }
 
 export async function setupIntegrationTestRealm({
-  contents,
+  contents = {},
   realmURL,
+  permissions,
   mockMatrixUtils,
 }: {
   contents: RealmContents;
   realmURL?: string;
+  permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  setupAuthEndpoints();
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: false,
+    permissions: permissions as RealmPermissions,
     mockMatrixUtils,
   });
 }
@@ -396,11 +584,6 @@ async function setupTestRealm({
   let { queue } = getService('queue');
 
   realmURL = realmURL ?? testRealmURL;
-
-  let realmServer = getService('realm-server');
-  if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    realmServer.setAvailableRealmURLs([realmURL]);
-  }
 
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
@@ -440,6 +623,7 @@ async function setupTestRealm({
     matrixURL: baseTestMatrix.url,
     secretSeed: testRealmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
+    prerenderer: localIndexer.prerenderer,
   });
 
   realm = new Realm({
@@ -472,10 +656,77 @@ async function setupTestRealm({
   await worker.run();
   await realm.start();
 
+  let realmServer = getService('realm-server');
+  if (!realmServer.availableRealmURLs.includes(realmURL)) {
+    realmServer.setAvailableRealmURLs([realmURL]);
+  }
+
   return { realm, adapter };
 }
 
-export function setupUserSubscription(matrixRoomId: string) {
+export function setupAuthEndpoints(
+  realmPermissions: Record<string, string[]> = {
+    [testRealmURL]: ['read', 'write'],
+  },
+) {
+  getService('network').mount(
+    async (req: Request) => {
+      if (req.url.includes('_realm-auth')) {
+        const authTokens: Record<string, string> = {};
+        for (const [realmURL, permissions] of Object.entries(
+          realmPermissions,
+        )) {
+          authTokens[realmURL] = createJWT(
+            {
+              user: '@testuser:localhost',
+              sessionRoom: getRoomIdForRealmAndUser(
+                realmURL,
+                '@testuser:localhost',
+              ),
+              permissions: permissions as RealmAction[],
+              realm: realmURL,
+            },
+            '1d',
+            testRealmSecretSeed,
+          );
+        }
+        return new Response(JSON.stringify(authTokens), { status: 200 });
+      }
+      if (req.url.includes('_server-session')) {
+        let data = await req.json();
+        if (!data.challenge) {
+          return new Response(
+            JSON.stringify({
+              challenge: 'test',
+              room: 'test-auth-realm-server-session-room',
+            }),
+            {
+              status: 401,
+            },
+          );
+        } else {
+          return new Response('Ok', {
+            status: 200,
+            headers: {
+              Authorization: createJWT(
+                {
+                  user: '@testuser:localhost',
+                  sessionRoom: 'test-auth-realm-server-session-room',
+                },
+                '1d',
+                testRealmSecretSeed,
+              ),
+            },
+          });
+        }
+      }
+      return null;
+    },
+    { prepend: true },
+  );
+}
+
+export function setupUserSubscription() {
   const userResponseBody = {
     data: {
       type: 'user',
@@ -530,34 +781,6 @@ export function setupUserSubscription(matrixRoomId: string) {
     async (req: Request) => {
       if (req.url.includes('_user')) {
         return new Response(JSON.stringify(userResponseBody));
-      }
-      if (req.url.includes('_server-session')) {
-        let data = await req.json();
-        if (!data.challenge) {
-          return new Response(
-            JSON.stringify({
-              challenge: 'test',
-              room: matrixRoomId,
-            }),
-            {
-              status: 401,
-            },
-          );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: '@testuser:localhost',
-                  sessionRoom: matrixRoomId,
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
-        }
       }
       return null;
     },
@@ -617,6 +840,16 @@ export function delay(delayAmountMs: number): Promise<void> {
   });
 }
 
+// --- Created-at test utilities ---
+// Returns created_at (epoch seconds) from realm_file_meta for a given local file path like 'Pet/mango.json'.
+export async function getFileCreatedAt(
+  realm: Realm,
+  localPath: string,
+): Promise<number | undefined> {
+  let db = await getDbAdapter();
+  return getCreatedTime(db, realm.url, localPath);
+}
+
 function changedEntry(
   listings: { path: string; lastModified?: number }[],
   entry: { path: string; lastModified?: number },
@@ -670,6 +903,12 @@ export function setupRealmServerEndpoints(
   endpoints?: RealmServerEndpoint[],
 ) {
   let defaultEndpoints: RealmServerEndpoint[] = [
+    {
+      route: '_realm-auth',
+      getResponse: async function (_req: Request) {
+        return new Response(JSON.stringify({}), { status: 200 });
+      },
+    },
     {
       route: '_server-session',
       getResponse: async function (req: Request) {
@@ -894,12 +1133,12 @@ export async function assertMessages(
   }
 }
 
-export const cardInfo = {
+export const cardInfo = Object.freeze({
   title: null,
   description: null,
   thumbnailURL: null,
   notes: null,
-};
+});
 
 // UI interaction helpers for acceptance tests
 

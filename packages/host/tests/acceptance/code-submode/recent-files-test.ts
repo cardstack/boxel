@@ -22,7 +22,9 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -187,7 +189,6 @@ const friendCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 let monacoService: MonacoService;
 module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -201,11 +202,12 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
     monacoService = getService('monaco-service');
 
     // this seeds the loader used during index which obtains url mappings
@@ -213,6 +215,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
         'person.gts': personCardSource,

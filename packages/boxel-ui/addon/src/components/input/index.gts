@@ -69,6 +69,7 @@ export interface Signature {
     onKeyPress?: (ev: KeyboardEvent) => Promise<void> | void;
     optional?: boolean;
     placeholder?: string;
+    readonly?: boolean;
     required?: boolean;
     size?: 'large' | 'default';
     state?: InputValidationState;
@@ -163,6 +164,7 @@ export default class BoxelInput extends Component<Signature> {
           max={{@max}}
           required={{@required}}
           disabled={{@disabled}}
+          readonly={{@readonly}}
           autocomplete={{@autocomplete}}
           aria-describedby={{if
             @helperText
@@ -221,202 +223,215 @@ export default class BoxelInput extends Component<Signature> {
       {{/let}}
     </div>
     <style scoped>
-      .input-container {
-        --icon-size: var(--boxel-icon-sm);
-        --icon-space: var(--boxel-sp-xs);
-        --icon-full-length: calc(var(--boxel-icon-sm) + var(--boxel-sp-xs) * 2);
-
-        display: grid;
-        grid-template-columns: var(--icon-full-length) 1fr var(
-            --icon-full-length
+      @layer boxelComponentL1 {
+        .input-container {
+          --icon-size: var(--boxel-icon-sm);
+          --icon-space: var(--boxel-sp-xs);
+          --icon-full-length: calc(
+            var(--boxel-icon-sm) + var(--boxel-sp-xs) * 2
           );
-        grid-template-areas:
-          'optional optional optional'
-          'pre-icon input post-icon'
-          'error error error'
-          'helper helper helper';
-        width: 100%;
-      }
 
-      .boxel-input {
-        --boxel-input-height: var(--boxel-form-control-height);
+          display: grid;
+          grid-template-columns: var(--icon-full-length) 1fr var(
+              --icon-full-length
+            );
+          grid-template-areas:
+            'optional optional optional'
+            'pre-icon input post-icon'
+            'error error error'
+            'helper helper helper';
+          width: 100%;
+        }
 
-        grid-column: 1 / span 3;
-        grid-row: 2;
+        .boxel-input {
+          grid-column: 1 / span 3;
+          grid-row: 2;
 
-        box-sizing: border-box;
-        width: 100%;
-        max-width: 100%;
-        min-height: var(--boxel-input-height);
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--background, var(--boxel-light));
-        color: var(--foreground, var(--boxel-dark));
-        border: 1px solid var(--border, var(--boxel-form-control-border-color));
-        border-radius: var(--boxel-form-control-border-radius);
-        box-shadow: var(--shadow);
-        outline: 1px solid transparent;
-        transition:
-          var(--boxel-transition-properties),
-          outline-color var(--boxel-transition);
-      }
+          box-sizing: border-box;
+          width: 100%;
+          max-width: 100%;
+          min-height: var(
+            --boxel-input-height,
+            var(--boxel-form-control-height)
+          );
+          padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+          background-color: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+          border: 1px solid
+            var(--border, var(--boxel-form-control-border-color));
+          border-radius: var(--boxel-form-control-border-radius);
+          box-shadow: var(--shadow);
+          outline: 1px solid transparent;
+          transition:
+            var(--boxel-transition-properties),
+            outline-color var(--boxel-transition);
+        }
 
-      .boxel-input--large {
-        --boxel-form-control-height: 4.375rem;
-        font-size: var(--boxel-font-size);
-      }
+        .boxel-input--large {
+          --boxel-form-control-height: 4.375rem;
+          font-size: var(--boxel-font-size);
+        }
 
-      .boxel-text-area {
-        --boxel-input-height: 10rem;
-      }
+        textarea {
+          --boxel-input-height: 10rem;
+          resize: both;
+          overflow: auto;
+        }
 
-      .boxel-input:disabled {
-        opacity: 0.5;
-      }
+        .boxel-input:not([type='color']):disabled {
+          opacity: 0.5;
+          resize: none; /* do not display resize toggle since it's disabled */
+        }
 
-      .boxel-input:focus-visible {
-        outline-color: var(--ring, var(--boxel-highlight));
-        border-color: var(--ring, var(--boxel-highlight));
-      }
+        .boxel-input:not([type='color'])[readonly] {
+          opacity: 0.5;
+        }
 
-      .boxel-input::placeholder {
-        color: var(--muted-foreground, var(--boxel-450));
-      }
+        .boxel-input:focus-visible {
+          outline-color: var(--ring, var(--boxel-highlight));
+          border-color: var(--ring, var(--boxel-highlight));
+        }
 
-      .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid):not(
-          :invalid
-        ):not(.search) {
-        border-color: var(--border, currentColor);
-      }
+        .boxel-input::placeholder {
+          color: var(--muted-foreground, var(--boxel-450));
+        }
 
-      .invalid:not(:disabled),
-      :invalid:not(:disabled) {
-        border-color: var(--destructive, var(--boxel-error-100));
-        box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
-      }
+        .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid):not(
+            :invalid
+          ):not(.search) {
+          border-color: var(--border, currentColor);
+        }
 
-      .invalid:focus-visible,
-      :invalid:focus-visible {
-        outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
-        box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
-      }
+        .invalid:not(:disabled),
+        :invalid:not(:disabled) {
+          border-color: var(--destructive, var(--boxel-error-100));
+          box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
+        }
 
-      .invalid:hover:not(:disabled),
-      :invalid:hover:not(:disabled) {
-        border-color: var(--destructive, var(--boxel-error-100));
-      }
+        .invalid:focus-visible,
+        :invalid:focus-visible {
+          outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
+          box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
+        }
 
-      .search {
-        --search-input-color: var(
-          --boxel-input-search-color,
-          var(--background, var(--boxel-light))
-        );
+        .invalid:hover:not(:disabled),
+        :invalid:hover:not(:disabled) {
+          border-color: var(--destructive, var(--boxel-error-100));
+        }
 
-        --search-input-background-color: var(
-          --boxel-input-search-background-color,
-          var(--foreground, var(--boxel-dark))
-        );
+        .search {
+          --search-input-color: var(
+            --boxel-input-search-color,
+            var(--background, var(--boxel-light))
+          );
 
-        --boxel-form-control-border-color: var(--border, var(--boxel-dark));
-        --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
+          --search-input-background-color: var(
+            --boxel-input-search-background-color,
+            var(--foreground, var(--boxel-dark))
+          );
 
-        background-color: var(--search-input-background-color);
-        color: var(--search-input-color);
-        padding-top: var(--boxel-sp-xxxs);
-        padding-right: var(--boxel-sp-xl);
-        padding-bottom: var(--boxel-sp-xxxs);
-        /* to account for the icon being on the left */
-        padding-right: unset;
-        padding-left: var(--boxel-sp-xxl); /* leave room for icon */
-        outline-width: 1px;
-      }
+          --boxel-form-control-border-color: var(--border, var(--boxel-dark));
+          --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
-      .boxel-input--bottom-flat {
-        --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
-          var(--boxel-border-radius-xl) 0 0;
-      }
+          background-color: var(--search-input-background-color);
+          color: var(--search-input-color);
+          padding-top: var(--boxel-sp-xxxs);
+          padding-right: var(--boxel-sp-xl);
+          padding-bottom: var(--boxel-sp-xxxs);
+          /* to account for the icon being on the left */
+          padding-right: unset;
+          padding-left: var(--boxel-sp-xxl); /* leave room for icon */
+          outline-width: 1px;
+        }
 
-      .search-icon {
-        --icon-color: var(
-          --boxel-input-search-icon-color,
-          var(--boxel-highlight)
-        );
-      }
+        .boxel-input--bottom-flat {
+          --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
+            var(--boxel-border-radius-xl) 0 0;
+        }
 
-      .search-icon-container {
-        grid-area: pre-icon;
+        .search-icon {
+          --icon-color: var(
+            --boxel-input-search-icon-color,
+            var(--boxel-highlight)
+          );
+        }
 
-        display: flex;
-        height: 100%;
-        align-items: center;
-        justify-content: center;
-      }
+        .search-icon-container {
+          grid-area: pre-icon;
 
-      .validation-icon-container {
-        grid-area: post-icon;
+          display: flex;
+          height: 100%;
+          align-items: center;
+          justify-content: center;
+        }
 
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        user-select: none;
-      }
+        .validation-icon-container {
+          grid-area: post-icon;
 
-      .search ~ .validation-icon-container .validation-icon-loading {
-        color: var(--primary, var(--boxel-highlight));
-        --icon-color: currentColor;
-      }
-      .search ~ .search-icon-container .search-icon {
-        color: var(
-          --boxel-input-search-icon-color,
-          var(--primary, var(--boxel-highlight))
-        );
-        --icon-color: currentColor;
-      }
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          user-select: none;
+        }
 
-      .optional {
-        grid-area: optional;
-        justify-self: end;
+        .search ~ .validation-icon-container .validation-icon-loading {
+          color: var(--primary, var(--boxel-highlight));
+          --icon-color: currentColor;
+        }
+        .search ~ .search-icon-container .search-icon {
+          color: var(
+            --boxel-input-search-icon-color,
+            var(--primary, var(--boxel-highlight))
+          );
+          --icon-color: currentColor;
+        }
 
-        margin-bottom: var(--boxel-sp-xxxs);
-        font-size: var(--boxel-font-size-xs);
-        font-style: oblique;
-        letter-spacing: var(--boxel-lsp);
-        opacity: 0.75;
-      }
+        .optional {
+          grid-area: optional;
+          justify-self: end;
 
-      .error-message {
-        grid-area: error;
+          margin-bottom: var(--boxel-sp-xxxs);
+          font-size: var(--boxel-font-size-xs);
+          font-style: oblique;
+          letter-spacing: var(--boxel-lsp);
+          opacity: 0.75;
+        }
 
-        margin-top: var(--boxel-sp-xxxs);
-        margin-left: calc(var(--boxel-sp-sm) + 1px);
-        color: var(--destructive, var(--boxel-error-200));
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
-        letter-spacing: var(--boxel-lsp);
-      }
+        .error-message {
+          grid-area: error;
 
-      .helper-text {
-        grid-area: helper;
+          margin-top: var(--boxel-sp-xxxs);
+          margin-left: calc(var(--boxel-sp-sm) + 1px);
+          color: var(--destructive, var(--boxel-error-200));
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
+          letter-spacing: var(--boxel-lsp);
+        }
 
-        margin-top: var(--boxel-sp-xs);
-        margin-left: calc(var(--boxel-sp-sm) + 1px);
-        font-size: var(--boxel-font-size-sm);
-        letter-spacing: var(--boxel-lsp);
-        opacity: 0.75;
-      }
+        .helper-text {
+          grid-area: helper;
 
-      .boxel-input:disabled ~ .error-message,
-      .boxel-input:disabled ~ .helper-text {
-        display: none;
-      }
+          margin-top: var(--boxel-sp-xs);
+          margin-left: calc(var(--boxel-sp-sm) + 1px);
+          font-size: var(--boxel-font-size-sm);
+          letter-spacing: var(--boxel-lsp);
+          opacity: 0.75;
+        }
 
-      .boxel-input.search::placeholder {
-        color: inherit;
-        opacity: 0.6;
-      }
+        .boxel-input:disabled ~ .error-message,
+        .boxel-input:disabled ~ .helper-text {
+          display: none;
+        }
 
-      @media (prefers-reduced-motion: no-preference) {
-        .validation-icon-loading {
-          animation: var(--boxel-infinite-spin-animation);
+        .boxel-input.search::placeholder {
+          color: inherit;
+          opacity: 0.6;
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+          .validation-icon-loading {
+            animation: var(--boxel-infinite-spin-animation);
+          }
         }
       }
     </style>

@@ -1,0 +1,28 @@
+{
+    "data": {
+        "type": "card",
+        "attributes": {
+            "cardInfo": {
+                "title": "DeepSeek: DeepSeek V3 0324",
+                "description": "DeepSeek V3, a 685B-parameter, mixture-of-experts model, is the latest iteration of the flagship chat model family from the DeepSeek team.\n\nIt succeeds the [DeepSeek V3](/deepseek/deepseek-chat-v3) model and performs really well on a variety of tasks.",
+                "thumbnailURL": null,
+                "notes": null
+            },
+            "modelId": "deepseek/deepseek-chat-v3-0324",
+            "toolsSupported": true
+        },
+        "relationships": {
+            "cardInfo.theme": {
+                "links": {
+                    "self": null
+                }
+            }
+        },
+        "meta": {
+            "adoptsFrom": {
+                "module": "https://cardstack.com/base/system-card",
+                "name": "ModelConfiguration"
+            }
+        }
+    }
+}

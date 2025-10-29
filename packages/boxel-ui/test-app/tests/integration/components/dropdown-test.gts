@@ -12,9 +12,9 @@ module('Integration | Component | dropdown', function (hooks) {
 
   test('dropdown auto-close behavior: auto-close when enabled, stays open when disabled', async function (assert) {
     const menuOptions = [
-      new MenuItem('Option 1', 'action', { action: () => {} }),
-      new MenuItem('Option 2', 'action', { action: () => {} }),
-      new MenuItem('Option 3', 'action', { action: () => {} }),
+      new MenuItem({ label: 'Option 1', action: () => {} }),
+      new MenuItem({ label: 'Option 2', action: () => {} }),
+      new MenuItem({ label: 'Option 3', action: () => {} }),
     ];
 
     // Scenario 1

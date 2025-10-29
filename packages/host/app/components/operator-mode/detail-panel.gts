@@ -10,7 +10,10 @@ import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
 
-import { LoadingIndicator, IconButton } from '@cardstack/boxel-ui/components';
+import {
+  LoadingIndicator,
+  ContextButton,
+} from '@cardstack/boxel-ui/components';
 import {
   IconInherit,
   IconTrash,
@@ -43,10 +46,7 @@ import {
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -119,6 +119,10 @@ export default class DetailPanel extends Component<Signature> {
 
   private get showInThisFilePanel() {
     return this.isModule && this.declarations.length > 0;
+  }
+
+  private get showInThisEmptyFilePanel() {
+    return this.isModule && this.isEmptyFile;
   }
 
   private get codePath() {
@@ -346,6 +350,10 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
+  private get isEmptyFile() {
+    return this.args.readyFile?.content.match(/^\s*$/);
+  }
+
   private get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
   }
@@ -399,13 +407,13 @@ export default class DetailPanel extends Component<Signature> {
               data-test-current-module-name={{@readyFile.name}}
             >
               {{#if (this.realm.canWrite @readyFile.url)}}
-                <IconButton
-                  @icon={{IconTrash}}
-                  @width='15'
-                  @height='15'
+                <ContextButton
+                  @icon='delete'
+                  @size='extra-small'
+                  @variant='destructive'
                   {{on 'click' (fn @delete this.codePath)}}
                   class='delete-module-button'
-                  aria-label='Delete Module'
+                  @label='Delete Module'
                   data-test-delete-module-button
                 />
               {{/if}}
@@ -415,6 +423,32 @@ export default class DetailPanel extends Component<Signature> {
               @items={{this.buildSelectorItems}}
               data-test-in-this-file-selector
             />
+          </BaseContainer>
+        </PanelSection>
+      {{/if}}
+
+      {{#if this.showInThisEmptyFilePanel}}
+        <PanelSection as |PanelHeader|>
+          <PanelHeader aria-label='In This Empty File Header'>
+            In This File
+          </PanelHeader>
+          <BaseContainer as |BaseHeader|>
+            <BaseHeader
+              @title={{@readyFile.name}}
+              data-test-current-module-name={{@readyFile.name}}
+            >
+              {{#if (this.realm.canWrite @readyFile.url)}}
+                <ContextButton
+                  @icon='delete'
+                  @size='extra-small'
+                  @variant='destructive'
+                  {{on 'click' (fn @delete this.codePath)}}
+                  class='delete-module-button'
+                  @label='Delete Module'
+                  data-test-delete-module-button
+                />
+              {{/if}}
+            </BaseHeader>
           </BaseContainer>
         </PanelSection>
       {{/if}}
@@ -540,21 +574,7 @@ export default class DetailPanel extends Component<Signature> {
         align-items: center;
         height: 100%;
       }
-      .delete-module-button {
-        --icon-stroke-width: 1.2px;
-        border: none;
-        border-radius: var(--boxel-border-radius-xs);
-        width: 20px;
-        height: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .delete-module-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-danger);
-      }
       .delete-module-button:focus:focus-visible:not(:disabled) {
-        --icon-color: var(--boxel-danger);
         outline: 2px solid var(--boxel-danger);
         outline-offset: 0;
       }

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "resourceTitle": "Machine Learning Course - Stanford CS229",
+      "resourceType": "video",
+      "url": "https://example.com/ml-course",
+      "subject": "Machine Learning",
+      "difficulty": "advanced",
+      "estimatedTime": 90,
+      "completionStatus": "not_started",
+      "tags": ["Machine learning","Statistics","Python"],
+      "notes": "Recommended by my mentor. Start after completing linear algebra review.",
+      "lastAccessed": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../study-resource",
+        "name": "StudyResource"
+      }
+    }
+  }
+}

@@ -3,11 +3,16 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
+
+DEFAULT_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog/'
+CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   BOXEL_HOST_URL=https://realms-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  VALID_PUBLISHED_REALM_DOMAINS='staging.boxel.dev,staging.boxel.build' \
+  PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='staging.boxel.dev' \
+  PUBLISHED_REALM_BOXEL_SITE_DOMAIN='staging.boxel.build' \
   ts-node \
   --transpileOnly main \
   --port=3000 \
@@ -23,8 +28,8 @@ NODE_NO_WARNINGS=1 \
   \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
-  --fromUrl='https://realms-staging.stack.cards/catalog/' \
-  --toUrl='https://realms-staging.stack.cards/catalog/' \
+  --fromUrl="${CATALOG_REALM_URL}" \
+  --toUrl="${CATALOG_REALM_URL}" \
   \
   --path='/persistent/skills' \
   --username='skills_realm' \

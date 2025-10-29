@@ -3,7 +3,6 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { BoxelButton, CircleSpinner } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, Exclamation } from '@cardstack/boxel-ui/icons';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 export type ApplyButtonState =
   | 'ready'
@@ -25,58 +24,49 @@ interface Signature {
 }
 
 const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
-  {{#if (eq @state 'ready')}}
-    <BoxelButton
-      @kind='primary'
-      @size='small'
-      class='apply-button'
-      {{setCssVar boxel-button-text-color='var(--boxel-dark)'}}
-      data-test-apply-state={{@state}}
-      ...attributes
-    >
-      {{#if (has-block)}}
-        {{yield}}
-      {{else if @actionVerb}}
-        {{@actionVerb}}
-      {{else}}
-        Run
-      {{/if}}
-    </BoxelButton>
-  {{else}}
-    <div
-      class='state-indicator {{@state}}'
-      data-test-apply-state={{@state}}
-      ...attributes
-    >
-      {{#if (eq @state 'applying')}}
-        <CircleSpinner width='18' height='18' />
-      {{else if (eq @state 'applied')}}
-        <CheckMark width='16' height='16' />
-      {{else if (eq @state 'failed')}}
-        <Exclamation width='16' height='16' />
-      {{else if (eq @state 'invalid')}}
-        <Exclamation width='16' height='16' />
-      {{else if (eq @state 'preparing')}}
-        <BoxelButton
-          @kind='secondary-dark'
-          @size='small'
-          class='apply-button'
-          tabindex='-1'
-          disabled
-          {{setCssVar boxel-button-text-color='var(--boxel-200)'}}
-          data-test-apply-state='preparing'
-        >
-          Working…
-        </BoxelButton>
-      {{/if}}
-    </div>
-  {{/if}}
+  <div
+    class='state-indicator {{@state}}'
+    data-test-apply-state={{@state}}
+    ...attributes
+  >
+    {{#if (eq @state 'ready')}}
+      <BoxelButton @kind='primary' @size='auto' class='apply-button'>
+        {{#if (has-block)}}
+          {{yield}}
+        {{else if @actionVerb}}
+          {{@actionVerb}}
+        {{else}}
+          Run
+        {{/if}}
+      </BoxelButton>
+    {{else if (eq @state 'applying')}}
+      <CircleSpinner width='18' height='18' />
+    {{else if (eq @state 'applied')}}
+      <CheckMark width='16' height='16' />
+    {{else if (eq @state 'failed')}}
+      <Exclamation width='16' height='16' />
+    {{else if (eq @state 'invalid')}}
+      <Exclamation width='16' height='16' />
+    {{else if (eq @state 'preparing')}}
+      <BoxelButton
+        @kind='secondary-dark'
+        @size='auto'
+        class='apply-button'
+        tabindex='-1'
+        disabled
+      >
+        Working…
+      </BoxelButton>
+    {{/if}}
+  </div>
   <style scoped>
     .apply-button {
       --boxel-button-font: 600 var(--boxel-font-xs);
       padding: 3px 10px;
       min-width: inherit;
       min-height: inherit;
+      height: 1.5rem;
+      border-radius: inherit;
     }
     .apply-button:hover:not(:disabled),
     .apply-button:focus:not(:disabled) {
@@ -94,6 +84,10 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
         width var(--boxel-transition),
         border-radius var(--boxel-transition);
     }
+    .state-indicator.ready {
+      border-radius: 100px;
+      width: fit-content;
+    }
     .state-indicator.applying {
       --icon-stroke-width: 5;
       width: 58px;
@@ -106,6 +100,8 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       border-radius: 100px;
     }
     .state-indicator.preparing .apply-button {
+      --boxel-button-color: transparent;
+      --boxel-button-text-color: var(--boxel-200);
       border: 0;
       min-width: 74px;
     }
@@ -113,7 +109,6 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       opacity: 1;
     }
     .state-indicator.preparing .apply-button:focus {
-      --boxel-button-color: inherit;
       filter: none;
       cursor: not-allowed;
     }
@@ -163,7 +158,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       overflow: hidden;
     }
 
-    .state-indicator:not(.applying):not(.preparing) {
+    .state-indicator:not(.applying):not(.preparing):not(.ready) {
       width: 1.5rem;
       aspect-ratio: 1;
       border-radius: 50%;

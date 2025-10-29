@@ -62,7 +62,7 @@ export default class MenuUsage extends Component {
       <:api as |Args|>
         <Args.Object
           @name='items'
-          @description="An array of MenuItems, created using the 'menu-item' helper. The menu-item helper accepts the menu item text as its first argument, and an action or link (as created using ember-link) as the second argument."
+          @description="An array of MenuItems, created using the 'menu-item' helper. The menu-item helper accepts the menu item text as its first argument, and an action as the second argument."
         />
         <Args.Action
           @name='closeMenu'

@@ -65,7 +65,6 @@ export default class WorkspaceChooser extends Component<Signature> {
         background-color: var(--boxel-700);
         height: 100%;
         width: 100%;
-        padding: 5.5rem 0 5.5rem 11.5rem;
         animation: fadeIn 0.5s ease-in forwards;
         z-index: var(--host-workspace-chooser-z-index);
       }
@@ -74,8 +73,8 @@ export default class WorkspaceChooser extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         height: 100%;
+        padding: 5rem;
         overflow: auto;
-        padding-right: 5.5rem;
       }
       .workspace-chooser__title {
         color: var(--boxel-light);

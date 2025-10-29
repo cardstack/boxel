@@ -1,0 +1,140 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GameQuizCard",
+        "module": "../game-quiz/game-quiz"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "subject": "Culinary Arts & World Cuisines",
+      "cardInfo": {
+        "notes": "Perfect for culinary students, food enthusiasts, and aspiring chefs looking to expand their global cuisine knowledge.",
+        "title": "World Cuisine Quiz",
+        "description": "Test your knowledge of international cooking techniques, ingredients, and traditional dishes from around the globe.",
+        "thumbnailURL": null
+      },
+      "gameScore": 0,
+      "quizTitle": "Global Cuisine Mastery Quiz",
+      "timeLimit": 20,
+      "difficulty": {
+        "index": 1,
+        "label": "Intermediate"
+      },
+      "completedAt": null,
+      "isCompleted": false,
+      "quizQuestions": [
+        {
+          "question": "Which spice is known as the 'king of spices' and is primarily grown in Kerala, India?",
+          "choices": [
+            "Cardamom",
+            "Black pepper",
+            "Cinnamon",
+            "Cloves"
+          ],
+          "correctAnswer": "Black pepper"
+        },
+        {
+          "question": "What is the main ingredient in the Japanese soup base called 'dashi'?",
+          "choices": [
+            "Miso paste",
+            "Soy sauce",
+            "Kombu seaweed",
+            "Rice vinegar"
+          ],
+          "correctAnswer": "Kombu seaweed"
+        },
+        {
+          "question": "Which French cooking technique involves cooking food slowly in its own fat?",
+          "choices": [
+            "Sous vide",
+            "Confit",
+            "Braising",
+            "Flambé"
+          ],
+          "correctAnswer": "Confit"
+        },
+        {
+          "question": "What type of pasta is traditionally used in carbonara?",
+          "choices": [
+            "Penne",
+            "Fettuccine",
+            "Spaghetti",
+            "Rigatoni"
+          ],
+          "correctAnswer": "Spaghetti"
+        },
+        {
+          "question": "Which country is credited with inventing tempura?",
+          "choices": [
+            "Japan",
+            "Portugal",
+            "China",
+            "Korea"
+          ],
+          "correctAnswer": "Portugal"
+        },
+        {
+          "question": "What is the primary flavor component in Thai tom yum soup?",
+          "choices": [
+            "Coconut milk",
+            "Fish sauce",
+            "Lemongrass and lime leaves",
+            "Tamarind paste"
+          ],
+          "correctAnswer": "Lemongrass and lime leaves"
+        },
+        {
+          "question": "Which cut of beef is traditionally used for authentic Beef Wellington?",
+          "choices": [
+            "Ribeye",
+            "Sirloin",
+            "Beef tenderloin",
+            "Strip steak"
+          ],
+          "correctAnswer": "Beef tenderloin"
+        },
+        {
+          "question": "What is the key difference between paella Valenciana and seafood paella?",
+          "choices": [
+            "The type of rice used",
+            "Valenciana contains rabbit and beans, seafood contains only seafood",
+            "The cooking method",
+            "The seasoning blend"
+          ],
+          "correctAnswer": "Valenciana contains rabbit and beans, seafood contains only seafood"
+        },
+        {
+          "question": "Which fermentation process is used to make traditional Korean kimchi?",
+          "choices": [
+            "Alcoholic fermentation",
+            "Acetic acid fermentation",
+            "Lactic acid fermentation",
+            "Mixed acid fermentation"
+          ],
+          "correctAnswer": "Lactic acid fermentation"
+        },
+        {
+          "question": "What is the traditional thickening agent in Greek avgolemono soup?",
+          "choices": [
+            "Cornstarch",
+            "Flour roux",
+            "Egg and lemon mixture",
+            "Heavy cream"
+          ],
+          "correctAnswer": "Egg and lemon mixture"
+        }
+      ],
+      "correctAnswers": 0,
+      "highestGameScore": "0"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

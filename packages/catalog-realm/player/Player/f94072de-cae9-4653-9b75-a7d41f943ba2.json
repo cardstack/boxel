@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Player",
+        "module": "../player"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "avatar": {
+        "eyeType": "Happy",
+        "topType": "LongHairBob",
+        "hairColor": "Blonde",
+        "mouthType": "Smile",
+        "skinColor": "Light",
+        "clotheType": "CollarSweater",
+        "eyebrowType": "Default",
+        "facialHairType": "Blank",
+        "accessoriesType": "Blank"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "Mary Hu",
+        "description": null,
+        "thumbnailURL": null
+      }
+    }
+  }
+}

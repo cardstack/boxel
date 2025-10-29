@@ -3,9 +3,14 @@ import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { ComponentLike } from '@glint/template';
-import Serializer from '@simple-dom/serializer';
 
+//@ts-ignore no types are available
+import createDocument from '@simple-dom/document';
+import Parser, { Tokenizer } from '@simple-dom/parser';
+import Serializer from '@simple-dom/serializer';
 import voidMap from '@simple-dom/void-map';
+
+import { tokenize } from 'simple-html-tokenizer';
 
 import {
   logger,
@@ -24,10 +29,11 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
-import {
-  type CardDef,
-  type Format,
-  type CardStore,
+import type {
+  CardDef,
+  Format,
+  CardStore,
+  BoxComponent,
 } from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -179,6 +185,18 @@ export default class RenderService extends Service {
     return parseCardHtml(html);
   };
 
+  renderCardComponent(
+    component: BoxComponent,
+    capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
+    format: Format = 'isolated',
+  ): string {
+    let element = getIsolatedRenderElement(this.document);
+    render(component, element, this.owner, format);
+    let serializer = new Serializer(voidMap);
+    let html = serializer.serialize(element);
+    return parseCardHtml(html, capture);
+  }
+
   render = (component: ComponentLike): string => {
     let element = getIsolatedRenderElement(this.document);
     render(component, element, this.owner);
@@ -230,13 +248,35 @@ export default class RenderService extends Service {
   }
 }
 
-function parseCardHtml(html: string): string {
-  let matches = html.matchAll(
-    /<div id="isolated-render"[^>]*>[\n\s]*(?<html>[\W\w\n\s]*)[\s\n]*<\/div>/gm,
-  );
-  for (let match of matches) {
-    let { html } = match.groups as { html: string };
-    return html.trim();
+export function parseCardHtml(
+  html: string,
+  capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
+): string {
+  let document = createDocument();
+  let parser = new Parser(tokenize as Tokenizer, document, voidMap);
+  let fragment = parser.parse(html).firstChild;
+  if (!fragment) {
+    throw new Error(`no HTML to parse`);
+  }
+  let serializer = new Serializer(voidMap);
+
+  let parts: string[] = [];
+  for (let node = fragment.firstChild; node; node = node.nextSibling) {
+    if (capture === 'innerHTML') {
+      if (node.nodeType !== ELEMENT_NODE_TYPE) {
+        continue;
+      }
+      let element = node as SimpleElement;
+      for (let child = element.firstChild; child; child = child.nextSibling) {
+        parts.push(serializer.serialize(child));
+      }
+      return parts.join('').trim();
+    } else {
+      parts.push(serializer.serialize(node));
+    }
+  }
+  if (capture === 'outerHTML') {
+    return parts.join('').trim();
   }
   throw new Error(`unable to determine HTML for card. found HTML:\n${html}`);
 }

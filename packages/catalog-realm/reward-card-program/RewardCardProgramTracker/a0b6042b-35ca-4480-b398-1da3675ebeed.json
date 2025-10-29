@@ -1,0 +1,120 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RewardCardProgramTracker",
+        "module": "../reward-card-program-tracker"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "trackingYear": "2025",
+      "cardholderName": "David Liu",
+      "benefitTrackings": [
+        {
+          "usedQ1": false,
+          "usedQ2": false,
+          "usedQ3": false,
+          "usedQ4": false,
+          "usedJan": false,
+          "usedFeb": false,
+          "usedMar": false,
+          "usedApr": false,
+          "usedMay": false,
+          "usedJun": false,
+          "usedJul": false,
+          "usedAug": false,
+          "usedSep": false,
+          "usedOct": false,
+          "usedNov": false,
+          "usedDec": false,
+          "usedFirstHalf": false,
+          "usedSecondHalf": false,
+          "usedAnnually": true,
+          "lastUsedDate": "2025-10-23",
+          "notes": null
+        },
+        {
+          "usedQ1": false,
+          "usedQ2": false,
+          "usedQ3": false,
+          "usedQ4": false,
+          "usedJan": false,
+          "usedFeb": false,
+          "usedMar": false,
+          "usedApr": false,
+          "usedMay": false,
+          "usedJun": false,
+          "usedJul": false,
+          "usedAug": false,
+          "usedSep": false,
+          "usedOct": false,
+          "usedNov": false,
+          "usedDec": false,
+          "usedFirstHalf": false,
+          "usedSecondHalf": false,
+          "usedAnnually": false,
+          "lastUsedDate": null,
+          "notes": null
+        },
+        {
+          "usedQ1": false,
+          "usedQ2": false,
+          "usedQ3": false,
+          "usedQ4": false,
+          "usedJan": false,
+          "usedFeb": false,
+          "usedMar": false,
+          "usedApr": false,
+          "usedMay": false,
+          "usedJun": false,
+          "usedJul": false,
+          "usedAug": false,
+          "usedSep": false,
+          "usedOct": false,
+          "usedNov": false,
+          "usedDec": false,
+          "usedFirstHalf": false,
+          "usedSecondHalf": false,
+          "usedAnnually": true,
+          "lastUsedDate": null,
+          "notes": null
+        }
+      ]
+    },
+    "relationships": {
+      "cardSystem": {
+        "links": {
+          "self": "../RewardCardProgram/american-express-business-platinium-card-program"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "benefitTrackings.0.benefit": {
+        "links": {
+          "self": "../Benefit/uber-one-credit"
+        }
+      },
+      "benefitTrackings.1.benefit": {
+        "links": {
+          "self": "../Benefit/airline-fee-credit"
+        }
+      },
+      "benefitTrackings.2.benefit": {
+        "links": {
+          "self": "../Benefit/business-amex-travel-flight-credit"
+        }
+      }
+    }
+  }
+}

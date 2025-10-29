@@ -16,53 +16,57 @@
       },
       "gameState": "gameOver",
       "casinoName": "Casino de Monte-Carlo",
-      "currentBet": 100,
+      "currentBet": 200,
       "dealerHand": [
         {
           "suit": "spades",
-          "value": "A",
-          "faceUp": true
-        },
-        {
-          "suit": "diamonds",
-          "value": "2",
+          "value": "Q",
           "faceUp": true
         },
         {
           "suit": "clubs",
-          "value": "J",
-          "faceUp": true
-        },
-        {
-          "suit": "clubs",
-          "value": "10",
-          "faceUp": true
+          "value": "3",
+          "faceUp": false
         }
       ],
       "playerHand": [
         {
-          "suit": "spades",
-          "value": "K",
+          "suit": "clubs",
+          "value": "6",
           "faceUp": true
         },
         {
-          "suit": "diamonds",
-          "value": "7",
+          "suit": "hearts",
+          "value": "J",
+          "faceUp": true
+        },
+        {
+          "suit": "hearts",
+          "value": "Q",
           "faceUp": true
         }
       ],
-      "playerName": "Jack Black",
       "statistics": {
         "wins": 3,
-        "losses": 5,
-        "earnings": -110
+        "losses": 1,
+        "earnings": -45
       },
-      "dealerScore": null,
-      "gameMessage": "Dealer busts! You win!",
-      "playerChips": 4890,
-      "playerScore": null
+      "dealerScore": 0,
+      "gameMessage": "Bust! You lose.",
+      "playerChips": 4955,
+      "playerScore": 0
     },
     "relationships": {
+      "dealer": {
+        "links": {
+          "self": null
+        }
+      },
+      "player": {
+        "links": {
+          "self": null
+        }
+      },
       "cardInfo.theme": {
         "links": {
           "self": null

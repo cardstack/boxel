@@ -3,6 +3,7 @@ import {
   type QueuePublisher,
   type Realm,
   type VirtualNetwork,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -29,6 +30,11 @@ import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
+import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability';
+import handleRealmAuth from './handlers/handle-realm-auth';
+import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain';
+import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain';
+import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -47,6 +53,7 @@ export type CreateRoutesArgs = {
     url: string,
     username: string,
     copiedFromRealm?: URL,
+    enableFileWatcher?: boolean,
   ) => Realm;
   createRealm: ({
     ownerUserId,
@@ -60,11 +67,18 @@ export type CreateRoutesArgs = {
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-  }) => Promise<Realm>;
+  }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
-  sendEvent: (user: string, eventType: string) => Promise<void>;
-  validPublishedRealmDomains?: string[];
+  sendEvent: (
+    user: string,
+    eventType: string,
+    data?: Record<string, any>,
+  ) => Promise<void>;
+  domainsForPublishedRealms?: {
+    boxelSpace?: string;
+    boxelSite?: string;
+  };
   assetsURL: URL;
 };
 
@@ -137,6 +151,31 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleFullReindex(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
+  router.post(
+    '/_realm-auth',
+    jwtMiddleware(args.realmSecretSeed),
+    handleRealmAuth(args),
+  );
+  router.get(
+    '/_check-boxel-domain-availability',
+    jwtMiddleware(args.realmSecretSeed),
+    handleCheckBoxelDomainAvailabilityRequest(args),
+  );
+  router.get(
+    '/_boxel-claimed-domains',
+    jwtMiddleware(args.realmSecretSeed),
+    handleGetBoxelClaimedDomainRequest(args),
+  );
+  router.post(
+    '/_boxel-claimed-domains',
+    jwtMiddleware(args.realmSecretSeed),
+    handleClaimBoxelDomainRequest(args),
+  );
+  router.delete(
+    '/_boxel-claimed-domains/:claimedDomainId',
+    jwtMiddleware(args.realmSecretSeed),
+    handleDeleteBoxelClaimedDomainRequest(args),
+  );
 
   return router.routes();
 }

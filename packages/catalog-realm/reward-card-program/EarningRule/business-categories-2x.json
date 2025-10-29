@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "EarningRule",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "category": "Business Purchases",
+      "appliesTo": "Key business categories or single purchases of $5,000 or more",
+      "capAmount": {
+        "amount": "2000000",
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "conditions": "Earn 2X points on eligible purchases in key business categories, or on single purchases of $5K or more. Purchases eligible for multiple additional point bonuses will only receive the highest eligible bonus. Earn 2X on up to $2 million of these purchases per calendar year.‡ Eligible purchases at US: Construction material and hardware suppliers Electronic goods retailers and software & cloud system providers Shipping providers Each eligible purchase of $5,000 or more",
+      "rateMultiplier": 2
+    },
+    "relationships": {
+      "capPeriod": {
+        "links": {
+          "self": "../TimePeriod/annual-calendar"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

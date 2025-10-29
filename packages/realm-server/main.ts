@@ -23,6 +23,11 @@ if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
 }
 
+if (process.env.USE_HEADLESS_CHROME_INDEXING) {
+  // in node context this is a boolean
+  (globalThis as any).__useHeadlessChromePrerender = true;
+}
+
 const REALM_SERVER_SECRET_SEED = process.env.REALM_SERVER_SECRET_SEED;
 if (!REALM_SERVER_SECRET_SEED) {
   console.error(
@@ -73,12 +78,6 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
-
-const VALID_PUBLISHED_REALM_DOMAINS = process.env.VALID_PUBLISHED_REALM_DOMAINS
-  ? process.env.VALID_PUBLISHED_REALM_DOMAINS.split(',').map((domain) =>
-      domain.trim(),
-    )
-  : undefined;
 
 let {
   port,
@@ -264,6 +263,16 @@ let autoMigrate = migrateDB || undefined;
     }
   }
 
+  // Domains to use for when users publish their realms.
+  // PUBLISHED_REALM_BOXEL_SPACE_DOMAIN is used to form urls like "mike.boxel.space/game-mechanics"
+  // PUBLISHED_REALM_BOXEL_SITE_DOMAIN is used to form urls like "mike.boxel.site"
+  let domainsForPublishedRealms = {
+    boxelSpace:
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+    boxelSite:
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
+  };
+
   let server = new RealmServer({
     realms,
     virtualNetwork,
@@ -274,12 +283,14 @@ let autoMigrate = migrateDB || undefined;
     grafanaSecret: GRAFANA_SECRET,
     dbAdapter,
     queue,
-    assetsURL: dist,
+    assetsURL: process.env.ASSETS_URL_OVERRIDE
+      ? new URL(process.env.ASSETS_URL_OVERRIDE)
+      : dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     enableFileWatcher: ENABLE_FILE_WATCHER,
-    validPublishedRealmDomains: VALID_PUBLISHED_REALM_DOMAINS,
+    domainsForPublishedRealms,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,

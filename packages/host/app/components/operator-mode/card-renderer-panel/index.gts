@@ -4,8 +4,6 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
-
 import Modifier from 'ember-modifier';
 
 import {
@@ -13,12 +11,13 @@ import {
   BoxelButton,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { IconLink, Eye, IconCode } from '@cardstack/boxel-ui/icons';
+import { eq, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
   cardTypeDisplayName,
   cardTypeIcon,
+  getCardMenuItems,
   identifyCard,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -27,9 +26,10 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
+import type CommandService from '@cardstack/host/services/command-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import RealmService from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -47,13 +47,11 @@ interface Signature {
 }
 
 export default class CardRendererPanel extends Component<Signature> {
+  @service private declare commandService: CommandService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
 
   private scrollPositions = new Map<string, number>();
-  private copyToClipboard = task(async () => {
-    await navigator.clipboard.writeText(this.args.card.id);
-  });
 
   private onScroll = (event: Event) => {
     let scrollPosition = (event.target as HTMLElement).scrollTop;
@@ -92,18 +90,18 @@ export default class CardRendererPanel extends Component<Signature> {
     return this.realm.info(url);
   }
 
-  private get contextMenuItems(): MenuItem[] {
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy Card URL', 'action', {
-        action: () => this.copyToClipboard.perform(),
-        icon: IconLink,
+  private get contextMenuItems() {
+    if (!this.args.card) {
+      return [];
+    }
+    return toMenuItems(
+      this.args.card[getCardMenuItems]({
+        canEdit: this.realm.canWrite(this.args.card.id),
+        cardCrudFunctions: {},
+        menuContext: 'code-mode-preview',
+        commandContext: this.commandService.commandContext,
       }),
-      new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode(),
-        icon: Eye,
-      }),
-    ];
-    return menuItems;
+    );
   }
 
   private get canEditCard() {

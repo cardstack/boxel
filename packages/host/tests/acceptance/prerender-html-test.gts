@@ -4,13 +4,18 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  type RenderRouteOptions,
+  type RenderError,
+  baseRealm,
+} from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -24,6 +29,14 @@ module('Acceptance | prerender | html', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
   });
+
+  const DEFAULT_RENDER_OPTIONS_SEGMENT = encodeURIComponent(
+    JSON.stringify({ clearCache: true } as RenderRouteOptions),
+  );
+  const renderPath = (url: string, suffix: string, nonce = 0) =>
+    `/render/${encodeURIComponent(
+      url,
+    )}/${nonce}/${DEFAULT_RENDER_OPTIONS_SEGMENT}${suffix}`;
 
   hooks.beforeEach(async function () {
     // these tests result in a really large index definitions object because of all the
@@ -167,6 +180,7 @@ module('Acceptance | prerender | html', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
         'cat.gts': { Cat },
@@ -508,7 +522,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('prerender isolated html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     assert
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="cardTitle"]`,
@@ -518,7 +532,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('prerender embedded html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/embedded/0`);
+    await visit(renderPath(url, '/html/embedded/0'));
     assert
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="embedded"] [data-test-card-title]`,
@@ -533,7 +547,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('prerender atom html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/atom/0`);
+    await visit(renderPath(url, '/html/atom/0'));
     assert
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="atom"]`,
@@ -543,7 +557,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('prerender fitted html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/fitted/0`);
+    await visit(renderPath(url, '/html/fitted/0'));
     assert
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="fitted"] [data-test-card-title]`,
@@ -558,13 +572,13 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('prerender icon html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/icon`);
+    await visit(renderPath(url, '/icon'));
     assert.dom('[data-prerender] > svg').exists('icon rendered');
   });
 
   test('prerender ancestor html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/embedded/1`);
+    await visit(renderPath(url, '/html/embedded/1'));
     assert
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="embedded"]`,
@@ -574,7 +588,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with contains field', async function (assert) {
     let url = `${testRealmURL}Pet/vangogh.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="name"?.*Van Gogh/s.test(value),
@@ -584,7 +598,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with containsMany field', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="aliases"?.*Satan?.*Satan's Mistress/s.test(value),
@@ -594,7 +608,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with linksTo field', async function (assert) {
     let url = `${testRealmURL}Pet/mango.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="petFriend"?.*Van Gogh/s.test(value),
@@ -604,7 +618,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with linksToMany field', async function (assert) {
     let url = `${testRealmURL}Person/hassan.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="pets"?.*Mango?.*Van Gogh/s.test(value),
@@ -614,10 +628,10 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('prerender can handle missing link in linksTo field', async function (assert) {
     let url = `${testRealmURL}Cat/molly.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML', 'error');
-    let error = JSON.parse(value);
-    assert.strictEqual(error.code, 404, 'error code is correct');
+    let { error }: RenderError = JSON.parse(value);
+    assert.strictEqual(error.status, 404, 'error code is correct');
     assert.strictEqual(error.title, 'Not Found', 'error title is correct');
     assert.strictEqual(
       error.message,
@@ -634,10 +648,10 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('prerender can handle missing link in linksToMany field', async function (assert) {
     let url = `${testRealmURL}Person/jade.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML', 'error');
-    let error = JSON.parse(value);
-    assert.strictEqual(error.code, 404, 'error code is correct');
+    let { error }: RenderError = JSON.parse(value);
+    assert.strictEqual(error.status, 404, 'error code is correct');
     assert.strictEqual(error.title, 'Not Found', 'error title is correct');
     assert.strictEqual(
       error.message,
@@ -654,7 +668,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with a cycle in a linksTo field', async function (assert) {
     let url = `${testRealmURL}Pet/pet-a.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="petFriend"?.*Beatrice/s.test(value),
@@ -664,7 +678,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with a cycle in a linksToMany field', async function (assert) {
     let url = `${testRealmURL}Person/germaine.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="friends"?.*Queenzy?.*Hassan/s.test(value),
@@ -674,7 +688,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with compound contains field that includes a linksTo field', async function (assert) {
     let url = `${testRealmURL}Pet/pet-c.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="license"?.*Scarsdale?.*Hassan/s.test(value),
@@ -684,7 +698,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with compound contains field that includes a linksToMany field', async function (assert) {
     let url = `${testRealmURL}Pet/pet-d.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="emergencyContact"?.*Jade?.*Germaine/s.test(value),
@@ -694,7 +708,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with compound containsMany field that includes a linksTo field', async function (assert) {
     let url = `${testRealmURL}Pet/pet-e.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="sitters"?.*Jade?.*Germaine/s.test(value),
@@ -704,7 +718,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with compound containsMany field that includes a linksToMany field', async function (assert) {
     let url = `${testRealmURL}Pet/pet-f.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="cliques"?.*Allen?.*Beatrice?.*Clive?.*Delancy/s.test(
@@ -716,7 +730,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with computed that consumes linksTo', async function (assert) {
     let url = `${testRealmURL}Pet/mango.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="friendName"?.*Van Gogh/s.test(value),
@@ -726,7 +740,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with computed that consumes linksToMany', async function (assert) {
     let url = `${testRealmURL}Person/hassan.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="numberOfPets"?.*2/s.test(value),
@@ -736,7 +750,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with computed linksTo', async function (assert) {
     let url = `${testRealmURL}Pet/mango.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="friendOfFriend"?.*Paper/s.test(value),
@@ -746,7 +760,7 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can prerender instance with computed linksToMany', async function (assert) {
     let url = `${testRealmURL}Person/germaine.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('innerHTML');
     assert.ok(
       /data-test-field="friendsOfFriend"?.*Germaine?.*Hassan/s.test(value),
@@ -756,9 +770,9 @@ module('Acceptance | prerender | html', function (hooks) {
 
   test('can handle not found prerender url', async function (assert) {
     let url = `${testRealmURL}does-not-exist.json`;
-    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    await visit(renderPath(url, '/html/isolated/0'));
     let { value } = await capturePrerenderResult('textContent', 'error');
-    let error = JSON.parse(value);
+    let { error }: RenderError = JSON.parse(value);
     assert.ok(error.stack, 'stack exists in error');
     delete error.stack;
     assert.deepEqual(

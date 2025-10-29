@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "outcome": {
+        "outcome": {
+          "label": "Lose"
+        }
+      },
+      "ref": {
+        "module": "http://localhost:4201/catalog/solitaire/solitaire",
+        "name": "Solitaire"
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../solitaire/Solitaire/1ca34cd3-17e2-4b1c-932f-a40e3627a700"
+        }
+      },
+      "outcome.player": {
+        "links": {
+          "self": "../player/Player/31247758-d5e2-4cd7-a0e2-594c1932b36a"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../game-result/game-result",
+        "name": "GameResult"
+      }
+    }
+  }
+}

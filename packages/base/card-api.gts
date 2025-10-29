@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -63,7 +63,9 @@ import {
   SingleCardDocument,
   loadDocument,
   LocalPath,
+  getCardMenuItems,
 } from '@cardstack/runtime-common';
+
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -74,12 +76,14 @@ import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
-import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
+import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+// normalizeEnumOptions used by enum moved to packages/base/enum.gts
+
 import {
   callSerializeHook,
   cardClassFromResource,
@@ -114,9 +118,15 @@ import {
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
+import {
+  type GetCardMenuItemParams,
+  getDefaultCardMenuItems,
+} from './card-menu-items';
+
+export const BULK_GENERATED_ITEM_COUNT = 3;
 
 interface CardOrFieldTypeIconSignature {
-  Element: Element;
+  Element: SVGElement;
 }
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
@@ -139,6 +149,7 @@ export {
   serializeCard,
   type BoxComponent,
   type DeserializeOpts,
+  type GetCardMenuItemParams,
   type JSONAPISingleResourceDocument,
   type ResourceID,
   type SerializeOpts,
@@ -181,6 +192,12 @@ export type FieldsTypeFor<T extends BaseDef> = {
 };
 export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
+// Opaque configuration passed to field format components and validators
+export type FieldConfiguration = Record<string, any>;
+// Configuration may be provided as a static object or a function of the parent instance
+export type ConfigurationInput<T> =
+  | FieldConfiguration
+  | ((this: Readonly<T>) => FieldConfiguration | undefined);
 export type FieldFormats = {
   ['fieldDef']: Format;
   ['cardDef']: Format;
@@ -196,6 +213,8 @@ interface Options {
   // in which case we need to tell the runtime that a card is
   // explicitly being used.
   isUsed?: true;
+  // Optional: per-usage configuration provider merged with FieldDef-level configuration
+  configuration?: ConfigurationInput<any>;
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
@@ -270,6 +289,9 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
 class Logger {
   private promises: Promise<any>[] = [];
 
+  // TODO this doesn't look like it's used anymore. in the past this was used to
+  // keep track of async when eagerly running computes after a property had been set.
+  // consider removing this.
   log(promise: Promise<any>) {
     this.promises.push(promise);
     // make an effort to resolve the promise at the time it is logged
@@ -319,6 +341,8 @@ export interface Field<
   fieldType: FieldType;
   computeVia: undefined | (() => unknown);
   description: undefined | string;
+  // Optional per-usage configuration stored on the field descriptor
+  configuration?: ConfigurationInput<any>;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -346,7 +370,7 @@ export interface Field<
   emptyValue(instance: BaseDef): any;
   validate(instance: BaseDef, value: any): void;
   component(model: Box<BaseDef>): BoxComponent;
-  getter(instance: BaseDef): BaseInstanceType<CardT>;
+  getter(instance: BaseDef): BaseInstanceType<CardT> | undefined;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
@@ -393,6 +417,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
@@ -413,13 +438,16 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return this.cardThunk();
   }
 
-  getter(instance: BaseDef): BaseInstanceType<FieldT> {
+  getter(instance: BaseDef): BaseInstanceType<FieldT> | undefined {
     let deserialized = getDataBucket(instance);
     entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
+      if ((globalThis as any).__lazilyLoadLinks) {
+        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+      }
     }
     return getter(instance, this);
   }
@@ -651,9 +679,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       return values;
     }
 
-    if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
-    } else {
+    if (!(primitive in this.card)) {
       for (let [index, item] of values.entries()) {
         if (item != null && !instanceOf(item, this.card)) {
           throw new Error(
@@ -703,6 +729,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
@@ -723,13 +750,16 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return this.cardThunk();
   }
 
-  getter(instance: BaseDef): BaseInstanceType<CardT> {
+  getter(instance: BaseDef): BaseInstanceType<CardT> | undefined {
     let deserialized = getDataBucket(instance);
     entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
+      if ((globalThis as any).__lazilyLoadLinks) {
+        return undefined;
+      }
     }
     return getter(instance, this);
   }
@@ -872,9 +902,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 
   validate(_instance: BaseDef, value: any) {
-    if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
-    } else {
+    if (!(primitive in this.card)) {
       if (value != null && !instanceOf(value, this.card)) {
         throw new Error(
           `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
@@ -901,6 +929,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
     computeVia,
@@ -921,13 +950,16 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  getter(instance: CardDef): BaseInstanceType<CardT> {
+  getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     entangleWithCardTracking(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
+      if ((globalThis as any).__lazilyLoadLinks) {
+        return undefined;
+      }
     }
     return getter(instance, this);
   }
@@ -1263,6 +1295,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
     computeVia,
@@ -1309,7 +1342,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
       lazilyLoadLink(instance, this, value.reference, { value });
-      return this.emptyValue as BaseInstanceType<FieldT>;
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
 
     // Ensure we have an array - if not, something went wrong during deserialization
@@ -1329,6 +1362,31 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
+      // Important: we intentionally leave the NotLoadedValue sentinels inside the
+      // WatchedArray so the lazy loader can swap them out in place once the linked
+      // cards finish loading. Because the array identity never changes, Glimmer’s
+      // tracking sees the mutation and re-renders when lazilyLoadLink replaces each
+      // sentinel with a CardDef instance. Callers should treat these entries as
+      // placeholders (e.g. check for constructor.getComponent) rather than assuming
+      // every element is immediately renderable. Ideally the .value refactor can
+      // iron out this kink.
+      // TODO
+      // Codex has offered a couple interim solutions to ease the burden on card
+      // authors around this:
+      // We can wrap the guard in a reusable helper/component so card authors don’t
+      // have to think about the sentinel:
+      //
+      // - Helper – export something like `has-card-component` (just checks
+      //   `value?.constructor?.getComponent`) from card-api. Then in templates
+      //   they write: `{{#if (has-card-component card)}}…{{/if}}` or
+      //   `{{#each (filter-loadable cards) as |c|}}`.
+      //
+      // - Component – provide a `LoadableCard` component that takes a card instance
+      //   and renders the correct `CardContainer` only when the component is ready;
+      //   otherwise it renders nothing or a skeleton. Card authors use
+      //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
+      //   themselves.
+
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, notLoadedRefs, this.name);
       }
@@ -1807,15 +1865,15 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new ContainsMany({
-          cardThunk: cardThunk(field),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new ContainsMany({
+        cardThunk: cardThunk(field),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1828,15 +1886,15 @@ export function contains<FieldT extends FieldDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new Contains({
-          cardThunk: cardThunk(field),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new Contains({
+        cardThunk: cardThunk(field),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1849,15 +1907,15 @@ export function linksTo<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new LinksTo({
-          cardThunk: cardThunk(cardOrThunk),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new LinksTo({
+        cardThunk: cardThunk(cardOrThunk),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
@@ -1870,19 +1928,21 @@ export function linksToMany<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, description, isUsed } = options ?? {};
-      return makeDescriptor(
-        new LinksToMany({
-          cardThunk: cardThunk(cardOrThunk),
-          computeVia,
-          name: fieldName,
-          description,
-          isUsed,
-        }),
-      );
+      let instance = new LinksToMany({
+        cardThunk: cardThunk(cardOrThunk),
+        computeVia,
+        name: fieldName,
+        description,
+        isUsed,
+      });
+      (instance as any).configuration = options?.configuration;
+      return makeDescriptor(instance);
     },
   } as any;
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
+
+// (moved below BaseDef & FieldDef declarations)
 
 // TODO: consider making this abstract
 export class BaseDef {
@@ -2054,11 +2114,14 @@ export type EditCardFn = (card: CardDef) => void;
 
 export type SaveCardFn = (id: string) => void;
 
+export type DeleteCardFn = (cardOrId: CardDef | URL | string) => Promise<void>;
+
 export interface CardCrudFunctions {
   createCard: CreateCardFn;
   saveCard: SaveCardFn;
   editCard: EditCardFn;
   viewCard: ViewCardFn;
+  deleteCard: DeleteCardFn;
 }
 
 export type BaseDefComponent = ComponentLike<{
@@ -2074,6 +2137,8 @@ export type BaseDefComponent = ComponentLike<{
     context?: CardContext;
     canEdit?: boolean;
     typeConstraint?: ResolvedCodeRef;
+    // Resolved, merged field configuration (if applicable)
+    configuration?: FieldConfiguration | undefined;
     createCard: CreateCardFn;
     viewCard: ViewCardFn;
     editCard: EditCardFn;
@@ -2087,6 +2152,9 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
+
+  // Optional provider for default configuration, merged with per-usage configuration
+  static configuration?: ConfigurationInput<any>;
 
   static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
@@ -2162,11 +2230,13 @@ export class TextAreaField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @type='textarea'
-        @disabled={{not @canEdit}}
+        @readonly={{not @canEdit}}
       />
     </template>
   };
 }
+
+// enumField has moved to packages/base/enum.gts
 
 export class CSSField extends TextAreaField {
   static displayName = 'CSS Field';
@@ -2333,6 +2403,10 @@ export class CardDef extends BaseDef {
   get [realmURL]() {
     let realmURLString = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
+  }
+
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+    return getDefaultCardMenuItems(this, params);
   }
 }
 
@@ -2545,7 +2619,9 @@ function lazilyLoadLink(
         let doc = await store.loadDocument(reference);
         if (isCardError(doc)) {
           let cardError = doc;
-          cardError.deps = [reference];
+          cardError.deps = [
+            !reference.endsWith('.json') ? `${reference}.json` : reference,
+          ];
           throw cardError;
         }
         let fieldValue = (await createFromSerialized(
@@ -2577,9 +2653,11 @@ function lazilyLoadLink(
         } else {
           (instance as any)[field.name] = fieldValue;
         }
-        deferred.fulfill();
       } catch (e) {
-        deferred.reject(e);
+        // we replace the node-loaded value with a null
+        // TODO in the future consider recording some link meta that this reference is actually missing
+        (instance as any)[field.name] = null;
+
         // We use a custom event for render errors--otherwise QUnit will report a "global error"
         // when we use a promise rejection to signal to the prerender that there was an error
         // even though everything is working as designed. QUnit is very noisy about these errors...
@@ -2588,6 +2666,7 @@ function lazilyLoadLink(
         });
         globalThis.dispatchEvent(event);
       } finally {
+        deferred.fulfill();
         inflightLoads.delete(key);
         if (inflightLoads.size === 0) {
           inflightLinkLoads.delete(instance);
@@ -3025,9 +3104,9 @@ export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
   instance[isSavedInstance] = true;
 }
 
-export async function searchDoc<CardT extends BaseDefConstructor>(
+export function searchDoc<CardT extends BaseDefConstructor>(
   instance: InstanceType<CardT>,
-): Promise<Record<string, any>> {
+): Record<string, any> {
   return getQueryableValue(instance.constructor, instance) as Record<
     string,
     any
@@ -3136,6 +3215,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     editCard?: EditCardFn;
     saveCard?: SaveCardFn;
     canEdit?: boolean;
+    configuration?: FieldConfiguration | undefined;
   };
 };
 
@@ -3365,7 +3445,8 @@ function myLoader(): Loader {
 
 class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
-  #inFlight: Promise<unknown>[] = [];
+  #inFlight: Set<Promise<unknown>> = new Set();
+  #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
   get(id: string) {
     id = id.replace(/\.json$/, '');
@@ -3381,12 +3462,36 @@ class FallbackCardStore implements CardStore {
   }
   makeTracked(_id: string) {}
   trackLoad(load: Promise<unknown>) {
-    this.#inFlight.push(load);
+    if (this.#inFlight.has(load)) {
+      return;
+    }
+    this.#inFlight.add(load);
+    this.#loadGeneration++;
+    load.finally(() => {
+      this.#inFlight.delete(load);
+    });
   }
   async loaded() {
-    await Promise.allSettled(this.#inFlight);
+    let observedGeneration = this.#loadGeneration;
+    while (true) {
+      if (this.#inFlight.size === 0) {
+        await Promise.resolve();
+      } else {
+        let pendingLoads = Array.from(this.#inFlight);
+        await Promise.allSettled(pendingLoads);
+      }
+      if (
+        this.#inFlight.size === 0 &&
+        this.#loadGeneration === observedGeneration
+      ) {
+        return;
+      }
+      observedGeneration = this.#loadGeneration;
+    }
   }
   async loadDocument(url: string) {
-    return await loadDocument(fetch, url);
+    let promise = loadDocument(fetch, url);
+    this.trackLoad(promise);
+    return await promise;
   }
 }

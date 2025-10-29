@@ -1,6 +1,7 @@
 import type Owner from '@ember/owner';
 
 import {
+  DBAdapter,
   Loader,
   LocalPath,
   RealmAdapter,
@@ -10,7 +11,6 @@ import {
   hasExecutableExtension,
   Deferred,
   unixTime,
-  FileWriteResult,
 } from '@cardstack/runtime-common';
 
 import { LintResult } from '@cardstack/runtime-common/lint';
@@ -21,6 +21,7 @@ import {
   FileRef,
   Kind,
   RequestContext,
+  AdapterWriteResult,
   TokenClaims,
 } from '@cardstack/runtime-common/realm';
 
@@ -61,7 +62,6 @@ let shimmedModuleIndicator = '// this file is shimmed';
 export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = { kind: 'directory', contents: {} };
   #lastModified: Map<string, number> = new Map();
-  #resourceCreatedAt: Map<string, number> = new Map();
   #paths: RealmPaths;
   #subscriber: ((message: UpdateRealmEventContent) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
@@ -92,7 +92,6 @@ export class TestRealmAdapter implements RealmAdapter {
       }
       let url = this.#paths.fileURL(path);
       this.#lastModified.set(url.href, now);
-      this.#resourceCreatedAt.set(url.href, now);
       dir.contents[last] = { kind: 'file', content };
       if (typeof content === 'object') {
         this.#potentialModulesAndInstances.push({ content, url });
@@ -110,7 +109,9 @@ export class TestRealmAdapter implements RealmAdapter {
 
   async broadcastRealmEvent(
     event: RealmEventContent,
+    realmUrl: string,
     matrixClient: MatrixClient,
+    _dbAdapter: DBAdapter,
   ) {
     if (!this.owner) {
       return;
@@ -120,8 +121,8 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let realmMatrixUsername = matrixClient.username;
 
-    let targetRoomIds = getRoomIds().filter((rid) =>
-      rid.replace('test-session-room-realm-', '').startsWith(this.#paths.url),
+    let targetRoomIds = getRoomIds().filter((rid: string) =>
+      rid.replace('test-session-room-realm-', '').startsWith(realmUrl),
     );
 
     for (let roomId of targetRoomIds) {
@@ -191,10 +192,6 @@ export class TestRealmAdapter implements RealmAdapter {
 
   get lastModifiedMap() {
     return this.#lastModified;
-  }
-
-  get resourceCreatedAtMap() {
-    return this.#resourceCreatedAt;
   }
 
   async lastModified(path: string): Promise<number | undefined> {
@@ -298,7 +295,6 @@ export class TestRealmAdapter implements RealmAdapter {
       path,
       content: fileRefContent,
       lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
-      created: this.#resourceCreatedAt.get(this.#paths.fileURL(path).href)!,
     };
 
     if (fileRefContent === shimmedModuleIndicator) {
@@ -311,11 +307,11 @@ export class TestRealmAdapter implements RealmAdapter {
   async write(
     path: LocalPath,
     contents: string | object,
-  ): Promise<FileWriteResult> {
+  ): Promise<AdapterWriteResult> {
     let segments = path.split('/');
     let name = segments.pop()!;
     let dir = this.#traverse(segments, 'directory');
-    let exists = await this.exists(path);
+    await this.exists(path);
     if (dir.kind === 'file') {
       throw new Error(`treated file as a directory`);
     }
@@ -340,8 +336,6 @@ export class TestRealmAdapter implements RealmAdapter {
         eventName: 'update',
         added: path,
       };
-
-      this.#resourceCreatedAt.set(this.#paths.fileURL(path).href, lastModified);
     }
 
     dir.contents[name] = {
@@ -357,8 +351,6 @@ export class TestRealmAdapter implements RealmAdapter {
     return {
       path,
       lastModified,
-      created: lastModified,
-      isNew: !exists,
     };
   }
 

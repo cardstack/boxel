@@ -1,0 +1,157 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Product Rotator",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/product-rotater-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/product-rotater-listing/screenshot_02.png"
+      ],
+      "summary": "This software enables users to upload reference images and describe a product to generate, rotate, and export high-quality 360-degree digital representations for use in product catalogs.",
+      "cardInfo": {
+        "notes": null,
+        "title": "Product Rotator",
+        "description": "This software enables users to upload reference images and describe a product to generate, rotate, and export high-quality 360-degree digital representations for use in product catalogs.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/product-rotater-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/5c962014-06cc-4cce-bf21-09e6e4387626"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/96201406-cc5c-4eff-a109-e6e4387626f7"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/aaa928ff-b1d3-49f6-a4fb-d39e736c0d7f"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/1baaa928-ffb1-43c9-b624-fbd39e736c0d"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/0fa0bb69-4d39-4bea-b46f-2b184fecfd3c"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/06cc5cce-ff21-49e6-a438-7626f71e5b3c"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/48a563be-eac1-4550-8c21-d9ea0f16ee22"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/ceff2109-e6e4-4876-a6f7-1e5b3cbdb165"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/e80009b7-c737-4933-87c1-3ab3347782b9"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/2109e6e4-3876-46f7-9e5b-3cbdb1653e87"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/09e6e438-7626-471e-9b3c-bdb1653e8778"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/5f27bc69-6e15-4027-bff5-5c893a2642d9"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../ProductRotator/9e769420-4048-4077-a2b6-5c6a3fd7dc9f"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../ProductRotationImage/616ede25-5221-4c52-8eba-bcce1b7475af"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../ProductRotationImage/217c520e-babc-4e1b-b475-afec58a21f94"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../ProductRotationImage/2552217c-520e-4abc-8e1b-7475afec58a2"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../ProductRotationImage/52217c52-0eba-4cce-9b74-75afec58a21f"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../ProductRotationImage/de255221-7c52-4eba-bcce-1b7475afec58"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../ProductRotationImage/6ede2552-217c-420e-babc-ce1b7475afec"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/e-commerce-online-sales"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/product-catalogs"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

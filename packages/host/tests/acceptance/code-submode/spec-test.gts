@@ -16,7 +16,9 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   percySnapshot,
   type TestContextWithSave,
@@ -247,7 +249,6 @@ const polymorphicFieldCardSource = `
   }
 `;
 
-let matrixRoomId: string;
 module('Acceptance | Spec preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -263,11 +264,12 @@ module('Acceptance | Spec preview', function (hooks) {
     mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -275,6 +277,7 @@ module('Acceptance | Spec preview', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': personCardSource,
         'person-1.gts': person1CardSource,
         'pet.gts': petCardSource,
@@ -562,6 +565,7 @@ module('Acceptance | Spec preview', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'new-skill.gts': newSkillCardSource,
         'person.gts': personCardSource,
         'person-entry.json': {

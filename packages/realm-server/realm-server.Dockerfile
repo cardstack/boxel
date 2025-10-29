@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20.19.1-slim
+FROM node:22.20.0-slim
 ARG realm_server_script
 ENV realm_server_script=$realm_server_script
 
 WORKDIR /realm-server
 
 RUN apt-get update && apt-get install -y ca-certificates curl unzip postgresql jq rsync
-RUN npm install -g pnpm@10.16.1
+RUN npm install -g pnpm@10.17.0
 
 COPY pnpm-lock.yaml ./
 

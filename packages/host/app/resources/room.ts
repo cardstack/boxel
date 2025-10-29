@@ -143,7 +143,11 @@ export class RoomResource extends Resource<Args> {
       // does not exist anymore (i.e. skill has been deleted or renamed). In
       // this case we should probably remove/update the reference from the skillConfig.
       // CS-8776
-      await this.loadSkills(this.matrixRoom.skillsConfig.enabledSkillCards);
+      try {
+        await this.loadSkills(this.matrixRoom.skillsConfig.enabledSkillCards);
+      } catch (e) {
+        console.warn(`Failed to load skills: ${e}`);
+      }
 
       let index = this._messageCache.size;
       // This is brought up to this level so if the
@@ -336,12 +340,25 @@ export class RoomResource extends Resource<Args> {
   get lastActiveTimestamp() {
     let eventsWithTime = this.events.filter((t) => t.origin_server_ts);
     let maybeLastActive =
-      eventsWithTime[eventsWithTime.length - 1].origin_server_ts;
+      eventsWithTime[eventsWithTime.length - 1]?.origin_server_ts;
     return maybeLastActive ?? this.created.getTime();
   }
 
   get activeLLM(): string {
-    return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+    return (
+      this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? this.defaultLLM
+    );
+  }
+
+  private get defaultLLM(): string {
+    // Use the first model from the system card if available
+    let systemCard = this.matrixService.systemCard;
+    if (systemCard?.modelConfigurations?.[0]?.modelId) {
+      let defaultModel = systemCard.modelConfigurations[0].modelId;
+      return defaultModel;
+    }
+    // Fallback to hardcoded default
+    return DEFAULT_LLM;
   }
 
   @cached

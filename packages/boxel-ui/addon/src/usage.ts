@@ -13,6 +13,7 @@ import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
 import ColorPaletteUsage from './components/color-palette/usage.gts';
 import ColorPickerUsage from './components/color-picker/usage.gts';
 import ContainerUsage from './components/container/usage.gts';
+import ContextButtonUsage from './components/context-button/usage.gts';
 import CopyButtonUsage from './components/copy-button/usage.gts';
 import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
@@ -42,6 +43,7 @@ import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.g
 import SelectUsage from './components/select/usage.gts';
 import SkeletonPlaceholderUsage from './components/skeleton-placeholder/usage.gts';
 import SortDropdownUsage from './components/sort-dropdown/usage.gts';
+import SwatchUsage from './components/swatch/usage.gts';
 import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TagListUsage from './components/tag-list/usage.gts';
@@ -62,6 +64,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['ColorPalette', ColorPaletteUsage],
   ['ColorPicker', ColorPickerUsage],
   ['Container', ContainerUsage],
+  ['ContextButton', ContextButtonUsage],
   ['CopyButton', CopyButtonUsage],
   ['DateRangePicker', DateRangePickerUsage],
   ['DragAndDrop', DragAndDropUsage],
@@ -91,6 +94,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Select', SelectUsage],
   ['SkeletonPlaceholder', SkeletonPlaceholderUsage],
   ['SortDropdown', SortDropdownUsage],
+  ['Swatch', SwatchUsage],
   ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
   ['TagList', TagListUsage],

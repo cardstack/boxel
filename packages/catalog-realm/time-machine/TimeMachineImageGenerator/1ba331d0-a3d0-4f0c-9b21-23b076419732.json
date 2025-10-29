@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimeMachineImageGenerator",
+        "module": "../image-generator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Paul McCartney",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "yearRange": {
+        "endValue": 2020,
+        "startValue": 1970
+      },
+      "creativeNote": "He had the best rap career of all-time",
+      "sourceImageUrl": "https://tse4.mm.bing.net/th/id/OIP.LIMg7oWe_QOyQdlZJZqm4wHaJi?cb=12&w=474&h=474&c=7&p=0"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

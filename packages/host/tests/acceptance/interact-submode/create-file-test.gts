@@ -10,7 +10,9 @@ import {
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -200,8 +202,6 @@ const userRealmFiles: Record<string, any> = {
   },
 };
 
-let matrixRoomId: string;
-
 module('Acceptance | interact submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -224,6 +224,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
           ...testRealmFiles,
         },
@@ -232,17 +233,19 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
         mockMatrixUtils,
         realmURL: userRealm,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
           ...userRealmFiles,
         },
       }),
     ]);
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     getService('network').mount(
       async (req: Request) => {

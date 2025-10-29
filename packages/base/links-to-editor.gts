@@ -28,11 +28,10 @@ import {
   type ResolvedCodeRef,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { IconButton } from '@cardstack/boxel-ui/components';
+import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
 import { hash } from '@ember/helper';
-import AddButton from './components/add-button';
 
 interface Signature {
   Element: HTMLElement;
@@ -58,15 +57,17 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       >
         {{#if this.isEmpty}}
           {{#if permissions.canWrite}}
-            <AddButton
+            <Button
               class='add-new'
-              @hideIcon={{true}}
+              @kind='muted'
+              @size='tall'
+              @rectangular={{true}}
               {{on 'click' this.add}}
               data-test-add-new={{@field.name}}
             >
               Link
               {{@field.card.displayName}}
-            </AddButton>
+            </Button>
           {{else}}
             - Empty -
           {{/if}}
@@ -123,6 +124,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
           0 0 0 1px var(--border, var(--boxel-300)),
           var(--shadow-lg, var(--boxel-box-shadow));
       }
+      .add-new {
+        width: fit-content;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
     </style>
   </template>
 
@@ -130,9 +135,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
-  remove = (ev: Event) => {
-    ev.preventDefault();
-    ev.stopPropagation();
+  remove = () => {
     this.args.model.value = null;
   };
 

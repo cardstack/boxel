@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - ci-bisect
+      - ci-bisect-**
   pull_request:
   workflow_dispatch:
 
@@ -19,6 +22,7 @@ jobs:
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
+      postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
       boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
@@ -26,6 +30,8 @@ jobs:
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
+      # Force all tests to run when on ci-bisect* branches
+      run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # 3.0.2
@@ -55,6 +61,8 @@ jobs:
               - 'packages/ai-bot/**'
               - 'packages/billing/**'
               - 'packages/postgres/**'
+            postgres-migrations:
+              - 'packages/postgres/migrations/**'
             boxel-icons:
               - *shared
               - 'packages/boxel-icons/**'
@@ -87,12 +95,35 @@ jobs:
             workspace-sync-cli:
               - *shared
               - 'packages/workspace-sync-cli/**'
+      - name: Force run all jobs on ci-bisect branches
+        id: force-run-all
+        shell: bash
+        run: |
+          echo "run_all=${{ startsWith(github.ref, 'refs/heads/ci-bisect') || startsWith(github.ref, 'refs/heads/ci-bisect-') || startsWith(github.head_ref || '', 'ci-bisect') }}" >> "$GITHUB_OUTPUT"
 
   ai-bot-test:
     name: AI bot Tests
     needs: change-check
-    if: needs.change-check.outputs.ai-bot == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.ai-bot == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
     concurrency:
       group: ai-bot-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -103,10 +134,54 @@ jobs:
         run: pnpm test
         working-directory: packages/ai-bot
 
+  postgres-migration-test:
+    name: Postgres Migration Test
+    needs: change-check
+    if: needs.change-check.outputs.postgres-migrations == 'true' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: postgres-migration-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/init
+
+      - name: Start Postgres
+        run: pnpm start:pg
+        working-directory: packages/postgres
+
+      - name: Determine changed migrations
+        id: migrations
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before || '' }}
+        shell: bash
+        run: packages/postgres/scripts/determine-changed-migrations.sh
+
+      - name: Apply migrations
+        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
+        working-directory: packages/postgres
+        env:
+          PGHOST: localhost
+          PGPORT: 5435
+        run: pnpm migrate up
+      - name: Run down migrations
+        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
+        working-directory: packages/postgres
+        env:
+          MIGRATION_DOWN_COUNT: ${{ steps.migrations.outputs.down_count }}
+        run: pnpm migrate down "$MIGRATION_DOWN_COUNT"
+      - name: Reapply migrations
+        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
+        working-directory: packages/postgres
+        run: pnpm migrate up
+
   boxel-motion-test:
     name: Boxel Motion Tests
     needs: change-check
-    if: needs.change-check.outputs.boxel-motion == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.boxel-motion == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-motion-test-${{ github.head_ref || github.run_id }}
@@ -124,7 +199,7 @@ jobs:
   boxel-ui-test:
     name: Boxel UI Tests
     needs: change-check
-    if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-ui-test-${{ github.head_ref || github.run_id }}
@@ -145,7 +220,7 @@ jobs:
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
     needs: change-check
-    if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
@@ -162,7 +237,7 @@ jobs:
   boxel-icons-raw-icon-changes-only:
     name: Boxel Icons ensure raw icon changes only
     needs: change-check
-    if: needs.change-check.outputs.boxel-icons == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.boxel-icons == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-icons-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
@@ -179,7 +254,7 @@ jobs:
   matrix-client-test:
     name: Matrix Client Tests
     needs: change-check
-    if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -254,7 +329,7 @@ jobs:
       - change-check
       - matrix-client-test
     # always() makes it run even if a matrix-client-test shard fails
-    if: always() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main')
+    if: always() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true')
     runs-on: ubuntu-latest
 
     permissions:
@@ -328,7 +403,7 @@ jobs:
   realm-server-test:
     name: Realm Server Tests
     needs: change-check
-    if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
@@ -344,12 +419,14 @@ jobs:
             "card-endpoints-test.ts",
             "card-source-endpoints-test.ts",
             "file-watcher-events-test.ts",
+            "headless-chrome-indexing-test.ts",
             "indexing-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
             "permissions/permission-checker-test.ts",
             "prerendering-test.ts",
             "prerender-server-test.ts",
+            "prerender-manager-test.ts",
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",
@@ -367,6 +444,12 @@ jobs:
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",
             "publish-unpublish-realm-test.ts",
+            "boxel-domain-availability-test.ts",
+            "claim-boxel-domain-test.ts",
+            "delete-boxel-claimed-domain-test.ts",
+            "get-boxel-claimed-domain-test.ts",
+            "realm-auth-test.ts",
+            "queries-test.ts",
           ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
@@ -418,7 +501,7 @@ jobs:
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package
     needs: change-check
-    if: needs.change-check.outputs.vscode-boxel-tools == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.vscode-boxel-tools == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: vscode-boxel-tools-test-${{ github.head_ref || github.run_id }}
@@ -447,7 +530,7 @@ jobs:
   workspace-sync-cli-build:
     name: Workspace Sync CLI Build
     needs: change-check
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: workspace-sync-cli-build-${{ github.head_ref || github.run_id }}
@@ -462,7 +545,7 @@ jobs:
   workspace-sync-cli-test:
     name: Workspace Sync CLI Integration Tests
     needs: change-check
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main'
+    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: workspace-sync-cli-test-${{ github.head_ref || github.run_id }}

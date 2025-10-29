@@ -1,0 +1,142 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Communication Log & News Feed System",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/commnuication-log-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/commnuication-log-listing/screenshot_02.png"
+      ],
+      "summary": "A comprehensive communication logging and news feed system for tracking interactions, messages, and updates. Features include real-time communication logging, map rendering capabilities, and customizable news feed displays for teams and organizations.",
+      "cardInfo": {
+        "notes": null,
+        "title": "Communication Log & News Feed",
+        "description": "Track and display communications with map integration and news feed capabilities",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/commnuication-log-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags.0": {
+        "links": {
+          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/86b403d5-85d8-4d13-9c78-1cc6527f73b0"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/cd13dc78-1cc6-427f-b3b0-e25583d6f8d2"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/d8cd13dc-781c-4652-bf73-b0e25583d6f8"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/13dc781c-c652-4f73-b0e2-5583d6f8d2ad"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/dc781cc6-527f-43b0-a255-83d6f8d2ad17"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/c6527f73-b0e2-4583-96f8-d2ad1792d163"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/48b5382b-1f1e-4fdc-9711-98a1809b07fc"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/9e538a36-264e-4b5d-b031-6b2c5298af95"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/7f239b84-fcb0-40f4-a56e-9fb3e9abd0ec"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/map-render"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/d2ad1792-d163-4466-b6fe-81509a2d8387"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/92d16304-6636-4e81-909a-2d838726ed2c"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/046636fe-8150-4a2d-8387-26ed2c437d21"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/card-list"
+        }
+      },
+      "specs.14": {
+        "links": {
+          "self": "../Spec/509a2d83-8726-4d2c-837d-2171eade2544"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../CommunicationLog/086dd962-b609-46ef-972b-44091954155a"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/social-networking"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/data-management"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

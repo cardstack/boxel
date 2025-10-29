@@ -269,8 +269,7 @@ module('Integration | commands | summarize-session', function (hooks) {
       assert.ok(error instanceof Error, 'Error should be an Error instance');
       const errorMessage = (error as Error).message;
       assert.true(
-        errorMessage.includes('OpenRouter API error') ||
-          errorMessage.includes('Failed to generate summary'),
+        errorMessage.includes('Failed to generate summary'),
         'Error message should indicate API failure',
       );
     }
@@ -293,9 +292,7 @@ module('Integration | commands | summarize-session', function (hooks) {
       // The error could be about room not found or other matrix-related errors
       const errorMessage = (error as Error).message;
       assert.true(
-        errorMessage.includes('room') ||
-          errorMessage.includes('Room') ||
-          errorMessage.includes('matrix'),
+        errorMessage.includes('room'),
         'Error message should indicate room-related issue',
       );
     }

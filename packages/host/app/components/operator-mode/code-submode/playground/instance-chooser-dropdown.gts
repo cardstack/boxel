@@ -18,8 +18,6 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type { FieldOption, SelectedInstance } from './playground-panel';
 
-export const BULK_GENERATED_ITEM_COUNT = 3;
-
 const getItemTitle = (selection: SelectedInstance | undefined) => {
   if (!selection) {
     return;
@@ -73,6 +71,7 @@ const BeforeOptions: TemplateOnlyComponent = <template>
 interface AfterOptionsSignature {
   Args: {
     menuItems: MenuItem[];
+    closeMenu?: () => void;
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
@@ -80,7 +79,11 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     <span class='title'>
       Action
     </span>
-    <Menu @items={{@menuItems}} />
+    <Menu
+      class='after-options-menu'
+      @items={{@menuItems}}
+      @closeMenu={{@closeMenu}}
+    />
   </div>
   <style scoped>
     .after-options {
@@ -95,6 +98,12 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       font: 500 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
       text-align: left;
+    }
+    .after-options-menu {
+      --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+    }
+    :deep(.boxel-menu__item) {
+      border-radius: var(--boxel-border-radius-sm);
     }
     :deep(.boxel-menu__item .menu-item) {
       width: 100%;
@@ -137,6 +146,14 @@ interface OptionsDropdownSignature {
   };
 }
 
+function closeInstanceChooser() {
+  (
+    document.querySelector(
+      '[data-playground-instance-chooser][aria-expanded="true"]',
+    ) as BoxelSelect | null
+  )?.click();
+}
+
 export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
   <template>
     <BoxelSelect
@@ -155,6 +172,7 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
       @afterOptionsComponent={{component
         AfterOptions
         menuItems=@afterMenuOptions
+        closeMenu=closeInstanceChooser
       }}
       @verticalPosition='above'
       data-playground-instance-chooser
@@ -177,7 +195,6 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
           --boxel-instance-chooser-height,
           var(--boxel-form-control-height)
         );
-        outline-color: var(--boxel-highlight);
       }
 
       .instance-chooser :deep(.boxel-trigger) {
@@ -205,6 +222,8 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
           .ember-basic-dropdown-content-wormhole-origin
             .instances-dropdown-content
         ) {
+        --boxel-select-max-height: fit-content;
+        --boxel-select-options-list-max-height: 12.25rem;
         border: 1px solid var(--boxel-450);
         border-radius: var(--boxel-border-radius);
       }

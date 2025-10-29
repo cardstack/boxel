@@ -10,8 +10,7 @@
     "attributes": {
       "name": "Online Order Listing",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/online-order-listing/screenshot_01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/online-order-listing/screenshot_02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-order-listing/screenshot_01.png"
       ],
       "summary": "A comprehensive solution for businesses needing to display, track, and manage online orders within the Boxel card system.",
       "cardInfo": {

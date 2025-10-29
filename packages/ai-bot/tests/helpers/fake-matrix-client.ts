@@ -1,4 +1,10 @@
-import type { IContent, IHttpOpts, MatrixHttpApi } from 'matrix-js-sdk';
+import type {
+  IContent,
+  IHttpOpts,
+  IRequestOpts,
+  MatrixHttpApi,
+  StateEvents,
+} from 'matrix-js-sdk';
 import { Method, MatrixClient } from 'matrix-js-sdk';
 
 export class FakeMatrixClient extends MatrixClient {
@@ -90,11 +96,12 @@ export class FakeMatrixClient extends MatrixClient {
     return this.sentEvents;
   }
 
-  sendStateEvent(
+  sendStateEvent<K extends keyof StateEvents>(
     _roomId: string,
-    _eventType: string,
-    _content: IContent,
-    _stateKey: string,
+    _eventType: K,
+    _content: StateEvents[K],
+    _stateKey?: string | undefined,
+    _opts?: IRequestOpts | undefined,
   ): Promise<{ event_id: string }> {
     throw new Error('Method not implemented.');
   }

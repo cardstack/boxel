@@ -11,6 +11,7 @@ import {
   type LooseSingleCardDocument,
   Deferred,
   baseRealm,
+  type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -24,7 +25,9 @@ import {
   getMonacoContent,
   setMonacoContent,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  setupAuthEndpoints,
   setupUserSubscription,
   withSlowSave,
   type TestContextWithSave,
@@ -33,7 +36,6 @@ import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
-let matrixRoomId: string;
 module('Acceptance | code submode | editor tests', function (hooks) {
   let monacoService: MonacoService;
   let adapter: TestRealmAdapter;
@@ -51,11 +53,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
-    matrixRoomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    setupUserSubscription(matrixRoomId);
+    setupUserSubscription();
+    setupAuthEndpoints();
 
     monacoService = getService('monaco-service');
 
@@ -67,6 +70,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     ({ adapter } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -208,7 +212,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
             },
           },
         },
-
         'Person/fadhlan.json': {
           data: {
             attributes: {
@@ -233,18 +236,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               adoptsFrom: {
                 module: `${testRealmURL}person`,
                 name: 'Person',
-              },
-            },
-          },
-        },
-        'grid.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
               },
             },
           },
@@ -288,6 +279,21 @@ module('Acceptance | code submode | editor tests', function (hooks) {
                 module: `${testRealmURL}person`,
                 name: 'Person',
               },
+            },
+          },
+        },
+        'theme-starry-night.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                name: 'Theme',
+                module: 'https://cardstack.com/base/card-api',
+              },
+            },
+            attributes: {
+              cardInfo: { title: 'Theme Starry Night' },
+              cssVariables:
+                ':root {\n  --background: #f5f7fa;\n  --foreground: #1a2238;\n  --card: #e3eaf2;\n  --card-foreground: #1a2238;\n  --popover: #fffbe6;\n  --popover-foreground: #1a2238;\n  --primary: #3a5ba0;\n  --primary-foreground: #fffbe6;\n  --secondary: #f7c873;\n  --secondary-foreground: #1a2238;\n  --muted: #e5e5df;\n  --muted-foreground: #3a5ba0;\n  --accent: #6ea3c1;\n  --accent-foreground: #fffbe6;\n  --destructive: #2d1e2f;\n  --destructive-foreground: #fffbe6;\n  --border: #b0b8c1;\n  --input: #6ea3c1;\n  --ring: #f7c873;\n  --chart-1: #3a5ba0;\n  --chart-2: #f7c873;\n  --chart-3: #6ea3c1;\n  --chart-4: #b0b8c1;\n  --chart-5: #2d1e2f;\n  --sidebar: #e3eaf2;\n  --sidebar-foreground: #1a2238;\n  --sidebar-primary: #3a5ba0;\n  --sidebar-primary-foreground: #fffbe6;\n  --sidebar-accent: #f7c873;\n  --sidebar-accent-foreground: #1a2238;\n  --sidebar-border: #b0b8c1;\n  --sidebar-ring: #f7c873;\n  --font-sans: Libre Baskerville, serif;\n  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;\n  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;\n  --radius: 0.5rem;\n  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);\n  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);\n  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);\n  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);\n  --tracking-normal: 0em;\n  --spacing: 0.25rem;\n}\n\n.dark {\n  --background: #181a24;\n  --foreground: #e6eaf3;\n  --card: #23243a;\n  --card-foreground: #e6eaf3;\n  --popover: #23243a;\n  --popover-foreground: #ffe066;\n  --primary: #3a5ba0;\n  --primary-foreground: #ffe066;\n  --secondary: #ffe066;\n  --secondary-foreground: #23243a;\n  --muted: #23243a;\n  --muted-foreground: #7a88a1;\n  --accent: #bccdf0;\n  --accent-foreground: #181a24;\n  --destructive: #a04a6c;\n  --destructive-foreground: #ffe066;\n  --border: #2d2e3e;\n  --input: #3a5ba0;\n  --ring: #ffe066;\n  --chart-1: #3a5ba0;\n  --chart-2: #ffe066;\n  --chart-3: #6ea3c1;\n  --chart-4: #7a88a1;\n  --chart-5: #a04a6c;\n  --sidebar: #23243a;\n  --sidebar-foreground: #e6eaf3;\n  --sidebar-primary: #3a5ba0;\n  --sidebar-primary-foreground: #ffe066;\n  --sidebar-accent: #ffe066;\n  --sidebar-accent-foreground: #23243a;\n  --sidebar-border: #2d2e3e;\n  --sidebar-ring: #ffe066;\n  --font-sans: Libre Baskerville, serif;\n  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;\n  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;\n  --radius: 0.5rem;\n  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);\n  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);\n  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);\n  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);\n}',
             },
           },
         },
@@ -728,6 +734,67 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       expected,
       'pet.gts changes were saved',
     );
+  });
+
+  test<TestContextWithSave>('can select and remove linked theme in default card-info editor', async function (assert) {
+    assert.expect(10);
+
+    const themeId = `${testRealmURL}theme-starry-night`;
+    const onSave = (
+      url: URL,
+      json: string | SingleCardDocument,
+      currentThemeId: string | null,
+    ) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      assert.strictEqual(url.href, `${testRealmURL}Pet/mango`);
+      assert.strictEqual(
+        json.data.relationships?.['cardInfo.theme']?.links?.self,
+        currentThemeId,
+      );
+    };
+
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    });
+
+    this.onSave((url: URL, json: string | SingleCardDocument) =>
+      onSave(url, json, themeId),
+    );
+
+    await click('[data-test-edit-button]');
+    await click('[data-test-toggle-thumbnail-editor]');
+    await click('[data-test-add-new="theme"]');
+
+    assert.dom('[data-test-card-catalog]').exists();
+    await click(`[data-test-card-catalog-item="${themeId}"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    assert
+      .dom(`[data-test-field="cardInfo-theme"] [data-test-card="${themeId}"]`)
+      .exists({ count: 1 });
+    await click(
+      '[data-test-field="cardInfo-theme"] [data-test-boxel-field-label]',
+    );
+    await click(`[data-test-card="${themeId}"]`);
+    assert
+      .dom(`[data-test-card="${themeId}"]`)
+      .exists({ count: 1 }, 'items are non-interactive');
+
+    this.unregisterOnSave();
+    this.onSave((url: URL, json: string | SingleCardDocument) =>
+      onSave(url, json, null),
+    );
+
+    await click(`[data-test-field="cardInfo-theme"] [data-test-remove-card]`);
+
+    assert.dom('[data-test-card-catalog]').doesNotExist();
+    assert
+      .dom(`[data-test-field="cardInfo-theme"] [data-test-card="${themeId}"]`)
+      .doesNotExist();
+    assert.dom('[data-test-add-new="theme"]').exists();
   });
 
   module('when the user lacks write permissions', function (hooks) {

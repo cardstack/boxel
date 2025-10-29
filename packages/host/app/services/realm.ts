@@ -16,7 +16,7 @@ import { cached } from '@glimmer/tracking';
 import { dropTask, task, restartableTask, rawTimeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
-import { TrackedSet, TrackedObject } from 'tracked-built-ins';
+import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import {
   Permissions,
@@ -61,6 +61,7 @@ class RealmResource {
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
   @service declare private messageService: MessageService;
+  @service declare private realmServer: RealmServerService;
 
   @tracked info: EnhancedRealmInfo | undefined;
   @tracked private realmPermissions: RealmPermissions | null | undefined;
@@ -68,6 +69,10 @@ class RealmResource {
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
   private subscription: { unsubscribe: () => void } | undefined;
+
+  @tracked private _isPublishing = false;
+  private _publishingRealms = new TrackedArray<string>();
+  private _unPublishingRealms = new TrackedArray<string>();
 
   // Hassan: in general i'm questioning the usefulness of using Tasks in this
   // class. We seem to be following the pattern of await-ing all the tasks on
@@ -86,6 +91,10 @@ class RealmResource {
         this.subscription.unsubscribe();
       }
     });
+  }
+
+  get isLoggedIn() {
+    return this.auth.type === 'logged-in';
   }
 
   get url(): string {
@@ -197,8 +206,8 @@ class RealmResource {
         new URL(this.realmURL),
       );
       this.token = token;
-    } catch (e) {
-      console.error('Failed to login to realm', e);
+    } catch (e: any) {
+      console.error(`RealmService - Failed to login to realm: ${e.message}`, e);
       this.token = undefined;
     } finally {
       this.loggingIn = undefined;
@@ -339,7 +348,7 @@ class RealmResource {
   );
 
   private tokenRefresher = restartableTask(async () => {
-    if (!this.claims) {
+    if ((globalThis as any).__boxelRenderContext || !this.claims) {
       return;
     }
 
@@ -365,6 +374,110 @@ class RealmResource {
       await this.loggingIn;
     }
   });
+
+  async publish(urls: string[]) {
+    if (this._isPublishing) {
+      return;
+    }
+
+    try {
+      this._isPublishing = true;
+      const publishPromises = urls.map(async (url) => {
+        if (this._publishingRealms.includes(url)) {
+          return;
+        }
+        // Set publishing state
+        this._publishingRealms.push(url);
+
+        try {
+          const result = await this.realmServer.publishRealm(this.url, url);
+          return result;
+        } catch (error) {
+          console.error(`Error publishing to URL ${url}:`, error);
+          throw error; // Re-throw so Promise.allSettled can capture it as rejected
+        } finally {
+          this._publishingRealms.splice(this._publishingRealms.indexOf(url), 1);
+        }
+      });
+
+      const results = await Promise.allSettled(publishPromises);
+      if (this.info) {
+        let lastPublishedAt = results.reduce(
+          (acc, result) => {
+            if (result.status === 'fulfilled' && result.value) {
+              acc[result.value.data.attributes.publishedRealmURL] =
+                result.value.data.attributes.lastPublishedAt;
+            }
+            return acc;
+          },
+          {} as Record<string, any>,
+        );
+        this.info = {
+          ...this.info,
+          lastPublishedAt: {
+            ...(this.info.lastPublishedAt &&
+            typeof this.info.lastPublishedAt === 'object'
+              ? this.info.lastPublishedAt
+              : {}),
+            ...lastPublishedAt,
+          },
+        };
+      }
+
+      return results;
+    } catch (error) {
+      console.error(`Error publishing to URLs ${urls}:`, error);
+      return;
+    } finally {
+      this._isPublishing = false;
+    }
+  }
+
+  get isPublishing() {
+    return this._isPublishing;
+  }
+
+  get isPublishingToAnyRealms(): boolean {
+    return this._publishingRealms.length > 0;
+  }
+
+  get publishingRealms(): string[] {
+    return this._publishingRealms;
+  }
+
+  async unpublish(url: string) {
+    if (this._unPublishingRealms.includes(url)) {
+      return;
+    }
+
+    try {
+      this._unPublishingRealms.push(url);
+      await this.realmServer.unpublishRealm(url);
+      if (
+        this.info &&
+        this.info.lastPublishedAt &&
+        typeof this.info.lastPublishedAt === 'object'
+      ) {
+        delete this.info.lastPublishedAt[url];
+        this.info = {
+          ...this.info,
+        };
+      }
+    } catch (error) {
+      console.error(`Error unpublishing from URL ${url}:`, error);
+      return;
+    } finally {
+      this._unPublishingRealms.splice(this._unPublishingRealms.indexOf(url), 1);
+    }
+  }
+
+  isUnpublishingAnyRealms = (): boolean => {
+    return this._unPublishingRealms.length > 0;
+  };
+
+  isUnpublishingRealm = (publishedRealmURL: string): boolean => {
+    return this._unPublishingRealms.includes(publishedRealmURL);
+  };
 }
 
 export default class RealmService extends Service {
@@ -378,7 +491,7 @@ export default class RealmService extends Service {
   // treats that case as a read-then-write assertion failure. So instead we do
   // untracked reads from `realms` and pair them, at the right times, with
   // tracked reads from `currentKnownRealms` to establish dependencies.
-  private realms: Map<string, RealmResource> = this.restoreSessions();
+  private _realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
 
@@ -387,6 +500,10 @@ export default class RealmService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+  }
+
+  get realms(): ReadonlyMap<string, RealmResource> {
+    return this._realms;
   }
 
   resetState() {
@@ -586,6 +703,39 @@ export default class RealmService extends Service {
     }
   }
 
+  async publish(realmURL: string, publishedRealmURLs: string[]) {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return await resource.publish(publishedRealmURLs);
+  }
+
+  async unpublish(realmURL: string, publishedRealmURL: string) {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return await resource.unpublish(publishedRealmURL);
+  }
+
+  isUnpublishingAnyRealms = (realmURL: string): boolean => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.isUnpublishingAnyRealms();
+  };
+
+  isUnpublishingRealm = (
+    realmURL: string,
+    publishedRealmURL: string,
+  ): boolean => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.isUnpublishingRealm(publishedRealmURL);
+  };
+
+  isPublishing = (realmURL: string): boolean => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.isPublishing;
+  };
+
+  publishingRealms = (realmURL: string): string[] => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.publishingRealms;
+  };
+
   // By default, this does a tracked read from currentKnownRealms so that your
   // answer can be invalidated if a new realm is discovered. Internally, we also
   // use it untracked to implement the read-through cache.
@@ -631,13 +781,21 @@ export default class RealmService extends Service {
     return resource;
   }
 
-  private getOrCreateRealmResource(realmURL: string): RealmResource {
+  getOrCreateRealmResource(
+    realmURL: string,
+    token: string | undefined = undefined,
+  ): RealmResource {
     // this should be the only place we do the untracked read. It needs to be
-    // untracked so our `this.realms.set` below will not be an assertion.
+    // untracked so our `this._realms.set` below will not be an assertion.
     let resource = this.knownRealm(realmURL, false);
+
+    if (resource && !resource?.token && token) {
+      resource.token = token;
+    }
+
     if (!resource) {
-      resource = this.createRealmResource(realmURL, undefined);
-      this.realms.set(realmURL, resource);
+      resource = this.createRealmResource(realmURL, token);
+      this._realms.set(realmURL, resource);
       // only after the set has happened can we safely do the tracked read to
       // establish our depenency.
       this.currentKnownRealms.add(realmURL);

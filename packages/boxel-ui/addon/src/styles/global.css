@@ -1,4 +1,15 @@
-@layer reset, utilities, boxelComponentL1, boxelComponentL2;
+/* Note on css layers: css @layer rules are used to create a layering system for the css.
+   The order of the layers is important as it determines the precedence of the styles.
+   The layers are defined in the following order:
+   1. reset: for resetting default browser styles
+   2. utilities: for utility classes that can be used throughout the application
+   3. boxelComponentL1: for base component styles
+   4. boxelComponentL2: for component styles that build on top of base styles
+   5. boxelComponentL3: for component styles that build on top of L2 styles
+   This layering system allows for easier overrides and customizations of styles at different levels.
+   More info: https://developer.mozilla.org/en-US/docs/Web/CSS/@layer
+*/
+@layer reset, utilities, boxelComponentL1, boxelComponentL2, boxelComponentL3;
 
 @layer reset {
   * {
@@ -93,10 +104,14 @@
     letter-spacing: inherit;
   }
 
-  input:disabled,
+  input:not([type='color']):disabled,
   select:disabled,
   textarea:disabled {
     opacity: 0.5;
+    pointer-events: none;
+  }
+
+  input[type='color']:disabled {
     pointer-events: none;
   }
 

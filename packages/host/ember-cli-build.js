@@ -100,7 +100,10 @@ module.exports = function (defaults) {
               stream: require.resolve('stream-browserify'),
             },
             alias: {
-              'matrix-js-sdk$': 'matrix-js-sdk/src/browser-index.ts', // Consume matrix-js-sdk via Typescript ESM so that code splitting works to exlcude massive matrix-sdk-crypto-wasm from the main bundle
+              // Exclude the rust-crypto module from the bundle
+              // because it wont work in fastboot and we don't use it
+              'matrix-js-sdk$': 'matrix-js-sdk/src/browser-index.ts',
+              './rust-crypto/index.ts': false,
             },
           },
           node: {
