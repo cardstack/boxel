@@ -35,6 +35,7 @@ let webServerInstance: Server | undefined;
 webServerInstance = createPrerenderHttpServer({
   secretSeed: REALM_SECRET_SEED,
   silent,
+  port,
 }).listen(port);
 log.info(`prerender server HTTP listening on port ${port}`);
 

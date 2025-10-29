@@ -188,12 +188,15 @@ export function buildPrerenderApp(
   return { app, prerenderer };
 }
 
-async function registerWithManager() {
+async function registerWithManager(port?: number) {
   try {
     const managerURL =
       process.env.PRERENDER_MANAGER_URL ?? 'http://localhost:4222';
     const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
-    const urlOverride = process.env.PRERENDER_SERVER_URL; // optional explicit URL
+    const urlOverride =
+      process.env.HOSTNAME && port
+        ? `http://${process.env.HOSTNAME}:${port}` // ECS provides HOSTNAME env var
+        : process.env.PRERENDER_SERVER_URL; // optional explicit URL
     let body = {
       data: {
         type: 'prerender-server',
@@ -223,6 +226,7 @@ export function createPrerenderHttpServer(options?: {
   secretSeed?: string;
   maxPages?: number;
   silent?: boolean;
+  port?: number;
 }): Server {
   let secretSeed = options?.secretSeed ?? process.env.REALM_SECRET_SEED ?? '';
   let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
@@ -242,7 +246,7 @@ export function createPrerenderHttpServer(options?: {
   // best-effort registration (async, non-blocking)
   server.on('listening', () => {
     try {
-      registerWithManager();
+      registerWithManager(options?.port);
     } catch (e) {
       log.debug('Error scheduling registration with prerender manager:', e);
     }
