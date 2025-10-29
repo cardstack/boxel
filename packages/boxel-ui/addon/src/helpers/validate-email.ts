@@ -18,32 +18,35 @@ export interface EmailValidationError {
   message: string;
 }
 
-function createError(
+const generateErrorDescription = (
   code: EmailValidationErrorCode,
   message: string,
-): EmailValidationError {
-  return { code, message };
-}
+) => ({ code, message });
 
-// Lightweight email validation for client-side feedback only. Returns `null`
-// for valid email addresses and an error descriptor otherwise so callers can
-// surface a more helpful message.
-export function validateEmail(input: unknown): EmailValidationError | null {
+// Lightweight email validation for client-side feedback only.
+// Returns an error descriptor if input is invalid; returns `null` if input is valid.
+function validateEmail(input: unknown): EmailValidationError | null {
   if (typeof input !== 'string') {
-    return createError('not-a-string', 'Enter a valid email address');
+    return generateErrorDescription(
+      'not-a-string',
+      'Enter a valid email address',
+    );
   }
 
   const value = input.trim();
   if (value === '') {
-    return createError('missing-value', 'Enter an email address');
+    return generateErrorDescription('missing-value', 'Enter an email address');
   }
 
   const firstAt = value.indexOf('@');
   if (firstAt === -1) {
-    return createError('missing-at-symbol', 'Email must include an "@" symbol');
+    return generateErrorDescription(
+      'missing-at-symbol',
+      'Email must include an "@" symbol',
+    );
   }
   if (firstAt !== value.lastIndexOf('@')) {
-    return createError(
+    return generateErrorDescription(
       'multiple-at-symbols',
       'Email can contain only one "@" symbol',
     );
@@ -53,21 +56,27 @@ export function validateEmail(input: unknown): EmailValidationError | null {
   const domainPart = value.slice(firstAt + 1);
 
   if (!localPart) {
-    return createError('missing-local-part', 'Enter a value before "@"');
+    return generateErrorDescription(
+      'missing-local-part',
+      'Enter a value before "@"',
+    );
   }
   if (!domainPart) {
-    return createError('missing-domain-part', 'Enter a domain after "@"');
+    return generateErrorDescription(
+      'missing-domain-part',
+      'Enter a domain after "@"',
+    );
   }
 
   if (localPart.includes('\r') || localPart.includes('\n')) {
-    return createError(
+    return generateErrorDescription(
       'invalid-local-part-character',
       'The part before "@" cannot include line breaks',
     );
   }
   // eslint-disable-next-line no-useless-escape -- character class needs escaped '[' and '\\'
   if (/[\s"(),:;<>@\[\]\\]/u.test(localPart)) {
-    return createError(
+    return generateErrorDescription(
       'invalid-local-part-character',
       'The part before "@" contains invalid characters',
     );
@@ -77,14 +86,14 @@ export function validateEmail(input: unknown): EmailValidationError | null {
     localPart.endsWith('.') ||
     localPart.includes('..')
   ) {
-    return createError(
+    return generateErrorDescription(
       'invalid-local-part-dots',
       'The part before "@" cannot start or end with "." or contain consecutive dots',
     );
   }
 
   if (/[@\s]/u.test(domainPart)) {
-    return createError(
+    return generateErrorDescription(
       'invalid-domain-character',
       'The domain contains invalid characters',
     );
@@ -92,7 +101,7 @@ export function validateEmail(input: unknown): EmailValidationError | null {
 
   const domainLabels = domainPart.split('.');
   if (domainLabels.length < 2) {
-    return createError(
+    return generateErrorDescription(
       'domain-missing-period',
       'Domain must include a period, like "example.com"',
     );
@@ -100,16 +109,19 @@ export function validateEmail(input: unknown): EmailValidationError | null {
 
   for (const label of domainLabels) {
     if (label.length === 0) {
-      return createError('domain-empty-label', 'Domain labels cannot be empty');
+      return generateErrorDescription(
+        'domain-empty-label',
+        'Domain labels cannot be empty',
+      );
     }
     if (label.startsWith('-') || label.endsWith('-')) {
-      return createError(
+      return generateErrorDescription(
         'domain-leading-trailing-hyphen',
         'Domain labels cannot start or end with a hyphen',
       );
     }
     if (label.includes('\r') || label.includes('\n') || /\s/u.test(label)) {
-      return createError(
+      return generateErrorDescription(
         'domain-whitespace',
         'Domain labels cannot contain whitespace',
       );
@@ -123,4 +135,4 @@ export function isValidEmail(input: unknown): boolean {
   return validateEmail(input) === null;
 }
 
-export default isValidEmail;
+export default validateEmail;

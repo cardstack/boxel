@@ -67,22 +67,46 @@ module('Integration | Component | email-input', function (hooks) {
       .hasAttribute('data-test-boxel-input-validation-state', 'valid');
   });
 
-  test('it shows a descriptive validation message when invalid on blur', async function (assert) {
-    let value: string | null = '';
+  test('it validates external value on render', async function (assert) {
+    let value: string | null = 'alice@';
     const set = (newValue: string) => (value = newValue);
 
     await render(<template>
       <EmailInput @value={{value}} @onChange={{set}} />
     </template>);
 
-    await typeIn('[data-test-boxel-email-input]', 'user@example');
+    await waitForDebounce();
+
+    assert.dom('[data-test-boxel-email-input]').hasValue('alice@');
+    assert
+      .dom('[data-test-boxel-email-input]')
+      .hasAttribute('data-test-boxel-input-validation-state', 'invalid');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .hasText('Enter a domain after "@"');
+    assert.strictEqual(value, 'alice@', 'existing value remains unchanged');
+  });
+
+  test('it shows a descriptive validation message when invalid on blur', async function (assert) {
+    let value: string | null = 'alice@email.com';
+    const set = (newValue: string) => (value = newValue);
+
+    await render(<template>
+      <EmailInput @value={{value}} @onChange={{set}} />
+    </template>);
+
+    await fillIn('[data-test-boxel-email-input]', 'alice@email');
     await waitForDebounce();
     await triggerEvent('[data-test-boxel-email-input]', 'blur');
 
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Domain must include a period, like "example.com"');
-    assert.strictEqual(value, null, 'invalid value not committed');
+    assert.strictEqual(
+      value,
+      'alice@email.com',
+      'invalid value not committed, previous value remains committed',
+    );
   });
 
   test('it allows clearing an optional email input without showing an error', async function (assert) {
@@ -119,16 +143,9 @@ module('Integration | Component | email-input', function (hooks) {
     assert
       .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'invalid');
-
-    let inputElement = document.querySelector(
-      '[data-test-boxel-email-input]',
-    ) as HTMLInputElement;
-    let expectedMessage =
-      inputElement.validationMessage || 'Enter a valid email address';
-
     assert
       .dom('[data-test-boxel-input-error-message]')
-      .hasText(expectedMessage);
+      .hasText('Enter an email address');
     assert.strictEqual(value, null, 'required empty input not committed');
   });
 });
