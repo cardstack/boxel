@@ -7,7 +7,7 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import EmailInput from './index.gts';
 
 export default class EmailInputUsage extends Component {
-  @tracked value: string | null = 'johnsmith@email.com';
+  @tracked value: string | null = null;
   @tracked disabled = false;
   @tracked required = false;
   @tracked placeholder?: string;
@@ -25,14 +25,14 @@ export default class EmailInputUsage extends Component {
           <code>BoxelInput</code>
           with client-side validation for email addresses. Valid values are
           committed via
-          <code>@onChange</code>; invalid input leaves the nested field in place
-          and surfaces descriptive error text.
+          <code>@onChange</code>; invalid input surfaces descriptive error
+          message on blur.
         </p>
       </:description>
       <:example>
         <EmailInput
           @value={{this.value}}
-          @onChange={{this.handleChange}}
+          @onChange={{fn (mut this.value)}}
           @disabled={{this.disabled}}
           @placeholder={{this.placeholder}}
           @required={{this.required}}
@@ -43,12 +43,12 @@ export default class EmailInputUsage extends Component {
           @name='value'
           @description='The current value passed to the input'
           @value={{this.value}}
-          @onInput={{this.handleChange}}
+          @onInput={{fn (mut this.value)}}
           @optional={{true}}
         />
         <Args.Action
           @name='onChange'
-          @description='Called with the committed value (string) or null when invalid'
+          @description='Called with input (string, or null if empty) when not invalid'
         />
         <Args.String
           @name='placeholder'
