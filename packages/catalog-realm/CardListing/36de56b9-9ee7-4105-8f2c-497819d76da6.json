@@ -9,7 +9,11 @@
     "type": "card",
     "attributes": {
       "name": "Youtube Thumnail Composer",
-      "images": ["https://boxel-images.boxel.ai/app-assets/catalog/youtube-thumbnail-composer-listing/screenshot_01.png"],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/youtube-thumbnail-composer-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/youtube-thumbnail-composer-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/youtube-thumbnail-composer-listing/screenshot_03.png"
+      ],
       "summary": "This listing provides a comprehensive visual editor for creating and customizing YouTube thumbnails, enabling users to add, manipulate, and layer text and shape elements, and export high-quality images for online sharing. Its primary purpose is to simplify thumbnail design with intuitive drag-and-drop and property editing features.",
       "cardInfo": {
         "notes": null,
@@ -99,14 +103,14 @@
           "self": null
         }
       },
-      "categories.0": {
-        "links": {
-          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
-        }
-      },
       "examples.0": {
         "links": {
           "self": "../youtube-thumbnail-composer/YouTubeThumbnailComposer/d5e75129-8239-47cc-839e-76da6b5a9969"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
         }
       },
       "cardInfo.theme": {
