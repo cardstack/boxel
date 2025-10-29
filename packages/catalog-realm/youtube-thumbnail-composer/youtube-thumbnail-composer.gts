@@ -233,7 +233,58 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
     } else if (bg?.type === 'gradient') {
       const primary = bg.primaryColor || '#6366f1';
       const secondary = bg.secondaryColor || '#8b5cf6';
-      const gradient = ctx.createLinearGradient(0, 0, width, height);
+      const direction = bg.gradientDirection || 'to bottom right';
+
+      // Map CSS-like directions to canvas gradient coordinates
+      let x0 = 0;
+      let y0 = 0;
+      let x1 = width;
+      let y1 = height;
+
+      const dir = String(direction).toLowerCase().trim();
+      if (dir.includes('to right')) {
+        // left -> right
+        x0 = 0;
+        y0 = 0;
+        x1 = width;
+        y1 = 0;
+      } else if (dir.includes('to left')) {
+        // right -> left
+        x0 = width;
+        y0 = 0;
+        x1 = 0;
+        y1 = 0;
+      } else if (dir.includes('to bottom')) {
+        // top -> bottom
+        x0 = 0;
+        y0 = 0;
+        x1 = 0;
+        y1 = height;
+      } else if (dir.includes('to top')) {
+        // bottom -> top
+        x0 = 0;
+        y0 = height;
+        x1 = 0;
+        y1 = 0;
+      } else if (dir.includes('45deg') || dir.includes('to top right')) {
+        // bottom-left -> top-right
+        x0 = 0;
+        y0 = height;
+        x1 = width;
+        y1 = 0;
+      } else if (
+        dir.includes('135deg') ||
+        dir.includes('to bottom right') ||
+        dir.includes('to top left')
+      ) {
+        // top-left -> bottom-right (default)
+        x0 = 0;
+        y0 = 0;
+        x1 = width;
+        y1 = height;
+      }
+
+      const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
       gradient.addColorStop(0, primary);
       gradient.addColorStop(1, secondary);
       ctx.fillStyle = gradient;
