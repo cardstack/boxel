@@ -1,63 +1,25 @@
 import { StringField, Component, field, CardDef, contains } from './card-api';
 import {
-  BoxelInput,
+  EmailInput,
   EntityDisplayWithIcon,
-  type BoxelInputValidationState,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
 import MailIcon from '@cardstack/boxel-icons/mail';
-import { debounce } from 'lodash';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-
-// We use simple regex here to validate common email formats
-// This is definitely NOT a full email validation
-// https://ihateregex.io/expr/email/
-function validateEmail(email: string) {
-  const emailPattern = /^[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+$/;
-  return emailPattern.test(email);
-}
-
-class EmailEditTemplate extends Component<typeof EmailField> {
-  @tracked validationState: BoxelInputValidationState = 'initial';
-
-  private debouncedInput = debounce((input: string) => {
-    if (input === '') {
-      this.validationState = 'initial';
-    } else {
-      this.validationState = validateEmail(input) ? 'valid' : 'invalid';
-    }
-    if (this.validationState === 'initial') {
-      this.args.set(null);
-    } else if (this.validationState === 'valid') {
-      this.args.set(input);
-    }
-  }, 300);
-
-  @action onInput(v: string): void {
-    this.debouncedInput(v);
-  }
-
-  get errorMessage() {
-    return 'Invalid email address';
-  }
-
-  <template>
-    <BoxelInput
-      @type='email'
-      @value={{@model}}
-      @onInput={{this.onInput}}
-      @disabled={{not @canEdit}}
-      @state={{this.validationState}}
-      @errorMessage={{this.errorMessage}}
-    />
-  </template>
-}
 
 export default class EmailField extends StringField {
   static icon = MailIcon;
   static displayName = 'Email';
+
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <EmailInput
+        @value={{@model}}
+        @onChange={{@set}}
+        @disabled={{not @canEdit}}
+      />
+    </template>
+  };
 
   static atom = class Atom extends Component<typeof EmailField> {
     <template>
@@ -84,7 +46,6 @@ export default class EmailField extends StringField {
       </style>
     </template>
   };
-  static edit = EmailEditTemplate;
 }
 
 export class CardWithEmail extends CardDef {
