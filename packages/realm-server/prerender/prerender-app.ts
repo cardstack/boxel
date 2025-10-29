@@ -198,8 +198,7 @@ export function buildPrerenderApp(
 function resolvePrerenderServerURL(port?: number): string {
   let hostname = process.env.HOSTNAME ?? 'localhost';
   let resolvedPort = port ?? defaultPrerenderServerPort;
-  let portSuffix = resolvedPort ? `:${resolvedPort}` : '';
-  return `http://${hostname}${portSuffix}`.replace(/\/$/, '');
+  return `http://${hostname}:${resolvedPort}`.replace(/\/$/, '');
 }
 
 async function registerWithManager(serverURL: string) {
