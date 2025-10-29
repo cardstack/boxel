@@ -134,6 +134,13 @@ test.describe('Publish realm', () => {
     await page.locator('[data-test-publish-button]').click();
 
     let newTab = await newTabPromise;
+
+    await page
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
+      )
+      .click();
+
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
