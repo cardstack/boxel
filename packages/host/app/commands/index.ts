@@ -20,6 +20,7 @@ const commandModuleContext = getCommandModuleContext();
 interface CommandModuleDescriptor {
   fileName: string;
   moduleName: string;
+  loadModule: () => Promise<CommandModule>;
 }
 
 const commandModules: CommandModuleDescriptor[] = commandModuleContext
@@ -27,30 +28,17 @@ const commandModules: CommandModuleDescriptor[] = commandModuleContext
   .map((fileName) => ({
     fileName,
     moduleName: moduleNameFromFileName(fileName),
+    loadModule: async () => commandModuleContext(fileName) as CommandModule,
   }))
   .sort((a, b) => a.moduleName.localeCompare(b.moduleName));
 
-const commandModuleLoaders = new Map<string, () => Promise<CommandModule>>(
-  commandModules.map(({ moduleName }) => [
-    moduleName,
-    () => import(`./${moduleName}`),
-  ]),
-);
-
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
-  virtualNetwork.shimAsyncModule({
-    prefix: '@cardstack/boxel-host/commands/',
-    resolve: async (rest) => {
-      let moduleName = normalizeRequestedModule(rest);
-      let loadModule = commandModuleLoaders.get(moduleName);
-      if (!loadModule) {
-        throw new Error(
-          `Unknown host command module "@cardstack/boxel-host/commands/${moduleName}"`,
-        );
-      }
-      return await loadModule();
-    },
-  });
+  for (let { moduleName, loadModule } of commandModules) {
+    virtualNetwork.shimAsyncModule({
+      id: `@cardstack/boxel-host/commands/${moduleName}`,
+      resolve: loadModule,
+    });
+  }
 }
 
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] =
@@ -93,33 +81,6 @@ function isHostCommandClass(
   );
 }
 
-function moduleNameFromFileName(fileName: string): string {
-  return fileName.replace(/^\.\//, '').replace(/\.(?:g)?ts$/, '');
-}
-
-function normalizeRequestedModule(rest: string): string {
-  let sanitized = rest.replace(/^[\\/]+/, '').split(/[?#]/, 1)[0];
-  if (sanitized.endsWith('/')) {
-    sanitized = sanitized.slice(0, -1);
-  }
-  sanitized = sanitized.replace(/\.(?:g)?ts$/, '').replace(/\.js$/, '');
-  if (sanitized.endsWith('/default')) {
-    sanitized = sanitized.slice(0, -'/default'.length);
-  }
-  if (!sanitized) {
-    throw new Error('Requested host command module must not be empty');
-  }
-  if (sanitized.includes('..')) {
-    throw new Error(
-      `Refusing to resolve host command module with parent traversal: "${rest}"`,
-    );
-  }
-  if (sanitized.includes('/')) {
-    throw new Error(`Unknown host command module "${rest}"`);
-  }
-  return sanitized;
-}
-
 function getCommandModuleContext() {
   if (typeof require?.context !== 'function') {
     throw new Error(
@@ -131,4 +92,8 @@ function getCommandModuleContext() {
     false,
     /^\.\/(?!index)(?!.*\.d\.ts$).*\.(?:g)?ts$/,
   );
+}
+
+function moduleNameFromFileName(fileName: string): string {
+  return fileName.replace(/^\.\//, '').replace(/\.(?:g)?ts$/, '');
 }
