@@ -172,10 +172,10 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
-      container-name: "boxel-prerender"
+      container-name: "boxel-prerender-server"
       environment: ${{ inputs.environment }}
       cluster: ${{ inputs.environment }}
-      service-name: "boxel-prerender-${{ inputs.environment }}"
+      service-name: "boxel-prerender-server-${{ inputs.environment }}"
       image: ${{ needs.build-prerender.outputs.image }}
       wait-for-service-stability: false
 
