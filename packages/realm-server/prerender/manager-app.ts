@@ -58,7 +58,7 @@ function clientURLFromContext(ctxt: Koa.Context): string | null {
   }
   // strip IPv6 prefix if present
   if (ip.startsWith('::ffff:')) ip = ip.slice(7);
-  const defaultPort = Number(process.env.PRERENDER_SERVER_DEFAULT_PORT ?? 4223);
+  const defaultPort = Number(process.env.PRERENDER_SERVER_DEFAULT_PORT ?? 4221);
   const scheme = 'http';
   return `${scheme}://${ip}:${defaultPort}`;
 }
