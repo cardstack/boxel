@@ -10,6 +10,7 @@ NODE_NO_WARNINGS=1 \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
+  --prerenderURL='http://boxel-prerender-manager.boxel-production-internal:4222' \
   --matrixURL='https://matrix.boxel.ai' \
   --distURL='https://boxel-host.boxel.ai' \
   \
