@@ -137,7 +137,7 @@ Prerender server:
 Prerender manager:
 
 - PRERENDER_MULTIPLEX (optional): Number of distinct servers to assign per realm for rotation. Minimum 1. Default 1.
-- PRERENDER_SERVER_DEFAULT_PORT (optional): When a server registers without a URL, the manager can infer the URL from the source IP and this default port. Default 4223.
+- PRERENDER_SERVER_DEFAULT_PORT (optional): When a server registers without a URL, the manager can infer the URL from the source IP and this default port. Default 4221.
 - PRERENDER_SERVER_TIMEOUT_MS (optional): Timeout for proxying a prerender request to a target server. Default 30000.
 - PRERENDER_HEALTHCHECK_TIMEOUT_MS (optional): Timeout for manager health checks of servers. Default 1000.
 - PRERENDER_HEALTHCHECK_INTERVAL_MS (optional): Interval in milliseconds for periodic health sweeps. When > 0, the manager regularly checks all registered servers and evicts unhealthy ones. Default 0 (disabled).
