@@ -12,7 +12,6 @@ import BoxelInput, { type InputValidationState } from '../index.gts';
 interface Signature {
   Args: {
     disabled?: boolean;
-    fallbackErrorMessage?: string;
     onChange?: (value: string | null) => void;
     placeholder?: string;
     required?: boolean;
@@ -25,9 +24,11 @@ const DEFAULT_FALLBACK_MESSAGE = 'Enter a valid email address';
 const DEFAULT_REQUIRED_MESSAGE = 'Enter an email address';
 
 export default class EmailInput extends Component<Signature> {
-  @tracked validationState: InputValidationState = 'initial';
-  @tracked draftValue: string;
-  @tracked errorMessage: string | undefined;
+  @tracked private validationState: InputValidationState = 'initial';
+  @tracked private draftValue: string;
+  @tracked private errorMessage: string | undefined;
+  private fallbackErrorMessage = DEFAULT_FALLBACK_MESSAGE;
+  private requiredErrorMessage = DEFAULT_REQUIRED_MESSAGE;
 
   private hasBlurred = false;
 
@@ -38,14 +39,6 @@ export default class EmailInput extends Component<Signature> {
     if (initial !== '') {
       this.validationState = isValidEmail(initial) ? 'valid' : 'initial';
     }
-  }
-
-  private get fallbackErrorMessage() {
-    return this.args.fallbackErrorMessage ?? DEFAULT_FALLBACK_MESSAGE;
-  }
-
-  private get requiredErrorMessage() {
-    return this.args.fallbackErrorMessage ?? DEFAULT_REQUIRED_MESSAGE;
   }
 
   private notify(value: string | null) {
