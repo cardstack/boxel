@@ -45,8 +45,8 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
         {{#if @icon}}
           <@icon
             class='boxel-field__icon'
-            width={{unless @iconWidth '1rem'}}
-            height={{unless @iconHeight '1rem'}}
+            width={{unless @iconWidth '16'}}
+            height={{unless @iconHeight '16'}}
             role='presentation'
           />
         {{/if}}

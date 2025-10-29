@@ -739,8 +739,8 @@ export class BoxelSelectOptions extends PowerSelectOptions {
                 <Check
                   class='boxel-select-option-checkmark'
                   role='presentation'
-                  width='var(--boxel-icon-xs)'
-                  height='var(--boxel-icon-xs)'
+                  width='16'
+                  height='16'
                   aria-hidden='true'
                 />
               {{/if}}
