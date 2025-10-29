@@ -60,6 +60,7 @@ import {
   containsMany,
   DateField,
   DatetimeField,
+  DateRangeField,
   EthereumAddressField,
   field,
   FieldDef,
@@ -3567,6 +3568,21 @@ module('Integration | card-basics', function (hooks) {
       await fillIn('[data-test-datetime-field-editor]', '');
       assert.dom('[data-test-datetime-field-editor]').hasNoValue();
       assert.dom('[data-test-datetime-output]').hasText('[no date-time]');
+
+      class DatesCard extends CardDef {
+        @field date = contains(DateField);
+        @field datetime = contains(DatetimeField);
+      }
+
+      let personWithBrokenDates = new DatesCard({
+        date: 'invalid date',
+        appointment: 'invalid datetime',
+      });
+
+      await renderCard(loader, personWithBrokenDates, 'edit');
+      assert
+        .dom('[data-test-boxel-card-container]')
+        .exists('card rendered without runtime crash');
     });
 
     test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
