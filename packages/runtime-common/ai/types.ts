@@ -19,6 +19,8 @@ export interface PromptParts {
   tools: Tool[] | undefined;
   toolChoice: ToolChoice | undefined;
   model: string | undefined;
+  toolsSupported?: boolean;
+  reasoningEffort?: string;
   shouldRespond: boolean;
   history: DiscreteMatrixEvent[];
 }

@@ -71,6 +71,8 @@ export async function getPromptParts(
       model: undefined,
       history: [],
       toolChoice: undefined,
+      toolsSupported: undefined,
+      reasoningEffort: undefined,
     };
   }
   let skills = await getEnabledSkills(eventList, client);
@@ -85,7 +87,8 @@ export async function getPromptParts(
     disabledSkillIds,
     client,
   );
-  let model = getModel(eventList);
+  let { model, toolsSupported, reasoningEffort } =
+    getActiveLLMDetails(eventList);
   return {
     shouldRespond,
     tools,
@@ -93,6 +96,8 @@ export async function getPromptParts(
     model,
     history,
     toolChoice: toolChoice,
+    toolsSupported,
+    reasoningEffort,
   };
 }
 
@@ -1020,15 +1025,27 @@ export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
   );
 };
 
-function getModel(eventlist: DiscreteMatrixEvent[]): string {
+function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
+  model: string;
+  toolsSupported?: boolean;
+  reasoningEffort?: string;
+} {
   let activeLLMEvent = findLast(
     eventlist,
     (event) => event.type === APP_BOXEL_ACTIVE_LLM,
-  ) as ActiveLLMEvent;
+  ) as ActiveLLMEvent | undefined;
   if (!activeLLMEvent) {
-    return DEFAULT_LLM;
+    return {
+      model: DEFAULT_LLM,
+      toolsSupported: undefined,
+      reasoningEffort: undefined,
+    };
   }
-  return activeLLMEvent.content.model;
+  return {
+    model: activeLLMEvent.content.model,
+    toolsSupported: activeLLMEvent.content.toolsSupported,
+    reasoningEffort: activeLLMEvent.content.reasoningEffort,
+  };
 }
 
 export function isCommandResultEvent(

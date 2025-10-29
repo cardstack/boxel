@@ -72,7 +72,6 @@ let aiBotInstanceId = uuidv4();
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
-  private toolCallCapableModels: Set<string>;
   pgAdapter: PgAdapter;
   id: string;
   aiBotInstanceId: string;
@@ -85,22 +84,7 @@ class Assistant {
     this.id = id;
     this.client = client;
     this.pgAdapter = new PgAdapter();
-    this.toolCallCapableModels = new Set();
     this.aiBotInstanceId = aiBotInstanceId;
-  }
-
-  async loadToolCallCapableModels() {
-    // api request is https://openrouter.ai/api/v1/models?supported_parameters=tools
-    let response = await fetch(
-      'https://openrouter.ai/api/v1/models?supported_parameters=tools',
-    );
-    let responseJson = (await response.json()) as {
-      data: { id: string }[];
-    };
-    let modelList = responseJson.data;
-    this.toolCallCapableModels = new Set(
-      modelList.map((model: any) => model.id),
-    );
   }
 
   async trackAiUsageCost(matrixUserId: string, generationId: string) {
@@ -125,38 +109,29 @@ class Assistant {
       throw new Error('Model is required');
     }
 
-    // Sending tools to models that don't support them results in an error
-    // from openrouter.
-    if (
-      prompt.tools?.length === 0 ||
-      (prompt.model && !this.toolCallCapableModels.has(prompt.model))
-    ) {
-      return this.openai.chat.completions.stream({
-        model: this.getModel(prompt),
-        messages: prompt.messages as ChatCompletionMessageParam[],
-        reasoning_effort: this.getReasoningEffort(prompt),
-      });
-    } else {
-      return this.openai.chat.completions.stream({
-        model: this.getModel(prompt),
-        messages: prompt.messages as ChatCompletionMessageParam[],
-        tools: prompt.tools,
-        tool_choice: prompt.toolChoice,
-        reasoning_effort: this.getReasoningEffort(prompt),
-      });
+    let request: Parameters<typeof this.openai.chat.completions.stream>[0] = {
+      model: this.getModel(prompt),
+      messages: prompt.messages as ChatCompletionMessageParam[],
+    };
+
+    if (prompt.reasoningEffort) {
+      request.reasoning_effort = prompt.reasoningEffort;
     }
+
+    if (
+      prompt.toolsSupported === true &&
+      prompt.tools &&
+      prompt.tools.length > 0
+    ) {
+      request.tools = prompt.tools;
+      request.tool_choice = prompt.toolChoice;
+    }
+
+    return this.openai.chat.completions.stream(request);
   }
 
   getModel(prompt: PromptParts) {
     return prompt.model ?? DEFAULT_LLM;
-  }
-
-  // TODO: This function is used to avoid a thinking model of gpt-5.
-  // This should use the reasoning effort defined in the ModelConfiguration card instead.
-  // once this is supported.
-  getReasoningEffort(prompt: PromptParts) {
-    let model = this.getModel(prompt);
-    return model === 'openai/gpt-5' ? 'minimal' : undefined;
   }
 
   async handleDebugCommands(
@@ -221,7 +196,6 @@ Common issues are:
   let { user_id: aiBotUserId } = auth;
 
   assistant = new Assistant(client, aiBotUserId, aiBotInstanceId);
-  await assistant.loadToolCallCapableModels();
 
   // Set up signal handlers for graceful shutdown
   setupSignalHandlers();

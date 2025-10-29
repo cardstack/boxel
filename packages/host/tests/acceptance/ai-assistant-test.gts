@@ -292,6 +292,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       }),
       modelId: 'openai/gpt-5',
       toolsSupported: true,
+      reasoningEffort: 'minimal',
     });
 
     let openAiGpt4oMiniModel = new ModelConfiguration({
@@ -655,6 +656,71 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, llmIdToChangeTo);
+  });
+
+  test('active LLM event includes metadata when switching models', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-llm-select-selected]');
+    await click(`[data-test-llm-select-item="openai/gpt-4o-mini"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return state.model === 'openai/gpt-4o-mini';
+    });
+
+    let firstState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      firstState.model,
+      'openai/gpt-4o-mini',
+      'Switching to GPT-4o mini updates active LLM',
+    );
+    assert.true(
+      firstState.toolsSupported,
+      'Active LLM event records tool support for GPT-4o mini',
+    );
+    assert.strictEqual(
+      firstState.reasoningEffort,
+      null,
+      'Reasoning effort is omitted when not configured',
+    );
+
+    await click('[data-test-llm-select-selected]');
+    await click(`[data-test-llm-select-item="openai/gpt-5"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return state.model === 'openai/gpt-5';
+    });
+
+    let secondState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      secondState.model,
+      'openai/gpt-5',
+      'Switching back to GPT-5 updates active LLM',
+    );
+    assert.true(
+      secondState.toolsSupported,
+      'Active LLM event records tool support for GPT-5',
+    );
+    assert.strictEqual(
+      secondState.reasoningEffort,
+      'minimal',
+      'Active LLM event records configured reasoning effort for GPT-5',
+    );
   });
 
   test('defaults to anthropic/claude-sonnet-4.5 in code mode', async function (assert) {
