@@ -13,6 +13,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import { cn } from '@cardstack/boxel-ui/helpers';
+import { isValidDate } from '@cardstack/runtime-common';
 
 const Format = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -187,6 +188,8 @@ export default class DateRangeField extends FieldDef {
 
 interface DateRangeConfig {
   noDateMsg: string;
+  invalidStartMsg: string;
+  invalidEndMsg: string;
 }
 
 function getFormattedDate(
@@ -195,13 +198,43 @@ function getFormattedDate(
 ): string {
   const defaults = {
     noDateMsg: '[Select a date]',
+    invalidStartMsg: '[Invalid start date]',
+    invalidEndMsg: '[Invalid end date]',
   };
   const finalConfig = { ...defaults, ...config };
 
-  if (!range.start && !range.end) {
+  let hasStartValue = range.start !== null && range.start !== undefined;
+  let hasEndValue = range.end !== null && range.end !== undefined;
+
+  if (!hasStartValue && !hasEndValue) {
     return finalConfig.noDateMsg;
   }
-  let start = range.start ? Format.format(range.start) : '[Select start date]';
-  let end = range.end ? Format.format(range.end) : '[Select end date]';
+
+  let start = formatDatePart(
+    range.start,
+    '[Select start date]',
+    finalConfig.invalidStartMsg,
+  );
+  let end = formatDatePart(
+    range.end,
+    '[Select end date]',
+    finalConfig.invalidEndMsg,
+  );
   return `${start} - ${end}`;
+}
+
+function formatDatePart(
+  value: Date | null | undefined,
+  emptyMessage: string,
+  invalidMessage: string,
+): string {
+  if (value === null || value === undefined) {
+    return emptyMessage;
+  }
+
+  if (!isValidDate(value)) {
+    return invalidMessage;
+  }
+
+  return Format.format(value);
 }
