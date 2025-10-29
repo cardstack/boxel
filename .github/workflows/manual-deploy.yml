@@ -94,7 +94,7 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
     secrets: inherit
     with:
-      repository: "boxel-prerender-${{ inputs.environment }}"
+      repository: "boxel-prerender-server-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/realm-server/prerender.Dockerfile"
       build-args: |
