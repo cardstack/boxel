@@ -17,6 +17,11 @@ export class ModelConfiguration extends CardDef {
   @field toolsSupported = contains(BooleanField, {
     description: 'Whether this model configuration supports tool usage',
   });
+
+  @field reasoningEffort = contains(StringField, {
+    description:
+      'Optional reasoning effort to pass when invoking this model (e.g. minimal, medium, maximal)',
+  });
 }
 
 export class SystemCard extends CardDef {
