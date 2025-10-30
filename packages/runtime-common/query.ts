@@ -20,6 +20,7 @@ export interface Query {
     size: number;
     realmVersion?: number;
   };
+  realms?: string[];
 }
 
 export type CardURL = string;
@@ -157,11 +158,31 @@ export function assertQuery(
       case 'page':
         assertPage(value, pointer.concat('page'));
         break;
+      case 'realms':
+        assertRealms(value, pointer.concat('realms'));
+        break;
 
       default:
         throw new InvalidQueryError(`unknown field in query: ${key}`);
     }
   }
+}
+
+function assertRealms(realms: any, pointer: string[]): asserts realms is string[] {
+  if (!Array.isArray(realms)) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: realms must be an array`,
+    );
+  }
+  realms.forEach((realm, index) => {
+    if (typeof realm !== 'string') {
+      throw new InvalidQueryError(
+        `${
+          pointer.concat(`[${index}]`).join('/') || '/'
+        }: realm entries must be strings`,
+      );
+    }
+  });
 }
 
 function assertSortExpression(
