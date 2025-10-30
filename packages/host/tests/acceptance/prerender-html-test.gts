@@ -777,7 +777,6 @@ module('Acceptance | prerender | html', function (hooks) {
 
     let url = `${testRealmURL}Cat/paper.json`;
     await visit(renderPath(url, '/html/isolated/0'));
-    await settled();
 
     let renderInstance = (globalThis as any).__renderInstance;
     assert.ok(renderInstance, 'render instance exists when prerendering');
