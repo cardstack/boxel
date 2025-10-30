@@ -5,13 +5,17 @@ import { debounce } from 'lodash';
 
 import validateEmail, {
   isValidEmail,
+  type EmailValidationError,
 } from '../../../helpers/validate-email.ts';
 import BoxelInput, { type InputValidationState } from '../index.gts';
 
 interface Signature {
   Args: {
     disabled?: boolean;
-    onChange?: (value: string | null) => void;
+    onChange?: (
+      value: string | null,
+      validation: EmailValidationError | null,
+    ) => void;
     placeholder?: string;
     required?: boolean;
     value: string | null;
@@ -20,11 +24,9 @@ interface Signature {
 }
 
 const DEFAULT_FALLBACK_MESSAGE = 'Enter a valid email address';
-const DEFAULT_REQUIRED_MESSAGE = 'Enter an email address';
 
 export default class EmailInput extends Component<Signature> {
   private fallbackErrorMessage = DEFAULT_FALLBACK_MESSAGE;
-  private requiredErrorMessage = DEFAULT_REQUIRED_MESSAGE;
 
   @tracked private validationState: InputValidationState = this.args.value
     ? isValidEmail(this.args.value)
@@ -37,24 +39,20 @@ export default class EmailInput extends Component<Signature> {
     : '';
   @tracked private hasBlurred = false;
 
-  private notify(value: string | null) {
-    this.args.onChange?.(value);
+  private notify(
+    value: string | null,
+    validation: EmailValidationError | null,
+  ) {
+    this.args.onChange?.(value, validation);
   }
 
   private handleValidation = (input: string) => {
     input = input?.trim();
-    if (!input?.length) {
-      if (this.args.required && this.hasBlurred) {
-        this.validationState = 'invalid';
-        this.errorMessage = this.requiredErrorMessage;
-      } else if (this.hasBlurred) {
-        this.validationState = 'initial';
-        this.errorMessage = undefined;
-        this.notify(null);
-      } else {
-        this.validationState = 'initial';
-        this.errorMessage = undefined;
-      }
+
+    if (!input?.length && !this.args.required) {
+      this.validationState = 'initial';
+      this.errorMessage = undefined;
+      this.notify(null, null);
       return;
     }
 
@@ -68,8 +66,8 @@ export default class EmailInput extends Component<Signature> {
     } else {
       this.validationState = 'valid';
       this.errorMessage = undefined;
-      this.notify(input);
     }
+    this.notify(input, validation);
   };
 
   private debouncedInput = debounce(
@@ -91,11 +89,6 @@ export default class EmailInput extends Component<Signature> {
     this.hasBlurred = true;
     this.debouncedInput.flush();
     this.handleValidation(this.inputValue);
-  }
-
-  override willDestroy(): void {
-    this.debouncedInput.cancel();
-    super.willDestroy();
   }
 
   <template>
