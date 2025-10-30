@@ -1,13 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { updateUser } from '../docker/synapse';
 import { appURL } from '../helpers/isolated-realm-server';
-import {
-  openRoot,
-  clearLocalStorage,
-  gotoRegistration,
-  assertLoggedIn,
-  createSubscribedUser,
-} from '../helpers';
+import { openRoot, assertLoggedIn, createSubscribedUser } from '../helpers';
 
 test.describe('Login using email', () => {
   let user: {
@@ -17,7 +11,7 @@ test.describe('Login using email', () => {
   };
   let userEmail: string;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({}) => {
     test.setTimeout(120_000);
     let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
 

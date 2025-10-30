@@ -6,7 +6,6 @@ import {
 } from '../docker/synapse';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
-  clearLocalStorage,
   assertLoggedIn,
   assertLoggedOut,
   login,
@@ -25,7 +24,7 @@ test.describe('Login', () => {
   let username: string;
   let password: string;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({}) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 120s to the overall test timeout
     test.setTimeout(120_000);
