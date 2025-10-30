@@ -55,9 +55,15 @@ jobs:
           for url in "${urls[@]}"; do
             echo "Waiting for ${url}"
             until curl --silent --fail --show-error "$url"; do
+              if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+                echo "Realm server process exited unexpectedly while waiting for ${url}" >&2
+                cat /tmp/server.log >&2 || true
+                exit 1
+              fi
               if (( SECONDS >= deadline )); then
                 echo "Timed out waiting for ${url}" >&2
                 kill "$SERVER_PID" || true
+                cat /tmp/server.log >&2 || true
                 exit 1
               fi
               sleep 5
