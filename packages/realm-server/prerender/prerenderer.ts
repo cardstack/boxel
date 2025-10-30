@@ -988,6 +988,9 @@ export class Prerenderer {
     this.#browser = await puppeteer.launch({
       headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
       args: process.env.CI ? ['--no-sandbox'] : [],
+      ...(process.env.PUPPETEER_EXECUTABLE_PATH
+        ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
+        : {}),
     });
     return this.#browser;
   }

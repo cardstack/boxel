@@ -49,6 +49,16 @@ RUN apt-get update \
 
 RUN npm install -g pnpm@10.17.0
 
+# Add a non-root user for running Chrome without --no-sandbox.
+RUN groupadd -r pptruser \
+    && useradd -r -m -d /home/pptruser -g pptruser -G audio,video pptruser
+
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
+RUN mkdir -p /home/pptruser/Downloads "${PUPPETEER_CACHE_DIR}"
+
 COPY pnpm-lock.yaml ./
 
 COPY patches/ ./patches
@@ -65,15 +75,8 @@ RUN CI=1 pnpm install -r --offline
 # RUN chmod +x /usr/local/bin/dumb-init
 # ENTRYPOINT ["dumb-init", "--"]
 
-# Uncomment to skip the Chrome for Testing download when installing puppeteer. If you do,
-# you'll need to launch puppeteer with:
-#     browser.launch({executablePath: 'google-chrome-stable'})
-# ENV PUPPETEER_SKIP_DOWNLOAD true
-
-# Add a non-root user for running Chrome without --no-sandbox.
-RUN groupadd -r pptruser \
-    && useradd -r -g pptruser -G audio,video pptruser \
-    && mkdir -p /home/pptruser/Downloads
+# Puppeteer is configured via PUPPETEER_SKIP_DOWNLOAD and PUPPETEER_EXECUTABLE_PATH
+# to reuse the system chrome installed above.
 
 RUN chown -R pptruser:pptruser /home/pptruser /realm-server
 
