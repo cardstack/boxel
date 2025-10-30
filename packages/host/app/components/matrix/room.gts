@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -29,7 +30,7 @@ import { TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -177,6 +178,14 @@ export default class Room extends Component<Signature> {
             {{else}}
               <NewSession @sendPrompt={{this.sendMessage}} />
             {{/each}}
+
+            {{#if this.shouldShowUnknownMessageSendError}}
+              <Alert @type='error' as |Alert|>
+                <Alert.Messages
+                  @messages={{array this.unknownMessageSendError}}
+                />
+              </Alert>
+            {{/if}}
           {{/if}}
         </AiAssistantConversation>
 
@@ -466,6 +475,18 @@ export default class Room extends Component<Signature> {
     }
   > = new WeakMap();
 
+  @tracked private unknownMessageSendError: string | undefined = undefined;
+  private get shouldShowUnknownMessageSendError() {
+    // Since unknownMessageSendError error is coming from the catch-all block in doSendMessage,
+    // we need to check if there already exists an error message in the last message, which is
+    // more specific and would take precedence (we don't want to show the generic unknown error
+    // message if there is a more specific error message in the last message)
+    if (!this.unknownMessageSendError) {
+      return false;
+    }
+    let lastMessage = this.messages[this.messages.length - 1];
+    return lastMessage?.errorMessage === undefined;
+  }
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
@@ -838,7 +859,7 @@ export default class Room extends Component<Signature> {
   });
 
   private get messageToSend() {
-    return this.matrixService.messagesToSend.get(this.args.roomId) ?? '';
+    return this.matrixService.getMessageToSend(this.args.roomId) ?? '';
   }
 
   private get cardIdsToAttach() {
@@ -866,14 +887,14 @@ export default class Room extends Component<Signature> {
       myLastMessage.body,
       myLastMessage!.attachedCardIds || [],
       myLastMessage.attachedFiles,
-      true,
       myLastMessage.clientGeneratedId,
+      true,
     );
   }
 
   @action
   private setMessage(message: string) {
-    this.matrixService.messagesToSend.set(this.args.roomId, message);
+    this.matrixService.setMessageToSend(this.args.roomId, message);
   }
 
   @action
@@ -898,7 +919,6 @@ export default class Room extends Component<Signature> {
       prompt ?? this.messageToSend,
       cards.length ? cards : undefined,
       files.length ? files : undefined,
-      Boolean(prompt),
     );
   }
 
@@ -983,16 +1003,25 @@ export default class Room extends Component<Signature> {
       message: string | undefined,
       cardsOrIds?: CardDef[] | string[],
       files?: FileDef[],
-      keepInputAndAttachments: boolean = false,
       clientGeneratedId: string = uuidv4(),
+      keepInputAndAttachments = false,
     ) => {
-      if (!keepInputAndAttachments) {
-        // this is for situations when a message is sent via some other way than the text box
-        // (example: ai prompt from new-session screen)
-        // if there were cards attached or a typed — but not sent — message, do not erase or remove them
-        this.matrixService.messagesToSend.set(this.args.roomId, undefined);
+      this.unknownMessageSendError = undefined;
+      let messageToSend = this.matrixService.getMessageToSend(this.args.roomId);
+      let cardsToSend =
+        this.matrixService.cardsToSend.get(this.args.roomId) ?? undefined;
+      let cardsToSendCopy = cardsToSend ? [...cardsToSend] : undefined;
+      const shouldClearDraft = !keepInputAndAttachments;
+
+      // We copy the draft and attachments into local variables before clearing them
+      // (unless we're intentionally preserving the user's current draft for a retry).
+      // Clearing immediately empties the input so the user sees that their message is “in flight”.
+      // If the send fails, we restore those saved values in the catch block so nothing is lost.
+      if (shouldClearDraft) {
+        this.matrixService.setMessageToSend(this.args.roomId, undefined);
         this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
+
       let openCardIds = new Set([
         ...(this.operatorModeStateService.getOpenCardIds() || []),
         ...this.autoAttachedCardIds,
@@ -1039,7 +1068,19 @@ export default class Room extends Component<Signature> {
           context,
         );
       } catch (e) {
-        console.error('Error sending message', e);
+        console.error(e);
+        this.unknownMessageSendError =
+          'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.';
+
+        if (shouldClearDraft) {
+          this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
+          if (cardsToSendCopy && cardsToSendCopy.length > 0) {
+            this.matrixService.cardsToSend.set(
+              this.args.roomId,
+              cardsToSendCopy,
+            );
+          }
+        }
       }
     },
   );

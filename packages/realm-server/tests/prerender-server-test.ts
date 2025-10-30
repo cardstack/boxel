@@ -46,7 +46,9 @@ module(basename(__filename), function () {
     });
 
     hooks.before(function () {
-      let built = buildPrerenderApp(realmSecretSeed);
+      let built = buildPrerenderApp(realmSecretSeed, {
+        serverURL: 'http://127.0.0.1:4221',
+      });
       prerenderer = built.prerenderer;
       request = supertest(built.app.callback());
     });

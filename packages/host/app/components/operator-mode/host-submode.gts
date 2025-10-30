@@ -19,6 +19,7 @@ import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submo
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 
+import HostModeService from '@cardstack/host/services/host-mode-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -40,6 +41,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
   @service private declare realm: RealmService;
+  @service private declare hostModeService: HostModeService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
@@ -66,7 +68,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   get realmURL() {
-    return this.operatorModeStateService.realmURL.href;
+    return this.hostModeService.realmURL;
   }
 
   get isPublishing() {
@@ -74,42 +76,15 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   get hasPublishedSites() {
-    return this.publishedRealmURLs.length > 0;
-  }
-
-  get publishedRealmEntries() {
-    const realmInfo = this.operatorModeStateService.currentRealmInfo;
-    if (
-      !realmInfo?.lastPublishedAt ||
-      typeof realmInfo.lastPublishedAt !== 'object'
-    ) {
-      return [];
-    }
-
-    return Object.entries(realmInfo.lastPublishedAt).sort(
-      ([, a], [, b]) => this.parsePublishedAt(b) - this.parsePublishedAt(a),
-    );
+    return this.hostModeService.publishedRealmURLs.length > 0;
   }
 
   get publishedRealmURLs() {
-    return this.publishedRealmEntries.map(([url]) => url);
+    return this.hostModeService.publishedRealmURLs;
   }
 
   get defaultPublishedRealmURL(): string | undefined {
-    return this.publishedRealmURLs[0];
-  }
-
-  getFullURL(baseURL: string) {
-    if (this.operatorModeStateService.hostModePrimaryCard) {
-      return (
-        baseURL +
-        this.operatorModeStateService.hostModePrimaryCard.replace(
-          this.realmURL,
-          '',
-        )
-      );
-    }
-    return baseURL;
+    return this.hostModeService.defaultPublishedRealmURL;
   }
 
   handlePublishTask = restartableTask(async (publishedRealmURLs: string[]) => {
@@ -158,11 +133,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   });
 
   get defaultPublishedSiteURL(): string | undefined {
-    let defaultURL = this.defaultPublishedRealmURL;
-    if (defaultURL) {
-      return this.getFullURL(defaultURL);
-    }
-    return undefined;
+    return this.hostModeService.defaultPublishedSiteURL;
   }
 
   @action
@@ -184,11 +155,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
     // Otherwise, let the anchor navigate naturally
     this.isOpenSitePopoverOpen = false;
-  }
-
-  private parsePublishedAt(value: unknown) {
-    let publishedAt = Number(value ?? 0);
-    return Number.isFinite(publishedAt) ? publishedAt : 0;
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {

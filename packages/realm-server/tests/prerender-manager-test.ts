@@ -67,7 +67,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('registration: header inference works; missing inference fails; unreachable rejected', async function (assert) {
+    test('registration: unreachable url rejected; missing url fails', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
 
@@ -75,23 +75,16 @@ module(basename(__filename), function () {
       let unreachable = `http://127.0.0.1:59999`;
       let unreachableRegistrationResponse = await request
         .post('/prerender-servers')
-        .set('X-Prerender-Server-Url', unreachable)
-        .send({});
+        .send({
+          data: {
+            type: 'prerender-server',
+            attributes: { url: unreachable },
+          },
+        });
       assert.strictEqual(
         unreachableRegistrationResponse.status,
         400,
         'unreachable rejected',
-      );
-
-      // inferred via header using mockPrerenderA
-      let headerRegistrationResponse = await request
-        .post('/prerender-servers')
-        .set('X-Prerender-Server-Url', serverUrlA as string)
-        .send({});
-      assert.strictEqual(
-        headerRegistrationResponse.status,
-        204,
-        'header inference 204',
       );
 
       // missing header & body cannot infer
@@ -232,11 +225,21 @@ module(basename(__filename), function () {
       let firstProxyResponse = await request.post('/prerender').send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
+      assert.ok(firstTarget, 'proxy response includes target header');
+
+      let missingUrlDisposalResponse = await request.delete(
+        `/prerender-servers/realms/${encodeURIComponent(realm)}`,
+      );
+      assert.strictEqual(
+        missingUrlDisposalResponse.status,
+        400,
+        'realm disposal requires url query param',
+      );
 
       // simulate prerender server notifying disposal
       let disposalResponse = await request
         .delete(`/prerender-servers/realms/${encodeURIComponent(realm)}`)
-        .set('X-Prerender-Server-Url', firstTarget);
+        .query({ url: firstTarget as string });
       assert.strictEqual(disposalResponse.status, 204, 'realm disposal 204');
 
       // next request should succeed; mapping for that realm should no longer be required
@@ -272,9 +275,16 @@ module(basename(__filename), function () {
       });
 
       // unregister server A
+      let missingUrlUnregisterResponse =
+        await request.delete('/prerender-servers');
+      assert.strictEqual(
+        missingUrlUnregisterResponse.status,
+        400,
+        'unregister requires url query param',
+      );
       let unregisterResponse = await request
         .delete('/prerender-servers')
-        .set('X-Prerender-Server-Url', serverUrlA as string);
+        .query({ url: serverUrlA as string });
       assert.strictEqual(unregisterResponse.status, 204, 'unregister 204');
 
       // new realm should not target A anymore

@@ -1,1 +1,1 @@
-export { default } from './card-error';
+export { default } from './index-error';

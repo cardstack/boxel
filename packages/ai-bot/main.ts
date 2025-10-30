@@ -54,6 +54,7 @@ import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import { type MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
+import { profEnabled, profTime, profNote } from './lib/profiler';
 
 let log = logger('ai-bot');
 
@@ -248,6 +249,13 @@ Common issues are:
           return;
         }
 
+        if (profEnabled()) {
+          profNote(eventId, 'event:received', {
+            type: event.getType(),
+            ts: event.event.origin_server_ts,
+          });
+        }
+
         // Handle the case where the user stops the generation
         let activeGeneration = activeGenerations.get(room.roomId);
         if (
@@ -276,10 +284,8 @@ Common issues are:
         }
 
         // Acquire a lock so that only one instance processes this event.
-        let eventLock = await acquireLock(
-          assistant.pgAdapter,
-          eventId,
-          aiBotInstanceId,
+        let eventLock = await profTime(eventId, 'lock:acquire', async () =>
+          acquireLock(assistant.pgAdapter, eventId, aiBotInstanceId),
         );
 
         if (!eventLock) {
@@ -304,7 +310,11 @@ Common issues are:
           let promptParts: PromptParts;
           let eventList: DiscreteMatrixEvent[];
           try {
-            eventList = await getRoomEvents(room.roomId, client, event.getId());
+            eventList = await profTime(
+              eventId,
+              'history:getRoomEvents',
+              async () => getRoomEvents(room.roomId, client, event.getId()),
+            );
           } catch (e) {
             log.error(e);
             Sentry.captureException(e, {
@@ -339,7 +349,11 @@ Common issues are:
           }
 
           try {
-            promptParts = await getPromptParts(eventList, aiBotUserId, client);
+            promptParts = await profTime(
+              eventId,
+              'history:constructPromptParts',
+              async () => getPromptParts(eventList, aiBotUserId, client),
+            );
             if (!promptParts.shouldRespond) {
               return;
             }
@@ -383,9 +397,11 @@ Common issues are:
             }
           }
 
-          const creditValidation = await validateAICredits(
-            assistant.pgAdapter,
-            senderMatrixUserId,
+          const creditValidation = await profTime(
+            eventId,
+            'billing:validateCredits',
+            async () =>
+              validateAICredits(assistant.pgAdapter, senderMatrixUserId),
           );
 
           if (!creditValidation.hasEnoughCredits) {
@@ -401,19 +417,34 @@ Common issues are:
             `[${eventId}] Starting generation with model %s`,
             promptParts.model,
           );
+          const requestStart = Date.now();
+          let firstChunkAt: number | undefined;
+          if (profEnabled()) {
+            profNote(eventId, 'llm:request:start', {
+              model: promptParts.model,
+            });
+          }
           const runner = assistant
             .getResponse(promptParts)
             .on('chunk', async (chunk, snapshot) => {
               log.info(`[${eventId}] Received chunk %s`, chunk.id);
+              if (profEnabled() && firstChunkAt == null) {
+                firstChunkAt = Date.now();
+                profNote(eventId, 'llm:ttft', {
+                  ms: firstChunkAt - requestStart,
+                  model: promptParts.model,
+                });
+              }
               generationId = chunk.id;
               let activeGeneration = activeGenerations.get(room.roomId);
               if (activeGeneration) {
                 activeGeneration.lastGeneratedChunkId = generationId;
               }
 
-              let chunkProcessingResult = await responder.onChunk(
-                chunk,
-                snapshot,
+              let chunkProcessingResult = await profTime(
+                eventId,
+                'llm:chunk:onChunk',
+                async () => responder.onChunk(chunk, snapshot),
               );
               let chunkProcessingResultError = chunkProcessingResult.find(
                 (promiseResult) =>
@@ -442,9 +473,13 @@ Common issues are:
           });
 
           try {
-            await runner.finalChatCompletion();
+            await profTime(eventId, 'llm:finalChatCompletion', async () =>
+              runner.finalChatCompletion(),
+            );
             log.info(`[${eventId}] Generation complete`);
-            await responder.finalize();
+            await profTime(eventId, 'response:finalize', async () =>
+              responder.finalize(),
+            );
             log.info(`[${eventId}] Response finalized`);
           } catch (error) {
             log.error(`[${eventId}] Error during generation or finalization`);
@@ -506,15 +541,22 @@ Common issues are:
     );
     try {
       //TODO: optimise this so we don't need to sync room events within a reaction event
-      let eventList = await getRoomEvents(room.roomId, client, event.getId());
+      let eventList = await profTime(
+        event.getId()!,
+        'title:getRoomEvents',
+        async () => getRoomEvents(room.roomId, client, event.getId()),
+      );
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
-      let history: DiscreteMatrixEvent[] = await constructHistory(
-        eventList,
-        client,
+      let history: DiscreteMatrixEvent[] = await profTime(
+        event.getId()!,
+        'title:constructHistory',
+        async () => constructHistory(eventList, client),
       );
-      return await assistant.setTitle(room.roomId, history, event);
+      return await profTime(event.getId()!, 'title:setTitle', async () =>
+        assistant.setTitle(room.roomId, history, event),
+      );
     } catch (e) {
       log.error(e);
       Sentry.captureException(e, {

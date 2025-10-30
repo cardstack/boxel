@@ -28,6 +28,7 @@ import {
   withTimeout,
   transitionTo,
 } from './utils';
+import { resolvePrerenderManagerURL } from './config';
 
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
@@ -61,15 +62,18 @@ export class Prerenderer {
     byRealm: new Map<string, { unusable: number; timeout: number }>(),
   };
   #silent: boolean;
+  #serverURL: string;
 
   constructor(options: {
     secretSeed: string;
+    serverURL: string;
     maxPages?: number;
     silent?: boolean;
   }) {
     this.#secretSeed = options.secretSeed;
     this.#maxPages = options.maxPages ?? 4;
     this.#silent = options.silent || process.env.PRERENDER_SILENT === 'true';
+    this.#serverURL = options.serverURL;
   }
 
   #incEvictionMetric(realm: string, reason: 'unusable' | 'timeout') {
@@ -487,12 +491,12 @@ export class Prerenderer {
       log.warn(`Error closing context for realm ${realm}:`, e);
     }
     try {
-      const managerURL =
-        process.env.PRERENDER_MANAGER_URL ?? 'http://localhost:4222';
-      await fetch(
-        `${managerURL.replace(/\/$/, '')}/prerender-servers/realms/${encodeURIComponent(realm)}`,
-        { method: 'DELETE' },
-      ).catch((e) => {
+      const managerURL = resolvePrerenderManagerURL();
+      let target = new URL(
+        `${managerURL}/prerender-servers/realms/${encodeURIComponent(realm)}`,
+      );
+      target.searchParams.set('url', this.#serverURL);
+      await fetch(target.toString(), { method: 'DELETE' }).catch((e) => {
         log.debug('Manager realm eviction notify failed:', e);
       });
     } catch (_e) {
