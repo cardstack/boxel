@@ -19,7 +19,7 @@ import { PgAdapter } from './pg-adapter';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
-const MAX_JOB_TIMEOUT_SEC = 15 * 60;
+const MAX_JOB_TIMEOUT_SEC = 20 * 60;
 
 interface JobsTable {
   id: number;

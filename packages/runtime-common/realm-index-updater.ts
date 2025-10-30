@@ -19,8 +19,8 @@ import { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
 
-export const FROM_SCRATCH_JOB_TIMEOUT_SEC = 15 * 60;
-const INCREMENTAL_JOB_TIMEOUT_SEC = 5 * 60;
+export const FROM_SCRATCH_JOB_TIMEOUT_SEC = 20 * 60;
+const INCREMENTAL_JOB_TIMEOUT_SEC = 10 * 60;
 
 export class RealmIndexUpdater {
   #realm: Realm;
