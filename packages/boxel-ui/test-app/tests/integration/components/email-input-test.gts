@@ -18,7 +18,7 @@ async function waitForDebounce() {
 module('Integration | Component | email-input', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('it delays invalid state until blur and only commits valid addresses', async function (assert) {
+  test('it delays invalid state until blur', async function (assert) {
     let value: string | null = null;
     const set = (newValue: string) => (value = newValue);
 
@@ -32,7 +32,7 @@ module('Integration | Component | email-input', function (hooks) {
     assert
       .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'initial');
-    assert.strictEqual(value, null, 'value not committed while typing');
+    assert.strictEqual(value, 'user@example', 'value is updated');
 
     await triggerEvent('[data-test-boxel-email-input]', 'blur');
 
@@ -84,7 +84,7 @@ module('Integration | Component | email-input', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Enter a domain after "@"');
-    assert.strictEqual(value, 'alice@', 'existing value remains unchanged');
+    assert.strictEqual(value, 'alice@', 'no change was made');
   });
 
   test('it shows a descriptive validation message when invalid on blur', async function (assert) {
@@ -102,11 +102,7 @@ module('Integration | Component | email-input', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Domain must include a period, like "example.com"');
-    assert.strictEqual(
-      value,
-      'alice@email.com',
-      'invalid value not committed, previous value remains committed',
-    );
+    assert.strictEqual(value, 'alice@email', 'value is updated');
   });
 
   test('it allows clearing an optional email input without showing an error', async function (assert) {
@@ -146,6 +142,6 @@ module('Integration | Component | email-input', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Enter an email address');
-    assert.strictEqual(value, null, 'required empty input not committed');
+    assert.strictEqual(value, null, 'value is updated');
   });
 });

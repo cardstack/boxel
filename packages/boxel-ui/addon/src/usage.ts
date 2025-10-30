@@ -79,7 +79,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
   ['InputGroup', InputGroupUsage],
-  ['InputEmail', InputEmailUsage],
+  ['EmailInput', InputEmailUsage],
   ['Input', InputUsage],
   ['LoadingIndicator', LoadingIndicatorUsage],
   ['Menu', MenuUsage],
