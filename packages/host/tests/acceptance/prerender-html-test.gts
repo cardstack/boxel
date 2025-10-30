@@ -1,4 +1,4 @@
-import { visit } from '@ember/test-helpers';
+import { settled, visit } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -18,6 +18,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
 } from '../helpers';
+import type { TestContextWithSave } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -766,6 +767,35 @@ module('Acceptance | prerender | html', function (hooks) {
       /data-test-field="friendsOfFriend"?.*Germaine?.*Hassan/s.test(value),
       `failed to find "Germaine" and "Hassan" field values in isolated HTML`,
     );
+  });
+
+  test<TestContextWithSave>('does not save instances while prerendering', async function (assert) {
+    assert.expect(2);
+
+    this.onSave(() => {
+      assert.step('persisted');
+    });
+
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(renderPath(url, '/html/isolated/0'));
+    await capturePrerenderResult('innerHTML');
+
+    let renderInstance = (globalThis as any).__renderInstance;
+    assert.ok(
+      renderInstance && typeof renderInstance.id === 'string',
+      'render instance has an id when prerendering',
+    );
+    if (!renderInstance || typeof renderInstance.id !== 'string') {
+      this.unregisterOnSave();
+      assert.verifySteps([], 'no save occurs while prerendering');
+      return;
+    }
+
+    getService('store').save(renderInstance.id);
+    await settled();
+
+    assert.verifySteps([], 'no save occurs while prerendering');
+    this.unregisterOnSave();
   });
 
   test('can handle not found prerender url', async function (assert) {
