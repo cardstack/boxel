@@ -56,6 +56,8 @@ RUN groupadd -r pptruser \
 ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_DISABLE_SANDBOX=true
+ENV PUPPETEER_CHROME_ARGS="--disable-dev-shm-usage"
 
 RUN mkdir -p /home/pptruser/Downloads "${PUPPETEER_CACHE_DIR}"
 
