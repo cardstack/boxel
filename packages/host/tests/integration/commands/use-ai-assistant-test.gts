@@ -328,7 +328,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     await aiAssistantCommand.execute({
       prompt: 'Hello with custom LLM!',
       roomId,
-      llmModel: 'gpt-4',
+      llmModel: 'openai/gpt-4o-mini',
     });
 
     // Check that the LLM model was set in room state
@@ -336,8 +336,17 @@ module('Integration | commands | ai-assistant', function (hooks) {
     assert.ok(llmState, 'LLM state should be present in room');
     assert.strictEqual(
       llmState.model,
-      'gpt-4',
-      'LLM model should be set to gpt-4',
+      'openai/gpt-4o-mini',
+      'LLM model should be set to openai/gpt-4o-mini',
+    );
+    assert.true(
+      llmState.toolsSupported,
+      'toolsSupported metadata should be set for the active LLM',
+    );
+    assert.strictEqual(
+      llmState.reasoningEffort,
+      undefined,
+      'reasoningEffort should be undefined when not configured',
     );
   });
 

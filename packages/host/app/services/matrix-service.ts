@@ -71,6 +71,8 @@ import {
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+type ActiveLLMReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | null;
+
 import {
   type Submode,
   Submodes,
@@ -1464,15 +1466,38 @@ export default class MatrixService extends Service {
     return this.timelineLoadingState.get(this.currentRoomId) ?? false;
   }
 
-  async sendActiveLLMEvent(roomId: string, model: string) {
+  async sendActiveLLMEvent(
+    roomId: string,
+    model: string,
+    overrides?: {
+      toolsSupported: boolean;
+      reasoningEffort?: ActiveLLMReasoningEffort;
+    },
+  ) {
     let modelConfiguration = this.systemCard?.modelConfigurations?.find(
       (configuration) => configuration.modelId === model,
     );
 
+    let toolsSupported = overrides?.toolsSupported;
+    if (toolsSupported === undefined) {
+      if (modelConfiguration?.toolsSupported !== undefined) {
+        toolsSupported = Boolean(modelConfiguration.toolsSupported);
+      }
+    }
+
+    let reasoningEffort =
+      overrides?.reasoningEffort ?? modelConfiguration?.reasoningEffort;
+
+    if (toolsSupported === undefined) {
+      throw new Error(
+        `Model configuration for ${model} not found. Provide toolsSupported when activating this model.`,
+      );
+    }
+
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
-      toolsSupported: modelConfiguration?.toolsSupported,
-      reasoningEffort: modelConfiguration?.reasoningEffort,
+      toolsSupported,
+      reasoningEffort,
     });
   }
 
