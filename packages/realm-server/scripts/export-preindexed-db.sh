@@ -1,6 +1,6 @@
 #! /bin/sh
 
-set -euo pipefail
+set -eu
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REALM_SERVER_DIR="$(dirname "$SCRIPTS_DIR")"
