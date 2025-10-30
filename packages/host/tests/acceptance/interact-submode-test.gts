@@ -941,7 +941,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
 
-      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-index]').exists({ count: 5 });
       await click('[data-test-boxel-filter-list-button="All Cards"]');
       await click('[data-test-create-new-card-button]');
       assert.dom('[data-test-card-catalog-item]').exists();
