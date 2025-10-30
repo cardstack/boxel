@@ -1,4 +1,3 @@
-// ²⁷ Board positioning field with enhanced height management
 import {
   FieldDef,
   field,
@@ -16,7 +15,6 @@ class Embedded extends Component<typeof BoardPosition> {
   get hasValidCustomHeight() {
     return this.args.model.customHeight && this.args.model.customHeight > 0;
   }
-
   <template>
     <div class='board-position-compact'>
       <span class='position-label'>Position:</span>
@@ -73,7 +71,6 @@ class Edit extends Component<typeof BoardPosition> {
     if (fieldName === 'format') {
       // String field
       this.args.model.format = target.value;
-
       // Set reasonable defaults when switching to fitted
       if (target.value === 'fitted' && !this.args.model.customHeight) {
         this.args.model.customHeight = this.args.model.autoHeight || 200;
@@ -96,14 +93,6 @@ class Edit extends Component<typeof BoardPosition> {
             type='number'
             value={{@model.x}}
             {{on 'input' (fn this.updateField 'x')}}
-          />
-        </label>
-        <label>
-          <span>Y:</span>
-          <input
-            type='number'
-            value={{@model.y}}
-            {{on 'input' (fn this.updateField 'y')}}
           />
         </label>
         <label>
@@ -131,7 +120,14 @@ class Edit extends Component<typeof BoardPosition> {
             <span class='height-hint'>auto: {{@model.autoHeight}}px</span>
           {{/if}}
         </label>
-
+        <label>
+          <span>Y:</span>
+          <input
+            type='number'
+            value={{@model.y}}
+            {{on 'input' (fn this.updateField 'y')}}
+          />
+        </label>
         <label>
           <span>Layer:</span>
           <input
@@ -146,7 +142,7 @@ class Edit extends Component<typeof BoardPosition> {
           <input
             type='text'
             value={{@model.format}}
-            placeholder='fitted or embedded'
+            placeholder='fitted, embedded, or isolated'
             {{on 'input' (fn this.updateField 'format')}}
           />
         </label>
