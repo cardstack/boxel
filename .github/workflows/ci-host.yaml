@@ -94,63 +94,9 @@ jobs:
             cp "junit/host-${{ matrix.shardIndex }}.xml" "junit/host-${{ matrix.shardIndex }}-attempt1.xml"
           fi
 
-      - name: Count attempt 1 failures
-        id: count_attempt1_failures
-        if: steps.host_tests_attempt_1.outcome == 'failure'
-        env:
-          REPORT_PATH: ${{ format('junit/host-{0}.xml', matrix.shardIndex) }}
-        run: |
-          if [ ! -f "$REPORT_PATH" ]; then
-            echo "failure_count=0" >> "$GITHUB_OUTPUT"
-            echo "No junit report found for attempt 1, assuming 0 failures."
-            exit 0
-          fi
-          failures=$(python - <<'PY'
-import os
-import xml.etree.ElementTree as ET
-
-path = os.environ["REPORT_PATH"]
-try:
-    tree = ET.parse(path)
-except Exception:
-    print(9999)
-    raise SystemExit(0)
-
-failures = 0
-for case in tree.iter("testcase"):
-    if case.find("failure") is not None or case.find("error") is not None:
-        failures += 1
-
-print(failures)
-PY
-)
-          if [ -z "$failures" ]; then
-            failures=9999
-          fi
-          echo "failure_count=$failures" >> "$GITHUB_OUTPUT"
-          echo "Attempt 1 reported $failures failing tests."
-
-      - name: Decide on retry eligibility
-        id: host_retry_decision
-        if: steps.host_tests_attempt_1.outcome == 'failure'
-        env:
-          FAILURE_COUNT: ${{ steps.count_attempt1_failures.outputs.failure_count }}
-        run: |
-          failures="${FAILURE_COUNT:-0}"
-          if [ -z "$failures" ]; then
-            failures=0
-          fi
-          if [ "$failures" -gt 20 ]; then
-            echo "retry_allowed=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping retry because $failures tests failed in attempt 1."
-          else
-            echo "retry_allowed=true" >> "$GITHUB_OUTPUT"
-            echo "Retrying shard after $failures test failures in attempt 1."
-          fi
-
       - name: Host test suite retry (shard ${{ matrix.shardIndex }})
         id: host_tests_attempt_2
-        if: steps.host_retry_decision.outputs.retry_allowed == 'true'
+        if: steps.host_tests_attempt_1.outcome == 'failure'
         continue-on-error: true
         run: |
           rm -f "junit/host-${{ matrix.shardIndex }}.xml"
@@ -165,14 +111,14 @@ PY
         working-directory: packages/host
 
       - name: Preserve attempt 2 junit report
-        if: steps.host_tests_attempt_2.outcome == 'failure' || steps.host_tests_attempt_2.outcome == 'success'
+        if: steps.host_tests_attempt_1.outcome == 'failure'
         run: |
           if [ -f "junit/host-${{ matrix.shardIndex }}.xml" ]; then
             cp "junit/host-${{ matrix.shardIndex }}.xml" "junit/host-${{ matrix.shardIndex }}-attempt2.xml"
           fi
 
       - name: Fail shard after retries
-        if: steps.host_tests_attempt_1.outcome == 'failure' && (steps.host_retry_decision.outputs.retry_allowed == 'false' || steps.host_tests_attempt_2.outcome == 'failure')
+        if: steps.host_tests_attempt_1.outcome == 'failure' && steps.host_tests_attempt_2.outcome == 'failure'
         run: exit 1
 
       - name: Upload junit report attempt 1
@@ -248,14 +194,24 @@ PY
           if [ ${#attempt2[@]} -gt 0 ]; then
             npx junit-report-merger host-attempt2.xml "${attempt2[@]}"
           fi
+          selected=()
           if [ ${#attempt2[@]} -gt 0 ]; then
-            cp host-attempt2.xml host.xml
-          elif [ ${#attempt1[@]} -gt 0 ]; then
-            cp host-attempt1.xml host.xml
-          else
+            selected+=("${attempt2[@]}")
+          fi
+          if [ ${#attempt1[@]} -gt 0 ]; then
+            for report in "${attempt1[@]}"; do
+              base="${report%-attempt1.xml}"
+              if [ -f "${base}-attempt2.xml" ]; then
+                continue
+              fi
+              selected+=("$report")
+            done
+          fi
+          if [ ${#selected[@]} -eq 0 ]; then
             echo "No reports collected" >&2
             exit 1
           fi
+          npx junit-report-merger host.xml "${selected[@]}"
 
       # host.xml has classname="Chrome 134.0", change to classname="Chrome" to prevent false test removal/addition warnings
       - name: Remove Chrome version number
