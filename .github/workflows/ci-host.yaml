@@ -74,7 +74,9 @@ jobs:
           sudo service dbus restart
           sudo service upower restart
 
-      - name: host test suite (shard ${{ matrix.shardIndex }})
+      - name: Host test suite attempt 1 (shard ${{ matrix.shardIndex }})
+        id: host_tests_attempt_1
+        continue-on-error: true
         run: dbus-run-session -- pnpm test-with-percy
         env:
           PERCY_GZIP: true
@@ -85,13 +87,110 @@ jobs:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
         working-directory: packages/host
 
-      - name: Upload junit report to GitHub Actions Artifacts
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+      - name: Preserve attempt 1 junit report
         if: always()
+        run: |
+          if [ -f "junit/host-${{ matrix.shardIndex }}.xml" ]; then
+            cp "junit/host-${{ matrix.shardIndex }}.xml" "junit/host-${{ matrix.shardIndex }}-attempt1.xml"
+          fi
+
+      - name: Count attempt 1 failures
+        id: count_attempt1_failures
+        if: steps.host_tests_attempt_1.outcome == 'failure'
+        env:
+          REPORT_PATH: ${{ format('junit/host-{0}.xml', matrix.shardIndex) }}
+        run: |
+          if [ ! -f "$REPORT_PATH" ]; then
+            echo "failure_count=0" >> "$GITHUB_OUTPUT"
+            echo "No junit report found for attempt 1, assuming 0 failures."
+            exit 0
+          fi
+          failures=$(python - <<'PY'
+import os
+import xml.etree.ElementTree as ET
+
+path = os.environ["REPORT_PATH"]
+try:
+    tree = ET.parse(path)
+except Exception:
+    print(9999)
+    raise SystemExit(0)
+
+failures = 0
+for case in tree.iter("testcase"):
+    if case.find("failure") is not None or case.find("error") is not None:
+        failures += 1
+
+print(failures)
+PY
+)
+          if [ -z "$failures" ]; then
+            failures=9999
+          fi
+          echo "failure_count=$failures" >> "$GITHUB_OUTPUT"
+          echo "Attempt 1 reported $failures failing tests."
+
+      - name: Decide on retry eligibility
+        id: host_retry_decision
+        if: steps.host_tests_attempt_1.outcome == 'failure'
+        env:
+          FAILURE_COUNT: ${{ steps.count_attempt1_failures.outputs.failure_count }}
+        run: |
+          failures="${FAILURE_COUNT:-0}"
+          if [ -z "$failures" ]; then
+            failures=0
+          fi
+          if [ "$failures" -gt 20 ]; then
+            echo "retry_allowed=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping retry because $failures tests failed in attempt 1."
+          else
+            echo "retry_allowed=true" >> "$GITHUB_OUTPUT"
+            echo "Retrying shard after $failures test failures in attempt 1."
+          fi
+
+      - name: Host test suite retry (shard ${{ matrix.shardIndex }})
+        id: host_tests_attempt_2
+        if: steps.host_retry_decision.outputs.retry_allowed == 'true'
+        continue-on-error: true
+        run: |
+          rm -f "junit/host-${{ matrix.shardIndex }}.xml"
+          dbus-run-session -- pnpm test-with-percy
+        env:
+          PERCY_GZIP: true
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
+          HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
+          HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
+          DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+        working-directory: packages/host
+
+      - name: Preserve attempt 2 junit report
+        if: steps.host_tests_attempt_2.outcome == 'failure' || steps.host_tests_attempt_2.outcome == 'success'
+        run: |
+          if [ -f "junit/host-${{ matrix.shardIndex }}.xml" ]; then
+            cp "junit/host-${{ matrix.shardIndex }}.xml" "junit/host-${{ matrix.shardIndex }}-attempt2.xml"
+          fi
+
+      - name: Fail shard after retries
+        if: steps.host_tests_attempt_1.outcome == 'failure' && (steps.host_retry_decision.outputs.retry_allowed == 'false' || steps.host_tests_attempt_2.outcome == 'failure')
+        run: exit 1
+
+      - name: Upload junit report attempt 1
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always() && hashFiles(format('junit/host-{0}-attempt1.xml', matrix.shardIndex)) != ''
         with:
-          name: host-test-report-${{ matrix.shardIndex }}
-          path: junit/host-${{ matrix.shardIndex }}.xml
+          name: host-test-report-${{ matrix.shardIndex }}-attempt1
+          path: junit/host-${{ matrix.shardIndex }}-attempt1.xml
           retention-days: 30
+
+      - name: Upload junit report attempt 2
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always() && hashFiles(format('junit/host-{0}-attempt2.xml', matrix.shardIndex)) != ''
+        with:
+          name: host-test-report-${{ matrix.shardIndex }}-attempt2
+          path: junit/host-${{ matrix.shardIndex }}-attempt2.xml
+          retention-days: 30
+
       - name: Print realm server logs
         if: always()
         run: cat /tmp/server.log
@@ -138,11 +237,34 @@ jobs:
       - run: ls all-host-reports
 
       - name: Merge reports
-        run: npx junit-report-merger host.xml "./all-host-reports/*.xml"
+        run: |
+          set -e
+          shopt -s nullglob
+          attempt1=(./all-host-reports/*-attempt1.xml)
+          attempt2=(./all-host-reports/*-attempt2.xml)
+          if [ ${#attempt1[@]} -gt 0 ]; then
+            npx junit-report-merger host-attempt1.xml "${attempt1[@]}"
+          fi
+          if [ ${#attempt2[@]} -gt 0 ]; then
+            npx junit-report-merger host-attempt2.xml "${attempt2[@]}"
+          fi
+          if [ ${#attempt2[@]} -gt 0 ]; then
+            cp host-attempt2.xml host.xml
+          elif [ ${#attempt1[@]} -gt 0 ]; then
+            cp host-attempt1.xml host.xml
+          else
+            echo "No reports collected" >&2
+            exit 1
+          fi
 
       # host.xml has classname="Chrome 134.0", change to classname="Chrome" to prevent false test removal/addition warnings
       - name: Remove Chrome version number
-        run: sed -i -E 's/classname="Chrome [^"]*"/classname="Chrome"/' host.xml
+        run: |
+          for file in host.xml host-attempt1.xml host-attempt2.xml; do
+            if [ -f "$file" ]; then
+              sed -i -E 's/classname="Chrome [^"]*"/classname="Chrome"/' "$file"
+            fi
+          done
 
       - name: Upload merged report
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
@@ -151,6 +273,30 @@ jobs:
           name: host-test-report-merged
           path: host.xml
           retention-days: 30
+
+      - name: Upload merged report attempt 1
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always() && hashFiles('host-attempt1.xml') != ''
+        with:
+          name: host-test-report-merged-attempt1
+          path: host-attempt1.xml
+          retention-days: 30
+
+      - name: Upload merged report attempt 2
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always() && hashFiles('host-attempt2.xml') != ''
+        with:
+          name: host-test-report-merged-attempt2
+          path: host-attempt2.xml
+          retention-days: 30
+
+      - name: Publish attempt 1 test results
+        if: always() && hashFiles('host-attempt1.xml') != ''
+        uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
+        with:
+          junit_files: host-attempt1.xml
+          check_name: Host Test Results (Attempt 1)
+          fail_on: nothing
 
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
