@@ -66,7 +66,7 @@ test.describe('Publish realm', () => {
     );
     await expect(
       newTab.locator(
-        '[data-test-card="http://user1.localhost:4205/new-workspace/index"]',
+        `[data-test-card="http://${user.username}.localhost:4205/new-workspace/index"]`,
       ),
     ).toBeVisible();
     await newTab.close();
