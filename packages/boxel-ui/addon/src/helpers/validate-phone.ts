@@ -1,7 +1,7 @@
 import type { ParsedPhoneNumber } from 'awesome-phonenumber';
 import { parsePhoneNumber } from 'awesome-phonenumber';
 
-const DEFAULT_REGION_CODE = 'US';
+export const DEFAULT_PHONE_REGION_CODE = 'US';
 
 export const PHONE_VALIDATION_ERROR_CODES = [
   'invalid-type',
@@ -125,7 +125,7 @@ export function normalizePhone(
   const defaultRegionCode = sanitizeRegion(
     options.defaultRegionCode ??
       (normalizedAllowedRegions ? firstAllowedRegion : undefined) ??
-      DEFAULT_REGION_CODE,
+      DEFAULT_PHONE_REGION_CODE,
   );
 
   const parseOptions = trimmed.startsWith('+')

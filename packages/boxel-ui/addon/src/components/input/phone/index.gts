@@ -1,9 +1,11 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { type AsYouType, getAsYouType } from 'awesome-phonenumber';
 import { debounce } from 'lodash';
 
 import validatePhone, {
+  DEFAULT_PHONE_REGION_CODE,
   isValidPhone,
 } from '../../../helpers/validate-phone.ts';
 import BoxelInput, { type InputValidationState } from '../index.gts';
@@ -25,13 +27,16 @@ const DEFAULT_REQUIRED_MESSAGE = 'Enter a phone number';
 export default class PhoneInput extends Component<Signature> {
   private fallbackErrorMessage = DEFAULT_FALLBACK_MESSAGE;
   private requiredErrorMessage = DEFAULT_REQUIRED_MESSAGE;
+  private asYouType: AsYouType = getAsYouType(DEFAULT_PHONE_REGION_CODE);
 
   @tracked private validationState: InputValidationState = this.args.value
     ? isValidPhone(this.args.value)
       ? 'valid'
       : 'invalid'
     : 'initial';
-  @tracked private inputValue = this.args.value ?? '';
+  @tracked private inputValue = this.args.value
+    ? this.formatForDisplay(this.args.value)
+    : '';
   @tracked private errorMessage = this.args.value
     ? validatePhone(this.args.value)?.message
     : '';
@@ -83,8 +88,9 @@ export default class PhoneInput extends Component<Signature> {
       this.validationState = 'initial';
     }
     this.errorMessage = undefined;
-    this.inputValue = value;
-    this.debouncedInput(value);
+    const formattedValue = this.formatForDisplay(value);
+    this.inputValue = formattedValue;
+    this.debouncedInput(formattedValue);
   }
 
   @action onBlur(): void {
@@ -96,6 +102,36 @@ export default class PhoneInput extends Component<Signature> {
   override willDestroy(): void {
     this.debouncedInput.cancel();
     super.willDestroy();
+  }
+
+  private sanitizeForFormatting(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    const hasLeadingPlus = trimmed.startsWith('+');
+    const digits = trimmed.replace(/\D/g, '');
+    if (hasLeadingPlus) {
+      return digits.length ? `+${digits}` : '+';
+    }
+
+    return digits;
+  }
+
+  private formatForDisplay(value: string | null): string {
+    if (!value) {
+      this.asYouType.reset();
+      return '';
+    }
+
+    const sanitized = this.sanitizeForFormatting(value);
+    if (!sanitized) {
+      this.asYouType.reset();
+      return '';
+    }
+
+    return this.asYouType.reset(sanitized);
   }
 
   <template>
