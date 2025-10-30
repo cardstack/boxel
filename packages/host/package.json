@@ -147,7 +147,7 @@
     "eslint-plugin-prettier": "catalog:",
     "eslint-plugin-qunit": "catalog:",
     "eslint-plugin-qunit-dom": "catalog:",
-    "eslint-plugin-window-mock": "workspace:*",
+    "eslint-plugin-cardstack-host": "workspace:*",
     "ethers": "catalog:",
     "eventemitter3": "catalog:",
     "fast-json-stable-stringify": "catalog:",
