@@ -1,7 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { updateUser } from '../docker/synapse';
 import { appURL } from '../helpers/isolated-realm-server';
-import { openRoot, assertLoggedIn, createSubscribedUser } from '../helpers';
+import {
+  openRoot,
+  assertLoggedIn,
+  createSubscribedUser,
+  updateSynapseUser,
+} from '../helpers';
 
 test.describe('Login using email', () => {
   let user: {
@@ -13,11 +17,10 @@ test.describe('Login using email', () => {
 
   test.beforeEach(async ({}) => {
     test.setTimeout(120_000);
-    let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
 
     user = await createSubscribedUser('email-login');
     userEmail = `${user.username}@example.com`;
-    await updateUser(adminAccessToken, user.credentials.userId, {
+    await updateSynapseUser(user.credentials.userId, {
       emailAddresses: [userEmail],
       displayname: 'Test User',
     });

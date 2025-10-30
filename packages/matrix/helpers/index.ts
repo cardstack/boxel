@@ -4,11 +4,13 @@ import {
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
+  registerUser,
   type SynapseInstance,
   sync,
+  updateUser,
+  type UpdateUserOptions,
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
-import { registerUser } from '../docker/synapse';
 import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
@@ -30,10 +32,56 @@ interface LoginOptions {
   showAllCards?: boolean; //default true
 }
 
-// Setup just one pool
-export const sharedSQLExecutor = new BasicSQLExecutor(
-  process.env.REALM_SERVER_DB!,
-);
+// Shared SQL executor is created on demand for tests
+interface MatrixTestContext {
+  adminAccessToken: string;
+  synapse: SynapseInstance;
+  realmServerDb: string;
+}
+
+let cachedMatrixTestContext: MatrixTestContext | undefined;
+let cachedSQLExecutor: SQLExecutor | undefined;
+
+export function getMatrixTestContext(): MatrixTestContext {
+  if (!cachedMatrixTestContext) {
+    let raw = process.env.MATRIX_TEST_CONTEXT;
+    if (!raw) {
+      throw new Error('MATRIX_TEST_CONTEXT environment variable is not defined');
+    }
+    let parsed = JSON.parse(raw) as Partial<MatrixTestContext>;
+    if (
+      typeof parsed.adminAccessToken !== 'string' ||
+      typeof parsed.realmServerDb !== 'string' ||
+      !parsed.synapse
+    ) {
+      throw new Error(
+        'MATRIX_TEST_CONTEXT is missing required properties: adminAccessToken, realmServerDb, synapse',
+      );
+    }
+    cachedMatrixTestContext = {
+      adminAccessToken: parsed.adminAccessToken,
+      realmServerDb: parsed.realmServerDb,
+      synapse: parsed.synapse as SynapseInstance,
+    };
+  }
+  return cachedMatrixTestContext;
+}
+
+export function getSharedSQLExecutor(): SQLExecutor {
+  if (!cachedSQLExecutor) {
+    let { realmServerDb } = getMatrixTestContext();
+    cachedSQLExecutor = new BasicSQLExecutor(realmServerDb);
+  }
+  return cachedSQLExecutor;
+}
+
+export async function updateSynapseUser(
+  userId: string,
+  options: UpdateUserOptions,
+) {
+  let { adminAccessToken } = getMatrixTestContext();
+  await updateUser(adminAccessToken, userId, options);
+}
 
 export async function setSkillsRedirect(page: Page) {
   await page.route('http://localhost:4201/skills/**', async (route) => {
@@ -596,8 +644,9 @@ export async function assertLoggedIn(page: Page, opts: ProfileAssertions) {
   }
 }
 
-export async function setupUser(username: string, realmServer: SQLExecutor) {
-  await realmServer.executeSQL(
+export async function setupUser(username: string, realmServer?: SQLExecutor) {
+  let executor = realmServer ?? getSharedSQLExecutor();
+  await executor.executeSQL(
     `INSERT INTO users (matrix_user_id) VALUES ('${username}')`,
   );
 }
@@ -605,9 +654,10 @@ export async function setupUser(username: string, realmServer: SQLExecutor) {
 export async function setupPermissions(
   username: string,
   realmURL: string,
-  realmServer: SQLExecutor,
+  realmServer?: SQLExecutor,
 ) {
-  await realmServer.executeSQL(
+  let executor = realmServer ?? getSharedSQLExecutor();
+  await executor.executeSQL(
     `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
     VALUES (
       '${realmURL}',
@@ -622,11 +672,12 @@ export async function setupPermissions(
 
 export async function setupPayment(
   username: string,
-  realmServer: SQLExecutor,
+  realmServer?: SQLExecutor,
   _page?: Page,
 ) {
+  let executor = realmServer ?? getSharedSQLExecutor();
   // mock trigger stripe webhook 'checkout.session.completed'
-  let starterPlan = await realmServer.executeSQL(
+  let starterPlan = await executor.executeSQL(
     `SELECT * FROM plans WHERE name = 'Starter'`,
   );
 
@@ -635,11 +686,11 @@ export async function setupPayment(
   let subscriptionId = `sub_${randomNumber}`;
   let stripeCustomerId = `cus_${randomNumber}`;
 
-  await realmServer.executeSQL(
+  await executor.executeSQL(
     `UPDATE users SET stripe_customer_id = '${stripeCustomerId}' WHERE matrix_user_id = '${username}'`,
   );
 
-  let findUser = await realmServer.executeSQL(
+  let findUser = await executor.executeSQL(
     `SELECT * FROM users WHERE matrix_user_id = '${username}'`,
   );
 
@@ -650,7 +701,7 @@ export async function setupPayment(
   const oneMonthFromNow = now + 2592000; // One month in seconds
 
   // mock trigger stripe webhook 'invoice.payment_succeeded'
-  await realmServer.executeSQL(
+  await executor.executeSQL(
     `INSERT INTO subscriptions (
       user_id,
       plan_id,
@@ -668,12 +719,12 @@ export async function setupPayment(
     )`,
   );
 
-  const getSubscription = await realmServer.executeSQL(
+  const getSubscription = await executor.executeSQL(
     `SELECT id FROM subscriptions WHERE stripe_subscription_id = '${subscriptionId}'`,
   );
   const subscriptionUUID = getSubscription[0].id;
 
-  await realmServer.executeSQL(
+  await executor.executeSQL(
     `INSERT INTO subscription_cycles (
       subscription_id,
       period_start,
@@ -685,19 +736,19 @@ export async function setupPayment(
     )`,
   );
 
-  let subscriptionCycle = await realmServer.executeSQL(
+  let subscriptionCycle = await executor.executeSQL(
     `SELECT id FROM subscription_cycles WHERE subscription_id = '${subscriptionUUID}'`,
   );
   const subscriptionCycleUUID = subscriptionCycle[0].id;
 
-  await realmServer.executeSQL(
+  await executor.executeSQL(
     `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${starterPlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
   );
 }
 
 export async function setupUserSubscribed(
   username: string,
-  realmServer: SQLExecutor,
+  realmServer?: SQLExecutor,
 ) {
   await setupUser(username, realmServer);
   await setupPayment(username, realmServer);
@@ -714,7 +765,7 @@ export function getUniquePassword(): string {
 export async function createUser(
   prefix = 'user',
 ): Promise<{ username: string; password: string; credentials: Credentials }> {
-  let synapse = JSON.parse(process.env.SYNAPSE!);
+  let { synapse } = getMatrixTestContext();
   const username = getUniqueUsername(prefix);
   const password = getUniquePassword();
   const credentials = await registerUser(synapse, username, password);
@@ -725,7 +776,7 @@ export async function createSubscribedUser(
   prefix = 'user',
 ): Promise<{ username: string; password: string; credentials: Credentials }> {
   const { username, password, credentials } = await createUser(prefix);
-  await setupUserSubscribed(`@${username}:localhost`, sharedSQLExecutor);
+  await setupUserSubscribed(`@${username}:localhost`);
   return { username, password, credentials };
 }
 

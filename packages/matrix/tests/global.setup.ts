@@ -15,9 +15,11 @@ export default async function setup() {
   let admin = await registerUser(synapse, 'admin', 'adminpass', true);
   await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
   const realmServer = await startRealmServer();
-  process.env.ADMIN_ACCESS_TOKEN = admin.accessToken;
-  process.env.SYNAPSE = JSON.stringify(synapse);
-  process.env.REALM_SERVER_DB = realmServer.db;
+  process.env.MATRIX_TEST_CONTEXT = JSON.stringify({
+    adminAccessToken: admin.accessToken,
+    synapse,
+    realmServerDb: realmServer.db,
+  });
   return async () => {
     await synapseStop(synapse.synapseId);
     await realmServer.stop();

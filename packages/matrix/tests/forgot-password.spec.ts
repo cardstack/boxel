@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { updateUser } from '../docker/synapse';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
@@ -8,6 +7,7 @@ import {
   validateEmailForResetPassword,
   login,
   createSubscribedUser,
+  updateSynapseUser,
 } from '../helpers';
 
 test.describe('Forgot password', () => {
@@ -17,12 +17,11 @@ test.describe('Forgot password', () => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 30s to the overall test timeout
     test.setTimeout(120_000);
-    let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
 
     await clearLocalStorage(page, appURL);
     user = await createSubscribedUser('forgot-password');
     userEmail = `${user.username}@example.com`;
-    await updateUser(adminAccessToken, user.credentials.userId, {
+    await updateSynapseUser(user.credentials.userId, {
       emailAddresses: [userEmail],
       displayname: user.username,
     });

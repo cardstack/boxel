@@ -1,5 +1,4 @@
 import { expect, type Page, test } from '@playwright/test';
-import { updateUser } from '../docker/synapse';
 import {
   login,
   validateEmail,
@@ -7,6 +6,7 @@ import {
   assertLoggedIn,
   createSubscribedUser,
   createUser,
+  updateSynapseUser,
 } from '../helpers';
 import { appURL } from '../helpers/isolated-realm-server';
 
@@ -19,13 +19,12 @@ test.describe('Profile', () => {
   let userEmail: string;
 
   let unseenEmail: string;
-  let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
 
     user = await createSubscribedUser('profile');
     userEmail = `${user.username}@localhost`;
-    await updateUser(adminAccessToken, user.credentials.userId, {
+    await updateSynapseUser(user.credentials.userId, {
       emailAddresses: [userEmail],
     });
 
@@ -178,7 +177,7 @@ test.describe('Profile', () => {
   }) => {
     let existingUser = await createUser('profile-existing-user');
     let existingUserEmail = `${existingUser.username}@localhost`;
-    await updateUser(adminAccessToken, existingUser.credentials.userId, {
+    await updateSynapseUser(existingUser.credentials.userId, {
       emailAddresses: [existingUserEmail],
     });
     await expect(page.locator('[data-test-current-email]')).toContainText(
@@ -259,7 +258,7 @@ test.describe('Profile', () => {
   }) => {
     let existingUser = await createUser('profile-existing-user');
     let existingUserEmail = `${existingUser.username}@localhost`;
-    await updateUser(adminAccessToken, existingUser.credentials.userId, {
+    await updateSynapseUser(existingUser.credentials.userId, {
       emailAddresses: [existingUserEmail],
     });
     await expect(page.locator('[data-test-current-email]')).toContainText(

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { updateAccountData, updateUser } from '../docker/synapse';
-import { createSubscribedUser, login } from '../helpers';
+import { updateAccountData } from '../docker/synapse';
+import { createSubscribedUser, login, updateSynapseUser } from '../helpers';
 
 import { appURL } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
@@ -14,11 +14,9 @@ test.describe('Realm URLs in Matrix account data', () => {
   let userEmail: string;
 
   test.beforeEach(async () => {
-    let adminAccessToken = process.env.ADMIN_ACCESS_TOKEN!;
-
     user = await createSubscribedUser('realm-urls');
     userEmail = `${user.username}@localhost`;
-    await updateUser(adminAccessToken, user.credentials.userId, {
+    await updateSynapseUser(user.credentials.userId, {
       emailAddresses: [userEmail],
     });
 

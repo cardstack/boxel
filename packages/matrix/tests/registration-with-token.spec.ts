@@ -19,17 +19,14 @@ import {
   getUniqueUsername,
   getUniquePassword,
   REGISTRATION_TOKEN,
+  getMatrixTestContext,
 } from '../helpers';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
 
 const serverIndexUrl = new URL(appURL).origin;
 
 function getSynapse(): SynapseInstance {
-  let env = process.env.SYNAPSE;
-  if (!env) {
-    throw new Error('SYNAPSE env var is not set');
-  }
-  return JSON.parse(env);
+  return getMatrixTestContext().synapse;
 }
 
 function makeRegistrationUser(
