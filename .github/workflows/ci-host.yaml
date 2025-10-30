@@ -143,7 +143,7 @@ jobs:
         run: pnpm start:skip-experiments | tee -a /tmp/server.log &
         working-directory: packages/realm-server
         env:
-          FULL_INDEX_ON_STARTUP: 'false'
+          FULL_INDEX_ON_STARTUP: "false"
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
