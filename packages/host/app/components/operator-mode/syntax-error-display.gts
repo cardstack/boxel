@@ -20,15 +20,20 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
   @service private declare matrixService: MatrixService;
 
   get stack() {
-    let stack = this.removeSourceMappingURL(this.args.syntaxErrors);
+    let maybeCardError = this.removeSourceMappingURL(this.args.syntaxErrors);
     let json: CardError | undefined;
     try {
-      json = JSON.parse(stack);
+      json = JSON.parse(maybeCardError);
     } catch (e) {
-      return stack;
+      return maybeCardError;
     }
     delete json!.deps; // definitely json exists at this point
-    return JSON.stringify(json, null, 2);
+    const stackDepth = 4;
+    // prevent super deep stacks
+    return (json!.stack ?? JSON.stringify(json, null, 2))
+      .split('\n')
+      .slice(0, stackDepth)
+      .join('\n');
   }
 
   removeSourceMappingURL(syntaxErrors: string): string {

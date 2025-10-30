@@ -2,7 +2,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import {
   baseRealm,
@@ -2260,8 +2260,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
     );
   });
 
-  // TODO: headless chrome doesn't support the `isUsed` field yet: CS-9539
-  skip(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
+  test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -2336,19 +2335,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         id: `${testRealmURL}Post/1`,
         title: '50 Ways to Leave Your Laptop',
         publication: {
-          cardInfo: {
-            theme: null,
-          },
-          featuredPosts: [
-            {
-              id: `${testRealmURL}Post/1`,
-            },
-            {
-              id: `${testRealmURL}Post/2`,
-            },
-          ],
           id: `${testRealmURL}Publication/pacific`,
-          title: 'Pacific Weekly',
         },
         views: 5,
         cardInfo: { theme: null },
@@ -2367,13 +2354,41 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         title: 'Pacific Weekly',
         featuredPosts: [
           {
+            author: {
+              description: 'Person',
+              fullName: ' ',
+              title: ' ',
+            },
+            cardInfo: {
+              theme: null,
+            },
             id: `${testRealmURL}Post/1`,
+            publication: {
+              id: `${testRealmURL}Publication/pacific`,
+            },
+            title: '50 Ways to Leave Your Laptop',
+            views: 5,
           },
-          { id: `${testRealmURL}Post/2` },
+          {
+            author: {
+              description: 'Person',
+              fullName: ' ',
+              title: ' ',
+            },
+            cardInfo: {
+              theme: null,
+            },
+            id: `${testRealmURL}Post/2`,
+            publication: {
+              id: `${testRealmURL}Publication/pacific`,
+            },
+            title: '49 Shades of Mauve',
+            views: 24,
+          },
         ],
         cardInfo: { theme: null },
       },
-      `publication search doc includes featuredPosts relationship`,
+      `publication search doc includes featuredPosts relationship via isUsed=true`,
     );
   });
 
@@ -4009,7 +4024,6 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/card-menu-items',
         'https://cardstack.com/base/card-serialization',
-        'https://cardstack.com/base/components/add-button',
         'https://cardstack.com/base/contains-many-component',
         'https://cardstack.com/base/default-templates/atom',
         'https://cardstack.com/base/default-templates/card-info',
@@ -4136,7 +4150,6 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://cardstack.com/base/card-menu-items',
         'https://cardstack.com/base/card-serialization',
         'https://cardstack.com/base/code-ref',
-        'https://cardstack.com/base/components/add-button',
         'https://cardstack.com/base/contains-many-component',
         'https://cardstack.com/base/default-templates/atom',
         'https://cardstack.com/base/default-templates/card-info',

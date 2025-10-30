@@ -1,0 +1,56 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "DemoFields",
+        "module": "../demo-fields"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "url": "https://www.pixar.com/finding-nemo",
+      "color": "#ff6d1f",
+      "email": "nemo@email.com",
+      "realm": "http://localhost:4201/experiments/",
+      "address": {
+        "city": "Sydney",
+        "state": "NSW",
+        "country": {
+          "code": "AU",
+          "name": "Australia"
+        },
+        "postalCode": null,
+        "poBoxNumber": null,
+        "addressLine1": "42 Wallaby Way",
+        "addressLine2": null
+      },
+      "country": {
+        "code": "AU",
+        "name": "Australia"
+      },
+      "phoneNo": {
+        "number": "+61712346578",
+        "countryCode": null
+      },
+      "website": "https://www.pixar.com",
+      "cardInfo": {
+        "notes": null,
+        "title": "Nemo",
+        "description": "Just keep swimming.",
+        "thumbnailURL": "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/906fc6e5-265f-4118-b2f2-36c97ecc4d77/nemo11.jpg?format=2500w"
+      },
+      "dateRange": {
+        "end": "2025-11-01",
+        "start": "2025-10-27"
+      },
+      "percentage": 99.9512
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

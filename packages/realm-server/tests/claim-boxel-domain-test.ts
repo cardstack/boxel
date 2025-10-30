@@ -135,7 +135,7 @@ module(basename(__filename), function () {
     test('should return 400 when source_realm_url is missing', async function (assert) {
       const response = await makePostRequest(defaultToken, {
         data: {
-          type: 'claimed-site-hostname',
+          type: 'claimed-domain',
           attributes: {
             hostname: 'test.boxel.site',
           },
@@ -156,7 +156,7 @@ module(basename(__filename), function () {
     test('should return 400 when hostname is missing', async function (assert) {
       const response = await makePostRequest(defaultToken, {
         data: {
-          type: 'claimed-site-hostname',
+          type: 'claimed-domain',
           attributes: {
             source_realm_url: 'https://test-realm.com',
           },
@@ -177,7 +177,7 @@ module(basename(__filename), function () {
     test('should return 422 when hostname is just the domain without subdomain', async function (assert) {
       const response = await makePostRequest(defaultToken, {
         data: {
-          type: 'claimed-site-hostname',
+          type: 'claimed-domain',
           attributes: {
             source_realm_url: 'https://test-realm.com',
             hostname: boxelSiteDomain,
@@ -199,7 +199,7 @@ module(basename(__filename), function () {
     test('should return 422 when hostname does not end with the correct domain', async function (assert) {
       const response = await makePostRequest(defaultToken, {
         data: {
-          type: 'claimed-site-hostname',
+          type: 'claimed-domain',
           attributes: {
             source_realm_url: 'https://test-realm.com',
             hostname: 'something.not-boxel.site',
@@ -238,7 +238,7 @@ module(basename(__filename), function () {
       for (const subdomain of invalidSubdomains) {
         const response = await makePostRequest(defaultToken, {
           data: {
-            type: 'claimed-site-hostname',
+            type: 'claimed-domain',
             attributes: {
               source_realm_url: 'https://test-realm.com',
               hostname: `${subdomain}.${boxelSiteDomain}`,
@@ -274,7 +274,7 @@ module(basename(__filename), function () {
 
       const response = await makePostRequest(defaultToken, {
         data: {
-          type: 'claimed-site-hostname',
+          type: 'claimed-domain',
           attributes: {
             source_realm_url: 'https://test-realm.com',
             hostname: hostname,
@@ -299,7 +299,7 @@ module(basename(__filename), function () {
 
       const response = await makePostRequest(defaultToken, {
         data: {
-          type: 'claimed-site-hostname',
+          type: 'claimed-domain',
           attributes: {
             source_realm_url: sourceRealmURL,
             hostname: hostname,
@@ -317,7 +317,7 @@ module(basename(__filename), function () {
       assert.ok(response.body.data, 'Should have data object');
       assert.strictEqual(
         response.body.data.type,
-        'claimed-site-hostname',
+        'claimed-domain',
         'Should have correct type',
       );
       assert.ok(response.body.data.id, 'Should have an ID');
@@ -375,7 +375,7 @@ module(basename(__filename), function () {
       const sourceRealmURL = 'https://new-realm.com';
       const response = await makePostRequest(defaultToken, {
         data: {
-          type: 'claimed-site-hostname',
+          type: 'claimed-domain',
           attributes: {
             source_realm_url: sourceRealmURL,
             hostname: hostname,

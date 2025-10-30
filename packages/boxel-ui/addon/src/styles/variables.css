@@ -103,6 +103,13 @@
   --boxel-icon-xl: 3.75rem; /* 60px */
   --boxel-icon-xxl: 5rem; /* 80px */
 
+  /* button sizes */
+  --boxel-button-mini: 1.25rem; /* 20px */
+  --boxel-button-xs: 1.5rem; /* 24px */
+  --boxel-button-sm: 1.875rem; /* 30px - base */
+  --boxel-button-tall: 2.5rem; /* 40px */
+  --boxel-button-touch: 3rem; /* 48px */
+
   /* border-color */
   --boxel-border-color: #d3d3d3;
   --boxel-button-border-color: #acacac;
@@ -114,13 +121,19 @@
   --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
 
   /* border-radius */
-  --boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
-  --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
-  --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 3px);
-  --boxel-border-radius: var(--boxel-radius);
-  --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
-  --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
-  --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
+  --boxel-border-radius-xxs: calc(
+    var(--boxel-border-radius-xs) - 2.5px
+  ); /* 1.5px */
+  --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 2px); /* 4px */
+  --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 4px); /* 6px */
+  --boxel-border-radius: var(--boxel-radius); /* 10px - base */
+  --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px); /* 12px */
+  --boxel-border-radius-xl: calc(
+    var(--boxel-border-radius-lg) + 3px
+  ); /* 15px */
+  --boxel-border-radius-xxl: calc(
+    var(--boxel-border-radius-xl) + 5px
+  ); /* 20px */
 
   /* animations */
   --boxel-infinite-spin-animation: boxel-spin 6000ms linear infinite;
@@ -156,6 +169,7 @@
   /* COLOR PALETTE */
 
   /**** Revisited Colors BOXEL-UI ****/
+  --boxel-50: #f5f5f5;
   --boxel-100: #f8f7fa;
   --boxel-200: #e8e8e8;
   --boxel-300: #d1d1d1;

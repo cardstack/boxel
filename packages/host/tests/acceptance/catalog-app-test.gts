@@ -10,10 +10,14 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
+
 import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import ListingUseCommand from '@cardstack/host/commands/listing-use';
+
+import ENV from '@cardstack/host/config/environment';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -24,6 +28,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   verifySubmode,
   toggleFileTree,
@@ -38,7 +43,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 import type { CardListing } from '@cardstack/catalog/listing/listing';
 
-const catalogRealmURL = 'http://localhost:4201/catalog/';
+const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 const testDestinationRealmURL = `http://test-realm/test2/`;
 
 //listing
@@ -180,6 +185,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       realmURL: mockCatalogURL,
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'author/author.gts': authorCardSource,
         'blog-post/blog-post.gts': blogPostCardSource,
         'fields/contact-link.gts': contactLinkFieldSource,
@@ -658,6 +664,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       mockMatrixUtils,
       realmURL: testDestinationRealmURL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': {
           data: {
             type: 'card',
@@ -1307,6 +1314,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             realmURL: mockCatalogURL,
             mockMatrixUtils,
             contents: {
+              ...SYSTEM_CARD_FIXTURE_CONTENTS,
               'Category/category-with-null-sphere.json': {
                 data: {
                   type: 'card',
@@ -1366,6 +1374,21 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
+    });
+
+    test('listing card shows more options dropdown in stack item', async function (assert) {
+      let triggerSelector = `[data-test-stack-card="${authorListingId}"] [data-test-more-options-button]`;
+      await waitFor(triggerSelector);
+      await click(triggerSelector);
+      await waitFor('[data-test-boxel-dropdown-content]');
+      assert
+        .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
+        .exists('Listing card dropdown renders menu items');
+      assert
+        .dom(
+          `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Generate example with AI"]`,
+        )
+        .exists('Generate example with AI action is present');
     });
 
     test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
@@ -1687,6 +1710,17 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   )
                 ) {
                   content = 'Mock listing summary sentence.';
+                } else if (
+                  systemLower.includes("boxel's sample data assistant")
+                ) {
+                  content = JSON.stringify({
+                    examples: [
+                      {
+                        label: 'Generated field value',
+                        url: 'https://example.com/contact',
+                      },
+                    ],
+                  });
                 } else if (systemLower.includes('representing tag')) {
                   // Deterministic tag selection
                   content = JSON.stringify([calculatorTagId]);

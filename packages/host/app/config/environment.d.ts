@@ -16,6 +16,7 @@ declare const config: {
 
   realmServerURL: string;
   resolvedBaseRealmURL: string;
+  resolvedCatalogRealmURL: string;
   resolvedSkillsRealmURL: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
@@ -36,4 +37,5 @@ declare const config: {
   };
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;
+  defaultSystemCardId: string;
 };

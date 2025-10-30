@@ -397,19 +397,12 @@ export async function writeMessage(
   await page.locator(`[data-test-message-field="${roomId}"]`).fill(message);
 }
 
-export async function selectCardFromCatalog(
-  page: Page,
-  cardId: string,
-  realmName = 'Test Workspace A',
-) {
+export async function selectCardFromCatalog(page: Page, cardId: string) {
   await page.locator('[data-test-attach-button]').click();
   await page.locator('[data-test-attach-card-btn]').click();
   await page
-    .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
-    .click();
-  await page
-    .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
-    .click();
+    .locator('[data-test-card-catalog-modal] [data-test-search-field]')
+    .fill(cardId);
   await page.locator(`[data-test-select="${cardId}"]`).click();
   await page.locator('[data-test-card-catalog-go-button]').click();
 }

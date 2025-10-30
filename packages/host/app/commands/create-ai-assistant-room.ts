@@ -25,6 +25,15 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
 
   static actionVerb = 'Create';
 
+  private getDefaultLLM(): string {
+    let systemCard = this.matrixService.systemCard;
+    return (
+      systemCard?.defaultModelConfiguration?.modelId ??
+      systemCard?.modelConfigurations?.[0]?.modelId ??
+      DEFAULT_LLM
+    );
+  }
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { CreateAIAssistantRoomInput } = commandModule;
@@ -90,7 +99,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
           {
             type: APP_BOXEL_ACTIVE_LLM,
             content: {
-              model: DEFAULT_LLM,
+              model: this.getDefaultLLM(),
             },
           },
           {

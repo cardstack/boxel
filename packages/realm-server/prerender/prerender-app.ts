@@ -14,12 +14,14 @@ import {
   fetchRequestFromContext,
 } from '../middleware';
 import { Prerenderer } from './index';
+import { resolvePrerenderManagerURL } from './config';
 
 let log = logger('prerender-server');
+const defaultPrerenderServerPort = 4221;
 
 export function buildPrerenderApp(
   secretSeed: string,
-  options?: { maxPages?: number; silent?: boolean },
+  options: { serverURL: string; maxPages?: number; silent?: boolean },
 ): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
@@ -29,7 +31,12 @@ export function buildPrerenderApp(
   let maxPages =
     options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
   let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
-  let prerenderer = new Prerenderer({ secretSeed, maxPages, silent });
+  let prerenderer = new Prerenderer({
+    secretSeed,
+    maxPages,
+    silent,
+    serverURL: options.serverURL,
+  });
 
   router.head('/', livenessCheck);
   router.get('/', async (ctxt: Koa.Context) => {
@@ -70,6 +77,9 @@ export function buildPrerenderApp(
           ? (attrs.renderOptions as RenderRouteOptions)
           : {};
 
+      log.debug(
+        `received prerender request ${url}: realm=${realm} userId=${userId} options=${JSON.stringify(renderOptions)} permissions=${JSON.stringify(permissions)}`,
+      );
       if (
         !url ||
         !userId ||
@@ -99,6 +109,25 @@ export function buildPrerenderApp(
         renderOptions,
       });
       let totalMs = Date.now() - start;
+      let poolFlags = Object.entries({
+        reused: pool.reused,
+        evicted: pool.evicted,
+        timedOut: pool.timedOut,
+      })
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .join(', ');
+      let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+      log.info(
+        'prerendered %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
+        url,
+        totalMs,
+        timings.launchMs,
+        timings.renderMs,
+        pool.pageId,
+        pool.realm,
+        poolFlagSuffix,
+      );
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
       ctxt.body = {
@@ -116,6 +145,18 @@ export function buildPrerenderApp(
           pool,
         },
       };
+      if (pool.timedOut) {
+        log.warn(`render of ${url} timed out`);
+      }
+      if (response.error) {
+        log.debug(
+          `render of ${url} resulted in error doc:\n${JSON.stringify(response.error, null, 2)}`,
+        );
+      } else {
+        log.debug(
+          `render of ${url} resulted in search doc:\n${JSON.stringify(response.searchDoc, null, 2)}`,
+        );
+      }
     } catch (err: any) {
       Sentry.captureException(err);
       log.error(`Unhandled error in /prerender:`, err);
@@ -154,22 +195,26 @@ export function buildPrerenderApp(
   return { app, prerenderer };
 }
 
-async function registerWithManager() {
+function resolvePrerenderServerURL(port?: number): string {
+  let hostname = process.env.HOSTNAME ?? 'localhost';
+  let resolvedPort = port ?? defaultPrerenderServerPort;
+  return `http://${hostname}:${resolvedPort}`.replace(/\/$/, '');
+}
+
+async function registerWithManager(serverURL: string) {
   try {
-    const managerURL =
-      process.env.PRERENDER_MANAGER_URL ?? 'http://localhost:4222';
+    const managerURL = resolvePrerenderManagerURL();
     const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
-    const urlOverride = process.env.PRERENDER_SERVER_URL; // optional explicit URL
     let body = {
       data: {
         type: 'prerender-server',
         attributes: {
           capacity,
-          ...(urlOverride ? { url: urlOverride } : {}),
+          url: serverURL,
         },
       },
     };
-    await fetch(`${managerURL.replace(/\/$/, '')}/prerender-servers`, {
+    await fetch(`${managerURL}/prerender-servers`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/vnd.api+json',
@@ -185,16 +230,35 @@ async function registerWithManager() {
   }
 }
 
+async function unregisterWithManager(serverURL: string) {
+  try {
+    const managerURL = resolvePrerenderManagerURL();
+    let target = new URL(`${managerURL}/prerender-servers`);
+    target.searchParams.set('url', serverURL);
+    await fetch(target.toString(), { method: 'DELETE' }).catch((e) => {
+      log.debug('Prerender manager unregister request failed:', e);
+    });
+  } catch (e) {
+    log.debug(
+      'Error while attempting to unregister with prerender manager:',
+      e,
+    );
+  }
+}
+
 export function createPrerenderHttpServer(options?: {
   secretSeed?: string;
   maxPages?: number;
   silent?: boolean;
+  port?: number;
 }): Server {
   let secretSeed = options?.secretSeed ?? process.env.REALM_SECRET_SEED ?? '';
   let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
+  let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp(secretSeed, {
     maxPages: options?.maxPages,
     silent,
+    serverURL,
   });
   let server = createServer(app.callback());
   server.on('close', async () => {
@@ -204,11 +268,19 @@ export function createPrerenderHttpServer(options?: {
       // Best-effort shutdown; log and continue
       log.warn('Error stopping prerenderer on server close:', e?.message ?? e);
     }
+    try {
+      await unregisterWithManager(serverURL);
+    } catch (e) {
+      log.debug(
+        'Error scheduling unregister with prerender manager:',
+        e as any,
+      );
+    }
   });
   // best-effort registration (async, non-blocking)
   server.on('listening', () => {
     try {
-      registerWithManager();
+      void registerWithManager(serverURL);
     } catch (e) {
       log.debug('Error scheduling registration with prerender manager:', e);
     }

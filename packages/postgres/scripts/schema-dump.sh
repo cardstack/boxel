@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -euo pipefail
 
 tmpFile='./schema_tmp.sql'
@@ -28,6 +28,8 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=stripe_events \
   --exclude-table-and-children=ai_bot_event_processing \
   --exclude-table-and-children=proxy_endpoints \
+  --exclude-table-and-children=claimed_domains_for_sites \
+  --exclude-table-and-children=session_rooms \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \

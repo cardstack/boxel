@@ -4,7 +4,7 @@ import StringField from 'https://cardstack.com/base/string';
 import { Command } from '@cardstack/runtime-common';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';
 
-import { buildAICues } from '../external/avataar-utils';
+import { buildAICues } from '../utils/external/avataar';
 import Avatar from '../fields/avatar';
 
 class CreateRealImageInput extends CardDef {

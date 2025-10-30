@@ -17,9 +17,11 @@ import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
+import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
 import * as ListingInitCommandModule from './listing-action-init';
 import * as ListingCreateCommandModule from './listing-create';
+import * as ListingGenerateExampleCommandModule from './listing-generate-example';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
@@ -34,6 +36,7 @@ import * as PopulateWithSampleDataCommandModule from './populate-with-sample-dat
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
+import * as ReadTextFileCommandModule from './read-text-file';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
@@ -41,6 +44,7 @@ import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
+import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
 import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
@@ -93,6 +97,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetEventsFromRoomCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/lint-and-fix',
+    LintAndFixCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-action-build',
     ListingBuildCommandModule,
   );
@@ -115,6 +123,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-remix',
     ListingRemixCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-generate-example',
+    ListingGenerateExampleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-in-interact-mode',
@@ -143,6 +155,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
     ReadFileForAiAssistantCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/read-text-file',
+    ReadTextFileCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/save-card',
@@ -248,35 +264,56 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/populate-with-sample-data',
     PopulateWithSampleDataCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/set-user-system-card',
+    SetUserSystemCardCommandModule,
+  );
 }
 
+// Note - this is used for the tests
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AddFieldToCardDefinitionCommandModule.default,
   AddSkillsToRoomCommandModule.default,
   ApplySearchReplaceBlockCommandModule.default,
   AskAiCommandModule.default,
+  CopyCardToRealmModule.default,
   CopyCardToStackCommandModule.default,
+  CopySourceCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
   CreateSpecCommandModule.default,
   GenerateExampleCardsCommandModule.default,
+  GenerateReadmeSpecCommandModule.default,
+  GetAllRealmMetasCommandModule.default,
   GetCardCommandModule.default,
+  GetEventsFromRoomCommandModule.default,
+  LintAndFixCommandModule.default,
+  ListingBuildCommandModule.default,
+  ListingInitCommandModule.default,
+  ListingCreateCommandModule.default,
+  ListingGenerateExampleCommandModule.default,
+  ListingInstallCommandModule.default,
+  ListingRemixCommandModule.default,
+  ListingUseCommandModule.default,
   OneShotLlmRequestCommandModule.default,
-  OpenAiAssistantRoomCommandModule.default,
   OpenAiAssistantRoomCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
-  OpenWorkspaceCommandModule.default,
+  PatchCodeCommandModule.default,
   PatchFieldsCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
+  PreviewFormatCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
+  ReadTextFileCommandModule.default,
   SaveCardCommandModule.default,
+  SearchAndChooseCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,
   SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
-  SearchAndChooseCommandModule.default,
   SearchGoogleImagesCommandModule.default,
   SendAiAssistantMessageModule.default,
+  SendRequestViaProxyCommandModule.default,
   SetActiveLlmModule.default,
+  SetUserSystemCardCommandModule.default,
   ShowCardCommandModule.default,
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,

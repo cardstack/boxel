@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimePeriod",
+        "module": "../reward-card-program"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "unit": "quarter",
+      "count": 1,
+      "notes": null,
+      "scope": "cardmember",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "minAmount": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "resetBasis": "cardmember-year",
+      "maxUsesPerPeriod": null,
+      "eligibleBookingNightsMin": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

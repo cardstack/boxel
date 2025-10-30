@@ -58,6 +58,7 @@ jobs:
         env:
           REALM_SERVER_ROOT: https://realms-staging.stack.cards/
           RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
+          RESOLVED_CATALOG_REALM_URL: https://realms-staging.stack.cards/catalog/
           RESOLVED_SKILLS_REALM_URL: https://realms-staging.stack.cards/skills/
           MATRIX_URL: https://matrix-staging.stack.cards
           MATRIX_SERVER_NAME: stack.cards
@@ -91,6 +92,7 @@ jobs:
         env:
           REALM_SERVER_ROOT: https://app.boxel.ai/
           RESOLVED_BASE_REALM_URL: https://app.boxel.ai/base/
+          RESOLVED_CATALOG_REALM_URL: https://app.boxel.ai/catalog/
           RESOLVED_SKILLS_REALM_URL: https://app.boxel.ai/skills/
           MATRIX_URL: https://matrix.boxel.ai
           MATRIX_SERVER_NAME: boxel.ai

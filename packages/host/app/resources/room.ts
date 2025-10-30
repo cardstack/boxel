@@ -345,7 +345,18 @@ export class RoomResource extends Resource<Args> {
   }
 
   get activeLLM(): string {
-    return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+    return (
+      this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? this.defaultLLM
+    );
+  }
+
+  private get defaultLLM(): string {
+    let systemCard = this.matrixService.systemCard;
+    return (
+      systemCard?.defaultModelConfiguration?.modelId ??
+      systemCard?.modelConfigurations?.[0]?.modelId ??
+      DEFAULT_LLM
+    );
   }
 
   @cached

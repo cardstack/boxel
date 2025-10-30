@@ -25,6 +25,7 @@ import {
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   withoutLoaderMonitoring,
   type TestContextWithSave,
@@ -148,6 +149,30 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
+const localStyleReferenceCard = {
+  data: {
+    type: 'card',
+    attributes: {
+      cardInfo: {
+        title: 'Local Style Reference',
+        description: 'Local card instance for style reference tests',
+        thumbnailURL: null,
+        notes: null,
+      },
+      styleName: 'Local Style Reference',
+      visualDNA: 'Style reference content for playground edit tests',
+      inspirations: ['Testing'],
+      wallpaperImages: [],
+    },
+    meta: {
+      adoptsFrom: {
+        module: 'https://cardstack.com/base/style-reference',
+        name: 'default',
+      },
+    },
+  },
+};
+
 module('Acceptance | code-submode | card playground', function (_hooks) {
   module('single realm', function (hooks) {
     let realm: Realm;
@@ -182,6 +207,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
           'author.gts': authorCard,
           'blog-post.gts': blogPostCard,
@@ -1347,7 +1373,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: personalRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'author-card.gts': authorCard,
+          'StyleReference/local-style.json': localStyleReferenceCard,
           '.realm.json': {
             name: `Test User's Workspace`,
             backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
@@ -1360,6 +1388,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: additionalRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'author-card.gts': authorCard,
           '.realm.json': {
             name: `Additional Workspace`,
@@ -1417,6 +1446,49 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'isolated',
         'new card is rendered in isolated format',
       );
+    });
+
+    test('edit format is enabled for writable instances of read-only card definitions', async function (assert) {
+      removePlaygroundSelections();
+      removeRecentFiles();
+      removeRecentCards();
+
+      try {
+        setRecentFiles([[personalRealmURL, 'StyleReference/local-style.json']]);
+
+        await openFileInPlayground('style-reference.gts', baseRealm.url);
+
+        await waitFor('[data-test-instance-chooser]');
+        assert
+          .dom('[data-test-selected-item]')
+          .containsText('Local Style Reference');
+
+        await waitFor('[data-test-edit-button]');
+        assert
+          .dom('[data-test-edit-button]')
+          .exists('edit button is shown for writable instance');
+
+        await click('[data-test-edit-button]');
+        await waitFor('[data-test-card-format="edit"]');
+        assert
+          .dom('[data-test-card-format="edit"]')
+          .exists('playground switches to edit format');
+
+        await fillIn(
+          '[data-test-card-format="edit"] [data-test-field="styleName"] input',
+          'Updated Style Reference',
+        );
+
+        assert
+          .dom(
+            '[data-test-card-format="edit"] [data-test-field="styleName"] input',
+          )
+          .isNotDisabled('styleName input is enabled for editing');
+      } finally {
+        removePlaygroundSelections();
+        removeRecentFiles();
+        removeRecentCards();
+      }
     });
   });
 
@@ -1508,6 +1580,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'boom-pet.gts': boomPet,
           'person.gts': personCard,
           'boom-person.gts': boomPerson,
@@ -1536,7 +1609,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-syntax-error] [data-test-error-stack]')
         .containsText(
-          `{ "additionalErrors": null, "message": "encountered error loading module \\"${testRealmURL}syntax-error.gts\\": StringField is not defined", "status": 500 }`,
+          `Encountered error while evaluating ${testRealmURL}syntax-error.gts: ReferenceError: StringField is not defined`,
           'error message is correct (and contains no "deps" field)',
         );
     });

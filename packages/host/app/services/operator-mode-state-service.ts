@@ -52,6 +52,8 @@ import { removeFileExtension } from '../components/search-sheet/utils';
 
 import { ModuleInspectorSelections } from '../utils/local-storage-keys';
 
+import { normalizeDirPath } from '../utils/normalized-dir-path';
+
 import MatrixService from './matrix-service';
 import NetworkService from './network';
 
@@ -664,7 +666,7 @@ export default class OperatorModeStateService extends Service {
     // solve UX issues with back button referring back to request url of redirect
     // when it should refer back to the previous code path
     this._state.codePath = codePath;
-    this.router.replaceWith('index', {
+    this.router.replaceWith('index-root', {
       queryParams: {
         operatorModeState: this.serialize(),
       },
@@ -701,13 +703,15 @@ export default class OperatorModeStateService extends Service {
     let localPath = this.codePathRelativeToRealm;
 
     if (localPath) {
-      let containingDirectory = localPath.split('/').slice(0, -1).join('/');
+      let segments = localPath.split('/').slice(0, -1).filter(Boolean);
+      let accumulator: string[] = [];
 
-      if (containingDirectory) {
-        containingDirectory += '/';
+      for (let segment of segments) {
+        accumulator.push(segment);
+        let dirPath = `${accumulator.join('/')}/`;
 
-        if (!this.currentRealmOpenDirs.includes(containingDirectory)) {
-          this.toggleOpenDir(containingDirectory);
+        if (!this.currentRealmOpenDirs.includes(dirPath)) {
+          this.toggleOpenDir(dirPath);
         }
       }
     }
@@ -761,6 +765,9 @@ export default class OperatorModeStateService extends Service {
   }
 
   private persist() {
+    if (this.isDestroyed) {
+      return;
+    }
     this.operatorModeController.operatorModeState = this.serialize();
     // This sets the title of the document for it's appearance in the browser
     // history (which needs to happen after the history pushState)--the
@@ -903,28 +910,17 @@ export default class OperatorModeStateService extends Service {
       return;
     }
 
+    let dirPath = normalizeDirPath(entryPath);
     let dirs = this.currentRealmOpenDirs.slice();
-    for (let i = 0; i < dirs.length; i++) {
-      if (dirs[i].startsWith(entryPath)) {
-        let localParts = entryPath.split('/').filter((p) => p.trim() != '');
-        localParts.pop();
-        if (localParts.length) {
-          dirs[i] = localParts.join('/') + '/';
-        } else {
-          dirs.splice(i, 1);
-        }
-        this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
-        return;
-      } else if (entryPath.startsWith(dirs[i])) {
-        dirs[i] = entryPath;
-        this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
-        return;
-      }
+    let index = dirs.indexOf(dirPath);
+
+    if (index !== -1) {
+      dirs.splice(index, 1);
+    } else {
+      dirs.push(dirPath);
     }
-    this.openDirs.set(
-      this.realmURL.href,
-      new TrackedArray([...dirs, entryPath]),
-    );
+
+    this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
     this.schedulePersist();
   };
 

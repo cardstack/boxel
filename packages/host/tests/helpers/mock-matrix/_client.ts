@@ -17,6 +17,7 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -26,7 +27,10 @@ import {
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_LLM_MODE,
+  APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+
+import ENV from '@cardstack/host/config/environment';
 
 import type {
   FileDefManager,
@@ -59,8 +63,8 @@ type Plural<T> = {
 
 const publicRealmURLs = [
   baseRealm.url,
-  'http://localhost:4201/catalog/',
-  'http://localhost:4201/skills/',
+  ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
+  ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
 ];
 
 export class MockClient implements ExtendedClient {
@@ -97,6 +101,8 @@ export class MockClient implements ExtendedClient {
       return {
         realms: this.sdkOpts.activeRealms ?? [],
       } as unknown as K;
+    } else if (_eventType === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
+      return (this.sdkOpts.systemCardAccountData ?? null) as unknown as K;
     }
     return null;
   }
@@ -195,11 +201,19 @@ export class MockClient implements ExtendedClient {
       this.sdkOpts.activeRealms = (data as any).realms;
     } else if (type === 'm.direct') {
       this.sdkOpts.directRooms = (data as any)[this.loggedInAs!];
+    } else if (type === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
+      this.sdkOpts.systemCardAccountData = data as any;
     } else {
       throw new Error(
         'Support for updating this event type in account data is not yet implemented in this mock.',
       );
     }
+    this.emitEvent(
+      new MatrixEvent({
+        type: type as string,
+        content: data as unknown as Record<string, unknown>,
+      }),
+    );
     return Promise.resolve({});
   }
 
@@ -551,6 +565,8 @@ export class MockClient implements ExtendedClient {
   private eventHandlerType(type: string) {
     switch (type) {
       case APP_BOXEL_REALMS_EVENT_TYPE:
+      case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
+      case 'm.direct':
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:

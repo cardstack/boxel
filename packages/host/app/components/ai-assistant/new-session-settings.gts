@@ -2,9 +2,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import XIcon from '@cardstack/boxel-icons/x';
-
-import { Button, IconButton } from '@cardstack/boxel-ui/components';
+import { Button, ContextButton } from '@cardstack/boxel-ui/components';
 
 interface Signature {
   Args: {
@@ -47,8 +45,10 @@ export default class NewSessionSettings extends Component<Signature> {
           class='new-session-settings-title'
           data-test-new-session-settings-title
         >New Session Options</div>
-        <IconButton
-          @icon={{XIcon}}
+        <ContextButton
+          @icon='close'
+          @variant='ghost'
+          @size='small'
           class='new-session-settings-close-button'
           data-test-new-session-settings-close-button
           {{on 'click' @onClose}}
@@ -92,12 +92,15 @@ export default class NewSessionSettings extends Component<Signature> {
     </div>
     <style scoped>
       .new-session-settings-menu {
+        --new-sessions-menu-foreground: #e0e0e0;
+
         background: var(--ai-assistant-menu-background);
-        border-radius: 10px;
+        border-radius: var(--boxel-border-radius);
         box-shadow: 0 10px 15px 0 rgba(0, 0, 0, 0.25);
         border: solid 1px rgba(0, 0, 0, 0.25);
         padding: 6.5px 11px 11px 11px;
-        min-width: 220px;
+        min-width: 13.75rem;
+        color: var(--new-sessions-menu-foreground);
       }
       .new-session-settings-header {
         display: flex;
@@ -106,25 +109,11 @@ export default class NewSessionSettings extends Component<Signature> {
         margin-bottom: 6.5px;
       }
       .new-session-settings-title {
-        font-family: Poppins, sans-serif;
-        font-size: 13px;
         font-weight: 600;
-        font-stretch: normal;
-        font-style: normal;
-        line-height: 1.23;
-        letter-spacing: 0.2px;
-        text-align: left;
-        color: #e0e0e0;
-      }
-      .new-session-settings-close-button {
-        --boxel-icon-button-width: 24px;
-        --boxel-icon-button-height: 24px;
-        --boxel-icon-button-color: #e0e0e0;
-        --boxel-icon-button-background: transparent;
+        letter-spacing: var(--boxel-lsp-sm);
       }
       .new-session-settings-close-button:hover {
-        --boxel-icon-button-color: #ffffff;
-        --boxel-icon-button-background: rgba(255, 255, 255, 0.1);
+        color: var(--boxel-light);
       }
       .new-session-settings-options {
         display: flex;
@@ -138,7 +127,7 @@ export default class NewSessionSettings extends Component<Signature> {
         cursor: pointer;
         padding: 7px 4px;
         border-radius: 5px;
-        transition: background-color 0.2s ease;
+        transition: background-color var(--boxel-transition);
       }
       .new-session-settings-option:hover {
         background-color: var(--ai-assistant-menu-hover-background);
@@ -150,18 +139,18 @@ export default class NewSessionSettings extends Component<Signature> {
         width: 18px;
         height: 18px;
         border-radius: 3px;
-        border: solid 1px #afafb7;
+        border: solid 1px var(--boxel-400);
         cursor: pointer;
         appearance: none;
         -webkit-appearance: none;
         position: relative;
         background-color: transparent;
-        transition: background-color 0.2s ease;
+        transition: background-color var(--boxel-transition);
         margin: 0;
       }
       .new-session-settings-option input[type='checkbox']:checked {
-        background-color: var(--boxel-teal);
-        border-color: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
+        border-color: var(--boxel-highlight);
       }
       .new-session-settings-option input[type='checkbox']:checked::after {
         content: '';
@@ -175,15 +164,8 @@ export default class NewSessionSettings extends Component<Signature> {
         transform: rotate(45deg);
       }
       .new-session-settings-label {
-        font-family: Poppins, sans-serif;
-        font-size: 13px;
         font-weight: 500;
-        font-stretch: normal;
-        font-style: normal;
-        line-height: 1.23;
-        letter-spacing: 0.2px;
-        text-align: left;
-        color: #e0e0e0;
+        letter-spacing: var(--boxel-lsp-sm);
         text-wrap: nowrap;
       }
       .new-session-settings-footer {

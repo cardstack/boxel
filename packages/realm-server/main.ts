@@ -23,6 +23,11 @@ if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
 }
 
+if (process.env.USE_HEADLESS_CHROME_INDEXING === 'true') {
+  // in node context this is a boolean
+  (globalThis as any).__useHeadlessChromePrerender = true;
+}
+
 const REALM_SERVER_SECRET_SEED = process.env.REALM_SERVER_SECRET_SEED;
 if (!REALM_SERVER_SECRET_SEED) {
   console.error(
@@ -262,8 +267,10 @@ let autoMigrate = migrateDB || undefined;
   // PUBLISHED_REALM_BOXEL_SPACE_DOMAIN is used to form urls like "mike.boxel.space/game-mechanics"
   // PUBLISHED_REALM_BOXEL_SITE_DOMAIN is used to form urls like "mike.boxel.site"
   let domainsForPublishedRealms = {
-    boxelSpace: process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost',
-    boxelSite: process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost',
+    boxelSpace:
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+    boxelSite:
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
   };
 
   let server = new RealmServer({

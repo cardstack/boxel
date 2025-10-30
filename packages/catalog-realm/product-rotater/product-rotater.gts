@@ -24,6 +24,7 @@ import {
   type RotationFrame,
 } from './components/rotation-preview';
 import { ProductRotationImage } from './components/product-rotation-image';
+import type Owner from '@ember/owner';
 
 const DEFAULT_IMAGE_COUNT = 4;
 
@@ -52,7 +53,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
   @tracked isExporting = false;
   @tracked error = '';
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     // Initialize imageCount before any getters might access it
     let initialCount = this.args.model?.imageCount ?? DEFAULT_IMAGE_COUNT;

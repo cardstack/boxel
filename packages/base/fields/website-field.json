@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Website Field",
+      "description": "A field that validates website addresses and provides a suitable editor.",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/website",
+        "name": "default"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

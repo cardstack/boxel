@@ -1,0 +1,136 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "title": "Default System Configuration",
+        "description": "This card defines the available language models and their settings, designed to work best in Boxel.",
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "defaultModelConfiguration": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-sonnet-45"
+        }
+      },
+      "modelConfigurations.0": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-5"
+        }
+      },
+      "modelConfigurations.1": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-4o-mini"
+        }
+      },
+      "modelConfigurations.2": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-haiku-45"
+        }
+      },
+      "modelConfigurations.3": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-35-sonnet"
+        }
+      },
+      "modelConfigurations.4": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-37-sonnet"
+        }
+      },
+      "modelConfigurations.5": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-37-sonnet-thinking"
+        }
+      },
+      "modelConfigurations.6": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-sonnet-4"
+        }
+      },
+      "modelConfigurations.7": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-sonnet-45"
+        }
+      },
+      "modelConfigurations.8": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-opus-41"
+        }
+      },
+      "modelConfigurations.9": {
+        "links": {
+          "self": "../ModelConfiguration/deepseek-deepseek-chat-v3-0324"
+        }
+      },
+      "modelConfigurations.10": {
+        "links": {
+          "self": "../ModelConfiguration/google-gemini-25-pro"
+        }
+      },
+      "modelConfigurations.11": {
+        "links": {
+          "self": "../ModelConfiguration/google-gemini-25-flash-lite"
+        }
+      },
+      "modelConfigurations.12": {
+        "links": {
+          "self": "../ModelConfiguration/google-gemini-25-flash"
+        }
+      },
+      "modelConfigurations.13": {
+        "links": {
+          "self": "../ModelConfiguration/meta-llama-llama-32-3b-instruct"
+        }
+      },
+      "modelConfigurations.14": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-41-nano"
+        }
+      },
+      "modelConfigurations.15": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-41-mini"
+        }
+      },
+      "modelConfigurations.16": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-41"
+        }
+      },
+      "modelConfigurations.17": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-4o"
+        }
+      },
+      "modelConfigurations.18": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-4o-mini"
+        }
+      },
+      "modelConfigurations.19": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-5-nano"
+        }
+      },
+      "modelConfigurations.20": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-5-mini"
+        }
+      },
+      "modelConfigurations.21": {
+        "links": {
+          "self": "../ModelConfiguration/openai-gpt-oss-20b"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/system-card",
+        "name": "SystemCard"
+      }
+    }
+  }
+}

@@ -9,7 +9,7 @@ import {
 test.describe('Publish realm', () => {
   let user: { username: string; password: string; credentials: any };
 
-  async function publishDefaultRealm(page: Page) {
+  async function openPublishRealmModal(page: Page) {
     let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
 
@@ -26,13 +26,17 @@ test.describe('Publish realm', () => {
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
 
     await page.locator('[data-test-publish-realm-button]').click();
+  }
+
+  async function publishDefaultRealm(page: Page) {
+    await openPublishRealmModal(page);
     await page.locator('[data-test-default-domain-checkbox]').click();
     await page.locator('[data-test-publish-button]').click();
 
     await page.waitForSelector('[data-test-unpublish-button]');
     await expect(
       page.locator(
-        '[data-test-publish-realm-modal] [data-test-open-site-button]',
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
       ),
     ).toBeVisible();
   }
@@ -43,13 +47,15 @@ test.describe('Publish realm', () => {
     test.setTimeout(120_000);
   });
 
-  test('it can publish a realm', async ({ page }) => {
+  test('it can publish a realm to a subdirectory', async ({ page }) => {
     await publishDefaultRealm(page);
 
     let newTabPromise = page.waitForEvent('popup');
 
     await page
-      .locator('[data-test-publish-realm-modal] [data-test-open-site-button]')
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
+      )
       .click();
 
     let newTab = await newTabPromise;
@@ -58,6 +64,68 @@ test.describe('Publish realm', () => {
     await expect(newTab).toHaveURL(
       `http://${user.username}.localhost:4205/new-workspace/`,
     );
+    await expect(
+      newTab.locator(
+        '[data-test-card="http://user1.localhost:4205/new-workspace/index"]',
+      ),
+    ).toBeVisible();
+    await newTab.close();
+    await page.bringToFront();
+  });
+
+  test('it validates, claims, and publishes to a custom subdomain', async ({
+    page,
+  }) => {
+    await openPublishRealmModal(page);
+
+    await page.locator('[data-test-custom-subdomain-setup-button]').click();
+
+    let customSubdomainInput = page.locator(
+      '[data-test-custom-subdomain-input]',
+    );
+    let claimButton = page.locator('[data-test-claim-custom-subdomain-button]');
+    let customSubdomainField = customSubdomainInput.locator('input');
+
+    await customSubdomainField.fill('xn--punycodetest');
+    await claimButton.click();
+
+    await expect(
+      page.locator('[data-test-boxel-input-group-error-message]'),
+    ).toHaveText('Punycode domains are not allowed for security reasons');
+
+    await customSubdomainField.fill('acceptable-subdomain');
+    await claimButton.click();
+
+    await expect(
+      page.locator('[data-test-boxel-input-group-error-message]'),
+    ).toHaveCount(0);
+
+    await expect(
+      page.locator('[data-test-custom-subdomain-input]'),
+    ).toHaveCount(0);
+
+    await page.locator('[data-test-custom-subdomain-checkbox]').click();
+    await page.locator('[data-test-publish-button]').click();
+
+    let newTabPromise = page.waitForEvent('popup');
+
+    await page
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-custom-subdomain-button]',
+      )
+      .click();
+
+    let newTab = await newTabPromise;
+    await newTab.waitForLoadState();
+
+    await expect(newTab).toHaveURL(
+      'http://acceptable-subdomain.localhost:4205/',
+    );
+    await expect(
+      newTab.locator(
+        '[data-test-card="http://acceptable-subdomain.localhost:4205/index"]',
+      ),
+    ).toBeVisible();
     await newTab.close();
     await page.bringToFront();
   });
@@ -74,7 +142,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/index`,
+      `http://${user.username}.localhost:4205/new-workspace/`,
     );
     await newTab.close();
     await page.bringToFront();
@@ -104,7 +172,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/index`,
+      `http://${user.username}.localhost:4205/new-workspace/`,
     );
     await newTab.close();
     await page.bringToFront();

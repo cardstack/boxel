@@ -391,12 +391,16 @@ export default class ForgotPassword extends Component<Signature> {
 
     try {
       let clientSecret = uuidv4();
+      let redirectUrl = new URL(window.location.href);
+      redirectUrl.searchParams.set('clientSecret', clientSecret);
+
       let { sid } = await this.matrixService.requestPasswordEmailToken(
         this.state.email,
         clientSecret,
         this.state.sendAttempt,
-        window.location.href + `&clientSecret=${clientSecret}`,
+        redirectUrl.toString(),
       );
+
       this.state = {
         ...this.state,
         type: 'waitForEmailValidation',

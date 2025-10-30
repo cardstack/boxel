@@ -11,6 +11,7 @@ import {
   testRealmURL,
   setupAuthEndpoints,
   setupUserSubscription,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
@@ -70,6 +71,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': new CardsGrid(),
         'pet.gts': { Pet },
         'Pet/1.json': new Pet({
@@ -122,7 +124,8 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await waitFor('[data-test-cards-grid-item]');
 
     let cards = findAll('[data-test-cards-grid-item]');
-    assert.ok(cards.length >= 3, 'Multiple cards are available');
+    let initialCardCount = cards.length;
+    assert.ok(initialCardCount >= 3, 'Multiple cards are available');
 
     // Enter selection mode by clicking the first card's checkbox
     await selectCard('Pet/1');
@@ -155,11 +158,17 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await click('[data-test-confirm-delete-button]');
 
     // Wait for deletion to complete
-    await waitFor('[data-test-cards-grid-item]', { count: 1 });
+    await waitFor('[data-test-cards-grid-item]', {
+      count: initialCardCount - 2,
+    });
 
     // Verify cards were deleted
     let remainingCards = findAll('[data-test-cards-grid-item]');
-    assert.strictEqual(remainingCards.length, 1, 'Two cards were deleted');
+    assert.strictEqual(
+      remainingCards.length,
+      initialCardCount - 2,
+      'Two cards were deleted',
+    );
 
     // Verify selection mode is cleared
     assert

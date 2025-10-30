@@ -37,6 +37,7 @@ import {
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
+  isCardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
@@ -57,7 +58,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   DEFAULT_CODING_LLM,
-  DEFAULT_LLM_LIST,
+  DEFAULT_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -67,7 +68,7 @@ import {
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
-  DEFAULT_LLM,
+  APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -104,6 +105,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
+import type { SystemCard } from 'https://cardstack.com/base/system-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { addPatchTools } from '../commands/utils';
@@ -195,6 +197,7 @@ export default class MatrixService extends Service {
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
+  @tracked private _systemCard: SystemCard | undefined;
   agentId: string | undefined;
 
   constructor(owner: Owner) {
@@ -202,6 +205,23 @@ export default class MatrixService extends Service {
     this.setLoggerLevelFromEnvironment();
     this.setAgentId();
     this.#ready = this.loadState.perform();
+  }
+
+  setMessageToSend(roomId: string, message: string | undefined) {
+    if (message === undefined) {
+      this.messagesToSend.delete(roomId);
+    } else {
+      this.messagesToSend.set(roomId, message);
+    }
+    this.localPersistenceService.setMessageDraft(roomId, message);
+  }
+
+  getMessageToSend(roomId: string) {
+    if (this.messagesToSend.has(roomId)) {
+      return this.messagesToSend.get(roomId);
+    }
+
+    return this.localPersistenceService.getMessageDraft(roomId);
   }
 
   private setAgentId() {
@@ -298,12 +318,17 @@ export default class MatrixService extends Service {
       [
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
-          if (e.event.type == APP_BOXEL_REALMS_EVENT_TYPE) {
-            await this.realmServer.setAvailableRealmURLs(
-              e.event.content.realms,
-            );
-            await this.loginToRealms();
-            await this.loadMoreAuthRooms(e.event.content.realms);
+          switch (e.event.type) {
+            case APP_BOXEL_REALMS_EVENT_TYPE:
+              await this.realmServer.setAvailableRealmURLs(
+                e.event.content.realms,
+              );
+              await this.loginToRealms();
+              await this.loadMoreAuthRooms(e.event.content.realms);
+              break;
+            case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
+              await this.setSystemCard(e.event.content.id);
+              break;
           }
         },
       ],
@@ -400,7 +425,7 @@ export default class MatrixService extends Service {
       // when user logs out we transition them back to an empty stack with the
       // workspace chooser open. this way we don't inadvertently leak private
       // card id's in the URL
-      this.router.transitionTo('index', {
+      this.router.transitionTo('index-root', {
         queryParams: {
           operatorModeState: stringify({
             stacks: [],
@@ -425,11 +450,15 @@ export default class MatrixService extends Service {
     displayName: string,
     registrationToken?: string,
   ) {
+    await this.ready;
+
     displayName = displayName.trim();
     this._isInitializingNewUser = true;
-    this.start({ auth });
-    this.setDisplayName(displayName);
-    let userId = this.client.getUserId();
+
+    this.configureClientWithAuth(auth);
+
+    let userId = auth.user_id;
+
     if (!userId) {
       throw new Error(
         `bug: there is no userId associated with the matrix client`,
@@ -437,6 +466,11 @@ export default class MatrixService extends Service {
     }
 
     await this.realmServer.createUser(userId, registrationToken);
+
+    await this.start({ auth });
+    this.setDisplayName(displayName);
+
+    await this.realmServer.authenticateToAllAccessibleRealms();
 
     await Promise.all([
       this.createPersonalRealmForUser({
@@ -450,6 +484,52 @@ export default class MatrixService extends Service {
 
     this.router.refresh();
     this._isInitializingNewUser = false;
+  }
+
+  private configureClientWithAuth(auth: LoginResponse) {
+    let {
+      access_token: accessToken,
+      user_id: userId,
+      device_id: deviceId,
+    } = auth;
+
+    if (!accessToken) {
+      throw new Error(
+        `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
+          auth,
+          null,
+          2,
+        )}`,
+      );
+    }
+    if (!userId) {
+      throw new Error(
+        `Cannot create matrix client from auth that has no user id: ${JSON.stringify(
+          auth,
+          null,
+          2,
+        )}`,
+      );
+    }
+    if (!deviceId) {
+      throw new Error(
+        `Cannot create matrix client from auth that has no device id: ${JSON.stringify(
+          auth,
+          null,
+          2,
+        )}`,
+      );
+    }
+
+    this._client = this.matrixSDK.createClient({
+      baseUrl: matrixURL,
+      accessToken,
+      userId,
+      deviceId,
+    });
+
+    this.realmServer.setClient(this.client);
+    this.saveAuth(auth);
   }
 
   public async createPersonalRealmForUser({
@@ -498,6 +578,8 @@ export default class MatrixService extends Service {
       refreshRoutes?: true;
     } = {},
   ) {
+    await this.ready;
+
     let { auth, refreshRoutes } = opts;
     if (!auth) {
       auth = this.getAuth();
@@ -506,54 +588,17 @@ export default class MatrixService extends Service {
       }
     }
 
-    let {
-      access_token: accessToken,
-      user_id: userId,
-      device_id: deviceId,
-    } = auth;
+    this.configureClientWithAuth(auth);
 
-    if (!accessToken) {
-      throw new Error(
-        `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
-          auth,
-          null,
-          2,
-        )}`,
-      );
-    }
-    if (!userId) {
-      throw new Error(
-        `Cannot create matrix client from auth that has no user id: ${JSON.stringify(
-          auth,
-          null,
-          2,
-        )}`,
-      );
-    }
-    if (!deviceId) {
-      throw new Error(
-        `Cannot create matrix client from auth that has no device id: ${JSON.stringify(
-          auth,
-          null,
-          2,
-        )}`,
-      );
-    }
-    this._client = this.matrixSDK.createClient({
-      baseUrl: matrixURL,
-      accessToken,
-      userId,
-      deviceId,
-    });
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
       this.saveAuth(auth);
       this.bindEventListeners();
 
       try {
-        let deviceId = this._client.getDeviceId();
+        let deviceId = this.client.getDeviceId();
         if (deviceId) {
-          let { last_seen_ts } = await this._client.getDevice(deviceId);
+          let { last_seen_ts } = await this.client.getDevice(deviceId);
           if (last_seen_ts) {
             this.startedAtTs = last_seen_ts;
           }
@@ -561,7 +606,7 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        let accountDataContent = (await this._client.getAccountDataFromServer(
+        let accountDataContent = (await this.client.getAccountDataFromServer(
           APP_BOXEL_REALMS_EVENT_TYPE,
         )) as { realms: string[] } | null;
 
@@ -583,6 +628,12 @@ export default class MatrixService extends Service {
             accountDataContent?.realms ?? [],
           ),
         ]);
+
+        let systemCardAccountData = (await this.client.getAccountDataFromServer(
+          APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
+        )) as { id?: string } | null;
+
+        await this.setSystemCard(systemCardAccountData?.id);
 
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
@@ -1766,17 +1817,23 @@ export default class MatrixService extends Service {
   }
 
   async setLLMForCodeMode() {
-    return this.setLLMModel(DEFAULT_CODING_LLM);
+    let preferredModel =
+      this.systemCard?.defaultModelConfiguration?.modelId ??
+      this.systemCard?.modelConfigurations?.[0]?.modelId ??
+      DEFAULT_CODING_LLM;
+    return this.setLLMModel(preferredModel);
   }
 
   async setLLMForInteractMode() {
-    return this.setLLMModel(DEFAULT_LLM);
+    let preferredModel =
+      this.systemCard?.defaultModelConfiguration?.modelId ??
+      this.systemCard?.modelConfigurations?.[0]?.modelId ??
+      DEFAULT_LLM;
+
+    return this.setLLMModel(preferredModel);
   }
 
   private async setLLMModel(model: string) {
-    if (!DEFAULT_LLM_LIST.includes(model)) {
-      throw new Error(`Cannot find LLM model: ${model}`);
-    }
     if (!this.currentRoomId) {
       return;
     }
@@ -1834,6 +1891,40 @@ export default class MatrixService extends Service {
 
   get isLoadingMoreAIRooms() {
     return this._isLoadingMoreAIRooms;
+  }
+
+  get systemCard() {
+    return this._systemCard;
+  }
+
+  private async setSystemCard(systemCardId: string | undefined) {
+    // Set the system card to use
+    // If there is none, we fall back to the default
+    if (!systemCardId) {
+      systemCardId = ENV.defaultSystemCardId;
+    }
+    if (systemCardId === this._systemCard?.id) {
+      // it's OK to call this multiple times with the same system card id
+      // we shouldn't do anything.
+      return;
+    }
+    let systemCard = await this.store.get<SystemCard>(systemCardId);
+    if (isCardErrorJSONAPI(systemCard)) {
+      console.error('Error loading system card:', systemCard);
+      return;
+    }
+
+    this.store.dropReference(this._systemCard?.id);
+    this.store.addReference(systemCardId);
+    this._systemCard = systemCard;
+  }
+
+  async setUserSystemCard(systemCardId: string | undefined) {
+    // This sets the users account data for their preferred system card
+    // If there is none, we fall back to the default
+    await this.client.setAccountData(APP_BOXEL_SYSTEM_CARD_EVENT_TYPE, {
+      id: systemCardId,
+    });
   }
 
   async loadMoreAuthRooms(realms: string[]) {

@@ -11,14 +11,15 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import window from 'ember-window-mock';
 
 import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
-import OpenSitePopover from '@cardstack/host/components/operator-mode/open-site-popover';
-import PublishingRealmPopover from '@cardstack/host/components/operator-mode/publishing-realm-popover';
+import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
+import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
+import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 
+import HostModeService from '@cardstack/host/services/host-mode-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -27,8 +28,9 @@ import type { ViewCardFn } from 'https://cardstack.com/base/card-api';
 
 import HostModeContent from '../host-mode/content';
 
-import PublishRealmModal from './publish-realm-modal';
 import SubmodeLayout from './submode-layout';
+
+import type { PublishError } from './publish-realm-modal';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;
@@ -39,6 +41,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
   @service private declare realm: RealmService;
+  @service private declare hostModeService: HostModeService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
@@ -65,7 +68,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   get realmURL() {
-    return this.operatorModeStateService.realmURL.href;
+    return this.hostModeService.realmURL;
   }
 
   get isPublishing() {
@@ -73,75 +76,85 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   get hasPublishedSites() {
-    return this.publishedRealmURLs.length > 0;
-  }
-
-  get publishedRealmEntries() {
-    const realmInfo = this.operatorModeStateService.currentRealmInfo;
-    if (
-      !realmInfo?.lastPublishedAt ||
-      typeof realmInfo.lastPublishedAt !== 'object'
-    ) {
-      return [];
-    }
-
-    return Object.entries(realmInfo.lastPublishedAt).sort(
-      ([, a], [, b]) => this.parsePublishedAt(b) - this.parsePublishedAt(a),
-    );
+    return this.hostModeService.publishedRealmURLs.length > 0;
   }
 
   get publishedRealmURLs() {
-    return this.publishedRealmEntries.map(([url]) => url);
+    return this.hostModeService.publishedRealmURLs;
   }
 
   get defaultPublishedRealmURL(): string | undefined {
-    return this.publishedRealmURLs[0];
+    return this.hostModeService.defaultPublishedRealmURL;
   }
 
-  getFullURL(baseURL: string) {
-    if (this.operatorModeStateService.hostModePrimaryCard) {
-      return (
-        baseURL +
-        this.operatorModeStateService.hostModePrimaryCard.replace(
-          this.realmURL,
-          '',
-        )
-      );
+  handlePublishTask = restartableTask(async (publishedRealmURLs: string[]) => {
+    const results = await this.realm.publish(this.realmURL, publishedRealmURLs);
+
+    const errors = new Map<string, string>();
+    if (results) {
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const url = publishedRealmURLs[index];
+          const error = result as PromiseRejectedResult;
+          const errorMessage =
+            error.reason?.message || 'Failed to publish to this domain';
+          errors.set(url, errorMessage);
+        }
+      });
     }
-    return baseURL;
-  }
 
-  handlePublish = restartableTask(async (publishedRealmURLs: string[]) => {
-    await this.realm.publish(this.realmURL, publishedRealmURLs);
+    if (errors.size > 0) {
+      const error = new Error(
+        'Failed to publish to some domains',
+      ) as PublishError;
+      error.urlErrors = errors;
+      throw error;
+    }
+
     this.isPublishingRealmPopoverOpen = false;
   });
+
+  @action
+  handlePublish(publishedRealmURLs: string[]) {
+    let promise = this.handlePublishTask.perform(publishedRealmURLs);
+    // Catch the error so it doesn't bubble
+    // to the browser (so error reporters like Bugsnag will see it).
+    // TODO: remove this after this issue (https://github.com/machty/ember-concurrency/issues/40)
+    // is resolved.
+    promise.catch((_error) => {});
+  }
+
+  get handlePublishError(): PublishError | null {
+    return this.handlePublishTask.last?.error as PublishError | null;
+  }
 
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     await this.realm.unpublish(this.realmURL, publishedRealmURL);
   });
 
+  get defaultPublishedSiteURL(): string | undefined {
+    return this.hostModeService.defaultPublishedSiteURL;
+  }
+
   @action
   handleOpenSiteButtonClick(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
     if (event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
       this.isOpenSitePopoverOpen = !this.isOpenSitePopoverOpen;
       return;
     }
 
-    this.isOpenSitePopoverOpen = false;
-    let defaultURL = this.defaultPublishedRealmURL;
-    if (defaultURL) {
-      window.open(this.getFullURL(defaultURL), '_blank');
-    } else {
+    // If there's no default URL, prevent navigation and show popover
+    if (!this.defaultPublishedRealmURL) {
+      event.preventDefault();
+      event.stopPropagation();
       this.isOpenSitePopoverOpen = true;
+      return;
     }
-  }
 
-  private parsePublishedAt(value: unknown) {
-    let publishedAt = Number(value ?? 0);
-    return Number.isFinite(publishedAt) ? publishedAt : 0;
+    // Otherwise, let the anchor navigate naturally
+    this.isOpenSitePopoverOpen = false;
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {
@@ -202,9 +215,13 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
             <Tooltip class='open-site-tooltip'>
               <:trigger>
                 <BoxelButton
+                  @as='anchor'
                   @kind='secondary'
                   @size='tall'
+                  @href={{this.defaultPublishedSiteURL}}
                   class='open-site-button'
+                  target='_blank'
+                  rel='noopener noreferrer'
                   {{on 'click' this.handleOpenSiteButtonClick}}
                   data-test-open-site-button
                 >
@@ -236,7 +253,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     <PublishRealmModal
       @isOpen={{this.isPublishRealmModalOpen}}
       @onClose={{this.closePublishRealmModal}}
-      @handlePublish={{perform this.handlePublish}}
+      @handlePublish={{this.handlePublish}}
+      @publishError={{this.handlePublishError}}
       @handleUnpublish={{perform this.handleUnpublish}}
     />
 

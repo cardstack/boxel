@@ -1,10 +1,14 @@
 import {
+  cleanCapturedHTML,
   delay,
+  logger,
   type PrerenderMeta,
   type RenderError,
 } from '@cardstack/runtime-common';
 
 import { type Page } from 'puppeteer';
+
+const log = logger('prerenderer');
 
 export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 15_000);
 
@@ -16,6 +20,7 @@ export interface RenderCapture {
   alive?: 'true' | 'false';
   id?: string;
   nonce?: string;
+  timedOut?: boolean;
 }
 
 export interface CaptureOptions {
@@ -53,7 +58,7 @@ export async function renderHTML(
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.html');
   }
-  return result.value;
+  return cleanCapturedHTML(result.value);
 }
 
 export async function renderIcon(
@@ -65,7 +70,7 @@ export async function renderIcon(
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.icon');
   }
-  return result.value;
+  return cleanCapturedHTML(result.value);
 }
 
 export async function renderMeta(
@@ -186,7 +191,7 @@ export async function captureResult(
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
   opts?: CaptureOptions,
 ): Promise<RenderCapture> {
-  const statuses: RenderStatus[] = ['ready', 'unusable'];
+  const statuses: RenderStatus[] = ['ready', 'error', 'unusable'];
   await page.waitForFunction(
     (
       statuses: string[],
@@ -197,7 +202,14 @@ export async function captureResult(
         document.querySelectorAll('[data-prerender]'),
       ) as HTMLElement[];
       if (!elements.length) {
-        return false;
+        let errorElement = document.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        if (!errorElement) {
+          return false;
+        }
+        let raw = errorElement.textContent ?? errorElement.innerHTML ?? '';
+        return raw.trim().length > 0;
       }
       let path = window.location.pathname;
       let expectingRender = path.includes('/render/');
@@ -228,16 +240,31 @@ export async function captureResult(
       }
       for (let element of elements) {
         let status = element.dataset.prerenderStatus ?? '';
-        let hasError =
-          status === 'loading' &&
-          element.querySelector('[data-prerender-error]') !== null;
+        const errorElement = element.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        const errorText = (
+          errorElement?.textContent ??
+          errorElement?.innerHTML ??
+          ''
+        ).trim();
+        const errorHasText = errorText.length > 0;
+        const hasError = errorElement !== null && errorHasText;
         if (!statuses.includes(status) && !hasError) {
           continue;
         }
-        if (targetId && element.dataset.prerenderId !== targetId) {
+        if (
+          targetId &&
+          element.dataset.prerenderId &&
+          element.dataset.prerenderId !== targetId
+        ) {
           continue;
         }
-        if (targetNonce && element.dataset.prerenderNonce !== targetNonce) {
+        if (
+          targetNonce &&
+          element.dataset.prerenderNonce &&
+          element.dataset.prerenderNonce !== targetNonce
+        ) {
           continue;
         }
         return true;
@@ -245,11 +272,21 @@ export async function captureResult(
       if (!expectingRender) {
         return elements.some((element) => {
           let status = element.dataset.prerenderStatus ?? '';
+          const errorElement = element.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          const errorText = (
+            errorElement?.textContent ??
+            errorElement?.innerHTML ??
+            ''
+          ).trim();
+          const errorHasText = errorText.length > 0;
+          const hasError = errorElement !== null && errorHasText;
           if (statuses.includes(status)) {
             return true;
           }
-          if (status === 'loading') {
-            return element.querySelector('[data-prerender-error]') !== null;
+          if (hasError) {
+            return true;
           }
           return false;
         });
@@ -301,16 +338,31 @@ export async function captureResult(
       let element =
         elements.find((candidate) => {
           let status = candidate.dataset.prerenderStatus ?? '';
-          let hasError =
-            status === 'loading' &&
-            candidate.querySelector('[data-prerender-error]') !== null;
+          const errorElement = candidate.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          const errorText = (
+            errorElement?.textContent ??
+            errorElement?.innerHTML ??
+            ''
+          ).trim();
+          const errorHasText = errorText.length > 0;
+          const hasError = errorElement !== null && errorHasText;
           if (!statuses.includes(status) && !hasError) {
             return false;
           }
-          if (targetId && candidate.dataset.prerenderId !== targetId) {
+          let candidateId =
+            candidate.dataset.prerenderId ??
+            errorElement?.dataset.prerenderId ??
+            null;
+          let candidateNonce =
+            candidate.dataset.prerenderNonce ??
+            errorElement?.dataset.prerenderNonce ??
+            null;
+          if (targetId && candidateId && candidateId !== targetId) {
             return false;
           }
-          if (targetNonce && candidate.dataset.prerenderNonce !== targetNonce) {
+          if (targetNonce && candidateNonce && candidateNonce !== targetNonce) {
             return false;
           }
           return true;
@@ -320,19 +372,50 @@ export async function captureResult(
           if (statuses.includes(status)) {
             return true;
           }
-          if (status === 'loading') {
-            return candidate.querySelector('[data-prerender-error]') !== null;
-          }
-          return false;
+          const fallbackErrorElement = candidate.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          const fallbackText = (
+            fallbackErrorElement?.textContent ??
+            fallbackErrorElement?.innerHTML ??
+            ''
+          ).trim();
+          const fallbackHasError =
+            fallbackErrorElement !== null && fallbackText.length > 0;
+          return fallbackHasError;
         });
+      let strayErrorElement: HTMLElement | null = null;
       if (!element) {
+        strayErrorElement = document.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+      }
+      if (!element && !strayErrorElement) {
         throw new Error('Unable to locate prerender result element');
       }
-      let statusAttr = element.dataset.prerenderStatus ?? '';
+      if (!element && strayErrorElement) {
+        let raw =
+          strayErrorElement.textContent ?? strayErrorElement.innerHTML ?? '';
+        let start = raw.indexOf('{');
+        let end = raw.lastIndexOf('}');
+        let json =
+          start !== -1 && end !== -1 && end > start
+            ? raw.slice(start, end + 1)
+            : raw;
+        return {
+          status: 'error',
+          value: json.trim(),
+          id: strayErrorElement.getAttribute('data-prerender-id') ?? undefined,
+          nonce:
+            strayErrorElement.getAttribute('data-prerender-nonce') ?? undefined,
+        } as RenderCapture;
+      }
+      let resolvedElement = element as HTMLElement;
+      let statusAttr = resolvedElement.dataset.prerenderStatus ?? '';
       let alive =
-        (element.dataset.emberAlive as 'true' | 'false' | undefined) ??
+        (resolvedElement.dataset.emberAlive as 'true' | 'false' | undefined) ??
         undefined;
-      let errorElement = element.querySelector(
+      let errorElement = resolvedElement.querySelector(
         '[data-prerender-error]',
       ) as HTMLElement | null;
       let finalStatus: RenderStatus = statuses.includes(statusAttr)
@@ -343,7 +426,7 @@ export async function captureResult(
         let raw =
           errorElement?.textContent ??
           errorElement?.innerHTML ??
-          element.innerHTML ??
+          resolvedElement.innerHTML ??
           '';
         let start = raw.indexOf('{');
         let end = raw.lastIndexOf('}');
@@ -357,11 +440,17 @@ export async function captureResult(
           status,
           value: json.trim(),
           alive,
-          id: element.dataset.prerenderId ?? undefined,
-          nonce: element.dataset.prerenderNonce ?? undefined,
+          id:
+            resolvedElement.dataset.prerenderId ??
+            errorElement?.dataset.prerenderId ??
+            undefined,
+          nonce:
+            resolvedElement.dataset.prerenderNonce ??
+            errorElement?.dataset.prerenderNonce ??
+            undefined,
         } as RenderCapture;
       } else {
-        const firstChild = element.children[0] as HTMLElement & {
+        const firstChild = resolvedElement.children[0] as HTMLElement & {
           textContent: string;
           innerHTML: string;
           outerHTML: string;
@@ -370,8 +459,8 @@ export async function captureResult(
           status: finalStatus,
           value: (firstChild as any)[capture]!,
           alive,
-          id: element.dataset.prerenderId ?? undefined,
-          nonce: element.dataset.prerenderNonce ?? undefined,
+          id: resolvedElement.dataset.prerenderId ?? undefined,
+          nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
         } as RenderCapture;
       }
     },
@@ -409,15 +498,38 @@ export async function withTimeout<T>(
     let [_a, _b, encodedId] = url.pathname.split('/');
     let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
-    return {
+    let dom = await page.evaluate(() => {
+      let el = document.querySelector('[data-prerender]');
+      if (el) {
+        return el.outerHTML;
+      }
+      let err = document.querySelector('[data-prerender-error]');
+      return err?.outerHTML ?? null;
+    });
+    let docsInFlight = await page.evaluate(() => {
+      try {
+        return (globalThis as any).__docsInFlight();
+      } catch (error) {
+        return null;
+      }
+    });
+    log.warn(
+      `render of ${id} timed out with DOM:\n${dom?.trim()}\nDocs in flight: ${docsInFlight}`,
+    );
+    let timeoutError: RenderError = {
+      type: 'error',
       error: {
         id,
         status: 504,
         title: 'Render timeout',
         message,
+        additionalErrors: null,
       },
       evict: true,
-    } as RenderError;
+    };
+    (timeoutError as any).capturedDom = dom ?? null;
+    (timeoutError as any).docsInFlight = docsInFlight ?? null;
+    return timeoutError;
   } else {
     return result as T;
   }

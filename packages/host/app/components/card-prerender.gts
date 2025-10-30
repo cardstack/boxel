@@ -1,5 +1,9 @@
 import type Owner from '@ember/owner';
 import { getOwner, setOwner } from '@ember/owner';
+import type {
+  RouteInfo,
+  RouteInfoWithAttributes,
+} from '@ember/routing/-internals';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -18,6 +22,7 @@ import {
   type PrerenderMeta,
   type RenderRouteOptions,
   serializeRenderRouteOptions,
+  cleanCapturedHTML,
 } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
@@ -32,6 +37,7 @@ import {
 
 import { CurrentRun } from '../lib/current-run';
 
+import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
@@ -47,8 +53,9 @@ export default class CardPrerender extends Component {
   @service private declare renderService: RenderService;
   @service private declare fastboot: { isFastBoot: boolean };
   @service private declare localIndexer: LocalIndexer;
+  @service private declare loaderService: LoaderService;
   #nonce = 0;
-  #shouldResetStoreForNextRender = true;
+  #shouldClearCacheForNextRender = true;
 
   #renderBasePath(url: string, renderOptions?: RenderRouteOptions) {
     let optionsSegment = encodeURIComponent(
@@ -128,17 +135,21 @@ export default class CardPrerender extends Component {
       this.#nonce++;
       this.localIndexer.renderError = undefined;
       this.localIndexer.prerenderStatus = 'loading';
-      let shouldResetStore = this.#consumeResetStoreForRender(
-        renderOptions?.resetStore === true,
+      let shouldClearCache = this.#consumeClearCacheForRender(
+        Boolean(renderOptions?.clearCache),
       );
       let initialRenderOptions: RenderRouteOptions = {
         ...(renderOptions ?? {}),
       };
-      if (shouldResetStore) {
-        initialRenderOptions.resetStore = true;
+      if (shouldClearCache) {
+        initialRenderOptions.clearCache = true;
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'card-prerender clearCache',
+        });
         this.store.resetCache();
       } else {
-        delete initialRenderOptions.resetStore;
+        delete initialRenderOptions.clearCache;
       }
       let error: RenderError | undefined;
       let isolatedHTML: string | null = null;
@@ -241,6 +252,7 @@ export default class CardPrerender extends Component {
       if (typeof captured !== 'string') {
         return null;
       }
+      await this.#ensureRenderReady(routeInfo);
       return this.processCapturedMarkup(captured);
     },
   );
@@ -269,6 +281,7 @@ export default class CardPrerender extends Component {
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
       }
+      await this.#ensureRenderReady(routeInfo);
       return routeInfo.attributes as PrerenderMeta;
     },
   );
@@ -286,9 +299,32 @@ export default class CardPrerender extends Component {
       if (typeof captured !== 'string') {
         return null;
       }
+      await this.#ensureRenderReady(routeInfo);
       return this.processCapturedMarkup(captured);
     },
   );
+
+  // this does the work that normally the render controller is doing. we do this
+  // because we are using RouterService.recognizeAndLoad() which doesn't actually do a
+  // full transition, it just runs the model hook. so we need to emulate scheduling
+  // the ready deferred after the component is rendered.
+  #ensureRenderReady(
+    routeInfo: RouteInfo | RouteInfoWithAttributes,
+  ): Promise<void> {
+    let current: RouteInfo | RouteInfoWithAttributes | null = routeInfo;
+    while (current) {
+      if (current.name === 'render' && 'attributes' in current) {
+        let readyPromise = (current as RouteInfoWithAttributes).attributes
+          ?.readyPromise;
+        if (readyPromise && typeof readyPromise.then === 'function') {
+          return readyPromise;
+        }
+        break;
+      }
+      current = current.parent as RouteInfo | RouteInfoWithAttributes | null;
+    }
+    return Promise.resolve();
+  }
 
   private async fromScratch({
     realmURL,
@@ -452,14 +488,14 @@ export default class CardPrerender extends Component {
     }
   }
 
-  #consumeResetStoreForRender(requestedReset = false): boolean {
-    if (requestedReset) {
-      this.#shouldResetStoreForNextRender = true;
+  #consumeClearCacheForRender(requestedClear = false): boolean {
+    if (requestedClear) {
+      this.#shouldClearCacheForNextRender = true;
     }
-    if (!this.#shouldResetStoreForNextRender) {
+    if (!this.#shouldClearCacheForNextRender) {
       return false;
     }
-    this.#shouldResetStoreForNextRender = false;
+    this.#shouldClearCacheForNextRender = false;
     return true;
   }
 
@@ -467,6 +503,9 @@ export default class CardPrerender extends Component {
     let cleaned = cleanCapturedHTML(markup);
     let errorPayload = extractPrerenderError(cleaned);
     if (errorPayload) {
+      if (this.localIndexer.prerenderStatus === 'loading') {
+        this.localIndexer.prerenderStatus = 'unusable';
+      }
       this.localIndexer.renderError = errorPayload;
       throw new Error(errorPayload);
     }
@@ -481,22 +520,11 @@ function getRunnerOpts(optsId: number): RunnerOpts {
 }
 
 function omitOneTimeOptions(options: RenderRouteOptions): RenderRouteOptions {
-  if (options.includesCodeChange === true || options.resetStore === true) {
-    let { includesCodeChange: _ic, resetStore: _rs, ...rest } = options;
+  if (options.clearCache) {
+    let { clearCache: _clearCache, ...rest } = options;
     return rest as RenderRouteOptions;
   }
   return options;
-}
-
-function cleanCapturedHTML(html: string): string {
-  if (!html) {
-    return html;
-  }
-  const emberIdAttr = /\s+id=(?:"ember\d+"|'ember\d+'|ember\d+)(?=[\s>])/g;
-  const emptyDataAttr = /\s+(data-[A-Za-z0-9:_-]+)=(?:""|''|(?=[\s>]))/g;
-  let cleaned = html.replace(emberIdAttr, '');
-  cleaned = cleaned.replace(emptyDataAttr, ' $1');
-  return cleaned;
 }
 
 function extractPrerenderError(markup: string): string | undefined {

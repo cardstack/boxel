@@ -24,6 +24,7 @@ import {
   jobIdentity,
   getFieldDefinitions,
   modulesConsumedInMeta,
+  cleanCapturedHTML,
   type ResolvedCodeRef,
   type Definition,
   type Batch,
@@ -78,6 +79,18 @@ const log = logger('current-run');
 const perfLog = logger('index-perf');
 const { renderTimeoutMs } = ENV;
 
+function canonicalURL(url: string, relativeTo?: string): string {
+  try {
+    let parsed = new URL(url, relativeTo);
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.href;
+  } catch (_e) {
+    let stripped = url.split('#')[0] ?? url;
+    return stripped.split('?')[0] ?? stripped;
+  }
+}
+
 interface CardType {
   refURL: string;
   codeRef: CodeRef;
@@ -119,9 +132,8 @@ export class CurrentRun {
     definitionErrors: 0,
     totalIndexEntries: 0,
   };
-  #hasCodeChangeForNextRender = false;
+  #shouldClearCacheForNextRender = true;
   #pendingLoaderReset = false;
-  #shouldResetStoreForNextRender = true;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
 
@@ -244,15 +256,16 @@ export class CurrentRun {
     let invalidations = CurrentRun.#sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
     );
-    if (
-      !current.#hasCodeChangeForNextRender &&
-      invalidations.some((url) => hasExecutableExtension(url.href))
-    ) {
-      current.#hasCodeChangeForNextRender = true;
-      current.#pendingLoaderReset = true;
-      log.debug(
-        `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
-      );
+    let hasExecutableInvalidation = invalidations.some((url) =>
+      hasExecutableExtension(url.href),
+    );
+    if (hasExecutableInvalidation) {
+      if (!current.#shouldClearCacheForNextRender) {
+        log.debug(
+          `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
+        );
+      }
+      current.#scheduleClearCacheForNextRender();
     }
 
     let hrefs = urls.map((u) => u.href);
@@ -323,14 +336,19 @@ export class CurrentRun {
   }
 
   get hasCodeChange(): boolean {
-    return this.#hasCodeChangeForNextRender;
+    return this.#shouldClearCacheForNextRender;
   }
 
-  #consumeHasCodeChangeForRender(): boolean {
-    if (!this.#hasCodeChangeForNextRender) {
+  #scheduleClearCacheForNextRender() {
+    this.#shouldClearCacheForNextRender = true;
+    this.#pendingLoaderReset = true;
+  }
+
+  #consumeClearCacheForRender(): boolean {
+    if (!this.#shouldClearCacheForNextRender) {
       return false;
     }
-    this.#hasCodeChangeForNextRender = false;
+    this.#shouldClearCacheForNextRender = false;
     return true;
   }
 
@@ -343,14 +361,6 @@ export class CurrentRun {
       reason: `${jobIdentity(this.#jobInfo)} pending-loader-reset`,
     });
     this.#pendingLoaderReset = false;
-  }
-
-  #consumeResetStoreForRender(): boolean {
-    if (!this.#shouldResetStoreForNextRender) {
-      return false;
-    }
-    this.#shouldResetStoreForNextRender = false;
-    return true;
   }
 
   static #sortInvalidations(urls: URL[]): URL[] {
@@ -521,7 +531,6 @@ export class CurrentRun {
           }
           await this.indexCard({
             path: localPath,
-            source: content,
             lastModified,
             resourceCreatedAt,
             resource,
@@ -597,7 +606,6 @@ export class CurrentRun {
     let moduleCreatedAt = await this.batch.ensureFileCreatedAt(moduleLocalPath);
     await this.batch.updateEntry(url, {
       type: 'module',
-      source: ref.content,
       lastModified: ref.lastModified,
       resourceCreatedAt: moduleCreatedAt,
       deps: new Set(deps),
@@ -711,14 +719,12 @@ export class CurrentRun {
 
   private async indexCard({
     path,
-    source,
     lastModified,
     resourceCreatedAt,
     resource,
     store,
   }: {
     path: LocalPath;
-    source: string;
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
@@ -742,15 +748,9 @@ export class CurrentRun {
       if ((globalThis as any).__useHeadlessChromePrerender?.()) {
         let renderResult: RenderResponse | undefined;
         try {
-          let includesCodeChange = this.#consumeHasCodeChangeForRender();
-          let shouldResetStore = this.#consumeResetStoreForRender();
+          let shouldClearCache = this.#consumeClearCacheForRender();
           let prerenderOptions: RenderRouteOptions | undefined =
-            includesCodeChange || shouldResetStore
-              ? {
-                  ...(shouldResetStore ? { resetStore: true } : {}),
-                  ...(includesCodeChange ? { includesCodeChange: true } : {}),
-                }
-              : undefined;
+            shouldClearCache ? { clearCache: true } : undefined;
           renderResult = await this.#prerenderer({
             url: fileURL,
             realm: this.#realmURL.href,
@@ -804,7 +804,9 @@ export class CurrentRun {
             renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
           ) {
             renderError.error.deps = renderError.error.deps ?? [];
-            renderError.error.deps.push(renderError.error.id);
+            renderError.error.deps.push(
+              canonicalURL(renderError.error.id, instanceURL.href),
+            );
           }
           if (!renderError) {
             log.error(
@@ -816,8 +818,8 @@ export class CurrentRun {
           // always include the modules that we see in serialized as deps
           renderError.error.deps = renderError.error.deps ?? [];
           renderError.error.deps.push(
-            ...modulesConsumedInMeta(resource.meta).map(
-              (m) => new URL(m, instanceURL.href).href,
+            ...modulesConsumedInMeta(resource.meta).map((m) =>
+              canonicalURL(m, instanceURL.href),
             ),
           );
           renderError.error.deps = [...new Set(renderError.error.deps)];
@@ -842,7 +844,6 @@ export class CurrentRun {
           } = renderResult;
           await this.updateEntry(instanceURL, {
             type: 'instance',
-            source,
             resource: serialized!.data as CardResource,
             searchData: searchDoc!,
             isolatedHtml: isolatedHTML ?? undefined,
@@ -951,7 +952,7 @@ export class CurrentRun {
               },
             },
           }) as SingleCardDocument;
-          searchData = await api.searchDoc(card);
+          searchData = api.searchDoc(card);
 
           if (!searchData) {
             throw new Error(
@@ -1025,6 +1026,9 @@ export class CurrentRun {
                   : []),
               ]),
             ];
+            error.error.deps = error.error.deps.map((dep) =>
+              canonicalURL(dep, instanceURL.href),
+            );
           } else if (typesMaybeError?.type === 'error') {
             error = { type: 'error', error: typesMaybeError.error };
           } else {
@@ -1040,7 +1044,6 @@ export class CurrentRun {
         } else if (searchData && doc && typesMaybeError?.type === 'types') {
           await this.updateEntry(instanceURL, {
             type: 'instance',
-            source,
             resource: doc.data,
             searchData,
             isolatedHtml,
@@ -1211,8 +1214,7 @@ export class CurrentRun {
 }
 
 function sanitizeHTML(html: string): string {
-  // currently this only involves removing auto-generated ember ID's
-  return html.replace(/\s+id="ember[0-9]+"/g, '');
+  return cleanCapturedHTML(html);
 }
 
 function assertURLEndsWithJSON(url: URL): URL {

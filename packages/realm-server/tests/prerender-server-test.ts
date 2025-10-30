@@ -46,7 +46,9 @@ module(basename(__filename), function () {
     });
 
     hooks.before(function () {
-      let built = buildPrerenderApp(realmSecretSeed);
+      let built = buildPrerenderApp(realmSecretSeed, {
+        serverURL: 'http://127.0.0.1:4221',
+      });
       prerenderer = built.prerenderer;
       request = supertest(built.app.callback());
     });
@@ -128,6 +130,10 @@ module(basename(__filename), function () {
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
       assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
       assert.false(res.body.meta?.pool?.evicted, 'pool.evicted defaults false');
+      assert.false(
+        res.body.meta?.pool?.timedOut,
+        'pool.timedOut defaults false',
+      );
       assert.strictEqual(
         res.body.meta?.pool?.realm,
         testRealmHref,

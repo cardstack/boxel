@@ -13,6 +13,7 @@ import {
   setupPermissionedRealms,
   matrixURL,
   realmSecretSeed,
+  cleanWhiteSpace,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { baseCardRef } from '@cardstack/runtime-common';
@@ -20,6 +21,9 @@ import { baseCardRef } from '@cardstack/runtime-common';
 module(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/';
+    let prerenderServerURL = realmURL.endsWith('/')
+      ? realmURL.slice(0, -1)
+      : realmURL;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -30,6 +34,7 @@ module(basename(__filename), function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
+        serverURL: prerenderServerURL,
       });
     });
 
@@ -125,6 +130,7 @@ module(basename(__filename), function () {
       );
 
       await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
 
       let second = await prerenderer.prerenderCard({
         realm: realmURL,
@@ -152,6 +158,9 @@ module(basename(__filename), function () {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
     let realmURL3 = 'http://127.0.0.1:4449/';
+    let prerenderServerURL = realmURL1.endsWith('/')
+      ? realmURL1.slice(0, -1)
+      : realmURL1;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -167,6 +176,7 @@ module(basename(__filename), function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
+        serverURL: prerenderServerURL,
       });
     });
     hooks.after(async () => {
@@ -214,6 +224,22 @@ module(basename(__filename), function () {
             [testUserId]: ['read', 'write', 'realm-owner'],
           },
           fileSystem: {
+            'broken-card.gts': `
+              import {
+            `,
+            'broken.json': {
+              data: {
+                attributes: {
+                  name: 'Broken',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './broken-card',
+                    name: 'Broken',
+                  },
+                },
+              },
+            },
             'cat.gts': `
               import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
@@ -222,7 +248,20 @@ module(basename(__filename), function () {
                 @field name = contains(StringField);
                 @field owner = linksTo(Person);
                 static displayName = "Cat";
-                static embedded = <template>{{@fields.name}} says Meow</template>
+                static embedded = <template>{{@fields.name}} says Meow. owned by <@fields.owner /></template>
+              }
+            `,
+            'dog.gts': `
+              import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+              export class Dog extends CardDef {
+                static displayName = "Dog";
+                @field name = contains(StringField);
+                @field owner = linksTo(Person, { isUsed: true });
+                static isolated = class extends Component<typeof this> {
+                  // owner is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
               }
             `,
             '1.json': {
@@ -233,6 +272,62 @@ module(basename(__filename), function () {
                 relationships: {
                   owner: {
                     links: { self: `${realmURL1}1` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './cat',
+                    name: 'Cat',
+                  },
+                },
+              },
+            },
+            'is-used.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
+                },
+                relationships: {
+                  owner: {
+                    links: { self: `${realmURL1}1` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog',
+                    name: 'Dog',
+                  },
+                },
+              },
+            },
+            'missing-link.json': {
+              data: {
+                attributes: {
+                  name: 'Missing Owner',
+                },
+                relationships: {
+                  owner: {
+                    links: { self: `${realmURL1}missing-owner` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './cat',
+                    name: 'Cat',
+                  },
+                },
+              },
+            },
+            'fetch-failed.json': {
+              data: {
+                attributes: {
+                  name: 'Missing Owner',
+                },
+                relationships: {
+                  owner: {
+                    links: {
+                      self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+                    },
                   },
                 },
                 meta: {
@@ -398,7 +493,7 @@ module(basename(__filename), function () {
       test('embedded HTML', function (assert) {
         assert.ok(
           /Maple\s+says\s+Meow/.test(
-            result.embeddedHTML![`${realmURL2}cat/Cat`],
+            cleanWhiteSpace(result.embeddedHTML![`${realmURL2}cat/Cat`]),
           ),
           `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
         );
@@ -476,11 +571,31 @@ module(basename(__filename), function () {
       test('searchDoc', function (assert) {
         assert.strictEqual(result.searchDoc?.name, 'Maple');
         assert.strictEqual(result.searchDoc?._cardType, 'Cat');
-        // This assertion seems flaky in CI is there some kind of race condition
-        // here?. we do have coverage for this in host tests, but it would be
-        // nice to see this in server tests too...
+        assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
+      });
 
-        // assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
+      test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
+        const testCardURL = `${realmURL2}is-used`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+
+        assert.ok(
+          /Mango/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="owner"/.test(response.isolatedHTML!),
+          `owner field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.owner.name,
+          'Hassan',
+          'linked field is included in search doc via isUsed=true',
+        );
       });
     });
 
@@ -521,6 +636,58 @@ module(basename(__filename), function () {
         });
       });
 
+      test('missing link surfaces 404 without eviction', async function (assert) {
+        const testCardURL = `${realmURL2}missing-link`;
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        let { response } = result;
+
+        assert.ok(response.error, 'error present for missing link');
+        assert.strictEqual(
+          response.error?.error.message,
+          `missing-owner.json not found`,
+        );
+        assert.strictEqual(response.error?.error.status, 404);
+        assert.false(
+          result.pool.evicted,
+          'missing link does not evict prerender page',
+        );
+        assert.false(
+          result.pool.timedOut,
+          'missing link does not mark prerender timeout',
+        );
+      });
+
+      test('fetch failed surfaces error without eviction', async function (assert) {
+        const testCardURL = `${realmURL2}fetch-failed`;
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+        });
+        let { response } = result;
+
+        assert.ok(response.error, 'error present for fetch failed');
+        assert.strictEqual(
+          response.error?.error.message,
+          `unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed`,
+        );
+        assert.strictEqual(response.error?.error.status, 500);
+        assert.false(
+          result.pool.evicted,
+          'fetch failed does not evict prerender page',
+        );
+        assert.false(
+          result.pool.timedOut,
+          'fetch failed does not mark prerender timeout',
+        );
+      });
+
       test('embedded error markup triggers render error', async function (assert) {
         const testCardURL = `${realmURL2}4`;
         let { response } = await prerenderer.prerenderCard({
@@ -539,24 +706,89 @@ module(basename(__filename), function () {
         assert.strictEqual(response.error?.error.status, 500);
       });
 
-      test('render timeout', async function (assert) {
+      test('recovers isolated HTML when timeout hits but DOM is settled', async function (assert) {
         const testCardURL = `${realmURL2}1`;
-        let result = await prerenderer.prerenderCard({
+        await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
           permissions,
-          opts: { timeoutMs: 4000, simulateTimeoutMs: 5000 },
         });
-        let {
-          response: { error },
-        } = result;
-        assert.strictEqual(error?.error.id, testCardURL);
-        assert.strictEqual(
-          error?.error.message,
-          'Render timed-out after 4000 ms',
+        let recovered = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+          opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
+        });
+
+        assert.ok(
+          recovered.response.isolatedHTML,
+          'captured isolated HTML after timeout recovery',
         );
-        assert.strictEqual(error?.error.status, 504);
+        assert.strictEqual(
+          recovered.response.error,
+          undefined,
+          'no timeout error returned when DOM recovered',
+        );
+        assert.true(
+          recovered.pool.timedOut,
+          'pool still notes timeout when recovery occurs',
+        );
+        assert.false(
+          recovered.pool.evicted,
+          'realm not evicted after recovering from timeout',
+        );
+
+        let next = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: `${realmURL2}1`,
+          userId: testUserId,
+          permissions,
+        });
+        assert.true(
+          next.pool.reused,
+          'subsequent render reuses pooled page after recovery',
+        );
+      });
+
+      test('does not recover timeout when DOM reports an error', async function (assert) {
+        const errorCardURL = `${realmURL2}4`;
+        // warm the realm so loader caches are populated
+        await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: errorCardURL,
+          userId: testUserId,
+          permissions,
+        });
+
+        let timedOut = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: errorCardURL,
+          userId: testUserId,
+          permissions,
+          opts: { timeoutMs: 500, simulateTimeoutMs: 2000 },
+        });
+
+        assert.ok(
+          timedOut.response.error,
+          'timeout still returns an error payload',
+        );
+        assert.strictEqual(
+          timedOut.response.error?.error.title,
+          'Render timeout',
+          'reports timeout when DOM contains error markup',
+        );
+        assert.strictEqual(
+          timedOut.response.isolatedHTML,
+          null,
+          'does not salvage HTML when DOM reports an error',
+        );
+        assert.true(timedOut.pool.timedOut, 'pool flags timeout');
+        assert.true(
+          timedOut.pool.evicted,
+          'realm evicted after timeout with error',
+        );
       });
 
       test('unusable triggers eviction and short-circuit', async function (assert) {
@@ -615,6 +847,10 @@ module(basename(__filename), function () {
           'meta fields are null when short-circuited',
         );
         assert.true(unusable.pool.evicted, 'pool notes eviction for unusable');
+        assert.false(
+          unusable.pool.timedOut,
+          'unusable eviction does not mark timeout',
+        );
         assert.notStrictEqual(
           unusable.pool.pageId,
           'unknown',
@@ -631,6 +867,23 @@ module(basename(__filename), function () {
         });
         assert.false(next.pool.reused, 'did not reuse after unusable eviction');
         assert.false(next.pool.evicted, 'subsequent render not evicted');
+      });
+
+      test('prerender surfaces module syntax errors without timing out', async function (assert) {
+        const cardURL = `${realmURL2}broken`;
+        let broken = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: cardURL,
+          userId: testUserId,
+          permissions,
+        });
+        assert.ok(broken.response.error, 'syntax error captured');
+        assert.strictEqual(
+          broken.response.error?.error.status,
+          406,
+          'syntax error reported as 406',
+        );
+        assert.false(broken.pool.timedOut, 'syntax error does not hit timeout');
       });
     });
 
@@ -661,6 +914,7 @@ module(basename(__filename), function () {
           'got timeout error',
         );
         assert.true(timeoutRun.pool.evicted, 'timeout eviction reflected');
+        assert.true(timeoutRun.pool.timedOut, 'timeout flagged on pool');
         assert.notStrictEqual(
           timeoutRun.pool.pageId,
           'unknown',
@@ -679,6 +933,7 @@ module(basename(__filename), function () {
           'did not reuse after timeout eviction',
         );
         assert.false(afterTimeout.pool.evicted, 'no eviction on new render');
+        assert.false(afterTimeout.pool.timedOut, 'no timeout on new render');
       });
 
       test('reuses the same page within a realm', async function (assert) {
@@ -708,6 +963,8 @@ module(basename(__filename), function () {
         );
         assert.false(first.pool.reused, 'first call not reused');
         assert.true(second.pool.reused, 'second call reused');
+        assert.false(first.pool.timedOut, 'first call not timed out');
+        assert.false(second.pool.timedOut, 'second call not timed out');
       });
 
       test('does not reuse across different realms', async function (assert) {

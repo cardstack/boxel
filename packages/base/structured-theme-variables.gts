@@ -1,4 +1,8 @@
 import { CopyButton } from '@cardstack/boxel-ui/components';
+import {
+  entriesToCssRuleMap,
+  type CssVariableEntry,
+} from '@cardstack/boxel-ui/helpers';
 
 import {
   field,
@@ -6,32 +10,36 @@ import {
   Component,
   FieldDef,
   getFields,
+  type BaseDefComponent,
   type BoxComponent,
-  type FieldsTypeFor,
 } from './card-api';
 import ColorField from './color';
 import CSSValueField from './css-value';
+import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
 
-function dasherize(str: string): string {
-  return str
-    .replace(/([a-z\d])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z]+)([A-Z][a-z\d]+)/g, '$1-$2')
-    .toLowerCase();
+export function dasherize(str?: string): string {
+  return (
+    str
+      ?.trim()
+      .replace(/\s+/g, '-')
+      .replace(/([a-z\d])([A-Z])/g, '$1-$2')
+      .replace(/([A-Z]+)([A-Z][a-z\d]+)/g, '$1-$2')
+      .toLowerCase() ?? ''
+  );
 }
 
-type FieldNameType = keyof FieldsTypeFor<ThemeVarField> & string;
-
-interface CssVariableField {
-  fieldName: FieldNameType;
+export interface CssVariableFieldEntry extends CssVariableEntry {
+  fieldName: string;
   cssVariableName: string;
   component?: BoxComponent;
-  value: string | undefined | null;
 }
 
+export type CssVariableField = Record<string, any>;
+
 class Embedded extends Component<typeof ThemeVarField> {
-  private get cssFields() {
-    let fields = this.args.fields;
-    let cssFields = this.args.model.cssVariableFields;
+  private get cssFields(): CssVariableFieldEntry[] | undefined {
+    let fields: CssVariableField = this.args.fields;
+    let cssFields = this.args.model?.cssVariableFields;
     cssFields = cssFields?.map((f) => ({
       component: fields?.[f.fieldName],
       ...f,
@@ -54,7 +62,10 @@ class Embedded extends Component<typeof ThemeVarField> {
         </div>
         <div class='code-preview'>
           {{#if field.value}}
-            <span class='css-value'><field.component /></span>
+            <span
+              class='css-value'
+              data-test-var-value={{field.fieldName}}
+            ><field.component /></span>
             <CopyButton
               class='copy-button'
               @textToCopy={{field.value}}
@@ -187,25 +198,36 @@ export default class ThemeVarField extends FieldDef {
   @field shadowXl = contains(CSSValueField);
   @field shadow2xl = contains(CSSValueField);
 
-  get cssVariableFields(): CssVariableField[] | undefined {
+  get cssVariableFields(): CssVariableFieldEntry[] | undefined {
     let fields = getFields(this);
     if (!fields) {
       return;
     }
-    let fieldNames = Object.keys(fields) as FieldNameType[];
+
+    let fieldNames = Object.keys(fields);
     if (!fieldNames?.length) {
       return;
     }
-    let cssVariableFields: CssVariableField[] = [];
+    let cssVariableFields: CssVariableFieldEntry[] = [];
     for (let fieldName of fieldNames) {
+      let cssVariableName = `--${dasherize(fieldName)}`;
+      let value = (this as CssVariableField)?.[fieldName];
       cssVariableFields.push({
         fieldName,
-        cssVariableName: `--${dasherize(fieldName)}`,
-        value: this?.[fieldName] as string | undefined | null,
+        cssVariableName,
+        name: cssVariableName,
+        value,
       });
     }
     return cssVariableFields;
   }
 
-  static embedded = Embedded;
+  get cssRuleMap(): CssRuleMap | undefined {
+    if (!entriesToCssRuleMap) {
+      return;
+    }
+    return entriesToCssRuleMap(this.cssVariableFields);
+  }
+
+  static embedded: BaseDefComponent = Embedded;
 }

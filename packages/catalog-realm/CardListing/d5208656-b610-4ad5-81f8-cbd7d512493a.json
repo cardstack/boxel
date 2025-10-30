@@ -1,0 +1,388 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Reward Card Program",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/reward-card-program-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/reward-card-program-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/reward-card-program-listing/screenshot_03.png"
+      ],
+      "summary": "This code defines a set of classes for modeling and displaying various reward program components such as time periods, bonuses, benefits, earning rules, and an overarching reward card program, primarily for use in digital interfaces. Its main purpose is to structure, compute, and present reward-related data with embedded and styled components for a comprehensive loyalty or rewards platform.",
+      "cardInfo": {
+        "notes": null,
+        "title": "Reward Card Program",
+        "description": "This code defines a set of classes for modeling and displaying various reward program components such as time periods, bonuses, benefits, earning rules, and an overarching reward card program, primarily for use in digital interfaces. Its main purpose is to structure, compute, and present reward-related data with embedded and styled components for a comprehensive loyalty or rewards platform.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/reward-card-program-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/275ff1e6-7436-41a6-bcf2-72014bed10fc"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/5ff1e674-3631-463c-b272-014bed10fc82"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/f1e67436-31a6-4cf2-b201-4bed10fc8265"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/e6743631-a63c-4272-814b-ed10fc8265cf"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/743631a6-3cf2-4201-8bed-10fc8265cff1"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/3631a63c-f272-414b-ad10-fc8265cff1b6"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/c04cf664-3c12-4ee2-b852-b6032a53ca8b"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/4cf6643c-121e-42f8-92b6-032a53ca8bac"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/3c121ee2-f852-4603-aa53-ca8bac313f7f"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/b934d0c2-7c20-4e61-b7af-1e03684213ff"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/5f27bc69-6e15-4027-bff5-5c893a2642d9"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../reward-card-program/RewardCardProgram/american-express-business-platinium-card-program"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../reward-card-program/RewardCardProgram/american-express-gold-card-program"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../reward-card-program/RewardCardProgram/american-express-krisflyer-card-program"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../reward-card-program/Benefit/airline-fee-credit"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-adobe-credit"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-airline-fee-credit"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-amex-travel-flight-credit"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-clear-plus-credit"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-dell-technologies-credit"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-global-entry-credit"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-global-lounge-collection"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-hilton-credit"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-hotel-credit"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-indeed-credit"
+        }
+      },
+      "examples.14": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-one-ap-credit"
+        }
+      },
+      "examples.15": {
+        "links": {
+          "self": "../reward-card-program/Benefit/business-wireless-credit"
+        }
+      },
+      "examples.16": {
+        "links": {
+          "self": "../reward-card-program/Benefit/clear-plus-credit"
+        }
+      },
+      "examples.17": {
+        "links": {
+          "self": "../reward-card-program/Benefit/digital-entertainment-credit"
+        }
+      },
+      "examples.18": {
+        "links": {
+          "self": "../reward-card-program/Benefit/global-lounge-collection"
+        }
+      },
+      "examples.19": {
+        "links": {
+          "self": "../reward-card-program/Benefit/hotel-credit"
+        }
+      },
+      "examples.20": {
+        "links": {
+          "self": "../reward-card-program/Benefit/lululemon-credit"
+        }
+      },
+      "examples.21": {
+        "links": {
+          "self": "../reward-card-program/Benefit/resy-credit"
+        }
+      },
+      "examples.22": {
+        "links": {
+          "self": "../reward-card-program/Benefit/shop-saks-credit"
+        }
+      },
+      "examples.23": {
+        "links": {
+          "self": "../reward-card-program/Benefit/uber-cash"
+        }
+      },
+      "examples.24": {
+        "links": {
+          "self": "../reward-card-program/Benefit/uber-one-credit"
+        }
+      },
+      "examples.25": {
+        "links": {
+          "self": "../reward-card-program/Benefit/walmart-plus-credit"
+        }
+      },
+      "examples.26": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/all-other-purchases-1x"
+        }
+      },
+      "examples.27": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/business-amex-travel-5x"
+        }
+      },
+      "examples.28": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/business-categories-2x"
+        }
+      },
+      "examples.29": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/business-other-purchases-1x"
+        }
+      },
+      "examples.30": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/flights-5x"
+        }
+      },
+      "examples.31": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/prepaid-hotels-5x"
+        }
+      },
+      "examples.32": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/restaurants-4x"
+        }
+      },
+      "examples.33": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/singapore-airlines-3x"
+        }
+      },
+      "examples.34": {
+        "links": {
+          "self": "../reward-card-program/EarningRule/supermarkets-4x"
+        }
+      },
+      "examples.35": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/business-fine-hotels-resorts"
+        }
+      },
+      "examples.36": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/business-hilton-honors-gold"
+        }
+      },
+      "examples.37": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/business-hotel-collection"
+        }
+      },
+      "examples.38": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/business-leaders-club-sterling"
+        }
+      },
+      "examples.39": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/business-marriott-bonvoy-gold"
+        }
+      },
+      "examples.40": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/hilton-honors-gold"
+        }
+      },
+      "examples.41": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/hotel-collection"
+        }
+      },
+      "examples.42": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/leaders-club-sterling"
+        }
+      },
+      "examples.43": {
+        "links": {
+          "self": "../reward-card-program/MembershipBenefit/marriott-bonvoy-gold"
+        }
+      },
+      "examples.44": {
+        "links": {
+          "self": "../reward-card-program/SignupBonus/amex-business-platinum-signup-bonus"
+        }
+      },
+      "examples.45": {
+        "links": {
+          "self": "../reward-card-program/SignupBonus/amex-gold-signup-bonus"
+        }
+      },
+      "examples.46": {
+        "links": {
+          "self": "../reward-card-program/SignupBonus/amex-krisflyer-signup-bonus"
+        }
+      },
+      "examples.47": {
+        "links": {
+          "self": "../reward-card-program/TimePeriod/annual-calendar"
+        }
+      },
+      "examples.48": {
+        "links": {
+          "self": "../reward-card-program/TimePeriod/four-year-period"
+        }
+      },
+      "examples.49": {
+        "links": {
+          "self": "../reward-card-program/TimePeriod/half-yearly"
+        }
+      },
+      "examples.50": {
+        "links": {
+          "self": "../reward-card-program/TimePeriod/monthly"
+        }
+      },
+      "examples.51": {
+        "links": {
+          "self": "../reward-card-program/TimePeriod/quarterly"
+        }
+      },
+      "examples.52": {
+        "links": {
+          "self": "../reward-card-program/TimePeriod/yearly"
+        }
+      },
+      "examples.53": {
+        "links": {
+          "self": "../reward-card-program/RewardCardProgramTracker/a0b6042b-35ca-4480-b398-1da3675ebeed"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/business-development"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/marketing-growth"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -92,6 +92,7 @@ class EditView extends Component<typeof CodeRefField> {
 }
 
 export default class CodeRefField extends FieldDef {
+  static displayName = 'CodeRef';
   static icon = CodeIcon;
   static [primitive]: ResolvedCodeRef;
   static [fieldSerializer] = 'code-ref';

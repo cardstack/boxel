@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PetOwner",
+        "module": "../pets"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "allowedSpecies": [
+        "Zaphod",
+        "Brox"
+      ],
+      "preferredSpecies": "Brox"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

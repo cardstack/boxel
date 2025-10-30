@@ -7,6 +7,7 @@ interface LeafletMap {
   addTo: (layer: any) => LeafletMap;
   on: (event: string, handler: (event: any) => void) => LeafletMap;
   remove: () => void;
+  getSize: () => { x: number; y: number };
   flyTo: (center: [number, number], zoom: number, options: any) => LeafletMap;
   flyToBounds: (bounds: any, options: any) => LeafletMap;
   invalidateSize: () => void;
@@ -92,7 +93,7 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #f5f5f5;
+        background: var(--boxel-50);
         color: #666;
         font-size: 14px;
         text-align: center;
@@ -222,9 +223,26 @@ class LeafletLayerState implements LeafletLayerStateInterface {
     );
   }
 
-  private fitMapToCoordinates(coords: Coordinate[]) {
+  private fitMapToCoordinates(coords: Coordinate[], attempt = 0) {
     if (!this.map || coords.length === 0) {
       throw new Error('Map is not initialized or no coordinates provided');
+    }
+
+    let size = this.map.getSize ? this.map.getSize() : null;
+    // Leaflet divides by the current map size; while prerender lays things out
+    // the container reports 0×0 which produces NaNs, so retry a few times until
+    // the map has real dimensions.
+    if (!size || size.x === 0 || size.y === 0) {
+      if (attempt >= 5) {
+        return;
+      }
+      let delay = Math.min(200, 50 * (attempt + 1));
+      setTimeout(() => {
+        if (this.map) {
+          this.fitMapToCoordinates(coords, attempt + 1);
+        }
+      }, delay);
+      return;
     }
 
     if (coords.length === 1) {
@@ -270,6 +288,17 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
     let { coordinates, routes, onMapClick, mapConfig } = named;
     let { tileserverUrl } = mapConfig || {};
     this.element = element;
+
+    // Prerendered runs start with a 0×0 container, so give Leaflet a minimal
+    // footprint until the real layout kicks in.
+    if (element && (element.clientWidth === 0 || element.clientHeight === 0)) {
+      if (!element.style.minWidth) {
+        element.style.minWidth = '320px';
+      }
+      if (!element.style.minHeight) {
+        element.style.minHeight = '320px';
+      }
+    }
 
     (async () => {
       if (!this.moduleSet) {

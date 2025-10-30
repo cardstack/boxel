@@ -21,6 +21,7 @@ import {
   setupOnSave,
   testHostModeRealmURL,
   setupAcceptanceTestRealm,
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAuthEndpoints,
   setupUserSubscription,
 } from '../helpers';
@@ -130,6 +131,7 @@ module('Acceptance | host mode tests', function (hooks) {
         '*': ['read'],
       },
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'pet.gts': { Pet },
         'view-card-demo.gts': viewCardDemoCardSource,
         'Pet/mango.json': {
@@ -269,6 +271,41 @@ module('Acceptance | host mode tests', function (hooks) {
     await waitFor(`[data-test-host-mode-stack-item="${targetStackId}"]`);
 
     assert.dom(`[data-test-host-mode-stack-item="${targetStackId}"]`).exists();
+  });
+
+  test('clicking a card in card list stacks it', async function (assert) {
+    await visit('/test'); // Visit the index card (CardsGrid)
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    // Wait for the cards grid to render with cards
+    await waitFor('[data-test-cards-grid-item]');
+
+    // Verify the pet card is not in the stack initially
+    assert
+      .dom(
+        `[data-test-host-mode-stack-item="${testHostModeRealmURL}Pet/mango"]`,
+      )
+      .doesNotExist();
+
+    // Click on the pet card in the list
+    await click(
+      `[data-test-cards-grid-item="${testHostModeRealmURL}Pet/mango"]`,
+    );
+
+    // Wait for the card to be added to the stack
+    await waitFor(
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}Pet/mango"]`,
+    );
+
+    // Verify the card is now in the stack
+    assert
+      .dom(
+        `[data-test-host-mode-stack-item="${testHostModeRealmURL}Pet/mango"]`,
+      )
+      .exists();
+
+    // Verify the card content is rendered
+    assert.dom('[data-test-pet-isolated="Mango"]').exists();
   });
 
   test('viewCard tabs persist after stacking and closing cards in host mode', async function (assert) {

@@ -44,6 +44,7 @@ import {
   type LooseCardResource,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import {
@@ -61,6 +62,7 @@ import { type CardSaveSubscriber } from './card-service';
 import EnvironmentService from './environment-service';
 
 import type CardService from './card-service';
+import type HostModeService from './host-mode-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -81,6 +83,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
+  @service declare private hostModeService: HostModeService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
@@ -208,6 +211,10 @@ export default class StoreService extends Service implements StoreInterface {
 
   loaded(): Promise<void> {
     return this.store.loaded();
+  }
+
+  get docsInFlight() {
+    return this.store.docsInFlight;
   }
 
   // This method creates a new instance in the store and return the new card ID
@@ -997,6 +1004,9 @@ export default class StoreService extends Service implements StoreInterface {
     let json = await this.cardService.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(doc, null, 2),
+      headers: {
+        'Content-Type': SupportedMimeType.CardJson,
+      },
     });
     if (!isSingleCardDocument(json)) {
       throw new Error(
@@ -1173,6 +1183,10 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private subscribeToRealm(url: URL) {
+    if (this.hostModeService.isActive) {
+      return;
+    }
+
     let realmURL = this.realm.realmOfURL(url);
     if (!realmURL) {
       console.warn(

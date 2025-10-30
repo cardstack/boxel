@@ -320,6 +320,13 @@ export class RealmServer {
           config.publishedRealmBoxelSpaceDomain = this.serverURL.host;
         }
 
+        if (config.publishedRealmBoxelSiteDomain === 'localhost:4201') {
+          // if this is the default, this needs to be the realm server’s host
+          // to work in Matrix tests, since publishedRealmBoxelSiteDomain is currently
+          // the default domain for publishing a realm
+          config.publishedRealmBoxelSiteDomain = this.serverURL.host;
+        }
+
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
@@ -447,8 +454,11 @@ export class RealmServer {
       },
     });
 
+    let realm = this.createAndMountRealm(realmPath, url, username);
+    await realm.ensureSessionRoom(ownerUserId);
+
     return {
-      realm: this.createAndMountRealm(realmPath, url, username),
+      realm,
       info,
     };
   };
