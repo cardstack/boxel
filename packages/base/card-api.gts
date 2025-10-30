@@ -994,6 +994,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
+    if (this.queryDefinition) {
+      let docMeta = (doc.data.meta = doc.data.meta ?? {});
+      let queryMeta = (docMeta as any).queryFields ?? {};
+      (docMeta as any).queryFields = queryMeta;
+      queryMeta[this.name] = JSON.parse(
+        JSON.stringify(this.queryDefinition),
+      );
+    }
     if (isNotLoadedValue(value)) {
       return {
         relationships: {
@@ -1450,6 +1458,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
+    if (this.queryDefinition) {
+      let docMeta = (doc.data.meta = doc.data.meta ?? {});
+      let queryMeta = (docMeta as any).queryFields ?? {};
+      (docMeta as any).queryFields = queryMeta;
+      queryMeta[this.name] = JSON.parse(
+        JSON.stringify(this.queryDefinition),
+      );
+    }
     // Check for skip-serialization marker for computed fields that can't be computed
     if (
       values &&
