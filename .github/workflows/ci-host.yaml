@@ -38,6 +38,22 @@ jobs:
           path: packages/skills-realm/contents
       - name: Restore realm file mtimes
         run: ./scripts/restore-realm-mtimes.sh
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
+      - name: Serve boxel-icons
+        run: pnpm serve &> /tmp/icon-server.log &
+        working-directory: packages/boxel-icons
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Start host to serve assets for fastboot
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
       - name: Seed realms and capture pre-indexed databases
         run: |
           set -euo pipefail
