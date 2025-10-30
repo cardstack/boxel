@@ -112,11 +112,10 @@ jobs:
           pnpm start:pg
           cleanup() { pnpm stop:pg; }
           trap cleanup EXIT
-          for db in boxel boxel_base boxel_test; do
-            docker exec boxel-pg psql -U postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"
-            docker exec boxel-pg psql -U postgres -c "CREATE DATABASE $db"
-            docker exec -i boxel-pg pg_restore -U postgres -d "$db" < .preindexed-db/${db}.dump
-          done
+          db=boxel
+          docker exec boxel-pg psql -U postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"
+          docker exec boxel-pg psql -U postgres -c "CREATE DATABASE $db"
+          docker exec -i boxel-pg pg_restore -U postgres -d "$db" < .preindexed-db/${db}.dump
         working-directory: packages/realm-server
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.

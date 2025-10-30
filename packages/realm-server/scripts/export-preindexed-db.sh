@@ -10,9 +10,8 @@ OUTPUT_DIR="$REPO_ROOT/preindexed-db"
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-for db in boxel boxel_base boxel_test; do
-  echo "Dumping $db"
-  docker exec boxel-pg pg_dump -Fc -U postgres "$db" > "$OUTPUT_DIR/${db}.dump"
-done
+DB=boxel
+echo "Dumping $DB"
+docker exec boxel-pg pg_dump -Fc -U postgres "$DB" > "$OUTPUT_DIR/${DB}.dump"
 
-echo "Database dumps written to $OUTPUT_DIR"
+echo "Database dump written to $OUTPUT_DIR/${DB}.dump"
