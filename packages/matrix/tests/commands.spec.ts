@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { putEvent } from '../docker/synapse';
 import {
   getRoomId,
@@ -6,7 +6,6 @@ import {
   createSubscribedUserAndLogin,
   getRoomEvents,
   showAllCards,
-  setSkillsRedirect,
   getAgentId,
   createRealm,
   postNewCard,
@@ -27,11 +26,6 @@ function uniqueRealmName(prefix: string) {
 }
 
 test.describe('Commands', () => {
-  test.beforeEach(async ({ page }) => {
-    test.setTimeout(120_000);
-    await setSkillsRedirect(page);
-  });
-
   test(`it includes the patch tool in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {

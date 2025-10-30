@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createRealm, createSubscribedUserAndLogin, logout } from '../helpers';
 import { appURL } from '../helpers/isolated-realm-server';
 import { randomUUID } from 'crypto';
@@ -11,7 +11,6 @@ test.skip('Host mode', () => {
   let password: string;
 
   test.beforeEach(async ({ page }) => {
-    test.setTimeout(120_000);
     const serverIndexUrl = new URL(appURL).origin;
     const user = await createSubscribedUserAndLogin(
       page,

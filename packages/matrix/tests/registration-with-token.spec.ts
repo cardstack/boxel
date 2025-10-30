@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   loginUser,
   registerUser,
@@ -45,7 +45,6 @@ function makeRegistrationUser(
 
 test.describe('User Registration w/ Token', () => {
   test.beforeEach(async () => {
-    test.setTimeout(120_000);
   });
 
   test('it can register a user with a registration token', async ({ page }) => {

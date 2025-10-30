@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
@@ -14,10 +14,6 @@ test.describe('Forgot password', () => {
   let user: { username: string; password: string; credentials: any };
   let userEmail: string;
   test.beforeEach(async ({ page }) => {
-    // These tests specifically are pretty slow as there's lots of reloading
-    // Add 30s to the overall test timeout
-    test.setTimeout(120_000);
-
     await clearLocalStorage(page, appURL);
     user = await createSubscribedUser('forgot-password');
     userEmail = `${user.username}@example.com`;

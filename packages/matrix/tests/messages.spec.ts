@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
 
 import { Credentials, putEvent } from '../docker/synapse';
 import {
@@ -17,17 +18,11 @@ import {
   getRoomEvents,
   setupTwoStackItems,
   showAllCards,
-  setSkillsRedirect,
 } from '../helpers';
 import { appURL } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
-  test.beforeEach(async ({ page }) => {
-    await setSkillsRedirect(page);
-    test.setTimeout(120_000);
-  });
-
   test(`it can send a message in a room`, async ({ page }) => {
     // TODO: this tests multiple different behaviours beyond just sending a message.
     // There are tests for:

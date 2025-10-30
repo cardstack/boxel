@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   openRoot,
@@ -15,9 +15,7 @@ test.describe('Login using email', () => {
   };
   let userEmail: string;
 
-  test.beforeEach(async ({}) => {
-    test.setTimeout(120_000);
-
+  test.beforeEach(async () => {
     user = await createSubscribedUser('email-login');
     userEmail = `${user.username}@example.com`;
     await updateSynapseUser(user.credentials.userId, {

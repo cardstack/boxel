@@ -37,6 +37,8 @@ interface MatrixTestContext {
   adminAccessToken: string;
   synapse: SynapseInstance;
   realmServerDb: string;
+  matrixUrl?: string;
+  prerenderUrl?: string;
 }
 
 let cachedMatrixTestContext: MatrixTestContext | undefined;
@@ -62,6 +64,12 @@ export function getMatrixTestContext(): MatrixTestContext {
       adminAccessToken: parsed.adminAccessToken,
       realmServerDb: parsed.realmServerDb,
       synapse: parsed.synapse as SynapseInstance,
+      matrixUrl:
+        typeof parsed.matrixUrl === 'string' ? parsed.matrixUrl : undefined,
+      prerenderUrl:
+        typeof parsed.prerenderUrl === 'string'
+          ? parsed.prerenderUrl
+          : undefined,
     };
   }
   return cachedMatrixTestContext;
@@ -83,13 +91,30 @@ export async function updateSynapseUser(
   await updateUser(adminAccessToken, userId, options);
 }
 
-export async function setSkillsRedirect(page: Page) {
-  await page.route('http://localhost:4201/skills/**', async (route) => {
+async function registerRealmRedirect(
+  page: Page,
+  fromPrefix: string,
+  toPrefix: string,
+) {
+  await page.route(`${fromPrefix}**`, async (route) => {
     const url = route.request().url();
-    const suffix = url.split('http://localhost:4201/skills/').pop();
-    const newUrl = `http://localhost:4205/skills/${suffix}`;
+    const suffix = url.slice(fromPrefix.length);
+    const newUrl = `${toPrefix}${suffix}`;
     await route.continue({ url: newUrl });
   });
+}
+
+export async function setRealmRedirects(page: Page) {
+  await registerRealmRedirect(
+    page,
+    'http://localhost:4201/skills/',
+    'http://localhost:4205/skills/',
+  );
+  await registerRealmRedirect(
+    page,
+    'http://localhost:4201/base/',
+    'http://localhost:4205/base/',
+  );
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {

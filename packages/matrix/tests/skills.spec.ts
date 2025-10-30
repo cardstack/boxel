@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
 import {
   login,
   logout,
@@ -9,7 +10,6 @@ import {
   sendMessage,
   reloadAndOpenAiAssistant,
   isInRoom,
-  setSkillsRedirect,
   showAllCards,
   createSubscribedUser,
   createSubscribedUserAndLogin,
@@ -22,10 +22,7 @@ test.describe('Skills', () => {
   let firstUser: { username: string; password: string; credentials: any };
   let secondUser: { username: string; password: string; credentials: any };
 
-  test.beforeEach(async ({ page }) => {
-    test.setTimeout(120_000);
-    await setSkillsRedirect(page);
-
+  test.beforeEach(async () => {
     firstUser = await createSubscribedUser('user-1');
     secondUser = await createSubscribedUser('user-2');
   });

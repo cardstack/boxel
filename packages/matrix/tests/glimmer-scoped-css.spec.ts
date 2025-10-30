@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
@@ -6,20 +6,12 @@ import {
   postCardSource,
   postNewCard,
   createSubscribedUserAndLogin,
-  setSkillsRedirect,
 } from '../helpers';
 
 test.describe('glimmer-scoped-css', () => {
   const serverIndexUrl = new URL(appURL).origin;
 
   let newCardURL: string;
-
-  test.beforeEach(async ({ page }) => {
-    await setSkillsRedirect(page);
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
-    test.setTimeout(120_000);
-  });
 
   test(':global is ignored and does not affect styles', async ({ page }) => {
     const realmName = 'realm1';

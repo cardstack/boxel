@@ -1,9 +1,11 @@
-import { spawn } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { Pool } from 'pg';
+import { createServer as createNetServer, type AddressInfo } from 'net';
+import type { SynapseInstance } from '../docker/synapse';
 
 setGracefulCleanup();
 
@@ -14,20 +16,201 @@ const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const skillsRealmDir = resolve(
   join(__dirname, '..', '..', 'skills-realm', 'contents'),
 );
+const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
+
+const DEFAULT_PRERENDER_PORT = 4221;
+
+export interface PrerenderServerConfig {
+  port?: number;
+}
+
+export interface RunningPrerenderServer {
+  port: number;
+  url: string;
+  stop(): Promise<void>;
+}
+
+export interface StartRealmServerOptions {
+  synapse: SynapseInstance;
+  prerenderURL: string;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function isPortAvailable(port: number): Promise<boolean> {
+  return await new Promise((resolve) => {
+    let tester = createNetServer();
+    tester.once('error', () => resolve(false));
+    tester.once('listening', () => {
+      tester.close(() => resolve(true));
+    });
+    tester.listen(port, '127.0.0.1');
+  });
+}
+
+async function findAvailablePort(preferred?: number): Promise<number> {
+  if (typeof preferred === 'number' && (await isPortAvailable(preferred))) {
+    return preferred;
+  }
+  return await new Promise((resolve, reject) => {
+    let server = createNetServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      let address = server.address() as AddressInfo | null;
+      server.close(() => {
+        if (address?.port) {
+          resolve(address.port);
+        } else {
+          reject(new Error('Could not determine available port'));
+        }
+      });
+    });
+  });
+}
+
+async function waitForHttpReady(url: string, timeoutMs = 60_000) {
+  let start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      let response = await fetch(url);
+      if (response.ok) {
+        return;
+      }
+    } catch (e) {
+      // ignore; server not ready yet
+    }
+    await delay(200);
+  }
+  throw new Error(`timed out waiting for ${url} to become ready`);
+}
+
+function stopChildProcess(proc: ChildProcess, signal: NodeJS.Signals = 'SIGINT') {
+  return new Promise<void>((resolve) => {
+    if (proc.exitCode !== null || proc.killed) {
+      resolve();
+      return;
+    }
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    function cleanup() {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      proc.removeAllListeners('exit');
+      proc.removeAllListeners('error');
+    }
+    proc.once('exit', () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    });
+    proc.once('error', () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    });
+    timer = setTimeout(() => {
+      if (!settled) {
+        proc.kill('SIGTERM');
+      }
+    }, 5_000);
+    proc.kill(signal);
+  });
+}
 
 // The isolated realm is fairly expensive to test with. Please use your best
 // judgement to decide if your test really merits an isolated realm for testing
 // or if a mock would be more suitable.
 
-export async function startServer() {
+export async function startPrerenderServer(
+  options?: PrerenderServerConfig,
+): Promise<RunningPrerenderServer> {
+  let port = await findAvailablePort(options?.port ?? DEFAULT_PRERENDER_PORT);
+  let url = `http://localhost:${port}`;
+  let env = {
+    ...process.env,
+    NODE_ENV: process.env.NODE_ENV ?? 'development',
+    NODE_NO_WARNINGS: '1',
+    REALM_SECRET_SEED: process.env.REALM_SECRET_SEED ?? "shhh! it's a secret",
+    BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
+  };
+  let prerenderArgs = [
+    '--transpileOnly',
+    'prerender/prerender-server',
+    `--port=${port}`,
+    '--silent',
+  ];
+
+  let child = spawn('ts-node', prerenderArgs, {
+    cwd: realmServerDir,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env,
+  });
+
+  child.stdout?.on('data', (data: Buffer) =>
+    console.log(`prerender: ${data.toString()}`),
+  );
+  child.stderr?.on('data', (data: Buffer) =>
+    console.error(`prerender: ${data.toString()}`),
+  );
+
+  let exitListener: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
+  let errorListener: ((err: Error) => void) | undefined;
+
+  const exitPromise = new Promise<never>((_, reject) => {
+    exitListener = (code: number | null, signal: NodeJS.Signals | null) => {
+      reject(
+        new Error(
+          `prerender server exited before it became ready (code: ${code}, signal: ${signal})`,
+        ),
+      );
+    };
+    errorListener = (err: Error) => {
+      reject(err);
+    };
+    child.once('exit', exitListener);
+    child.once('error', errorListener);
+  });
+
+  try {
+    await Promise.race([waitForHttpReady(url, 60_000), exitPromise]);
+  } finally {
+    if (exitListener) {
+      child.removeListener('exit', exitListener);
+    }
+    if (errorListener) {
+      child.removeListener('error', errorListener);
+    }
+  }
+
+  return {
+    port,
+    url,
+    async stop() {
+      await stopChildProcess(child);
+    },
+  };
+}
+
+export async function startServer({
+  synapse,
+  prerenderURL,
+}: StartRealmServerOptions) {
   let dir = dirSync();
   let testRealmDir = join(dir.name, 'test');
   ensureDirSync(testRealmDir);
   copySync(testRealmCards, testRealmDir);
 
   let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
+  let workerManagerPort = await findAvailablePort(4212);
 
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = testDBName;
@@ -35,17 +218,18 @@ export async function startServer() {
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
-  process.env.MATRIX_URL = 'http://localhost:8008';
+  let matrixURL = `http://localhost:${synapse.port}`;
+  process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
   process.env.NODE_ENV = 'test';
 
   let workerArgs = [
     `--transpileOnly`,
     'worker-manager',
-    `--port=4212`,
-    `--matrixURL='http://localhost:8008'`,
+    `--port=${workerManagerPort}`,
+    `--matrixURL='${matrixURL}'`,
     `--distURL="${process.env.HOST_URL ?? 'http://localhost:4200'}"`,
-    `--prerendererUrl='http://localhost:4221'`,
+    `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
 
     `--fromUrl='http://localhost:4205/test/'`,
@@ -53,7 +237,7 @@ export async function startServer() {
   ];
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4201/base/'`,
+    `--toUrl='http://localhost:4205/base/'`,
   ]);
 
   let workerManager = spawn('ts-node', workerArgs, {
@@ -75,9 +259,9 @@ export async function startServer() {
     `--transpileOnly`,
     'main',
     `--port=4205`,
-    `--matrixURL='http://localhost:8008'`,
+    `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
-    `--workerManagerPort=4212`,
+    `--workerManagerPort=${workerManagerPort}`,
     `--useRegistrationSecretFunction`,
 
     `--path='${testRealmDir}'`,
@@ -91,64 +275,80 @@ export async function startServer() {
     `--fromUrl='http://localhost:4205/skills/'`,
     `--toUrl='http://localhost:4205/skills/'`,
   ]);
-
   serverArgs = serverArgs.concat([
+    `--username='base_realm'`,
+    `--path='${baseRealmDir}'`,
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4201/base/'`,
+    `--toUrl='http://localhost:4205/base/'`,
   ]);
 
-  let realmServer = spawn('ts-node', serverArgs, {
-    cwd: realmServerDir,
-    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-    env: {
-      ...process.env,
-      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
-      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
-    },
-  });
-  realmServer.unref();
-  if (realmServer.stdout) {
-    realmServer.stdout.on('data', (data: Buffer) =>
-      console.log(`realm server: ${data.toString()}`),
-    );
-  }
-  if (realmServer.stderr) {
-    realmServer.stderr.on('data', (data: Buffer) =>
-      console.error(`realm server: ${data.toString()}`),
-    );
-  }
-  realmServer.on('message', (message) => {
-    if (message === 'get-registration-secret' && realmServer.send) {
-      let secret = readFileSync(
-        join(matrixDir, 'registration_secret.txt'),
-        'utf8',
+  let realmServer: ChildProcess | undefined;
+  try {
+    realmServer = spawn('ts-node', serverArgs, {
+      cwd: realmServerDir,
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      env: {
+        ...process.env,
+        PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
+        PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
+      },
+    });
+    realmServer.unref();
+    if (realmServer.stdout) {
+      realmServer.stdout.on('data', (data: Buffer) =>
+        console.log(`realm server: ${data.toString()}`),
       );
-      realmServer.send(`registration-secret:${secret}`);
     }
-  });
+    if (realmServer.stderr) {
+      realmServer.stderr.on('data', (data: Buffer) =>
+        console.error(`realm server: ${data.toString()}`),
+      );
+    }
+    realmServer.on('message', (message) => {
+      if (message === 'get-registration-secret' && realmServer.send) {
+        let secret = readFileSync(
+          join(matrixDir, 'registration_secret.txt'),
+          'utf8',
+        );
+        realmServer.send(`registration-secret:${secret}`);
+      }
+    });
 
-  let timeout = await Promise.race([
-    new Promise<void>((r) => {
-      realmServer.on('message', (message) => {
-        if (message === 'ready') {
+    let timeout = await Promise.race([
+      new Promise<void>((r) => {
+        if (!realmServer) {
           r();
+          return;
         }
-      });
-    }),
-    new Promise<true>((r) => setTimeout(() => r(true), 60_000)),
-  ]);
-  if (timeout) {
-    throw new Error(
-      `timed-out waiting for realm server to start. Stopping server`,
-    );
-  }
+        const onMessage = (message: unknown) => {
+          if (message === 'ready') {
+            realmServer?.off('message', onMessage);
+            r();
+          }
+        };
+        realmServer.on('message', onMessage);
+      }),
+      new Promise<true>((r) => setTimeout(() => r(true), 60_000)),
+    ]);
+    if (timeout) {
+      throw new Error(
+        `timed-out waiting for realm server to start. Stopping server`,
+      );
+    }
 
-  return new IsolatedRealmServer(
-    realmServer,
-    workerManager,
-    testRealmDir,
-    testDBName,
-  );
+    return new IsolatedRealmServer(
+      realmServer,
+      workerManager,
+      testRealmDir,
+      testDBName,
+    );
+  } catch (err) {
+    if (realmServer) {
+      await stopChildProcess(realmServer);
+    }
+    await stopChildProcess(workerManager);
+    throw err;
+  }
 }
 
 export interface SQLExecutor {

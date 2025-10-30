@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   login,
@@ -16,7 +16,7 @@ import {
   isInRoom,
   getRoomsFromSync,
   initialRoomName,
-  setSkillsRedirect,
+  setRealmRedirects,
   waitUntil,
   createSubscribedUser,
 } from '../helpers';
@@ -27,8 +27,6 @@ test.describe('Room creation', () => {
   let xUser: { username: string; password: string; credentials: any };
 
   test.beforeEach(async ({ page }) => {
-    test.setTimeout(120_000);
-    await setSkillsRedirect(page);
     await clearLocalStorage(page, appURL);
 
     firstUser = await createSubscribedUser('user-1');
@@ -54,6 +52,7 @@ test.describe('Room creation', () => {
     // Assert that the room selection persists for each tab separately after reload
     const context = page.context();
     const page2 = await context.newPage();
+    await setRealmRedirects(page2);
     await page2.goto(appURL);
     await openRoom(page, room1);
     await openRoom(page2, room2);

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   createRealm,
@@ -14,12 +14,6 @@ import {
 test.describe('Live Cards', () => {
   const serverIndexUrl = new URL(appURL).origin;
   const realmName = 'realm1';
-
-  test.beforeEach(async () => {
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
-    test.setTimeout(120_000);
-  });
 
   test('it can subscribe to realm events of a private realm', async ({
     page,

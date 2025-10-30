@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   getJoinedRooms,
   getAccountData,
@@ -23,12 +23,9 @@ test.describe('Login', () => {
   let username: string;
   let password: string;
 
-  test.beforeEach(async ({}) => {
-    // These tests specifically are pretty slow as there's lots of reloading
-    // Add 120s to the overall test timeout
-    test.setTimeout(120_000);
-    ({ username, password, credentials } =
-      await createSubscribedUser('login-tests'));
+test.beforeEach(async () => {
+  ({ username, password, credentials } =
+    await createSubscribedUser('login-tests'));
     await setupPermissions(credentials.userId, `${appURL}/`);
   });
 

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
@@ -7,12 +7,6 @@ import {
 } from '../helpers';
 
 test.describe('Workspace Chooser', () => {
-  test.beforeEach(async () => {
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
-    test.setTimeout(120_000);
-  });
-
   test('back button from a workspace returns to the workspace chooser', async ({
     page,
   }) => {

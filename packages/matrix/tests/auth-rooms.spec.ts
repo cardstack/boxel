@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   getJoinedRooms,
   getRoomMembers,
@@ -8,11 +8,6 @@ import { createSubscribedUser } from '../helpers';
 import { appURL } from '../helpers/isolated-realm-server';
 
 test.describe('Auth rooms', () => {
-  test.beforeEach(async () => {
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    test.setTimeout(120_000);
-  });
-
   // CS-8988 - was flaky before, making it a toPass to attempt to stabilize
   test('auth rooms have a retention policy', async ({ page }) => {
     const { username, password, credentials } =

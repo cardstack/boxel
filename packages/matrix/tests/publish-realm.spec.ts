@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
@@ -40,12 +41,6 @@ test.describe('Publish realm', () => {
       ),
     ).toBeVisible();
   }
-
-  test.beforeEach(async () => {
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
-    test.setTimeout(120_000);
-  });
 
   test('it can publish a realm to a subdirectory', async ({ page }) => {
     await publishDefaultRealm(page);

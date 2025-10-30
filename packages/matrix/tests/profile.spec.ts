@@ -1,4 +1,5 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
 import {
   login,
   validateEmail,
@@ -20,8 +21,6 @@ test.describe('Profile', () => {
 
   let unseenEmail: string;
   test.beforeEach(async ({ page }) => {
-    test.setTimeout(120_000);
-
     user = await createSubscribedUser('profile');
     userEmail = `${user.username}@localhost`;
     await updateSynapseUser(user.credentials.userId, {
