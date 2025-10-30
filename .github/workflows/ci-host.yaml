@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           WAIT_ON_TIMEOUT=900000 pnpm exec start-server-and-test \
-            "pnpm start:skip-experiments" \
+            "sh ./scripts/start-skip-with-preindex.sh" \
             "http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4201/catalog/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4201/skills/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4202/test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:8008|http-get://localhost:5001" \
             "sh ./scripts/export-preindexed-db.sh"
         working-directory: packages/realm-server

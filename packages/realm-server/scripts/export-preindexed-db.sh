@@ -4,11 +4,8 @@ set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REALM_SERVER_DIR="$(dirname "$SCRIPTS_DIR")"
-REPO_ROOT="$(dirname "$REALM_SERVER_DIR")"
+REPO_ROOT="$(cd "$REALM_SERVER_DIR/../.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/preindexed-db"
-
-echo "Registering realm users..."
-pnpm --dir="$REPO_ROOT/packages/matrix" register-realm-users
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
