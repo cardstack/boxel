@@ -36,18 +36,26 @@ jobs:
         with:
           repository: cardstack/boxel-skills
           path: packages/skills-realm/contents
-      - name: Restore realm file mtimes
-        run: ./scripts/restore-realm-mtimes.sh
+      - name: Restore cached pre-indexed database
+        id: preindex-cache
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
+        with:
+          path: preindexed-db
+          key: host-preindexed-db-${{ hashFiles('packages/base/**', 'packages/catalog-realm/**', 'packages/realm-server/**', 'packages/host/tests/cards/**', 'packages/skills-realm/contents/**') }}
       - name: Build boxel-icons
+        if: steps.preindex-cache.outputs.cache-hit != 'true'
         run: pnpm build
         working-directory: packages/boxel-icons
       - name: Serve boxel-icons
+        if: steps.preindex-cache.outputs.cache-hit != 'true'
         run: pnpm serve &> /tmp/icon-server.log &
         working-directory: packages/boxel-icons
       - name: Build boxel-ui
+        if: steps.preindex-cache.outputs.cache-hit != 'true'
         run: pnpm build
         working-directory: packages/boxel-ui/addon
       - name: Start host to serve assets for fastboot
+        if: steps.preindex-cache.outputs.cache-hit != 'true'
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
@@ -55,6 +63,7 @@ jobs:
           wait-for: 3m
           wait-on: http-get://localhost:4200
       - name: Seed realms and capture pre-indexed databases
+        if: steps.preindex-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           WAIT_ON_TIMEOUT=900000 pnpm exec start-server-and-test \
@@ -89,8 +98,6 @@ jobs:
         with:
           repository: cardstack/boxel-skills
           path: packages/skills-realm/contents
-      - name: Restore realm file mtimes
-        run: ./scripts/restore-realm-mtimes.sh
       - name: Build boxel-icons
         run: pnpm build
         working-directory: packages/boxel-icons
@@ -108,10 +115,13 @@ jobs:
 
       - name: Restore pre-indexed databases
         run: |
-          set -euo pipefail
+          set -eu
           pnpm start:pg
           cleanup() { pnpm stop:pg; }
           trap cleanup EXIT
+          until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do
+            sleep 1
+          done
           db=boxel
           docker exec boxel-pg psql -U postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"
           docker exec boxel-pg psql -U postgres -c "CREATE DATABASE $db"
