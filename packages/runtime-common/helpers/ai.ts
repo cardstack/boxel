@@ -138,7 +138,7 @@ export async function basicMappings(loader: Loader) {
   const { default: DateTimeField } = datetime;
   const { default: BooleanField } = boolean;
   const { default: CodeRef } = codeRef;
-  const { QueryField } = query;
+  const { JsonField, QueryField } = query;
   mappings.set(StringField, {
     type: 'string',
   });
@@ -166,6 +166,11 @@ export async function basicMappings(loader: Loader) {
       module: { type: 'string' },
       name: { type: 'string' },
     },
+  });
+  mappings.set(JsonField, {
+    type: 'object',
+    properties: {},
+    additionalProperties: true,
   });
   mappings.set(QueryField, {
     type: 'object',
