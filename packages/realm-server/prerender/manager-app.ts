@@ -47,22 +47,6 @@ async function ping(url: string, timeoutMs: number): Promise<boolean> {
   }
 }
 
-function clientURLFromContext(ctxt: Koa.Context): string | null {
-  let headerUrl = ctxt.get('X-Prerender-Server-Url');
-  if (headerUrl) {
-    return normalizeURL(headerUrl);
-  }
-  let ip = ctxt.req.socket.remoteAddress || '';
-  if (!ip) {
-    return null;
-  }
-  // strip IPv6 prefix if present
-  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
-  const defaultPort = Number(process.env.PRERENDER_SERVER_DEFAULT_PORT ?? 4223);
-  const scheme = 'http';
-  return `${scheme}://${ip}:${defaultPort}`;
-}
-
 export function buildPrerenderManagerApp(): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   registry: Registry;
@@ -89,6 +73,17 @@ export function buildPrerenderManagerApp(): {
     0,
     Number(process.env.PRERENDER_HEALTHCHECK_INTERVAL_MS ?? 0),
   );
+
+  function urlFromQuery(ctxt: Koa.Context): string | undefined {
+    let raw = (ctxt.query as Record<string, unknown>)?.['url'];
+    if (typeof raw === 'string') {
+      return raw;
+    }
+    if (Array.isArray(raw)) {
+      return raw[0];
+    }
+    return undefined;
+  }
 
   // health
   router.head('/', async (ctxt) => {
@@ -118,16 +113,12 @@ export function buildPrerenderManagerApp(): {
       let capacity: number = Number(attrs.capacity ?? 4);
       let url: string | undefined = attrs.url;
       if (!url) {
-        let inferred = clientURLFromContext(ctxt);
-        if (!inferred) {
-          log.warn('Registration rejected: cannot infer URL');
-          ctxt.status = 400;
-          ctxt.body = {
-            errors: [{ status: 400, message: 'Cannot infer URL' }],
-          };
-          return;
-        }
-        url = inferred;
+        log.warn('Registration rejected: prerender server URL not provided');
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'URL is required' }],
+        };
+        return;
       }
       url = normalizeURL(url);
 
@@ -168,20 +159,29 @@ export function buildPrerenderManagerApp(): {
 
   // unregister server
   router.delete('/prerender-servers', async (ctxt) => {
-    let url = clientURLFromContext(ctxt);
-    if (url) {
-      url = normalizeURL(url);
-      registry.servers.delete(url);
-      // remove from realms mappings
-      for (let [realm, list] of registry.realms) {
-        let idx = list.indexOf(url);
-        if (idx >= 0) {
-          list.splice(idx, 1);
-          if (list.length === 0) registry.realms.delete(realm);
-        }
+    let url = urlFromQuery(ctxt);
+    if (!url) {
+      log.warn('Cannot unregister server: missing url query parameter');
+      ctxt.status = 400;
+      ctxt.body = {
+        errors: [
+          {
+            status: 400,
+            message: 'Missing required query parameter: url',
+          },
+        ],
+      };
+      return;
+    }
+    url = normalizeURL(url);
+    registry.servers.delete(url);
+    // remove from realms mappings
+    for (let [realm, list] of registry.realms) {
+      let idx = list.indexOf(url);
+      if (idx >= 0) {
+        list.splice(idx, 1);
+        if (list.length === 0) registry.realms.delete(realm);
       }
-    } else {
-      log.warn('Cannot unregister server: cannot infer prerender server url');
     }
     ctxt.status = 204;
   });
@@ -189,18 +189,27 @@ export function buildPrerenderManagerApp(): {
   // realm disposal
   router.delete('/prerender-servers/realms/:encodedRealm', async (ctxt) => {
     let realm = decodeURIComponent(ctxt.params.encodedRealm);
-    let url = clientURLFromContext(ctxt);
-    if (url) {
-      url = normalizeURL(url);
-      let list = registry.realms.get(realm) || [];
-      let idx = list.indexOf(url);
-      if (idx >= 0) list.splice(idx, 1);
-      if (list.length === 0) registry.realms.delete(realm);
-      // free capacity marker
-      registry.servers.get(url)?.activeRealms.delete(realm);
-    } else {
-      log.warn('Cannot dispose realm: cannot infer prerender server url');
+    let url = urlFromQuery(ctxt);
+    if (!url) {
+      log.warn('Cannot dispose realm %s: missing url query parameter', realm);
+      ctxt.status = 400;
+      ctxt.body = {
+        errors: [
+          {
+            status: 400,
+            message: 'Missing required query parameter: url',
+          },
+        ],
+      };
+      return;
     }
+    url = normalizeURL(url);
+    let list = registry.realms.get(realm) || [];
+    let idx = list.indexOf(url);
+    if (idx >= 0) list.splice(idx, 1);
+    if (list.length === 0) registry.realms.delete(realm);
+    // free capacity marker
+    registry.servers.get(url)?.activeRealms.delete(realm);
     ctxt.status = 204;
   });
 

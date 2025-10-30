@@ -78,6 +78,28 @@ jobs:
       build-args: |
         "realm_server_script=start:${{ inputs.environment }}"
 
+  build-prerender-manager:
+    name: Build prerender manager Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-prerender-manager-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/realm-server/prerender-manager.Dockerfile"
+      build-args: |
+        "prerender_manager_script=start:prerender-manager"
+
+  build-prerender:
+    name: Build prerender Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-prerender-server-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/realm-server/prerender.Dockerfile"
+      build-args: |
+        "prerender_script=start:prerender-${{ inputs.environment }}"
+
   build-worker:
     name: Build worker Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
@@ -124,9 +146,49 @@ jobs:
     steps:
       - run: sleep 180
 
+  deploy-prerender-manager:
+    name: Deploy prerender manager
+    needs: [build-prerender-manager]
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-prerender-manager"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-prerender-manager-${{ inputs.environment }}"
+      image: ${{ needs.build-prerender-manager.outputs.image }}
+      wait-for-service-stability: false
+
+  post-deploy-prerender-manager:
+    name: Wait for prerender manager
+    needs: [deploy-prerender-manager]
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 180
+
+  deploy-prerender:
+    name: Deploy prerender
+    needs: [build-prerender, post-deploy-prerender-manager]
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-prerender-server"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-prerender-server-${{ inputs.environment }}"
+      image: ${{ needs.build-prerender.outputs.image }}
+      wait-for-service-stability: false
+
+  post-deploy-prerender:
+    name: Wait for prerender
+    needs: [deploy-prerender]
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 180
+
   deploy-worker:
     name: Deploy worker
-    needs: [build-worker, deploy-host, post-migrate-db]
+    needs: [build-worker, deploy-host, post-migrate-db, post-deploy-prerender]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
