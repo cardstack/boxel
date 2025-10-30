@@ -42,7 +42,8 @@ export default class EmailInput extends Component<Signature> {
   }
 
   private handleValidation = (input: string) => {
-    if (!input || input?.trim() === '') {
+    input = input?.trim();
+    if (!input?.length) {
       if (this.args.required && this.hasBlurred) {
         this.validationState = 'invalid';
         this.errorMessage = this.requiredErrorMessage;
