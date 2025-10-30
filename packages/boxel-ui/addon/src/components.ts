@@ -36,6 +36,7 @@ import BoxelInput, {
   InputBottomTreatments as BoxelInputBottomTreatments,
   InputValidationStates as BoxelInputValidationStates,
 } from './components/input/index.gts';
+import BoxelPhoneInput from './components/input/phone/index.gts';
 import BoxelInputGroup from './components/input-group/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
@@ -94,6 +95,7 @@ export {
   BoxelMessage,
   BoxelMultiSelect,
   BoxelMultiSelectBasic,
+  BoxelPhoneInput,
   BoxelSelect,
   BoxelTag,
   Button,

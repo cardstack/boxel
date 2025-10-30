@@ -28,6 +28,7 @@ import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
 import InputGroupUsage from './components/input-group/usage.gts';
+import InputPhoneUsage from './components/input/phone/usage.gts';
 import InputUsage from './components/input/usage.gts';
 import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
@@ -80,6 +81,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
   ['InputGroup', InputGroupUsage],
+  ['InputPhone', InputPhoneUsage],
   ['Input', InputUsage],
   ['LoadingIndicator', LoadingIndicatorUsage],
   ['Menu', MenuUsage],
