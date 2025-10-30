@@ -2,13 +2,16 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { type AsYouType, getAsYouType } from 'awesome-phonenumber';
+import { type TCountryCode, countries, getEmojiFlag } from 'countries-list';
 import { debounce } from 'lodash';
 
 import validatePhone, {
   DEFAULT_PHONE_REGION_CODE,
   isValidPhone,
+  normalizePhone,
 } from '../../../helpers/validate-phone.ts';
-import BoxelInput, { type InputValidationState } from '../index.gts';
+import BoxelInputGroup from '../../input-group/index.gts';
+import { type InputValidationState } from '../index.gts';
 
 interface Signature {
   Args: {
@@ -23,6 +26,12 @@ interface Signature {
 
 const DEFAULT_FALLBACK_MESSAGE = 'Enter a valid phone number';
 const DEFAULT_REQUIRED_MESSAGE = 'Enter a phone number';
+
+interface FlagDisplay {
+  emoji: string;
+  label: string;
+  regionCode: string;
+}
 
 export default class PhoneInput extends Component<Signature> {
   private fallbackErrorMessage = DEFAULT_FALLBACK_MESSAGE;
@@ -41,6 +50,9 @@ export default class PhoneInput extends Component<Signature> {
     ? validatePhone(this.args.value)?.message
     : '';
   @tracked private hasBlurred = false;
+  @tracked private countryFlag: FlagDisplay | null = this.args.value
+    ? this.flagFromInput(this.args.value)
+    : null;
 
   private notify(value: string | null) {
     this.args.onChange?.(value);
@@ -60,11 +72,13 @@ export default class PhoneInput extends Component<Signature> {
         this.validationState = 'initial';
         this.errorMessage = undefined;
       }
+      this.countryFlag = null;
       return;
     }
 
-    const validation = validatePhone(input);
-    if (validation) {
+    const normalization = normalizePhone(input);
+    if (!normalization.ok) {
+      const validation = normalization.error;
       this.validationState = this.hasBlurred ? 'invalid' : 'initial';
       this.errorMessage =
         this.validationState === 'invalid'
@@ -73,7 +87,8 @@ export default class PhoneInput extends Component<Signature> {
     } else {
       this.validationState = 'valid';
       this.errorMessage = undefined;
-      this.notify(input);
+      this.setFlagFromRegion(normalization.value.regionCode);
+      this.notify(normalization.value.e164);
     }
   };
 
@@ -88,15 +103,17 @@ export default class PhoneInput extends Component<Signature> {
       this.validationState = 'initial';
     }
     this.errorMessage = undefined;
-    const formattedValue = this.formatForDisplay(value);
-    this.inputValue = formattedValue;
-    this.debouncedInput(formattedValue);
+    this.inputValue = value;
+    this.updateFlagForInput(value);
+    this.debouncedInput(value);
   }
 
   @action onBlur(): void {
     this.hasBlurred = true;
     this.debouncedInput.flush();
-    this.handleValidation(this.inputValue);
+    const formatted = this.formatForDisplay(this.inputValue);
+    this.inputValue = formatted;
+    this.handleValidation(formatted);
   }
 
   override willDestroy(): void {
@@ -128,15 +145,80 @@ export default class PhoneInput extends Component<Signature> {
     const sanitized = this.sanitizeForFormatting(value);
     if (!sanitized) {
       this.asYouType.reset();
+      this.countryFlag = null;
       return '';
     }
 
-    return this.asYouType.reset(sanitized);
+    const formatted = this.asYouType.reset(sanitized);
+    this.updateFlagFromAsYouType();
+    return formatted;
+  }
+
+  private updateFlagForInput(value: string | null | undefined): void {
+    if (!value) {
+      this.asYouType.reset();
+      this.countryFlag = null;
+      return;
+    }
+
+    const sanitized = this.sanitizeForFormatting(value);
+    if (!sanitized) {
+      this.asYouType.reset();
+      this.countryFlag = null;
+      return;
+    }
+
+    this.asYouType.reset(sanitized);
+    this.updateFlagFromAsYouType();
+  }
+
+  private flagFromInput(value: string): FlagDisplay | null {
+    const normalization = normalizePhone(value);
+    if (!normalization.ok) {
+      return null;
+    }
+    return this.flagFromRegion(normalization.value.regionCode);
+  }
+
+  private updateFlagFromAsYouType(): void {
+    try {
+      const parsed = this.asYouType.getPhoneNumber();
+      this.setFlagFromRegion(parsed?.regionCode);
+    } catch {
+      this.countryFlag = null;
+    }
+  }
+
+  private setFlagFromRegion(regionCode?: string | null): void {
+    if (!regionCode) {
+      this.countryFlag = null;
+      return;
+    }
+
+    const flag = this.flagFromRegion(regionCode);
+    this.countryFlag = flag;
+  }
+
+  private flagFromRegion(regionCode: string): FlagDisplay | null {
+    const normalizedRegion = regionCode.toUpperCase();
+    const emoji = getEmojiFlag(normalizedRegion as TCountryCode);
+    if (!emoji) {
+      return null;
+    }
+    const country = countries[normalizedRegion as TCountryCode];
+    const label = country?.name
+      ? `${country.name} flag`
+      : `Flag for ${normalizedRegion}`;
+    return {
+      emoji,
+      label,
+      regionCode: normalizedRegion,
+    };
   }
 
   <template>
-    <BoxelInput
-      @type='tel'
+    <BoxelInputGroup
+      type='tel'
       @value={{this.inputValue}}
       @onInput={{this.onInput}}
       @onBlur={{this.onBlur}}
@@ -147,6 +229,26 @@ export default class PhoneInput extends Component<Signature> {
       @required={{@required}}
       data-test-boxel-phone-input
       ...attributes
-    />
+    >
+      <:before as |Accessories|>
+        {{#if this.countryFlag}}
+          <Accessories.Text class='flag'>
+            <span
+              class='phone-input__flag'
+              aria-hidden='true'
+              data-test-boxel-phone-input-flag
+            >{{this.countryFlag.emoji}}</span>
+            <span class='boxel-sr-only'>{{this.countryFlag.label}}</span>
+          </Accessories.Text>
+        {{/if}}
+      </:before>
+    </BoxelInputGroup>
+    <style scoped>
+      :deep(.flag) {
+        padding-block: var(--boxel-sp-5xs);
+        padding-right: 0;
+        font-size: var(--boxel-font-size-lg);
+      }
+    </style>
   </template>
 }
