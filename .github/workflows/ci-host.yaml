@@ -25,8 +25,72 @@ permissions:
   pull-requests: write
 
 jobs:
+  host-preindex:
+    name: Pre-index Realms
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: Start realm services and wait for indexing
+        run: |
+          set -euo pipefail
+          pnpm start:skip-experiments | tee -a /tmp/server.log &
+          SERVER_PID=$!
+          echo "$SERVER_PID" > /tmp/realm-server.pid
+          urls=(
+            "http://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+            "http://localhost:4201/catalog/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+            "http://localhost:4201/skills/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+            "http://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+            "http://localhost:4202/test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+            "http://localhost:8008"
+            "http://localhost:5001"
+          )
+          deadline=$((SECONDS + 900))
+          for url in "${urls[@]}"; do
+            echo "Waiting for ${url}"
+            until curl --silent --fail --show-error "$url"; do
+              if (( SECONDS >= deadline )); then
+                echo "Timed out waiting for ${url}" >&2
+                kill "$SERVER_PID" || true
+                exit 1
+              fi
+              sleep 5
+            done
+          done
+          echo "All services reported ready"
+        working-directory: packages/realm-server
+      - name: Dump pre-indexed databases
+        run: |
+          set -euo pipefail
+          mkdir -p ../../preindexed-db
+          for db in boxel boxel_base boxel_test; do
+            echo "Dumping $db"
+            docker exec boxel-pg pg_dump -Fc -U postgres "$db" > ../../preindexed-db/${db}.dump
+          done
+        working-directory: packages/realm-server
+      - name: Stop realm services
+        if: always()
+        run: |
+          set +e
+          if [ -f /tmp/realm-server.pid ]; then
+            kill "$(cat /tmp/realm-server.pid)" 2>/dev/null || true
+            rm /tmp/realm-server.pid
+          fi
+          pnpm stop:pg || true
+          docker stop boxel-synapse >/dev/null 2>&1 || true
+          docker stop boxel-smtp >/dev/null 2>&1 || true
+        working-directory: packages/realm-server
+      - name: Upload pre-indexed database artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: host-preindexed-db
+          path: preindexed-db
+          retention-days: 1
+
   host-test:
     name: Host Tests
+    needs: host-preindex
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -48,6 +112,24 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
+      - name: Download pre-indexed database
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: host-preindexed-db
+          path: packages/realm-server/.preindexed-db
+
+      - name: Restore pre-indexed databases
+        run: |
+          set -euo pipefail
+          pnpm start:pg
+          cleanup() { pnpm stop:pg; }
+          trap cleanup EXIT
+          for db in boxel boxel_base boxel_test; do
+            docker exec boxel-pg psql -U postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"
+            docker exec boxel-pg psql -U postgres -c "CREATE DATABASE $db"
+            docker exec -i boxel-pg pg_restore -U postgres -d "$db" < .preindexed-db/${db}.dump
+          done
+        working-directory: packages/realm-server
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
