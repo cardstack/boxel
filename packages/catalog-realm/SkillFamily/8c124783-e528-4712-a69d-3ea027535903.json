@@ -1,0 +1,44 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillFamily",
+        "module": "../skill-family"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "description": null
+    },
+    "relationships": {
+      "statements.0": {
+        "links": {
+          "self": "../Statement/boxel-ui-forms"
+        }
+      },
+      "statements.1": {
+        "links": {
+          "self": "../Statement/enum-field-config"
+        }
+      },
+      "statements.2": {
+        "links": {
+          "self": "../Statement/theming-system"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
