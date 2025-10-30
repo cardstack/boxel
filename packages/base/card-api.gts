@@ -65,6 +65,7 @@ import {
   LocalPath,
   getCardMenuItems,
 } from '@cardstack/runtime-common';
+import { type Query as RelationshipQuery } from '@cardstack/runtime-common/query';
 
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -217,6 +218,10 @@ interface Options {
   configuration?: ConfigurationInput<any>;
 }
 
+interface RelationshipOptions extends Options {
+  query?: RelationshipQuery;
+}
+
 export interface CardContext<T extends CardDef = CardDef> {
   commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
@@ -244,6 +249,7 @@ export interface FieldConstructor<T> {
   description: string | undefined;
   isUsed?: true;
   isPolymorphic?: true;
+  queryDefinition?: RelationshipQuery;
 }
 
 type CardChangeSubscriber = (
@@ -343,6 +349,8 @@ export interface Field<
   description: undefined | string;
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
+  // Declarative relationship query definition, if provided
+  queryDefinition?: RelationshipQuery;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -930,6 +938,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
+  readonly queryDefinition?: RelationshipQuery;
   constructor({
     cardThunk,
     computeVia,
@@ -937,6 +946,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     description,
     isUsed,
     isPolymorphic,
+    queryDefinition,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
@@ -944,6 +954,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.queryDefinition = queryDefinition;
   }
 
   get card(): CardT {
@@ -1296,6 +1307,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
+  readonly queryDefinition?: RelationshipQuery;
   constructor({
     cardThunk,
     computeVia,
@@ -1303,6 +1315,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     description,
     isUsed,
     isPolymorphic,
+    queryDefinition,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
@@ -1310,6 +1323,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.queryDefinition = queryDefinition;
   }
 
   get card(): FieldT {
@@ -1846,7 +1860,7 @@ export const field = function (
   key: string | symbol,
   { initializer }: { initializer(): any },
 ) {
-  let descriptor = initializer().setupField(key);
+  let descriptor = initializer().setupField(key, target as BaseDef);
   if (descriptor[fieldDescription]) {
     setFieldDescription(
       target.constructor,
@@ -1863,7 +1877,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
   return {
-    setupField(fieldName: string) {
+    setupField(fieldName: string, _ownerPrototype?: BaseDef) {
       let { computeVia, description, isUsed } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
@@ -1884,7 +1898,7 @@ export function contains<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT> {
   return {
-    setupField(fieldName: string) {
+    setupField(fieldName: string, _ownerPrototype?: BaseDef) {
       let { computeVia, description, isUsed } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
@@ -1902,17 +1916,21 @@ contains[fieldType] = 'contains' as FieldType;
 
 export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
-  options?: Options,
+  options?: RelationshipOptions,
 ): BaseInstanceType<CardT> {
   return {
-    setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype?: BaseDef) {
+      let { computeVia, description, isUsed, query } = options ?? {};
+      if (query) {
+        validateRelationshipQuery(ownerPrototype, fieldName, query);
+      }
       let instance = new LinksTo({
         cardThunk: cardThunk(cardOrThunk),
         computeVia,
         name: fieldName,
         description,
         isUsed,
+        queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -1923,17 +1941,21 @@ linksTo[fieldType] = 'linksTo' as FieldType;
 
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
-  options?: Options,
+  options?: RelationshipOptions,
 ): BaseInstanceType<CardT>[] {
   return {
-    setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype?: BaseDef) {
+      let { computeVia, description, isUsed, query } = options ?? {};
+      if (query) {
+        validateRelationshipQuery(ownerPrototype, fieldName, query);
+      }
       let instance = new LinksToMany({
         cardThunk: cardThunk(cardOrThunk),
         computeVia,
         name: fieldName,
         description,
         isUsed,
+        queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -3111,6 +3133,72 @@ export function searchDoc<CardT extends BaseDefConstructor>(
     string,
     any
   >;
+}
+
+const THIS_INTERPOLATION_PREFIX = '$this.';
+const THIS_REALM_TOKEN = '$thisRealm';
+
+function validateRelationshipQuery(
+  ownerPrototype: BaseDef | undefined,
+  fieldName: string,
+  query: RelationshipQuery,
+): void {
+  if (typeof query !== 'object' || query == null) {
+    throw new Error(
+      `query field "${fieldName}" must provide a query object`,
+    );
+  }
+  if (!ownerPrototype) {
+    return;
+  }
+  let tokens = new Set<string>();
+  collectInterpolationTokens(query, tokens);
+  let ownerClass = ownerPrototype.constructor as typeof BaseDef;
+  for (let token of tokens) {
+    if (token === THIS_REALM_TOKEN) {
+      continue;
+    }
+    if (typeof token === 'string' && token.startsWith(THIS_INTERPOLATION_PREFIX)) {
+      let path = token.slice(THIS_INTERPOLATION_PREFIX.length);
+      let [head] = path.split('.');
+      let referencedField = getField(ownerClass, head, { untracked: true });
+      if (!referencedField) {
+        let ownerName = ownerClass.name ?? 'Card';
+        throw new Error(
+          `query field "${fieldName}" references unknown path "${token}" on ${ownerName}`,
+        );
+      }
+    }
+  }
+}
+
+function collectInterpolationTokens(
+  value: unknown,
+  tokens: Set<string>,
+): void {
+  if (value == null) {
+    return;
+  }
+  if (typeof value === 'string') {
+    if (
+      value.startsWith(THIS_INTERPOLATION_PREFIX) ||
+      value === THIS_REALM_TOKEN
+    ) {
+      tokens.add(value);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (let entry of value) {
+      collectInterpolationTokens(entry, tokens);
+    }
+    return;
+  }
+  if (typeof value === 'object') {
+    for (let entry of Object.values(value as Record<string, unknown>)) {
+      collectInterpolationTokens(entry, tokens);
+    }
+  }
 }
 
 function makeDescriptor<
