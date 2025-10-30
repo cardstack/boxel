@@ -118,7 +118,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     ],
   });
 
-  let { createAndJoinRoom, getRoomState, simulateRemoteMessage } =
+  let { createAndJoinRoom, getRoomIds, getRoomState, simulateRemoteMessage } =
     mockMatrixUtils;
 
   // Setup realm server endpoints for summarization tests
@@ -2589,10 +2589,36 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-send-message-btn]');
 
+    let roomsBeforeSameSkills = getRoomIds();
     await click('[data-test-create-room-btn]', { shiftKey: true });
     await click('[data-test-new-session-settings-option="Add Same Skills"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor('[data-room-settled]');
+
+    let roomsAfterSameSkills = getRoomIds();
+    let duplicatedSkillsRoomId = roomsAfterSameSkills.find(
+      (roomId) => !roomsBeforeSameSkills.includes(roomId),
+    );
+    assert.ok(
+      duplicatedSkillsRoomId,
+      'Creating a new session with copied skills creates a new room',
+    );
+    if (duplicatedSkillsRoomId) {
+      let activeLLMState = getRoomState(
+        duplicatedSkillsRoomId,
+        APP_BOXEL_ACTIVE_LLM,
+        '',
+      );
+      assert.strictEqual(
+        typeof activeLLMState.toolsSupported,
+        'boolean',
+        'New room active LLM event includes toolsSupported metadata',
+      );
+      assert.true(
+        Object.prototype.hasOwnProperty.call(activeLLMState, 'reasoningEffort'),
+        'New room active LLM event includes reasoningEffort metadata',
+      );
+    }
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu]');
@@ -2626,8 +2652,31 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Enabling create new session button',
     );
     await click('[data-test-send-message-btn]');
+    let roomsBeforeNewSession = getRoomIds();
     await click('[data-test-create-room-btn]');
     await waitFor('[data-room-settled]');
+
+    let roomsAfterNewSession = getRoomIds();
+    let newlyCreatedRoomId = roomsAfterNewSession.find(
+      (roomId) => !roomsBeforeNewSession.includes(roomId),
+    );
+    assert.ok(newlyCreatedRoomId, 'Creating a new session creates a new room');
+    if (newlyCreatedRoomId) {
+      let activeLLMState = getRoomState(
+        newlyCreatedRoomId,
+        APP_BOXEL_ACTIVE_LLM,
+        '',
+      );
+      assert.strictEqual(
+        typeof activeLLMState.toolsSupported,
+        'boolean',
+        'Newly created room includes toolsSupported metadata',
+      );
+      assert.true(
+        Object.prototype.hasOwnProperty.call(activeLLMState, 'reasoningEffort'),
+        'Newly created room includes reasoningEffort metadata',
+      );
+    }
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu]');
