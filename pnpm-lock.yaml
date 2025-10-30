@@ -312,6 +312,9 @@ catalogs:
     dompurify:
       specifier: ^3.0.3
       version: 3.0.3
+    ember-cli-deploy-fastboot-s3:
+      specifier: https://github.com/outdoorsy/ember-cli-deploy-fastboot-s3.git#f35c58eea35aad149e48ea1369ef549d92da9256
+      version: 0.3.7
     ember-concurrency:
       specifier: ^4.0.3
       version: 4.0.3
@@ -2252,7 +2255,7 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0
       ember-cli-deploy-fastboot-s3:
-        specifier: https://github.com/outdoorsy/ember-cli-deploy-fastboot-s3.git#f35c58eea35aad149e48ea1369ef549d92da9256
+        specifier: 'catalog:'
         version: https://codeload.github.com/outdoorsy/ember-cli-deploy-fastboot-s3/tar.gz/f35c58eea35aad149e48ea1369ef549d92da9256
       ember-cli-deploy-revision-data:
         specifier: ^2.0.0
