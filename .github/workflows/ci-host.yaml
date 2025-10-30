@@ -36,6 +36,8 @@ jobs:
         with:
           repository: cardstack/boxel-skills
           path: packages/skills-realm/contents
+      - name: Restore realm file mtimes
+        run: ./scripts/restore-realm-mtimes.sh
       - name: Seed realms and capture pre-indexed databases
         run: |
           set -euo pipefail
@@ -71,6 +73,8 @@ jobs:
         with:
           repository: cardstack/boxel-skills
           path: packages/skills-realm/contents
+      - name: Restore realm file mtimes
+        run: ./scripts/restore-realm-mtimes.sh
       - name: Build boxel-icons
         run: pnpm build
         working-directory: packages/boxel-icons
