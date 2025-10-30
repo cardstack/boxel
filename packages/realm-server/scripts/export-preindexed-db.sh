@@ -10,8 +10,13 @@ OUTPUT_DIR="$REPO_ROOT/preindexed-db"
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-DB=boxel
-echo "Dumping $DB"
-docker exec boxel-pg pg_dump -Fc -U postgres "$DB" > "$OUTPUT_DIR/${DB}.dump"
+for DB in boxel boxel_base boxel_test; do
+  if docker exec boxel-pg psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='${DB}'" | grep -q 1; then
+    echo "Dumping $DB"
+    docker exec boxel-pg pg_dump -Fc -U postgres "$DB" > "$OUTPUT_DIR/${DB}.dump"
+  else
+    echo "Skipping $DB (database does not exist)"
+  fi
+done
 
-echo "Database dump written to $OUTPUT_DIR/${DB}.dump"
+ls "$OUTPUT_DIR"
