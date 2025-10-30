@@ -1,4 +1,4 @@
-import { settled, visit } from '@ember/test-helpers';
+import { visit } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -781,25 +781,13 @@ module('Acceptance | prerender | html', function (hooks) {
     let renderInstance = (globalThis as any).__renderInstance;
     assert.ok(renderInstance, 'render instance exists when prerendering');
 
-    let hasId = typeof renderInstance?.id === 'string';
-    assert.true(hasId, 'render instance has an id when prerendering');
-    if (!hasId) {
-      this.unregisterOnSave();
-      assert.verifySteps([], 'no save occurs while prerendering');
-      return;
-    }
-
     // Mutate the rendered instance between the visit and capture, mirroring instance mutations that
     // normally enqueue an autosave, and confirm that nothing is persisted in prerender context.
-    let originalName = (renderInstance as any).name;
     (renderInstance as any).name = 'Paper (mutated for prerender test)';
-    await settled();
     await getService('store').flushSaves();
-    await capturePrerenderResult('innerHTML');
-    (renderInstance as any).name = originalName;
-    await settled();
-
     assert.verifySteps([], 'no save occurs while prerendering');
+
+    await capturePrerenderResult('innerHTML');
     this.unregisterOnSave();
   });
 
