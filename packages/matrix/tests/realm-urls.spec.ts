@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { updateAccountData, updateUser } from '../docker/synapse';
-import { createSubscribedUser, login, setupUserSubscribed } from '../helpers';
+import { createSubscribedUser, login } from '../helpers';
 
 import { appURL } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
