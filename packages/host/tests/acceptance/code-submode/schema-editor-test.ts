@@ -12,7 +12,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
-import MonacoService from '@cardstack/host/services/monaco-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   setupLocalIndexing,

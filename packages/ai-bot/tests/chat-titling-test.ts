@@ -16,14 +16,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
-import {
-  EventStatus,
-  IEvent,
-  IRoomEvent,
-  IStateEvent,
-  type MatrixClient,
-  MatrixEvent,
-} from 'matrix-js-sdk';
+import type { IEvent, IRoomEvent, IStateEvent } from 'matrix-js-sdk';
+import { EventStatus, type MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
 import type OpenAI from 'openai';
 import {

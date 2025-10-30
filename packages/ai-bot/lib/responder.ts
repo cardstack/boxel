@@ -2,17 +2,17 @@ import { logger } from '@cardstack/runtime-common';
 import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import * as Sentry from '@sentry/node';
-import { OpenAIError } from 'openai/error';
+import type { OpenAIError } from 'openai/error';
 import throttle from 'lodash/throttle';
-import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
+import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
+import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
-import { MatrixClient } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 

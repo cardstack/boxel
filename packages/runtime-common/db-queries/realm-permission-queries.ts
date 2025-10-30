@@ -1,5 +1,6 @@
-import { DBAdapter } from '../db';
-import { RealmAction, type RealmPermissions } from '../index';
+import type { DBAdapter } from '../db';
+import type { RealmAction } from '../index';
+import type { RealmPermissions } from '../index';
 import { query, asExpressions, param, upsert } from '../expression';
 import { getMatrixUsername } from '../matrix-client';
 

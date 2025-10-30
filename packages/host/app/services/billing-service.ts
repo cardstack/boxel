@@ -1,4 +1,4 @@
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
@@ -10,10 +10,10 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 
-import MatrixService from './matrix-service';
-import NetworkService from './network';
-import RealmServerService from './realm-server';
-import ResetService from './reset';
+import type MatrixService from './matrix-service';
+import type NetworkService from './network';
+import type RealmServerService from './realm-server';
+import type ResetService from './reset';
 
 interface SubscriptionData {
   plan: string | null;

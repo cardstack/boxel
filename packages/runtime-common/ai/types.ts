@@ -3,7 +3,7 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 import type { LooseCardResource } from '../index';
-import { ToolChoice } from '../helpers/ai';
+import type { ToolChoice } from '../helpers/ai';
 
 export interface ChatCompletionMessageToolCall {
   id: string;

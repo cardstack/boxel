@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 import { DEFAULT_REMIX_LLM } from '@cardstack/runtime-common/matrix-constants';
 
-import * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
 

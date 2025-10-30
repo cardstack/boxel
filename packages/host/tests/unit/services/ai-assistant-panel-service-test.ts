@@ -2,8 +2,8 @@ import { getService } from '@universal-ember/test-support';
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
-import MonacoService from '@cardstack/host/services/monaco-service';
+import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 module('Unit | Service | ai-assistant-panel-service', function (hooks) {
   setupTest(hooks);

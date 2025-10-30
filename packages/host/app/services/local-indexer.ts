@@ -2,15 +2,15 @@ import Service from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import {
-  type IndexResults,
-  type IndexWriter,
-  type Prerenderer,
-  type FromScratchArgsWithPermissions,
-  type IncrementalArgsWithPermissions,
+import type {
+  IndexResults,
+  IndexWriter,
+  Prerenderer,
+  FromScratchArgsWithPermissions,
+  IncrementalArgsWithPermissions,
 } from '@cardstack/runtime-common';
 
-import { type TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
+import type { TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 
 // Tests inject an implementation of this service to help perform indexing
 // for the test-realm-adapter

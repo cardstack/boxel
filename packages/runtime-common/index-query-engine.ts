@@ -1,17 +1,18 @@
-import * as JSONTypes from 'json-typescript';
+import type * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
+import type { ResolvedCodeRef } from './index';
 import {
   type CardResource,
   type CodeRef,
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
-  ResolvedCodeRef,
   trimExecutableExtension,
   baseRealm,
   getSerializer,
 } from './index';
+import type { DBSpecificExpression, Param } from './expression';
 import {
   type Expression,
   type CardExpression,
@@ -33,9 +34,8 @@ import {
   query,
   dbExpression,
   isDbExpression,
-  DBSpecificExpression,
-  Param,
 } from './expression';
+import type { RangeOperator, RangeFilterValue } from './query';
 import {
   type Query,
   type Filter,
@@ -45,23 +45,19 @@ import {
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
-  RangeOperator,
-  RangeFilterValue,
 } from './query';
-import { type SerializedError } from './error';
-import { type DBAdapter } from './db';
+import type { SerializedError } from './error';
+import type { DBAdapter } from './db';
+import type { RealmMetaTable } from './index-structure';
 import {
   coerceTypes,
-  RealmMetaTable,
   type BoxelIndexTable,
   type CardTypeSummary,
   type Definition,
   type FieldDefinition,
 } from './index-structure';
-import {
-  DefinitionsCache,
-  isFilterRefersToNonexistentTypeError,
-} from './definitions-cache';
+import type { DefinitionsCache } from './definitions-cache';
+import { isFilterRefersToNonexistentTypeError } from './definitions-cache';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 interface IndexedModule {

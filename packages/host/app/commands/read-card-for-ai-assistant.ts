@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 

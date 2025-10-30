@@ -1,9 +1,11 @@
 import { module, test } from 'qunit';
-import supertest, { SuperTest, Test } from 'supertest';
+import type { SuperTest, Test } from 'supertest';
+import supertest from 'supertest';
 import { basename } from 'path';
 import Koa from 'koa';
 import Router from '@koa/router';
-import { Server, createServer } from 'http';
+import type { Server } from 'http';
+import { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app';
 
 module(basename(__filename), function () {

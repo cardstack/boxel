@@ -4,7 +4,7 @@ import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_COMMAND_REQUESTS_KEY,

@@ -1,4 +1,4 @@
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 
 import type { ExtendedMatrixSDK } from '@cardstack/host/services/matrix-sdk-loader';
 

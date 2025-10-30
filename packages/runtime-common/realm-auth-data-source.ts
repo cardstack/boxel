@@ -1,4 +1,4 @@
-import { MatrixClient } from './matrix-client';
+import type { MatrixClient } from './matrix-client';
 import { RealmAuthClient } from './realm-auth-client';
 
 export class RealmAuthDataSource {

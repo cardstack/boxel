@@ -1,5 +1,5 @@
 import type { QueuePublisher, QueueRunner } from '../queue';
-import { type SharedTests } from '../helpers';
+import type { SharedTests } from '../helpers';
 
 const tests = Object.freeze({
   'it can run a job': async (assert, { publisher, runner }) => {

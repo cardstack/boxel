@@ -1,4 +1,4 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 import {
   EXTRA_TOKENS_PRICING,
   SupportedMimeType,
@@ -18,8 +18,8 @@ import {
   getPlanByName,
   getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
-import { RealmServerTokenClaim } from '../utils/jwt';
-import { CreateRoutesArgs } from '../routes';
+import type { RealmServerTokenClaim } from '../utils/jwt';
+import type { CreateRoutesArgs } from '../routes';
 
 export default function handleCreateStripeSessionRequest({
   dbAdapter,

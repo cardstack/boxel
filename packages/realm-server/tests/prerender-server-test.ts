@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
-import supertest, { SuperTest, Test } from 'supertest';
+import type { SuperTest, Test } from 'supertest';
+import supertest from 'supertest';
 import { basename } from 'path';
 
 import {
@@ -10,7 +11,7 @@ import {
   testRealmHref,
 } from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
-import { Prerenderer } from '../prerender';
+import type { Prerenderer } from '../prerender';
 import { baseCardRef } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {

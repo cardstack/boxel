@@ -1,11 +1,11 @@
-import {
-  type DBAdapter,
-  type QueuePublisher,
-  type Realm,
-  type VirtualNetwork,
-  RealmInfo,
+import type { RealmInfo } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  QueuePublisher,
+  Realm,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import handleCreateSessionRequest from './handlers/handle-create-session';
 import handleCreateRealmRequest from './handlers/handle-create-realm';
@@ -20,7 +20,7 @@ import {
   livenessCheck,
   grafanaAuthorization,
 } from './middleware';
-import Koa from 'koa';
+import type Koa from 'koa';
 import handleCreateUserRequest from './handlers/handle-create-user';
 import handleQueueStatusRequest from './handlers/handle-queue-status';
 import handleReindex from './handlers/handle-reindex';

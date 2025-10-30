@@ -1,6 +1,6 @@
 import {
+  type Changeset,
   type AnimationDefinition,
-  Changeset,
   SpriteType,
   StaticBehavior,
   TweenBehavior,

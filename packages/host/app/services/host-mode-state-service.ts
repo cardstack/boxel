@@ -1,4 +1,4 @@
-import RouterService from '@ember/routing/router-service';
+import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
@@ -8,7 +8,7 @@ import stringify from 'safe-stable-stringify';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import RealmService from './realm';
+import type RealmService from './realm';
 
 interface InitializeOptions {
   primaryCardId: string | null;

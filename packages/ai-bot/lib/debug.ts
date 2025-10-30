@@ -1,5 +1,5 @@
 import { setTitle } from './set-title';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
@@ -12,7 +12,7 @@ import {
   sendEventListAsDebugMessage,
   sendDebugMessage,
 } from '@cardstack/runtime-common/ai';
-import { MatrixClient } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 
 export async function handleDebugCommands(
   openai: OpenAI,

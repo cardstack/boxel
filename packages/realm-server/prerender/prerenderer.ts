@@ -16,6 +16,7 @@ import puppeteer, {
   type Page,
 } from 'puppeteer';
 import { createJWT } from '../jwt';
+import type { RenderCapture } from './utils';
 import {
   captureResult,
   isRenderError,
@@ -23,7 +24,6 @@ import {
   renderHTML,
   renderIcon,
   renderMeta,
-  RenderCapture,
   type CaptureOptions,
   withTimeout,
   transitionTo,

@@ -1,7 +1,8 @@
 import qs from 'qs';
 import { module, test } from 'qunit';
 
-import { parseQuery, Query } from '@cardstack/runtime-common/query';
+import type { Query } from '@cardstack/runtime-common/query';
+import { parseQuery } from '@cardstack/runtime-common/query';
 
 module('Unit | qs | parse', function () {
   test('parseQuery errors out if the query is too deep', async function (assert) {

@@ -8,11 +8,12 @@ import { Resource } from 'ember-modify-based-class-resource';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
-import { type Ready } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 import { loadModule } from '@cardstack/host/resources/import';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
-import ModuleContentsService, {
+import type ModuleContentsService from '@cardstack/host/services/module-contents-service';
+import {
   type ModuleDeclaration,
   type CardOrFieldDeclaration,
   type CardOrFieldReexport,

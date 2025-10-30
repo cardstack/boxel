@@ -4,8 +4,8 @@ import { inject as service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -14,7 +14,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
-import { Message } from './message';
+import type { Message } from './message';
 
 type CommandStatus = 'applied' | 'ready' | 'applying' | 'invalid';
 

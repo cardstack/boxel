@@ -1,4 +1,4 @@
-import { DBAdapter } from '@cardstack/runtime-common';
+import type { DBAdapter } from '@cardstack/runtime-common';
 import { handlePaymentSucceeded } from './payment-succeeded';
 import { handleCheckoutSessionCompleted } from './checkout-session-completed';
 

@@ -33,6 +33,13 @@ module.exports = {
         'plugin:qunit-dom/recommended',
       ],
       rules: {
+        '@typescript-eslint/consistent-type-imports': [
+          'error',
+          {
+            disallowTypeAnnotations: false,
+          },
+        ],
+        '@typescript-eslint/no-import-type-side-effects': 'error',
         '@typescript-eslint/no-empty-function': 'off',
         '@typescript-eslint/no-unused-vars': [
           'error',
