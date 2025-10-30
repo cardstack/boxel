@@ -60,7 +60,6 @@ import {
   containsMany,
   DateField,
   DatetimeField,
-  DateRangeField,
   EthereumAddressField,
   field,
   FieldDef,
