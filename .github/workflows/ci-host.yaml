@@ -145,7 +145,19 @@ jobs:
         env:
           FULL_INDEX_ON_STARTUP: "false"
       - name: create realm users
-        run: pnpm register-realm-users
+        run: |
+          set -eu
+          pnpm assert-synapse-running
+          attempts=0
+          until pnpm register-realm-users; do
+            attempts=$((attempts + 1))
+            if [ "$attempts" -ge 5 ]; then
+              echo "register-realm-users failed after $attempts attempts" >&2
+              exit 1
+            fi
+            echo "register-realm-users failed (attempt $attempts), retrying in 15s..." >&2
+            sleep 15
+          done
         working-directory: packages/matrix
 
       - name: Install D-Bus helpers
