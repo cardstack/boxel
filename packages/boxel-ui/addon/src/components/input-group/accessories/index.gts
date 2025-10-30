@@ -12,6 +12,7 @@ import BoxelSelect, { type BoxelSelectArgs } from '../../select/index.gts';
 interface ButtonSignature {
   Args: {
     kind?: BoxelButtonKind;
+    disabled?: boolean;
   };
   Blocks: {
     default: [];
@@ -23,33 +24,19 @@ export const Button: TemplateOnlyComponent<ButtonSignature> = <template>
   <BoxelButton
     class='accessory button-accessory'
     @kind={{@kind}}
+    @disabled={{@disabled}}
     data-test-boxel-input-group-button-accessory
     ...attributes
   >
     {{yield}}
   </BoxelButton>
-  <style scoped>
-    .accessory {
-      border: 1px solid var(--boxel-input-group-border-color);
-      border-radius: var(--boxel-input-group-border-radius);
-      margin: 0;
-      min-height: var(--boxel-input-group-height);
-      outline-offset: 0;
-    }
-
-    .button-accessory {
-      box-shadow: none;
-      z-index: 2;
-    }
-
-    .button-accessory:focus {
-      z-index: 5;
-    }
-  </style>
 </template>;
 
 interface IconButtonSignature {
-  Args: Pick<BoxelIconButtonSignature['Args'], 'icon' | 'width' | 'height'>;
+  Args: Pick<
+    BoxelIconButtonSignature['Args'],
+    'icon' | 'width' | 'height' | 'disabled'
+  >;
   Blocks: {
     default: [];
   };
@@ -62,23 +49,10 @@ export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>
     @icon={{@icon}}
     @height={{@height}}
     @width={{@width}}
+    @disabled={{@disabled}}
     data-test-boxel-input-group-icon-button-accessory
     ...attributes
   />
-  <style scoped>
-    .accessory {
-      border: 1px solid var(--boxel-input-group-border-color);
-      border-radius: var(--boxel-input-group-border-radius);
-      margin: 0;
-      min-height: var(--boxel-input-group-height);
-      outline-offset: 0;
-    }
-
-    .icon-button-accessory {
-      box-shadow: none;
-      z-index: 2;
-    }
-  </style>
 </template>;
 
 interface TextSignature {
@@ -89,28 +63,22 @@ interface TextSignature {
 
 export const Text: TemplateOnlyComponent<TextSignature> = <template>
   <span
-    class='accessory text-accessory'
+    class='text-accessory'
     data-test-boxel-input-group-text-accessory
     ...attributes
   >{{yield}}</span>
   <style scoped>
-    .accessory {
-      border: 1px solid var(--boxel-input-group-border-color);
-      border-radius: var(--boxel-input-group-border-radius);
-      margin: 0;
-      min-height: var(--boxel-input-group-height);
-      outline-offset: 0;
-    }
-
-    .text-accessory {
-      align-items: center;
-      color: var(--muted-foreground, var(--boxel-700));
-      display: flex;
-      font-size: var(--boxel-font-size-sm);
-      padding: var(--boxel-input-group-padding-y)
-        var(--boxel-input-group-padding-x);
-      text-align: center;
-      white-space: nowrap;
+    @layer boxelComponentL1 {
+      .text-accessory {
+        align-items: center;
+        color: var(--muted-foreground, var(--boxel-700));
+        display: flex;
+        font-size: var(--boxel-font-size-sm);
+        padding: var(--boxel-input-group-padding-y)
+          var(--boxel-input-group-padding-x);
+        text-align: center;
+        white-space: nowrap;
+      }
     }
   </style>
 </template>;
@@ -127,6 +95,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
   <template>
     <div
       class={{cn
+        'accessory'
         'boxel-input-group__accessory'
         'boxel-input-group__select-accessory'
         boxel-input-group__select-accessory--disabled=@disabled
@@ -162,8 +131,9 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
     </div>
     <style scoped>
       .boxel-input-group__accessory {
-        border: 1px solid var(--boxel-input-group-border-color);
-        border-radius: var(--boxel-input-group-border-radius);
+        background: none;
+        border: none;
+        border-radius: 0;
         margin: 0;
         min-height: var(--boxel-input-group-height);
         outline-offset: 0;
@@ -174,8 +144,11 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       }
 
       .boxel-input-group__select-accessory :deep(.boxel-select) {
+        min-height: inherit;
+        background: none;
         border: none;
         font-weight: 600;
+        outline-offset: 0px;
       }
 
       .boxel-input-group__select-accessory
@@ -188,7 +161,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       }
 
       .boxel-input-group__select-accessory--disabled {
-        border: 1px solid var(--boxel-input-group-border-color);
         opacity: 0.5;
       }
 
