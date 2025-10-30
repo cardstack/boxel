@@ -49,7 +49,6 @@ RUN apt-get update \
 
 RUN npm install -g pnpm@10.17.0
 
-# Add a non-root user for running Chrome without --no-sandbox.
 RUN groupadd -r pptruser \
     && useradd -r -m -d /home/pptruser -g pptruser -G audio,video pptruser
 
@@ -70,19 +69,8 @@ ADD . ./
 
 RUN CI=1 pnpm fetch
 RUN CI=1 pnpm install -r --offline
-
-# If running Docker >= 1.13.0 use docker run's --init arg to reap zombie processes, otherwise
-# uncomment the following lines to have `dumb-init` as PID 1
-# ADD https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_x86_64 /usr/local/bin/dumb-init
-# RUN chmod +x /usr/local/bin/dumb-init
-# ENTRYPOINT ["dumb-init", "--"]
-
-# Puppeteer is configured via PUPPETEER_SKIP_DOWNLOAD and PUPPETEER_EXECUTABLE_PATH
-# to reuse the system chrome installed above.
-
 RUN chown -R pptruser:pptruser /home/pptruser /realm-server
 
-# Run everything after as non-privileged user so Puppeteer can launch Chrome without --no-sandbox.
 USER pptruser
 
 EXPOSE 4221
