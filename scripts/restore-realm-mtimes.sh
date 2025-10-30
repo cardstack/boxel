@@ -1,32 +1,41 @@
 #! /bin/sh
 
-set -euo pipefail
+set -eu
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 restore_in_repo() {
   prefix="$1"
-  if git ls-files --error-unmatch "$prefix" >/dev/null 2>&1; then
-    git ls-files -z -- "$prefix" | while IFS= read -r -d '' file; do
-      ts=$(git log -1 --format=%ct -- "$file" || true)
-      if [ -n "$ts" ]; then
-        touch -d "@$ts" "$file"
-      fi
-    done
+  tmp=$(mktemp)
+  if git ls-files -z -- "$prefix" >"$tmp" 2>/dev/null; then
+    if [ -s "$tmp" ]; then
+      while IFS= read -r -d '' file; do
+        ts=$(git log -1 --format=%ct -- "$file" 2>/dev/null || true)
+        if [ -n "$ts" ]; then
+          touch -d "@$ts" "$file"
+        fi
+      done <"$tmp"
+    fi
   fi
+  rm -f "$tmp"
 }
 
 restore_external_repo() {
   dir="$1"
   if [ -d "$dir/.git" ]; then
-    (cd "$dir"
-      git ls-files -z | while IFS= read -r -d '' file; do
-        ts=$(git log -1 --format=%ct -- "$file" || true)
-        if [ -n "$ts" ]; then
-          touch -d "@$ts" "$file"
-        fi
-      done)
+    tmp=$(mktemp)
+    if git -C "$dir" ls-files -z >"$tmp" 2>/dev/null; then
+      if [ -s "$tmp" ]; then
+        while IFS= read -r -d '' file; do
+          ts=$(git -C "$dir" log -1 --format=%ct -- "$file" 2>/dev/null || true)
+          if [ -n "$ts" ]; then
+            touch -d "@$ts" "$dir/$file"
+          fi
+        done <"$tmp"
+      fi
+    fi
+    rm -f "$tmp"
   fi
 }
 
