@@ -26,6 +26,7 @@ catalog:
   "@babel/runtime": ^7.22.11
   "@babel/traverse": ^7.17.9
   "@cardstack/requirejs-monaco-ember-polyfill": ^0.0.1
+  "@ember/test-waiters": ^4.1.1
   "@eslint/eslintrc": ^2.1.4
   "@eslint/js": ^8.57.1
   "@floating-ui/dom": ^1.6.3
@@ -191,7 +192,7 @@ catalog:
   process: ^0.11.10
   qs: ^6.13.0
   qunit: ^2.24.1
-  qunit-dom: ^1.6.0
+  qunit-dom: ^3.5.0
   reactiveweb: ^1.3.0
   recast: ^0.23.4
   release-it: ^14.2.1
