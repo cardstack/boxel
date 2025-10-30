@@ -5,6 +5,7 @@ import {
   maxLinkDepth,
   maybeURL,
   IndexQueryEngine,
+  codeRefWithAbsoluteURL,
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
@@ -16,14 +17,18 @@ import {
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
-import type { Query } from './query';
+import { buildQueryString, type Query } from './query';
 import { CardError, type SerializedError } from './error';
+import { isResolvedCodeRef } from './code-ref';
 import {
+  isCardCollectionDocument,
   isSingleCardDocument,
   type SingleCardDocument,
   type CardCollectionDocument,
 } from './document-types';
 import type { CardResource, Saved } from './resource-types';
+import type { DefinitionsCache } from './definitions-cache';
+import type { FieldDefinition } from './index-structure';
 
 type Options = {
   loadLinks?: true;
@@ -43,6 +48,16 @@ export interface SearchResultError {
     cardTitle: string | null;
   };
 }
+
+const THIS_INTERPOLATION_PREFIX = '$this.';
+const THIS_REALM_TOKEN = '$thisRealm';
+const EMPTY_PREDICATE_KEYS = new Set([
+  'eq',
+  'contains',
+  'range',
+  'any',
+  'every',
+]);
 
 export class RealmIndexQueryEngine {
   #realm: Realm;
@@ -209,6 +224,402 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getInstance(url, opts);
   }
 
+  private async populateQueryFields(
+    resource: LooseCardResource,
+    realmURL: URL,
+    opts?: Options,
+  ): Promise<void> {
+    if (!resource.meta?.adoptsFrom) {
+      return;
+    }
+
+    let relativeTo = resource.id ? new URL(resource.id) : realmURL;
+    let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
+    if (!isResolvedCodeRef(codeRef)) {
+      return;
+    }
+    let definitionEntry = await this.#indexQueryEngine.getOwnDefinition(
+      codeRef,
+      opts,
+    );
+    if (!definitionEntry || definitionEntry.type !== 'definition') {
+      return;
+    }
+
+    let definition = definitionEntry.definition;
+    for (let [fieldName, fieldDefinition] of Object.entries(
+      definition.fields,
+    )) {
+      let metaQuery =
+        (resource.meta as any)?.queryFields?.[fieldName] ?? undefined;
+      let queryDefinition = this.getQueryDefinition(fieldDefinition, metaQuery);
+
+      if (
+        fieldName.includes('.') ||
+        (fieldDefinition.type !== 'linksTo' &&
+          fieldDefinition.type !== 'linksToMany') ||
+        !queryDefinition
+      ) {
+        continue;
+      }
+
+      let results = await this.executeQueryForField({
+        fieldDefinition,
+        queryDefinition,
+        resource,
+        realmURL,
+        opts,
+      });
+      this.applyQueryResults({
+        fieldDefinition,
+        fieldName,
+        resource,
+        results,
+      });
+    }
+  }
+
+  private async executeQueryForField({
+    fieldDefinition,
+    queryDefinition,
+    resource,
+    realmURL,
+    opts,
+  }: {
+    fieldDefinition: FieldDefinition;
+    queryDefinition: Query;
+    resource: LooseCardResource;
+    realmURL: URL;
+    opts?: Options;
+  }): Promise<CardResource<Saved>[]> {
+    let normalized = this.normalizeQueryDefinition(
+      fieldDefinition,
+      queryDefinition,
+      resource,
+      realmURL,
+    );
+    if (!normalized) {
+      return [];
+    }
+
+    let { query, realms } = normalized;
+    let aggregated: CardResource<Saved>[] = [];
+    let seen = new Set<string>();
+
+    for (let realmHref of realms) {
+      let realmResults: CardResource<Saved>[] = [];
+      if (realmHref === this.realmURL.href) {
+        let collection = await this.#indexQueryEngine.search(
+          this.realmURL,
+          query,
+          opts,
+        );
+        realmResults = Array.isArray(collection.cards) ? collection.cards : [];
+      } else {
+        let remoteResults = await this.fetchRemoteQueryResults(
+          realmHref,
+          query,
+        );
+        realmResults = Array.isArray(remoteResults) ? remoteResults : [];
+      }
+
+      for (let card of realmResults) {
+        if (!card.id || seen.has(card.id)) {
+          continue;
+        }
+        seen.add(card.id);
+        aggregated.push(card);
+      }
+    }
+    return aggregated;
+  }
+
+  private normalizeQueryDefinition(
+    fieldDefinition: FieldDefinition,
+    queryDefinition: Query,
+    resource: LooseCardResource,
+    realmURL: URL,
+  ): { query: Query; realms: string[] } | null {
+    let workingQuery: Query = JSON.parse(JSON.stringify(queryDefinition));
+    let queryAny = workingQuery as Record<string, any>;
+    let aborted = false;
+
+    const markEmptyPredicate = (context?: string) => {
+      if (context && EMPTY_PREDICATE_KEYS.has(context)) {
+        aborted = true;
+      }
+    };
+
+    const interpolateNode = (node: any, context?: string): any => {
+      if (aborted) {
+        return undefined;
+      }
+
+      if (typeof node === 'string') {
+        if (node === THIS_REALM_TOKEN) {
+          return realmURL.href;
+        }
+        if (node.startsWith(THIS_INTERPOLATION_PREFIX)) {
+          let path = node.slice(THIS_INTERPOLATION_PREFIX.length);
+          let value = this.getValueForPath(resource, path);
+          if (value === undefined) {
+            markEmptyPredicate(context);
+            return undefined;
+          }
+          return value;
+        }
+        return node;
+      }
+
+      if (Array.isArray(node)) {
+        let result: any[] = [];
+        for (let entry of node) {
+          let interpolated = interpolateNode(entry, context);
+          if (interpolated !== undefined) {
+            result.push(interpolated);
+          }
+        }
+        if (result.length === 0) {
+          markEmptyPredicate(context);
+          return undefined;
+        }
+        return result;
+      }
+
+      if (node && typeof node === 'object') {
+        let result: Record<string, any> = {};
+        for (let [key, value] of Object.entries(node)) {
+          let interpolated = interpolateNode(value, key);
+          if (interpolated !== undefined) {
+            result[key] = interpolated;
+          }
+        }
+        if (Object.keys(result).length === 0) {
+          markEmptyPredicate(context);
+          return undefined;
+        }
+        return result;
+      }
+
+      return node;
+    };
+
+    if (queryAny.filter) {
+      let interpolatedFilter = interpolateNode(queryAny.filter, 'filter');
+      if (interpolatedFilter === undefined) {
+        delete queryAny.filter;
+      } else {
+        queryAny.filter = interpolatedFilter;
+      }
+    }
+
+    if (queryAny.sort) {
+      let interpolatedSort = interpolateNode(queryAny.sort, 'sort');
+      if (interpolatedSort === undefined) {
+        delete queryAny.sort;
+      } else {
+        queryAny.sort = interpolatedSort;
+      }
+    }
+
+    if (queryAny.page) {
+      let interpolatedPage = interpolateNode(queryAny.page, 'page');
+      if (interpolatedPage === undefined) {
+        delete queryAny.page;
+      } else {
+        queryAny.page = interpolatedPage;
+      }
+    }
+
+    let realmsList: any = queryAny.realms ?? [THIS_REALM_TOKEN];
+    let interpolatedRealms = interpolateNode(realmsList, 'realms');
+    if (interpolatedRealms !== undefined) {
+      realmsList = interpolatedRealms;
+    }
+    delete queryAny.realms;
+
+    if (aborted) {
+      return null;
+    }
+
+    let resolvedRealms = (Array.isArray(realmsList) ? realmsList : [realmsList])
+      .map((realm) => {
+        if (typeof realm !== 'string') {
+          return undefined;
+        }
+        if (realm === THIS_REALM_TOKEN) {
+          return realmURL.href;
+        }
+        if (realm.startsWith(THIS_INTERPOLATION_PREFIX)) {
+          let value = this.getValueForPath(
+            resource,
+            realm.slice(THIS_INTERPOLATION_PREFIX.length),
+          );
+          return typeof value === 'string' && value.length > 0
+            ? value
+            : undefined;
+        }
+        return realm;
+      })
+      .filter((realm): realm is string => typeof realm === 'string');
+
+    if (resolvedRealms.length === 0) {
+      resolvedRealms = [realmURL.href];
+    }
+
+    let targetRef = codeRefWithAbsoluteURL(
+      fieldDefinition.fieldOrCard,
+      resource.id ? new URL(resource.id) : realmURL,
+    );
+
+    let filter = queryAny.filter as Record<string, any> | undefined;
+    if (!filter) {
+      filter = {};
+      queryAny.filter = filter;
+    }
+    if (!filter.on) {
+      filter.on = targetRef;
+    }
+
+    if (Array.isArray(queryAny.sort)) {
+      queryAny.sort = queryAny.sort.map((entry: any) => {
+        if (entry && typeof entry === 'object' && !('on' in entry)) {
+          return { ...entry, on: targetRef };
+        }
+        return entry;
+      });
+    }
+
+    if (fieldDefinition.type === 'linksTo') {
+      let page = queryAny.page ?? {};
+      page.size = 1;
+      if (page.number == null) {
+        page.number = 0;
+      }
+      queryAny.page = page;
+    } else if (queryAny.page) {
+      queryAny.page.number = queryAny.page.number ?? 0;
+    }
+
+    return { query: workingQuery, realms: resolvedRealms };
+  }
+
+  private getQueryDefinition(
+    fieldDefinition: FieldDefinition,
+    metaQuery: unknown,
+  ): Query | undefined {
+    if (fieldDefinition.query && typeof fieldDefinition.query === 'object') {
+      return fieldDefinition.query as Query;
+    }
+    if (metaQuery && typeof metaQuery === 'object') {
+      return metaQuery as Query;
+    }
+    return undefined;
+  }
+
+  private getValueForPath(resource: LooseCardResource, path: string): any {
+    let root: any = {
+      ...(resource.attributes ?? {}),
+      id: resource.id,
+    };
+    let segments = path.split('.');
+    let current: any = root;
+    for (let segment of segments) {
+      if (current == null) {
+        return undefined;
+      }
+      if (Array.isArray(current)) {
+        let index = Number(segment);
+        if (!Number.isInteger(index)) {
+          return undefined;
+        }
+        current = current[index];
+        continue;
+      }
+      if (typeof current === 'object' && segment in current) {
+        current = (current as any)[segment];
+        continue;
+      }
+      return undefined;
+    }
+    return current;
+  }
+
+  private applyQueryResults({
+    fieldDefinition,
+    fieldName,
+    resource,
+    results,
+  }: {
+    fieldDefinition: FieldDefinition;
+    fieldName: string;
+    resource: LooseCardResource;
+    results: CardResource<Saved>[];
+  }): void {
+    resource.relationships = resource.relationships ?? {};
+    for (let key of Object.keys(resource.relationships)) {
+      if (key === fieldName || key.startsWith(`${fieldName}.`)) {
+        delete resource.relationships[key];
+      }
+    }
+
+    if (fieldDefinition.type === 'linksTo') {
+      let first = results[0];
+      if (!first || !first.id) {
+        resource.relationships[fieldName] = {
+          links: { self: null },
+        };
+        return;
+      }
+      resource.relationships[fieldName] = {
+        links: { self: first.id },
+        data: { type: 'card', id: first.id },
+      };
+      return;
+    }
+
+    if (results.length === 0) {
+      resource.relationships[fieldName] = {
+        links: { self: null },
+      };
+      return;
+    }
+
+    results.forEach((card, index) => {
+      if (!card.id) {
+        return;
+      }
+      resource.relationships![`${fieldName}.${index}`] = {
+        links: { self: card.id },
+        data: { type: 'card', id: card.id },
+      };
+    });
+  }
+
+  private async fetchRemoteQueryResults(
+    realmHref: string,
+    query: Query,
+  ): Promise<CardResource<Saved>[]> {
+    try {
+      let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
+      let searchURL = new URL('./_search', baseHref);
+      searchURL.search = buildQueryString(query);
+      let response = await this.#fetch(searchURL.href, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      if (!response.ok) {
+        return [];
+      }
+      let json = await response.json();
+      if (!isCardCollectionDocument(json)) {
+        return [];
+      }
+      return json.data;
+    } catch (_err) {
+      return [];
+    }
+  }
+
   // TODO The caller should provide a list of fields to be included via JSONAPI
   // request. currently we just use the maxLinkDepth to control how deep to load
   // links
@@ -237,91 +648,103 @@ export class RealmIndexQueryEngine {
       visited.push(resource.id);
     }
     let realmPath = new RealmPaths(realmURL);
-    for (let [fieldName, relationship] of Object.entries(
-      resource.relationships ?? {},
-    )) {
-      if (!relationship.links?.self) {
-        continue;
-      }
-      let linkURL = new URL(
-        relationship.links.self,
-        resource.id ? new URL(resource.id) : realmURL,
-      );
-      let linkResource: CardResource<Saved> | undefined;
-      if (realmPath.inRealm(linkURL)) {
-        let maybeResult = await this.#indexQueryEngine.getInstance(
-          linkURL,
-          opts,
+    let processedRelationships = new Set<string>();
+    let processRelationships = async () => {
+      for (let [fieldName, relationship] of Object.entries(
+        resource.relationships ?? {},
+      )) {
+        if (processedRelationships.has(fieldName)) {
+          continue;
+        }
+        if (!relationship.links?.self) {
+          continue;
+        }
+        processedRelationships.add(fieldName);
+        let linkURL = new URL(
+          relationship.links.self,
+          resource.id ? new URL(resource.id) : realmURL,
         );
-        linkResource =
-          maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
-      } else {
-        let response = await this.#fetch(linkURL, {
-          headers: { Accept: SupportedMimeType.CardJson },
-        });
-        if (!response.ok) {
-          let cardError = await CardError.fromFetchResponse(
-            linkURL.href,
-            response,
+        let linkResource: CardResource<Saved> | undefined;
+        if (realmPath.inRealm(linkURL)) {
+          let maybeResult = await this.#indexQueryEngine.getInstance(
+            linkURL,
+            opts,
           );
-          throw cardError;
+          linkResource =
+            maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
+        } else {
+          let response = await this.#fetch(linkURL, {
+            headers: { Accept: SupportedMimeType.CardJson },
+          });
+          if (!response.ok) {
+            let cardError = await CardError.fromFetchResponse(
+              linkURL.href,
+              response,
+            );
+            throw cardError;
+          }
+          let json = await response.json();
+          if (!isSingleCardDocument(json)) {
+            throw new Error(
+              `instance ${
+                linkURL.href
+              } is not a card document. it is: ${JSON.stringify(json, null, 2)}`,
+            );
+          }
+          linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
         }
-        let json = await response.json();
-        if (!isSingleCardDocument(json)) {
-          throw new Error(
-            `instance ${
-              linkURL.href
-            } is not a card document. it is: ${JSON.stringify(json, null, 2)}`,
-          );
-        }
-        linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
-      }
-      let foundLinks = false;
-      // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
-      // index based on keeping track of the rendered fields and invalidate the
-      // index as consumed cards change
-      if (linkResource && stack.length <= maxLinkDepth) {
-        for (let includedResource of await this.loadLinks(
-          {
-            realmURL,
-            resource: linkResource,
-            omit,
-            included: [...included, linkResource],
-            visited,
-            stack: [...(resource.id != null ? [resource.id] : []), ...stack],
-          },
-          opts,
-        )) {
-          foundLinks = true;
-          if (
-            includedResource.id &&
-            !omit.includes(includedResource.id) &&
-            !included.find((r) => r.id === includedResource.id)
-          ) {
-            included.push({
-              ...includedResource,
-              ...{ links: { self: includedResource.id } },
-            });
+        let foundLinks = false;
+        // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
+        // index based on keeping track of the rendered fields and invalidate the
+        // index as consumed cards change
+        if (linkResource && stack.length <= maxLinkDepth) {
+          for (let includedResource of await this.loadLinks(
+            {
+              realmURL,
+              resource: linkResource,
+              omit,
+              included: [...included, linkResource],
+              visited,
+              stack: [...(resource.id != null ? [resource.id] : []), ...stack],
+            },
+            opts,
+          )) {
+            foundLinks = true;
+            if (
+              includedResource.id &&
+              !omit.includes(includedResource.id) &&
+              !included.find((r) => r.id === includedResource.id)
+            ) {
+              included.push({
+                ...includedResource,
+                ...{ links: { self: includedResource.id } },
+              });
+            }
           }
         }
+        let relationshipId = maybeURL(relationship.links.self, resource.id);
+        if (!relationshipId) {
+          throw new Error(
+            `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+          );
+        }
+        if (
+          foundLinks ||
+          omit.includes(relationshipId.href) ||
+          (relationshipId &&
+            included.find((i) => i.id === relationshipId!.href))
+        ) {
+          resource.relationships![fieldName].data = {
+            type: 'card',
+            id: relationshipId.href,
+          };
+        }
       }
-      let relationshipId = maybeURL(relationship.links.self, resource.id);
-      if (!relationshipId) {
-        throw new Error(
-          `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
-        );
-      }
-      if (
-        foundLinks ||
-        omit.includes(relationshipId.href) ||
-        (relationshipId && included.find((i) => i.id === relationshipId!.href))
-      ) {
-        resource.relationships![fieldName].data = {
-          type: 'card',
-          id: relationshipId.href,
-        };
-      }
-    }
+    };
+
+    await processRelationships();
+    await this.populateQueryFields(resource, realmURL, opts);
+    await processRelationships();
     return included;
   }
 }

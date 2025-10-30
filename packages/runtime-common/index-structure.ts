@@ -2,6 +2,7 @@ import type { CardResource, SerializerName, CodeRef } from './index';
 import type { SerializedError } from './error';
 import type { PgPrimitive } from './expression';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
+import type { Query } from './query';
 
 export interface BoxelIndexTable {
   url: string;
@@ -58,6 +59,7 @@ export interface FieldDefinition {
   isComputed: boolean;
   fieldOrCard: CodeRef;
   serializerName?: SerializerName;
+  query?: Query;
 }
 
 export interface Definition {

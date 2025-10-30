@@ -172,6 +172,110 @@ module(basename(__filename), function () {
             },
           });
         });
+        test('query-backed relationships resolve via search at read time', async function (assert) {
+          let { testRealm: realm, request } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'query-person-finder.gts',
+              `
+                import { CardDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+                import { Person } from "./person";
+
+                export class QueryPersonFinder extends CardDef {
+                  @field title = contains(StringField);
+                  @field favorite = linksTo(Person, {
+                    query: {
+                      filter: {
+                        eq: { firstName: '$this.title' },
+                      },
+                    },
+                  });
+                  @field matches = linksToMany(Person, {
+                    query: {
+                      filter: {
+                        eq: { firstName: '$this.title' },
+                      },
+                    },
+                  });
+                }
+              `,
+            ],
+            [
+              'query-person-finder.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    title: 'Mango',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './query-person-finder.gts',
+                      name: 'QueryPersonFinder',
+                    },
+                  },
+                },
+              }),
+            ],
+          ]);
+
+          await realm.writeMany(writes);
+
+          let queryResults = await realm.realmIndexQueryEngine.search({
+            filter: {
+              eq: { firstName: 'Mango' },
+              on: { module: `${testRealmHref}person`, name: 'Person' },
+            },
+          });
+          assert.strictEqual(
+            queryResults.data.length,
+            1,
+            'search finds Mango within the realm',
+          );
+          assert.strictEqual(
+            queryResults.data[0]?.id,
+            `${testRealmHref}person-1`,
+            'search result id matches the expected person card',
+          );
+
+          let response = await request
+            .get('/query-person-finder')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let doc = response.body;
+          let favorite = doc.data.relationships.favorite;
+          assert.deepEqual(
+            favorite.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'linksTo query resolves to the matching person',
+          );
+          assert.strictEqual(
+            favorite.links.self,
+            `${testRealmHref}person-1`,
+            'linksTo relationship self link set to resolved card',
+          );
+
+          let matchesRelationship = doc.data.relationships['matches.0'];
+          assert.ok(matchesRelationship, 'linksToMany relationship populated');
+          assert.deepEqual(
+            matchesRelationship.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'linksToMany query returns matching person in first slot',
+          );
+
+          assert.ok(
+            Array.isArray(doc.included),
+            'included resources present for query results',
+          );
+          assert.ok(
+            doc.included.some(
+              (resource: any) => resource.id === `${testRealmHref}person-1`,
+            ),
+            'included contains resolved person card',
+          );
+        });
       });
 
       module('published realm', function (hooks) {
