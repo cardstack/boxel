@@ -987,11 +987,13 @@ export class Prerenderer {
     }
     let launchArgs: string[] = [];
     let disableSandbox =
-      process.env.CI === 'true' || process.env.PUPPETEER_DISABLE_SANDBOX === 'true';
+      process.env.CI === 'true' ||
+      process.env.PUPPETEER_DISABLE_SANDBOX === 'true';
     if (disableSandbox) {
       launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
     }
-    let extraArgs = process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
+    let extraArgs =
+      process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
     if (extraArgs && extraArgs.length > 0) {
       launchArgs.push(...extraArgs);
     }
