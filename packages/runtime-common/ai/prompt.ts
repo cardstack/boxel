@@ -37,6 +37,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
 } from '../matrix-constants';
+import type { ReasoningEffort } from 'openai/resources/shared';
 import {
   CardResource,
   LooseCardResource,
@@ -1028,7 +1029,7 @@ export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
 function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   model: string;
   toolsSupported?: boolean;
-  reasoningEffort?: string;
+  reasoningEffort?: ReasoningEffort;
 } {
   let activeLLMEvent = findLast(
     eventlist,
@@ -1044,8 +1045,36 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   return {
     model: activeLLMEvent.content.model,
     toolsSupported: activeLLMEvent.content.toolsSupported,
-    reasoningEffort: activeLLMEvent.content.reasoningEffort,
+    reasoningEffort: normalizeReasoningEffort(
+      activeLLMEvent.content.reasoningEffort,
+    ),
   };
+}
+
+const VALID_REASONING_EFFORTS: ReasoningEffort[] = [
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  null,
+];
+
+function normalizeReasoningEffort(
+  value?: string | null,
+): ReasoningEffort | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (
+    VALID_REASONING_EFFORTS.includes(value as ReasoningEffort) &&
+    value !== null
+  ) {
+    return value as ReasoningEffort;
+  }
+  return undefined;
 }
 
 export function isCommandResultEvent(

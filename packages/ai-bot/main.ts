@@ -114,7 +114,7 @@ class Assistant {
       messages: prompt.messages as ChatCompletionMessageParam[],
     };
 
-    if (prompt.reasoningEffort) {
+    if (prompt.reasoningEffort !== undefined) {
       request.reasoning_effort = prompt.reasoningEffort;
     }
 
