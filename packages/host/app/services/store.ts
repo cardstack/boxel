@@ -994,6 +994,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
     if ((globalThis as any).__boxelRenderContext) {
+      // we skip saving when rendering cards in headless chrome
       return;
     }
     if (opts?.isImmediate) {
