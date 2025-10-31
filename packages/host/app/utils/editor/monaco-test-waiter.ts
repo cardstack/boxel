@@ -107,9 +107,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         for (let lineNumber = 1; lineNumber <= maxLines; lineNumber++) {
           const lineText = model.getLineContent(lineNumber);
           if (!lineText) continue;
-          const trimmed = lineText.trim();
-          if (!trimmed) continue;
-          const leadingWhitespace = lineText.length - trimmed.length;
+          const leadingWhitespace = lineText.match(/^\s+/u)?.[0]?.length ?? 0;
           if (leadingWhitespace >= 2) {
             return true;
           }
@@ -146,6 +144,9 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         if (indentGuidesReady) return;
         const domNode = targetEditor.getDomNode();
         if (!domNode) return;
+        if (indentGuidesExpected) {
+          ensureTokenization();
+        }
         const guide = domNode.querySelector(
           '.core-guide.bracket-indent-guide, .core-guide-indent',
         );
