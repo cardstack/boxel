@@ -1,11 +1,10 @@
-import {
+import type {
   DBAdapter,
   FromScratchArgs,
   FromScratchResult,
   QueuePublisher,
-  param,
-  query,
 } from '../';
+import { param, query } from '../';
 
 export async function enqueueReindexRealmJob(
   realmUrl: string,

@@ -2,9 +2,11 @@ import { isDestroying } from '@ember/destroyable';
 import { debounce } from '@ember/runloop';
 import { inject as service } from '@ember/service';
 
-import Modifier, { NamedArgs } from 'ember-modifier';
+import Modifier from 'ember-modifier';
 
-import ScrollPositionService from '@cardstack/host/services/scroll-position-service';
+import type ScrollPositionService from '@cardstack/host/services/scroll-position-service';
+
+import type { NamedArgs } from 'ember-modifier';
 
 interface RestoreScrollPositionModifierArgs {
   Positional: [];

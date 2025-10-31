@@ -88,11 +88,18 @@ test.describe('Publish realm', () => {
     await expect(newTab).toHaveURL(
       'http://user1.localhost:4205/new-workspace/',
     );
+    await expect(
+      newTab.locator(
+        '[data-test-card="http://user1.localhost:4205/new-workspace/index"]',
+      ),
+    ).toBeVisible();
     await newTab.close();
     await page.bringToFront();
   });
 
-  test('it validates and claims a custom subdomain', async ({ page }) => {
+  test('it validates, claims, and publishes to a custom subdomain', async ({
+    page,
+  }) => {
     await openPublishRealmModal(page);
 
     await page.locator('[data-test-custom-subdomain-setup-button]').click();
@@ -120,6 +127,31 @@ test.describe('Publish realm', () => {
     await expect(
       page.locator('[data-test-custom-subdomain-input]'),
     ).toHaveCount(0);
+
+    await page.locator('[data-test-custom-subdomain-checkbox]').click();
+    await page.locator('[data-test-publish-button]').click();
+
+    let newTabPromise = page.waitForEvent('popup');
+
+    await page
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-custom-subdomain-button]',
+      )
+      .click();
+
+    let newTab = await newTabPromise;
+    await newTab.waitForLoadState();
+
+    await expect(newTab).toHaveURL(
+      'http://acceptable-subdomain.localhost:4205/',
+    );
+    await expect(
+      newTab.locator(
+        '[data-test-card="http://acceptable-subdomain.localhost:4205/index"]',
+      ),
+    ).toBeVisible();
+    await newTab.close();
+    await page.bringToFront();
   });
 
   test('open site popover opens with shift-click', async ({ page }) => {
@@ -134,7 +166,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/index',
+      'http://user1.localhost:4205/new-workspace/',
     );
     await newTab.close();
     await page.bringToFront();
@@ -164,7 +196,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://user1.localhost:4205/new-workspace/index',
+      'http://user1.localhost:4205/new-workspace/',
     );
     await newTab.close();
     await page.bringToFront();

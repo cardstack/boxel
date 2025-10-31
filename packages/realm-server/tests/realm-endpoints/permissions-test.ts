@@ -1,9 +1,10 @@
 import { module, test } from 'qunit';
-import { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
-import { Realm, fetchRealmPermissions } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
+import { fetchRealmPermissions } from '@cardstack/runtime-common';
 import {
   setupBaseRealmServer,
   setupPermissionedRealm,
@@ -13,7 +14,7 @@ import {
   createJWT,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { type PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | _permissions', function (hooks) {

@@ -21,7 +21,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import { Realm } from '@cardstack/runtime-common/realm';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -408,9 +408,10 @@ const notFoundAdoptionInstance = `{
 }
 `;
 
+let personalRealmURL: string;
+
 module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
-    let personalRealmURL: string;
     let additionalRealmURL: string;
     let catalogRealmURL: string;
 

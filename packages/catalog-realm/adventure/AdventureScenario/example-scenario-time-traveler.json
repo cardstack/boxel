@@ -1,0 +1,35 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AdventureScenario",
+        "module": "../adventure-scenario"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "key": "time-traveler",
+      "tags": [
+        "combat"
+      ],
+      "title": "Temporal Paradox",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "Your machine misfires, stranding you with knowledge from the future.",
+      "imageStyles": [
+        "time-relevant"
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

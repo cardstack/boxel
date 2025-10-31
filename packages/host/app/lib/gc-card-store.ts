@@ -139,6 +139,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
   }
 
+  get docsInFlight() {
+    return [...this.#docsInFlight.keys()];
+  }
+
   trackLoad(load: Promise<unknown>) {
     if (this.#inFlight.has(load)) {
       return;

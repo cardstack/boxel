@@ -1,9 +1,9 @@
-import * as JSONTypes from 'json-typescript';
+import type * as JSONTypes from 'json-typescript';
 import isPlainObject from 'lodash/isPlainObject';
 import stringify from 'safe-stable-stringify';
 import flattenDeep from 'lodash/flattenDeep';
 
-import { type CodeRef, type DBAdapter, type TypeCoercion } from './index';
+import type { CodeRef, DBAdapter, TypeCoercion } from './index';
 
 export type Expression = (
   | string

@@ -15,7 +15,7 @@ import {
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CardTypeService from '@cardstack/host/services/card-type-service';
-import { type Type } from '@cardstack/host/services/card-type-service';
+import type { Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
 

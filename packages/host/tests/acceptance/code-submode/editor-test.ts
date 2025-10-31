@@ -32,9 +32,11 @@ import {
   withSlowSave,
   type TestContextWithSave,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
+
+import type { TestRealmAdapter } from '../../helpers/adapter';
 
 module('Acceptance | code submode | editor tests', function (hooks) {
   let monacoService: MonacoService;

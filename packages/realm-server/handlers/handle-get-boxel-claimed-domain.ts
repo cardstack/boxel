@@ -1,4 +1,4 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 import { param, query, SupportedMimeType } from '@cardstack/runtime-common';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import {
@@ -7,8 +7,8 @@ import {
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
-import { RealmServerTokenClaim } from '../utils/jwt';
-import { CreateRoutesArgs } from '../routes';
+import type { RealmServerTokenClaim } from '../utils/jwt';
+import type { CreateRoutesArgs } from '../routes';
 
 export default function handleGetBoxelClaimedDomainRequest({
   dbAdapter,

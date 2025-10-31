@@ -1,21 +1,20 @@
-import { RealmServerTokenClaim } from '../utils/jwt';
+import type { RealmServerTokenClaim } from '../utils/jwt';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
-import Koa from 'koa';
+import type Koa from 'koa';
+import type { Realm, RealmInfo } from '@cardstack/runtime-common';
 import {
   createResponse,
   DEFAULT_PERMISSIONS,
   logger,
-  Realm,
   SupportedMimeType,
-  RealmInfo,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
-import { CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes';
 
 interface RealmCreationJSON {
   data: {

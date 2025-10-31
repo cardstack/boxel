@@ -22,6 +22,7 @@ jobs:
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
+      postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
       boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
@@ -60,6 +61,8 @@ jobs:
               - 'packages/ai-bot/**'
               - 'packages/billing/**'
               - 'packages/postgres/**'
+            postgres-migrations:
+              - 'packages/postgres/migrations/**'
             boxel-icons:
               - *shared
               - 'packages/boxel-icons/**'
@@ -130,6 +133,50 @@ jobs:
       - name: AI Bot test suite
         run: pnpm test
         working-directory: packages/ai-bot
+
+  postgres-migration-test:
+    name: Postgres Migration Test
+    needs: change-check
+    if: needs.change-check.outputs.postgres-migrations == 'true' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: postgres-migration-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/init
+
+      - name: Start Postgres
+        run: pnpm start:pg
+        working-directory: packages/postgres
+
+      - name: Determine changed migrations
+        id: migrations
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before || '' }}
+        shell: bash
+        run: packages/postgres/scripts/determine-changed-migrations.sh
+
+      - name: Apply migrations
+        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
+        working-directory: packages/postgres
+        env:
+          PGHOST: localhost
+          PGPORT: 5435
+        run: pnpm migrate up
+      - name: Run down migrations
+        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
+        working-directory: packages/postgres
+        env:
+          MIGRATION_DOWN_COUNT: ${{ steps.migrations.outputs.down_count }}
+        run: pnpm migrate down "$MIGRATION_DOWN_COUNT"
+      - name: Reapply migrations
+        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
+        working-directory: packages/postgres
+        run: pnpm migrate up
 
   boxel-motion-test:
     name: Boxel Motion Tests
@@ -208,7 +255,7 @@ jobs:
     name: Matrix Client Tests
     needs: change-check
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-8-core
     strategy:
       fail-fast: false
       matrix:
@@ -221,7 +268,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install
         working-directory: packages/matrix
       - name: Build boxel-icons
         run: pnpm build

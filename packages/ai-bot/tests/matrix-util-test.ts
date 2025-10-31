@@ -1,6 +1,6 @@
 import { test } from 'qunit';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
-import { Method } from 'matrix-js-sdk';
+import type { Method } from 'matrix-js-sdk';
 import type {
   CardMessageEvent,
   MatrixEvent as DiscreteMatrixEvent,

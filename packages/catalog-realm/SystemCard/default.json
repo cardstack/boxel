@@ -10,6 +10,11 @@
       }
     },
     "relationships": {
+      "defaultModelConfiguration": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-sonnet-45"
+        }
+      },
       "modelConfigurations.0": {
         "links": {
           "self": "../ModelConfiguration/openai-gpt-5"

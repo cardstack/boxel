@@ -1,4 +1,4 @@
-import { Readable } from 'stream';
+import type { Readable } from 'stream';
 
 export async function nodeStreamToText(stream: Readable): Promise<string> {
   const chunks: Buffer[] = [];

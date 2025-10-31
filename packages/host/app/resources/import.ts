@@ -5,17 +5,15 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import {
-  logger,
-  CardError,
+import type {
   CardErrorJSONAPI,
   CardErrorsJSONAPI,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-
-import NetworkService from '../services/network';
+import { logger, CardError } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
 
 interface Args {
   named: { url: string };

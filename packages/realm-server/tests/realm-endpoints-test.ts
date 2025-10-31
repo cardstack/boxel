@@ -1,12 +1,13 @@
 import { module, test } from 'qunit';
-import supertest, { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
+import supertest from 'supertest';
 import { join, resolve, basename } from 'path';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
+import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
-  Realm,
   SupportedMimeType,
   type LooseSingleCardDocument,
   type QueuePublisher,
@@ -39,7 +40,7 @@ import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { type PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
 
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {

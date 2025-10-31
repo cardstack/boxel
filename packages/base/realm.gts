@@ -9,6 +9,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+import World from '@cardstack/boxel-icons/world';
 import { action } from '@ember/object';
 import { commandData } from './resources/command-data';
 import type { GetAllRealmMetasResult } from './command';
@@ -164,5 +165,6 @@ class EditComponent extends Component<typeof RealmField> {
 
 export default class RealmField extends StringField {
   static displayName = 'Realm';
+  static icon = World;
   static edit = EditComponent;
 }

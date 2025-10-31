@@ -3,6 +3,11 @@
     "type": "card",
     "attributes": {},
     "relationships": {
+      "defaultModelConfiguration": {
+        "links": {
+          "self": "../ModelConfiguration/test-claude-sonnet-45"
+        }
+      },
       "modelConfigurations.0": {
         "links": {
           "self": "../ModelConfiguration/test-gpt"
@@ -10,7 +15,7 @@
       },
       "modelConfigurations.1": {
         "links": {
-          "self": "../ModelConfiguration/test-claude-sonnet-4"
+          "self": "../ModelConfiguration/test-claude-sonnet-45"
         }
       },
       "modelConfigurations.2": {

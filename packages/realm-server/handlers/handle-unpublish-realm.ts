@@ -1,4 +1,4 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 import {
   query,
   SupportedMimeType,
@@ -21,8 +21,8 @@ import {
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
-import { type CreateRoutesArgs } from '../routes';
-import { RealmServerTokenClaim } from '../utils/jwt';
+import type { CreateRoutesArgs } from '../routes';
+import type { RealmServerTokenClaim } from '../utils/jwt';
 
 const log = logger('handle-unpublish');
 

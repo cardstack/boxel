@@ -190,15 +190,12 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       },
     );
 
-    await openAiAssistant();
+    let roomId = await openAiAssistant();
+    const failingMessage =
+      'This is a magic message with a SENDING_DELAY_THEN_FAILURE!';
 
-    await fillIn(
-      '[data-test-message-field]',
-      'This is a magic message with a SENDING_DELAY_THEN_FAILURE!',
-    );
-    assert
-      .dom('[data-test-message-field]')
-      .hasValue('This is a magic message with a SENDING_DELAY_THEN_FAILURE!');
+    await fillIn('[data-test-message-field]', failingMessage);
+    assert.dom('[data-test-message-field]').hasValue(failingMessage);
     assert.dom('[data-test-send-message-btn]').isEnabled();
     assert.dom('[data-test-ai-assistant-message]').doesNotExist();
     click('[data-test-send-message-btn]');
@@ -210,14 +207,27 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert.dom('[data-test-user-message]').hasClass('is-pending');
 
     await waitFor('[data-test-boxel-alert="error"]');
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue(failingMessage, 'prompt is not lost after sending failed');
+
+    await settled();
+
     assert.dom('[data-test-card-error]').containsText('Failed to send');
     assert.dom('[data-test-alert-action-button="Retry"]').exists();
+    assert
+      .dom(`[data-test-message-field="${roomId}"]`)
+      .hasValue(failingMessage);
+
     await percySnapshot(assert);
 
     click('[data-test-alert-action-button="Retry"]');
     await waitFor('[data-test-ai-assistant-message-pending]');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     await settled();
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue(failingMessage, 'prompt is not lost after retry');
   });
 
   test('it enlarges the input box when entering/pasting lots of text', async function (assert) {

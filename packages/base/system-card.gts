@@ -1,4 +1,4 @@
-import { CardDef, field, contains, linksToMany } from './card-api';
+import { CardDef, field, contains, linksToMany, linksTo } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
 import { getCardMenuItems } from '@cardstack/runtime-common';
@@ -21,6 +21,11 @@ export class ModelConfiguration extends CardDef {
 
 export class SystemCard extends CardDef {
   static displayName = 'System Card';
+
+  @field defaultModelConfiguration = linksTo(ModelConfiguration, {
+    description:
+      'Preferred model configuration to use when no specific mode default exists',
+  });
 
   @field modelConfigurations = linksToMany(ModelConfiguration, {
     description: 'List of available model configurations for this system',

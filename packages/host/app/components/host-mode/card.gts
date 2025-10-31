@@ -46,16 +46,8 @@ export default class HostModeCard extends Component<Signature> {
     return this.cardError?.message;
   }
 
-  get loadingMessage() {
-    return 'Loading card...';
-  }
-
   get shouldShowEmptyMessage() {
     return !this.args.cardId && !this.card && !this.isError && !this.isLoading;
-  }
-
-  get emptyMessage() {
-    return 'No card selected.';
   }
 
   <template>
@@ -77,7 +69,7 @@ export default class HostModeCard extends Component<Signature> {
         </div>
       {{else if this.isLoading}}
         <div class='message'>
-          <p>{{this.loadingMessage}}</p>
+          <p>Loading card…</p>
         </div>
       {{else if @openInteractSubmode}}
         <div class='non-publishable-message'>
@@ -89,7 +81,7 @@ export default class HostModeCard extends Component<Signature> {
         </div>
       {{else if this.shouldShowEmptyMessage}}
         <div class='message'>
-          <p>{{this.emptyMessage}}</p>
+          <p>No card selected.</p>
         </div>
       {{/if}}
     </CardContainer>

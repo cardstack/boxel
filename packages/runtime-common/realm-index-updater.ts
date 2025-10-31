@@ -15,12 +15,12 @@ import {
   type CopyArgs,
   type CopyResult,
 } from '.';
-import { Realm } from './realm';
+import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
 
-const FROM_SCRATCH_JOB_TIMEOUT_SEC = 10 * 60;
-const INCREMENTAL_JOB_TIMEOUT_SEC = 3 * 60;
+const FROM_SCRATCH_JOB_TIMEOUT_SEC = 15 * 60;
+const INCREMENTAL_JOB_TIMEOUT_SEC = 5 * 60;
 
 export class RealmIndexUpdater {
   #realm: Realm;

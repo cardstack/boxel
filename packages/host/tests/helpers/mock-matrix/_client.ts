@@ -1,4 +1,4 @@
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -6,16 +6,8 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import * as MatrixSDK from 'matrix-js-sdk';
 
-import {
-  MSC3575SlidingSyncRequest,
-  MSC3575SlidingSyncResponse,
-} from 'matrix-js-sdk/lib/sliding-sync';
-
-import {
-  LooseSingleCardDocument,
-  baseRealm,
-  unixTime,
-} from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
@@ -47,11 +39,15 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type { CommandField } from 'https://cardstack.com/base/skill';
 
-import { MockSDK } from './_sdk';
+import type { MockSDK } from './_sdk';
 
-import { ServerState } from './_server-state';
+import type { ServerState } from './_server-state';
 
 import type { Config } from '../mock-matrix';
+import type {
+  MSC3575SlidingSyncRequest,
+  MSC3575SlidingSyncResponse,
+} from 'matrix-js-sdk/lib/sliding-sync';
 
 type IEvent = MatrixSDK.IEvent;
 

@@ -4,10 +4,8 @@ import * as path from 'path';
 import { tmpdir } from 'os';
 import { module, test } from 'qunit';
 import { realmPassword } from '../../matrix/helpers/realm-credentials';
-import {
-  startTestRealmServer,
-  TestRealmServer,
-} from './helpers/start-test-realm';
+import type { TestRealmServer } from './helpers/start-test-realm';
+import { startTestRealmServer } from './helpers/start-test-realm';
 
 const REALM_PORT = 4205; // Using isolated realm server port
 const MATRIX_URL = 'http://localhost:8008';

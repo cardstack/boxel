@@ -5,15 +5,16 @@ import {
   type SingleCardDocument,
 } from './document-types';
 import { isMeta, type CardResource } from './resource-types';
-import { RealmPaths, LocalPath, ensureTrailingSlash, join } from './paths';
+import type { LocalPath } from './paths';
+import { RealmPaths, ensureTrailingSlash, join } from './paths';
 import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
+import type { ErrorDetails } from './error';
 import {
   systemError,
   notFound,
   methodNotAllowed,
   badRequest,
   CardError,
-  ErrorDetails,
   formattedError,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
@@ -54,7 +55,7 @@ import {
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
-import { type CardFields } from './resource-types';
+import type { CardFields } from './resource-types';
 import {
   fileContentToText,
   readFileAsText,
@@ -62,12 +63,11 @@ import {
   type TextFileRef,
 } from './stream';
 import { transpileJS } from './transpile';
+import type { Method, RouteTable } from './router';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
   AuthorizationError,
-  Method,
-  RouteTable,
   Router,
   SupportedMimeType,
   lookupRouteTable,
@@ -94,22 +94,20 @@ import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 import serialize from './file-serializer';
 
-import {
-  MatrixBackendAuthentication,
-  Utils,
-} from './matrix-backend-authentication';
+import type { Utils } from './matrix-backend-authentication';
+import { MatrixBackendAuthentication } from './matrix-backend-authentication';
 
 import type {
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import type { LintArgs, LintResult } from './lint';
-import {
+import type {
   AtomicOperation,
   AtomicOperationResult,
   AtomicPayloadValidationError,
-  filterAtomicOperations,
 } from './atomic-document';
+import { filterAtomicOperations } from './atomic-document';
 import {
   DefinitionsCache,
   isFilterRefersToNonexistentTypeError,

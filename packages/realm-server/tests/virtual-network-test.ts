@@ -1,7 +1,5 @@
-import {
-  ResponseWithNodeStream,
-  VirtualNetwork,
-} from '@cardstack/runtime-common';
+import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
+import { VirtualNetwork } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import { basename } from 'path';
 

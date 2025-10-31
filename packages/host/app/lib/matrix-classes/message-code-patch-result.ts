@@ -8,9 +8,9 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import { Message } from './message';
+import type { Message } from './message';
 
 export default class MessageCodePatchResult {
   @tracked index: number;
