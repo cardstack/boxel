@@ -19,6 +19,7 @@ import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
+import EmailInputUsage from './components/email-input/usage.gts';
 import EntityIconDisplayUsage from './components/entity-icon-display/usage.gts';
 import EntityThumbnailDisplayUsage from './components/entity-thumbnail-display/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
@@ -27,7 +28,6 @@ import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
 import InputGroupUsage from './components/input-group/usage.gts';
-import InputEmailUsage from './components/input/email/usage.gts';
 import InputUsage from './components/input/usage.gts';
 import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
@@ -71,6 +71,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['DragAndDrop', DragAndDropUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
+  ['EmailInput', EmailInputUsage],
   ['EntityIconDisplay', EntityIconDisplayUsage],
   ['EntityThumbnailDisplay', EntityThumbnailDisplayUsage],
   ['FieldContainer', FieldContainerUsage],
@@ -79,7 +80,6 @@ export const ALL_USAGE_COMPONENTS = [
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
   ['InputGroup', InputGroupUsage],
-  ['EmailInput', InputEmailUsage],
   ['Input', InputUsage],
   ['LoadingIndicator', LoadingIndicatorUsage],
   ['Menu', MenuUsage],

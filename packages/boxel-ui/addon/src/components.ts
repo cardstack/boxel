@@ -21,6 +21,7 @@ import DndKanbanBoard, {
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
 } from './components/dropdown/index.gts';
+import EmailInput from './components/email-input/index.gts';
 import EntityDisplayWithIcon from './components/entity-icon-display/index.gts';
 import EntityDisplayWithThumbnail from './components/entity-thumbnail-display/index.gts';
 import FieldContainer from './components/field-container/index.gts';
@@ -29,7 +30,6 @@ import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
-import EmailInput from './components/input/email/index.gts';
 import BoxelInput, {
   type InputBottomTreatment as BoxelInputBottomTreatment,
   type InputValidationState as BoxelInputValidationState,
