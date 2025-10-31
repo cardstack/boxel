@@ -1,10 +1,14 @@
 import { Component, primitive, FieldDef } from './card-api';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import CalendarClockIcon from '@cardstack/boxel-icons/calendar-clock';
-import { fieldSerializer, DatetimeSerializer } from '@cardstack/runtime-common';
+import {
+  fieldSerializer,
+  DatetimeSerializer,
+  isValidDate,
+} from '@cardstack/runtime-common';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -27,7 +31,10 @@ class View extends Component<typeof DatetimeField> {
     if (this.args.model == null) {
       return '[no date-time]';
     }
-    return this.args.model ? Format.format(this.args.model) : undefined;
+    if (!isValidDate(this.args.model)) {
+      return '[invalid date-time]';
+    }
+    return Format.format(this.args.model);
   }
 }
 
@@ -56,11 +63,18 @@ export default class DatetimeField extends FieldDef {
       if (!date?.length) {
         return set(null);
       }
-      return set(parseISO(date));
+      let parsed = parseISO(date);
+      if (!isValid(parsed)) {
+        return;
+      }
+      return set(parsed);
     }
 
     get formatted() {
       if (!this.args.model) {
+        return;
+      }
+      if (!isValidDate(this.args.model)) {
         return;
       }
       return format(this.args.model, datetimeFormat);

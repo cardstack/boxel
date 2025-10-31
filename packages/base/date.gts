@@ -1,5 +1,5 @@
 import { Component, primitive, FieldDef } from './card-api';
-import { parse } from 'date-fns';
+import { isValid, parse } from 'date-fns';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -8,6 +8,7 @@ import {
   DateSerializer,
   fieldSerializer,
   getSerializer,
+  isValidDate,
 } from '@cardstack/runtime-common';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
@@ -28,7 +29,10 @@ class View extends Component<typeof DateField> {
     if (this.args.model == null) {
       return '[no date]';
     }
-    return this.args.model ? Format.format(this.args.model) : undefined;
+    if (!isValidDate(this.args.model)) {
+      return '[invalid date]';
+    }
+    return Format.format(this.args.model);
   }
 }
 
@@ -56,11 +60,18 @@ export default class DateField extends FieldDef {
       if (!date?.length) {
         return set(null);
       }
-      return set(parse(date, dateFormat, new Date()));
+      let parsed = parse(date, dateFormat, new Date());
+      if (!isValid(parsed)) {
+        return;
+      }
+      return set(parsed);
     }
 
     get formatted() {
       if (!this.args.model) {
+        return;
+      }
+      if (!isValidDate(this.args.model)) {
         return;
       }
       return getSerializer(DateField[fieldSerializer]).serialize(
