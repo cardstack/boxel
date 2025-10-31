@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks';
 import { Memoize } from 'typescript-memoize';
 import {
   IndexWriter,
@@ -21,6 +22,7 @@ import ignore, { type Ignore } from 'ignore';
 
 export const FROM_SCRATCH_JOB_TIMEOUT_SEC = 20 * 60;
 const INCREMENTAL_JOB_TIMEOUT_SEC = 10 * 60;
+const durationFormatter = new Intl.DurationFormat('en', { style: 'short' });
 
 export class RealmIndexUpdater {
   #realm: Realm;
@@ -88,6 +90,7 @@ export class RealmIndexUpdater {
   // in an onInvalidation callback
   async fullIndex() {
     this.#indexingDeferred = new Deferred<void>();
+    let startedAt = performance.now();
     try {
       let args: FromScratchArgs = {
         realmURL: this.#realm.url,
@@ -103,8 +106,11 @@ export class RealmIndexUpdater {
       let { ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;
+      let indexingDuration = durationFormatter.format(
+        performance.now() - startedAt,
+      );
       this.#log.info(
-        `Realm ${this.realmURL.href} has completed indexing: ${JSON.stringify(
+        `Realm ${this.realmURL.href} has completed indexing in ${indexingDuration}: ${JSON.stringify(
           stats,
           null,
           2,
