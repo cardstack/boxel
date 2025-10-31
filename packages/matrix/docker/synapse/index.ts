@@ -344,22 +344,18 @@ export async function createRegistrationToken(
   }
 }
 
+export interface UpdateUserOptions {
+  password?: string;
+  displayname?: string;
+  avatar_url?: string;
+  emailAddresses?: string[];
+  matrixURL?: string;
+}
+
 export async function updateUser(
   adminAccessToken: string,
   userId: string,
-  {
-    password,
-    displayname,
-    avatar_url,
-    emailAddresses,
-    matrixURL,
-  }: {
-    password?: string;
-    displayname?: string;
-    avatar_url?: string;
-    emailAddresses?: string[];
-    matrixURL?: string;
-  },
+  { password, displayname, avatar_url, emailAddresses, matrixURL }: UpdateUserOptions,
 ) {
   let url = matrixURL
     ? `${matrixURL}/_synapse/admin/v2/users/${userId}`
