@@ -32,7 +32,7 @@ import * as boxelUiIcons from '@cardstack/boxel-ui/icons';
 import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 
 import * as runtime from '@cardstack/runtime-common';
-import { VirtualNetwork } from '@cardstack/runtime-common';
+import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 import { shimHostCommands } from '../commands';
 

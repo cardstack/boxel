@@ -13,7 +13,7 @@ import {
   type InstanceOrError,
   type ResolvedCodeRef,
 } from '.';
-import { Realm } from './realm';
+import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
@@ -22,8 +22,8 @@ import {
   type SingleCardDocument,
   type CardCollectionDocument,
 } from './document-types';
-import { type CardResource, type Saved } from './resource-types';
-import { type DefinitionsCache } from './definitions-cache';
+import type { CardResource, Saved } from './resource-types';
+import type { DefinitionsCache } from './definitions-cache';
 
 type Options = {
   loadLinks?: true;

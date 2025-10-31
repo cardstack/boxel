@@ -1,6 +1,6 @@
-import {
-  type BaseDefConstructor,
-  type BaseInstanceType,
+import type {
+  BaseDefConstructor,
+  BaseInstanceType,
 } from 'https://cardstack.com/base/card-api';
 
 export function queryableValue(

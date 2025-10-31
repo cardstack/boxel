@@ -1,4 +1,4 @@
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
@@ -17,9 +17,9 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 
-import OperatorModeStateService from './operator-mode-state-service';
-
 import type CardService from './card-service';
+import type OperatorModeStateService from './operator-mode-state-service';
+
 import type StoreService from './store';
 
 export interface PlaygroundSelection {

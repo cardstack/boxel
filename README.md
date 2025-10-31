@@ -130,21 +130,20 @@ Prerender server:
 - REALM_SECRET_SEED (required): Secret used to create session tokens for realms.
 - BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to http://localhost:4200 in dev scripts.
 - PRERENDER_MANAGER_URL (optional): Base URL of the prerender manager to register with. Defaults to http://localhost:4222.
-- PRERENDER_SERVER_URL (optional): Explicit public URL for this server when registering with the manager (overrides inference).
 - PRERENDER_PAGE_POOL_SIZE (optional): Max number of per-realm pages to keep open in the pool. Default 4.
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:
 
 - PRERENDER_MULTIPLEX (optional): Number of distinct servers to assign per realm for rotation. Minimum 1. Default 1.
-- PRERENDER_SERVER_DEFAULT_PORT (optional): When a server registers without a URL, the manager can infer the URL from the source IP and this default port. Default 4223.
 - PRERENDER_SERVER_TIMEOUT_MS (optional): Timeout for proxying a prerender request to a target server. Default 30000.
 - PRERENDER_HEALTHCHECK_TIMEOUT_MS (optional): Timeout for manager health checks of servers. Default 1000.
 - PRERENDER_HEALTHCHECK_INTERVAL_MS (optional): Interval in milliseconds for periodic health sweeps. When > 0, the manager regularly checks all registered servers and evicts unhealthy ones. Default 0 (disabled).
 
-Headers used when integrating with the manager:
+Integration notes for the prerender manager:
 
-- X-Prerender-Server-Url: Servers may provide their URL via this header when registering or unregistering. If omitted, the manager attempts to infer from the client IP plus PRERENDER_SERVER_DEFAULT_PORT.
+- Registration requests must include the prerender server URL in `data.attributes.url`.
+- Subsequent calls to `/prerender-servers` (DELETE) and `/prerender-servers/realms/:realm` (DELETE) must include the `url` query parameter identifying the calling server.
 
 Manager routing behavior at a glance:
 

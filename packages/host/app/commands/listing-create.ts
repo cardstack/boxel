@@ -2,18 +2,17 @@ import { service } from '@ember/service';
 
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
-import {
-  isCardInstance,
+import type {
   LooseSingleCardDocument,
   ResolvedCodeRef,
-  SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
 import { resolveAdoptedCodeRef } from '@cardstack/runtime-common/code-ref';
 
-import * as CardAPI from 'https://cardstack.com/base/card-api';
-import * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 

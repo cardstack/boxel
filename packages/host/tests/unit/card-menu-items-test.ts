@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 

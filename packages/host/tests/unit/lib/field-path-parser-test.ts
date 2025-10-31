@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 
 import { FieldPathParser } from '@cardstack/host/lib/field-path-parser';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 module('Unit | Utility | field-path-parser', function () {
   module('parseFieldPath', function () {

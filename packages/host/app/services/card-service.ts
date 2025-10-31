@@ -13,10 +13,8 @@ import {
   type Loader,
 } from '@cardstack/runtime-common';
 
-import {
-  AtomicOperation,
-  createAtomicDocument,
-} from '@cardstack/runtime-common/atomic-document';
+import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
+import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
 
 import type {
   BaseDef,

@@ -1,11 +1,7 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import {
-  find,
-  doubleClick,
-  render,
-  RenderingTestContext,
-} from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { find, doubleClick, render } from '@ember/test-helpers';
 import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';

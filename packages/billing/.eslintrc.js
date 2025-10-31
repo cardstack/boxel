@@ -14,6 +14,13 @@ module.exports = {
       extends: ['plugin:n/recommended'],
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
+        '@typescript-eslint/consistent-type-imports': [
+          'error',
+          {
+            disallowTypeAnnotations: false,
+          },
+        ],
+        '@typescript-eslint/no-import-type-side-effects': 'error',
       },
     },
     {

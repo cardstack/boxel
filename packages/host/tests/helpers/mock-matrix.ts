@@ -1,4 +1,4 @@
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';

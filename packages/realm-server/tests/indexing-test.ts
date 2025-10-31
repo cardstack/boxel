@@ -1,13 +1,13 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
-import {
+import type {
   DBAdapter,
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
-  type IndexedInstance,
   RealmAdapter,
 } from '@cardstack/runtime-common';
+import type { IndexedInstance } from '@cardstack/runtime-common';
 import {
   createRealm,
   testRealm,

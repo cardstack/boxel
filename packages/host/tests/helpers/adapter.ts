@@ -1,10 +1,12 @@
 import type Owner from '@ember/owner';
 
-import {
+import type {
   DBAdapter,
   Loader,
   LocalPath,
   RealmAdapter,
+} from '@cardstack/runtime-common';
+import {
   RealmPaths,
   baseRealm,
   createResponse,
@@ -13,11 +15,11 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
-import { LintResult } from '@cardstack/runtime-common/lint';
-import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import type { LintResult } from '@cardstack/runtime-common/lint';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import {
+import type {
   FileRef,
   Kind,
   RequestContext,

@@ -1,28 +1,25 @@
 import { getOwner } from '@ember/owner';
-import { settled, RenderingTestContext, waitUntil } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import type { Loader, Query } from '@cardstack/runtime-common';
 import {
-  Loader,
-  Query,
   baseRealm,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import {
-  SearchResource,
-  Args as SearchResourceArgs,
-} from '@cardstack/host/resources/search';
+import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
+import { SearchResource } from '@cardstack/host/resources/search';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
-  CardDocFiles,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -30,6 +27,8 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDocFiles } from '../../helpers';
 
 class StubRealmService extends RealmService {
   realmOfURL(_url: URL) {

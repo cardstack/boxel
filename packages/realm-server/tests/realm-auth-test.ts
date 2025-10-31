@@ -3,7 +3,7 @@ import type { SuperTest, Test as SupertestTest } from 'supertest';
 import sinon from 'sinon';
 import { basename } from 'path';
 
-import { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 

@@ -1,10 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import {
-  type RealmPermissions,
-  type Realm,
-  type RealmAdapter,
-  type RenderResponse,
+import type {
+  RealmPermissions,
+  Realm,
+  RealmAdapter,
+  RenderResponse,
 } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/index';
 
@@ -21,6 +21,9 @@ import { baseCardRef } from '@cardstack/runtime-common';
 module(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/';
+    let prerenderServerURL = realmURL.endsWith('/')
+      ? realmURL.slice(0, -1)
+      : realmURL;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -31,6 +34,7 @@ module(basename(__filename), function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
+        serverURL: prerenderServerURL,
       });
     });
 
@@ -154,6 +158,9 @@ module(basename(__filename), function () {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
     let realmURL3 = 'http://127.0.0.1:4449/';
+    let prerenderServerURL = realmURL1.endsWith('/')
+      ? realmURL1.slice(0, -1)
+      : realmURL1;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -169,6 +176,7 @@ module(basename(__filename), function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
+        serverURL: prerenderServerURL,
       });
     });
     hooks.after(async () => {

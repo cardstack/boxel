@@ -19,7 +19,7 @@ import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
 
 /* About the Worker Manager
@@ -266,9 +266,16 @@ let adapter: PgAdapter;
 
 async function monitorWorker(workerId: string, worker: ChildProcess) {
   let stuckJobs = (await query([
-    `SELECT id, job_id FROM job_reservations WHERE worker_id=`,
+    `SELECT id, job_id FROM job_reservations jr WHERE worker_id=`,
     param(workerId),
     `AND completed_at IS NULL AND locked_until < NOW() - INTERVAL '30 seconds'`,
+    `AND NOT EXISTS (`,
+    // Skip stale reservations if this worker has already retried the job with a newer reservation.
+    `  SELECT 1 FROM job_reservations newer WHERE`,
+    `    newer.worker_id = jr.worker_id AND`,
+    `    newer.job_id = jr.job_id AND`,
+    `    newer.id > jr.id`,
+    `)`,
   ])) as { id: string; job_id: string }[];
 
   if (stuckJobs.length > 0) {

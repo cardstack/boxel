@@ -8,7 +8,6 @@ import { restartableTask, rawTimeout, task } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { type IEvent } from 'matrix-js-sdk';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
@@ -25,11 +24,11 @@ import ENV from '@cardstack/host/config/environment';
 
 import config from '@cardstack/host/config/environment';
 
-import RealmService from './realm';
-
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
+import type RealmService from './realm';
 import type ResetService from './reset';
+import type { IEvent } from 'matrix-js-sdk';
 
 const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
 

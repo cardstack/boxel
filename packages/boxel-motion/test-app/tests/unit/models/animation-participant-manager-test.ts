@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { type ISpriteModifier, SpriteType } from '@cardstack/boxel-motion';
-import {
+import type {
   AnimationParticipant,
-  AnimationParticipantManager,
   Sprite,
 } from '@cardstack/boxel-motion/models';
-import { type IContext } from '@cardstack/boxel-motion/utils';
+import { AnimationParticipantManager } from '@cardstack/boxel-motion/models';
+import type { IContext } from '@cardstack/boxel-motion/utils';
 import { module, test } from 'qunit';
 
 function simulateRender(

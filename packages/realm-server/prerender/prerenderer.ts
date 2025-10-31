@@ -16,6 +16,7 @@ import puppeteer, {
   type Page,
 } from 'puppeteer';
 import { createJWT } from '../jwt';
+import type { RenderCapture } from './utils';
 import {
   captureResult,
   isRenderError,
@@ -23,11 +24,11 @@ import {
   renderHTML,
   renderIcon,
   renderMeta,
-  RenderCapture,
   type CaptureOptions,
   withTimeout,
   transitionTo,
 } from './utils';
+import { resolvePrerenderManagerURL } from './config';
 
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
@@ -61,15 +62,18 @@ export class Prerenderer {
     byRealm: new Map<string, { unusable: number; timeout: number }>(),
   };
   #silent: boolean;
+  #serverURL: string;
 
   constructor(options: {
     secretSeed: string;
+    serverURL: string;
     maxPages?: number;
     silent?: boolean;
   }) {
     this.#secretSeed = options.secretSeed;
     this.#maxPages = options.maxPages ?? 4;
     this.#silent = options.silent || process.env.PRERENDER_SILENT === 'true';
+    this.#serverURL = options.serverURL;
   }
 
   #incEvictionMetric(realm: string, reason: 'unusable' | 'timeout') {
@@ -487,12 +491,12 @@ export class Prerenderer {
       log.warn(`Error closing context for realm ${realm}:`, e);
     }
     try {
-      const managerURL =
-        process.env.PRERENDER_MANAGER_URL ?? 'http://localhost:4222';
-      await fetch(
-        `${managerURL.replace(/\/$/, '')}/prerender-servers/realms/${encodeURIComponent(realm)}`,
-        { method: 'DELETE' },
-      ).catch((e) => {
+      const managerURL = resolvePrerenderManagerURL();
+      let target = new URL(
+        `${managerURL}/prerender-servers/realms/${encodeURIComponent(realm)}`,
+      );
+      target.searchParams.set('url', this.#serverURL);
+      await fetch(target.toString(), { method: 'DELETE' }).catch((e) => {
         log.debug('Manager realm eviction notify failed:', e);
       });
     } catch (_e) {
@@ -981,9 +985,24 @@ export class Prerenderer {
     if (this.#browser) {
       return this.#browser;
     }
+    let launchArgs: string[] = [];
+    let disableSandbox =
+      process.env.CI === 'true' ||
+      process.env.PUPPETEER_DISABLE_SANDBOX === 'true';
+    if (disableSandbox) {
+      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
+    let extraArgs =
+      process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
+    if (extraArgs && extraArgs.length > 0) {
+      launchArgs.push(...extraArgs);
+    }
     this.#browser = await puppeteer.launch({
       headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
-      args: process.env.CI ? ['--no-sandbox'] : [],
+      ...(launchArgs.length > 0 ? { args: launchArgs } : {}),
+      ...(process.env.PUPPETEER_EXECUTABLE_PATH
+        ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
+        : {}),
     });
     return this.#browser;
   }

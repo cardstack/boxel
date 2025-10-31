@@ -7,7 +7,7 @@ import {
   type SerializerName,
 } from './index';
 
-import { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 // we are only recursing 3 levels deep when we see a card def that we have already encountered,

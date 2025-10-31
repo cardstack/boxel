@@ -11,10 +11,10 @@ import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
+import type { CodeRef } from '@cardstack/runtime-common';
 import {
   RealmPaths,
   type LocalPath,
-  CodeRef,
   isResolvedCodeRef,
   isCardInstance,
   isLocalId,
@@ -23,7 +23,8 @@ import {
   realmURL as realmURLSymbol,
 } from '@cardstack/runtime-common';
 
-import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
+import type { Submode } from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import {
@@ -36,7 +37,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
-import { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
+import type { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 import type Realm from '@cardstack/host/services/realm';
 import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -44,9 +45,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
-import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
-
-import { type Stack } from '../components/operator-mode/interact-submode';
+import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
 
@@ -54,16 +53,16 @@ import { ModuleInspectorSelections } from '../utils/local-storage-keys';
 
 import { normalizeDirPath } from '../utils/normalized-dir-path';
 
-import MatrixService from './matrix-service';
-import NetworkService from './network';
-
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
 import type ErrorDisplayService from './error-display';
+import type MatrixService from './matrix-service';
+import type NetworkService from './network';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
+import type { Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
 

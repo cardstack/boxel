@@ -1,7 +1,7 @@
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
-import { ComponentLike } from '@glint/template';
+import type { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';

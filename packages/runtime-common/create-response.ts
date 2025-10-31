@@ -1,4 +1,4 @@
-import { RequestContext } from './realm';
+import type { RequestContext } from './realm';
 
 interface CreateResponseArgs {
   body?: BodyInit | null | undefined;

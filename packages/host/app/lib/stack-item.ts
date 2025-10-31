@@ -1,4 +1,4 @@
-import { type Deferred } from '@cardstack/runtime-common';
+import type { Deferred } from '@cardstack/runtime-common';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 

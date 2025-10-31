@@ -1,11 +1,7 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import {
-  RoomMemberEvent,
-  RoomEvent,
-  createClient,
-  MatrixEvent,
-} from 'matrix-js-sdk';
+import type { MatrixEvent } from 'matrix-js-sdk';
+import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
 import OpenAI from 'openai';
 import {
@@ -16,8 +12,8 @@ import {
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
+import type { PromptParts } from '@cardstack/runtime-common/ai';
 import {
-  PromptParts,
   isRecognisedDebugCommand,
   getPromptParts,
   isInDebugMode,
@@ -45,14 +41,14 @@ import * as Sentry from '@sentry/node';
 
 import { saveUsageCost } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
-import { ChatCompletionMessageParam } from 'openai/resources';
-import { OpenAIError } from 'openai/error';
-import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
+import type { ChatCompletionMessageParam } from 'openai/resources';
+import type { OpenAIError } from 'openai/error';
+import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireLock, releaseLock } from './lib/queries';
 import { DebugLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
-import { type MatrixClient } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
 

@@ -4,14 +4,11 @@ import {
   codeRefWithAbsoluteURL,
 } from './code-ref';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { CardDefConstructor } from 'https://cardstack.com/base/card-api';
-import {
-  AttributesSchema,
-  CardSchema,
-  generateJsonSchemaForCardType,
-} from './helpers/ai';
+import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
+import type { AttributesSchema, CardSchema } from './helpers/ai';
+import { generateJsonSchemaForCardType } from './helpers/ai';
 import { simpleHash } from './utils';
-import { EncodedCommandRequest } from '../base/matrix-event';
+import type { EncodedCommandRequest } from '../base/matrix-event';
 
 export interface CommandRequest {
   id: string;

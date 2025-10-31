@@ -1,7 +1,7 @@
-import * as JSONTypes from 'json-typescript';
+import type * as JSONTypes from 'json-typescript';
 import { parse } from 'date-fns';
+import type { IndexWriter, QueuePublisher, DBAdapter } from '.';
 import {
-  IndexWriter,
   Deferred,
   reportError,
   authorizationMiddleware,
@@ -24,8 +24,6 @@ import {
   type Prerenderer,
   type RealmPermissions,
   systemInitiatedPriority,
-  QueuePublisher,
-  DBAdapter,
   fetchAllRealmsWithOwners,
   fetchUserPermissions,
 } from '.';

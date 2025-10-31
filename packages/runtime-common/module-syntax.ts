@@ -13,10 +13,8 @@ import {
   type Reexport,
   isInternalReference,
 } from './schema-analysis-plugin';
-import {
-  removeFieldPlugin,
-  Options as RemoveOptions,
-} from './remove-field-plugin';
+import type { Options as RemoveOptions } from './remove-field-plugin';
+import { removeFieldPlugin } from './remove-field-plugin';
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
 import isEqual from 'lodash/isEqual';

@@ -1,4 +1,4 @@
-import { type RealmInfo } from '../index';
+import type { RealmInfo } from '../index';
 export const testRealmURL = `http://test-realm/test/`;
 export const testHostModeRealmURL = 'http://test-realm/user/test/';
 

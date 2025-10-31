@@ -4,10 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import {
-  RealmAuthClient,
-  RealmAuthMatrixClientInterface,
-} from '@cardstack/runtime-common/realm-auth-client';
+import type { RealmAuthMatrixClientInterface } from '@cardstack/runtime-common/realm-auth-client';
+import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { createClient } from 'matrix-js-sdk';
 

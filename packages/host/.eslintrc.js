@@ -24,7 +24,7 @@ module.exports = {
           ],
         },
       },
-      plugins: ['ember', '@typescript-eslint', 'window-mock'],
+      plugins: ['ember', '@typescript-eslint', 'cardstack-host'],
       extends: [
         'eslint:recommended',
         'plugin:ember/recommended',
@@ -33,6 +33,13 @@ module.exports = {
         'plugin:qunit-dom/recommended',
       ],
       rules: {
+        '@typescript-eslint/consistent-type-imports': [
+          'error',
+          {
+            disallowTypeAnnotations: false,
+          },
+        ],
+        '@typescript-eslint/no-import-type-side-effects': 'error',
         '@typescript-eslint/no-empty-function': 'off',
         '@typescript-eslint/no-unused-vars': [
           'error',
@@ -47,8 +54,9 @@ module.exports = {
         '@typescript-eslint/no-non-null-assertion': 'off',
         'no-undef': 'off',
         'ember/no-runloop': 'off',
-        'window-mock/mock-window-only': 'error',
-        'window-mock/wrapped-setup-helpers-only': 'error',
+        'cardstack-host/mock-window-only': 'error',
+        'cardstack-host/wrapped-setup-helpers-only': 'error',
+        'cardstack-host/host-commands-registered': 'error',
       },
     },
     {
@@ -68,7 +76,7 @@ module.exports = {
         },
         warnOnUnsupportedTypeScriptVersion: false,
       },
-      plugins: ['ember', 'window-mock', '@cardstack/boxel'],
+      plugins: ['ember', 'cardstack-host', '@cardstack/boxel'],
       extends: [
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended',
@@ -96,8 +104,8 @@ module.exports = {
         'ember/no-tracked-properties-from-args': 'off',
         'ember/no-runloop': 'off',
         'node/no-deprecated-api': 'off',
-        'window-mock/mock-window-only': 'error',
-        'window-mock/wrapped-setup-helpers-only': 'error',
+        'cardstack-host/mock-window-only': 'error',
+        'cardstack-host/wrapped-setup-helpers-only': 'error',
         '@cardstack/boxel/template-missing-invokable': [
           'error',
           { invokables: MISSING_INVOKABLES_CONFIG.invokables },

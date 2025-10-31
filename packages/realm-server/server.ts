@@ -1,6 +1,7 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
+import type { RealmInfo } from '@cardstack/runtime-common';
 import {
   Realm,
   logger,
@@ -14,7 +15,6 @@ import {
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
   PUBLISHED_DIRECTORY_NAME,
-  RealmInfo,
   fetchSessionRoom,
   REALM_SERVER_REALM,
 } from '@cardstack/runtime-common';
@@ -41,8 +41,8 @@ import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
-  MatrixClient,
   passwordFromSeed,
   getMatrixUsername,
 } from '@cardstack/runtime-common/matrix-client';

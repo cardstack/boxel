@@ -6,7 +6,7 @@ import {
   type RenderError,
 } from '@cardstack/runtime-common';
 
-import { type Page } from 'puppeteer';
+import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 

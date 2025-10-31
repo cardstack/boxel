@@ -1,4 +1,4 @@
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 export function getCodeRefFromSearchKey(
   searchKey: string,
