@@ -22,6 +22,17 @@ import BoxelInputGroup from './index.gts';
 
 const validStates = Object.values(InputValidationStates);
 
+// Common input types that work well with InputGroup
+const inputTypes = [
+  'text',
+  'number',
+  'email',
+  'password',
+  'tel',
+  'url',
+  'search',
+];
+
 const ValidIcons = {
   default: undefined,
   checkmark: CheckMark,
@@ -47,6 +58,10 @@ export default class BoxelInputGroupUsage extends Component {
   @tracked placeholder: string | undefined;
   @tracked autocomplete: string | undefined;
   @tracked inputmode: string | undefined;
+  @tracked type: string | undefined;
+  @tracked min: number | undefined;
+  @tracked max: number | undefined;
+  @tracked step: number | undefined;
   @tracked helperText = 'Please enter an amount';
   @tracked errorMessage = '';
   @tracked disabled = false;
@@ -129,6 +144,10 @@ export default class BoxelInputGroupUsage extends Component {
           @placeholder={{this.placeholder}}
           @autocomplete={{this.autocomplete}}
           @inputmode={{this.inputmode}}
+          @type={{this.type}}
+          @min={{this.min}}
+          @max={{this.max}}
+          @step={{this.step}}
           @onInput={{this.set}}
           @state={{this.state}}
           @validIcon={{this.validIcon}}
@@ -212,6 +231,31 @@ export default class BoxelInputGroupUsage extends Component {
           @description='The inputmode attribute value for the input (ignored when a default block is supplied)'
           @value={{this.inputmode}}
           @onInput={{fn (mut this.inputmode)}}
+        />
+        <Args.String
+          @name='type'
+          @description='The HTML input type attribute'
+          @options={{inputTypes}}
+          @value={{this.type}}
+          @onInput={{fn (mut this.type)}}
+        />
+        <Args.Number
+          @name='min'
+          @description='The minimum value for number inputs'
+          @value={{this.min}}
+          @onInput={{fn (mut this.min)}}
+        />
+        <Args.Number
+          @name='max'
+          @description='The maximum value for number inputs'
+          @value={{this.max}}
+          @onInput={{fn (mut this.max)}}
+        />
+        <Args.Number
+          @name='step'
+          @description='The step value for number inputs'
+          @value={{this.step}}
+          @onInput={{fn (mut this.step)}}
         />
         <Args.String
           @name='value'

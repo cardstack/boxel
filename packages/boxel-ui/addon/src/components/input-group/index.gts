@@ -35,8 +35,8 @@ export interface Signature {
     id?: string;
     inputmode?: string;
     invalidIcon?: Icon;
-    max?: number;
-    min?: number;
+    max?: number /** HTML input max attribute, typically used with number inputs to set the maximum allowed value */;
+    min?: number /** HTML input min attribute, typically used with number inputs to set the minimum allowed value */;
     onBlur?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
@@ -44,8 +44,8 @@ export interface Signature {
     readonly?: boolean;
     required?: boolean;
     state?: InputValidationState;
-    step?: number;
-    type?: string;
+    step?: number /** HTML input step attribute, typically used with number inputs to set the increment/decrement step value */;
+    type?: string /** HTML input type attribute (e.g., 'text', 'number', 'email', 'password') */;
     validIcon?: Icon;
     value?: string;
   };

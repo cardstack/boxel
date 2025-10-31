@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "pin": null,
+      "pin": 923,
       "stat": 1000,
       "unit": {
         "unit": null,
@@ -22,7 +22,7 @@
         "min": 70
       },
       "score": 200,
-      "masked": null,
+      "masked": 102030123010,
       "rating": 3,
       "slider": 26,
       "stepper": 0,
@@ -34,11 +34,11 @@
       },
       "quantity": 4,
       "formatted": 88888,
-      "percentage": 6,
+      "percentage": 200,
       "progressBar": 100,
-      "progressCircle": null,
+      "progressCircle": 30,
       "animatedCounter": 1000,
-      "variantSelection": "stepper"
+      "variantSelection": "pin"
     },
     "relationships": {
       "cardInfo.theme": {

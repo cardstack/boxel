@@ -65,8 +65,12 @@ function clampValue(
   return value;
 }
 
+interface ConfigWithPresentation<T> {
+  presentation?: Partial<T>;
+}
+
 function readConfig<T extends Record<string, unknown>>(
-  configuration: any,
+  configuration: ConfigWithPresentation<T> | undefined,
   defaults: T,
 ): T {
   let raw = (configuration?.presentation ?? {}) as Partial<T> | undefined;
@@ -794,6 +798,12 @@ class PinNumberFieldEdit extends Component<typeof PinNumberField> {
     input?.focus();
   }
 
+  /**
+   * Collects the current PIN value from DOM inputs and updates the model.
+   * Note: This reads from DOM rather than using pinDigits getter because
+   * we need to capture the current input state during user interaction,
+   * before it's committed to the model.
+   */
   collectPinValue() {
     let digits: string[] = [];
     for (let i = 0; i < this.config.length; i++) {
@@ -2403,12 +2413,15 @@ class MaskedNumberFieldEdit extends Component<typeof MaskedNumberField> {
       return '';
     }
 
-    let str = String(val);
+    // Extract sign and work with absolute value
+    let isNegative = val < 0;
+    let absVal = Math.abs(val);
+    let str = String(absVal);
     let visibleDigits = this.config.visibleDigits ?? 4;
     let maskChar = this.config.maskChar ?? '*';
 
     if (str.length <= visibleDigits) {
-      return str;
+      return isNegative ? `-${str}` : str;
     }
 
     let masked = maskChar.repeat(str.length - visibleDigits);
@@ -2428,10 +2441,11 @@ class MaskedNumberFieldEdit extends Component<typeof MaskedNumberField> {
           result += char;
         }
       }
-      return result;
+      return isNegative ? `-${result}` : result;
     }
 
-    return `${masked}${visible}`;
+    let maskedResult = `${masked}${visible}`;
+    return isNegative ? `-${maskedResult}` : maskedResult;
   }
 
   <template>
@@ -2499,12 +2513,15 @@ class MaskedNumberField extends NumberField {
         return '—';
       }
 
-      let str = String(val);
+      // Extract sign and work with absolute value
+      let isNegative = val < 0;
+      let absVal = Math.abs(val);
+      let str = String(absVal);
       let visibleDigits = this.config.visibleDigits ?? 4;
       let maskChar = this.config.maskChar ?? '*';
 
       if (str.length <= visibleDigits) {
-        return str;
+        return isNegative ? `-${str}` : str;
       }
 
       let masked = maskChar.repeat(str.length - visibleDigits);
@@ -2523,10 +2540,11 @@ class MaskedNumberField extends NumberField {
             result += char;
           }
         }
-        return result;
+        return isNegative ? `-${result}` : result;
       }
 
-      return `${masked}${visible}`;
+      let maskedResult = `${masked}${visible}`;
+      return isNegative ? `-${maskedResult}` : maskedResult;
     }
     <template>
       <span class='masked-number-atom'>{{this.maskedDisplay}}</span>
