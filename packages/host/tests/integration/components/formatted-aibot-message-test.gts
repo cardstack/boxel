@@ -295,6 +295,22 @@ let c = 3;
       .doesNotExist();
     assert.dom('[data-test-code-block-index="1"] [data-test-editor]').exists();
 
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          '[data-test-code-block-index="1"] .view-line',
+        ).length >= 3,
+    );
+    await waitUntil(() => {
+      const lines = document.querySelector(
+        '[data-test-code-block-index="1"] .view-lines',
+      ) as HTMLElement | null;
+      return (
+        lines?.innerText ===
+        '// existing code ... \nlet a = 1;\nlet c = 3;'
+      );
+    });
+
     await percySnapshot(assert);
   });
 

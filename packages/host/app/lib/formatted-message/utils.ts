@@ -103,6 +103,13 @@ export function extractCodeData(
 
   let contentWithoutFirstLine = content.slice(lines[0].length).trimStart();
 
+  if (!language || language === 'text') {
+    const inferred = inferLanguageFromCode(codeToDisplay);
+    if (inferred) {
+      language = inferred;
+    }
+  }
+
   return {
     language: language ?? '',
     code: codeToDisplay,
@@ -115,6 +122,23 @@ export function extractCodeData(
     eventId,
     codeBlockIndex,
   };
+}
+
+function inferLanguageFromCode(code: string | null): string | null {
+  if (!code) {
+    return null;
+  }
+
+  const trimmed = code.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^<[^>]+>/.test(trimmed) && trimmed.includes('</')) {
+    return 'html';
+  }
+
+  return null;
 }
 
 export function findLastTextNodeWithContent(parentNode: Node): Text | null {

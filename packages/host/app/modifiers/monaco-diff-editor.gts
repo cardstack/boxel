@@ -69,12 +69,6 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
         editorDisplayOptions,
       );
 
-      // Track editor initialization for test waiters
-      if (this.waiterManager) {
-        const operationId = `monaco-diff-editor-modifier-init-${editor.getId()}`;
-        this.waiterManager.trackEditorInit(editor, operationId);
-      }
-
       let originalModel = monacoSDK.editor.createModel(
         originalCode ?? '',
         language ?? '',
@@ -107,6 +101,12 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
           updateDiffEditorStats(makeCodeDiffStats(editor.getLineChanges()));
         }
       });
+
+      // Track editor initialization for test waiters after diff models are ready
+      if (this.waiterManager) {
+        const operationId = `monaco-diff-editor-modifier-init-${editor.getId()}`;
+        this.waiterManager.trackEditorInit(editor, operationId);
+      }
     }
 
     registerDestructor(this, () => {
