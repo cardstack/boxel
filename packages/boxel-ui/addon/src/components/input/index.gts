@@ -297,25 +297,22 @@ export default class BoxelInput extends Component<Signature> {
         }
 
         .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid):not(
-            :invalid
-          ):not(.search) {
+            .search
+          ) {
           border-color: var(--border, currentColor);
         }
 
-        .invalid:not(:disabled),
-        :invalid:not(:disabled) {
+        .invalid:not(:disabled) {
           border-color: var(--destructive, var(--boxel-error-100));
           box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
         }
 
-        .invalid:focus-visible,
-        :invalid:focus-visible {
+        .invalid:focus-visible {
           outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
           box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
         }
 
-        .invalid:hover:not(:disabled),
-        :invalid:hover:not(:disabled) {
+        .invalid:hover:not(:disabled) {
           border-color: var(--destructive, var(--boxel-error-100));
         }
 

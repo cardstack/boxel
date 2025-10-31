@@ -21,6 +21,7 @@ import DndKanbanBoard, {
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
 } from './components/dropdown/index.gts';
+import EmailInput from './components/email-input/index.gts';
 import EntityDisplayWithIcon from './components/entity-icon-display/index.gts';
 import EntityDisplayWithThumbnail from './components/entity-thumbnail-display/index.gts';
 import FieldContainer from './components/field-container/index.gts';
@@ -107,6 +108,7 @@ export {
   DndColumn,
   DndItem,
   DndKanbanBoard,
+  EmailInput,
   EntityDisplayWithIcon,
   EntityDisplayWithThumbnail,
   FieldContainer,
