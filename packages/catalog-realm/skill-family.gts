@@ -143,11 +143,6 @@ class SkillFamilyIsolated extends Component<typeof SkillFamily> {
     this.tocOpen = !this.tocOpen;
   }
 
-  @action
-  closeToc() {
-    this.tocOpen = false;
-  }
-
   // Get theme CSS from cardInfo.theme or use defaults
   get cssVariables() {
     const theme = this.args.model?.cardInfo?.theme;
@@ -285,7 +280,7 @@ class SkillFamilyIsolated extends Component<typeof SkillFamily> {
             </div>
           </div>
 
-          <nav class='view-toggle'>
+          <nav class='view-toggle' aria-label='View toggle'>
             <Button
               class='toggle-btn
                 {{if (eq this.viewMode "generated") "active" ""}}'
@@ -362,13 +357,6 @@ class SkillFamilyIsolated extends Component<typeof SkillFamily> {
         {{else}}
           <div class='doc-layout'>
             {{#if (gt this.tableOfContents.length 0)}}
-              {{#if this.tocOpen}}
-                <div
-                  class='toc-overlay active'
-                  {{on 'click' this.closeToc}}
-                ></div>
-              {{/if}}
-
               <button
                 class='floating-toc-toggle'
                 {{on 'click' this.toggleToc}}
@@ -426,7 +414,7 @@ class SkillFamilyIsolated extends Component<typeof SkillFamily> {
                     </Button>
                   </div>
                 </div>
-                <nav class='toc-nav'>
+                <nav class='toc-nav' aria-label='Table of contents'>
                   {{#each this.tableOfContents as |item|}}
                     <a
                       href='#{{item.id}}'
@@ -686,19 +674,6 @@ class SkillFamilyIsolated extends Component<typeof SkillFamily> {
         gap: 0;
       }
 
-      /* TOC Overlay - Mobile Only */
-      .toc-overlay {
-        display: none;
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.3);
-        z-index: 15;
-        backdrop-filter: blur(2px);
-      }
-
       /* Table of Contents Sidebar - Sticky Left Column */
       .toc-sidebar {
         position: sticky;
@@ -714,32 +689,6 @@ class SkillFamilyIsolated extends Component<typeof SkillFamily> {
         transition:
           width 0.2s ease,
           min-width 0.2s ease;
-      }
-
-      /* Mobile: Overlay behavior */
-      @media (max-width: 1023px) {
-        .toc-overlay {
-          display: none;
-        }
-
-        .toc-overlay.active {
-          display: block;
-        }
-
-        .toc-sidebar {
-          position: absolute;
-          left: -280px;
-          top: 0;
-          height: 100%;
-          width: 260px;
-          box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
-          z-index: 16;
-          transition: left 0.3s ease;
-        }
-
-        .toc-sidebar.open {
-          left: 0;
-        }
       }
 
       .toc-header {
