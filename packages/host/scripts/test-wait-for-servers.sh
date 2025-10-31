@@ -37,7 +37,24 @@ TEST_REALM_READY="$TEST_REALM$READY_PATH"
 SYNAPSE_URL="http://localhost:8008"
 SMTP_4_DEV_URL="http://localhost:5001"
 
+HOST_TESTS_STARTED_FILE="${HOST_TESTS_STARTED_FILE:-/tmp/host-tests-started}"
+rm -f "$HOST_TESTS_STARTED_FILE"
+
 WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 start-server-and-test \
   'pnpm run wait' \
   "$BASE_REALM_READY|$CATALOG_REALM_READY|$NODE_TEST_REALM_READY|$SKILLS_REALM_READY|$TEST_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL" \
   './scripts/run-tests-with-logs.sh'
+
+status=$?
+
+if [ ! -f "$HOST_TESTS_STARTED_FILE" ]; then
+  printf '\n⚠️  Host shard never executed the test runner because waiting for realm services to become ready failed.\n' >&2
+  if [ "$status" -eq 253 ] 2>/dev/null; then
+    printf 'start-server-and-test exited with code 253, which typically means the wait-on step timed out while polling realm readiness URLs. This often happens when the realm server cannot start or finish indexing.\n' >&2
+  fi
+  printf 'See the realm server logs above for startup or indexing errors.\n' >&2
+fi
+
+rm -f "$HOST_TESTS_STARTED_FILE"
+
+exit "$status"
