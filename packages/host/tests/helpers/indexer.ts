@@ -1,5 +1,6 @@
 import isEqual from 'lodash/isEqual';
 
+import type { LooseCardResource, DBAdapter } from '@cardstack/runtime-common';
 import {
   asExpressions,
   addExplicitParens,
@@ -16,9 +17,7 @@ import {
   type Expression,
   type BoxelIndexTable,
   type RealmVersionsTable,
-  LooseCardResource,
   trimExecutableExtension,
-  DBAdapter,
   query,
   isDefinitionId,
   trimExportNameFromDefinitionId,

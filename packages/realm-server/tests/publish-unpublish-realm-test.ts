@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
-import supertest, { SuperTest, Test } from 'supertest';
+import type { SuperTest, Test } from 'supertest';
+import supertest from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import {
   existsSync,
@@ -9,16 +10,15 @@ import {
   readJsonSync,
 } from 'fs-extra';
 import { basename, join } from 'path';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
+import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import {
-  Realm,
   DEFAULT_PERMISSIONS,
-  VirtualNetwork,
   type QueuePublisher,
   type QueueRunner,
 } from '@cardstack/runtime-common';
-import { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupDB,
   setupPermissionedRealm,

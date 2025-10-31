@@ -1,13 +1,13 @@
 import Route from '@ember/routing/route';
-import Transition from '@ember/routing/transition';
+import type Transition from '@ember/routing/transition';
 
 import { service } from '@ember/service';
 
 import { isEqual } from 'lodash';
 
+import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
-  CodeRef,
   identifyCard,
   internalKeyFor,
   maybeRelativeURL,

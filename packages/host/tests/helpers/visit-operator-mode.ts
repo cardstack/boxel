@@ -2,7 +2,7 @@ import { visit } from '@ember/test-helpers';
 
 import stringify from 'safe-stable-stringify';
 
-import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
 export default async function visitOperatorMode({
   stacks,

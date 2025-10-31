@@ -9,8 +9,6 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import OperatorModeStateService from '../services/operator-mode-state-service';
-
 import AddSkillsToRoomCommand from './add-skills-to-room';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
@@ -19,6 +17,7 @@ import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
 
 import type MatrixService from '../services/matrix-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
 
 export default class UseAiAssistantCommand extends HostBaseCommand<

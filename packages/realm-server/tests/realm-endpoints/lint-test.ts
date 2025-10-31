@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
-import { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { Realm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 import {
   setupBaseRealmServer,
   matrixURL,

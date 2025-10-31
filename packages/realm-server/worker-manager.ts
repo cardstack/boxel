@@ -19,7 +19,7 @@ import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
 
 /* About the Worker Manager

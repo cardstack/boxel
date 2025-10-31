@@ -1,7 +1,7 @@
-import { type CardResource, type SerializerName, type CodeRef } from './index';
-import { type SerializedError } from './error';
-import { type PgPrimitive } from './expression';
-import { type FieldType } from 'https://cardstack.com/base/card-api';
+import type { CardResource, SerializerName, CodeRef } from './index';
+import type { SerializedError } from './error';
+import type { PgPrimitive } from './expression';
+import type { FieldType } from 'https://cardstack.com/base/card-api';
 
 export interface BoxelIndexTable {
   url: string;

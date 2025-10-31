@@ -1,19 +1,19 @@
 import { service } from '@ember/service';
 import Service from '@ember/service';
 
+import type { RealmInfo } from '@cardstack/runtime-common';
 import {
   identifyCard,
   internalKeyFor,
   baseRealm,
   moduleFrom,
   getAncestor,
-  RealmInfo,
   SupportedMimeType,
   isResolvedCodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 

@@ -1,12 +1,11 @@
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '../index';
-import {
+import type {
   DBAdapter,
   FromScratchArgs,
   FromScratchResult,
   QueuePublisher,
-  param,
-  query,
 } from '../';
+import { param, query } from '../';
 
 export async function enqueueReindexRealmJob(
   realmUrl: string,

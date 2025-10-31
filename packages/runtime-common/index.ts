@@ -1,4 +1,4 @@
-import { CardResource, Meta } from './resource-types';
+import type { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 
@@ -113,8 +113,8 @@ export interface RealmPrerenderedCards {
 // TODO should we use the secure form once we start letting lid's drive the id
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
-import { type LocalPath } from './paths';
-import { CardTypeFilter, Query, EveryFilter } from './query';
+import type { LocalPath } from './paths';
+import type { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
@@ -228,8 +228,8 @@ import type {
   BaseDef,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { RealmInfo } from './realm';
-import { PrerenderedCard, QueryResultsMeta } from './index-query-engine';
+import type { RealmInfo } from './realm';
+import type { PrerenderedCard, QueryResultsMeta } from './index-query-engine';
 
 export interface MatrixCardError {
   id?: string;
@@ -315,8 +315,8 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   return await chooser.chooseFile<T>();
 }
 
-import { type CardErrorJSONAPI } from './error';
-import { SingleCardDocument } from './document-types';
+import type { CardErrorJSONAPI } from './error';
+import type { SingleCardDocument } from './document-types';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;

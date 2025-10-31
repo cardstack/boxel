@@ -1,8 +1,10 @@
 import { inject as service } from '@ember/service';
 
-import Modifier, { NamedArgs, PositionalArgs } from 'ember-modifier';
+import Modifier from 'ember-modifier';
 
-import ScrollPositionService from '@cardstack/host/services/scroll-position-service';
+import type ScrollPositionService from '@cardstack/host/services/scroll-position-service';
+
+import type { NamedArgs, PositionalArgs } from 'ember-modifier';
 
 interface ScrollIntoViewModifierArgs {
   Positional: [boolean];

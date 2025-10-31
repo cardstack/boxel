@@ -2,30 +2,27 @@ import { getOwner } from '@ember/application';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
-import { ComponentLike } from '@glint/template';
-
 //@ts-ignore no types are available
 import createDocument from '@simple-dom/document';
-import Parser, { Tokenizer } from '@simple-dom/parser';
+
+import Parser from '@simple-dom/parser';
 import Serializer from '@simple-dom/serializer';
 import voidMap from '@simple-dom/void-map';
 
 import { tokenize } from 'simple-html-tokenizer';
 
+import type { RealmPaths } from '@cardstack/runtime-common';
 import {
   logger,
   baseRealm,
-  RealmPaths,
   loadDocument,
   type CodeRef,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Deferred } from '@cardstack/runtime-common/deferred';
+import type { Deferred } from '@cardstack/runtime-common/deferred';
 import { isCardError, CardError } from '@cardstack/runtime-common/error';
-import {
-  isNotLoadedError,
-  NotLoaded,
-} from '@cardstack/runtime-common/not-loaded';
+import type { NotLoaded } from '@cardstack/runtime-common/not-loaded';
+import { isNotLoadedError } from '@cardstack/runtime-common/not-loaded';
 
 import config from '@cardstack/host/config/environment';
 
@@ -42,7 +39,9 @@ import { render } from '../lib/isolated-render';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
+import type { ComponentLike } from '@glint/template';
 import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
+import type { Tokenizer } from '@simple-dom/parser';
 
 const log = logger('renderer');
 

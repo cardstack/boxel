@@ -1,11 +1,7 @@
 import a from 'indefinite';
 
-import {
-  CodeRef,
-  getPlural,
-  loadCardDef,
-  Loader,
-} from '@cardstack/runtime-common';
+import type { CodeRef, Loader } from '@cardstack/runtime-common';
+import { getPlural, loadCardDef } from '@cardstack/runtime-common';
 import {
   isCardTypeFilter,
   isEveryFilter,

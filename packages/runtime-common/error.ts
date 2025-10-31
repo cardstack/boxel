@@ -1,7 +1,7 @@
 import { getReasonPhrase } from 'http-status-codes';
 import status from 'statuses';
 import { createResponse } from './create-response';
-import { RequestContext } from './realm';
+import type { RequestContext } from './realm';
 import type { SearchResultError } from './realm-index-query-engine';
 
 export interface ErrorDetails {

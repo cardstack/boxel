@@ -1,7 +1,7 @@
-import { DBAdapter } from '../db';
+import type { DBAdapter } from '../db';
 
 import { query, asExpressions, insert } from '../expression';
-import { type User } from './db-types';
+import type { User } from './db-types';
 
 export async function insertUser(
   dbAdapter: DBAdapter,

@@ -8,13 +8,10 @@ import Ajv from 'ajv';
 
 import { task, timeout, all } from 'ember-concurrency';
 
-import { IEvent } from 'matrix-js-sdk';
-
 import { TrackedSet } from 'tracked-built-ins';
 
+import type { Command, CommandContext } from '@cardstack/runtime-common';
 import {
-  Command,
-  CommandContext,
   CommandContextStamp,
   delay,
   getClass,
@@ -30,7 +27,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -39,6 +36,7 @@ import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageCommand from '../lib/matrix-classes/message-command';
+import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 

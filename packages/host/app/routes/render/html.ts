@@ -1,5 +1,5 @@
 import Route from '@ember/routing/route';
-import RouterService from '@ember/routing/router-service';
+import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
 import { isValidFormat } from '@cardstack/runtime-common';

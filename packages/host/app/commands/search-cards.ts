@@ -2,7 +2,8 @@ import { service } from '@ember/service';
 
 import flatMap from 'lodash/flatMap';
 
-import { Filter, assertQuery } from '@cardstack/runtime-common';
+import type { Filter } from '@cardstack/runtime-common';
+import { assertQuery } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 

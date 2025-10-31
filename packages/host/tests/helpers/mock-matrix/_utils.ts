@@ -1,8 +1,8 @@
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import RealmService from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 
 import type { RealmEvent } from 'https://cardstack.com/base/matrix-event';
 

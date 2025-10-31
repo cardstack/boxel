@@ -1,4 +1,4 @@
-import { Changeset } from '@cardstack/boxel-motion/models/animator';
+import type { Changeset } from '@cardstack/boxel-motion/models/animator';
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 

@@ -13,11 +13,11 @@ import isEqual from 'lodash/isEqual';
 
 import { TrackedArray } from 'tracked-built-ins';
 
+import type { QueryResultsMeta } from '@cardstack/runtime-common';
 import {
   subscribeToRealm,
   isCardCollectionDocument,
   isCardInstance,
-  QueryResultsMeta,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';

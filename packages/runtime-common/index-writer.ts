@@ -28,11 +28,11 @@ import {
   dbExpression,
   upsertMultipleRows,
 } from './expression';
-import { type SerializedError } from './error';
-import { type DBAdapter } from './db';
+import type { SerializedError } from './error';
+import type { DBAdapter } from './db';
+import type { RealmMetaTable } from './index-structure';
 import {
   coerceTypes,
-  RealmMetaTable,
   type BoxelIndexTable,
   type RealmVersionsTable,
   type Definition,

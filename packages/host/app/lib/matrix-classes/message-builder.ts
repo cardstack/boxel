@@ -12,10 +12,8 @@ import {
   isCardInstance,
 } from '@cardstack/runtime-common';
 
-import {
-  CommandRequest,
-  decodeCommandRequest,
-} from '@cardstack/runtime-common/commands';
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import { decodeCommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -31,7 +29,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { RoomSkill } from '@cardstack/host/resources/room';
+import type { RoomSkill } from '@cardstack/host/resources/room';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -39,7 +37,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
-import { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
@@ -51,10 +49,11 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
-import { RoomMember } from './member';
 import { Message } from './message';
 import MessageCodePatchResult from './message-code-patch-result';
 import MessageCommand from './message-command';
+
+import type { RoomMember } from './member';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',

@@ -1,14 +1,16 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
-import {
-  type IndexedInstance,
-  type QueuePublisher,
-  type QueueRunner,
+import type {
   DBAdapter,
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
   RealmAdapter,
+} from '@cardstack/runtime-common';
+import type {
+  IndexedInstance,
+  QueuePublisher,
+  QueueRunner,
 } from '@cardstack/runtime-common';
 import {
   setupBaseRealmServer,
@@ -25,10 +27,10 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { join, basename } from 'path';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
-import {
-  type PgQueueRunner,
-  type PgAdapter,
-  type PgQueuePublisher,
+import type {
+  PgQueueRunner,
+  PgAdapter,
+  PgQueuePublisher,
 } from '@cardstack/postgres';
 
 function trimCardContainer(text: string) {

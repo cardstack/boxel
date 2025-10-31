@@ -1,23 +1,22 @@
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
 
 import { service } from '@ember/service';
 
-import * as MatrixSDK from 'matrix-js-sdk';
 import { SlidingSync } from 'matrix-js-sdk/lib/sliding-sync';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
-import FileDefManagerImpl, {
-  FileDefManager,
-} from '@cardstack/host/lib/file-def-manager';
+import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
+import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 
-import MatrixService from './matrix-service';
-import NetworkService from './network';
+import type MatrixService from './matrix-service';
+import type NetworkService from './network';
+import type * as MatrixSDK from 'matrix-js-sdk';
 
 /*
   This abstracts over the matrix SDK, including several extra functions that are

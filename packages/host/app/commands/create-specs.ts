@@ -16,7 +16,8 @@ import {
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
+import type { SpecType } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 import {

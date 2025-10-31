@@ -1,4 +1,5 @@
-import { SafeString, htmlSafe } from '@ember/template';
+import type { SafeString } from '@ember/template';
+import { htmlSafe } from '@ember/template';
 
 import { SEARCH_MARKER } from '@cardstack/runtime-common';
 import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';

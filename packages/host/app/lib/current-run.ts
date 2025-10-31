@@ -6,6 +6,7 @@ import ignore, { type Ignore } from 'ignore';
 import isEqual from 'lodash/isEqual';
 import merge from 'lodash/merge';
 
+import type { IndexWriter, RenderResponse } from '@cardstack/runtime-common';
 import {
   baseRealm,
   logger,
@@ -19,7 +20,6 @@ import {
   identifyCard,
   isCardDef,
   isBaseDef,
-  IndexWriter,
   unixTime,
   jobIdentity,
   getFieldDefinitions,
@@ -44,7 +44,6 @@ import {
   type Prerenderer,
   type RealmPermissions,
   type RenderRouteOptions,
-  RenderResponse,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -54,9 +53,10 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 import { cardTypeIcon } from '@cardstack/runtime-common/helpers';
-import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { isIgnored } from '@cardstack/runtime-common/realm-index-updater';
-import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
+import type { Reader, Stats } from '@cardstack/runtime-common/worker';
 
 import ENV from '@cardstack/host/config/environment';
 
