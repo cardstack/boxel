@@ -1,4 +1,4 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 import {
   fetchUserPermissions,
   query,
@@ -25,8 +25,8 @@ import {
   setContextResponse,
 } from '../middleware';
 import { createJWT } from '../jwt';
-import { type CreateRoutesArgs } from '../routes';
-import { RealmServerTokenClaim } from '../utils/jwt';
+import type { CreateRoutesArgs } from '../routes';
+import type { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 

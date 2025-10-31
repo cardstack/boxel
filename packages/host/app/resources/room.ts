@@ -3,12 +3,11 @@ import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { TaskInstance, restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
 
-import { IRoomEvent } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -53,9 +52,10 @@ import {
   RoomMember,
   type RoomMemberInterface,
 } from '../lib/matrix-classes/member';
-import { Message } from '../lib/matrix-classes/message';
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
+
+import type { Message } from '../lib/matrix-classes/message';
 
 import type Room from '../lib/matrix-classes/room';
 
@@ -64,6 +64,8 @@ import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type { TaskInstance } from 'ember-concurrency';
+import type { IRoomEvent } from 'matrix-js-sdk';
 
 export type RoomSkill = {
   cardId: string;

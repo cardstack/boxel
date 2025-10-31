@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, all } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface Args {
   named: {

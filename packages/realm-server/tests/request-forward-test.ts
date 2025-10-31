@@ -1,8 +1,9 @@
 import { module, test } from 'qunit';
 import sinon from 'sinon';
-import supertest, { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
+import supertest from 'supertest';
 import { basename, join } from 'path';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {

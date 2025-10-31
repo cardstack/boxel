@@ -1,11 +1,11 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 import { query, param } from '@cardstack/runtime-common';
 import {
   sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
-import { CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes';
 import { validateSubdomain } from '../lib/user-subdomain-validation';
 
 type CheckBoxelDomainAvailabilityResponse = {

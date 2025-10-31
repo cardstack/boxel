@@ -12,7 +12,9 @@ import {
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { Submode, Submodes } from '../components/submode-switcher';
+import { Submodes } from '../components/submode-switcher';
+
+import type { Submode } from '../components/submode-switcher';
 
 import type CardService from '../services/card-service';
 import type StoreService from '../services/store';

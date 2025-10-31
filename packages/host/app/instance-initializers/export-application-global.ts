@@ -1,4 +1,4 @@
-import ApplicationInstance from '@ember/application/instance';
+import type ApplicationInstance from '@ember/application/instance';
 
 import config from '@cardstack/host/config/environment';
 

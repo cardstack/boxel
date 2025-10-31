@@ -1,7 +1,8 @@
 import '../instrument';
 import '../setup-logger';
 import { logger } from '@cardstack/runtime-common';
-import { Server, createServer } from 'http';
+import type { Server } from 'http';
+import { createServer } from 'http';
 import yargs from 'yargs';
 import { buildPrerenderManagerApp } from './manager-app';
 

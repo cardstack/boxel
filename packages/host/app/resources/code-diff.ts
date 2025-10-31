@@ -5,9 +5,9 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import type CardService from '@cardstack/host/services/card-service';
-import CommandService from '@cardstack/host/services/command-service';
+import type CommandService from '@cardstack/host/services/command-service';
 
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import ApplySearchReplaceBlockCommand from '../commands/apply-search-replace-block';
 

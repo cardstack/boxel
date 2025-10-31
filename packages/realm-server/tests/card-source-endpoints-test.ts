@@ -1,16 +1,16 @@
 import { module, test } from 'qunit';
-import { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
-import { Server } from 'http';
-import { type DirResult } from 'tmp';
+import type { Server } from 'http';
+import type { DirResult } from 'tmp';
 import { existsSync, readFileSync } from 'fs-extra';
 import {
   cardSrc,
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
+import type { Realm } from '@cardstack/runtime-common';
 import {
   RealmPaths,
-  Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {

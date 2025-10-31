@@ -1,6 +1,7 @@
 import Koa from 'koa';
 import Router from '@koa/router';
-import { Server, createServer } from 'http';
+import type { Server } from 'http';
+import { createServer } from 'http';
 import * as Sentry from '@sentry/node';
 import {
   logger,

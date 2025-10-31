@@ -7,10 +7,7 @@ import {
   PgQueueRunner,
 } from '@cardstack/postgres';
 
-import {
-  type QueuePublisher,
-  type QueueRunner,
-} from '@cardstack/runtime-common';
+import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 import { basename } from 'path';

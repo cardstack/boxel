@@ -6,10 +6,11 @@ import templateOnly from '@ember/component/template-only';
 import { htmlSafe, type SafeString } from '@ember/template';
 import { precompileTemplate } from '@ember/template-compilation';
 
-import { ComponentLike } from '@glint/template';
 import { modifier } from 'ember-modifier';
 
 import { compiler } from '@cardstack/runtime-common/etc';
+
+import type { ComponentLike } from '@glint/template';
 
 class _DynamicHTMLComponent {
   constructor(

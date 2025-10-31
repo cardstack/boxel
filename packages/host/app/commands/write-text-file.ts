@@ -3,8 +3,9 @@ import { service } from '@ember/service';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import NetworkService from '../services/network';
-import RealmService from '../services/realm';
+
+import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 
 export default class WriteTextFileCommand extends HostBaseCommand<
   typeof BaseCommandModule.WriteTextFileInput

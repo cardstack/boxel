@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { type CommandContext } from '@cardstack/runtime-common';
+import type { CommandContext } from '@cardstack/runtime-common';
 import {
   generateJsonSchemaForCardType,
   basicMappings,
@@ -9,11 +9,10 @@ import {
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import {
-  FieldPathParser,
-  ValidateFieldPathResult,
-} from '../lib/field-path-parser';
+import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseCommand from '../lib/host-base-command';
+
+import type { ValidateFieldPathResult } from '../lib/field-path-parser';
 
 import type CardService from '../services/card-service';
 import type StoreService from '../services/store';

@@ -1,4 +1,5 @@
-import Owner, { getOwner } from '@ember/owner';
+import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -8,13 +9,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import { dropTask, task, timeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash';
-import {
-  type LoginResponse,
-  type MatrixEvent,
-  type RoomMember,
-  type EmittedEvents,
-} from 'matrix-js-sdk';
-import { MatrixClient } from 'matrix-js-sdk';
+
 import { Filter } from 'matrix-js-sdk';
 import {
   type SlidingSync,
@@ -27,11 +22,13 @@ import stringify from 'safe-stable-stringify';
 import { TrackedMap } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
+import type {
+  LooseCardResource,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import {
   aiBotUsername,
-  LooseCardResource,
   logger,
-  ResolvedCodeRef,
   isCardInstance,
   Deferred,
   SEARCH_MARKER,
@@ -79,18 +76,19 @@ import ENV from '@cardstack/host/config/environment';
 
 import type IndexController from '@cardstack/host/controllers/index';
 
-import Room, { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
+import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
+import Room from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import {
+import type {
   CardForAttachmentCard,
   FileForAttachmentCard,
 } from 'https://cardstack.com/base/command';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
-import { type FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   BoxelContext,
   CardMessageContent,
@@ -113,11 +111,9 @@ import { isSkillCard } from '../lib/file-def-manager';
 import { skillCardURL } from '../lib/utils';
 import { importResource } from '../resources/import';
 
-import { RoomResource, getRoom } from '../resources/room';
+import { getRoom } from '../resources/room';
 
 import { clearLocalStorage } from '../utils/local-storage-keys';
-
-import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
 import type CommandService from './command-service';
@@ -128,10 +124,19 @@ import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
 import type MessageService from './message-service';
 import type NetworkService from './network';
+import type { SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 import type StoreService from './store';
+import type { RoomResource } from '../resources/room';
+import type { MatrixClient } from 'matrix-js-sdk';
+import type {
+  LoginResponse,
+  MatrixEvent,
+  RoomMember,
+  EmittedEvents,
+} from 'matrix-js-sdk';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 

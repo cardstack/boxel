@@ -1,11 +1,8 @@
-import { type FastBootInstance } from './fastboot-from-deployed';
+import type { FastBootInstance } from './fastboot-from-deployed';
 import { instantiateFastBoot } from './fastboot-from-deployed';
-import {
-  type IndexRunner,
-  type RunnerOpts,
-} from '@cardstack/runtime-common/worker';
+import type { IndexRunner, RunnerOpts } from '@cardstack/runtime-common/worker';
 import { JSDOM } from 'jsdom';
-import { type ErrorReporter } from '@cardstack/runtime-common/realm';
+import type { ErrorReporter } from '@cardstack/runtime-common/realm';
 import { performance } from 'perf_hooks';
 import { readFileSync } from 'fs-extra';
 import { join } from 'path';

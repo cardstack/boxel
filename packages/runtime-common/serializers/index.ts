@@ -8,15 +8,15 @@ import * as EthereumAddressSerializer from './ethereum-address';
 import * as NumberSerializer from './number';
 import * as ImageSizeSerializer from './image-size';
 
-import { type CardDocument } from '../index';
-import {
-  type JSONAPISingleResourceDocument,
-  type SerializeOpts,
-  type BaseDef,
-  type BaseDefConstructor,
-  type BaseInstanceType,
-  type CardStore,
-  type DeserializeOpts,
+import type { CardDocument } from '../index';
+import type {
+  JSONAPISingleResourceDocument,
+  SerializeOpts,
+  BaseDef,
+  BaseDefConstructor,
+  BaseInstanceType,
+  CardStore,
+  DeserializeOpts,
 } from 'https://cardstack.com/base/card-api';
 
 export {

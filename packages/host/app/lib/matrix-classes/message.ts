@@ -1,8 +1,6 @@
 import { guidFor } from '@ember/object/internals';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { EventStatus } from 'matrix-js-sdk';
-
 import { TrackedArray } from 'tracked-built-ins';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -13,13 +11,14 @@ import {
   type HtmlTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
-import { type FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import { RoomMember } from './member';
+import type { RoomMember } from './member';
 
 import type MessageCodePatchResult from './message-code-patch-result';
 
 import type MessageCommand from './message-command';
+import type { EventStatus } from 'matrix-js-sdk';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',

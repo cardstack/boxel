@@ -1,8 +1,10 @@
-import { IContent, MatrixClient, Method } from 'matrix-js-sdk';
+import type { IContent, MatrixClient } from 'matrix-js-sdk';
+import { Method } from 'matrix-js-sdk';
 import { REPLACE_MARKER, SEARCH_MARKER, SEPARATOR_MARKER } from '../constants';
 import { logger } from '../log';
 import { OpenAIError } from 'openai/error';
-import { CommandRequest, encodeCommandRequests } from '../commands';
+import type { CommandRequest } from '../commands';
+import { encodeCommandRequests } from '../commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
@@ -12,10 +14,10 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
 } from '../matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import { MatrixEvent } from 'matrix-js-sdk';
-import { PromptParts } from './types';
+import type { MatrixEvent } from 'matrix-js-sdk';
+import type { PromptParts } from './types';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
-import { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 function getLog() {
   return logger('ai-bot');

@@ -1,4 +1,4 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 import {
   SupportedMimeType,
   systemInitiatedPriority,
@@ -7,7 +7,7 @@ import {
   sendResponseForUnauthorizedRequest,
   setContextResponse,
 } from '../middleware';
-import { type CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes';
 import {
   compareCurrentBoxelUIChecksum,
   writeCurrentBoxelUIChecksum,

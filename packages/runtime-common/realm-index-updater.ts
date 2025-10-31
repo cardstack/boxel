@@ -15,7 +15,7 @@ import {
   type CopyArgs,
   type CopyResult,
 } from '.';
-import { Realm } from './realm';
+import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
 

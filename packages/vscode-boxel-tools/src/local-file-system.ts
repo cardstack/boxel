@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { RealmAuth } from './realm-auth';
+import type { RealmAuth } from './realm-auth';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 
 // Define the metadata structure for realm files

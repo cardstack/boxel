@@ -1,6 +1,6 @@
-import { RealmInfo } from './realm';
-import { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
-import { type CardTypeSummary } from './index-structure';
+import type { RealmInfo } from './realm';
+import type { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
+import type { CardTypeSummary } from './index-structure';
 import {
   type CardResource,
   type PrerenderedCardResource,

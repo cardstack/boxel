@@ -1,4 +1,4 @@
-import { RealmInfo } from './realm';
+import type { RealmInfo } from './realm';
 import { type CodeRef, isCodeRef, moduleFrom } from './code-ref';
 
 // resource

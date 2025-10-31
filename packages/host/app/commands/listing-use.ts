@@ -8,8 +8,8 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common';
 
-import * as CardAPI from 'https://cardstack.com/base/card-api';
-import * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
 

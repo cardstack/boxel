@@ -47,21 +47,18 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
-import { type CardSaveSubscriber } from './card-service';
-
-import EnvironmentService from './environment-service';
+import type { CardSaveSubscriber } from './card-service';
 
 import type CardService from './card-service';
+import type EnvironmentService from './environment-service';
+
 import type HostModeService from './host-mode-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
