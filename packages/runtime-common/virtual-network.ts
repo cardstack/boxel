@@ -176,9 +176,19 @@ export class VirtualNetwork {
 
     if (remappedUrl) {
       return await buildRequest(remappedUrl, request);
-    } else {
-      return request;
     }
+
+    if (request.url.includes('test-realm')) {
+      console.warn(
+        '[virtual-network] unmapped test-realm request',
+        direction,
+        request.url,
+        { mappings: this.urlMappings },
+      );
+      console.trace('trace');
+    }
+
+    return request;
   }
 
   private mapRedirectionURL(response: Response): void {
