@@ -76,7 +76,7 @@ module(basename(__filename), function () {
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
-      
+
       // Register two servers
       await request.post('/prerender-servers').send({
         data: {
@@ -90,14 +90,14 @@ module(basename(__filename), function () {
           attributes: { capacity: 2, url: serverUrlB },
         },
       });
-      
+
       // Make a prerender request to assign a realm to a server
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
       let proxyResponse = await request.post('/prerender').send(body);
       assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
       let assignedServer = proxyResponse.headers['x-boxel-prerender-target'];
-      
+
       // Get healthcheck
       let healthResponse = await request.get('/');
       assert.strictEqual(healthResponse.status, 200, 'health 200');
@@ -106,15 +106,15 @@ module(basename(__filename), function () {
         'application/vnd.api+json',
         'JSON-API content type',
       );
-      
+
       let { data, included } = healthResponse.body;
       assert.strictEqual(data.type, 'prerender-manager-health', 'health type');
       assert.strictEqual(data.attributes.ready, true, 'ready');
-      
+
       // Verify included servers
       assert.ok(Array.isArray(included), 'included is array');
       assert.strictEqual(included.length, 2, 'two servers in included');
-      
+
       // Find the server that was assigned the realm
       let assignedServerData = included.find(
         (s: any) => s.id === assignedServer,
@@ -140,7 +140,7 @@ module(basename(__filename), function () {
         'has registeredAt',
       );
       assert.ok(assignedServerData.attributes.lastSeenAt > 0, 'has lastSeenAt');
-      
+
       // Verify realms array
       assert.ok(
         Array.isArray(assignedServerData.attributes.realms),
@@ -160,7 +160,7 @@ module(basename(__filename), function () {
         assignedServerData.attributes.realms[0].lastUsed > 0,
         'realm has lastUsed timestamp',
       );
-      
+
       // Verify the other server has no realms
       let otherServerUrl = assignedServer === serverUrlA ? serverUrlB : serverUrlA;
       let otherServerData = included.find((s: any) => s.id === otherServerUrl);

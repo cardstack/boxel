@@ -91,7 +91,7 @@ export function buildPrerenderManagerApp(): {
   });
   router.get('/', async (ctxt) => {
     ctxt.set('Content-Type', 'application/vnd.api+json');
-    
+
     // Build the list of active servers with their realms
     let servers = [];
     for (let [serverUrl, serverInfo] of registry.servers) {
@@ -99,10 +99,12 @@ export function buildPrerenderManagerApp(): {
       for (let realm of serverInfo.activeRealms) {
         realms.push({
           url: realm,
+          // Use the last access time if available, otherwise fall back to server registration time
+          // (which represents when the realm was first assigned to this server)
           lastUsed: registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt,
         });
       }
-      
+
       servers.push({
         type: 'prerender-server',
         id: serverUrl,
