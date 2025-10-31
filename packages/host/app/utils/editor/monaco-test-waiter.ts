@@ -4,18 +4,6 @@ import { isTesting } from '@embroider/macros';
 
 import type * as MonacoSDK from 'monaco-editor';
 
-interface MonacoTokenization {
-  forceTokenization(lineCount: number): void;
-  backgroundTokenizationState?: number;
-  hasTokens?: boolean;
-}
-
-type TokenizationCapableModel = MonacoSDK.editor.ITextModel & {
-  tokenization?: MonacoTokenization;
-};
-
-const BACKGROUND_TOKENIZATION_STATE_COMPLETED = 2;
-
 /**
  * Monaco Editor Test Waiter Strategy
  *
@@ -81,147 +69,94 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       const targetEditor =
         'getModifiedEditor' in editor ? editor.getModifiedEditor() : editor;
 
-      // Synchronously add syntax highlighting and tokenization (for indentation lines)
+      // Synchronously add syntax highlighting
       const forceFullTokenization = (
         codeEditor: MonacoSDK.editor.ICodeEditor,
       ) => {
-        const model = codeEditor.getModel() as TokenizationCapableModel | null;
+        const model = codeEditor.getModel();
         if (!model) return;
 
         const lineCount = model.getLineCount();
         if (lineCount <= 0) return;
 
-        model.tokenization?.forceTokenization(lineCount);
-        if ('forceTokenization' in model) {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (model as any).forceTokenization(lineCount);
-          } catch {
-            // ignore – not all models expose forceTokenization directly
-          }
-        }
-      };
+        type TokenizationCapableModel = MonacoSDK.editor.ITextModel & {
+          tokenization?: { forceTokenization(lineCount: number): void };
+        };
 
-      const editorsToValidate: MonacoSDK.editor.ICodeEditor[] =
-        'getOriginalEditor' in editor
-          ? [editor.getOriginalEditor(), targetEditor]
-          : [targetEditor];
-
-      const disposables: MonacoSDK.IDisposable[] = [];
-      const register = (disposable?: MonacoSDK.IDisposable) => {
-        if (disposable) {
-          disposables.push(disposable);
-        }
-      };
-
-      const isEditorReady = (codeEditor: MonacoSDK.editor.ICodeEditor) => {
-        const layoutInfo = codeEditor.getLayoutInfo();
-        const contentHeight = codeEditor.getContentHeight();
-
-        if (layoutInfo.width <= 0 || layoutInfo.height <= 0) {
-          return false;
-        }
-
-        if (contentHeight <= 0) {
-          return false;
-        }
-
-        const model = codeEditor.getModel() as TokenizationCapableModel | null;
-        if (!model) {
-          return true;
-        }
-
-        const tokenization = model.tokenization;
-        if (tokenization) {
-          if (model.getLanguageId() === 'plaintext') {
-            return true;
-          }
-
-          const backgroundState = tokenization.backgroundTokenizationState;
-          if (
-            backgroundState !== undefined &&
-            backgroundState !== BACKGROUND_TOKENIZATION_STATE_COMPLETED
-          ) {
-            return false;
-          }
-
-          if ('hasTokens' in tokenization && !tokenization.hasTokens) {
-            return false;
-          }
-        }
-
-        return true;
-      };
-
-      const originalEndAsync = this.endAsync.bind(this);
-
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-      const cleanup = () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          timeoutId = undefined;
-        }
-        while (disposables.length) {
-          disposables.pop()?.dispose();
-        }
-        this.endAsync = originalEndAsync;
-      };
-
-      const hardFinalize = () => {
-        if (isInitialized) return;
-        isInitialized = true;
-        editorsToValidate.forEach(forceFullTokenization);
-        cleanup();
-        originalEndAsync(operationId);
-      };
-
-      const tryFinalize = () => {
-        if (isInitialized) return;
-        if (editorsToValidate.every(isEditorReady)) {
-          hardFinalize();
-        }
-      };
-
-      const observeModel = (codeEditor: MonacoSDK.editor.ICodeEditor) => {
-        const model = codeEditor.getModel() as TokenizationCapableModel | null;
-        if (!model) return;
-
-        register(model.onDidChangeContent(tryFinalize));
-        register(model.onDidChangeTokens(tryFinalize));
-        register(model.onDidChangeLanguage(tryFinalize));
-      };
-
-      editorsToValidate.forEach((codeEditor) => {
-        observeModel(codeEditor);
-        register(
-          codeEditor.onDidChangeModel(() => {
-            observeModel(codeEditor);
-            tryFinalize();
-          }),
+        (model as TokenizationCapableModel).tokenization?.forceTokenization(
+          lineCount,
         );
-        register(codeEditor.onDidLayoutChange(tryFinalize));
-        register(codeEditor.onDidContentSizeChange(tryFinalize));
+      };
+
+      const checkInitComplete = () => {
+        if (isInitialized) return;
+
+        // Editor is considered initialized when it has content dimensions
+        // and layout is complete
+        const contentHeight = targetEditor.getContentHeight();
+        const layoutInfo = targetEditor.getLayoutInfo();
+
+        if (
+          contentHeight > 0 &&
+          layoutInfo.width > 0 &&
+          layoutInfo.height > 0
+        ) {
+          forceFullTokenization(targetEditor);
+          if ('getOriginalEditor' in editor) {
+            forceFullTokenization(editor.getOriginalEditor());
+          }
+
+          isInitialized = true;
+          this.endAsync(operationId);
+        }
+      };
+
+      // Listen for layout changes to detect when initialization is complete
+      const layoutDisposable = targetEditor.onDidLayoutChange(() => {
+        checkInitComplete();
       });
 
+      // Listen for content size changes as well
+      const contentSizeDisposable = targetEditor.onDidContentSizeChange(() => {
+        checkInitComplete();
+      });
+
+      // For diff editors, also listen to diff updates
+      let diffDisposable: MonacoSDK.IDisposable | undefined;
       if ('getModifiedEditor' in editor) {
-        register(editor.onDidUpdateDiff(tryFinalize));
+        diffDisposable = editor.onDidUpdateDiff(() => {
+          checkInitComplete();
+        });
       }
 
-      timeoutId = setTimeout(() => {
+      // Fallback timeout to prevent hanging tests
+      const timeoutId = setTimeout(() => {
         if (!isInitialized) {
-          hardFinalize();
+          forceFullTokenization(targetEditor);
+          if ('getOriginalEditor' in editor) {
+            forceFullTokenization(editor.getOriginalEditor());
+          }
+          isInitialized = true;
+          layoutDisposable.dispose();
+          contentSizeDisposable.dispose();
+          diffDisposable?.dispose();
+          this.endAsync(operationId);
         }
       }, 2000);
 
+      // Override endAsync for this specific operation to ensure cleanup
+      const originalEndAsync = this.endAsync.bind(this);
       this.endAsync = (operation: string) => {
         if (operation === operationId) {
-          cleanup();
+          clearTimeout(timeoutId);
+          layoutDisposable.dispose();
+          contentSizeDisposable.dispose();
+          diffDisposable?.dispose();
+          // Restore original endAsync
+          this.endAsync = originalEndAsync;
         }
         originalEndAsync(operation);
       };
-
-      tryFinalize();
     },
   };
 }
