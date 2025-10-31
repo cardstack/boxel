@@ -1,5 +1,5 @@
 import { action } from '@ember/object';
-import { StringField, Component, field, CardDef, contains } from './card-api';
+import { StringField, Component } from './card-api';
 import {
   EmailInput,
   EntityDisplayWithIcon,
@@ -43,7 +43,11 @@ export default class EmailField extends StringField {
       {{#if @model}}
         <EntityDisplayWithIcon @title={{@model}} @underline={{false}}>
           <:title>
-            <a href='mailto:{{@model}}' rel='noopener noreferrer'>
+            <a
+              href='mailto:{{@model}}'
+              rel='noopener noreferrer'
+              data-test-atom-email
+            >
               {{@model}}
             </a>
           </:title>
@@ -61,16 +65,6 @@ export default class EmailField extends StringField {
           color: inherit;
         }
       </style>
-    </template>
-  };
-}
-
-export class CardWithEmail extends CardDef {
-  static displayName = 'Card with Email';
-  @field email = contains(EmailField);
-  static isolated = class Isolated extends Component<typeof this> {
-    <template>
-      <@fields.email @format='atom' />
     </template>
   };
 }

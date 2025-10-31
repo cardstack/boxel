@@ -60,6 +60,7 @@ import {
   containsMany,
   DateField,
   DatetimeField,
+  EmailField,
   EthereumAddressField,
   field,
   FieldDef,
@@ -112,6 +113,7 @@ module('Integration | card-basics', function (hooks) {
         @field ethereumAddress = contains(EthereumAddressField);
         @field markdown = contains(MarkdownField);
         @field textArea = contains(TextAreaField);
+        @field email = contains(EmailField);
       }
       let person = new Person();
       await renderCard(loader, person, 'edit');
@@ -119,6 +121,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-field="string"] input').hasAttribute('disabled');
       assert.dom('[data-test-field="number"] input').hasAttribute('disabled');
       assert.dom('[data-test-field="bigInt"] input').hasAttribute('disabled');
+      assert.dom('[data-test-field="email"] input').hasAttribute('disabled');
 
       assert
         .dom('[data-test-field="boolean"] .boxel-radio-fieldset')
