@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22.20.0-slim
+FROM node:24.11.0-slim
 ARG realm_server_script
 ENV realm_server_script=$realm_server_script
 
