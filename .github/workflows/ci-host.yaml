@@ -74,6 +74,12 @@ jobs:
           sudo service dbus restart
           sudo service upower restart
 
+      - name: Wait for realm readiness
+        run: pnpm test:wait-for-servers
+        env:
+          HOST_TEST_WAIT_ONLY: "true"
+        working-directory: packages/host
+
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: dbus-run-session -- pnpm test-with-percy
         env:
@@ -83,6 +89,7 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+          HOST_TEST_SKIP_WAIT: "true"
         working-directory: packages/host
 
       - name: Upload junit report to GitHub Actions Artifacts
