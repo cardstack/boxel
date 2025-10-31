@@ -48,7 +48,128 @@ module(basename(__filename), function () {
       assert.strictEqual(headResponse.status, 200, 'HEAD / 200');
       let getResponse = await request.get('/');
       assert.strictEqual(getResponse.status, 200, 'GET / 200');
-      assert.deepEqual(getResponse.body, { ready: true }, 'ready body');
+      assert.strictEqual(
+        getResponse.headers['content-type'],
+        'application/vnd.api+json',
+        'JSON-API content type',
+      );
+      assert.strictEqual(
+        getResponse.body.data.type,
+        'prerender-manager-health',
+        'response type',
+      );
+      assert.strictEqual(getResponse.body.data.id, 'health', 'response id');
+      assert.strictEqual(
+        getResponse.body.data.attributes.ready,
+        true,
+        'ready attribute',
+      );
+      assert.ok(Array.isArray(getResponse.body.included), 'included is array');
+      assert.strictEqual(
+        getResponse.body.included.length,
+        0,
+        'no servers registered',
+      );
+    });
+
+    test('health includes active servers with realms and last used times', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      
+      // Register two servers
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+      
+      // Make a prerender request to assign a realm to a server
+      let realm = 'https://realm.example/R';
+      let body = makeBody(realm, `${realm}/1`);
+      let proxyResponse = await request.post('/prerender').send(body);
+      assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
+      let assignedServer = proxyResponse.headers['x-boxel-prerender-target'];
+      
+      // Get healthcheck
+      let healthResponse = await request.get('/');
+      assert.strictEqual(healthResponse.status, 200, 'health 200');
+      assert.strictEqual(
+        healthResponse.headers['content-type'],
+        'application/vnd.api+json',
+        'JSON-API content type',
+      );
+      
+      let { data, included } = healthResponse.body;
+      assert.strictEqual(data.type, 'prerender-manager-health', 'health type');
+      assert.strictEqual(data.attributes.ready, true, 'ready');
+      
+      // Verify included servers
+      assert.ok(Array.isArray(included), 'included is array');
+      assert.strictEqual(included.length, 2, 'two servers in included');
+      
+      // Find the server that was assigned the realm
+      let assignedServerData = included.find(
+        (s: any) => s.id === assignedServer,
+      );
+      assert.ok(assignedServerData, 'assigned server in included');
+      assert.strictEqual(
+        assignedServerData.type,
+        'prerender-server',
+        'server type',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.url,
+        assignedServer,
+        'server url',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.capacity,
+        2,
+        'server capacity',
+      );
+      assert.ok(
+        assignedServerData.attributes.registeredAt > 0,
+        'has registeredAt',
+      );
+      assert.ok(assignedServerData.attributes.lastSeenAt > 0, 'has lastSeenAt');
+      
+      // Verify realms array
+      assert.ok(
+        Array.isArray(assignedServerData.attributes.realms),
+        'realms is array',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.realms.length,
+        1,
+        'one realm active',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.realms[0].url,
+        realm,
+        'realm url',
+      );
+      assert.ok(
+        assignedServerData.attributes.realms[0].lastUsed > 0,
+        'realm has lastUsed timestamp',
+      );
+      
+      // Verify the other server has no realms
+      let otherServerUrl = assignedServer === serverUrlA ? serverUrlB : serverUrlA;
+      let otherServerData = included.find((s: any) => s.id === otherServerUrl);
+      assert.ok(otherServerData, 'other server in included');
+      assert.strictEqual(
+        otherServerData.attributes.realms.length,
+        0,
+        'other server has no realms',
+      );
     });
 
     test('registration: explicit url passes and returns 204', async function (assert) {

@@ -90,8 +90,42 @@ export function buildPrerenderManagerApp(): {
     ctxt.status = 200;
   });
   router.get('/', async (ctxt) => {
-    ctxt.set('Content-Type', 'application/json');
-    ctxt.body = JSON.stringify({ ready: true });
+    ctxt.set('Content-Type', 'application/vnd.api+json');
+    
+    // Build the list of active servers with their realms
+    let servers = [];
+    for (let [serverUrl, serverInfo] of registry.servers) {
+      let realms = [];
+      for (let realm of serverInfo.activeRealms) {
+        realms.push({
+          url: realm,
+          lastUsed: registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt,
+        });
+      }
+      
+      servers.push({
+        type: 'prerender-server',
+        id: serverUrl,
+        attributes: {
+          url: serverUrl,
+          capacity: serverInfo.capacity,
+          registeredAt: serverInfo.registeredAt,
+          lastSeenAt: serverInfo.lastSeenAt,
+          realms: realms,
+        },
+      });
+    }
+    
+    ctxt.body = JSON.stringify({
+      data: {
+        type: 'prerender-manager-health',
+        id: 'health',
+        attributes: {
+          ready: true,
+        },
+      },
+      included: servers,
+    });
     ctxt.status = 200;
   });
 
