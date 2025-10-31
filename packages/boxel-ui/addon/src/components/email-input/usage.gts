@@ -23,10 +23,12 @@ export default class EmailInputUsage extends Component {
           <code>EmailInput</code>
           wraps
           <code>BoxelInput</code>
-          with client-side validation for email addresses. Valid values are
+          with client-side validation for email addresses. Input values are
           committed via
-          <code>@onChange</code>; invalid input surfaces descriptive error
-          message on blur.
+          <code>@onChange</code>, which also passes along the current validation
+          error object (or
+          <code>null</code>); invalid input surfaces a descriptive error message
+          on blur.
         </p>
       </:description>
       <:example>
