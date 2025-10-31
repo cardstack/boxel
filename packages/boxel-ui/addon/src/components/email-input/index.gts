@@ -7,8 +7,8 @@ import { tracked } from '@glimmer/tracking';
 import validateEmailFormat, {
   type EmailFormatValidationError,
   isValidEmailFormat,
-} from '../../../helpers/validate-email-format.ts';
-import BoxelInput, { type InputValidationState } from '../index.gts';
+} from '../../helpers/validate-email-format.ts';
+import BoxelInput, { type InputValidationState } from '../input/index.gts';
 
 interface Signature {
   Args: {
