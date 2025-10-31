@@ -94,11 +94,29 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         );
       };
 
-      // Render waits on two pieces of Monaco UI:
-      // 1. Layout of the text viewport + scroll area (so the code actually has size)
-      // 2. Diff computation for the overview ruler (the colored highlight strip on the right)
+      // Render waits on Monaco UI elements that appear asynchronously:
+      // 1. Layout of the text viewport + scroll area (so the code area actually has size)
+      // 2. Diff overview ruler for diff editors (the colored heat map in the scroll gutter)
+      // 3. Bracket/indent guides (the vertical indentation highlight blocks inside the code area)
       let layoutReady = false;
       let diffReady = !diffEditor;
+      const indentGuidesExpected = (() => {
+        const model = targetEditor.getModel();
+        if (!model) return false;
+        const maxLines = Math.min(model.getLineCount(), 200);
+        for (let lineNumber = 1; lineNumber <= maxLines; lineNumber++) {
+          const lineText = model.getLineContent(lineNumber);
+          if (!lineText) continue;
+          const trimmed = lineText.trim();
+          if (!trimmed) continue;
+          const leadingWhitespace = lineText.length - trimmed.length;
+          if (leadingWhitespace >= 2) {
+            return true;
+          }
+        }
+        return false;
+      })();
+      let indentGuidesReady = !indentGuidesExpected;
       let tokenizationForced = false;
 
       const ensureTokenization = () => {
@@ -124,6 +142,18 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         }
       };
 
+      const updateIndentGuidesReady = () => {
+        if (indentGuidesReady) return;
+        const domNode = targetEditor.getDomNode();
+        if (!domNode) return;
+        const guide = domNode.querySelector(
+          '.core-guide.bracket-indent-guide, .core-guide-indent',
+        );
+        if (guide) {
+          indentGuidesReady = true;
+        }
+      };
+
       const updateDiffReady = () => {
         if (!diffEditor) return;
         // Diff highlights (overview ruler + gutter badges) appear only after Monaco
@@ -137,7 +167,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       const checkInitComplete = () => {
         if (isInitialized) return;
 
-        if (!layoutReady || !diffReady) {
+        if (!layoutReady || !diffReady || !indentGuidesReady) {
           return;
         }
 
@@ -149,12 +179,14 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       // Listen for layout changes to detect when initialization is complete
       const layoutDisposable = targetEditor.onDidLayoutChange(() => {
         updateLayoutReady();
+        updateIndentGuidesReady();
         checkInitComplete();
       });
 
       // Listen for content size changes as well
       const contentSizeDisposable = targetEditor.onDidContentSizeChange(() => {
         updateLayoutReady();
+        updateIndentGuidesReady();
         checkInitComplete();
       });
 
@@ -167,9 +199,17 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         });
       }
 
+      const decorationsDisposable = targetEditor.onDidChangeModelDecorations(
+        () => {
+          updateIndentGuidesReady();
+          checkInitComplete();
+        },
+      );
+
       // Run an initial readiness check in case everything is already available
       updateLayoutReady();
       updateDiffReady();
+      updateIndentGuidesReady();
       checkInitComplete();
 
       // Fallback timeout to prevent hanging tests
@@ -177,11 +217,13 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         if (!isInitialized) {
           updateLayoutReady();
           updateDiffReady();
+          updateIndentGuidesReady();
           ensureTokenization();
           isInitialized = true;
           layoutDisposable.dispose();
           contentSizeDisposable.dispose();
           diffDisposable?.dispose();
+          decorationsDisposable.dispose();
           this.endAsync(operationId);
         }
       }, 2000);
@@ -194,6 +236,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           layoutDisposable.dispose();
           contentSizeDisposable.dispose();
           diffDisposable?.dispose();
+          decorationsDisposable.dispose();
           // Restore original endAsync
           this.endAsync = originalEndAsync;
         }
