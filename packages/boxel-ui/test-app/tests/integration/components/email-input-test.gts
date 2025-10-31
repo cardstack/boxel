@@ -1,20 +1,9 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
-import {
-  fillIn,
-  render,
-  settled,
-  triggerEvent,
-  typeIn,
-} from '@ember/test-helpers';
+import { fillIn, render, triggerEvent, typeIn } from '@ember/test-helpers';
 
 import { EmailInput } from '@cardstack/boxel-ui/components';
 import type { EmailFormatValidationError } from '@cardstack/boxel-ui/helpers/validate-email-format';
-
-async function waitForDebounce() {
-  await new Promise<void>((resolve) => setTimeout(resolve, 350));
-  await settled();
-}
 
 type Validation = EmailFormatValidationError | null | undefined;
 
@@ -30,7 +19,6 @@ module('Integration | Component | email-input', function (hooks) {
     </template>);
 
     await typeIn('[data-test-boxel-email-input]', 'user@example');
-    await waitForDebounce();
 
     assert
       .dom('[data-test-boxel-email-input]')
@@ -44,7 +32,6 @@ module('Integration | Component | email-input', function (hooks) {
       .hasAttribute('data-test-boxel-input-validation-state', 'invalid');
 
     await typeIn('[data-test-boxel-email-input]', '.com');
-    await waitForDebounce();
 
     assert
       .dom('[data-test-boxel-email-input]')
@@ -59,8 +46,6 @@ module('Integration | Component | email-input', function (hooks) {
     await render(<template>
       <EmailInput @value={{value}} @onChange={{set}} />
     </template>);
-
-    await waitForDebounce();
 
     assert
       .dom('[data-test-boxel-email-input]')
@@ -77,8 +62,6 @@ module('Integration | Component | email-input', function (hooks) {
     await render(<template>
       <EmailInput @value={{value}} @onChange={{set}} />
     </template>);
-
-    await waitForDebounce();
 
     assert.dom('[data-test-boxel-email-input]').hasValue('alice@');
     assert
@@ -109,7 +92,6 @@ module('Integration | Component | email-input', function (hooks) {
     </template>);
 
     await fillIn('[data-test-boxel-email-input]', 'alice@email');
-    await waitForDebounce();
     await triggerEvent('[data-test-boxel-email-input]', 'blur');
 
     assert
@@ -147,10 +129,7 @@ module('Integration | Component | email-input', function (hooks) {
       <EmailInput @value={{value}} @onChange={{set}} />
     </template>);
 
-    await typeIn('[data-test-boxel-email-input]', 'user@example.com');
-    await waitForDebounce();
     await fillIn('[data-test-boxel-email-input]', '');
-    await waitForDebounce();
     await triggerEvent('[data-test-boxel-email-input]', 'blur');
 
     assert

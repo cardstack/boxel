@@ -1,8 +1,8 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { debounce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { debounce } from 'lodash';
 
 import validateEmailFormat, {
   type EmailFormatValidationError,
@@ -77,11 +77,6 @@ export default class EmailInput extends Component<Signature> {
     this.notify(input, validation, ev);
   };
 
-  private debouncedInput = debounce(
-    (input: string, ev: Event) => this.handleValidation(input, ev),
-    300,
-  );
-
   @action onInput(ev: Event): void {
     this.hasBlurred = false;
     if (this.validationState === 'invalid') {
@@ -90,12 +85,11 @@ export default class EmailInput extends Component<Signature> {
     this.errorMessage = undefined;
     let value = (ev?.target as HTMLInputElement | null)?.value ?? '';
     this.inputValue = value;
-    this.debouncedInput(value, ev);
+    debounce(this.handleValidation, value, ev, 300);
   }
 
   @action onBlur(ev: Event): void {
     this.hasBlurred = true;
-    this.debouncedInput.flush();
     this.handleValidation(this.inputValue, ev);
   }
 
