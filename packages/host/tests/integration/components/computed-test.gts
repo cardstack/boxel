@@ -10,6 +10,10 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import { CardStoreWithErrors } from '@cardstack/host/services/render-service';
+
+import type * as CardAPIModule from 'https://cardstack.com/base/card-api';
+
 import {
   cleanWhiteSpace,
   testRealmURL,
@@ -668,5 +672,149 @@ module('Integration | computeds', function (hooks) {
     assert
       .dom('[data-test-categories] [data-test-category-name]')
       .exists({ count: 3 });
+  });
+
+  module('lazy link loading', function (hooks) {
+    // Ensure the lazy link loader path is exercised while keeping global state isolated
+    let originalLazilyLoadLinks: unknown;
+
+    hooks.beforeEach(function () {
+      originalLazilyLoadLinks = (globalThis as any).__lazilyLoadLinks;
+      (globalThis as any).__lazilyLoadLinks = true;
+    });
+
+    hooks.afterEach(function () {
+      if (originalLazilyLoadLinks === undefined) {
+        delete (globalThis as any).__lazilyLoadLinks;
+      } else {
+        (globalThis as any).__lazilyLoadLinks = originalLazilyLoadLinks;
+      }
+    });
+
+    test('render-service resolves computed dependency on lazily loaded link', async function (assert) {
+      class Team extends CardDef {
+        @field name = contains(StringField);
+        @field shortName = contains(StringField, {
+          computeVia: function (this: Team) {
+            return this.name ? this.name.slice(0, 2).toUpperCase() : undefined;
+          },
+        });
+      }
+
+      class SprintTask extends CardDef {
+        @field name = contains(StringField);
+        @field team = linksTo(() => Team);
+        @field shortId = contains(StringField, {
+          computeVia: function (this: SprintTask) {
+            if (!this.id) {
+              return;
+            }
+            let idPart = this.id.split('/').pop();
+            if (!idPart) {
+              return;
+            }
+            let team = this.team;
+            if (!team) {
+              return;
+            }
+            if (!team.shortName) {
+              return;
+            }
+            return `${team.shortName}-${idPart.slice(0, 4).toUpperCase()}`;
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <span data-test-short-id>{{@model.shortId}}</span>
+          </template>
+        };
+      }
+
+      let moduleURL = '../task-cards';
+      let remoteRealmURL = 'https://remote.example/';
+      let teamId = `${remoteRealmURL}Team/alpha`;
+      let taskId = `${testRealmURL}SprintTask/task-1`;
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: remoteRealmURL,
+        contents: {
+          'task-cards.gts': { Team, SprintTask },
+          'Team/alpha.json': {
+            data: {
+              type: 'card',
+              id: teamId,
+              attributes: { name: 'Alpha Team' },
+              meta: {
+                adoptsFrom: {
+                  module: '../task-cards',
+                  name: 'Team',
+                },
+              },
+            },
+          },
+        },
+      });
+
+      let { realm } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'task-cards.gts': { Team, SprintTask },
+          'SprintTask/task-1.json': {
+            data: {
+              type: 'card',
+              id: taskId,
+              attributes: { name: 'Deliver release' },
+              relationships: {
+                team: {
+                  links: {
+                    self: teamId,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: moduleURL,
+                  name: 'SprintTask',
+                },
+              },
+            },
+          },
+        },
+      });
+
+      let cardApi = (await loader.import(
+        `${baseRealm.url}card-api`,
+      )) as typeof CardAPIModule;
+      let { createFromSerialized } = cardApi;
+
+      let result = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(taskId),
+      );
+      assert.ok(result, 'received card document result');
+      assert.strictEqual(result?.type, 'doc', 'card document is present');
+
+      if (result && result.type === 'doc') {
+        let store = new CardStoreWithErrors(
+          loader.fetch.bind(loader) as typeof fetch,
+        );
+
+        let sprintTask = await createFromSerialized<typeof SprintTask>(
+          result.doc.data,
+          result.doc,
+          new URL(taskId),
+          { store },
+        );
+
+        let root = await renderCard(loader, sprintTask, 'isolated');
+        await store.loaded();
+
+        assert
+          .dom('[data-test-short-id]', root)
+          .hasText('AL-TASK', 'computed shortId resolves after loading link');
+      } else {
+        assert.ok(false, 'expected card document to be available');
+      }
+    });
   });
 });
