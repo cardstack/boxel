@@ -81,6 +81,21 @@ if [ ! -f "$HOST_TESTS_STARTED_FILE" ]; then
   for target in "${READINESS_TARGETS[@]}"; do
     printf '  • %s\n' "$(from_wait_url "$target")" >&2
   done
+  realm_log="/tmp/server.log"
+  if [ -f "$realm_log" ]; then
+    printf '\nRealm server log tail (last 200 lines):\n' >&2
+    if ! tail -n 200 "$realm_log" >&2; then
+      printf '(failed to read %s)\n' "$realm_log" >&2
+    fi
+
+    recent_errors=$(grep -in 'error' "$realm_log" | tail -n 20)
+    if [ -n "$recent_errors" ]; then
+      printf '\nRealm server log lines matching "error" (last %d):\n' "$(printf '%s' "$recent_errors" | wc -l)" >&2
+      printf '%s\n' "$recent_errors" >&2
+    fi
+  else
+    printf '\nRealm server log not found at %s\n' "$realm_log" >&2
+  fi
   printf 'See the realm server logs above for startup or indexing errors.\n' >&2
 fi
 
