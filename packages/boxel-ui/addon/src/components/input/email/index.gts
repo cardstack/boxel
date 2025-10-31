@@ -1,12 +1,13 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { debounce } from 'lodash';
 
-import validateEmail, {
-  isValidEmail,
-  type EmailValidationError,
-} from '../../../helpers/validate-email.ts';
+import validateEmailFormat, {
+  type EmailFormatValidationError,
+  isValidEmailFormat,
+} from '../../../helpers/validate-email-format.ts';
 import BoxelInput, { type InputValidationState } from '../index.gts';
 
 interface Signature {
@@ -14,7 +15,8 @@ interface Signature {
     disabled?: boolean;
     onChange?: (
       value: string | null,
-      validation: EmailValidationError | null,
+      validation: EmailFormatValidationError | null,
+      ev: Event,
     ) => void;
     placeholder?: string;
     required?: boolean;
@@ -29,34 +31,38 @@ export default class EmailInput extends Component<Signature> {
   private fallbackErrorMessage = DEFAULT_FALLBACK_MESSAGE;
 
   @tracked private validationState: InputValidationState = this.args.value
-    ? isValidEmail(this.args.value)
+    ? isValidEmailFormat(this.args.value)
       ? 'valid'
       : 'invalid'
     : 'initial';
   @tracked private inputValue = this.args.value ?? '';
   @tracked private errorMessage = this.args.value
-    ? validateEmail(this.args.value)?.message
+    ? validateEmailFormat(this.args.value)?.message
     : '';
   @tracked private hasBlurred = false;
 
   private notify(
     value: string | null,
-    validation: EmailValidationError | null,
+    validation: EmailFormatValidationError | null,
+    ev: Event,
   ) {
-    this.args.onChange?.(value, validation);
+    this.args.onChange?.(value, validation, ev);
   }
 
-  private handleValidation = (input: string) => {
+  private handleValidation = (input: string, ev: Event) => {
     input = input?.trim();
 
-    if (!input?.length && !this.args.required) {
+    let t = ev.target as HTMLInputElement | null;
+    let required = this.args.required || t?.required;
+
+    if (!input?.length && !required) {
       this.validationState = 'initial';
       this.errorMessage = undefined;
-      this.notify(null, null);
+      this.notify(input, null, ev);
       return;
     }
 
-    const validation = validateEmail(input);
+    const validation = validateEmailFormat(input);
     if (validation) {
       this.validationState = this.hasBlurred ? 'invalid' : 'initial';
       this.errorMessage =
@@ -67,35 +73,37 @@ export default class EmailInput extends Component<Signature> {
       this.validationState = 'valid';
       this.errorMessage = undefined;
     }
-    this.notify(input, validation);
+
+    this.notify(input, validation, ev);
   };
 
   private debouncedInput = debounce(
-    (input: string) => this.handleValidation(input),
+    (input: string, ev: Event) => this.handleValidation(input, ev),
     300,
   );
 
-  @action onInput(value: string): void {
+  @action onInput(ev: Event): void {
     this.hasBlurred = false;
     if (this.validationState === 'invalid') {
       this.validationState = 'initial';
     }
     this.errorMessage = undefined;
+    let value = (ev?.target as HTMLInputElement | null)?.value ?? '';
     this.inputValue = value;
-    this.debouncedInput(value);
+    this.debouncedInput(value, ev);
   }
 
-  @action onBlur(): void {
+  @action onBlur(ev: Event): void {
     this.hasBlurred = true;
     this.debouncedInput.flush();
-    this.handleValidation(this.inputValue);
+    this.handleValidation(this.inputValue, ev);
   }
 
   <template>
     <BoxelInput
       @type='email'
       @value={{this.inputValue}}
-      @onInput={{this.onInput}}
+      {{on 'input' this.onInput}}
       @onBlur={{this.onBlur}}
       @state={{this.validationState}}
       @errorMessage={{this.errorMessage}}
