@@ -1,0 +1,51 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "NumberFieldVariantPreview",
+        "module": "../fields-preview/number-field-variant"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "pin": null,
+      "stat": 1000,
+      "unit": {
+        "unit": null,
+        "value": null
+      },
+      "badge": 2,
+      "basic": 100,
+      "gauge": 360,
+      "range": {
+        "max": 680,
+        "min": 200
+      },
+      "score": 200,
+      "masked": null,
+      "rating": 3,
+      "slider": 26,
+      "stepper": 3,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "quantity": 4,
+      "formatted": 88888,
+      "percentage": 6,
+      "progressBar": 100,
+      "progressCircle": null,
+      "animatedCounter": 1000,
+      "variantSelection": "stepper"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

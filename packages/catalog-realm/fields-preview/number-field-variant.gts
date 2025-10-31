@@ -3,16 +3,19 @@ import {
   Component,
   contains,
   field,
+  type Field,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { BoxelSelect, FieldContainer } from '@cardstack/boxel-ui/components';
-import { FieldRenderer } from './components/field-renderer';
+import { FieldRenderer } from '../components/field-renderer';
 import {
   AnimatedCounterNumberField,
   BadgeNumberField,
   BasicNumberField,
+  DualRangeSliderField,
+  FormattedNumberField,
   GaugeNumberField,
-  NumberRange,
+  MaskedNumberField,
   PercentageNumberField,
   PinNumberField,
   ProgressBarNumberField,
@@ -23,7 +26,8 @@ import {
   SliderNumberField,
   StatNumberField,
   StepperNumberField,
-} from './fields/number';
+  UnitNumberField,
+} from '../fields/number';
 
 type VariantMeta = {
   value: string;
@@ -33,44 +37,39 @@ type VariantMeta = {
 
 const NUMBER_VARIANT_OPTIONS: VariantMeta[] = [
   {
+    value: 'animatedCounter',
+    fieldName: 'animatedCounter',
+    label: AnimatedCounterNumberField.displayName ?? 'Animated Counter Number',
+  },
+  {
+    value: 'badge',
+    fieldName: 'badge',
+    label: BadgeNumberField.displayName ?? 'Badge Number',
+  },
+  {
     value: 'basic',
     fieldName: 'basic',
     label: BasicNumberField.displayName ?? 'Basic Number',
   },
   {
+    value: 'formatted',
+    fieldName: 'formatted',
+    label: FormattedNumberField.displayName ?? 'Formatted Number',
+  },
+  {
+    value: 'gauge',
+    fieldName: 'gauge',
+    label: GaugeNumberField.displayName ?? 'Gauge Number',
+  },
+  {
+    value: 'masked',
+    fieldName: 'masked',
+    label: MaskedNumberField.displayName ?? 'Masked Number',
+  },
+  {
     value: 'percentage',
     fieldName: 'percentage',
     label: PercentageNumberField.displayName ?? 'Percentage Number',
-  },
-  {
-    value: 'slider',
-    fieldName: 'slider',
-    label: SliderNumberField.displayName ?? 'Slider Number',
-  },
-  {
-    value: 'stepper',
-    fieldName: 'stepper',
-    label: StepperNumberField.displayName ?? 'Stepper Number',
-  },
-  {
-    value: 'rating',
-    fieldName: 'rating',
-    label: RatingNumberField.displayName ?? 'Rating Number',
-  },
-  {
-    value: 'quantity',
-    fieldName: 'quantity',
-    label: QuantityNumberField.displayName ?? 'Quantity Number',
-  },
-  {
-    value: 'range',
-    fieldName: 'range',
-    label: NumberRange.displayName ?? 'Number Range',
-  },
-  {
-    value: 'stat',
-    fieldName: 'stat',
-    label: StatNumberField.displayName ?? 'Stat Number',
   },
   {
     value: 'pin',
@@ -88,50 +87,95 @@ const NUMBER_VARIANT_OPTIONS: VariantMeta[] = [
     label: ProgressCircleNumberField.displayName ?? 'Progress Circle Number',
   },
   {
-    value: 'gauge',
-    fieldName: 'gauge',
-    label: GaugeNumberField.displayName ?? 'Gauge Number',
+    value: 'quantity',
+    fieldName: 'quantity',
+    label: QuantityNumberField.displayName ?? 'Quantity Number',
   },
   {
-    value: 'badge',
-    fieldName: 'badge',
-    label: BadgeNumberField.displayName ?? 'Badge Number',
+    value: 'range',
+    fieldName: 'range',
+    label: DualRangeSliderField.displayName ?? 'Dual Range',
   },
   {
-    value: 'animatedCounter',
-    fieldName: 'animatedCounter',
-    label: AnimatedCounterNumberField.displayName ?? 'Animated Counter Number',
+    value: 'rating',
+    fieldName: 'rating',
+    label: RatingNumberField.displayName ?? 'Rating Number',
   },
   {
     value: 'score',
     fieldName: 'score',
     label: ScoreNumberField.displayName ?? 'Score Number',
   },
+  {
+    value: 'slider',
+    fieldName: 'slider',
+    label: SliderNumberField.displayName ?? 'Slider Number',
+  },
+  {
+    value: 'stat',
+    fieldName: 'stat',
+    label: StatNumberField.displayName ?? 'Stat Number',
+  },
+  {
+    value: 'stepper',
+    fieldName: 'stepper',
+    label: StepperNumberField.displayName ?? 'Stepper Number',
+  },
+  {
+    value: 'unit',
+    fieldName: 'unit',
+    label: UnitNumberField.displayName ?? 'Unit Number',
+  },
 ];
 
 const DEFAULT_VARIANT_VALUE = NUMBER_VARIANT_OPTIONS[0]?.value ?? 'basic';
 
-export class NumberFieldVariant extends CardDef {
-  static displayName = 'Number Field Variant Playground';
+export class NumberFieldVariantPreview extends CardDef {
+  static displayName = 'Number Field Variant Preview';
 
   @field variantSelection = contains(StringField);
-  @field basic = contains(BasicNumberField);
-  @field percentage = contains(PercentageNumberField);
-  @field slider = contains(SliderNumberField);
-  @field stepper = contains(StepperNumberField);
-  @field rating = contains(RatingNumberField);
-  @field quantity = contains(QuantityNumberField);
-  @field range = contains(NumberRange);
-  @field stat = contains(StatNumberField, {
+  @field animatedCounter = contains(AnimatedCounterNumberField, {
     configuration: {
       presentation: {
-        label: 'Total Revenue',
-        prefix: '$',
-        delta: 8.3,
-        deltaDirection: 'up',
+        label: 'Downloads Today',
       },
     },
   });
+  @field badge = contains(BadgeNumberField, {
+    configuration: {
+      presentation: {
+        label: 'Items',
+      },
+    },
+  });
+  @field basic = contains(BasicNumberField);
+  @field formatted = contains(FormattedNumberField, {
+    configuration: {
+      presentation: {
+        decimals: 2,
+        thousandsSeparator: ',',
+        decimalSeparator: '.',
+      },
+    },
+  });
+  @field gauge = contains(GaugeNumberField, {
+    configuration: {
+      presentation: {
+        label: 'Performance Score',
+        helperText: 'Use for scores and thresholds',
+        max: 100,
+      },
+    },
+  });
+  @field masked = contains(MaskedNumberField, {
+    configuration: {
+      presentation: {
+        maskChar: '*',
+        visibleDigits: 4,
+      },
+    },
+  });
+  @field percentage = contains(PercentageNumberField);
   @field pin = contains(PinNumberField, {
     configuration: {
       presentation: {
@@ -162,29 +206,9 @@ export class NumberFieldVariant extends CardDef {
       },
     },
   });
-  @field gauge = contains(GaugeNumberField, {
-    configuration: {
-      presentation: {
-        label: 'Performance Score',
-        helperText: 'Use for scores and thresholds',
-        max: 100,
-      },
-    },
-  });
-  @field badge = contains(BadgeNumberField, {
-    configuration: {
-      presentation: {
-        label: 'Items',
-      },
-    },
-  });
-  @field animatedCounter = contains(AnimatedCounterNumberField, {
-    configuration: {
-      presentation: {
-        label: 'Downloads Today',
-      },
-    },
-  });
+  @field quantity = contains(QuantityNumberField);
+  @field range = contains(DualRangeSliderField);
+  @field rating = contains(RatingNumberField);
   @field score = contains(ScoreNumberField, {
     configuration: {
       presentation: {
@@ -192,9 +216,34 @@ export class NumberFieldVariant extends CardDef {
       },
     },
   });
+  @field slider = contains(SliderNumberField);
+  @field stat = contains(StatNumberField, {
+    configuration: {
+      presentation: {
+        label: 'Total Revenue',
+        prefix: '$',
+        delta: 8.3,
+        deltaDirection: 'up',
+      },
+    },
+  });
+  @field stepper = contains(StepperNumberField);
+  @field unit = contains(UnitNumberField, {
+    configuration: {
+      presentation: {
+        units: [
+          { value: 'kg', label: 'kg' },
+          { value: 'lb', label: 'lb' },
+          { value: 'g', label: 'g' },
+          { value: 'oz', label: 'oz' },
+        ],
+        defaultUnit: 'kg',
+      },
+    },
+  });
 
   static isolated = class Isolated extends Component<
-    typeof NumberFieldVariant
+    typeof NumberFieldVariantPreview
   > {
     get variantOptions() {
       return NUMBER_VARIANT_OPTIONS;
@@ -227,6 +276,14 @@ export class NumberFieldVariant extends CardDef {
       return this.selectedVariant?.fieldName;
     }
 
+    get instanceAsCardDef() {
+      return this.args.model as unknown as CardDef;
+    }
+
+    get fieldsAsFieldMap() {
+      return this.args.fields as unknown as { [fieldName: string]: Field };
+    }
+
     selectVariant = (option: { label: string; value: string }) => {
       this.args.model.variantSelection = option.value;
     };
@@ -247,6 +304,7 @@ export class NumberFieldVariant extends CardDef {
             @onChange={{this.selectVariant}}
             @placeholder='Select variant'
             @searchField='label'
+            @searchEnabled={{true}}
             as |opt|
           >
             {{opt.label}}
@@ -255,9 +313,9 @@ export class NumberFieldVariant extends CardDef {
 
         {{#if this.selectedFieldName}}
           <FieldRenderer
-            @instance={{this.args.model}}
+            @instance={{this.instanceAsCardDef}}
             @fieldName={{this.selectedFieldName}}
-            @fields={{this.args.fields}}
+            @fields={{this.fieldsAsFieldMap}}
             as |field|
           >
             {{#if field}}

@@ -1,11 +1,17 @@
 import NumberField from 'https://cardstack.com/base/number';
+import StringField from 'https://cardstack.com/base/string';
 import {
   Component,
   FieldDef,
   contains,
   field,
 } from 'https://cardstack.com/base/card-api';
-import { BoxelInput, BoxelInputGroup } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInput,
+  BoxelInputGroup,
+  ProgressBar,
+  ProgressRadial,
+} from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
@@ -13,7 +19,6 @@ import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { on } from '@ember/modifier';
-import { or } from '@cardstack/boxel-ui/helpers';
 
 interface NumberConstraints {
   min?: number;
@@ -170,7 +175,7 @@ class PercentageNumberFieldEdit extends Component<
   get config(): PercentageConfig {
     return readConfig(this.args.configuration, {
       min: 0,
-      max: 100,
+      max: undefined,
       step: 1,
       allowNegative: false,
       placeholder: '0',
@@ -231,7 +236,7 @@ class PercentageNumberField extends NumberField {
     get config(): PercentageConfig {
       return readConfig(this.args.configuration, {
         min: 0,
-        max: 100,
+        max: undefined,
         step: 1,
         allowNegative: false,
         placeholder: '0',
@@ -435,31 +440,31 @@ class StepperNumberFieldEdit extends Component<typeof StepperNumberField> {
       @layer boxelComponentL1 {
         .stepper {
           display: inline-flex;
-          align-items: center;
+          align-items: stretch;
           border: var(--boxel-border);
           border-radius: var(--boxel-border-radius);
+          width: min-content;
+          overflow: hidden;
         }
         .stepper__btn {
           background: var(--background, var(--boxel-light));
           color: var(--foreground, var(--boxel-650));
           padding: 0 var(--boxel-sp-sm);
           font-weight: 600;
-          border: none;
           cursor: pointer;
+          border: none;
+          outline: none;
+          height: auto;
         }
         .stepper__btn[disabled] {
           opacity: 0.4;
           cursor: not-allowed;
         }
-        .stepper__btn--dec {
-          border-right: var(--boxel-border);
-        }
-        .stepper__btn--inc {
-          border-left: var(--boxel-border);
-        }
         .stepper__input {
-          width: 4.5rem;
+          border-radius: 0;
           text-align: center;
+          border: none;
+          outline: none;
         }
       }
     </style>
@@ -916,8 +921,8 @@ class PinNumberFieldEdit extends Component<typeof PinNumberField> {
 
         .pin-slot:focus {
           outline: none;
-          border-color: var(--ring, var(--boxel-highlight));
-          box-shadow: 0 0 0 2px var(--ring, var(--boxel-highlight));
+          border-color: var(--ring, var(--boxel-blue));
+          box-shadow: 0 0 0 2px var(--ring, var(--boxel-blue));
           transform: scale(1.02);
         }
 
@@ -1085,8 +1090,6 @@ type ProgressConfig = {
   max: number;
   label?: string;
   helperText?: string;
-  valueFormat?: 'percent' | 'raw' | 'none';
-  valueSuffix?: string;
 };
 
 class ProgressBarAtom extends Component<typeof ProgressBarNumberField> {
@@ -1095,87 +1098,35 @@ class ProgressBarAtom extends Component<typeof ProgressBarNumberField> {
       max: 100,
       label: undefined,
       helperText: undefined,
-      valueFormat: 'percent',
-      valueSuffix: undefined,
     });
   }
 
-  get pct() {
-    return percentage(this.args.model, this.config.max);
-  }
-
-  get pctRounded() {
-    return Math.round(this.pct);
-  }
-
-  get displayValue() {
-    let format = this.config.valueFormat ?? 'percent';
-    if (format === 'none') {
-      return undefined;
-    }
-    if (format === 'raw') {
-      return formatDisplayValue(this.args.model, this.config.valueSuffix);
-    }
-    return `${this.pctRounded}%`;
-  }
-
-  get fillStyle() {
-    return htmlSafe(`width: ${this.pct}%`);
+  get numericValue(): number {
+    return typeof this.args.model === 'number' ? this.args.model : 0;
   }
 
   <template>
-    <div class='progress'>
-      {{#if (or this.config.label this.displayValue)}}
-        <div class='progress__header'>
-          {{#if this.config.label}}
-            <div class='progress__label'>{{this.config.label}}</div>
-          {{/if}}
-          {{#if this.displayValue}}
-            <div class='progress__value'>{{this.displayValue}}</div>
-          {{/if}}
-        </div>
+    <div class='progress-wrapper'>
+      {{#if this.config.label}}
+        <div class='progress__label'>{{this.config.label}}</div>
       {{/if}}
-      <div class='progress__track'>
-        <div class='progress__fill' style={{this.fillStyle}}></div>
-      </div>
+      <ProgressBar @max={{this.config.max}} @value={{this.numericValue}} />
       {{#if this.config.helperText}}
         <div class='progress__helper'>{{this.config.helperText}}</div>
       {{/if}}
     </div>
     <style scoped>
       @layer boxelComponentL1 {
-        .progress {
+        .progress-wrapper {
           width: 100%;
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-xxs);
         }
-        .progress__header {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          font-size: var(--boxel-font-size-sm);
-          color: var(--boxel-600);
-        }
         .progress__label {
           font-weight: 600;
           color: var(--boxel-650);
-        }
-        .progress__value {
-          font-weight: 600;
-          color: var(--primary, var(--boxel-blue));
-        }
-        .progress__track {
-          background: var(--track, var(--boxel-200));
-          border-radius: 9999px;
-          height: 0.75rem;
-          overflow: hidden;
-        }
-        .progress__fill {
-          background: var(--primary, var(--boxel-blue));
-          height: 100%;
-          border-radius: 9999px;
-          transition: width var(--boxel-transition);
+          font-size: var(--boxel-font-size-sm);
         }
         .progress__helper {
           font-size: var(--boxel-font-size-sm);
@@ -1199,9 +1150,6 @@ type ProgressCircleConfig = {
   size: number;
   label?: string;
   helperText?: string;
-  valueFormat?: 'percent' | 'raw';
-  valueSuffix?: string;
-  strokeWidth?: number;
 };
 
 class ProgressCircleAtom extends Component<typeof ProgressCircleNumberField> {
@@ -1211,95 +1159,20 @@ class ProgressCircleAtom extends Component<typeof ProgressCircleNumberField> {
       size: 96,
       label: undefined,
       helperText: undefined,
-      valueFormat: 'percent',
-      valueSuffix: undefined,
-      strokeWidth: 8,
     });
   }
 
-  get pct() {
-    return percentage(this.args.model, this.config.max);
+  get numericValue(): number {
+    return typeof this.args.model === 'number' ? this.args.model : 0;
   }
 
-  get strokeWidth() {
-    let configured = this.config.strokeWidth;
-    if (typeof configured === 'number' && configured > 0) {
-      return configured;
-    }
-    return 8;
-  }
-
-  get center() {
-    return this.config.size / 2;
-  }
-
-  get radius() {
-    let radius = this.center - this.strokeWidth;
-    return radius > 0
-      ? radius
-      : Math.max(0, this.center - this.strokeWidth / 2);
-  }
-
-  get circumference() {
-    return 2 * Math.PI * this.radius;
-  }
-
-  get offset() {
-    return this.circumference * (1 - this.pct / 100);
-  }
-
-  get pctRounded() {
-    return Math.round(this.pct);
-  }
-
-  get valueDisplay() {
-    let format = this.config.valueFormat ?? 'percent';
-    if (format === 'raw') {
-      return formatDisplayValue(this.args.model, this.config.valueSuffix);
-    }
-    return `${this.pctRounded}%`;
-  }
-
-  get circleDimensionsStyle() {
-    return htmlSafe(
-      `width:${this.config.size}px; height:${this.config.size}px;`,
-    );
-  }
-
-  get viewBoxValue() {
-    let size = this.config.size;
-    return `0 0 ${size} ${size}`;
+  get sizeStyle() {
+    return htmlSafe(`--boxel-progress-radial-size: ${this.config.size}px;`);
   }
 
   <template>
-    <div class='progress-circle'>
-      <div
-        class='progress-circle__graphic'
-        style={{this.circleDimensionsStyle}}
-      >
-        <svg class='progress-circle__ring' viewBox={{this.viewBoxValue}}>
-          <circle
-            cx={{this.center}}
-            cy={{this.center}}
-            r={{this.radius}}
-            stroke-width={{this.strokeWidth}}
-            fill='transparent'
-            class='progress-circle__track'
-          />
-          <circle
-            cx={{this.center}}
-            cy={{this.center}}
-            r={{this.radius}}
-            stroke-width={{this.strokeWidth}}
-            fill='transparent'
-            class='progress-circle__fill'
-            stroke-dasharray={{this.circumference}}
-            stroke-dashoffset={{this.offset}}
-            stroke-linecap='round'
-          />
-        </svg>
-        <div class='progress-circle__center'>{{this.valueDisplay}}</div>
-      </div>
+    <div class='progress-circle' style={{this.sizeStyle}}>
+      <ProgressRadial @max={{this.config.max}} @value={{this.numericValue}} />
       {{#if this.config.label}}
         <div class='progress-circle__label'>{{this.config.label}}</div>
       {{/if}}
@@ -1314,29 +1187,6 @@ class ProgressCircleAtom extends Component<typeof ProgressCircleNumberField> {
           flex-direction: column;
           align-items: center;
           gap: var(--boxel-sp-xxs);
-        }
-        .progress-circle__graphic {
-          position: relative;
-          display: inline-block;
-        }
-        .progress-circle__ring {
-          transform: rotate(-90deg);
-        }
-        .progress-circle__track {
-          stroke: var(--track, var(--boxel-200));
-        }
-        .progress-circle__fill {
-          stroke: var(--primary, var(--boxel-success-100));
-          transition: stroke-dashoffset var(--boxel-transition);
-        }
-        .progress-circle__center {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          color: var(--boxel-700);
         }
         .progress-circle__label {
           font-weight: 600;
@@ -1558,7 +1408,7 @@ class BadgeNumberAtom extends Component<typeof BadgeNumberField> {
         }
         .badge__count {
           font-weight: 700;
-          font-size: var(--boxel-font-size-lg);
+          font-size: var(--boxel-font-size);
         }
       }
     </style>
@@ -1700,151 +1550,1004 @@ class ScoreNumberField extends NumberField {
   static embedded = ScoreNumberAtom;
 }
 
-// Dual range ---------------------------------------------------------------
+// Dual Range Slider --------------------------------------------------------
 
-type RangeConfig = {
-  min: number;
-  max: number;
-  step: number;
+type DualRangeSliderConfig = NumberConstraints & {
+  currency?: string;
+  showInputs?: boolean;
 };
 
-class NumberRangeEdit extends Component<typeof NumberRange> {
-  get config(): RangeConfig {
+function formatRangeValue(
+  value: number | null,
+  config: DualRangeSliderConfig,
+): string {
+  if (value == null) {
+    return '—';
+  }
+  let decimals = config.decimals ?? 0;
+  let formatter = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  let formatted = formatter.format(value);
+  let currency = config.currency ?? '';
+  return `${currency}${formatted}`;
+}
+
+class DualRangeSliderFieldEdit extends Component<typeof DualRangeSliderField> {
+  minInputValidator: TextInputValidator<number> = new TextInputValidator(
+    () => {
+      let raw = this.args.model.min;
+      return typeof raw === 'number' ? raw : this.rawMinValue ?? null;
+    },
+    (inputVal) => this.setLowerBound(inputVal),
+    deserializeForUI,
+    serializeForUI,
+    NumberSerializer.validate,
+  );
+
+  maxInputValidator: TextInputValidator<number> = new TextInputValidator(
+    () => {
+      let raw = this.args.model.max;
+      return typeof raw === 'number' ? raw : this.rawMaxValue ?? null;
+    },
+    (inputVal) => this.setUpperBound(inputVal),
+    deserializeForUI,
+    serializeForUI,
+    NumberSerializer.validate,
+  );
+
+  get config(): DualRangeSliderConfig {
     return readConfig(this.args.configuration, {
       min: 0,
-      max: 100,
-      step: 1,
+      max: 1000,
+      step: 10,
+      allowNegative: false,
+      decimals: 0,
+      currency: '$',
+      showInputs: true,
     });
   }
 
-  get rawMin() {
-    return typeof this.args.model.min === 'number'
-      ? this.args.model.min
-      : this.config.min;
+  get sliderMin(): number {
+    let configuredMin = this.config.min;
+    if (
+      this.config.allowNegative === false &&
+      (configuredMin == null || configuredMin < 0)
+    ) {
+      return 0;
+    }
+    return typeof configuredMin === 'number' ? configuredMin : 0;
   }
 
-  get rawMax() {
-    return typeof this.args.model.max === 'number'
-      ? this.args.model.max
-      : this.config.max;
+  get sliderMax(): number {
+    let configuredMax = this.config.max;
+    if (typeof configuredMax === 'number') {
+      return configuredMax;
+    }
+    let fallback = this.sliderMin + 100;
+    let currentMin = this.rawMinValue;
+    let currentMax = this.rawMaxValue;
+    if (typeof currentMin === 'number') {
+      fallback = Math.max(fallback, currentMin);
+    }
+    if (typeof currentMax === 'number') {
+      fallback = Math.max(fallback, currentMax);
+    }
+    return fallback;
   }
 
-  get minValue() {
-    let min = this.rawMin;
-    let max = this.rawMax;
-    if (min > max - this.config.step) {
-      min = max - this.config.step;
-    }
-    if (min < this.config.min) {
-      min = this.config.min;
-    }
-    return min;
+  get sliderSpan(): number {
+    let span = this.sliderMax - this.sliderMin;
+    return span <= 0 ? 1 : span;
   }
 
-  get maxValue() {
-    let min = this.rawMin;
-    let max = this.rawMax;
-    if (max < min + this.config.step) {
-      max = min + this.config.step;
+  get rawMinValue(): number | null {
+    let raw = this.args.model.min;
+    if (typeof raw === 'number') {
+      return clampValue(raw, this.config) ?? null;
     }
-    if (max > this.config.max) {
-      max = this.config.max;
-    }
-    return max;
+    return null;
   }
 
-  setMin = (next: string) => {
-    let parsed = deserializeForUI(next);
-    if (parsed == null) {
-      parsed = this.config.min;
+  get rawMaxValue(): number | null {
+    let raw = this.args.model.max;
+    if (typeof raw === 'number') {
+      return clampValue(raw, this.config) ?? null;
     }
-    if (parsed > this.rawMax - this.config.step) {
-      parsed = this.rawMax - this.config.step;
-    }
-    if (parsed < this.config.min) {
-      parsed = this.config.min;
-    }
-    this.args.model.min = parsed;
-  };
+    return null;
+  }
 
-  setMax = (next: string) => {
-    let parsed = deserializeForUI(next);
-    if (parsed == null) {
-      parsed = this.config.max;
+  get minValue(): number {
+    let value = this.rawMinValue;
+    if (typeof value === 'number') {
+      return Math.min(value, this.sliderMax);
     }
-    if (parsed < this.rawMin + this.config.step) {
-      parsed = this.rawMin + this.config.step;
+    return this.sliderMin;
+  }
+
+  get maxValue(): number {
+    let value = this.rawMaxValue;
+    if (typeof value === 'number') {
+      return Math.max(value, this.minValue);
     }
-    if (parsed > this.config.max) {
-      parsed = this.config.max;
+    return Math.max(this.sliderMin, this.sliderMax);
+  }
+
+  get minValueString(): string {
+    return serializeForUI(this.minValue) ?? '';
+  }
+
+  get maxValueString(): string {
+    return serializeForUI(this.maxValue) ?? '';
+  }
+
+  get minDisplayValue(): string {
+    return this.rawMinValue != null
+      ? formatRangeValue(this.rawMinValue, this.config)
+      : 'Any';
+  }
+
+  get maxDisplayValue(): string {
+    return this.rawMaxValue != null
+      ? formatRangeValue(this.rawMaxValue, this.config)
+      : 'Any';
+  }
+
+  get minBoundLabel(): string {
+    return formatRangeValue(this.sliderMin, this.config);
+  }
+
+  get maxBoundLabel(): string {
+    return formatRangeValue(this.sliderMax, this.config);
+  }
+
+  get sliderRangeStyle() {
+    let start = ((this.minValue - this.sliderMin) / this.sliderSpan) * 100;
+    let end = ((this.maxValue - this.sliderMin) / this.sliderSpan) * 100;
+    let clampedStart = Math.max(0, Math.min(100, start));
+    let clampedEnd = Math.max(0, Math.min(100, end));
+    if (clampedEnd < clampedStart) {
+      [clampedStart, clampedEnd] = [clampedEnd, clampedStart];
     }
-    this.args.model.max = parsed;
-  };
+    return htmlSafe(
+      `--range-start:${clampedStart}%; --range-end:${clampedEnd}%;`,
+    );
+  }
+
+  setLowerBound(inputVal: number | null | undefined) {
+    if (inputVal == null) {
+      this.args.model.min = undefined;
+      return;
+    }
+    let clamped = clampValue(inputVal, this.config);
+    if (clamped == null) {
+      this.args.model.min = undefined;
+      return;
+    }
+    let currentMax = this.maxValue;
+    if (clamped > currentMax) {
+      this.args.model.max = clamped;
+    }
+    this.args.model.min = clamped;
+  }
+
+  setUpperBound(inputVal: number | null | undefined) {
+    if (inputVal == null) {
+      this.args.model.max = undefined;
+      return;
+    }
+    let clamped = clampValue(inputVal, this.config);
+    if (clamped == null) {
+      this.args.model.max = undefined;
+      return;
+    }
+    let currentMin = this.minValue;
+    if (clamped < currentMin) {
+      this.args.model.min = clamped;
+    }
+    this.args.model.max = clamped;
+  }
+
+  @action handleMinSliderInput(event: Event) {
+    let target = event.target as HTMLInputElement | null;
+    if (!target) {
+      return;
+    }
+    this.minInputValidator.onInput(target.value);
+  }
+
+  @action handleMaxSliderInput(event: Event) {
+    let target = event.target as HTMLInputElement | null;
+    if (!target) {
+      return;
+    }
+    this.maxInputValidator.onInput(target.value);
+  }
 
   <template>
-    <div class='range'>
-      <BoxelInput
-        @type='range'
-        @value={{this.minValue}}
-        @onInput={{this.setMin}}
-        min={{this.config.min}}
-        max={{this.config.max}}
-        step={{this.config.step}}
-        class='range__slider'
-      />
-      <BoxelInput
-        @type='range'
-        @value={{this.maxValue}}
-        @onInput={{this.setMax}}
-        min={{this.config.min}}
-        max={{this.config.max}}
-        step={{this.config.step}}
-        class='range__slider'
-      />
+    <div class='dual-range'>
+      <div class='dual-range__values'>
+        <div class='dual-range__value'>
+          <span class='dual-range__value-label'>Minimum</span>
+          <span class='dual-range__value-amount'>{{this.minDisplayValue}}</span>
+        </div>
+        <div class='dual-range__value dual-range__value--right'>
+          <span class='dual-range__value-label'>Maximum</span>
+          <span class='dual-range__value-amount'>{{this.maxDisplayValue}}</span>
+        </div>
+      </div>
+
+      <div class='dual-range__slider'>
+        <div class='dual-range__track' style={{this.sliderRangeStyle}}></div>
+        <input
+          type='range'
+          class='dual-range__input dual-range__input--min'
+          value={{this.minValueString}}
+          min={{this.sliderMin}}
+          max={{this.sliderMax}}
+          step={{this.config.step}}
+          {{on 'input' this.handleMinSliderInput}}
+          disabled={{not @canEdit}}
+        />
+        <input
+          type='range'
+          class='dual-range__input dual-range__input--max'
+          value={{this.maxValueString}}
+          min={{this.sliderMin}}
+          max={{this.sliderMax}}
+          step={{this.config.step}}
+          {{on 'input' this.handleMaxSliderInput}}
+          disabled={{not @canEdit}}
+        />
+      </div>
+
+      {{#if this.config.showInputs}}
+        <div class='dual-range__inputs'>
+          <BoxelInputGroup
+            @type='number'
+            @value={{this.minInputValidator.asString}}
+            @onInput={{this.minInputValidator.onInput}}
+            @state={{if this.minInputValidator.isInvalid 'invalid' 'none'}}
+            @errorMessage={{this.minInputValidator.errorMessage}}
+            @placeholder='Min'
+            @inputmode='decimal'
+            @min={{this.sliderMin}}
+            @max={{this.sliderMax}}
+            @step={{this.config.step}}
+            @disabled={{not @canEdit}}
+            class='dual-range__input-control'
+          >
+            <:before as |Accessories|>
+              {{#if this.config.currency}}
+                <Accessories.Text>{{this.config.currency}}</Accessories.Text>
+              {{/if}}
+            </:before>
+          </BoxelInputGroup>
+          <span class='dual-range__separator'>to</span>
+          <BoxelInputGroup
+            @type='number'
+            @value={{this.maxInputValidator.asString}}
+            @onInput={{this.maxInputValidator.onInput}}
+            @state={{if this.maxInputValidator.isInvalid 'invalid' 'none'}}
+            @errorMessage={{this.maxInputValidator.errorMessage}}
+            @placeholder='Max'
+            @inputmode='decimal'
+            @min={{this.sliderMin}}
+            @max={{this.sliderMax}}
+            @step={{this.config.step}}
+            @disabled={{not @canEdit}}
+            class='dual-range__input-control'
+          >
+            <:before as |Accessories|>
+              {{#if this.config.currency}}
+                <Accessories.Text>{{this.config.currency}}</Accessories.Text>
+              {{/if}}
+            </:before>
+          </BoxelInputGroup>
+        </div>
+      {{/if}}
+
+      <div class='dual-range__bounds'>
+        <span>Min {{this.minBoundLabel}}</span>
+        <span>Max {{this.maxBoundLabel}}</span>
+      </div>
     </div>
-    <div class='range__label'>{{this.minValue}} – {{this.maxValue}}</div>
     <style scoped>
       @layer boxelComponentL1 {
-        .range {
+        .dual-range {
           display: grid;
-          gap: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp);
         }
-        .range__slider input[type='range'] {
+        .dual-range__values {
+          display: flex;
+          justify-content: space-between;
+          gap: var(--boxel-sp);
+        }
+        .dual-range__value {
+          display: grid;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .dual-range__value-label {
+          font-size: var(--boxel-font-size-xs);
+          font-weight: var(--boxel-font-weight-semibold);
+          text-transform: uppercase;
+          letter-spacing: var(--boxel-lsp);
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .dual-range__value-amount {
+          font-size: var(--boxel-font-size-lg);
+          font-weight: var(--boxel-font-weight-semibold);
+          color: var(--primary, var(--boxel-dark));
+        }
+        .dual-range__slider {
+          position: relative;
+          height: 2.25rem;
+          display: flex;
+          align-items: center;
+        }
+        .dual-range__track {
+          position: absolute;
           width: 100%;
-          appearance: none;
-          height: 0.5rem;
-          background: var(--track, var(--boxel-200));
-          border-radius: 9999px;
+          height: var(--boxel-sp-xxs);
+          border-radius: var(--boxel-border-radius-xl);
+          background: linear-gradient(
+            to right,
+            var(--track-bg, var(--boxel-200)) var(--range-start, 0%),
+            var(--active-bg, var(--boxel-blue)) var(--range-start, 0%),
+            var(--active-bg, var(--boxel-blue)) var(--range-end, 100%),
+            var(--track-bg, var(--boxel-200)) var(--range-end, 100%)
+          );
         }
-        .range__label {
-          color: var(--boxel-blue);
-          font-weight: 600;
-          margin-top: var(--boxel-sp-xxs);
+        .dual-range__input {
+          pointer-events: none;
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          margin: 0;
+          appearance: none;
+          background: none;
+        }
+        .dual-range__input--min {
+          z-index: 2;
+        }
+        .dual-range__input--max {
+          z-index: 3;
+        }
+        .dual-range__input:disabled {
+          pointer-events: none;
+        }
+        .dual-range__input::-webkit-slider-runnable-track {
+          appearance: none;
+          background: transparent;
+        }
+        .dual-range__input::-moz-range-track {
+          background: transparent;
+        }
+        .dual-range__input::-webkit-slider-thumb {
+          pointer-events: auto;
+          appearance: none;
+          width: var(--boxel-icon-sm);
+          height: var(--boxel-icon-sm);
+          border-radius: var(--boxel-border-radius-xl);
+          background: var(--thumb-bg, var(--boxel-light));
+          border: 2px solid var(--thumb-border, var(--boxel-blue));
+          box-shadow: var(--boxel-box-shadow);
+          transition: var(--boxel-transition);
+        }
+        .dual-range__input::-moz-range-thumb {
+          pointer-events: auto;
+          width: var(--boxel-icon-sm);
+          height: var(--boxel-icon-sm);
+          border-radius: var(--boxel-border-radius-xl);
+          background: var(--thumb-bg, var(--boxel-light));
+          border: 2px solid var(--thumb-border, var(--boxel-blue));
+          box-shadow: var(--boxel-box-shadow);
+          transition: var(--boxel-transition);
+        }
+        .dual-range__input:hover::-webkit-slider-thumb {
+          box-shadow: var(--boxel-box-shadow-hover);
+        }
+        .dual-range__input:hover::-moz-range-thumb {
+          box-shadow: var(--boxel-box-shadow-hover);
+        }
+        .dual-range__input:focus-visible::-webkit-slider-thumb {
+          outline: var(--boxel-outline);
+          outline-offset: 2px;
+        }
+        .dual-range__input:focus-visible::-moz-range-thumb {
+          outline: var(--boxel-outline);
+          outline-offset: 2px;
+        }
+        .dual-range__input:disabled::-webkit-slider-thumb,
+        .dual-range__input:disabled::-moz-range-thumb {
+          border-color: var(--boxel-300);
+          background: var(--boxel-light-500);
+          box-shadow: none;
+          opacity: 0.5;
+        }
+        .dual-range__inputs {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          gap: var(--boxel-sp-xs);
+          align-items: center;
+        }
+        .dual-range__input-control {
+          width: 100%;
+        }
+        .dual-range__separator {
+          font-size: var(--boxel-font-size-sm);
+          font-weight: var(--boxel-font-weight-normal);
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .dual-range__bounds {
+          display: flex;
+          justify-content: space-between;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: var(--boxel-font-weight-normal);
+          letter-spacing: var(--boxel-lsp-xs);
+          color: var(--muted-foreground, var(--boxel-500));
         }
       }
     </style>
   </template>
 }
 
-class NumberRange extends FieldDef {
-  static displayName = 'Number Range';
+class DualRangeSliderField extends FieldDef {
+  static displayName = 'Dual Range Slider';
   @field min = contains(NumberField);
   @field max = contains(NumberField);
-  static edit = NumberRangeEdit;
-  static atom = class Atom extends Component<typeof NumberRange> {
+  static edit = DualRangeSliderFieldEdit;
+  static atom = class DualRangeSliderAtom extends Component<
+    typeof DualRangeSliderField
+  > {
+    get config(): DualRangeSliderConfig {
+      return readConfig(this.args.configuration, {
+        min: 0,
+        max: 1000,
+        step: 10,
+        allowNegative: false,
+        decimals: 0,
+        currency: '$',
+        showInputs: true,
+      });
+    }
+
+    get minValue(): number | null {
+      let raw = this.args.model.min;
+      if (typeof raw === 'number') {
+        return clampValue(raw, this.config);
+      }
+      return null;
+    }
+
+    get maxValue(): number | null {
+      let raw = this.args.model.max;
+      if (typeof raw === 'number') {
+        return clampValue(raw, this.config);
+      }
+      return null;
+    }
+
+    get displayValue() {
+      let minLabel =
+        this.minValue != null
+          ? formatRangeValue(this.minValue, this.config)
+          : 'Any';
+      let maxLabel =
+        this.maxValue != null
+          ? formatRangeValue(this.maxValue, this.config)
+          : 'Any';
+
+      if (minLabel === 'Any' && maxLabel === 'Any') {
+        return 'Any range';
+      }
+      return `${minLabel} - ${maxLabel}`;
+    }
+
     <template>
-      <span>{{@model.min}} – {{@model.max}}</span>
+      <span class='dual-range-atom'>{{this.displayValue}}</span>
+      <style scoped>
+        .dual-range-atom {
+          font-weight: var(--boxel-font-weight-semibold);
+          color: var(--primary, var(--boxel-dark));
+        }
+      </style>
     </template>
   };
-  static embedded = NumberRange.atom;
+  static embedded = DualRangeSliderField.atom;
+}
+
+// Unit Number Field --------------------------------------------------------
+
+type UnitOption = {
+  value: string;
+  label: string;
+  conversionFactor?: number;
+};
+
+type UnitConfig = NumberConstraints & {
+  units: UnitOption[];
+  defaultUnit?: string;
+};
+
+class UnitNumberEdit extends Component<typeof UnitNumberField> {
+  get config(): UnitConfig {
+    return readConfig(this.args.configuration, {
+      min: 0,
+      max: undefined,
+      step: 1,
+      allowNegative: false,
+      placeholder: '0',
+      units: [
+        { value: 'kg', label: 'kg' },
+        { value: 'lb', label: 'lb', conversionFactor: 2.20462 },
+      ],
+      defaultUnit: 'kg',
+    });
+  }
+
+  textInputValidator: TextInputValidator<number> = new TextInputValidator(
+    () => {
+      let val = this.args.model.value;
+      return typeof val === 'number' ? val : null;
+    },
+    (inputVal) => {
+      let clamped = clampValue(inputVal ?? null, this.config);
+      this.args.model.value = clamped === null ? undefined : clamped;
+    },
+    deserializeForUI,
+    serializeForUI,
+    NumberSerializer.validate,
+  );
+
+  get unitOptions() {
+    return this.config.units.map((u) => ({
+      label: u.label,
+      value: u.value,
+    }));
+  }
+
+  get selectedUnit() {
+    let current = this.args.model.unit;
+    if (!current && this.config.defaultUnit) {
+      this.args.model.unit = this.config.defaultUnit;
+      current = this.config.defaultUnit;
+    }
+    return this.unitOptions.find((opt) => opt.value === current);
+  }
+
+  selectUnit = (option: { label: string; value: string }) => {
+    this.args.model.unit = option.value;
+  };
+
+  <template>
+    <BoxelInputGroup
+      @type='number'
+      @value={{this.textInputValidator.asString}}
+      @onInput={{this.textInputValidator.onInput}}
+      @errorMessage={{this.textInputValidator.errorMessage}}
+      @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+      @disabled={{not @canEdit}}
+      @placeholder={{this.config.placeholder}}
+      @min={{this.config.min}}
+      @max={{this.config.max}}
+      @step={{this.config.step}}
+      class='unit-number'
+    >
+      <:after as |Accessories|>
+        <Accessories.Select
+          @searchEnabled={{true}}
+          @options={{this.unitOptions}}
+          @selected={{this.selectedUnit}}
+          @onChange={{this.selectUnit}}
+          @placeholder='Unit'
+          @searchField='label'
+          as |opt|
+        >
+          {{opt.label}}
+        </Accessories.Select>
+      </:after>
+    </BoxelInputGroup>
+    <style scoped>
+      @layer boxelComponentL1 {
+        .unit-number {
+          width: 100%;
+        }
+      }
+    </style>
+  </template>
+}
+
+class UnitNumberField extends FieldDef {
+  static displayName = 'Unit Number';
+  @field value = contains(NumberField);
+  @field unit = contains(StringField);
+  static edit = UnitNumberEdit;
+  static atom = class UnitNumberAtom extends Component<typeof UnitNumberField> {
+    get config(): UnitConfig {
+      return readConfig(this.args.configuration, {
+        min: 0,
+        max: undefined,
+        step: 1,
+        allowNegative: false,
+        placeholder: '0',
+        units: [
+          { value: 'kg', label: 'kg' },
+          { value: 'lb', label: 'lb' },
+        ],
+        defaultUnit: 'kg',
+      });
+    }
+    get displayValue() {
+      let val =
+        typeof this.args.model.value === 'number'
+          ? this.args.model.value
+          : null;
+      let unit = this.args.model.unit || this.config.defaultUnit || '';
+      return formatDisplayValue(val, ` ${unit}`);
+    }
+    <template>
+      <span class='unit-number-atom'>{{this.displayValue}}</span>
+      <style scoped>
+        .unit-number-atom {
+          font-weight: 500;
+        }
+      </style>
+    </template>
+  };
+  static embedded = UnitNumberField.atom;
+}
+
+// Formatted Number Field ---------------------------------------------------
+
+type FormattedNumberConfig = NumberConstraints & {
+  thousandsSeparator?: string;
+  decimalSeparator?: string;
+  prefix?: string;
+  suffix?: string;
+};
+
+function formatNumber(
+  value: number | null,
+  config: FormattedNumberConfig,
+): string {
+  if (value == null) {
+    return '';
+  }
+
+  let num = value;
+  let decimals = config.decimals ?? 0;
+  let thousandsSeparator = config.thousandsSeparator ?? ',';
+  let decimalSeparator = config.decimalSeparator ?? '.';
+
+  // Round to decimal scale
+  let factor = Math.pow(10, decimals);
+  num = Math.round(num * factor) / factor;
+
+  // Split into integer and decimal parts
+  let parts = num.toFixed(decimals).split('.');
+  let integerPart = parts[0] || '0';
+  let decimalPart = parts[1];
+
+  // Add thousands separator
+  integerPart = integerPart.replace(
+    /\B(?=(\d{3})+(?!\d))/g,
+    thousandsSeparator,
+  );
+
+  // Combine
+  let formatted =
+    decimals > 0 && decimalPart
+      ? `${integerPart}${decimalSeparator}${decimalPart}`
+      : integerPart;
+
+  return formatted;
+}
+
+class FormattedNumberFieldEdit extends Component<typeof FormattedNumberField> {
+  get config(): FormattedNumberConfig {
+    return readConfig(this.args.configuration, {
+      min: undefined,
+      max: undefined,
+      step: undefined,
+      allowNegative: true,
+      placeholder: '0',
+      decimals: 2,
+      thousandsSeparator: ',',
+      decimalSeparator: '.',
+      prefix: '',
+      suffix: '',
+    });
+  }
+
+  textInputValidator: TextInputValidator<number> = new TextInputValidator(
+    () => this.args.model,
+    (inputVal) => this.args.set(clampValue(inputVal ?? null, this.config)),
+    deserializeForUI,
+    serializeForUI,
+    NumberSerializer.validate,
+  );
+
+  get formattedValue() {
+    let val = typeof this.args.model === 'number' ? this.args.model : null;
+    return formatNumber(val, this.config);
+  }
+
+  get displayValue() {
+    let formatted = this.formattedValue;
+    if (!formatted) {
+      return '';
+    }
+    return `${this.config.prefix ?? ''}${formatted}${this.config.suffix ?? ''}`;
+  }
+
+  <template>
+    <div class='formatted-number'>
+      <BoxelInput
+        @type='number'
+        @value={{this.textInputValidator.asString}}
+        @onInput={{this.textInputValidator.onInput}}
+        @errorMessage={{this.textInputValidator.errorMessage}}
+        @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+        @disabled={{not @canEdit}}
+        @placeholder={{this.config.placeholder}}
+        min={{this.config.min}}
+        max={{this.config.max}}
+        step={{this.config.step}}
+        class='formatted-number__input'
+      />
+      {{#if this.displayValue}}
+        <div class='formatted-number__preview'>
+          Preview:
+          {{this.displayValue}}
+        </div>
+      {{/if}}
+    </div>
+    <style scoped>
+      @layer boxelComponentL1 {
+        .formatted-number {
+          display: grid;
+          gap: var(--boxel-sp-xxs);
+        }
+        .formatted-number__preview {
+          font-size: var(--boxel-font-size-sm);
+          color: var(--boxel-500);
+          padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+          background: var(--boxel-100);
+          border-radius: var(--boxel-border-radius);
+          font-family: var(--boxel-font-family-mono);
+        }
+      }
+    </style>
+  </template>
+}
+
+class FormattedNumberField extends NumberField {
+  static displayName = 'Formatted Number';
+  static edit = FormattedNumberFieldEdit;
+  static atom = class FormattedNumberAtom extends Component<
+    typeof FormattedNumberField
+  > {
+    get config(): FormattedNumberConfig {
+      return readConfig(this.args.configuration, {
+        min: undefined,
+        max: undefined,
+        step: undefined,
+        allowNegative: true,
+        placeholder: '0',
+        decimals: 2,
+        thousandsSeparator: ',',
+        decimalSeparator: '.',
+        prefix: '',
+        suffix: '',
+      });
+    }
+    get displayValue() {
+      let val = typeof this.args.model === 'number' ? this.args.model : null;
+      let formatted = formatNumber(val, this.config);
+      if (!formatted) {
+        return '—';
+      }
+      return `${this.config.prefix ?? ''}${formatted}${
+        this.config.suffix ?? ''
+      }`;
+    }
+    <template>
+      <span class='formatted-number-atom'>{{this.displayValue}}</span>
+      <style scoped>
+        .formatted-number-atom {
+          font-family: var(--boxel-font-family-mono);
+          font-weight: 500;
+        }
+      </style>
+    </template>
+  };
+  static embedded = FormattedNumberField.atom;
+}
+
+// Masked Number Field ------------------------------------------------------
+
+type MaskedNumberConfig = NumberConstraints & {
+  maskChar?: string;
+  visibleDigits?: number;
+  pattern?: string;
+};
+
+class MaskedNumberFieldEdit extends Component<typeof MaskedNumberField> {
+  get config(): MaskedNumberConfig {
+    return readConfig(this.args.configuration, {
+      min: undefined,
+      max: undefined,
+      step: undefined,
+      allowNegative: false,
+      placeholder: 'Enter number',
+      maskChar: '*',
+      visibleDigits: 4,
+      pattern: undefined,
+    });
+  }
+
+  textInputValidator: TextInputValidator<number> = new TextInputValidator(
+    () => this.args.model,
+    (inputVal) => this.args.set(clampValue(inputVal ?? null, this.config)),
+    deserializeForUI,
+    serializeForUI,
+    NumberSerializer.validate,
+  );
+
+  get maskedDisplay() {
+    let val = typeof this.args.model === 'number' ? this.args.model : null;
+    if (val == null) {
+      return '';
+    }
+
+    let str = String(val);
+    let visibleDigits = this.config.visibleDigits ?? 4;
+    let maskChar = this.config.maskChar ?? '*';
+
+    if (str.length <= visibleDigits) {
+      return str;
+    }
+
+    let masked = maskChar.repeat(str.length - visibleDigits);
+    let visible = str.slice(-visibleDigits);
+
+    // Apply pattern if provided (e.g., "**** **** **** 1234")
+    let pattern = this.config.pattern;
+    if (pattern) {
+      let full = masked + visible;
+      let result = '';
+      let digitIndex = 0;
+      for (let char of pattern) {
+        if (char === 'X' || char === '#') {
+          result += full[digitIndex] || maskChar;
+          digitIndex++;
+        } else {
+          result += char;
+        }
+      }
+      return result;
+    }
+
+    return `${masked}${visible}`;
+  }
+
+  <template>
+    <div class='masked-number'>
+      <BoxelInput
+        @type='number'
+        @value={{this.textInputValidator.asString}}
+        @onInput={{this.textInputValidator.onInput}}
+        @errorMessage={{this.textInputValidator.errorMessage}}
+        @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+        @disabled={{not @canEdit}}
+        @placeholder={{this.config.placeholder}}
+        min={{this.config.min}}
+        max={{this.config.max}}
+        step={{this.config.step}}
+        class='masked-number__input'
+      />
+      {{#if this.maskedDisplay}}
+        <div class='masked-number__display'>
+          {{this.maskedDisplay}}
+        </div>
+      {{/if}}
+    </div>
+    <style scoped>
+      @layer boxelComponentL1 {
+        .masked-number {
+          display: grid;
+          gap: var(--boxel-sp-xxs);
+        }
+        .masked-number__display {
+          font-family: var(--boxel-font-family-mono);
+          font-size: var(--boxel-font-size);
+          color: var(--boxel-600);
+          padding: var(--boxel-sp-xs);
+          background: var(--boxel-100);
+          border-radius: var(--boxel-border-radius);
+          letter-spacing: 0.1em;
+        }
+      }
+    </style>
+  </template>
+}
+
+class MaskedNumberField extends NumberField {
+  static displayName = 'Masked Number';
+  static edit = MaskedNumberFieldEdit;
+  static atom = class MaskedNumberAtom extends Component<
+    typeof MaskedNumberField
+  > {
+    get config(): MaskedNumberConfig {
+      return readConfig(this.args.configuration, {
+        min: undefined,
+        max: undefined,
+        step: undefined,
+        allowNegative: false,
+        placeholder: 'Enter number',
+        maskChar: '*',
+        visibleDigits: 4,
+        pattern: undefined,
+      });
+    }
+    get maskedDisplay() {
+      let val = typeof this.args.model === 'number' ? this.args.model : null;
+      if (val == null) {
+        return '—';
+      }
+
+      let str = String(val);
+      let visibleDigits = this.config.visibleDigits ?? 4;
+      let maskChar = this.config.maskChar ?? '*';
+
+      if (str.length <= visibleDigits) {
+        return str;
+      }
+
+      let masked = maskChar.repeat(str.length - visibleDigits);
+      let visible = str.slice(-visibleDigits);
+
+      let pattern = this.config.pattern;
+      if (pattern) {
+        let full = masked + visible;
+        let result = '';
+        let digitIndex = 0;
+        for (let char of pattern) {
+          if (char === 'X' || char === '#') {
+            result += full[digitIndex] || maskChar;
+            digitIndex++;
+          } else {
+            result += char;
+          }
+        }
+        return result;
+      }
+
+      return `${masked}${visible}`;
+    }
+    <template>
+      <span class='masked-number-atom'>{{this.maskedDisplay}}</span>
+      <style scoped>
+        .masked-number-atom {
+          font-family: var(--boxel-font-family-mono);
+          letter-spacing: 0.1em;
+        }
+      </style>
+    </template>
+  };
+  static embedded = MaskedNumberField.atom;
 }
 
 export {
   AnimatedCounterNumberField,
   BadgeNumberField,
   BasicNumberField,
+  DualRangeSliderField,
+  FormattedNumberField,
   GaugeNumberField,
-  NumberRange,
+  MaskedNumberField,
   PercentageNumberField,
   PinNumberField,
   ProgressBarNumberField,
@@ -1855,4 +2558,5 @@ export {
   SliderNumberField,
   StatNumberField,
   StepperNumberField,
+  UnitNumberField,
 };
