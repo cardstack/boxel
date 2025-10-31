@@ -43,11 +43,10 @@ WAIT_RESOURCES="$BASE_REALM_READY|$CATALOG_REALM_READY|$NODE_TEST_REALM_READY|$S
 WAIT_ON_TIMEOUT=${WAIT_ON_TIMEOUT:-600000}
 
 if [ "${HOST_TEST_WAIT_ONLY:-}" = "true" ] || [ "${HOST_TEST_WAIT_ONLY:-}" = "1" ]; then
-  OLD_IFS=$IFS
-  IFS='|'
-  set -- $WAIT_RESOURCES
-  IFS=$OLD_IFS
-  pnpm exec -- wait-on -t "$WAIT_ON_TIMEOUT" "$@"
+  WAIT_ON_TIMEOUT=$WAIT_ON_TIMEOUT NODE_NO_WARNINGS=1 start-server-and-test \
+    'pnpm run wait' \
+    "$WAIT_RESOURCES" \
+    'node -e "console.log(\"realm services ready\")"'
   exit 0
 fi
 
