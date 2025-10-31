@@ -64,6 +64,12 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
     trackEditorInit(editor, operationId): void {
       let isInitialized = false;
+      const isDiffEditor =
+        'getLineChanges' in editor &&
+        typeof editor.getLineChanges === 'function';
+      const diffEditor = isDiffEditor
+        ? (editor as MonacoSDK.editor.IStandaloneDiffEditor)
+        : null;
 
       // For diff editors, we track the modified editor which contains the primary content
       const targetEditor =
@@ -88,11 +94,24 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         );
       };
 
-      const checkInitComplete = () => {
-        if (isInitialized) return;
+      // Render waits on two pieces of Monaco UI:
+      // 1. Layout of the text viewport + scroll area (so the code actually has size)
+      // 2. Diff computation for the overview ruler (the colored highlight strip on the right)
+      let layoutReady = false;
+      let diffReady = !diffEditor;
+      let tokenizationForced = false;
 
-        // Editor is considered initialized when it has content dimensions
-        // and layout is complete
+      const ensureTokenization = () => {
+        if (tokenizationForced) return;
+        tokenizationForced = true;
+
+        forceFullTokenization(targetEditor);
+        if ('getOriginalEditor' in editor) {
+          forceFullTokenization(editor.getOriginalEditor());
+        }
+      };
+
+      const updateLayoutReady = () => {
         const contentHeight = targetEditor.getContentHeight();
         const layoutInfo = targetEditor.getLayoutInfo();
 
@@ -101,41 +120,64 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           layoutInfo.width > 0 &&
           layoutInfo.height > 0
         ) {
-          forceFullTokenization(targetEditor);
-          if ('getOriginalEditor' in editor) {
-            forceFullTokenization(editor.getOriginalEditor());
-          }
-
-          isInitialized = true;
-          this.endAsync(operationId);
+          layoutReady = true;
         }
+      };
+
+      const updateDiffReady = () => {
+        if (!diffEditor) return;
+        // Diff highlights (overview ruler + gutter badges) appear only after Monaco
+        // calculates lineChanges for the diff editor.
+        const lineChanges = diffEditor.getLineChanges();
+        if (lineChanges !== null) {
+          diffReady = true;
+        }
+      };
+
+      const checkInitComplete = () => {
+        if (isInitialized) return;
+
+        if (!layoutReady || !diffReady) {
+          return;
+        }
+
+        ensureTokenization();
+        isInitialized = true;
+        this.endAsync(operationId);
       };
 
       // Listen for layout changes to detect when initialization is complete
       const layoutDisposable = targetEditor.onDidLayoutChange(() => {
+        updateLayoutReady();
         checkInitComplete();
       });
 
       // Listen for content size changes as well
       const contentSizeDisposable = targetEditor.onDidContentSizeChange(() => {
+        updateLayoutReady();
         checkInitComplete();
       });
 
       // For diff editors, also listen to diff updates
       let diffDisposable: MonacoSDK.IDisposable | undefined;
-      if ('getModifiedEditor' in editor) {
-        diffDisposable = editor.onDidUpdateDiff(() => {
+      if (diffEditor) {
+        diffDisposable = diffEditor.onDidUpdateDiff(() => {
+          updateDiffReady();
           checkInitComplete();
         });
       }
 
+      // Run an initial readiness check in case everything is already available
+      updateLayoutReady();
+      updateDiffReady();
+      checkInitComplete();
+
       // Fallback timeout to prevent hanging tests
       const timeoutId = setTimeout(() => {
         if (!isInitialized) {
-          forceFullTokenization(targetEditor);
-          if ('getOriginalEditor' in editor) {
-            forceFullTokenization(editor.getOriginalEditor());
-          }
+          updateLayoutReady();
+          updateDiffReady();
+          ensureTokenization();
           isInitialized = true;
           layoutDisposable.dispose();
           contentSizeDisposable.dispose();
