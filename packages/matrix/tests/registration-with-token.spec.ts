@@ -35,7 +35,7 @@ function makeRegistrationUser(
 ) {
   let username = getUniqueUsername(prefix);
   let password = getUniquePassword();
-  let chosenDomain = emailDomain || 'localhost';
+  let chosenDomain = opts?.emailDomain ?? 'localhost';
   return {
     username,
     password,
