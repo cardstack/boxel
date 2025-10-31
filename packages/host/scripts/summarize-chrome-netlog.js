@@ -137,8 +137,31 @@ if (!failures.length) {
 }
 
 console.log(`Network failures detected in ${path.basename(filePath)}:`);
+const groupedByHost = new Map();
 for (const failure of failures) {
   console.log(`  • ${(failure.url ?? '<unknown URL>')}`);
+  let hostKey = '<unknown host>';
+  if (failure.url) {
+    try {
+      const parsedUrl = new URL(failure.url, 'http://localhost');
+      hostKey = `${parsedUrl.protocol}//${parsedUrl.host}`;
+    } catch {
+      // ignore parse failures, keep unknown host label
+    }
+  }
+
+  let hostSummary = groupedByHost.get(hostKey);
+  if (!hostSummary) {
+    hostSummary = {
+      total: 0,
+      net: new Map(),
+      http: new Map(),
+    };
+    groupedByHost.set(hostKey, hostSummary);
+  }
+
+  hostSummary.total += 1;
+
   for (const detail of failure.failures) {
     if (detail.kind === 'net') {
       const errorName = describeNetError(detail.code);
@@ -146,11 +169,39 @@ for (const failure of failures) {
       console.log(
         `      ${detail.type}: net::${errorName} (${detail.code})${message}`,
       );
+
+      const key = `${errorName} (${detail.code})`;
+      hostSummary.net.set(key, (hostSummary.net.get(key) ?? 0) + 1);
     } else if (detail.kind === 'http') {
       const message = detail.description ? ` – ${detail.description}` : '';
       console.log(
         `      ${detail.type}: HTTP ${detail.status}${message}`,
       );
+
+      const key = `HTTP ${detail.status}`;
+      hostSummary.http.set(key, (hostSummary.http.get(key) ?? 0) + 1);
+    }
+  }
+}
+
+if (groupedByHost.size) {
+  console.log('\nSummary by host:');
+  for (const [host, summary] of groupedByHost.entries()) {
+    const suffix = summary.total === 1 ? '' : 's';
+    console.log(`  ${host} – ${summary.total} failure${suffix}`);
+
+    if (summary.net.size) {
+      for (const [errorKey, count] of summary.net.entries()) {
+        const countSuffix = count === 1 ? '' : 's';
+        console.log(`    net::${errorKey} ×${count} occurrence${countSuffix}`);
+      }
+    }
+
+    if (summary.http.size) {
+      for (const [statusKey, count] of summary.http.entries()) {
+        const countSuffix = count === 1 ? '' : 's';
+        console.log(`    ${statusKey} ×${count} occurrence${countSuffix}`);
+      }
     }
   }
 }

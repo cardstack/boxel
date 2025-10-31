@@ -34,6 +34,17 @@ collect_diagnostics() {
     done
   fi
 
+  local realm_log="/tmp/server.log"
+  if [[ -f "$realm_log" ]]; then
+    echo "\n─ Realm server log tail (last 200 lines)" >&2
+    if ! tail -n 200 "$realm_log" >&2; then
+      echo "(failed to read $realm_log)" >&2
+    fi
+  else
+    echo "\n─ Realm server log tail" >&2
+    echo "Realm server log not found at $realm_log" >&2
+  fi
+
   local readiness_urls=(
     "http://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
     "http://localhost:4201/catalog/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
