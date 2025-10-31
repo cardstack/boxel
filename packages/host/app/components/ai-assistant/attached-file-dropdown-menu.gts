@@ -50,6 +50,9 @@ export default class AttachedFileDropdownMenu extends Component<{
   @tracked isRestorePatchedFileModalOpen = false;
   @tracked fileContent: string | null = null;
   @action private openInCodeMode() {
+    if (this.operatorModeStateService.workspaceChooserOpened) {
+      this.operatorModeStateService.closeWorkspaceChooser();
+    }
     if (
       this.operatorModeStateService.state.submode === Submodes.Code &&
       this.operatorModeStateService.state.codePath?.toString() ===
