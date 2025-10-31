@@ -35,6 +35,8 @@ export interface Signature {
     id?: string;
     inputmode?: string;
     invalidIcon?: Icon;
+    max?: number;
+    min?: number;
     onBlur?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
@@ -42,6 +44,8 @@ export interface Signature {
     readonly?: boolean;
     required?: boolean;
     state?: InputValidationState;
+    step?: number;
+    type?: string;
     validIcon?: Icon;
     value?: string;
   };
@@ -120,6 +124,10 @@ export default class InputGroup extends Component<Signature> {
               @onBlur={{@onBlur}}
               autocomplete={{@autocomplete}}
               inputmode={{@inputmode}}
+              type={{@type}}
+              min={{@min}}
+              max={{@max}}
+              step={{@step}}
               aria-describedby={{if
                 @helperText
                 (concat 'helper-text-' this.elementId)
