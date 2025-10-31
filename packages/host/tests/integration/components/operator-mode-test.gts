@@ -90,6 +90,7 @@ module('Integration | operator-mode', function (hooks) {
     let {
       field,
       contains,
+      containsMany,
       linksTo,
       linksToMany,
       serialize,
@@ -252,6 +253,8 @@ module('Integration | operator-mode', function (hooks) {
       @field pet = linksTo(Pet);
       @field friends = linksToMany(Pet);
       @field cars = linksToMany(Car);
+      @field nicknames = containsMany(StringField);
+      @field favoriteGames = containsMany(StringField);
       @field firstLetterOfTheName = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName[0];
@@ -277,6 +280,10 @@ module('Integration | operator-mode', function (hooks) {
           <@fields.friends />
           Cars:
           <@fields.cars />
+          Nicknames:
+          <@fields.nicknames />
+          Favorite Games:
+          <@fields.favoriteGames />
           <div data-test-addresses>Address: <@fields.address /></div>
         </template>
       };
@@ -475,6 +482,8 @@ module('Integration | operator-mode', function (hooks) {
               }),
             }),
             pet: petMango,
+            nicknames: ['Lan'],
+            favoriteGames: ['Soccer'],
           }),
           'Person/hassan.json': {
             data: {
@@ -498,6 +507,8 @@ module('Integration | operator-mode', function (hooks) {
             firstName: 'Burcu',
             friends: [petJackie, petWoody, petBuzz],
             cars: [myvi, proton],
+            nicknames: ['Ace', 'Bolt', 'Comet'],
+            favoriteGames: ['Chess', 'Go'],
           }),
           'Friend/friend-b.json': friendB,
           'Friend/friend-a.json': new Friend({
@@ -3079,11 +3090,26 @@ module('Integration | operator-mode', function (hooks) {
       .exists({ count: 3 });
 
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="0"] [data-test-card="${testRealmURL}Pet/jackie"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="0"]`)
       .hasText('Jackie');
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="1"] [data-test-card="${testRealmURL}Pet/woody"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="1"]`)
       .hasText('Woody');
+    assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="2"] [data-test-card="${testRealmURL}Pet/buzz"]`,
+      )
+      .exists();
     assert
       .dom(`[data-test-list="friends"] [data-test-item="2"]`)
       .hasText('Buzz');
@@ -3141,11 +3167,26 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-list="friends"] [data-test-item]')
       .exists({ count: 3 });
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="0"] [data-test-card="${testRealmURL}Pet/woody"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="0"]`)
       .hasText('Woody');
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="1"] [data-test-card="${testRealmURL}Pet/buzz"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="1"]`)
       .hasText('Buzz');
+    assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="2"] [data-test-card="${testRealmURL}Pet/jackie"]`,
+      )
+      .exists();
     assert
       .dom(`[data-test-list="friends"] [data-test-item="2"]`)
       .hasText('Jackie');
@@ -3211,6 +3252,175 @@ module('Integration | operator-mode', function (hooks) {
         `[data-test-plural-view-field="cars"] [data-test-plural-view-item="1"]`,
       )
       .hasText('Proton');
+  });
+
+  test('can reorder containsMany cards in edit view without affecting other containsMany cards', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/burcu"] .field-component-card`,
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
+    assert
+      .dom(
+        `[data-test-plural-view-field="nicknames"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 3 });
+    assert
+      .dom(
+        `[data-test-plural-view-field="favoriteGames"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 2 });
+    assert.dom(`[data-test-plural-view-field="nicknames"]`).containsText('Ace');
+    assert
+      .dom(`[data-test-plural-view-field="nicknames"]`)
+      .containsText('Bolt');
+    assert
+      .dom(`[data-test-plural-view-field="nicknames"]`)
+      .containsText('Comet');
+    assert
+      .dom(`[data-test-plural-view-field="favoriteGames"]`)
+      .containsText('Chess');
+    assert
+      .dom(`[data-test-plural-view-field="favoriteGames"]`)
+      .containsText('Go');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
+    );
+    document
+      .querySelector('[data-test-list="nicknames"]')
+      ?.scrollIntoView({ block: 'center' });
+
+    assert
+      .dom('[data-test-list="nicknames"] [data-test-item]')
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-list="favoriteGames"] [data-test-item]')
+      .exists({ count: 2 });
+
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="0"] input`)
+      .hasValue('Ace');
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="1"] input`)
+      .hasValue('Bolt');
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="2"] input`)
+      .hasValue('Comet');
+
+    assert
+      .dom(`[data-test-list="favoriteGames"] [data-test-item="0"] input`)
+      .hasValue('Chess');
+    assert
+      .dom(`[data-test-list="favoriteGames"] [data-test-item="1"] input`)
+      .hasValue('Go');
+
+    let dragAndDrop = async (itemSelector: string, targetSelector: string) => {
+      let itemElement = document.querySelector(itemSelector);
+      let targetElement = document.querySelector(targetSelector);
+
+      if (!itemElement || !targetElement) {
+        throw new Error('Item or target element not found');
+      }
+
+      let itemRect = itemElement.getBoundingClientRect();
+      let targetRect = targetElement.getBoundingClientRect();
+
+      await triggerEvent(itemElement, 'mousedown', {
+        clientX: itemRect.left + itemRect.width / 2,
+        clientY: itemRect.top + itemRect.height / 2,
+      });
+
+      await triggerEvent(document, 'mousemove', {
+        clientX: itemRect.left + 1,
+        clientY: itemRect.top + 1,
+      });
+
+      let firstStackItemHeaderRect = document
+        .querySelector('[data-test-operator-mode-stack="0"] header')!
+        .getBoundingClientRect();
+      let firstStackItemPaddingTop = getComputedStyle(
+        document.querySelector('[data-test-operator-mode-stack="0"]')!,
+      )
+        .getPropertyValue('padding-top')
+        .replace('px', '');
+      let marginTop =
+        firstStackItemHeaderRect.height + Number(firstStackItemPaddingTop);
+      await triggerEvent(document, 'mousemove', {
+        clientX: targetRect.left + targetRect.width / 2,
+        clientY: targetRect.top - marginTop,
+      });
+
+      await triggerEvent(itemElement, 'mouseup', {
+        clientX: targetRect.left + targetRect.width / 2,
+        clientY: targetRect.top - marginTop,
+      });
+    };
+    await dragAndDrop(
+      '[data-test-list="nicknames"] [data-test-sort="1"]',
+      '[data-test-list="nicknames"] [data-test-sort="0"]',
+    );
+
+    assert
+      .dom('[data-test-list="nicknames"] [data-test-item]')
+      .exists({ count: 3 });
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="0"] input`)
+      .hasValue('Bolt');
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="1"] input`)
+      .hasValue('Ace');
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="2"] input`)
+      .hasValue('Comet');
+
+    assert
+      .dom(`[data-test-list="favoriteGames"] [data-test-item="0"] input`)
+      .hasValue('Chess');
+    assert
+      .dom(`[data-test-list="favoriteGames"] [data-test-item="1"] input`)
+      .hasValue('Go');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
+    );
+    assert
+      .dom(
+        `[data-test-plural-view-field="nicknames"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 3 });
+    assert
+      .dom(`[data-test-plural-view-field="nicknames"]`)
+      .containsText('Bolt');
+    assert.dom(`[data-test-plural-view-field="nicknames"]`).containsText('Ace');
+    assert
+      .dom(`[data-test-plural-view-field="nicknames"]`)
+      .containsText('Comet');
+
+    assert
+      .dom(
+        `[data-test-plural-view-field="favoriteGames"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 2 });
+    assert
+      .dom(`[data-test-plural-view-field="favoriteGames"]`)
+      .containsText('Chess');
+    assert
+      .dom(`[data-test-plural-view-field="favoriteGames"]`)
+      .containsText('Go');
   });
 
   test('CardDef filter is not displayed in filter list', async function (assert) {
