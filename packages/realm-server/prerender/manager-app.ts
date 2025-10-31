@@ -117,7 +117,7 @@ export function buildPrerenderManagerApp(): {
         },
       });
     }
-    
+
     ctxt.body = JSON.stringify({
       data: {
         type: 'prerender-manager-health',
