@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/usr/bin/env bash
 
 ensure_trailing_slash() {
   case "$1" in
