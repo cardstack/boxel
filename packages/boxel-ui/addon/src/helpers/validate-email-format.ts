@@ -1,4 +1,4 @@
-export type EmailValidationErrorCode =
+export type EmailFormatValidationErrorCode =
   | 'not-a-string'
   | 'missing-value'
   | 'missing-at-symbol'
@@ -13,19 +13,21 @@ export type EmailValidationErrorCode =
   | 'domain-leading-trailing-hyphen'
   | 'domain-whitespace';
 
-export interface EmailValidationError {
-  code: EmailValidationErrorCode;
+export interface EmailFormatValidationError {
+  code: EmailFormatValidationErrorCode;
   message: string;
 }
 
 const generateErrorDescription = (
-  code: EmailValidationErrorCode,
+  code: EmailFormatValidationErrorCode,
   message: string,
 ) => ({ code, message });
 
 // Lightweight email validation for client-side feedback only.
 // Returns an error descriptor if input is invalid; returns `null` if input is valid.
-function validateEmail(input: unknown): EmailValidationError | null {
+export default function validateEmailFormat(
+  input: unknown,
+): EmailFormatValidationError | null {
   if (typeof input !== 'string') {
     return generateErrorDescription(
       'not-a-string',
@@ -48,7 +50,7 @@ function validateEmail(input: unknown): EmailValidationError | null {
   if (firstAt !== value.lastIndexOf('@')) {
     return generateErrorDescription(
       'multiple-at-symbols',
-      'Email can contain only one "@" symbol',
+      'Email must contain only one "@" symbol',
     );
   }
 
@@ -131,8 +133,6 @@ function validateEmail(input: unknown): EmailValidationError | null {
   return null;
 }
 
-export function isValidEmail(input: unknown): boolean {
-  return validateEmail(input) === null;
+export function isValidEmailFormat(input: unknown): boolean {
+  return validateEmailFormat(input) === null;
 }
-
-export default validateEmail;

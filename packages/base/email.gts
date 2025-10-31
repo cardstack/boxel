@@ -1,25 +1,42 @@
+import { action } from '@ember/object';
 import { StringField, Component, field, CardDef, contains } from './card-api';
 import {
   EmailInput,
   EntityDisplayWithIcon,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import {
+  not,
+  type EmailFormatValidationError,
+} from '@cardstack/boxel-ui/helpers';
+import { fieldSerializer } from '@cardstack/runtime-common';
 
 import MailIcon from '@cardstack/boxel-icons/mail';
+
+class Edit extends Component<typeof EmailField> {
+  @action private handleChange(
+    value: string,
+    validation: EmailFormatValidationError,
+  ) {
+    if (validation === null && this.args.model !== value) {
+      this.args.set(value);
+    }
+  }
+
+  <template>
+    <EmailInput
+      @value={{@model}}
+      @onChange={{this.handleChange}}
+      @disabled={{not @canEdit}}
+    />
+  </template>
+}
 
 export default class EmailField extends StringField {
   static icon = MailIcon;
   static displayName = 'Email';
+  static [fieldSerializer] = 'email';
 
-  static edit = class Edit extends Component<typeof this> {
-    <template>
-      <EmailInput
-        @value={{@model}}
-        @onChange={{@set}}
-        @disabled={{not @canEdit}}
-      />
-    </template>
-  };
+  static edit = Edit;
 
   static atom = class Atom extends Component<typeof EmailField> {
     <template>

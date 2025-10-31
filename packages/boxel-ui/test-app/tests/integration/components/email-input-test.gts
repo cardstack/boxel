@@ -9,11 +9,14 @@ import {
 } from '@ember/test-helpers';
 
 import { EmailInput } from '@cardstack/boxel-ui/components';
+import type { EmailFormatValidationError } from '@cardstack/boxel-ui/helpers/validate-email-format';
 
 async function waitForDebounce() {
   await new Promise<void>((resolve) => setTimeout(resolve, 350));
   await settled();
 }
+
+type Validation = EmailFormatValidationError | null | undefined;
 
 module('Integration | Component | email-input', function (hooks) {
   setupRenderingTest(hooks);
@@ -89,7 +92,17 @@ module('Integration | Component | email-input', function (hooks) {
 
   test('it shows a descriptive validation message when invalid on blur', async function (assert) {
     let value: string | null = 'alice@email.com';
-    const set = (newValue: string) => (value = newValue);
+    let validation: Validation;
+    let event: Event | undefined;
+    const set = (
+      newValue: string | null,
+      _validation: EmailFormatValidationError | null,
+      _event: Event,
+    ) => {
+      value = newValue;
+      validation = _validation;
+      event = _event;
+    };
 
     await render(<template>
       <EmailInput @value={{value}} @onChange={{set}} />
@@ -103,11 +116,32 @@ module('Integration | Component | email-input', function (hooks) {
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Domain must include a period, like "example.com"');
     assert.strictEqual(value, 'alice@email', 'value is updated');
+    assert.strictEqual(
+      validation?.code,
+      'domain-missing-period',
+      'validation error code passed to onChange',
+    );
+    assert.strictEqual(
+      validation?.message,
+      'Domain must include a period, like "example.com"',
+      'validation message passed to onChange',
+    );
+    assert.ok(event, 'event is passed to onChange');
   });
 
   test('it allows clearing an optional email input without showing an error', async function (assert) {
-    let value: string | null = null;
-    const set = (newValue: string) => (value = newValue);
+    let value: string | null = 'alice@email.com';
+    let validation: Validation;
+    let event: Event | undefined;
+    const set = (
+      newValue: string | null,
+      _validation: EmailFormatValidationError | null,
+      _event: Event,
+    ) => {
+      value = newValue;
+      validation = _validation;
+      event = _event;
+    };
 
     await render(<template>
       <EmailInput @value={{value}} @onChange={{set}} />
@@ -123,7 +157,13 @@ module('Integration | Component | email-input', function (hooks) {
       .dom('[data-test-boxel-email-input]')
       .hasAttribute('data-test-boxel-input-validation-state', 'initial');
     assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
-    assert.strictEqual(value, null, 'value cleared when input emptied');
+    assert.strictEqual(value, '', 'value cleared when input emptied');
+    assert.strictEqual(
+      validation,
+      null,
+      'clearing optional input passes null validation',
+    );
+    assert.ok(event, 'event is passed to onChange');
   });
 
   test('it requires a value when marked as required', async function (assert) {
@@ -131,7 +171,7 @@ module('Integration | Component | email-input', function (hooks) {
     const set = (newValue: string) => (value = newValue);
 
     await render(<template>
-      <EmailInput @value={{value}} @onChange={{set}} @required={{true}} />
+      <EmailInput @value={{value}} @onChange={{set}} required />
     </template>);
 
     await triggerEvent('[data-test-boxel-email-input]', 'blur');
@@ -142,6 +182,6 @@ module('Integration | Component | email-input', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Enter an email address');
-    assert.strictEqual(value, null, 'value is updated');
+    assert.strictEqual(value, '', 'value is updated');
   });
 });
