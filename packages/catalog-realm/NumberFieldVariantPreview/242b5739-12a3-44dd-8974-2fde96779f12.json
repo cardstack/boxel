@@ -18,14 +18,14 @@
       "basic": 100,
       "gauge": 360,
       "range": {
-        "max": 680,
-        "min": 200
+        "max": 890,
+        "min": 70
       },
       "score": 200,
       "masked": null,
       "rating": 3,
       "slider": 26,
-      "stepper": 3,
+      "stepper": 0,
       "cardInfo": {
         "notes": null,
         "title": null,

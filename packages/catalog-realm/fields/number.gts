@@ -778,18 +778,18 @@ class PinNumberFieldEdit extends Component<typeof PinNumberField> {
     return str.slice(0, this.config.length).split('');
   }
 
-  pinInputId(index: number) {
-    return `pin-input-${index}`;
-  }
-
   getDigitAt = (index: number): string => {
     return this.pinDigits[index] || '';
   };
 
+  getAriaLabel = (index: number): string => {
+    return `Digit ${index + 1} of ${this.config.length}`;
+  };
+
   focusInput(index: number) {
     if (index < 0 || index >= this.config.length) return;
-    let input = document.getElementById(
-      this.pinInputId(index),
+    let input = document.querySelector(
+      `.pin-slot[data-pin-index="${index}"]`,
     ) as HTMLInputElement | null;
     input?.focus();
   }
@@ -797,8 +797,8 @@ class PinNumberFieldEdit extends Component<typeof PinNumberField> {
   collectPinValue() {
     let digits: string[] = [];
     for (let i = 0; i < this.config.length; i++) {
-      let input = document.getElementById(
-        this.pinInputId(i),
+      let input = document.querySelector(
+        `.pin-slot[data-pin-index="${i}"]`,
       ) as HTMLInputElement | null;
       if (input?.value) {
         digits.push(input.value);
@@ -860,20 +860,19 @@ class PinNumberFieldEdit extends Component<typeof PinNumberField> {
   <template>
     <div class='pin-container'>
       {{#if this.config.label}}
-        <label class='pin-container__label'>{{this.config.label}}</label>
+        <div class='pin-container__label'>{{this.config.label}}</div>
       {{/if}}
 
       <div class='pin-group' role='group' aria-label='PIN code input'>
         {{#each this.inputSlots as |idx|}}
           <input
-            id={{this.pinInputId idx}}
             data-pin-index={{idx}}
             type='text'
             inputmode='numeric'
             maxlength='1'
             class='pin-slot'
             autocomplete='one-time-code'
-            aria-label='Digit {{idx}}'
+            aria-label={{this.getAriaLabel idx}}
             value={{this.getDigitAt idx}}
             {{on 'input' (fn this.handleInput idx)}}
             {{on 'keydown' (fn this.handleKeyDown idx)}}
@@ -1789,6 +1788,7 @@ class DualRangeSliderFieldEdit extends Component<typeof DualRangeSliderField> {
           step={{this.config.step}}
           {{on 'input' this.handleMinSliderInput}}
           disabled={{not @canEdit}}
+          aria-label='Minimum value'
         />
         <input
           type='range'
@@ -1799,6 +1799,7 @@ class DualRangeSliderFieldEdit extends Component<typeof DualRangeSliderField> {
           step={{this.config.step}}
           {{on 'input' this.handleMaxSliderInput}}
           disabled={{not @canEdit}}
+          aria-label='Maximum value'
         />
       </div>
 
