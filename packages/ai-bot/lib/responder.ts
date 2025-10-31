@@ -2,22 +2,26 @@ import { logger } from '@cardstack/runtime-common';
 import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import * as Sentry from '@sentry/node';
-import { OpenAIError } from 'openai/error';
+import type { OpenAIError } from 'openai/error';
 import throttle from 'lodash/throttle';
-import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
+import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
+import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
-import { MatrixClient } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
 export class Responder {
   matrixResponsePublisher: MatrixResponsePublisher;
+  private _lastSentTotal = 0;
+  private _lastSentContentLen = 0;
+  private _lastSentReasoningLen = 0;
+  private _lastSentToolCallsJson: string | undefined;
 
   static eventMayTriggerResponse(event: DiscreteMatrixEvent) {
     // If it's a message, we should respond unless it's a card fragment
@@ -69,12 +73,40 @@ export class Responder {
     this.sendMessageEventWithThrottlingInternal();
   };
 
-  sendMessageEventWithThrottlingInternal: () => unknown = throttle(() => {
-    this.needsMessageSend = false;
-    this.sendMessageEvent();
-  }, 250);
+  sendMessageEventWithThrottlingInternal: () => unknown = throttle(
+    () => {
+      this.needsMessageSend = false;
+      this.sendMessageEvent();
+    },
+    Number(process.env.AI_BOT_STREAM_THROTTLE_MS ?? 250),
+  );
 
   sendMessageEvent = async () => {
+    // Only send if the delta is meaningful, unless we are finalizing.
+    const minDelta = Number(process.env.AI_BOT_STREAM_MIN_DELTA ?? 0);
+    const latestContentLen = (this.responseState.latestContent || '').length;
+    const reasoningText = this.responseState.latestReasoning || '';
+    const latestReasoningLen = reasoningText.length;
+    const toolCallsJson = JSON.stringify(this.responseState.toolCalls || []);
+    const currentTotal = latestContentLen + latestReasoningLen;
+    // Track last-sent size on the instance
+    const lastSent = this._lastSentTotal;
+    const contentDelta = latestContentLen - this._lastSentContentLen;
+    const reasoningDelta = latestReasoningLen - this._lastSentReasoningLen;
+    const toolCallsChanged = toolCallsJson !== this._lastSentToolCallsJson;
+
+    const isFinal = this.responseState.isStreamingFinished;
+    const isFirstContent = lastSent === 0 && currentTotal > 0;
+    const shouldSend =
+      isFinal ||
+      isFirstContent ||
+      reasoningDelta > 0 ||
+      toolCallsChanged ||
+      contentDelta >= minDelta;
+    if (!shouldSend) {
+      return;
+    }
+
     const messagePromise = this.matrixResponsePublisher
       .sendMessage()
       .catch((e) => {
@@ -82,6 +114,11 @@ export class Responder {
           errorMessage: e.message,
         };
       });
+    // Update last-sent size only when we actually send
+    this._lastSentTotal = currentTotal;
+    this._lastSentContentLen = latestContentLen;
+    this._lastSentReasoningLen = latestReasoningLen;
+    this._lastSentToolCallsJson = toolCallsJson;
     this.messagePromises.push(messagePromise);
     await messagePromise;
   };

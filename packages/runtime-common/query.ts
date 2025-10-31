@@ -1,4 +1,4 @@
-import * as JSON from 'json-typescript';
+import type * as JSON from 'json-typescript';
 import isEqual from 'lodash/isEqual';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';

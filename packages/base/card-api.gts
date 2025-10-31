@@ -82,6 +82,7 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+// normalizeEnumOptions used by enum moved to packages/base/enum.gts
 
 import {
   callSerializeHook,
@@ -196,7 +197,7 @@ export type FieldConfiguration = Record<string, any>;
 // Configuration may be provided as a static object or a function of the parent instance
 export type ConfigurationInput<T> =
   | FieldConfiguration
-  | ((self: Readonly<T>) => FieldConfiguration | undefined);
+  | ((this: Readonly<T>) => FieldConfiguration | undefined);
 export type FieldFormats = {
   ['fieldDef']: Format;
   ['cardDef']: Format;
@@ -678,9 +679,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       return values;
     }
 
-    if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
-    } else {
+    if (!(primitive in this.card)) {
       for (let [index, item] of values.entries()) {
         if (item != null && !instanceOf(item, this.card)) {
           throw new Error(
@@ -903,9 +902,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 
   validate(_instance: BaseDef, value: any) {
-    if (primitive in this.card) {
-      // todo: primitives could implement a validation symbol
-    } else {
+    if (!(primitive in this.card)) {
       if (value != null && !instanceOf(value, this.card)) {
         throw new Error(
           `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
@@ -1945,6 +1942,8 @@ export function linksToMany<CardT extends CardDefConstructor>(
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
 
+// (moved below BaseDef & FieldDef declarations)
+
 // TODO: consider making this abstract
 export class BaseDef {
   // this is here because CardBase has no public instance methods, so without it
@@ -2236,6 +2235,8 @@ export class TextAreaField extends StringField {
     </template>
   };
 }
+
+// enumField has moved to packages/base/enum.gts
 
 export class CSSField extends TextAreaField {
   static displayName = 'CSS Field';

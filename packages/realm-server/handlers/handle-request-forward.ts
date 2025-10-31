@@ -1,9 +1,6 @@
-import Koa from 'koa';
-import {
-  DBAdapter,
-  logger,
-  SupportedMimeType,
-} from '@cardstack/runtime-common';
+import type Koa from 'koa';
+import type { DBAdapter } from '@cardstack/runtime-common';
+import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import {
   sendResponseForBadRequest,
   sendResponseForSystemError,

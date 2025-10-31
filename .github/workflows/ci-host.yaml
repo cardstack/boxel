@@ -13,7 +13,7 @@ on:
       - "packages/eslint-plugin-boxel/**"
       - "packages/realm-server/**"
       - "packages/runtime-common/**"
-      - ".github/workflows/ci-host.yml"
+      - ".github/workflows/ci-host.yaml"
       - "package.json"
       - "pnpm-lock.yaml"
   workflow_dispatch:
@@ -27,7 +27,7 @@ permissions:
 jobs:
   host-test:
     name: Host Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-8-core
     strategy:
       fail-fast: false
       matrix:

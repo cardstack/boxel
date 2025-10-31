@@ -6,7 +6,7 @@ import { isCardInstance, logger } from '@cardstack/runtime-common';
 const oneShotLogger = logger('llm:oneshot');
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import { Skill } from 'https://cardstack.com/base/skill';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 

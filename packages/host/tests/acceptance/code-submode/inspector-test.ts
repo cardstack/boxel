@@ -22,7 +22,7 @@ import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
 import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
 
@@ -41,10 +41,12 @@ import {
   type TestContextWithSave,
   setMonacoContent,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { assertRecentFileURLs } from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
+
+import type { TestRealmAdapter } from '../../helpers/adapter';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const realmAFiles: Record<string, any> = {

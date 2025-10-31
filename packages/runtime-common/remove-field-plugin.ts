@@ -2,8 +2,8 @@ import type {
   PossibleCardOrFieldDeclaration,
   PossibleField,
 } from './schema-analysis-plugin';
-import { types as t } from '@babel/core';
-import { NodePath } from '@babel/traverse';
+import type { types as t } from '@babel/core';
+import type { NodePath } from '@babel/traverse';
 
 interface State {
   opts: Options;

@@ -1,10 +1,10 @@
 import { RealmPaths } from './paths';
 import { baseRealm, isNode } from './index';
+import type { ModuleDescriptor } from './package-shim-handler';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
   type ModuleLike,
-  ModuleDescriptor,
 } from './package-shim-handler';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher';

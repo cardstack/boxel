@@ -10,7 +10,7 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
-import { consume } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import {
   BoxelSelect,
@@ -23,6 +23,8 @@ import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 import {
   cardTypeDisplayName,
   getCardMenuItems,
+  type Permissions,
+  PermissionsContextName,
 } from '@cardstack/runtime-common';
 
 import {
@@ -36,6 +38,7 @@ import {
   specRef,
   trimJsonExtension,
   uuidv4,
+  realmURL,
   type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
@@ -155,7 +158,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
     return toMenuItems(
       this.card?.[getCardMenuItems]?.({
-        canEdit: this.realm.canWrite(cardId),
+        canEdit: this.canEditCard,
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',
         commandContext: this.commandService.commandContext,
@@ -189,10 +192,11 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   @action private setFormat(format: Format) {
-    if (!this.card?.id) {
+    let selectedCardId = this.selectedCardId;
+    if (!selectedCardId) {
       return;
     }
-    this.persistSelections(this.card.id, format);
+    this.persistSelections(selectedCardId, format);
   }
 
   private get realmInfo() {
@@ -204,7 +208,25 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get canEditCard() {
-    return this.card?.id && this.realm.canWrite(this.card.id);
+    let realmHref = this.selectedCardRealmHref;
+    if (realmHref) {
+      return this.realm.canWrite(realmHref);
+    }
+    let selectedCardId = this.selectedCardId;
+    return Boolean(selectedCardId && this.realm.canWrite(selectedCardId));
+  }
+
+  @provide(PermissionsContextName)
+  get permissions(): Permissions | undefined {
+    let realmHref = this.selectedCardRealmHref;
+    if (realmHref) {
+      return this.realm.permissions(realmHref);
+    }
+    let selectedCardId = this.selectedCardId;
+    if (selectedCardId) {
+      return this.realm.permissions(selectedCardId);
+    }
+    return undefined;
   }
 
   private get setEditMode() {
@@ -251,6 +273,27 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private get card(): CardDef | undefined {
     return this.cardResource?.card;
+  }
+
+  private get selectedCardId() {
+    return this.playgroundSelection?.cardId ?? this.card?.id;
+  }
+
+  private get selectedCardRealmHref(): string | undefined {
+    let cardRealm = this.card?.[realmURL];
+    if (cardRealm) {
+      return cardRealm.href;
+    }
+    let selectedCardId = this.selectedCardId;
+    if (!selectedCardId) {
+      return undefined;
+    }
+    try {
+      let cardURL = new URL(selectedCardId);
+      return this.realm.realmOfURL(cardURL)?.href;
+    } catch {
+      return undefined;
+    }
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {

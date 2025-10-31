@@ -1,4 +1,3 @@
-// ²⁸ Base class for all board items with positioning
 import {
   CardDef,
   field,

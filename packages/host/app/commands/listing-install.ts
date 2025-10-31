@@ -1,28 +1,28 @@
 import { service } from '@ember/service';
 
+import type {
+  ListingPathResolver,
+  ModuleResource,
+  LooseCardResource,
+} from '@cardstack/runtime-common';
 import {
   type ResolvedCodeRef,
   RealmPaths,
   join,
-  ListingPathResolver,
   planModuleInstall,
   planInstanceInstall,
   PlanBuilder,
-  ModuleResource,
-  LooseCardResource,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
-import {
-  type AtomicOperation,
-  type AtomicOperationResult,
+import type {
+  AtomicOperation,
+  AtomicOperationResult,
 } from '@cardstack/runtime-common/atomic-document';
-import {
-  CopyInstanceMeta,
-  type CopyModuleMeta,
-} from '@cardstack/runtime-common/catalog';
+import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
+import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
-import * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 

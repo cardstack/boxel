@@ -1,12 +1,12 @@
-import { type RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
   baseRealm,
   localId,
-  LooseSingleCardDocument,
   isNotLoadedError,
   type Loader,
   type CardErrorJSONAPI as CardError,
@@ -17,7 +17,7 @@ import CardStore, {
 } from '@cardstack/host/lib/gc-card-store';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type CardDef as CardInstance } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardInstance } from 'https://cardstack.com/base/card-api';
 
 import { saveCard, testRealmURL } from '../helpers';
 import {

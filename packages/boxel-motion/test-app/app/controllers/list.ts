@@ -1,9 +1,9 @@
-import {
-  type AnimationTimeline,
-  type AnimationDefinition,
+import type {
+  AnimationTimeline,
+  AnimationDefinition,
 } from '@cardstack/boxel-motion';
 import { SpringBehavior } from '@cardstack/boxel-motion';
-import { Changeset } from '@cardstack/boxel-motion/models/animator';
+import type { Changeset } from '@cardstack/boxel-motion/models/animator';
 import Controller from '@ember/controller';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';

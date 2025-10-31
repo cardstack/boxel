@@ -1,7 +1,6 @@
 import { cached, tracked } from '@glimmer/tracking';
 
 import EventEmitter from 'eventemitter3';
-import { type IEvent } from 'matrix-js-sdk';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -10,13 +9,15 @@ import {
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   ActiveLLMEvent,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import Mutex from '../mutex';
+
+import type { IEvent } from 'matrix-js-sdk';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 

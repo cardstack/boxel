@@ -1,6 +1,7 @@
 import Koa from 'koa';
 import Router from '@koa/router';
-import { Server, createServer } from 'http';
+import type { Server } from 'http';
+import { createServer } from 'http';
 import * as Sentry from '@sentry/node';
 import {
   logger,
@@ -14,12 +15,14 @@ import {
   fetchRequestFromContext,
 } from '../middleware';
 import { Prerenderer } from './index';
+import { resolvePrerenderManagerURL } from './config';
 
 let log = logger('prerender-server');
+const defaultPrerenderServerPort = 4221;
 
 export function buildPrerenderApp(
   secretSeed: string,
-  options?: { maxPages?: number; silent?: boolean },
+  options: { serverURL: string; maxPages?: number; silent?: boolean },
 ): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
@@ -29,7 +32,12 @@ export function buildPrerenderApp(
   let maxPages =
     options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
   let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
-  let prerenderer = new Prerenderer({ secretSeed, maxPages, silent });
+  let prerenderer = new Prerenderer({
+    secretSeed,
+    maxPages,
+    silent,
+    serverURL: options.serverURL,
+  });
 
   router.head('/', livenessCheck);
   router.get('/', async (ctxt: Koa.Context) => {
@@ -188,22 +196,26 @@ export function buildPrerenderApp(
   return { app, prerenderer };
 }
 
-async function registerWithManager() {
+function resolvePrerenderServerURL(port?: number): string {
+  let hostname = process.env.HOSTNAME ?? 'localhost';
+  let resolvedPort = port ?? defaultPrerenderServerPort;
+  return `http://${hostname}:${resolvedPort}`.replace(/\/$/, '');
+}
+
+async function registerWithManager(serverURL: string) {
   try {
-    const managerURL =
-      process.env.PRERENDER_MANAGER_URL ?? 'http://localhost:4222';
+    const managerURL = resolvePrerenderManagerURL();
     const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
-    const urlOverride = process.env.PRERENDER_SERVER_URL; // optional explicit URL
     let body = {
       data: {
         type: 'prerender-server',
         attributes: {
           capacity,
-          ...(urlOverride ? { url: urlOverride } : {}),
+          url: serverURL,
         },
       },
     };
-    await fetch(`${managerURL.replace(/\/$/, '')}/prerender-servers`, {
+    await fetch(`${managerURL}/prerender-servers`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/vnd.api+json',
@@ -219,16 +231,35 @@ async function registerWithManager() {
   }
 }
 
+async function unregisterWithManager(serverURL: string) {
+  try {
+    const managerURL = resolvePrerenderManagerURL();
+    let target = new URL(`${managerURL}/prerender-servers`);
+    target.searchParams.set('url', serverURL);
+    await fetch(target.toString(), { method: 'DELETE' }).catch((e) => {
+      log.debug('Prerender manager unregister request failed:', e);
+    });
+  } catch (e) {
+    log.debug(
+      'Error while attempting to unregister with prerender manager:',
+      e,
+    );
+  }
+}
+
 export function createPrerenderHttpServer(options?: {
   secretSeed?: string;
   maxPages?: number;
   silent?: boolean;
+  port?: number;
 }): Server {
   let secretSeed = options?.secretSeed ?? process.env.REALM_SECRET_SEED ?? '';
   let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
+  let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp(secretSeed, {
     maxPages: options?.maxPages,
     silent,
+    serverURL,
   });
   let server = createServer(app.callback());
   server.on('close', async () => {
@@ -238,11 +269,19 @@ export function createPrerenderHttpServer(options?: {
       // Best-effort shutdown; log and continue
       log.warn('Error stopping prerenderer on server close:', e?.message ?? e);
     }
+    try {
+      await unregisterWithManager(serverURL);
+    } catch (e) {
+      log.debug(
+        'Error scheduling unregister with prerender manager:',
+        e as any,
+      );
+    }
   });
   // best-effort registration (async, non-blocking)
   server.on('listening', () => {
     try {
-      registerWithManager();
+      void registerWithManager(serverURL);
     } catch (e) {
       log.debug('Error scheduling registration with prerender manager:', e);
     }

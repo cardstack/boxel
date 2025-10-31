@@ -1,10 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import {
-  type RealmPermissions,
-  type Realm,
-  type RealmAdapter,
-  type RenderResponse,
+import type {
+  RealmPermissions,
+  Realm,
+  RealmAdapter,
+  RenderResponse,
 } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/index';
 
@@ -21,6 +21,9 @@ import { baseCardRef } from '@cardstack/runtime-common';
 module(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/';
+    let prerenderServerURL = realmURL.endsWith('/')
+      ? realmURL.slice(0, -1)
+      : realmURL;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -31,6 +34,7 @@ module(basename(__filename), function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
+        serverURL: prerenderServerURL,
       });
     });
 
@@ -154,6 +158,9 @@ module(basename(__filename), function () {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
     let realmURL3 = 'http://127.0.0.1:4449/';
+    let prerenderServerURL = realmURL1.endsWith('/')
+      ? realmURL1.slice(0, -1)
+      : realmURL1;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -169,6 +176,7 @@ module(basename(__filename), function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
+        serverURL: prerenderServerURL,
       });
     });
     hooks.after(async () => {
@@ -698,24 +706,89 @@ module(basename(__filename), function () {
         assert.strictEqual(response.error?.error.status, 500);
       });
 
-      test('render timeout', async function (assert) {
+      test('recovers isolated HTML when timeout hits but DOM is settled', async function (assert) {
         const testCardURL = `${realmURL2}1`;
-        let result = await prerenderer.prerenderCard({
+        await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
           permissions,
-          opts: { timeoutMs: 4000, simulateTimeoutMs: 5000 },
         });
-        let {
-          response: { error },
-        } = result;
-        assert.strictEqual(error?.error.id, testCardURL);
-        assert.strictEqual(
-          error?.error.message,
-          'Render timed-out after 4000 ms',
+        let recovered = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          userId: testUserId,
+          permissions,
+          opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
+        });
+
+        assert.ok(
+          recovered.response.isolatedHTML,
+          'captured isolated HTML after timeout recovery',
         );
-        assert.strictEqual(error?.error.status, 504);
+        assert.strictEqual(
+          recovered.response.error,
+          undefined,
+          'no timeout error returned when DOM recovered',
+        );
+        assert.true(
+          recovered.pool.timedOut,
+          'pool still notes timeout when recovery occurs',
+        );
+        assert.false(
+          recovered.pool.evicted,
+          'realm not evicted after recovering from timeout',
+        );
+
+        let next = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: `${realmURL2}1`,
+          userId: testUserId,
+          permissions,
+        });
+        assert.true(
+          next.pool.reused,
+          'subsequent render reuses pooled page after recovery',
+        );
+      });
+
+      test('does not recover timeout when DOM reports an error', async function (assert) {
+        const errorCardURL = `${realmURL2}4`;
+        // warm the realm so loader caches are populated
+        await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: errorCardURL,
+          userId: testUserId,
+          permissions,
+        });
+
+        let timedOut = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: errorCardURL,
+          userId: testUserId,
+          permissions,
+          opts: { timeoutMs: 500, simulateTimeoutMs: 2000 },
+        });
+
+        assert.ok(
+          timedOut.response.error,
+          'timeout still returns an error payload',
+        );
+        assert.strictEqual(
+          timedOut.response.error?.error.title,
+          'Render timeout',
+          'reports timeout when DOM contains error markup',
+        );
+        assert.strictEqual(
+          timedOut.response.isolatedHTML,
+          null,
+          'does not salvage HTML when DOM reports an error',
+        );
+        assert.true(timedOut.pool.timedOut, 'pool flags timeout');
+        assert.true(
+          timedOut.pool.evicted,
+          'realm evicted after timeout with error',
+        );
       });
 
       test('unusable triggers eviction and short-circuit', async function (assert) {

@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
-import { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
 import {
   asExpressions,
   fetchUserPermissions,

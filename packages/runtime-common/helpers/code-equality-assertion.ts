@@ -1,6 +1,6 @@
 import { transform } from '@babel/core';
-import { NodePath } from '@babel/traverse';
-import { StringLiteral } from '@babel/types';
+import type { NodePath } from '@babel/traverse';
+import type { StringLiteral } from '@babel/types';
 import { createPatch } from 'diff';
 import { isNode } from '../index';
 //@ts-ignore unsure where these types live

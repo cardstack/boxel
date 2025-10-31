@@ -1,7 +1,7 @@
 import proxy from 'koa-proxies';
+import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   logger as getLogger,
-  ResponseWithNodeStream,
   webStreamToText,
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';

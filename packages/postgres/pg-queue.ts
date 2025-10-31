@@ -15,11 +15,11 @@ import {
   Deferred,
   Job,
 } from '@cardstack/runtime-common';
-import { PgAdapter } from './pg-adapter';
+import type { PgAdapter } from './pg-adapter';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
-const MAX_JOB_TIMEOUT_SEC = 10 * 60;
+const MAX_JOB_TIMEOUT_SEC = 20 * 60;
 
 interface JobsTable {
   id: number;

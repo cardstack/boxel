@@ -1,10 +1,10 @@
 import { module, test } from 'qunit';
-import { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
-import { Realm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 import {
   setupBaseRealmServer,
   setupPermissionedRealm,

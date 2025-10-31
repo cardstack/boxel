@@ -1,5 +1,5 @@
-import { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
-import {
+import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
+import type {
   ChatCompletionMessageToolCall,
   OpenAIPromptMessage,
   PromptParts,
@@ -37,12 +37,12 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
 } from '../matrix-constants';
-import {
+import type {
   CardResource,
   LooseCardResource,
   LooseSingleCardDocument,
 } from '../index';
-import { ToolChoice } from '../helpers/ai';
+import type { ToolChoice } from '../helpers/ai';
 import { logger } from '../log';
 
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants';

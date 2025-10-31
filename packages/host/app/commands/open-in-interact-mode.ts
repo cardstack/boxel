@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { Format } from '@cardstack/runtime-common';
+import type { Format } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 

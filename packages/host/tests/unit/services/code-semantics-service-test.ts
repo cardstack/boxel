@@ -5,7 +5,7 @@ import type { Ready } from '@cardstack/host/resources/file';
 import type { State } from '@cardstack/host/resources/module-contents';
 
 import type { SaveType } from '@cardstack/host/services/card-service';
-import CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
+import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 
 const mockFile: Ready = {
   state: 'ready',

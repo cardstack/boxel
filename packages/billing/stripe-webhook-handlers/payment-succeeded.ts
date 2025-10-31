@@ -1,10 +1,10 @@
+import type { User } from '@cardstack/runtime-common';
 import {
   type DBAdapter,
   type Plan,
   type Subscription,
   type SubscriptionCycle,
   retry,
-  User,
 } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
@@ -21,8 +21,9 @@ import {
   sumUpCreditsLedger,
   updateSubscription as updateSubscriptionQuery,
 } from '../billing-queries';
-import { StripeInvoicePaymentSucceededWebhookEvent } from '.';
-import { PgAdapter, TransactionManager } from '@cardstack/postgres';
+import type { StripeInvoicePaymentSucceededWebhookEvent } from '.';
+import type { PgAdapter } from '@cardstack/postgres';
+import { TransactionManager } from '@cardstack/postgres';
 import { ProrationCalculator } from '../proration-calculator';
 
 export async function handlePaymentSucceeded(

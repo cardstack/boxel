@@ -47,21 +47,18 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
-import { type CardSaveSubscriber } from './card-service';
-
-import EnvironmentService from './environment-service';
+import type { CardSaveSubscriber } from './card-service';
 
 import type CardService from './card-service';
+import type EnvironmentService from './environment-service';
+
 import type HostModeService from './host-mode-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
@@ -213,6 +210,10 @@ export default class StoreService extends Service implements StoreInterface {
     return this.store.loaded();
   }
 
+  get docsInFlight() {
+    return this.store.docsInFlight;
+  }
+
   // This method creates a new instance in the store and return the new card ID
   async create(
     doc: LooseSingleCardDocument,
@@ -288,6 +289,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.setIdentityContext(instance);
     await this.startAutoSaving(instance);
 
+    if ((globalThis as any).__boxelRenderContext) {
+      return instance;
+    }
+
     if (opts?.doNotWaitForPersist) {
       // intentionally not awaiting
       this.persistAndUpdate(instance, {
@@ -343,6 +348,9 @@ export default class StoreService extends Service implements StoreInterface {
     patch: PatchData,
     opts?: { doNotPersist?: true },
   ): Promise<T | CardErrorJSONAPI | undefined> {
+    if ((globalThis as any).__boxelRenderContext) {
+      return;
+    }
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
     let instance = await this.get<T>(id);
     if (!instance || !isCardInstance(instance)) {
@@ -767,23 +775,27 @@ export default class StoreService extends Service implements StoreInterface {
     }
     try {
       if (!id) {
-        // this is a new card so instantiate it and save it
-        let doc = idOrDoc as LooseSingleCardDocument;
-        let newInstance = await this.createFromSerialized(
-          doc.data,
-          doc,
-          relativeTo,
-        );
-        let maybeError = await this.persistAndUpdate(newInstance, {
-          realm,
-          localDir: opts?.localDir,
-        });
-        if (!isCardInstance(maybeError)) {
-          return maybeError;
+        if (!(globalThis as any).__boxelRenderContext) {
+          // this is a new card so instantiate it and save it
+          let doc = idOrDoc as LooseSingleCardDocument;
+          let newInstance = await this.createFromSerialized(
+            doc.data,
+            doc,
+            relativeTo,
+          );
+          let maybeError = await this.persistAndUpdate(newInstance, {
+            realm,
+            localDir: opts?.localDir,
+          });
+          if (!isCardInstance(maybeError)) {
+            return maybeError;
+          }
+          this.store.set(newInstance.id, newInstance);
+          deferred?.fulfill(newInstance);
+          return newInstance as T;
+        } else {
+          throw new Error(`cannot save serialized doc in render context`);
         }
-        this.store.set(newInstance.id, newInstance);
-        deferred?.fulfill(newInstance);
-        return newInstance as T;
       }
 
       let existingInstance = this.peek(id);
@@ -978,6 +990,10 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
+    if ((globalThis as any).__boxelRenderContext) {
+      // we skip saving when rendering cards in headless chrome
+      return;
+    }
     if (opts?.isImmediate) {
       return await this.persistAndUpdate(instance);
     } else {

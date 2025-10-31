@@ -23,7 +23,7 @@ if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
 }
 
-if (process.env.USE_HEADLESS_CHROME_INDEXING) {
+if (process.env.USE_HEADLESS_CHROME_INDEXING === 'true') {
   // in node context this is a boolean
   (globalThis as any).__useHeadlessChromePrerender = true;
 }

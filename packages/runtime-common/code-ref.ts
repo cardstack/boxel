@@ -1,10 +1,10 @@
-import {
-  type BaseDefConstructor,
-  type Field,
-  type BaseDef,
-  type CardDef,
-  type FieldDef,
-  type FieldConstructor,
+import type {
+  BaseDefConstructor,
+  Field,
+  BaseDef,
+  CardDef,
+  FieldDef,
+  FieldConstructor,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
 import {

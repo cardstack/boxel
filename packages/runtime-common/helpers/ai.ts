@@ -1,7 +1,7 @@
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { primitive } from '../constants';
-import { Loader } from '../loader';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { Loader } from '../loader';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
 
 type ArraySchema = {
@@ -138,7 +138,7 @@ export async function basicMappings(loader: Loader) {
   const { default: DateTimeField } = datetime;
   const { default: BooleanField } = boolean;
   const { default: CodeRef } = codeRef;
-  const { QueryField } = query;
+  const { JsonField, QueryField } = query;
   mappings.set(StringField, {
     type: 'string',
   });
@@ -166,6 +166,11 @@ export async function basicMappings(loader: Loader) {
       module: { type: 'string' },
       name: { type: 'string' },
     },
+  });
+  mappings.set(JsonField, {
+    type: 'object',
+    properties: {},
+    additionalProperties: true,
   });
   mappings.set(QueryField, {
     type: 'object',

@@ -1,16 +1,16 @@
 import type Controller from '@ember/controller';
 import { action } from '@ember/object';
 import Route from '@ember/routing/route';
-import RouterService from '@ember/routing/router-service';
-import Transition from '@ember/routing/transition';
+import type RouterService from '@ember/routing/router-service';
+import type Transition from '@ember/routing/transition';
 import { join, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 
 import { TrackedMap } from 'tracked-built-ins';
 
+import type { CardError } from '@cardstack/runtime-common';
 import {
   formattedError,
-  CardError,
   baseRealm,
   SupportedMimeType,
   isCardError,
@@ -130,6 +130,8 @@ export default class RenderRoute extends Route<Model> {
     let parsedOptions = parseRenderRouteOptions(options);
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
+    // this is a tool for our prerenderer to understand if a timed out render is salvageable
+    (globalThis as any).__docsInFlight = () => this.store.docsInFlight.length;
     let key = `${id}|${nonce}|${canonicalOptions}`;
     let existing = this.#modelPromises.get(key);
     if (existing) {

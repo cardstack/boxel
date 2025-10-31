@@ -9,10 +9,10 @@ import { task } from 'ember-concurrency';
 
 import merge from 'lodash/merge';
 
-import { type SingleCardDocument } from '@cardstack/runtime-common';
+import type { SingleCardDocument } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
-import CardService from '@cardstack/host/services/card-service';
+import type CardService from '@cardstack/host/services/card-service';
 import {
   type MonacoLanguageConfig,
   extendDefinition,

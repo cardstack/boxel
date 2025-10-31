@@ -1,12 +1,12 @@
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import type { RunnerOpts } from '@cardstack/runtime-common';
 import {
   VirtualNetwork,
   authorizationMiddleware,
   baseRealm,
   fetcher,
-  RunnerOpts,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';

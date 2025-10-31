@@ -1,9 +1,9 @@
 import { module, test } from 'qunit';
-import { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { Server } from 'http';
+import type { Server } from 'http';
 import qs from 'qs';
-import { type Definition, type Realm } from '@cardstack/runtime-common';
+import type { Definition, Realm } from '@cardstack/runtime-common';
 import {
   setupBaseRealmServer,
   setupPermissionedRealm,

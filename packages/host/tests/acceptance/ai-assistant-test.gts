@@ -321,6 +321,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Create system card with model configurations
     let defaultSystemCard = new SystemCard({
+      defaultModelConfiguration: anthropicClaudeSonnet45Model,
       modelConfigurations: [
         openAiGpt5Model,
         openAiGpt4oMiniModel,
@@ -346,6 +347,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     let alternateSystemCard = new SystemCard({
+      defaultModelConfiguration: deepseekModel,
       modelConfigurations: [deepseekModel, geminiFlashModel, openAiGpt5Model],
     });
 
@@ -630,8 +632,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
-    // Default model should be the first one in the system card
-    let defaultModelName = modelNameFor('openai/gpt-5');
+    // Default model should come from the system card's default configuration
+    let defaultModelId = 'anthropic/claude-sonnet-4.5';
+    let defaultModelName = modelNameFor(defaultModelId);
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
@@ -687,7 +690,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
   });
 
-  test('defaults to the first system card model in interact mode', async function (assert) {
+  test('defaults to the system card default in interact mode', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -702,24 +705,25 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
     let matrixService = getService('matrix-service');
-    let firstSystemModelId =
+    let defaultSystemModelId =
+      matrixService.systemCard?.defaultModelConfiguration?.modelId ??
       matrixService.systemCard?.modelConfigurations?.[0]?.modelId;
 
-    assert.ok(firstSystemModelId, 'system card provides a first model');
-    let expectedName = modelNameFor(firstSystemModelId!);
+    assert.ok(defaultSystemModelId, 'system card provides a default model');
+    let expectedName = modelNameFor(defaultSystemModelId!);
 
     assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
     assert.strictEqual(
-      firstSystemModelId,
-      'openai/gpt-5',
-      'gpt-5 remains the leading option',
+      defaultSystemModelId,
+      'anthropic/claude-sonnet-4.5',
+      'sonnet 4.5 remains the leading option',
     );
 
     await click('[data-test-close-ai-assistant]');
   });
 
-  test('switching back to interact mode uses openai/gpt-5', async function (assert) {
+  test('switching back to interact mode uses the system default model', async function (assert) {
     let interactFallbackName = modelNameFor(DEFAULT_LLM);
 
     await visitOperatorMode({
@@ -736,10 +740,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
-    // Initial interact mode defaults to first system card model
+    // Initial interact mode defaults to the system card default
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('openai/gpt-5'));
+      .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
 
     // Switch to Code mode and confirm coding default is applied
     await click('[data-test-submode-switcher] button');
@@ -748,7 +752,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom('[data-test-llm-select-selected]')
       .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
 
-    // Switch back to Interact mode and ensure we fall back to GPT-5
+    // Switch back to Interact mode and ensure we fall back to the default
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-llm-select-selected]').hasText(interactFallbackName);
@@ -948,6 +952,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-send-message-btn]');
 
     mockedFileContent = 'test card content';
+
+    // This is to make sure opening code mode works even if the workspace chooser is open
+    await click('[data-test-workspace-chooser-toggle]');
 
     await click('[data-test-attached-file-dropdown-button="Fadhlan"]');
 
@@ -2557,6 +2564,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Enabling create new session button',
     );
     await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-create-room-btn]:not([disabled])');
     await click('[data-test-create-room-btn]');
     await waitFor('[data-room-settled]');
 
@@ -3148,5 +3156,141 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
       },
     ]);
+  });
+
+  test('restores chat input of unsent messages', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    const matrixService = getService('matrix-service');
+    await waitFor(`[data-room-settled]`);
+
+    let firstRoomId = matrixService.currentRoomId;
+    assert.ok(firstRoomId, 'Should have an initial room ID');
+    if (!firstRoomId) {
+      throw new Error('Missing room ID for initial session');
+    }
+
+    await waitFor(`[data-test-message-field="${firstRoomId}"]`);
+
+    await fillIn(
+      `[data-test-message-field="${firstRoomId}"]`,
+      'hey, could you do something for me?',
+    );
+    await click('[data-test-send-message-btn]');
+    await fillIn(
+      `[data-test-message-field="${firstRoomId}"]`,
+      'how old is the sun?',
+    );
+
+    // user does not click send, and moves on to a new room
+
+    await click('[data-test-create-room-btn]');
+    await waitFor(`[data-room-settled]`);
+
+    let secondRoomId = matrixService.currentRoomId;
+    assert.ok(secondRoomId, 'Should have a second room ID');
+    if (!secondRoomId) {
+      throw new Error('Missing room ID for new session');
+    }
+    assert.notStrictEqual(
+      secondRoomId,
+      firstRoomId,
+      'Second room should be different from first room',
+    );
+
+    await waitFor(`[data-test-message-field="${secondRoomId}"]`);
+    assert
+      .dom(`[data-test-message-field="${secondRoomId}"]`)
+      .hasValue('', 'New room starts with an empty chat input');
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor(`[data-test-enter-room="${firstRoomId}"]`);
+    await click(`[data-test-enter-room="${firstRoomId}"]`);
+    await waitFor(`[data-room-settled]`);
+    await waitUntil(() => matrixService.currentRoomId === firstRoomId);
+    await waitFor(`[data-test-message-field="${firstRoomId}"]`);
+    assert
+      .dom(`[data-test-message-field="${firstRoomId}"]`)
+      .hasValue(
+        'how old is the sun?',
+        'Draft message is restored when returning to the original room',
+      );
+  });
+
+  test('shows an error and persists the prompt in case the message failed to send', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    const matrixService = getService('matrix-service');
+
+    let roomId = matrixService.currentRoomId;
+    assert.ok(roomId, 'Should have a room ID');
+    if (!roomId) {
+      throw new Error('Missing room ID for message failure test');
+    }
+
+    await waitFor(`[data-test-message-field="${roomId}"]`);
+
+    const originalSendMessage = matrixService.sendMessage;
+    let sendAttempts = 0;
+    matrixService.sendMessage = async function (
+      ..._args: Parameters<typeof originalSendMessage>
+    ) {
+      sendAttempts++;
+      throw new Error('Intentional failure for test');
+    };
+
+    const failingMessage = 'This message should trigger an error';
+    try {
+      await fillIn(`[data-test-message-field="${roomId}"]`, failingMessage);
+      await waitUntil(
+        () => matrixService.getMessageToSend(roomId!) === failingMessage,
+      );
+
+      await click('[data-test-send-message-btn]');
+
+      await waitFor('[data-test-boxel-alert="error"]');
+      assert.strictEqual(sendAttempts, 1, 'sendMessage was attempted once');
+      assert
+        .dom('[data-test-boxel-alert="error"] [data-test-alert-message="0"]')
+        .hasText(
+          'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.',
+        );
+
+      await waitUntil(
+        () => matrixService.getMessageToSend(roomId!) === failingMessage,
+      );
+      assert
+        .dom(`[data-test-message-field="${roomId}"]`)
+        .hasValue(
+          failingMessage,
+          'Draft message is restored after a failed send attempt',
+        );
+    } finally {
+      matrixService.sendMessage = originalSendMessage;
+    }
   });
 });

@@ -1214,7 +1214,7 @@ module('Acceptance | host submode', function (hooks) {
 
           assert
             .dom('[data-test-open-custom-subdomain-button]')
-            .hasAttribute('href', 'http://my-custom-site.localhost:4201/index')
+            .hasAttribute('href', 'http://my-custom-site.localhost:4201/')
             .hasAttribute('target', '_blank');
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;

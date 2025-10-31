@@ -1,4 +1,5 @@
-import Koa from 'koa';
+import type Koa from 'koa';
+import type { DBAdapter } from '@cardstack/runtime-common';
 import {
   type FromScratchResult,
   type QueuePublisher,
@@ -7,7 +8,6 @@ import {
   userInitiatedPriority,
   SupportedMimeType,
   RealmPaths,
-  DBAdapter,
 } from '@cardstack/runtime-common';
 import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import {
@@ -15,7 +15,7 @@ import {
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
-import { type CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes';
 
 export default function handleReindex({
   queue,
