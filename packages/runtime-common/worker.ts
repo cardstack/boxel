@@ -501,7 +501,7 @@ export class Worker {
     }[] = [];
 
     let batchLabel =
-      args.totalBatches && args.batchNumber
+      args.totalBatches != null && args.batchNumber != null
         ? `batch ${args.batchNumber}/${args.totalBatches}`
         : 'batch';
 
