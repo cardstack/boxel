@@ -14,12 +14,46 @@ import {
   asExpressions,
   Deferred,
   Job,
+  fullReindexBatchTimeoutSeconds,
+  normalizeFullReindexBatchSize,
+  FROM_SCRATCH_JOB_TIMEOUT_SEC,
+  normalizeFullReindexCooldownSeconds,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from './pg-adapter';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
-const MAX_JOB_TIMEOUT_SEC = 20 * 60;
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  let parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return undefined;
+  }
+  return Math.floor(parsed);
+}
+
+const configuredMaxJobTimeout = parsePositiveInteger(
+  process.env.PG_QUEUE_MAX_JOB_TIMEOUT_SEC,
+);
+
+const configuredBatchSize = parsePositiveInteger(
+  process.env.FULL_REINDEX_BATCH_SIZE,
+);
+
+const baselineBatchSize = normalizeFullReindexBatchSize(configuredBatchSize);
+const baselineCooldownSeconds = normalizeFullReindexCooldownSeconds();
+const derivedBatchTimeout = fullReindexBatchTimeoutSeconds(
+  baselineBatchSize,
+  baselineCooldownSeconds,
+);
+
+const MAX_JOB_TIMEOUT_SEC =
+  configuredMaxJobTimeout != null
+    ? Math.max(configuredMaxJobTimeout, FROM_SCRATCH_JOB_TIMEOUT_SEC)
+    : Math.max(FROM_SCRATCH_JOB_TIMEOUT_SEC, derivedBatchTimeout);
 
 interface JobsTable {
   id: number;

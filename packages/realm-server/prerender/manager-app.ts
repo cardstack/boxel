@@ -9,6 +9,7 @@ type ServerInfo = {
   activeRealms: Set<string>;
   registeredAt: number;
   lastSeenAt: number;
+  lastAssignedAt: number;
 };
 
 type Registry = {
@@ -88,7 +89,7 @@ export function buildPrerenderManagerApp(): {
   function logRegistry() {
     let msg: string[] = ['registry:'];
     for (let [realm, servers] of registry.realms) {
-      msg.push(`${realm} --> ${servers.join(', ')}`);
+      msg.push(`    ${realm} --> ${servers.join(', ')}`);
     }
     log.info(msg.join('\n'));
   }
@@ -155,6 +156,7 @@ export function buildPrerenderManagerApp(): {
         activeRealms: new Set(),
         registeredAt: now(),
         lastSeenAt: now(),
+        lastAssignedAt: 0,
       });
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
@@ -221,21 +223,50 @@ export function buildPrerenderManagerApp(): {
     ctxt.status = 204;
   });
 
+  function leastRecentlyUsedServerWithCapacity(options?: {
+    exclude?: Iterable<string>;
+  }): string | undefined {
+    let excludeSet = new Set(options?.exclude ? [...options.exclude] : []);
+    let best: { url: string; info: ServerInfo } | undefined;
+    for (let [url, info] of registry.servers) {
+      if (excludeSet.has(url)) {
+        continue;
+      }
+      if (info.activeRealms.size >= info.capacity) {
+        continue;
+      }
+      if (!best) {
+        best = { url, info };
+        continue;
+      }
+      if (info.lastAssignedAt < best.info.lastAssignedAt) {
+        best = { url, info };
+      }
+    }
+    return best?.url;
+  }
+
   // helper: choose server for realm
   function chooseServerForRealm(realm: string): string | null {
     let assigned = registry.realms.get(realm);
     if (assigned && assigned.length > 0) {
       // If we have fewer than multiplex servers assigned, try to add a new one and prefer returning it
       if (assigned.length < multiplex) {
-        for (let [url, info] of registry.servers) {
-          if (
-            !assigned.includes(url) &&
-            info.activeRealms.size < info.capacity
-          ) {
-            assigned.push(url);
-            // prefer the newly added server to spread load
-            return url;
+        let candidate = leastRecentlyUsedServerWithCapacity({
+          exclude: assigned,
+        });
+        if (candidate) {
+          assigned.push(candidate);
+          if (assigned.length > multiplex) {
+            assigned.splice(0, assigned.length - multiplex);
           }
+          registry.realms.set(realm, assigned);
+          let info = registry.servers.get(candidate);
+          if (info) {
+            info.activeRealms.add(realm);
+            info.lastAssignedAt = now();
+          }
+          return candidate;
         }
       }
       // Otherwise rotate among the assigned set
@@ -244,18 +275,27 @@ export function buildPrerenderManagerApp(): {
       if (assigned.length > multiplex) {
         assigned.splice(0, assigned.length - multiplex);
       }
+      registry.realms.set(realm, assigned);
+      let info = registry.servers.get(next);
+      if (info) {
+        info.lastAssignedAt = now();
+      }
       return next;
     }
     // pick server with available capacity
-    for (let [url, info] of registry.servers) {
-      if (info.activeRealms.size < info.capacity) {
-        // assign
+    {
+      let candidate = leastRecentlyUsedServerWithCapacity();
+      if (candidate) {
         let list = registry.realms.get(realm) || [];
-        if (!list.includes(url)) list.push(url);
+        if (!list.includes(candidate)) list.push(candidate);
         if (list.length > multiplex) list = list.slice(-multiplex);
         registry.realms.set(realm, list);
-        info.activeRealms.add(realm);
-        return url;
+        let info = registry.servers.get(candidate);
+        if (info) {
+          info.activeRealms.add(realm);
+          info.lastAssignedAt = now();
+        }
+        return candidate;
       }
     }
     // pressure mode: pick server owning globally LRU realm
@@ -275,6 +315,10 @@ export function buildPrerenderManagerApp(): {
         if (!list.includes(url)) list.push(url);
         if (list.length > multiplex) list = list.slice(-multiplex);
         registry.realms.set(realm, list);
+        let info = registry.servers.get(url);
+        if (info) {
+          info.lastAssignedAt = now();
+        }
         // don't mark active until success
         return url;
       }
@@ -286,6 +330,10 @@ export function buildPrerenderManagerApp(): {
       if (!list.includes(any)) list.push(any);
       if (list.length > multiplex) list = list.slice(-multiplex);
       registry.realms.set(realm, list);
+      let info = registry.servers.get(any);
+      if (info) {
+        info.lastAssignedAt = now();
+      }
       return any;
     }
     return null;

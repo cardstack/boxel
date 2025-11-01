@@ -14,6 +14,8 @@ import {
   type QueuePublisher,
   type QueueRunner,
   DEFAULT_PERMISSIONS,
+  normalizeFullReindexBatchSize,
+  normalizeFullReindexCooldownSeconds,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
@@ -1416,6 +1418,20 @@ module(basename(__filename), function () {
                 360,
                 'job has correct timeout (6 minutes)',
               );
+              let jobArgs = (reindexJob.args ?? {}) as {
+                batchSize?: number;
+                cooldownSeconds?: number;
+              };
+              assert.strictEqual(
+                jobArgs.batchSize,
+                normalizeFullReindexBatchSize(),
+                'job includes batch size for full reindex',
+              );
+              assert.strictEqual(
+                jobArgs.cooldownSeconds,
+                normalizeFullReindexCooldownSeconds(),
+                'job includes cooldown seconds for full reindex',
+              );
             }
 
             // Verify that writeCurrentBoxelUIChecksum was called
@@ -1545,6 +1561,20 @@ module(basename(__filename), function () {
             jobs[0].concurrency_group,
             `full-reindex-group`,
             'concurrency group is correct',
+          );
+          let jobArgs = (jobs[0].args ?? {}) as {
+            batchSize?: number;
+            cooldownSeconds?: number;
+          };
+          assert.strictEqual(
+            jobArgs.batchSize,
+            normalizeFullReindexBatchSize(),
+            'batch size is included for grafana-triggered full reindex',
+          );
+          assert.strictEqual(
+            jobArgs.cooldownSeconds,
+            normalizeFullReindexCooldownSeconds(),
+            'cooldown seconds are included for grafana-triggered full reindex',
           );
         });
 

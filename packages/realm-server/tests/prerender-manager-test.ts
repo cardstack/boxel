@@ -259,6 +259,49 @@ module(basename(__filename), function () {
       );
     });
 
+    test('realm disposal selects least recently used idle server when multiplex=1', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlB },
+        },
+      });
+
+      let realm = 'https://realm.example/R';
+      let body = makeBody(realm, `${realm}/1`);
+      let firstProxyResponse = await request.post('/prerender').send(body);
+      assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
+      let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
+      assert.ok(firstTarget, 'proxy response includes target header');
+
+      let disposalResponse = await request
+        .delete(`/prerender-servers/realms/${encodeURIComponent(realm)}`)
+        .query({ url: firstTarget as string });
+      assert.strictEqual(disposalResponse.status, 204, 'realm disposal 204');
+
+      let otherTarget = firstTarget === serverUrlA ? serverUrlB : serverUrlA;
+      let secondProxyResponse = await request.post('/prerender').send(body);
+      assert.strictEqual(
+        secondProxyResponse.status,
+        201,
+        'proxy ok after disposal',
+      );
+      assert.strictEqual(
+        secondProxyResponse.headers['x-boxel-prerender-target'],
+        otherTarget,
+        'chooses least recently used idle server',
+      );
+    });
+
     test('unregister removes server from routing', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app } = buildPrerenderManagerApp();
