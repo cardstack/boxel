@@ -1,5 +1,5 @@
+export const DEFAULT_FULL_REINDEX_CONCURRENCY = 4;
 const DEFAULT_FULL_REINDEX_BATCH_SIZE = 4;
-const DEFAULT_FULL_REINDEX_CONCURRENCY = 4;
 const DEFAULT_FULL_REINDEX_COOLDOWN_SEC = 10;
 
 function readEnvNumber(name: string): number | undefined {
@@ -81,7 +81,17 @@ export function defaultFullReindexCooldownSeconds(): number {
   return normalizeFullReindexCooldownSeconds();
 }
 
-export function normalizeFullReindexConcurrency(value?: number | null): number {
+export function normalizeFullReindexConcurrency(
+  valueStr?: string | null,
+): number {
+  let value: number | undefined;
+  if (valueStr) {
+    try {
+      value = parseInt(valueStr);
+    } catch (e) {
+      // fallback to default
+    }
+  }
   if (isValidPositiveInteger(value)) {
     return Math.floor(value);
   }

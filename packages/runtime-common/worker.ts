@@ -29,7 +29,6 @@ import {
   normalizeFullReindexBatchSize,
   fullReindexBatchTimeoutSeconds,
   normalizeFullReindexCooldownSeconds,
-  normalizeFullReindexConcurrency
 } from '.';
 import { MatrixClient } from './matrix-client';
 import { lintFix } from './lint';
@@ -71,6 +70,7 @@ export interface StatusArgs {
 
 export interface FullReindexArgs {
   realmUrls: string[];
+  concurrency: number;
   batchSize?: number;
   cooldownSeconds?: number;
 }
@@ -403,7 +403,7 @@ export class Worker {
       `${jobIdentity(args.jobInfo)} starting reindex-all for job: ${JSON.stringify(args)}`,
     );
     this.reportStatus(args.jobInfo, 'start');
-    let { realmUrls } = args;
+    let { realmUrls, concurrency } = args;
 
     const realmOwners = await fetchAllRealmsWithOwners(this.#dbAdapter);
 
@@ -441,7 +441,6 @@ export class Worker {
     }
 
     let totalBatches = batches.length;
-    let concurrency = normalizeFullReindexConcurrency();
     for (let [index, batch] of batches.entries()) {
       if (batch.length === 0) {
         continue;

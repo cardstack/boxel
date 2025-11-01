@@ -4,6 +4,7 @@ import {
   systemInitiatedPriority,
   normalizeFullReindexBatchSize,
   normalizeFullReindexCooldownSeconds,
+  DEFAULT_FULL_REINDEX_CONCURRENCY,
 } from '@cardstack/runtime-common';
 import {
   sendResponseForUnauthorizedRequest,
@@ -45,6 +46,7 @@ export default function handlePostDeployment({
           realmUrls: realms.map((r) => r.url),
           batchSize,
           cooldownSeconds,
+          concurrency: DEFAULT_FULL_REINDEX_CONCURRENCY,
         },
       });
 
