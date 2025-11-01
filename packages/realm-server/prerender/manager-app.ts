@@ -63,7 +63,7 @@ export function buildPrerenderManagerApp(): {
   const multiplex = Math.max(1, Number(process.env.PRERENDER_MULTIPLEX ?? 1));
   const proxyTimeoutMs = Math.max(
     1000,
-    Number(process.env.PRERENDER_SERVER_TIMEOUT_MS ?? 30000),
+    Number(process.env.PRERENDER_SERVER_TIMEOUT_MS ?? 60000),
   );
   const healthcheckTimeoutMs = Math.max(
     100,
@@ -86,11 +86,11 @@ export function buildPrerenderManagerApp(): {
   }
 
   function logRegistry() {
+    let msg: string[] = ['registry:'];
     for (let [realm, servers] of registry.realms) {
-      log.info(
-        `${realm} is being processed by servers:\n${JSON.stringify(servers, null, 2)}`,
-      );
+      msg.push(`${realm} --> ${servers.join(', ')}`);
     }
+    log.info(msg.join('\n'));
   }
 
   // health
