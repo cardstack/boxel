@@ -100,9 +100,10 @@ export interface RealmReindexTarget extends JSONTypes.Object {
 }
 
 export interface FullReindexBatchArgs extends JSONTypes.Object {
-  remainingRealms: RealmReindexTarget[];
-  batchSize: number;
+  realms: RealmReindexTarget[];
   cooldownSeconds: number;
+  batchNumber: number;
+  totalBatches: number;
 }
 
 export interface IncrementalArgs extends WorkerArgs {
@@ -432,22 +433,37 @@ export class Worker {
     let cooldownSeconds = normalizeFullReindexCooldownSeconds(
       args.cooldownSeconds,
     );
-    let timeout = fullReindexBatchTimeoutSeconds(batchSize, cooldownSeconds);
 
-    await this.#queuePublisher.publish<void>({
-      jobType: FULL_REINDEX_BATCH_JOB,
-      concurrencyGroup: FULL_REINDEX_BATCH_CONCURRENCY_GROUP,
-      timeout,
-      priority: systemInitiatedPriority,
-      args: {
-        remainingRealms: realmsWithUsernames,
-        batchSize,
+    let batches: RealmReindexTarget[][] = [];
+    for (let i = 0; i < realmsWithUsernames.length; i += batchSize) {
+      batches.push(realmsWithUsernames.slice(i, i + batchSize));
+    }
+
+    let totalBatches = batches.length;
+    for (let [index, batch] of batches.entries()) {
+      if (batch.length === 0) {
+        continue;
+      }
+      let timeout = fullReindexBatchTimeoutSeconds(
+        batch.length,
         cooldownSeconds,
-      },
-    });
+      );
+      await this.#queuePublisher.publish<void>({
+        jobType: FULL_REINDEX_BATCH_JOB,
+        concurrencyGroup: FULL_REINDEX_BATCH_CONCURRENCY_GROUP,
+        timeout,
+        priority: systemInitiatedPriority,
+        args: {
+          realms: batch,
+          cooldownSeconds,
+          batchNumber: index + 1,
+          totalBatches,
+        },
+      });
+    }
 
     this.#log.info(
-      `${jobIdentity(args.jobInfo)} scheduled full reindex for ${realmsWithUsernames.length} realm(s) in batches of ${batchSize}`,
+      `${jobIdentity(args.jobInfo)} scheduled full reindex for ${realmsWithUsernames.length} realm(s) across ${totalBatches} batch(es) with batch size ${batchSize} and cooldown ${cooldownSeconds}s`,
     );
 
     this.reportStatus(args.jobInfo, 'finish');
@@ -463,26 +479,20 @@ export class Worker {
     );
     this.reportStatus(args.jobInfo, 'start');
 
-    let batchSize = normalizeFullReindexBatchSize(args.batchSize);
     let cooldownSeconds = normalizeFullReindexCooldownSeconds(
       args.cooldownSeconds,
     );
-    let remaining = Array.isArray(args.remainingRealms)
-      ? [...args.remainingRealms]
-      : [];
+    let realms = Array.isArray(args.realms) ? [...args.realms] : [];
     let cooldownMs =
       cooldownSeconds > 0 ? Math.floor(cooldownSeconds * 1000) : 0;
 
-    if (remaining.length === 0) {
+    if (realms.length === 0) {
       this.#log.debug(
-        `${jobIdentity(args.jobInfo)} full-reindex batch job has no remaining realms`,
+        `${jobIdentity(args.jobInfo)} full-reindex batch job has no realms to process`,
       );
       this.reportStatus(args.jobInfo, 'finish');
       return;
     }
-
-    let currentBatch = remaining.slice(0, batchSize);
-    let rest = remaining.slice(batchSize);
 
     let enqueueFailures: { target: RealmReindexTarget; error: Error }[] = [];
     let completedCount = 0;
@@ -491,8 +501,17 @@ export class Worker {
       error: Error;
     }[] = [];
 
-    for (let index = 0; index < currentBatch.length; index++) {
-      let target = currentBatch[index];
+    let batchLabel =
+      args.totalBatches && args.batchNumber
+        ? `batch ${args.batchNumber}/${args.totalBatches}`
+        : 'batch';
+
+    this.#log.info(
+      `${jobIdentity(args.jobInfo)} starting ${batchLabel} with ${realms.length} realm(s)`,
+    );
+
+    for (let index = 0; index < realms.length; index++) {
+      let target = realms[index];
       let job: Job<FromScratchResult> | undefined;
       try {
         job = await enqueueReindexRealmJob(
@@ -527,26 +546,9 @@ export class Worker {
         failedRuns.push({ target, error: normalizedError });
       }
 
-      if (index < currentBatch.length - 1 && cooldownMs > 0) {
+      if (index < realms.length - 1 && cooldownMs > 0) {
         await sleep(cooldownMs);
       }
-    }
-
-    if (rest.length > 0) {
-      await this.#queuePublisher.publish<void>({
-        jobType: FULL_REINDEX_BATCH_JOB,
-        concurrencyGroup: FULL_REINDEX_BATCH_CONCURRENCY_GROUP,
-        timeout: fullReindexBatchTimeoutSeconds(batchSize, cooldownSeconds),
-        priority: systemInitiatedPriority,
-        args: {
-          remainingRealms: rest,
-          batchSize,
-          cooldownSeconds,
-        },
-      });
-      this.#log.debug(
-        `${jobIdentity(args.jobInfo)} queued next full-reindex batch with ${rest.length} remaining realms`,
-      );
     }
 
     if (failedRuns.length > 0 || enqueueFailures.length > 0) {
@@ -556,7 +558,7 @@ export class Worker {
       );
     } else {
       this.#log.info(
-        `${jobIdentity(args.jobInfo)} completed full-reindex batch for ${completedCount} realm(s)`,
+        `${jobIdentity(args.jobInfo)} completed ${batchLabel} for ${completedCount} realm(s)`,
       );
     }
 
