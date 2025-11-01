@@ -86,14 +86,6 @@ export function buildPrerenderManagerApp(): {
     return undefined;
   }
 
-  function logRegistry() {
-    let msg: string[] = ['registry:'];
-    for (let [realm, servers] of registry.realms) {
-      msg.push(`    ${realm} --> ${servers.join(', ')}`);
-    }
-    log.info(msg.join('\n'));
-  }
-
   // health
   router.head('/', async (ctxt) => {
     ctxt.status = 200;
@@ -402,7 +394,6 @@ export function buildPrerenderManagerApp(): {
 
       const targetURL = `${normalizeURL(target)}/prerender`;
       log.info(`proxying prerender request for ${attrs.url} to ${targetURL}`);
-      logRegistry();
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
       const res = await fetch(targetURL, {
