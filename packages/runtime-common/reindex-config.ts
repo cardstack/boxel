@@ -84,7 +84,7 @@ export function normalizeFullReindexConcurrency(
   let value: number | undefined;
   if (valueStr) {
     try {
-      value = parseInt(valueStr);
+      value = parseInt(valueStr, 10);
     } catch (e) {
       // fallback to default
     }
