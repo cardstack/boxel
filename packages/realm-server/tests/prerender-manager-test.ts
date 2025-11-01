@@ -136,10 +136,21 @@ module(basename(__filename), function () {
         'server capacity',
       );
       assert.ok(
-        assignedServerData.attributes.registeredAt > 0,
-        'has registeredAt',
+        typeof assignedServerData.attributes.registeredAt === 'string',
+        'registeredAt is a string',
       );
-      assert.ok(assignedServerData.attributes.lastSeenAt > 0, 'has lastSeenAt');
+      assert.ok(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(assignedServerData.attributes.registeredAt),
+        'registeredAt is ISO 8601 format',
+      );
+      assert.ok(
+        typeof assignedServerData.attributes.lastSeenAt === 'string',
+        'lastSeenAt is a string',
+      );
+      assert.ok(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(assignedServerData.attributes.lastSeenAt),
+        'lastSeenAt is ISO 8601 format',
+      );
 
       // Verify realms array
       assert.ok(
@@ -157,8 +168,12 @@ module(basename(__filename), function () {
         'realm url',
       );
       assert.ok(
-        assignedServerData.attributes.realms[0].lastUsed > 0,
-        'realm has lastUsed timestamp',
+        typeof assignedServerData.attributes.realms[0].lastUsed === 'string',
+        'realm lastUsed is a string',
+      );
+      assert.ok(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(assignedServerData.attributes.realms[0].lastUsed),
+        'realm lastUsed is ISO 8601 format',
       );
 
       // Verify the other server has no realms

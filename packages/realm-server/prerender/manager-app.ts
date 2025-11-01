@@ -101,7 +101,7 @@ export function buildPrerenderManagerApp(): {
           url: realm,
           // Use the last access time if available, otherwise fall back to server registration time
           // (which represents when the realm was first assigned to this server)
-          lastUsed: registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt,
+          lastUsed: new Date(registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt).toISOString(),
         });
       }
 
@@ -111,8 +111,8 @@ export function buildPrerenderManagerApp(): {
         attributes: {
           url: serverUrl,
           capacity: serverInfo.capacity,
-          registeredAt: serverInfo.registeredAt,
-          lastSeenAt: serverInfo.lastSeenAt,
+          registeredAt: new Date(serverInfo.registeredAt).toISOString(),
+          lastSeenAt: new Date(serverInfo.lastSeenAt).toISOString(),
           realms: realms,
         },
       });
