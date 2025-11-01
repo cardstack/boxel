@@ -121,7 +121,9 @@ export function buildPrerenderManagerApp(): {
           url: realm,
           // Use the last access time if available, otherwise fall back to server registration time
           // (which represents when the realm was first assigned to this server)
-          lastUsed: formatTimestampWithTimezone(registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt),
+          lastUsed: formatTimestampWithTimezone(
+            registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt,
+          ),
         });
       }
 

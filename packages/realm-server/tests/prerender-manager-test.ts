@@ -59,9 +59,8 @@ module(basename(__filename), function () {
         'response type',
       );
       assert.strictEqual(getResponse.body.data.id, 'health', 'response id');
-      assert.strictEqual(
+      assert.true(
         getResponse.body.data.attributes.ready,
-        true,
         'ready attribute',
       );
       assert.ok(Array.isArray(getResponse.body.included), 'included is array');
@@ -109,7 +108,7 @@ module(basename(__filename), function () {
 
       let { data, included } = healthResponse.body;
       assert.strictEqual(data.type, 'prerender-manager-health', 'health type');
-      assert.strictEqual(data.attributes.ready, true, 'ready');
+      assert.true(data.attributes.ready, 'ready');
 
       // Verify included servers
       assert.ok(Array.isArray(included), 'included is array');
@@ -135,8 +134,9 @@ module(basename(__filename), function () {
         2,
         'server capacity',
       );
-      assert.ok(
-        typeof assignedServerData.attributes.registeredAt === 'string',
+      assert.strictEqual(
+        typeof assignedServerData.attributes.registeredAt,
+        'string',
         'registeredAt is a string',
       );
       assert.ok(
@@ -145,8 +145,9 @@ module(basename(__filename), function () {
         ),
         'registeredAt is in local timezone format with timezone indicator',
       );
-      assert.ok(
-        typeof assignedServerData.attributes.lastSeenAt === 'string',
+      assert.strictEqual(
+        typeof assignedServerData.attributes.lastSeenAt,
+        'string',
         'lastSeenAt is a string',
       );
       assert.ok(
@@ -171,8 +172,9 @@ module(basename(__filename), function () {
         realm,
         'realm url',
       );
-      assert.ok(
-        typeof assignedServerData.attributes.realms[0].lastUsed === 'string',
+      assert.strictEqual(
+        typeof assignedServerData.attributes.realms[0].lastUsed,
+        'string',
         'realm lastUsed is a string',
       );
       assert.ok(
@@ -183,7 +185,8 @@ module(basename(__filename), function () {
       );
 
       // Verify the other server has no realms
-      let otherServerUrl = assignedServer === serverUrlA ? serverUrlB : serverUrlA;
+      let otherServerUrl =
+        assignedServer === serverUrlA ? serverUrlB : serverUrlA;
       let otherServerData = included.find((s: any) => s.id === otherServerUrl);
       assert.ok(otherServerData, 'other server in included');
       assert.strictEqual(
