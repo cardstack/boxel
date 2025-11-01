@@ -449,7 +449,7 @@ export class Worker {
         batch.length,
         cooldownSeconds,
       );
-      let concurrencySuffix = (index % concurrency) + 1
+      let concurrencySuffix = (index % concurrency) + 1;
       await this.#queuePublisher.publish<void>({
         jobType: FULL_REINDEX_BATCH_JOB,
         concurrencyGroup: `${FULL_REINDEX_BATCH_CONCURRENCY_GROUP}-${concurrencySuffix}`,
