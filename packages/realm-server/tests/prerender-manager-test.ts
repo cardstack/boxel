@@ -140,7 +140,9 @@ module(basename(__filename), function () {
         'registeredAt is a string',
       );
       assert.ok(
-        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(assignedServerData.attributes.registeredAt),
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(
+          assignedServerData.attributes.registeredAt,
+        ),
         'registeredAt is in local timezone format with timezone indicator',
       );
       assert.ok(
@@ -148,7 +150,9 @@ module(basename(__filename), function () {
         'lastSeenAt is a string',
       );
       assert.ok(
-        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(assignedServerData.attributes.lastSeenAt),
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(
+          assignedServerData.attributes.lastSeenAt,
+        ),
         'lastSeenAt is in local timezone format with timezone indicator',
       );
 
@@ -172,7 +176,9 @@ module(basename(__filename), function () {
         'realm lastUsed is a string',
       );
       assert.ok(
-        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(assignedServerData.attributes.realms[0].lastUsed),
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(
+          assignedServerData.attributes.realms[0].lastUsed,
+        ),
         'realm lastUsed is in local timezone format with timezone indicator',
       );
 
