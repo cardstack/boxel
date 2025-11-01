@@ -140,16 +140,16 @@ module(basename(__filename), function () {
         'registeredAt is a string',
       );
       assert.ok(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(assignedServerData.attributes.registeredAt),
-        'registeredAt is ISO 8601 format',
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(assignedServerData.attributes.registeredAt),
+        'registeredAt is in local timezone format with timezone indicator',
       );
       assert.ok(
         typeof assignedServerData.attributes.lastSeenAt === 'string',
         'lastSeenAt is a string',
       );
       assert.ok(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(assignedServerData.attributes.lastSeenAt),
-        'lastSeenAt is ISO 8601 format',
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(assignedServerData.attributes.lastSeenAt),
+        'lastSeenAt is in local timezone format with timezone indicator',
       );
 
       // Verify realms array
@@ -172,8 +172,8 @@ module(basename(__filename), function () {
         'realm lastUsed is a string',
       );
       assert.ok(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(assignedServerData.attributes.realms[0].lastUsed),
-        'realm lastUsed is ISO 8601 format',
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(assignedServerData.attributes.realms[0].lastUsed),
+        'realm lastUsed is in local timezone format with timezone indicator',
       );
 
       // Verify the other server has no realms
