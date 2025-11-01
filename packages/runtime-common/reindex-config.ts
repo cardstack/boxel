@@ -1,4 +1,5 @@
 const DEFAULT_FULL_REINDEX_BATCH_SIZE = 4;
+const DEFAULT_FULL_REINDEX_CONCURRENCY = 4;
 const DEFAULT_FULL_REINDEX_COOLDOWN_SEC = 10;
 
 function readEnvNumber(name: string): number | undefined {
@@ -78,4 +79,15 @@ export function defaultFullReindexBatchSize(): number {
 
 export function defaultFullReindexCooldownSeconds(): number {
   return normalizeFullReindexCooldownSeconds();
+}
+
+export function normalizeFullReindexConcurrency(value?: number | null): number {
+  if (isValidPositiveInteger(value)) {
+    return Math.floor(value);
+  }
+  let envValue = readEnvNumber('FULL_REINDEX_CONCURRENCY');
+  if (isValidPositiveInteger(envValue)) {
+    return Math.floor(envValue);
+  }
+  return DEFAULT_FULL_REINDEX_CONCURRENCY;
 }

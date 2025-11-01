@@ -29,6 +29,7 @@ import {
   normalizeFullReindexBatchSize,
   fullReindexBatchTimeoutSeconds,
   normalizeFullReindexCooldownSeconds,
+  normalizeFullReindexConcurrency
 } from '.';
 import { MatrixClient } from './matrix-client';
 import { lintFix } from './lint';
@@ -440,6 +441,7 @@ export class Worker {
     }
 
     let totalBatches = batches.length;
+    let concurrency = normalizeFullReindexConcurrency();
     for (let [index, batch] of batches.entries()) {
       if (batch.length === 0) {
         continue;
@@ -448,9 +450,10 @@ export class Worker {
         batch.length,
         cooldownSeconds,
       );
+      let concurrencySuffix = (index % concurrency) + 1
       await this.#queuePublisher.publish<void>({
         jobType: FULL_REINDEX_BATCH_JOB,
-        concurrencyGroup: FULL_REINDEX_BATCH_CONCURRENCY_GROUP,
+        concurrencyGroup: `${FULL_REINDEX_BATCH_CONCURRENCY_GROUP}-${concurrencySuffix}`,
         timeout,
         priority: systemInitiatedPriority,
         args: {
