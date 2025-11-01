@@ -480,6 +480,27 @@ export class Prerenderer {
     this.#stopped = true;
   }
 
+  async #restartBrowser(): Promise<void> {
+    log.warn('Restarting prerender browser');
+    for (let [realm, entry] of this.#pool) {
+      try {
+        await entry.context.close();
+      } catch (e) {
+        log.warn(`Error closing context for realm ${realm} during restart:`, e);
+      }
+      this.#lru.delete(realm);
+    }
+    this.#pool.clear();
+    if (this.#browser) {
+      try {
+        await this.#browser.close();
+      } catch (e) {
+        log.warn('Error closing browser during restart:', e);
+      }
+    }
+    this.#browser = null;
+  }
+
   async disposeRealm(realm: string): Promise<void> {
     let entry = this.#pool.get(realm);
     if (!entry) return;
@@ -576,16 +597,44 @@ export class Prerenderer {
             };
           }
         | undefined;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        let result = await this.#prerenderAttempt({
-          realm,
-          url,
-          userId,
-          permissions,
-          auth,
-          opts,
-          renderOptions: attemptOptions,
-        });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let result: {
+          response: RenderResponse;
+          timings: { launchMs: number; renderMs: number };
+          pool: {
+            pageId: string;
+            realm: string;
+            reused: boolean;
+            evicted: boolean;
+            timedOut: boolean;
+          };
+        };
+        try {
+          result = await this.#prerenderAttempt({
+            realm,
+            url,
+            userId,
+            permissions,
+            auth,
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e) {
+          log.error(
+            `prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+            e,
+          );
+          await this.#restartBrowser();
+          result = await this.#prerenderAttempt({
+            realm,
+            url,
+            userId,
+            permissions,
+            auth,
+            opts,
+            renderOptions: attemptOptions,
+          });
+        }
         lastResult = result;
 
         let retrySignature = this.#shouldRetryWithClearCache(result.response);
