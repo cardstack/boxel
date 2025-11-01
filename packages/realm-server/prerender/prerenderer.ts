@@ -625,15 +625,25 @@ export class Prerenderer {
             e,
           );
           await this.#restartBrowser();
-          result = await this.#prerenderAttempt({
-            realm,
-            url,
-            userId,
-            permissions,
-            auth,
-            opts,
-            renderOptions: attemptOptions,
-          });
+          try {
+            result = await this.#prerenderAttempt({
+              realm,
+              url,
+              userId,
+              permissions,
+              auth,
+              opts,
+              renderOptions: attemptOptions,
+            });
+          } catch (e2) {
+            log.error(
+              `prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+              e2,
+            );
+            // Optionally, set result to an error response or continue the loop
+            // For now, rethrow to break the loop and propagate the error
+            throw e2;
+          }
         }
         lastResult = result;
 
