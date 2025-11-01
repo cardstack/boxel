@@ -83,11 +83,7 @@ export function normalizeFullReindexConcurrency(
 ): number {
   let value: number | undefined;
   if (valueStr) {
-    try {
-      value = parseInt(valueStr);
-    } catch (e) {
-      // fallback to default
-    }
+    value = parseInt(valueStr);
   }
   if (isValidPositiveInteger(value)) {
     return Math.floor(value);
