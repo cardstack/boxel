@@ -484,17 +484,14 @@ export class Worker {
     let cooldownSeconds = normalizeFullReindexCooldownSeconds(
       args.cooldownSeconds,
     );
-    let realms = Array.isArray(args.realms) ? [...args.realms] : [];
+    if (!Array.isArray(args.realms) || args.realms.length === 0) {
+      throw new Error(
+        `${jobIdentity(args.jobInfo)} full-reindex batch missing realms`,
+      );
+    }
+    let realms = [...args.realms];
     let cooldownMs =
       cooldownSeconds > 0 ? Math.floor(cooldownSeconds * 1000) : 0;
-
-    if (realms.length === 0) {
-      this.#log.debug(
-        `${jobIdentity(args.jobInfo)} full-reindex batch job has no realms to process`,
-      );
-      this.reportStatus(args.jobInfo, 'finish');
-      return;
-    }
 
     let enqueueFailures: { target: RealmReindexTarget; error: Error }[] = [];
     let completedCount = 0;
@@ -557,6 +554,17 @@ export class Worker {
       let totalFailures = failedRuns.length + enqueueFailures.length;
       this.#log.warn(
         `${jobIdentity(args.jobInfo)} full-reindex batch completed with ${totalFailures} failure(s) (${failedRuns.length} runtime, ${enqueueFailures.length} enqueue)`,
+      );
+      let failureSummary = [
+        enqueueFailures.length
+          ? `${enqueueFailures.length} enqueue failure(s)`
+          : null,
+        failedRuns.length ? `${failedRuns.length} runtime failure(s)` : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      throw new Error(
+        `${jobIdentity(args.jobInfo)} full-reindex batch had ${failureSummary}`,
       );
     } else {
       this.#log.info(

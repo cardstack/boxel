@@ -39,11 +39,7 @@ const configuredMaxJobTimeout = parsePositiveInteger(
   process.env.PG_QUEUE_MAX_JOB_TIMEOUT_SEC,
 );
 
-const configuredBatchSize = parsePositiveInteger(
-  process.env.FULL_REINDEX_BATCH_SIZE,
-);
-
-const baselineBatchSize = normalizeFullReindexBatchSize(configuredBatchSize);
+const baselineBatchSize = normalizeFullReindexBatchSize();
 const baselineCooldownSeconds = normalizeFullReindexCooldownSeconds();
 const derivedBatchTimeout = fullReindexBatchTimeoutSeconds(
   baselineBatchSize,

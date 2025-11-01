@@ -64,9 +64,6 @@ export function fullReindexBatchTimeoutSeconds(
 ): number {
   let normalizedBatchSize = normalizeFullReindexBatchSize(batchSize);
   let normalizedCooldown = normalizeFullReindexCooldownSeconds(cooldownSeconds);
-  if (normalizedBatchSize === 0) {
-    return FROM_SCRATCH_JOB_TIMEOUT_SEC;
-  }
   let totalJobTime = normalizedBatchSize * FROM_SCRATCH_JOB_TIMEOUT_SEC;
   let totalCooldownTime =
     Math.max(normalizedBatchSize - 1, 0) * normalizedCooldown;
