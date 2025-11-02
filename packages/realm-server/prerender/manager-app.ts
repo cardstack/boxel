@@ -2,6 +2,7 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import { logger } from '@cardstack/runtime-common';
 import { fetchRequestFromContext, fullRequestURL } from '../middleware';
+import { format } from 'date-fns';
 
 type ServerInfo = {
   url: string;
@@ -57,14 +58,9 @@ function formatTimestampWithTimezone(timestamp: number): string {
   const timezone = `UTC${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
 
   // Format: YYYY-MM-DD HH:mm:ss (Timezone)
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const formattedDate = format(date, 'yyyy-MM-dd HH:mm:ss');
 
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} (${timezone})`;
+  return `${formattedDate} (${timezone})`;
 }
 
 export function buildPrerenderManagerApp(): {
