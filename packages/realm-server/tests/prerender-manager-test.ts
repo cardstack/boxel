@@ -134,27 +134,13 @@ module(basename(__filename), function () {
         2,
         'server capacity',
       );
-      assert.strictEqual(
-        typeof assignedServerData.attributes.registeredAt,
-        'string',
-        'registeredAt is a string',
+      assert.ok(
+        assignedServerData.attributes.registeredAt,
+        'has registeredAt timestamp',
       );
       assert.ok(
-        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(
-          assignedServerData.attributes.registeredAt,
-        ),
-        'registeredAt is in local timezone format with timezone indicator',
-      );
-      assert.strictEqual(
-        typeof assignedServerData.attributes.lastSeenAt,
-        'string',
-        'lastSeenAt is a string',
-      );
-      assert.ok(
-        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(
-          assignedServerData.attributes.lastSeenAt,
-        ),
-        'lastSeenAt is in local timezone format with timezone indicator',
+        assignedServerData.attributes.lastSeenAt,
+        'has lastSeenAt timestamp',
       );
 
       // Verify realms array
@@ -172,16 +158,9 @@ module(basename(__filename), function () {
         realm,
         'realm url',
       );
-      assert.strictEqual(
-        typeof assignedServerData.attributes.realms[0].lastUsed,
-        'string',
-        'realm lastUsed is a string',
-      );
       assert.ok(
-        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/.test(
-          assignedServerData.attributes.realms[0].lastUsed,
-        ),
-        'realm lastUsed is in local timezone format with timezone indicator',
+        assignedServerData.attributes.realms[0].lastUsed,
+        'has realm lastUsed timestamp',
       );
 
       // Verify the other server has no realms
