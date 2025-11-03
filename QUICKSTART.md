@@ -45,7 +45,14 @@ To build the entire repository and run the application, follow these steps:
    pnpm start
    ```
 
-7. Run the realm server:
+7. Register Matrix users:
+
+   ```zsh
+   cd ./packages/matrix
+   pnpm register-all
+   ```
+
+8. Run the realm server:
 
    ```zsh
    cd ./packages/realm-server
@@ -60,13 +67,6 @@ To build the entire repository and run the application, follow these steps:
    "instanceErrors": 0,
    "moduleErrors": 0
    })
-   ```
-
-8. Register ALL:
-
-   ```zsh
-   cd ./packages/matrix
-   pnpm register-all
    ```
 
 9. Verify registration:
