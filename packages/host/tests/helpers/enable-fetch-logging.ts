@@ -241,15 +241,52 @@ export default function enableFetchLogging() {
     unhandledRejections.length = 0;
   };
 
+  const describeRequest = (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): { url: string; method: string } => {
+    let url: string;
+    let method: string | undefined;
+
+    if (typeof Request !== 'undefined' && input instanceof Request) {
+      url = input.url;
+      method = input.method;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else if (typeof input === 'string') {
+      url = input;
+    } else {
+      try {
+        url = String(input);
+      } catch {
+        url = '<unknown request>';
+      }
+    }
+
+    if (init?.method) {
+      method = init.method;
+    }
+
+    if (!method) {
+      method = 'GET';
+    }
+
+    return { url, method: method.toUpperCase() };
+  };
+
   window.fetch = async (...args) => {
-    const request = new Request(args[0] as RequestInfo, args[1]);
+    const [input, init] = args as [RequestInfo | URL, RequestInit?];
+    const { url, method } = describeRequest(input, init);
     try {
-      const response = await originalFetch(request);
+      const response =
+        init === undefined
+          ? await originalFetch(input as RequestInfo)
+          : await originalFetch(input as RequestInfo, init as RequestInit);
       if (!response.ok && !(response.status >= 300 && response.status < 400)) {
         const cloned = response.clone();
         seen.push({
-          url: request.url,
-          method: request.method,
+          url,
+          method,
           status: cloned.status,
           body: await cloned.text().catch(() => '<failed to read body>'),
         });
@@ -257,8 +294,8 @@ export default function enableFetchLogging() {
       return response;
     } catch (error) {
       seen.push({
-        url: request.url,
-        method: request.method,
+        url,
+        method,
         error: error as Error,
       });
       throw error;
