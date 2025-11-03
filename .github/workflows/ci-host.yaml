@@ -112,6 +112,19 @@ jobs:
         with:
           name: host-preindexed-db
           path: packages/realm-server/.preindexed-db
+      - name: List downloaded dump files
+        run: |
+          set -eu
+          ls -al .preindexed-db || true
+          for db in boxel boxel_base boxel_test; do
+            dump_path=".preindexed-db/${db}.dump"
+            if [ -f "$dump_path" ]; then
+              echo "$dump_path size $(wc -c < \"$dump_path\") bytes"
+            else
+              echo "no dump present for $db"
+            fi
+          done
+        working-directory: packages/realm-server
 
       - name: Restore pre-indexed databases
         run: |

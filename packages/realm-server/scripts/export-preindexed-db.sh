@@ -13,7 +13,8 @@ mkdir -p "$OUTPUT_DIR"
 for DB in boxel boxel_base boxel_test; do
   echo "Dumping $DB"
   if docker exec boxel-pg pg_dump -Fc -U postgres "$DB" > "$OUTPUT_DIR/${DB}.dump"; then
-    echo "  ✓ wrote $OUTPUT_DIR/${DB}.dump"
+    size=$(wc -c < "$OUTPUT_DIR/${DB}.dump")
+    echo "  ✓ wrote $OUTPUT_DIR/${DB}.dump (${size} bytes)"
   else
     echo "  ⚠️ skipping $DB (pg_dump failed)" >&2
     rm -f "$OUTPUT_DIR/${DB}.dump"
