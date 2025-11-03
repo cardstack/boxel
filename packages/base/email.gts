@@ -1,56 +1,32 @@
-import { StringField, Component, field, CardDef, contains } from './card-api';
+import { action } from '@ember/object';
+import { StringField, Component } from './card-api';
 import {
-  BoxelInput,
+  EmailInput,
   EntityDisplayWithIcon,
-  type BoxelInputValidationState,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import {
+  not,
+  type EmailFormatValidationError,
+} from '@cardstack/boxel-ui/helpers';
+import { fieldSerializer } from '@cardstack/runtime-common';
 
 import MailIcon from '@cardstack/boxel-icons/mail';
-import { debounce } from 'lodash';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 
-// We use simple regex here to validate common email formats
-// This is definitely NOT a full email validation
-// https://ihateregex.io/expr/email/
-function validateEmail(email: string) {
-  const emailPattern = /^[^@ \t\r\n]+@[^@ \t\r\n]+\.[^@ \t\r\n]+$/;
-  return emailPattern.test(email);
-}
-
-class EmailEditTemplate extends Component<typeof EmailField> {
-  @tracked validationState: BoxelInputValidationState = 'initial';
-
-  private debouncedInput = debounce((input: string) => {
-    if (input === '') {
-      this.validationState = 'initial';
-    } else {
-      this.validationState = validateEmail(input) ? 'valid' : 'invalid';
+class Edit extends Component<typeof EmailField> {
+  @action private handleChange(
+    value: string,
+    validation: EmailFormatValidationError,
+  ) {
+    if (validation === null && this.args.model !== value) {
+      this.args.set(value);
     }
-    if (this.validationState === 'initial') {
-      this.args.set(null);
-    } else if (this.validationState === 'valid') {
-      this.args.set(input);
-    }
-  }, 300);
-
-  @action onInput(v: string): void {
-    this.debouncedInput(v);
-  }
-
-  get errorMessage() {
-    return 'Invalid email address';
   }
 
   <template>
-    <BoxelInput
-      @type='email'
+    <EmailInput
       @value={{@model}}
-      @onInput={{this.onInput}}
+      @onChange={{this.handleChange}}
       @disabled={{not @canEdit}}
-      @state={{this.validationState}}
-      @errorMessage={{this.errorMessage}}
     />
   </template>
 }
@@ -58,13 +34,20 @@ class EmailEditTemplate extends Component<typeof EmailField> {
 export default class EmailField extends StringField {
   static icon = MailIcon;
   static displayName = 'Email';
+  static [fieldSerializer] = 'email';
+
+  static edit = Edit;
 
   static atom = class Atom extends Component<typeof EmailField> {
     <template>
       {{#if @model}}
         <EntityDisplayWithIcon @title={{@model}} @underline={{false}}>
           <:title>
-            <a href='mailto:{{@model}}' rel='noopener noreferrer'>
+            <a
+              href='mailto:{{@model}}'
+              rel='noopener noreferrer'
+              data-test-atom-email
+            >
               {{@model}}
             </a>
           </:title>
@@ -82,17 +65,6 @@ export default class EmailField extends StringField {
           color: inherit;
         }
       </style>
-    </template>
-  };
-  static edit = EmailEditTemplate;
-}
-
-export class CardWithEmail extends CardDef {
-  static displayName = 'Card with Email';
-  @field email = contains(EmailField);
-  static isolated = class Isolated extends Component<typeof this> {
-    <template>
-      <@fields.email @format='atom' />
     </template>
   };
 }
