@@ -19,6 +19,7 @@ import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
+import EmailInputUsage from './components/email-input/usage.gts';
 import EntityIconDisplayUsage from './components/entity-icon-display/usage.gts';
 import EntityThumbnailDisplayUsage from './components/entity-thumbnail-display/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
@@ -70,6 +71,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['DragAndDrop', DragAndDropUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
+  ['EmailInput', EmailInputUsage],
   ['EntityIconDisplay', EntityIconDisplayUsage],
   ['EntityThumbnailDisplay', EntityThumbnailDisplayUsage],
   ['FieldContainer', FieldContainerUsage],

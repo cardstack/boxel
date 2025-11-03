@@ -22,47 +22,6 @@ import ignore, { type Ignore } from 'ignore';
 export const FROM_SCRATCH_JOB_TIMEOUT_SEC = 20 * 60;
 const INCREMENTAL_JOB_TIMEOUT_SEC = 10 * 60;
 
-function humanizeDuration(durationMs: number): string {
-  if (!Number.isFinite(durationMs) || durationMs <= 0) {
-    return '0s';
-  }
-
-  const secondsFractional = durationMs / 1000;
-  if (secondsFractional < 1) {
-    return `${Math.round(durationMs)}ms`;
-  }
-  if (secondsFractional < 10) {
-    return `${secondsFractional.toFixed(1)}s`;
-  }
-
-  const totalSeconds = Math.round(secondsFractional);
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const seconds = totalSeconds % 60;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-
-  if (totalMinutes < 60) {
-    if (seconds === 0) {
-      return `${totalMinutes}m`;
-    }
-    return `${totalMinutes}m ${seconds}s`;
-  }
-
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  const parts = [`${hours}h`];
-
-  if (minutes) {
-    parts.push(`${minutes}m`);
-  } else if (seconds) {
-    parts.push(`${seconds}s`);
-  }
-
-  return parts.join(' ');
-}
-
 export class RealmIndexUpdater {
   #realm: Realm;
   #log = logger('realm-index-updater');
@@ -129,12 +88,15 @@ export class RealmIndexUpdater {
   // in an onInvalidation callback
   async fullIndex() {
     this.#indexingDeferred = new Deferred<void>();
+    let startedAt = performance.now();
     try {
       let args: FromScratchArgs = {
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
       };
-      let startedAt = Date.now();
+
+      this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
+
       let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
@@ -143,12 +105,14 @@ export class RealmIndexUpdater {
         args,
       });
       let { ignoreData, stats } = await job.done;
-      let durationMs = Date.now() - startedAt;
-      let durationHuman = humanizeDuration(durationMs);
       this.#stats = stats;
       this.#ignoreData = ignoreData;
+      let indexingDurationSeconds = (
+        (performance.now() - startedAt) /
+        1000
+      ).toFixed(2);
       this.#log.info(
-        `Realm ${this.realmURL.href} has completed indexing in ${durationHuman}: ${JSON.stringify(
+        `Realm ${this.realmURL.href} has completed indexing in ${indexingDurationSeconds}s: ${JSON.stringify(
           stats,
           null,
           2,
