@@ -24,7 +24,7 @@ import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
 const configuredMaxJobTimeout = Number(
-  process.env.PG_QUEUE_MAX_JOB_TIMEOUT_SEC,
+  process.env.PG_QUEUE_MAX_JOB_TIMEOUT_SEC ?? '0',
 );
 
 const baselineBatchSize = normalizeFullReindexBatchSize();
