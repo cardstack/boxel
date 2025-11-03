@@ -1,9 +1,10 @@
 import { contains, field, Component, FieldDef, StringField } from './card-api';
-import { PhoneInput, Pill } from '@cardstack/boxel-ui/components';
+import { PhoneInput } from '@cardstack/boxel-ui/components';
 import {
   RadioInput,
   EntityDisplayWithIcon,
 } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import NumberField from './number';
 
 import { tracked } from '@glimmer/tracking';
@@ -68,27 +69,18 @@ export class PhoneNumberType extends FieldDef {
   static edit = PhoneNumberTypeEdit;
 }
 
-export default class PhoneNumberField extends FieldDef {
+export default class PhoneNumberField extends StringField {
   static displayName = 'Phone Number';
   static icon = PhoneIcon;
-  @field number = contains(StringField);
-  @field countryCode = contains(StringField);
-
-  setNumber = (number: string) => {
-    this.number = number;
-  };
-
-  setCountryCode = (code: string) => {
-    this.countryCode = code;
-  };
 
   static edit = class Edit extends Component<typeof PhoneNumberField> {
     <template>
       <PhoneInput
-        @countryCode={{@model.countryCode}}
-        @value={{@model.number}}
-        @onInput={{@model.setNumber}}
-        @onCountryCodeChange={{@model.setCountryCode}}
+        @value={{@model}}
+        @onChange={{@set}}
+        {{!-- @errorMessage={{this.textInputValidator.errorMessage}}
+        @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}} --}}
+        @disabled={{not @canEdit}}
       />
     </template>
   };
@@ -97,11 +89,7 @@ export default class PhoneNumberField extends FieldDef {
     <template>
       <EntityDisplayWithIcon @underline={{false}}>
         <:title>
-          {{#if @model.countryCode}}
-            +{{@model.countryCode}}{{@model.number}}
-          {{else}}
-            {{@model.number}}
-          {{/if}}
+          {{@model}}
         </:title>
         <:icon>
           <PhoneIcon class='icon' />
@@ -109,90 +97,76 @@ export default class PhoneNumberField extends FieldDef {
       </EntityDisplayWithIcon>
       <style scoped>
         .icon {
-          color: var(--boxel-400);
+          color: var(--muted, var(--boxel-400));
         }
       </style>
     </template>
   };
-
-  static embedded = class Embedded extends Component<typeof PhoneNumberField> {
-    <template>
-      {{#if @model.countryCode}}
-        <span>+{{@model.countryCode}}{{@model.number}}</span>
-      {{else}}
-        <span>{{@model.number}}</span>
-      {{/if}}
-    </template>
-  };
 }
 
-export class ContactPhoneNumber extends FieldDef {
-  @field phoneNumber = contains(PhoneNumberField);
-  @field type = contains(PhoneNumberType);
+// export class ContactPhoneNumber extends FieldDef {
+//   @field phoneNumber = contains(PhoneNumberField);
+//   @field type = contains(PhoneNumberType);
 
-  static atom = class Atom extends Component<typeof ContactPhoneNumber> {
-    get hasPhoneNumber() {
-      return Boolean(this.args.model?.phoneNumber?.number);
-    }
+//   static atom = class Atom extends Component<typeof ContactPhoneNumber> {
+//     get hasPhoneNumber() {
+//       return Boolean(this.args.model?.phoneNumber?.number);
+//     }
 
-    get hasCountryCode() {
-      return Boolean(this.args.model?.phoneNumber?.countryCode);
-    }
+//     get hasCountryCode() {
+//       return Boolean(this.args.model?.phoneNumber?.countryCode);
+//     }
 
-    get hasTypeLabel() {
-      return Boolean(this.args.model?.type?.label?.length);
-    }
+//     get hasTypeLabel() {
+//       return Boolean(this.args.model?.type?.label?.length);
+//     }
 
-    get hasCountryCodeAndPhoneNumber() {
-      return (
-        this.args.model &&
-        this.hasCountryCode &&
-        this.hasPhoneNumber &&
-        this.hasTypeLabel
-      );
-    }
+//     get hasCountryCodeAndPhoneNumber() {
+//       return (
+//         this.args.model &&
+//         this.hasCountryCode &&
+//         this.hasPhoneNumber &&
+//         this.hasTypeLabel
+//       );
+//     }
 
-    <template>
-      {{#if this.hasCountryCodeAndPhoneNumber}}
-        <EntityDisplayWithIcon @underline={{false}}>
-          <:title>
-            {{#if this.hasCountryCode}}
-              +{{@model.phoneNumber.countryCode}}{{@model.phoneNumber.number}}
-            {{else if this.hasPhoneNumber}}
-              {{@model.phoneNumber.number}}
-            {{/if}}
-          </:title>
-          <:icon>
-            <PhoneIcon class='icon' />
-          </:icon>
-          <:tag>
-            {{#if this.hasTypeLabel}}
-              <Pill class='pill-gray'>
-                {{@model.type.label}}
-              </Pill>
-            {{/if}}
-          </:tag>
-        </EntityDisplayWithIcon>
-      {{/if}}
-      <style scoped>
-        .icon {
-          color: var(--boxel-400);
-        }
-        .pill-gray {
-          --default-pill-padding: 0 var(--boxel-sp-xxxs);
-          --default-pill-font: 300 var(--boxel-font-xs);
-          background-color: var(--boxel-200);
-          border-color: transparent;
-        }
-      </style>
-    </template>
-  };
+//     <template>
+//       {{#if @model}}
+//         <EntityDisplayWithIcon @underline={{false}}>
+//           <:title>
+//             {{@model}}
+//           </:title>
+//           <:icon>
+//             <PhoneIcon class='icon' />
+//           </:icon>
+//           <:tag>
+//             {{#if this.hasTypeLabel}}
+//               <Pill class='pill-gray'>
+//                 {{@model.type.label}}
+//               </Pill>
+//             {{/if}}
+//           </:tag>
+//         </EntityDisplayWithIcon>
+//       {{/if}}
+//       <style scoped>
+//         .icon {
+//           color: var(--boxel-400);
+//         }
+//         .pill-gray {
+//           --default-pill-padding: 0 var(--boxel-sp-xxxs);
+//           --default-pill-font: 300 var(--boxel-font-xs);
+//           background-color: var(--boxel-200);
+//           border-color: transparent;
+//         }
+//       </style>
+//     </template>
+//   };
 
-  static embedded = class Embedded extends Component<
-    typeof ContactPhoneNumber
-  > {
-    <template>
-      <@fields.phoneNumber @format='embedded' />
-    </template>
-  };
-}
+//   static embedded = class Embedded extends Component<
+//     typeof ContactPhoneNumber
+//   > {
+//     <template>
+//       <@fields.phoneNumber @format='embedded' />
+//     </template>
+//   };
+// }
