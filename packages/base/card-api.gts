@@ -1242,8 +1242,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       format: Format | undefined,
       defaultFormat: Format,
       isComputed: boolean,
+      isQueryBacked: boolean,
     ) {
-      return (format ?? defaultFormat) === 'edit' && !isComputed;
+      return (format ?? defaultFormat) === 'edit' && !isComputed && !isQueryBacked;
     }
     function getChildFormat(
       format: Format | undefined,
@@ -1275,7 +1276,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
-              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
+              (shouldRenderEditor
+                @format
+                defaultFormats.cardDef
+                isComputed
+                (if linksToField.queryDefinition true false)
+              )
             }}
               <LinksToEditor
                 @model={{(getInnerModel)}}
