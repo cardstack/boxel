@@ -1,0 +1,73 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThemeListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Style",
+      "images": [
+        "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526481280695-3c4691f8a85b?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "summary": "### Visual DNA\nPrimary-color geometry, asymmetrical tension, and modular grid systems that echo Bauhaus workshop posters and exhibition catalogs.\n\n### Inspirations\n- Bauhaus archives\n- Google Bauhaus\n- Harvard Art Museums\n\nLay out editorial hero bands, pricing cards, and interactive canvases with bold sans typography, offset accent bars, and precise negative space.",
+      "cardInfo": {
+        "notes": "Pair with interface cards that can showcase modular grids, hero banners, and motion samples using the theme variables.",
+        "title": "Bauhaus Geometric Style Reference",
+        "description": "Theme bundle featuring a Bauhaus-inspired Style Reference, paired Brand Guide, and reusable CSS variable set.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=600&q=80"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/style-reference"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../StyleReference/bauhaus-geometric"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../brand-guide/bauhaus-geometric"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../StyleReference/bauhaus-geometric"
+        }
+      }
+    }
+  }
+}

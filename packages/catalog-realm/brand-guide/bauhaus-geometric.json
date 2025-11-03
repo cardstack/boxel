@@ -1,0 +1,200 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Bauhaus Geometric",
+      "visualDNA": "A disciplined palette of red, blue, and yellow forms that snap to modular grids, celebrate asymmetry, and keep typography bold, condensed, and utilitarian.",
+      "inspirations": [
+        "Bauhaus print workshop ephemera",
+        "Google Bauhaus interactive archive",
+        "Harvard Art Museums collection labels",
+        "László Moholy-Nagy exhibition graphics"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;800&family=Archivo+Black&family=DM+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Use rigid grid columns, bold typographic lockups, and offset accent bars. Allow plenty of negative space so primary shapes feel intentional.",
+        "title": "Bauhaus Geometric Brand Guide",
+        "description": "Brand system built on Bauhaus workshop geometry—primary color blocks, modular grids, and assertive headline typography.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=600&q=80"
+      },
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526481280695-3c4691f8a85b?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "brandColorPalette": [
+        {
+          "name": "Primary Red",
+          "value": "#d72638"
+        },
+        {
+          "name": "Primary Blue",
+          "value": "#0050a4"
+        },
+        {
+          "name": "Accent Yellow",
+          "value": "#ffb400"
+        },
+        {
+          "name": "Neutral Cream",
+          "value": "#fefdf8"
+        },
+        {
+          "name": "Constructivist Black",
+          "value": "#111111"
+        }
+      ],
+      "functionalPalette": {
+        "primary": "#d72638",
+        "secondary": "#0050a4",
+        "accent": "#ffb400",
+        "neutral": "#f2efe6",
+        "light": "#fefdf8",
+        "dark": "#111111",
+        "border": "#1d1d1d"
+      },
+      "typography": {
+        "heading": {
+          "fontFamily": "'Archivo Black', 'Barlow', sans-serif",
+          "fontSize": "32px",
+          "fontWeight": "800",
+          "lineHeight": "1.1"
+        },
+        "body": {
+          "fontFamily": "'Barlow', 'Helvetica Neue', sans-serif",
+          "fontSize": "16px",
+          "fontWeight": "400",
+          "lineHeight": "1.5"
+        }
+      },
+      "cornerRadius": "8px",
+      "spacing": "16px",
+      "markUsage": {
+        "primaryMarkClearanceRatio": "0.75",
+        "primaryMarkMinHeight": "32px",
+        "primaryMark1": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 64'><rect width='160' height='64' fill='%23fefdf8'/><circle cx='30' cy='32' r='18' fill='%23d72638'/><rect x='64' y='14' width='52' height='36' fill='%230050a4'/><rect x='124' y='20' width='18' height='24' fill='%23ffb400'/></svg>",
+        "primaryMark2": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 64'><rect width='160' height='64' fill='%23111111'/><circle cx='30' cy='32' r='18' fill='%23ffb400'/><rect x='64' y='14' width='52' height='36' fill='%23d72638'/><rect x='124' y='20' width='18' height='24' fill='%23fefdf8'/></svg>",
+        "primaryMarkGreyscale1": null,
+        "primaryMarkGreyscale2": null,
+        "secondaryMarkClearanceRatio": "1",
+        "secondaryMarkMinHeight": "24px",
+        "secondaryMark1": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 64'><rect width='160' height='64' fill='%23fefdf8'/><rect x='18' y='12' width='44' height='40' fill='%230050a4'/><circle cx='90' cy='32' r='20' fill='%23ffb400'/><rect x='120' y='24' width='22' height='16' fill='%23111111'/></svg>",
+        "secondaryMark2": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 64'><rect width='160' height='64' fill='%23111111'/><rect x='18' y='12' width='44' height='40' fill='%23ffb400'/><circle cx='90' cy='32' r='20' fill='%23d72638'/><rect x='120' y='24' width='22' height='16' fill='%23fefdf8'/></svg>",
+        "secondaryMarkGreyscale1": null,
+        "secondaryMarkGreyscale2": null,
+        "socialMediaProfileIcon": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'><rect width='80' height='80' rx='16' fill='%230050a4'/><circle cx='28' cy='28' r='14' fill='%23ffb400'/><rect x='38' y='40' width='24' height='24' fill='%23d72638'/></svg>"
+      },
+      "rootVariables": {
+        "background": "#fefdf8",
+        "foreground": "#111111",
+        "card": "#ffffff",
+        "cardForeground": "#111111",
+        "popover": "#ffffff",
+        "popoverForeground": "#111111",
+        "primary": "#d72638",
+        "primaryForeground": "#ffffff",
+        "secondary": "#0050a4",
+        "secondaryForeground": "#ffffff",
+        "muted": "#f2efe6",
+        "mutedForeground": "#2e2e2e",
+        "accent": "#ffb400",
+        "accentForeground": "#111111",
+        "destructive": "#b40e2a",
+        "destructiveForeground": "#fef2f2",
+        "border": "#1d1d1d",
+        "input": "#1d1d1d",
+        "ring": "#d72638",
+        "chart1": "#d72638",
+        "chart2": "#0050a4",
+        "chart3": "#ffb400",
+        "chart4": "#1d1d1d",
+        "chart5": "#058e3f",
+        "sidebar": "#111111",
+        "sidebarForeground": "#fefdf8",
+        "sidebarPrimary": "#ffb400",
+        "sidebarPrimaryForeground": "#111111",
+        "sidebarAccent": "#0050a4",
+        "sidebarAccentForeground": "#fefdf8",
+        "sidebarBorder": "#1d1d1d",
+        "sidebarRing": "#ffb400",
+        "fontSans": "'Barlow', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'DM Mono', 'SFMono-Regular', monospace",
+        "radius": "8px",
+        "spacing": "0.375rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 1px 0 rgba(17, 17, 17, 0.08)",
+        "shadowXs": "0 2px 4px rgba(17, 17, 17, 0.08)",
+        "shadowSm": "0 6px 12px rgba(17, 17, 17, 0.12)",
+        "shadow": "0 12px 20px rgba(17, 17, 17, 0.16)",
+        "shadowMd": "0 18px 28px rgba(17, 17, 17, 0.2)",
+        "shadowLg": "0 24px 36px rgba(17, 17, 17, 0.24)",
+        "shadowXl": "0 32px 48px rgba(17, 17, 17, 0.28)",
+        "shadow2xl": "0 40px 60px rgba(17, 17, 17, 0.32)"
+      },
+      "darkModeVariables": {
+        "background": "#111111",
+        "foreground": "#fefdf8",
+        "card": "#1c1c1c",
+        "cardForeground": "#fefdf8",
+        "popover": "#1c1c1c",
+        "popoverForeground": "#fefdf8",
+        "primary": "#ffb400",
+        "primaryForeground": "#111111",
+        "secondary": "#3a7bd5",
+        "secondaryForeground": "#0a0a0a",
+        "muted": "#1e1e1e",
+        "mutedForeground": "#d0cec2",
+        "accent": "#d72638",
+        "accentForeground": "#fefdf8",
+        "destructive": "#ff4d4d",
+        "destructiveForeground": "#111111",
+        "border": "#2c2c2c",
+        "input": "#2c2c2c",
+        "ring": "#ffb400",
+        "chart1": "#ffb400",
+        "chart2": "#3a7bd5",
+        "chart3": "#d72638",
+        "chart4": "#7dd87d",
+        "chart5": "#f9e26a",
+        "sidebar": "#0d0d0d",
+        "sidebarForeground": "#fefdf8",
+        "sidebarPrimary": "#d72638",
+        "sidebarPrimaryForeground": "#fefdf8",
+        "sidebarAccent": "#ffb400",
+        "sidebarAccentForeground": "#111111",
+        "sidebarBorder": "#2c2c2c",
+        "sidebarRing": "#d72638",
+        "fontSans": "'Barlow', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'DM Mono', 'SFMono-Regular', monospace",
+        "radius": "8px",
+        "spacing": "0.375rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 1px 1px rgba(0, 0, 0, 0.4)",
+        "shadowXs": "0 2px 4px rgba(0, 0, 0, 0.45)",
+        "shadowSm": "0 6px 12px rgba(0, 0, 0, 0.5)",
+        "shadow": "0 12px 20px rgba(0, 0, 0, 0.55)",
+        "shadowMd": "0 18px 28px rgba(0, 0, 0, 0.6)",
+        "shadowLg": "0 24px 36px rgba(0, 0, 0, 0.65)",
+        "shadowXl": "0 32px 48px rgba(0, 0, 0, 0.7)",
+        "shadow2xl": "0 40px 60px rgba(0, 0, 0, 0.75)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../StyleReference/bauhaus-geometric"
+        }
+      }
+    }
+  }
+}

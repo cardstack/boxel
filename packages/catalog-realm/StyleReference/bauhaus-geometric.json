@@ -1,0 +1,137 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "styleName": "Bauhaus Geometric",
+      "visualDNA": "Primary-color geometry, asymmetrical tension, and modular grid systems that echo Bauhaus workshop posters and exhibition catalogs.",
+      "inspirations": [
+        "Bauhaus archives",
+        "Google Bauhaus",
+        "Harvard Art Museums"
+      ],
+      "wallpaperImages": [
+        "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1526481280695-3c4691f8a85b?auto=format&fit=crop&w=1400&q=80",
+        "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1400&q=80"
+      ],
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;800&family=Archivo+Black&family=DM+Mono:wght@400;500&display=swap"
+      ],
+      "cardInfo": {
+        "notes": "Layer rigid rectangles with circular counterpoints, offset headline bars, and overlapping accent dots to land the Bauhaus printshop feeling.",
+        "title": "Bauhaus Geometric",
+        "description": "Primary blocks, modular grids, and assertive sans typography for Bauhaus-inspired product storytelling.",
+        "thumbnailURL": "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=600&q=80"
+      },
+      "rootVariables": {
+        "background": "#fefdf8",
+        "foreground": "#111111",
+        "card": "#ffffff",
+        "cardForeground": "#111111",
+        "popover": "#ffffff",
+        "popoverForeground": "#111111",
+        "primary": "#d72638",
+        "primaryForeground": "#ffffff",
+        "secondary": "#0050a4",
+        "secondaryForeground": "#ffffff",
+        "muted": "#f2efe6",
+        "mutedForeground": "#2e2e2e",
+        "accent": "#ffb400",
+        "accentForeground": "#111111",
+        "destructive": "#b40e2a",
+        "destructiveForeground": "#fef2f2",
+        "border": "#1d1d1d",
+        "input": "#1d1d1d",
+        "ring": "#d72638",
+        "chart1": "#d72638",
+        "chart2": "#0050a4",
+        "chart3": "#ffb400",
+        "chart4": "#1d1d1d",
+        "chart5": "#058e3f",
+        "sidebar": "#111111",
+        "sidebarForeground": "#fefdf8",
+        "sidebarPrimary": "#ffb400",
+        "sidebarPrimaryForeground": "#111111",
+        "sidebarAccent": "#0050a4",
+        "sidebarAccentForeground": "#fefdf8",
+        "sidebarBorder": "#1d1d1d",
+        "sidebarRing": "#ffb400",
+        "fontSans": "'Barlow', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'DM Mono', 'SFMono-Regular', monospace",
+        "radius": "8px",
+        "spacing": "0.375rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 1px 0 rgba(17, 17, 17, 0.08)",
+        "shadowXs": "0 2px 4px rgba(17, 17, 17, 0.08)",
+        "shadowSm": "0 6px 12px rgba(17, 17, 17, 0.12)",
+        "shadow": "0 12px 20px rgba(17, 17, 17, 0.16)",
+        "shadowMd": "0 18px 28px rgba(17, 17, 17, 0.2)",
+        "shadowLg": "0 24px 36px rgba(17, 17, 17, 0.24)",
+        "shadowXl": "0 32px 48px rgba(17, 17, 17, 0.28)",
+        "shadow2xl": "0 40px 60px rgba(17, 17, 17, 0.32)"
+      },
+      "darkModeVariables": {
+        "background": "#111111",
+        "foreground": "#fefdf8",
+        "card": "#1c1c1c",
+        "cardForeground": "#fefdf8",
+        "popover": "#1c1c1c",
+        "popoverForeground": "#fefdf8",
+        "primary": "#ffb400",
+        "primaryForeground": "#111111",
+        "secondary": "#3a7bd5",
+        "secondaryForeground": "#0a0a0a",
+        "muted": "#1e1e1e",
+        "mutedForeground": "#d0cec2",
+        "accent": "#d72638",
+        "accentForeground": "#fefdf8",
+        "destructive": "#ff4d4d",
+        "destructiveForeground": "#111111",
+        "border": "#2c2c2c",
+        "input": "#2c2c2c",
+        "ring": "#ffb400",
+        "chart1": "#ffb400",
+        "chart2": "#3a7bd5",
+        "chart3": "#d72638",
+        "chart4": "#7dd87d",
+        "chart5": "#f9e26a",
+        "sidebar": "#0d0d0d",
+        "sidebarForeground": "#fefdf8",
+        "sidebarPrimary": "#d72638",
+        "sidebarPrimaryForeground": "#fefdf8",
+        "sidebarAccent": "#ffb400",
+        "sidebarAccentForeground": "#111111",
+        "sidebarBorder": "#2c2c2c",
+        "sidebarRing": "#d72638",
+        "fontSans": "'Barlow', 'Helvetica Neue', system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', 'Times New Roman', serif",
+        "fontMono": "'DM Mono', 'SFMono-Regular', monospace",
+        "radius": "8px",
+        "spacing": "0.375rem",
+        "trackingNormal": "0.02em",
+        "shadow2xs": "0 1px 1px rgba(0, 0, 0, 0.4)",
+        "shadowXs": "0 2px 4px rgba(0, 0, 0, 0.45)",
+        "shadowSm": "0 6px 12px rgba(0, 0, 0, 0.5)",
+        "shadow": "0 12px 20px rgba(0, 0, 0, 0.55)",
+        "shadowMd": "0 18px 28px rgba(0, 0, 0, 0.6)",
+        "shadowLg": "0 24px 36px rgba(0, 0, 0, 0.65)",
+        "shadowXl": "0 32px 48px rgba(0, 0, 0, 0.7)",
+        "shadow2xl": "0 40px 60px rgba(0, 0, 0, 0.75)"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

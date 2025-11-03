@@ -1,0 +1,40 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "BulkCardGenerator",
+        "module": "../bulk-card-generator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "count": 1,
+      "prompt": "Return JSON for one StyleReference card with these exact fields:\n\n- styleName: \"Aurora Flux\"\n- inspirations: [\"Hurtigruten\", \"Philips Hue\", \"Northern Lights Tours\"]\n- visualDNA: \"Prismatic ribbon gradient, deep indigo sky, slow shimmer, meteor-line motion.\"\n- wallpaperImages: three distinct landscape URLs from Unsplash or Pexels showing aurora/northern-lights scenes; verify they’re real and unique.\n\nNo other attributes or relationships.```\n",
+      "codeRef": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "llmModel": "anthropic/claude-sonnet-4.5",
+      "localDir": "StyleReference",
+      "targetRealmUrl": "http://localhost:4201/catalog/"
+    },
+    "relationships": {
+      "example": {
+        "links": {
+          "self": "http://localhost:4201/catalog/StyleReference/digital-bauhaus-atelier"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
