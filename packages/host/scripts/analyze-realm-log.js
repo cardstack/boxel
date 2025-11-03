@@ -90,6 +90,18 @@ const interestingPatterns = [
     after: 6,
   },
   {
+    label: 'From-scratch indexing failure summary',
+    regex: /from-scratch indexing failed/i,
+    before: 2,
+    after: 6,
+  },
+  {
+    label: 'From-scratch indexing error payload',
+    regex: /from-scratch indexing (error|job) payload/i,
+    before: 1,
+    after: 4,
+  },
+  {
     label: 'Register runner rethrow',
     regex: /Rethrowing error from inside registerRunner/i,
     before: 2,
