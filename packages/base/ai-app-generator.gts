@@ -37,6 +37,13 @@ export class AiAppGenerator extends CardDef {
       this.args.model.promptValue = value;
     };
 
+    handlePromptInput = (event: Event) => {
+      let target = event.target as HTMLTextAreaElement | null;
+      if (target) {
+        this.setPromptValue(target.value);
+      }
+    };
+
     executeAskAi = () => {
       this.askAi.perform();
     };
@@ -80,6 +87,7 @@ export class AiAppGenerator extends CardDef {
                 id='prompt-textarea'
                 class='prompt-textarea'
                 value={{@model.promptValue}}
+                {{on 'input' this.handlePromptInput}}
               ></textarea>
             </div>
             <div class='create-button-container'>
