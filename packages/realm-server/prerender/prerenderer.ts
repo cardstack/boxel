@@ -143,7 +143,7 @@ export class Prerenderer {
           error: {
             status: 500,
             title: 'Render capture parse error',
-            message: `Error result could not be during prerendering: ${capture.value}`,
+            message: `Error result could not be during prerendering: "${capture.value}"`,
             additionalErrors: null,
           },
         };
