@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -u
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ensure_trailing_slash() {
@@ -48,10 +50,14 @@ SYNAPSE_URL="http://localhost:8008"
 SMTP_4_DEV_URL="http://localhost:5001"
 
 HOST_TESTS_STARTED_FILE="${HOST_TESTS_STARTED_FILE:-/tmp/host-tests-started}"
-rm -f "$HOST_TESTS_STARTED_FILE"
-
 WAIT_TIMEOUT_MS=${HOST_WAIT_TIMEOUT_MS:-600000}
 timeout_minutes=$(awk "BEGIN { print $WAIT_TIMEOUT_MS / 60000 }")
+
+HOST_WAIT_ATTEMPTS=${HOST_WAIT_ATTEMPTS:-2}
+if ! [[ "$HOST_WAIT_ATTEMPTS" =~ ^[0-9]+$ ]] || [ "$HOST_WAIT_ATTEMPTS" -lt 1 ]; then
+  printf 'Invalid HOST_WAIT_ATTEMPTS value: %s (expected positive integer)\n' "$HOST_WAIT_ATTEMPTS" >&2
+  exit 2
+fi
 
 READINESS_TARGETS=(
   "$BASE_REALM_READY"
@@ -63,33 +69,34 @@ READINESS_TARGETS=(
   "$SMTP_4_DEV_URL"
 )
 
-printf '⏳  Waiting up to %.1f minutes for realm services to report readiness...\n' "$timeout_minutes" >&2
+diagnose_readiness_failure() {
+  local attempt=$1
+  local exit_code=$2
 
-WAIT_ON_ARG=$(IFS='|'; printf '%s' "${READINESS_TARGETS[*]}")
-
-WAIT_ON_TIMEOUT=$WAIT_TIMEOUT_MS NODE_NO_WARNINGS=1 start-server-and-test \
-  'pnpm run wait' \
-  "$WAIT_ON_ARG" \
-  './scripts/run-tests-with-logs.sh'
-
-status=$?
-
-if [ ! -f "$HOST_TESTS_STARTED_FILE" ]; then
-  printf '\n⚠️  Host shard never executed the test runner because the readiness poll timed out after %.1f minutes.\n' "$timeout_minutes" >&2
-  if [ "$status" -eq 253 ] 2>/dev/null; then
+  printf '\n⚠️  Host shard never executed the test runner because the readiness poll timed out after %.1f minutes (attempt %d/%d).\n' \
+    "$timeout_minutes" "$attempt" "$HOST_WAIT_ATTEMPTS" >&2
+  if [ "$exit_code" -eq 253 ] 2>/dev/null; then
     printf 'start-server-and-test exited with code 253, which indicates the wait-on step gave up while polling realm readiness URLs. This usually means the realm server failed to boot or finish indexing.\n' >&2
   fi
+
   printf 'Endpoints that never reported ready:\n' >&2
   for target in "${READINESS_TARGETS[@]}"; do
     printf '  • %s\n' "$(from_wait_url "$target")" >&2
   done
-  realm_log="/tmp/server.log"
+
+  local realm_log="/tmp/server.log"
   if [ -f "$realm_log" ]; then
+    local snapshot="/tmp/realm-server-log-attempt-${attempt}.log"
+    if cp "$realm_log" "$snapshot" 2>/dev/null; then
+      printf '\nSaved realm server log snapshot to %s\n' "$snapshot" >&2
+    fi
+
     printf '\nRealm server log tail (last 200 lines):\n' >&2
     if ! tail -n 200 "$realm_log" >&2; then
       printf '(failed to read %s)\n' "$realm_log" >&2
     fi
 
+    local recent_errors
     recent_errors=$(grep -in 'error' "$realm_log" | tail -n 20)
     if [ -n "$recent_errors" ]; then
       printf '\nRealm server log lines matching "error" (last %d):\n' "$(printf '%s' "$recent_errors" | wc -l)" >&2
@@ -103,7 +110,45 @@ if [ ! -f "$HOST_TESTS_STARTED_FILE" ]; then
   else
     printf '\nRealm server log not found at %s\n' "$realm_log" >&2
   fi
+
   printf 'See the realm server logs above for startup or indexing errors.\n' >&2
+
+  if [ "$attempt" -lt "$HOST_WAIT_ATTEMPTS" ] && [ -f "$realm_log" ]; then
+    rm -f "$realm_log"
+  fi
+}
+
+WAIT_ON_ARG=$(IFS='|'; printf '%s' "${READINESS_TARGETS[*]}")
+
+status=0
+reported_readiness_failure=0
+
+for (( attempt = 1; attempt <= HOST_WAIT_ATTEMPTS; attempt++ )); do
+  rm -f "$HOST_TESTS_STARTED_FILE"
+  printf '⏳  Waiting up to %.1f minutes for realm services to report readiness (attempt %d/%d)...\n' \
+    "$timeout_minutes" "$attempt" "$HOST_WAIT_ATTEMPTS" >&2
+
+  WAIT_ON_TIMEOUT=$WAIT_TIMEOUT_MS NODE_NO_WARNINGS=1 start-server-and-test \
+    'pnpm run wait' \
+    "$WAIT_ON_ARG" \
+    './scripts/run-tests-with-logs.sh'
+
+  status=$?
+
+  if [ -f "$HOST_TESTS_STARTED_FILE" ]; then
+    break
+  fi
+
+  diagnose_readiness_failure "$attempt" "$status"
+  reported_readiness_failure=1
+
+  if [ "$attempt" -lt "$HOST_WAIT_ATTEMPTS" ]; then
+    printf '\n🔁  Retrying host shard after readiness failure...\n\n' >&2
+  fi
+done
+
+if [ ! -f "$HOST_TESTS_STARTED_FILE" ] && [ "$reported_readiness_failure" -eq 0 ]; then
+  diagnose_readiness_failure "$HOST_WAIT_ATTEMPTS" "$status"
 fi
 
 rm -f "$HOST_TESTS_STARTED_FILE"
