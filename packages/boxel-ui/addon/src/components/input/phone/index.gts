@@ -1,9 +1,10 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { debounce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { type AsYouType, getAsYouType } from 'awesome-phonenumber';
 import { type TCountryCode, countries, getEmojiFlag } from 'countries-list';
-import { debounce } from 'lodash';
 
 import validatePhone, {
   DEFAULT_PHONE_REGION_CODE,
@@ -58,9 +59,13 @@ export default class PhoneInput extends Component<Signature> {
     this.args.onChange?.(value);
   }
 
-  private handleValidation = (input: string) => {
+  private handleValidation = (input: string, ev: Event) => {
     input = input?.trim();
-    if (!input?.length) {
+
+    let t = ev.target as HTMLInputElement | null;
+    let required = this.args.required || t?.required;
+
+    if (!input?.length && !required) {
       if (this.args.required && this.hasBlurred) {
         this.validationState = 'invalid';
         this.errorMessage = this.requiredErrorMessage;
@@ -92,33 +97,23 @@ export default class PhoneInput extends Component<Signature> {
     }
   };
 
-  private debouncedInput = debounce(
-    (input: string) => this.handleValidation(input),
-    300,
-  );
-
-  @action onInput(value: string): void {
+  @action onInput(ev: Event): void {
     this.hasBlurred = false;
     if (this.validationState === 'invalid') {
       this.validationState = 'initial';
     }
     this.errorMessage = undefined;
+    let value = (ev?.target as HTMLInputElement | null)?.value ?? '';
     this.inputValue = value;
     this.updateFlagForInput(value);
-    this.debouncedInput(value);
+    debounce(this.handleValidation, value, ev, 300);
   }
 
   @action onBlur(): void {
     this.hasBlurred = true;
-    this.debouncedInput.flush();
     const formatted = this.formatForDisplay(this.inputValue);
     this.inputValue = formatted;
     this.handleValidation(formatted);
-  }
-
-  override willDestroy(): void {
-    this.debouncedInput.cancel();
-    super.willDestroy();
   }
 
   private sanitizeForFormatting(value: string): string {
@@ -220,7 +215,7 @@ export default class PhoneInput extends Component<Signature> {
     <BoxelInputGroup
       type='tel'
       @value={{this.inputValue}}
-      @onInput={{this.onInput}}
+      {{on 'input' this.onInput}}
       @onBlur={{this.onBlur}}
       @state={{this.validationState}}
       @errorMessage={{this.errorMessage}}
