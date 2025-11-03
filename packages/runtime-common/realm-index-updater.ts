@@ -94,6 +94,9 @@ export class RealmIndexUpdater {
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
       };
+
+      this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
+
       let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
