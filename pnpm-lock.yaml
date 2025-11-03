@@ -2913,6 +2913,9 @@ importers:
       '@types/uuid':
         specifier: 'catalog:'
         version: 9.0.8
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       babel-import-util:
         specifier: ^1.2.2
         version: 1.2.2

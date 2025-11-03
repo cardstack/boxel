@@ -10,6 +10,7 @@ import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
+import * as awesomePhoneNumber from 'awesome-phonenumber';
 import * as dateFns from 'date-fns';
 import * as emberConcurrency from 'ember-concurrency';
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
@@ -25,7 +26,6 @@ import * as lodash from 'lodash';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
-import * as awesomePhoneNumber from 'awesome-phonenumber';
 
 import * as boxelUiComponents from '@cardstack/boxel-ui/components';
 import * as boxelUiHelpers from '@cardstack/boxel-ui/helpers';

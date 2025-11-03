@@ -15,6 +15,7 @@ import {
   not,
   type NormalizePhoneFormatResult,
 } from '@cardstack/boxel-ui/helpers';
+import { fieldSerializer } from '@cardstack/runtime-common';
 
 import PhoneIcon from '@cardstack/boxel-icons/phone';
 
@@ -42,6 +43,7 @@ class Edit extends Component<typeof PhoneNumberField> {
 export default class PhoneNumberField extends StringField {
   static displayName = 'Phone Number';
   static icon = PhoneIcon;
+  static [fieldSerializer] = 'phone';
 
   static edit = Edit;
 
