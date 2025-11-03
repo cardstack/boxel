@@ -2,6 +2,9 @@ import type Koa from 'koa';
 import {
   SupportedMimeType,
   systemInitiatedPriority,
+  normalizeFullReindexBatchSize,
+  normalizeFullReindexCooldownSeconds,
+  normalizeFullReindexConcurrency,
 } from '@cardstack/runtime-common';
 import {
   sendResponseForUnauthorizedRequest,
@@ -32,6 +35,10 @@ export default function handlePostDeployment({
       boxelUiChangeCheckerResult.currentChecksum !==
       boxelUiChangeCheckerResult.previousChecksum
     ) {
+      let batchSize = normalizeFullReindexBatchSize();
+      let cooldownSeconds = normalizeFullReindexCooldownSeconds();
+      let concurrencyParam = ctxt.URL.searchParams.get('concurrency');
+      let concurrency = normalizeFullReindexConcurrency(concurrencyParam);
       await queue.publish<void>({
         jobType: `full-reindex`,
         concurrencyGroup: `full-reindex-group`,
@@ -39,6 +46,9 @@ export default function handlePostDeployment({
         priority: systemInitiatedPriority,
         args: {
           realmUrls: realms.map((r) => r.url),
+          batchSize,
+          cooldownSeconds,
+          concurrency,
         },
       });
 
