@@ -134,7 +134,20 @@ export class Prerenderer {
 
   #captureToError(capture: RenderCapture): RenderError | undefined {
     if (capture.status === 'error' || capture.status === 'unusable') {
-      let parsed = JSON.parse(capture.value) as RenderError;
+      let parsed: RenderError | undefined;
+      try {
+        parsed = JSON.parse(capture.value);
+      } catch (e) {
+        parsed = {
+          type: 'error',
+          error: {
+            status: 500,
+            title: 'Render capture parse error',
+            message: `Error result could not be during prerendering: ${capture.value}`,
+            additionalErrors: null,
+          },
+        };
+      }
       return {
         ...(parsed as unknown as RenderError),
         evict: capture.status === 'unusable',
