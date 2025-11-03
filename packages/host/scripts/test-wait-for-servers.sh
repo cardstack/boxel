@@ -72,6 +72,7 @@ READINESS_TARGETS=(
 diagnose_readiness_failure() {
   local attempt=$1
   local exit_code=$2
+  local target
 
   printf '\n⚠️  Host shard never executed the test runner because the readiness poll timed out after %.1f minutes (attempt %d/%d).\n' \
     "$timeout_minutes" "$attempt" "$HOST_WAIT_ATTEMPTS" >&2
@@ -80,9 +81,12 @@ diagnose_readiness_failure() {
   fi
 
   printf 'Endpoints that never reported ready:\n' >&2
-  for target in "${READINESS_TARGETS[@]}"; do
-    printf '  • %s\n' "$(from_wait_url "$target")" >&2
-  done
+  if ! print_pending_endpoints >&2; then
+    printf '  • Unable to determine remaining endpoints (diagnostic probe failed); listing all targets instead:\n' >&2
+    for target in "${READINESS_TARGETS[@]}"; do
+      printf '    • %s\n' "$(from_wait_url "$target")" >&2
+    done
+  fi
 
   local realm_log="/tmp/server.log"
   if [ -f "$realm_log" ]; then
@@ -116,6 +120,87 @@ diagnose_readiness_failure() {
   if [ "$attempt" -lt "$HOST_WAIT_ATTEMPTS" ] && [ -f "$realm_log" ]; then
     rm -f "$realm_log"
   fi
+}
+
+check_endpoint_with_wait_on() {
+  local target=$1
+  local timeout=$2
+
+  node - "$target" "$timeout" <<'NODE'
+const waitOn = (() => {
+  try {
+    return require('wait-on');
+  } catch (err) {
+    console.error(String(err && err.message ? err.message : err));
+    process.exit(2);
+  }
+})();
+
+const target = process.argv[2];
+const timeout = Number(process.argv[3]) || 5000;
+
+waitOn({
+  resources: [target],
+  timeout,
+  httpTimeout: timeout,
+  log: false,
+  verbose: false,
+})
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    const message = String(err && err.message ? err.message : err || '');
+    if (err && (err.code === 'ETIMEDOUT' || /timed out/i.test(message))) {
+      process.exit(1);
+      return;
+    }
+    if (message) {
+      console.error(message);
+    }
+    process.exit(2);
+  });
+NODE
+
+  return $?
+}
+
+print_pending_endpoints() {
+  local -a pending_targets=()
+  local check_timeout_ms=$WAIT_TIMEOUT_MS
+  local node_status
+  local target
+
+  if [ "$check_timeout_ms" -gt 10000 ]; then
+    check_timeout_ms=10000
+  fi
+  if [ "$check_timeout_ms" -lt 1000 ]; then
+    check_timeout_ms=1000
+  fi
+
+  for target in "${READINESS_TARGETS[@]}"; do
+    check_endpoint_with_wait_on "$target" "$check_timeout_ms"
+    node_status=$?
+    if [ "$node_status" -eq 0 ]; then
+      continue
+    elif [ "$node_status" -eq 1 ]; then
+      pending_targets+=("$target")
+    else
+      return 1
+    fi
+  done
+
+  if [ "${#pending_targets[@]}" -eq 0 ]; then
+    local timeout_seconds
+    timeout_seconds=$(awk "BEGIN { print $check_timeout_ms / 1000 }")
+    printf '  • All readiness endpoints responded during diagnostic probe (within %.1f seconds).\n' "$timeout_seconds"
+  else
+    for target in "${pending_targets[@]}"; do
+      printf '  • %s\n' "$(from_wait_url "$target")"
+    done
+  fi
+
+  return 0
 }
 
 WAIT_ON_ARG=$(IFS='|'; printf '%s' "${READINESS_TARGETS[*]}")
