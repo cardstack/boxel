@@ -111,7 +111,7 @@ module(
     });
 
     test('host does not re-fetch query-backed relationships', async function (assert) {
-      assert.expect(5);
+      assert.expect(8);
       let network = getService('network') as NetworkService;
       let store = getService('store') as StoreService;
       let cardService = getService('card-service') as CardService;
@@ -179,6 +179,19 @@ module(
             'Target',
             'rendered card displays data without re-fetching',
           );
+
+        element = await renderCard(loader, queryCard, 'edit');
+        await settled();
+
+        assert
+          .dom('[data-test-links-to-editor="favorite"]')
+          .doesNotExist('linksTo editor is hidden for query-backed field');
+        assert
+          .dom('[data-test-add-new="favorite"]')
+          .doesNotExist('add button is hidden for query-backed linksTo');
+        assert
+          .dom('[data-test-links-to-many="matches"]')
+          .doesNotExist('linksToMany editor is hidden for query-backed field');
       } finally {
         network.virtualNetwork.unmount(handler);
       }
