@@ -140,7 +140,10 @@ jobs:
             dump_path=".preindexed-db/${db}.dump"
             if [ -f "$dump_path" ]; then
               echo "Restoring $db from $dump_path"
-              docker exec boxel-pg psql -U postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"
+              present=$(docker exec boxel-pg psql -U postgres -tAc "SELECT COUNT(*) FROM pg_database WHERE datname='$db'" | tr -d '[:space:]')
+              if [ "$present" = "1" ]; then
+                docker exec boxel-pg psql -U postgres -c "DROP DATABASE $db WITH (FORCE)"
+              fi
               docker exec boxel-pg psql -U postgres -c "CREATE DATABASE $db"
               docker exec -i boxel-pg pg_restore -U postgres -d "$db" < "$dump_path"
             else
@@ -151,6 +154,8 @@ jobs:
               fi
             fi
           done
+          echo "Post-restore database sizes:"
+          docker exec boxel-pg psql -U postgres -Atc "SELECT datname || ': ' || pg_size_pretty(pg_database_size(datname)) FROM pg_database WHERE datname IN ('boxel','boxel_base','boxel_test');"
         working-directory: packages/realm-server
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
