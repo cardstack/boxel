@@ -8,8 +8,8 @@ import PhoneInput from './index.gts';
 
 export default class PhoneInputUsage extends Component {
   @tracked value: string | null = null;
-  @tracked disabled = false;
-  @tracked required = false;
+  @tracked disabled?: boolean;
+  @tracked required?: boolean;
   @tracked placeholder?: string;
 
   @action handleChange(newValue: string | null): void {
@@ -23,10 +23,12 @@ export default class PhoneInputUsage extends Component {
           <code>PhoneInput</code>
           wraps
           <code>BoxelInput</code>
-          with client-side validation for phone numbers. Valid values are
+          with client-side validation for phone numbers. Input values are
           committed via
-          <code>@onChange</code>; invalid input surfaces descriptive error
-          message on blur.
+          <code>@onChange</code>, which also passes along the current validation
+          error object (or
+          <code>null</code>); invalid input surfaces a descriptive error message
+          on blur.
         </p>
       </:description>
       <:example>

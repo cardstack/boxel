@@ -6,18 +6,23 @@ import { tracked } from '@glimmer/tracking';
 import { type AsYouType, getAsYouType } from 'awesome-phonenumber';
 import { type TCountryCode, countries, getEmojiFlag } from 'countries-list';
 
-import validatePhone, {
+import validatePhoneFormat, {
   DEFAULT_PHONE_REGION_CODE,
-  isValidPhone,
-  normalizePhone,
-} from '../../../helpers/validate-phone.ts';
+  isValidPhoneFormat,
+  normalizePhoneFormat,
+  type NormalizePhoneFormatResult,
+} from '../../../helpers/validate-phone-format.ts';
 import BoxelInputGroup from '../../input-group/index.gts';
 import { type InputValidationState } from '../index.gts';
 
 interface Signature {
   Args: {
     disabled?: boolean;
-    onChange?: (value: string | null) => void;
+    onChange?: (
+      value: string | null,
+      validation: NormalizePhoneFormatResult | null,
+      ev: Event,
+    ) => void;
     placeholder?: string;
     required?: boolean;
     value: string | null;
@@ -26,7 +31,6 @@ interface Signature {
 }
 
 const DEFAULT_FALLBACK_MESSAGE = 'Enter a valid phone number';
-const DEFAULT_REQUIRED_MESSAGE = 'Enter a phone number';
 
 interface FlagDisplay {
   emoji: string;
@@ -36,64 +40,57 @@ interface FlagDisplay {
 
 export default class PhoneInput extends Component<Signature> {
   private fallbackErrorMessage = DEFAULT_FALLBACK_MESSAGE;
-  private requiredErrorMessage = DEFAULT_REQUIRED_MESSAGE;
   private asYouType: AsYouType = getAsYouType(DEFAULT_PHONE_REGION_CODE);
 
   @tracked private validationState: InputValidationState = this.args.value
-    ? isValidPhone(this.args.value)
+    ? isValidPhoneFormat(this.args.value)
       ? 'valid'
       : 'invalid'
     : 'initial';
-  @tracked private inputValue = this.args.value
-    ? this.formatForDisplay(this.args.value)
-    : '';
+  @tracked private inputValue = this.args.value ?? '';
   @tracked private errorMessage = this.args.value
-    ? validatePhone(this.args.value)?.message
+    ? validatePhoneFormat(this.args.value)?.message
     : '';
   @tracked private hasBlurred = false;
-  @tracked private countryFlag: FlagDisplay | null = this.args.value
-    ? this.flagFromInput(this.args.value)
-    : null;
+  @tracked private countryFlag?: FlagDisplay | null;
 
-  private notify(value: string | null) {
-    this.args.onChange?.(value);
+  private notify(
+    value: string | null,
+    validation: NormalizePhoneFormatResult | null,
+    ev: Event,
+  ) {
+    this.args.onChange?.(value, validation, ev);
   }
 
   private handleValidation = (input: string, ev: Event) => {
-    input = input?.trim();
+    input = this.sanitizeForFormatting(input);
 
     let t = ev.target as HTMLInputElement | null;
     let required = this.args.required || t?.required;
 
     if (!input?.length && !required) {
-      if (this.args.required && this.hasBlurred) {
-        this.validationState = 'invalid';
-        this.errorMessage = this.requiredErrorMessage;
-      } else if (this.hasBlurred) {
-        this.validationState = 'initial';
-        this.errorMessage = undefined;
-        this.notify(null);
-      } else {
-        this.validationState = 'initial';
-        this.errorMessage = undefined;
-      }
+      this.validationState = 'initial';
+      this.errorMessage = undefined;
       this.countryFlag = null;
+      this.notify(input, null, ev);
       return;
     }
 
-    const normalization = normalizePhone(input);
-    if (!normalization.ok) {
-      const validation = normalization.error;
+    const normalized = normalizePhoneFormat(input);
+    console.log(normalized);
+    if (!normalized.ok) {
       this.validationState = this.hasBlurred ? 'invalid' : 'initial';
       this.errorMessage =
         this.validationState === 'invalid'
-          ? validation.message ?? this.fallbackErrorMessage
+          ? normalized.error.message ?? this.fallbackErrorMessage
           : undefined;
+      this.notify(input, normalized, ev);
     } else {
       this.validationState = 'valid';
       this.errorMessage = undefined;
-      this.setFlagFromRegion(normalization.value.regionCode);
-      this.notify(normalization.value.e164);
+      this.setFlagFromRegion(normalized.value.regionCode);
+      this.inputValue = normalized.value.international;
+      this.notify(normalized.value.e164, normalized, ev);
     }
   };
 
@@ -109,11 +106,12 @@ export default class PhoneInput extends Component<Signature> {
     debounce(this.handleValidation, value, ev, 300);
   }
 
-  @action onBlur(): void {
+  @action onBlur(ev: Event): void {
     this.hasBlurred = true;
     const formatted = this.formatForDisplay(this.inputValue);
     this.inputValue = formatted;
-    this.handleValidation(formatted);
+    console.log(formatted);
+    this.handleValidation(this.inputValue, ev);
   }
 
   private sanitizeForFormatting(value: string): string {
@@ -165,14 +163,6 @@ export default class PhoneInput extends Component<Signature> {
 
     this.asYouType.reset(sanitized);
     this.updateFlagFromAsYouType();
-  }
-
-  private flagFromInput(value: string): FlagDisplay | null {
-    const normalization = normalizePhone(value);
-    if (!normalization.ok) {
-      return null;
-    }
-    return this.flagFromRegion(normalization.value.regionCode);
   }
 
   private updateFlagFromAsYouType(): void {

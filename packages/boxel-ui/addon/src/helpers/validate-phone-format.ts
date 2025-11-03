@@ -13,20 +13,20 @@ export const PHONE_VALIDATION_ERROR_CODES = [
   'disallowed-country',
 ] as const;
 
-export type PhoneValidationErrorCode =
+export type PhoneFormatValidationErrorCode =
   (typeof PHONE_VALIDATION_ERROR_CODES)[number];
 
-export interface PhoneValidationError {
-  code: PhoneValidationErrorCode;
+export interface PhoneFormatValidationError {
+  code: PhoneFormatValidationErrorCode;
   message: string;
 }
 
-type ErrorCatalog = Record<string, PhoneValidationError>;
+type ErrorCatalog = Record<string, PhoneFormatValidationError>;
 
 const generateErrorDescription = (
-  code: PhoneValidationErrorCode,
+  code: PhoneFormatValidationErrorCode,
   message: string,
-) => ({ code, message }) as const satisfies PhoneValidationError;
+) => ({ code, message }) as const satisfies PhoneFormatValidationError;
 
 export const PHONE_VALIDATION_ERRORS = {
   invalidType: generateErrorDescription(
@@ -50,17 +50,17 @@ export const PHONE_VALIDATION_ERRORS = {
   ),
 } satisfies ErrorCatalog;
 
-export type PhoneValidationErrorMessages = Partial<
-  Record<PhoneValidationErrorCode, string>
+export type PhoneFormatValidationErrorMessages = Partial<
+  Record<PhoneFormatValidationErrorCode, string>
 >;
 
-export interface PhoneValidationOptions {
+export interface PhoneFormatValidationOptions {
   allowedRegionCodes?: readonly string[];
   defaultRegionCode?: string;
-  errorMessages?: PhoneValidationErrorMessages;
+  errorMessages?: PhoneFormatValidationErrorMessages;
 }
 
-export interface NormalizedPhoneNumber {
+export interface NormalizedPhoneNumberFormat {
   countryCode: number;
   e164: string;
   international: string;
@@ -69,19 +69,19 @@ export interface NormalizedPhoneNumber {
   significant: string;
 }
 
-export type NormalizePhoneResult =
+export type NormalizePhoneFormatResult =
   | {
       ok: true;
-      value: NormalizedPhoneNumber;
+      value: NormalizedPhoneNumberFormat;
     }
   | {
-      error: PhoneValidationError;
+      error: PhoneFormatValidationError;
       ok: false;
     };
 
 const NORMALIZE_ERROR_BY_POSSIBILITY: Record<
   ParsedPhoneNumber['possibility'],
-  PhoneValidationError
+  PhoneFormatValidationError
 > = {
   invalid: PHONE_VALIDATION_ERRORS.invalidFormat,
   'invalid-country-code': PHONE_VALIDATION_ERRORS.invalidCountryCode,
@@ -95,7 +95,7 @@ const sanitizeRegion = (region?: string): string | undefined =>
   region?.trim().toUpperCase() || undefined;
 
 const coerceAllowedRegions = (
-  allowed: PhoneValidationOptions['allowedRegionCodes'],
+  allowed: PhoneFormatValidationOptions['allowedRegionCodes'],
 ): ReadonlySet<string> | null => {
   if (!allowed?.length) {
     return null;
@@ -104,10 +104,10 @@ const coerceAllowedRegions = (
   return new Set(allowed.map((region) => region.toUpperCase()));
 };
 
-export function normalizePhone(
+export function normalizePhoneFormat(
   input: unknown,
-  options: PhoneValidationOptions = {},
-): NormalizePhoneResult {
+  options: PhoneFormatValidationOptions = {},
+): NormalizePhoneFormatResult {
   if (typeof input !== 'string') {
     return { ok: false, error: PHONE_VALIDATION_ERRORS.invalidType };
   }
@@ -177,31 +177,22 @@ export function normalizePhone(
 
 // Lightweight phone number validation for client-side feedback only.
 // Returns an error descriptor if input is invalid; returns `null` if input is valid.
-function validatePhone(
+export default function validatePhoneFormat(
   input: unknown,
-  options: PhoneValidationOptions = {},
-): PhoneValidationError | null {
-  const result = normalizePhone(input, options);
-  if (result.ok) {
+  options: PhoneFormatValidationOptions = {},
+): PhoneFormatValidationError | null {
+  let normalized = normalizePhoneFormat(input, options);
+
+  if (normalized.ok) {
     return null;
   }
 
-  const overrideMessage = options.errorMessages?.[result.error.code];
-  if (!overrideMessage) {
-    return result.error;
-  }
-
-  return {
-    code: result.error.code,
-    message: overrideMessage,
-  };
+  return normalized.error;
 }
 
-export function isValidPhone(
+export function isValidPhoneFormat(
   input: unknown,
-  options?: PhoneValidationOptions,
+  options?: PhoneFormatValidationOptions,
 ): boolean {
-  return validatePhone(input, options) === null;
+  return validatePhoneFormat(input, options) === null;
 }
-
-export default validatePhone;
