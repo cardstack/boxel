@@ -1,7 +1,53 @@
 import type { ParsedPhoneNumber } from 'awesome-phonenumber';
 import { parsePhoneNumber } from 'awesome-phonenumber';
 
-export const DEFAULT_PHONE_REGION_CODE = 'US';
+const FALLBACK_PHONE_REGION_CODE = 'US';
+
+const extractRegionFromLocale = (locale?: string): string | undefined => {
+  if (!locale) {
+    return undefined;
+  }
+
+  try {
+    if (
+      typeof Intl !== 'undefined' &&
+      typeof (Intl as any).Locale === 'function'
+    ) {
+      const region = new (Intl as any).Locale(locale).region;
+      if (region) {
+        return region.toUpperCase();
+      }
+    }
+  } catch {
+    // Ignore parsing errors and fall back to regex extraction
+  }
+
+  const match = locale.match(/-([a-z]{2})(?:[-_]|$)/i);
+  return match?.[1] ? match[1].toUpperCase() : undefined;
+};
+
+const getUserRegionCode = (): string | undefined => {
+  if (typeof navigator === 'undefined') {
+    return undefined;
+  }
+
+  const locales =
+    Array.isArray(navigator.languages) && navigator.languages.length
+      ? navigator.languages
+      : [navigator.language];
+
+  for (const locale of locales) {
+    const region = extractRegionFromLocale(locale);
+    if (region) {
+      return region;
+    }
+  }
+
+  return undefined;
+};
+
+export const DEFAULT_PHONE_REGION_CODE =
+  getUserRegionCode() ?? FALLBACK_PHONE_REGION_CODE;
 
 export const PHONE_VALIDATION_ERROR_CODES = [
   'invalid-type',

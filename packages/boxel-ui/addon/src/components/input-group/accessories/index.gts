@@ -11,8 +11,8 @@ import BoxelSelect, { type BoxelSelectArgs } from '../../select/index.gts';
 
 interface ButtonSignature {
   Args: {
-    kind?: BoxelButtonKind;
     disabled?: boolean;
+    kind?: BoxelButtonKind;
   };
   Blocks: {
     default: [];

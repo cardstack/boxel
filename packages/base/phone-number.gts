@@ -2,11 +2,18 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
-import { contains, field, Component, FieldDef, StringField } from './card-api';
+import {
+  primitive,
+  contains,
+  field,
+  Component,
+  FieldDef,
+  StringField,
+} from './card-api';
 import NumberField from './number';
 
 import {
-  BoxelPhoneInput,
+  PhoneInput,
   EntityDisplayWithIcon,
   Pill,
   RadioInput,
@@ -15,15 +22,41 @@ import {
   not,
   type NormalizePhoneFormatResult,
 } from '@cardstack/boxel-ui/helpers';
-import { fieldSerializer } from '@cardstack/runtime-common';
+import { fieldSerializer, PhoneSerializer } from '@cardstack/runtime-common';
 
 import PhoneIcon from '@cardstack/boxel-icons/phone';
 
 import { parsePhoneNumber } from 'awesome-phonenumber';
 
+function validate(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  let normalized = PhoneSerializer.deserializeSync(value);
+  if (!normalized) {
+    return 'Enter a valid phone number';
+  }
+
+  return null;
+}
+
+function deserializeForUI(value: string | null): string | null {
+  return PhoneSerializer.deserializeSync(value);
+}
+
+function parseForDisplay(value: string | null) {
+  let normalized = PhoneSerializer.deserializeSync(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return parsePhoneNumber(normalized);
+}
+
 class Edit extends Component<typeof PhoneNumberField> {
   <template>
-    <BoxelPhoneInput
+    <PhoneInput
       @value={{@model}}
       @onChange={{this.handleChange}}
       @disabled={{not @canEdit}}
@@ -34,15 +67,35 @@ class Edit extends Component<typeof PhoneNumberField> {
     value: string | null,
     validation: NormalizePhoneFormatResult | null,
   ) {
-    if ((validation === null || validation?.ok) && this.args.model !== value) {
-      this.args.set(value);
+    if (!value) {
+      this.args.set(null);
+      return;
+    }
+
+    if (validation?.ok) {
+      let normalized = validation.value?.e164;
+      if (normalized && this.args.model !== normalized) {
+        this.args.set(normalized);
+      }
+      return;
+    }
+
+    let validationError = validate(value);
+    if (validationError) {
+      return;
+    }
+
+    let normalized = deserializeForUI(value);
+    if (normalized && this.args.model !== normalized) {
+      this.args.set(normalized);
     }
   }
 }
 
-export default class PhoneNumberField extends StringField {
+export default class PhoneNumberField extends FieldDef {
   static displayName = 'Phone Number';
   static icon = PhoneIcon;
+  static [primitive]: string;
   static [fieldSerializer] = 'phone';
 
   static edit = Edit;
@@ -75,12 +128,10 @@ export default class PhoneNumberField extends StringField {
     </template>
 
     get parsed() {
-      let value = this.args.model?.trim();
-      if (!value?.length || !parsePhoneNumber) {
-        return;
+      if (!parsePhoneNumber) {
+        return null;
       }
-      let parsed = parsePhoneNumber(value);
-      return parsed;
+      return parseForDisplay(this.args.model);
     }
   };
 
@@ -94,12 +145,11 @@ export default class PhoneNumberField extends StringField {
     </template>
 
     get parsed() {
-      let value = this.args.model?.trim();
-      if (!value?.length || !parsePhoneNumber) {
-        return;
+      if (!parsePhoneNumber) {
+        return null;
       }
-      let parsed = parsePhoneNumber(value);
-      return parsed?.number?.international;
+      let parsed = parseForDisplay(this.args.model);
+      return parsed?.number?.international ?? null;
     }
   };
 }

@@ -7,7 +7,7 @@ import { and, bool, eq, or } from '../../helpers/truth-helpers.ts';
 import FailureBordered from '../../icons/failure-bordered.gts';
 import SuccessBordered from '../../icons/success-bordered.gts';
 import type { Icon } from '../../icons/types.ts';
-import { type InputValidationState } from '../input/index.gts';
+import { type InputType, type InputValidationState } from '../input/index.gts';
 import LoadingIndicator from '../loading-indicator/index.gts';
 import {
   type AccessoriesBlockArg,
@@ -42,6 +42,7 @@ export interface Signature {
     readonly?: boolean;
     required?: boolean;
     state?: InputValidationState;
+    type?: InputType;
     validIcon?: Icon;
     value?: string;
   };
@@ -110,6 +111,7 @@ export default class InputGroup extends Component<Signature> {
           {{else}}
             <InputControl
               id={{this.elementId}}
+              type={{@type}}
               @placeholder={{@placeholder}}
               @disabled={{@disabled}}
               @readonly={{@readonly}}
