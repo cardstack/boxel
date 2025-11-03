@@ -1333,50 +1333,44 @@ module(basename(__filename), function () {
           );
         });
 
-        test('can reindex all realms via post-deployment endpoint called from CI pipeline', async function (assert: Assert) {
-          let compareCurrentBoxelUIChecksumStub: sinon.SinonStub;
-          let writeCurrentBoxelUIChecksumStub: sinon.SinonStub;
+        test('post-deployment endpoint requires authorization header', async function (assert: Assert) {
+          let response = await request2
+            .post('/_post-deployment')
+            .set('Content-Type', 'application/json');
 
-          // Test case 1: Missing authorization header - should be unauthorized
-          {
-            let response = await request2
-              .post('/_post-deployment')
-              .set('Content-Type', 'application/json');
+          assert.strictEqual(
+            response.status,
+            401,
+            'HTTP 401 status for missing auth header',
+          );
+        });
 
-            assert.strictEqual(
-              response.status,
-              401,
-              'HTTP 401 status for missing auth header',
-            );
-          }
+        test('post-deployment endpoint rejects incorrect authorization', async function (assert: Assert) {
+          let response = await request2
+            .post('/_post-deployment')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', 'wrong-secret');
 
-          // Test case 2: Wrong authorization header - should be unauthorized
-          {
-            let response = await request2
-              .post('/_post-deployment')
-              .set('Content-Type', 'application/json')
-              .set('Authorization', 'wrong-secret');
+          assert.strictEqual(
+            response.status,
+            401,
+            'HTTP 401 status for wrong auth header',
+          );
+        });
 
-            assert.strictEqual(
-              response.status,
-              401,
-              'HTTP 401 status for wrong auth header',
-            );
-          }
+        test('post-deployment endpoint triggers full reindex when checksums differ', async function (assert: Assert) {
+          let compareCurrentBoxelUIChecksumStub = sinon
+            .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+            .resolves({
+              previousChecksum: 'old-checksum-123',
+              currentChecksum: 'new-checksum-456',
+            });
+          let writeCurrentBoxelUIChecksumStub = sinon.stub(
+            boxelUIChangeChecker,
+            'writeCurrentBoxelUIChecksum',
+          );
 
-          // Test case 3: Checksums are different - should trigger reindex
-          {
-            compareCurrentBoxelUIChecksumStub = sinon
-              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
-              .resolves({
-                previousChecksum: 'old-checksum-123',
-                currentChecksum: 'new-checksum-456',
-              });
-            writeCurrentBoxelUIChecksumStub = sinon.stub(
-              boxelUIChangeChecker,
-              'writeCurrentBoxelUIChecksum',
-            );
-
+          try {
             let initialJobs = await dbAdapter.execute('select * from jobs');
             let initialJobCount = initialJobs.length;
 
@@ -1395,7 +1389,6 @@ module(basename(__filename), function () {
               'response body contains checksum comparison result',
             );
 
-            // Verify that a full-reindex job was published
             let finalJobs = await dbAdapter.execute('select * from jobs');
             assert.strictEqual(
               finalJobs.length,
@@ -1434,7 +1427,6 @@ module(basename(__filename), function () {
               );
             }
 
-            // Verify that writeCurrentBoxelUIChecksum was called
             assert.ok(
               writeCurrentBoxelUIChecksumStub.calledOnce,
               'writeCurrentBoxelUIChecksum was called',
@@ -1443,24 +1435,25 @@ module(basename(__filename), function () {
               writeCurrentBoxelUIChecksumStub.calledWith('new-checksum-456'),
               'writeCurrentBoxelUIChecksum called with new checksum',
             );
-
+          } finally {
             compareCurrentBoxelUIChecksumStub.restore();
             writeCurrentBoxelUIChecksumStub.restore();
           }
+        });
 
-          // Test case 4: Checksums are the same - should not trigger reindex
-          {
-            compareCurrentBoxelUIChecksumStub = sinon
-              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
-              .resolves({
-                previousChecksum: 'same-checksum-789',
-                currentChecksum: 'same-checksum-789',
-              });
-            writeCurrentBoxelUIChecksumStub = sinon.stub(
-              boxelUIChangeChecker,
-              'writeCurrentBoxelUIChecksum',
-            );
+        test('post-deployment endpoint ignores reindex when checksums match', async function (assert: Assert) {
+          let compareCurrentBoxelUIChecksumStub = sinon
+            .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+            .resolves({
+              previousChecksum: 'same-checksum-789',
+              currentChecksum: 'same-checksum-789',
+            });
+          let writeCurrentBoxelUIChecksumStub = sinon.stub(
+            boxelUIChangeChecker,
+            'writeCurrentBoxelUIChecksum',
+          );
 
+          try {
             let initialJobs = await dbAdapter.execute('select * from jobs');
             let initialJobCount = initialJobs.length;
 
@@ -1479,7 +1472,6 @@ module(basename(__filename), function () {
               'response body contains checksum comparison result',
             );
 
-            // Verify that no new job was published
             let finalJobs = await dbAdapter.execute('select * from jobs');
             assert.strictEqual(
               finalJobs.length,
@@ -1487,12 +1479,11 @@ module(basename(__filename), function () {
               'no new job was created when checksums are the same',
             );
 
-            // Verify that writeCurrentBoxelUIChecksum was not called
             assert.ok(
               writeCurrentBoxelUIChecksumStub.notCalled,
               'writeCurrentBoxelUIChecksum was not called when checksums are same',
             );
-
+          } finally {
             compareCurrentBoxelUIChecksumStub.restore();
             writeCurrentBoxelUIChecksumStub.restore();
           }
