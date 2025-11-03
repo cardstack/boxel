@@ -2,6 +2,7 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import { logger } from '@cardstack/runtime-common';
 import { fetchRequestFromContext, fullRequestURL } from '../middleware';
+import { format } from 'date-fns';
 
 type ServerInfo = {
   url: string;
@@ -47,6 +48,21 @@ async function ping(url: string, timeoutMs: number): Promise<boolean> {
   }
 }
 
+function formatTimestampWithTimezone(timestamp: number): string {
+  const date = new Date(timestamp);
+  // Get timezone offset in hours and minutes
+  const offset = -date.getTimezoneOffset();
+  const offsetHours = Math.floor(Math.abs(offset) / 60);
+  const offsetMinutes = Math.abs(offset) % 60;
+  const offsetSign = offset >= 0 ? '+' : '-';
+  const timezone = `UTC${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+
+  // Format: YYYY-MM-DD HH:mm:ss (Timezone)
+  const formattedDate = format(date, 'yyyy-MM-dd HH:mm:ss');
+
+  return `${formattedDate} (${timezone})`;
+}
+
 export function buildPrerenderManagerApp(): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   registry: Registry;
@@ -90,8 +106,46 @@ export function buildPrerenderManagerApp(): {
     ctxt.status = 200;
   });
   router.get('/', async (ctxt) => {
-    ctxt.set('Content-Type', 'application/json');
-    ctxt.body = JSON.stringify({ ready: true });
+    ctxt.set('Content-Type', 'application/vnd.api+json');
+
+    // Build the list of active servers with their realms
+    let servers = [];
+    for (let [serverUrl, serverInfo] of registry.servers) {
+      let realms = [];
+      for (let realm of serverInfo.activeRealms) {
+        realms.push({
+          url: realm,
+          // Use the last access time if available, otherwise fall back to server registration time
+          // (which represents when the realm was first assigned to this server)
+          lastUsed: formatTimestampWithTimezone(
+            registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt,
+          ),
+        });
+      }
+
+      servers.push({
+        type: 'prerender-server',
+        id: serverUrl,
+        attributes: {
+          url: serverUrl,
+          capacity: serverInfo.capacity,
+          registeredAt: formatTimestampWithTimezone(serverInfo.registeredAt),
+          lastSeenAt: formatTimestampWithTimezone(serverInfo.lastSeenAt),
+          realms: realms,
+        },
+      });
+    }
+
+    ctxt.body = JSON.stringify({
+      data: {
+        type: 'prerender-manager-health',
+        id: 'health',
+        attributes: {
+          ready: true,
+        },
+      },
+      included: servers,
+    });
     ctxt.status = 200;
   });
 
