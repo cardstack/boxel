@@ -881,6 +881,9 @@ importers:
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.15
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -2188,6 +2191,9 @@ importers:
       ajv:
         specifier: 'catalog:'
         version: 8.17.1
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       broccoli-asset-rev:
         specifier: 'catalog:'
         version: 3.0.0
