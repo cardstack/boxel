@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 ensure_trailing_slash() {
   case "$1" in
     */) printf '%s' "$1" ;;
@@ -92,6 +94,11 @@ if [ ! -f "$HOST_TESTS_STARTED_FILE" ]; then
     if [ -n "$recent_errors" ]; then
       printf '\nRealm server log lines matching "error" (last %d):\n' "$(printf '%s' "$recent_errors" | wc -l)" >&2
       printf '%s\n' "$recent_errors" >&2
+    fi
+
+    printf '\nRealm indexing analysis:\n' >&2
+    if ! node "$SCRIPT_DIR/analyze-realm-log.js" "$realm_log" >&2; then
+      printf 'Failed to analyze %s\n' "$realm_log" >&2
     fi
   else
     printf '\nRealm server log not found at %s\n' "$realm_log" >&2

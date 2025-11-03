@@ -43,6 +43,11 @@ collect_diagnostics() {
     if ! tail -n 200 "$realm_log" >&2; then
       echo "(failed to read $realm_log)" >&2
     fi
+
+    echo "\n─ Realm indexing analysis" >&2
+    if ! node "$SCRIPT_DIR/analyze-realm-log.js" "$realm_log" >&2; then
+      echo "Failed to analyze $realm_log" >&2
+    fi
   else
     echo "\n─ Realm server log tail" >&2
     echo "Realm server log not found at $realm_log" >&2
