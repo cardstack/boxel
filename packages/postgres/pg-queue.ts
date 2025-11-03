@@ -23,19 +23,7 @@ import type { PgAdapter } from './pg-adapter';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
-
-function parsePositiveInteger(value: string | undefined): number | undefined {
-  if (value == null) {
-    return undefined;
-  }
-  let parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return undefined;
-  }
-  return Math.floor(parsed);
-}
-
-const configuredMaxJobTimeout = parsePositiveInteger(
+const configuredMaxJobTimeout = Number(
   process.env.PG_QUEUE_MAX_JOB_TIMEOUT_SEC,
 );
 
