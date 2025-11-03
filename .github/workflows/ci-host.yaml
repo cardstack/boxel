@@ -119,7 +119,8 @@ jobs:
           for db in boxel boxel_base boxel_test; do
             dump_path=".preindexed-db/${db}.dump"
             if [ -f "$dump_path" ]; then
-              echo "$dump_path size $(wc -c < \"$dump_path\") bytes"
+              size=$(wc -c < "$dump_path")
+              echo "$dump_path size ${size} bytes"
             else
               echo "no dump present for $db"
             fi
@@ -138,6 +139,7 @@ jobs:
           for db in boxel boxel_base boxel_test; do
             dump_path=".preindexed-db/${db}.dump"
             if [ -f "$dump_path" ]; then
+              echo "Restoring $db from $dump_path"
               docker exec boxel-pg psql -U postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"
               docker exec boxel-pg psql -U postgres -c "CREATE DATABASE $db"
               docker exec -i boxel-pg pg_restore -U postgres -d "$db" < "$dump_path"
