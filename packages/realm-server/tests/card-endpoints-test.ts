@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
+import supertest from 'supertest';
 import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
@@ -15,6 +16,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupBaseRealmServer,
   setupPermissionedRealm,
+  setupPermissionedRealms,
   setupMatrixRoom,
   matrixURL,
   closeServer,
@@ -3035,6 +3037,187 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
         });
       });
+    });
+  });
+
+  module('Query-backed relationships runtime resolver', function (hooks) {
+    const providerRealmURL = 'http://127.0.0.1:5521/';
+    const consumerRealmURL = 'http://127.0.0.1:5522/';
+    const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
+    let consumerRequest: SuperTest<Test>;
+
+    setupBaseRealmServer(hooks, matrixURL);
+
+    setupPermissionedRealms(hooks, {
+      realms: [
+        {
+          realmURL: providerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'person.gts': `
+              import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+
+              export class Person extends CardDef {
+                @field name = contains(StringField);
+              }
+            `,
+            'person-remote.json': {
+              data: {
+                attributes: {
+                  name: 'Zed',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          realmURL: consumerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'favorite-finder.gts': `
+              import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+              import { Person } from "${providerRealmURL}person";
+
+              export class FavoriteLookup extends CardDef {
+                @field favorite = linksTo(Person, {
+                  query: {
+                    realms: ['$thisRealm', '${providerRealmURL}', '${UNREACHABLE_REALM_URL}'],
+                    page: { size: 1 },
+                  },
+                });
+                @field matches = linksToMany(Person, {
+                  query: {
+                    realms: ['$thisRealm', '${providerRealmURL}', '${UNREACHABLE_REALM_URL}'],
+                    sort: [
+                      { by: 'name', direction: 'desc' },
+                    ],
+                    page: { size: 1 },
+                  },
+                });
+              }
+            `,
+            'favorite.json': {
+              data: {
+                meta: {
+                  adoptsFrom: {
+                    module: './favorite-finder',
+                    name: 'FavoriteLookup',
+                  },
+                },
+              },
+            },
+            'local-person.json': {
+              data: {
+                attributes: {
+                  name: 'Abe',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${providerRealmURL}person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms }) {
+        let latestRealms = realms.slice(-2);
+        consumerRequest = supertest(latestRealms[1].realmHttpServer);
+      },
+    });
+
+    hooks.afterEach(() => {
+      resetCatalogRealms();
+    });
+
+    test('linksTo query resolves the first aggregated result and includes it', async function (assert) {
+      let response = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let doc = response.body;
+      let favoriteRelationship = doc.data.relationships.favorite;
+
+      assert.deepEqual(
+        favoriteRelationship?.data,
+        { type: 'card', id: `${consumerRealmURL}local-person` },
+        'linksTo picks the first (local realm) match',
+      );
+      assert.ok(
+        Array.isArray(doc.included),
+        '`included` array exists for linksTo query',
+      );
+      assert.ok(
+        doc.included.some(
+          (resource: any) => resource.id === `${consumerRealmURL}local-person`,
+        ),
+        '`included` contains the resolved favorite card',
+      );
+    });
+
+    test('linksToMany query enforces global page size, records remote errors, and includes results', async function (assert) {
+      let response = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let doc = response.body;
+      let relationships = doc.data.relationships as Record<string, any>;
+      let firstRelationship = relationships['matches.0'];
+      let secondRelationship = relationships['matches.1'];
+
+      assert.ok(firstRelationship, 'first match is present');
+      assert.deepEqual(
+        firstRelationship.data,
+        { type: 'card', id: `${consumerRealmURL}local-person` },
+        'host realm result appears first when no global sort is applied',
+      );
+      assert.deepEqual(
+        secondRelationship?.data,
+        { type: 'card', id: `${providerRealmURL}person-remote` },
+        'remote realm result is appended after local matches',
+      );
+
+      let baseRelationship = relationships.matches;
+      assert.ok(
+        baseRelationship?.meta?.errors,
+        'relationship meta includes errors array',
+      );
+      assert.ok(
+        baseRelationship.meta.errors.some(
+          (error: any) => error.realm === UNREACHABLE_REALM_URL,
+        ),
+        'meta includes unreachable realm entry',
+      );
+
+      assert.ok(Array.isArray(doc.included), '`included` array is present');
+      let includedIds = (doc.included ?? []).map(
+        (resource: any) => resource.id,
+      );
+      assert.ok(
+        includedIds.includes(`${consumerRealmURL}local-person`),
+        '`included` contains the local person result',
+      );
+      assert.ok(
+        includedIds.includes(`${providerRealmURL}person-remote`),
+        '`included` contains the remote person result',
+      );
     });
   });
 });

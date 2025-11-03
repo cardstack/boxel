@@ -6,6 +6,7 @@ import {
   maybeURL,
   IndexQueryEngine,
   codeRefWithAbsoluteURL,
+  logger,
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
@@ -49,6 +50,15 @@ export interface SearchResultError {
   };
 }
 
+type QueryFieldErrorType = 'authorization' | 'network' | 'unknown';
+
+type QueryFieldErrorDetail = {
+  realm: string;
+  type: QueryFieldErrorType;
+  message: string;
+  status?: number;
+};
+
 const THIS_INTERPOLATION_PREFIX = '$this.';
 const THIS_REALM_TOKEN = '$thisRealm';
 const EMPTY_PREDICATE_KEYS = new Set([
@@ -63,6 +73,7 @@ export class RealmIndexQueryEngine {
   #realm: Realm;
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
+  #log = logger('realm:index-query-engine');
 
   constructor({
     realm,
@@ -263,8 +274,9 @@ export class RealmIndexQueryEngine {
         continue;
       }
 
-      let results = await this.executeQueryForField({
+      let { results, errors } = await this.executeQueryForField({
         fieldDefinition,
+        fieldName,
         queryDefinition,
         resource,
         realmURL,
@@ -275,23 +287,29 @@ export class RealmIndexQueryEngine {
         fieldName,
         resource,
         results,
+        errors,
       });
     }
   }
 
   private async executeQueryForField({
     fieldDefinition,
+    fieldName,
     queryDefinition,
     resource,
     realmURL,
     opts,
   }: {
     fieldDefinition: FieldDefinition;
+    fieldName: string;
     queryDefinition: Query;
     resource: LooseCardResource;
     realmURL: URL;
     opts?: Options;
-  }): Promise<CardResource<Saved>[]> {
+  }): Promise<{
+    results: CardResource<Saved>[];
+    errors: QueryFieldErrorDetail[];
+  }> {
     let normalized = this.normalizeQueryDefinition(
       fieldDefinition,
       queryDefinition,
@@ -299,39 +317,71 @@ export class RealmIndexQueryEngine {
       realmURL,
     );
     if (!normalized) {
-      return [];
+      return { results: [], errors: [] };
     }
 
     let { query, realms } = normalized;
     let aggregated: CardResource<Saved>[] = [];
     let seen = new Set<string>();
+    let errors: QueryFieldErrorDetail[] = [];
 
     for (let realmHref of realms) {
       let realmResults: CardResource<Saved>[] = [];
       if (realmHref === this.realmURL.href) {
-        let collection = await this.#indexQueryEngine.search(
-          this.realmURL,
-          query,
-          opts,
-        );
-        realmResults = Array.isArray(collection.cards) ? collection.cards : [];
+        try {
+          let collection = await this.#indexQueryEngine.search(
+            this.realmURL,
+            query,
+            opts,
+          );
+          realmResults = Array.isArray(collection.cards)
+            ? collection.cards
+            : [];
+        } catch (err: unknown) {
+          let message =
+            err instanceof Error ? err.message : String(err ?? 'unknown error');
+          errors.push({
+            realm: realmHref,
+            type: 'unknown',
+            message,
+          });
+          this.#log.debug(
+            `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed to execute local search: ${message}`,
+          );
+          continue;
+        }
       } else {
-        let remoteResults = await this.fetchRemoteQueryResults(
-          realmHref,
-          query,
-        );
-        realmResults = Array.isArray(remoteResults) ? remoteResults : [];
+        let remoteResult = await this.fetchRemoteQueryResults(realmHref, query);
+        if (remoteResult.error) {
+          errors.push(remoteResult.error);
+          this.#log.debug(
+            `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed querying realm ${realmHref}: ${remoteResult.error.message}`,
+          );
+        }
+        realmResults = remoteResult.cards;
       }
 
       for (let card of realmResults) {
-        if (!card.id || seen.has(card.id)) {
+        if (!card?.id || seen.has(card.id)) {
           continue;
         }
         seen.add(card.id);
         aggregated.push(card);
       }
     }
-    return aggregated;
+
+    if (
+      aggregated.length === 0 &&
+      errors.length > 0 &&
+      errors.length === realms.length &&
+      errors.every((error) => error.type === 'authorization')
+    ) {
+      this.#log.warn(
+        `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} returned no results because all realm queries were unauthorized`,
+      );
+    }
+
+    return { results: aggregated, errors };
   }
 
   private normalizeQueryDefinition(
@@ -473,11 +523,9 @@ export class RealmIndexQueryEngine {
     );
 
     let filter = queryAny.filter as Record<string, any> | undefined;
-    if (!filter) {
-      filter = {};
-      queryAny.filter = filter;
-    }
-    if (!filter.on) {
+    if (!filter || Object.keys(filter).length === 0) {
+      queryAny.filter = { type: targetRef };
+    } else if (!filter.on) {
       filter.on = targetRef;
     }
 
@@ -493,12 +541,16 @@ export class RealmIndexQueryEngine {
     if (fieldDefinition.type === 'linksTo') {
       let page = queryAny.page ?? {};
       page.size = 1;
-      if (page.number == null) {
-        page.number = 0;
-      }
+      page.number = 0;
       queryAny.page = page;
     } else if (queryAny.page) {
-      queryAny.page.number = queryAny.page.number ?? 0;
+      let page = queryAny.page;
+      if (page.size != null || page.number != null) {
+        page.number = page.number ?? 0;
+        queryAny.page = page;
+      } else {
+        delete queryAny.page;
+      }
     }
 
     return { query: workingQuery, realms: resolvedRealms };
@@ -550,11 +602,13 @@ export class RealmIndexQueryEngine {
     fieldName,
     resource,
     results,
+    errors,
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
     resource: LooseCardResource;
     results: CardResource<Saved>[];
+    errors: QueryFieldErrorDetail[];
   }): void {
     resource.relationships = resource.relationships ?? {};
     for (let key of Object.keys(resource.relationships)) {
@@ -563,26 +617,43 @@ export class RealmIndexQueryEngine {
       }
     }
 
+    let errorMeta =
+      errors.length > 0
+        ? {
+            errors: errors.map((error) => ({
+              realm: error.realm,
+              type: error.type,
+              message: error.message,
+              ...(error.status != null ? { status: error.status } : {}),
+            })),
+          }
+        : undefined;
+
     if (fieldDefinition.type === 'linksTo') {
       let first = results[0];
       if (!first || !first.id) {
         resource.relationships[fieldName] = {
           links: { self: null },
+          ...(errorMeta ? { meta: errorMeta } : {}),
         };
         return;
       }
       resource.relationships[fieldName] = {
         links: { self: first.id },
         data: { type: 'card', id: first.id },
+        ...(errorMeta ? { meta: errorMeta } : {}),
       };
       return;
     }
 
-    if (results.length === 0) {
+    if (results.length === 0 || errorMeta) {
       resource.relationships[fieldName] = {
         links: { self: null },
+        ...(errorMeta ? { meta: errorMeta } : {}),
       };
-      return;
+      if (results.length === 0) {
+        return;
+      }
     }
 
     results.forEach((card, index) => {
@@ -599,7 +670,7 @@ export class RealmIndexQueryEngine {
   private async fetchRemoteQueryResults(
     realmHref: string,
     query: Query,
-  ): Promise<CardResource<Saved>[]> {
+  ): Promise<{ cards: CardResource<Saved>[]; error?: QueryFieldErrorDetail }> {
     try {
       let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
       let searchURL = new URL('./_search', baseHref);
@@ -608,15 +679,46 @@ export class RealmIndexQueryEngine {
         headers: { Accept: SupportedMimeType.CardJson },
       });
       if (!response.ok) {
-        return [];
+        let type: QueryFieldErrorType =
+          response.status === 401 || response.status === 403
+            ? 'authorization'
+            : 'network';
+        let statusMessage = `${response.status}${
+          response.statusText ? ` ${response.statusText}` : ''
+        }`;
+        return {
+          cards: [],
+          error: {
+            realm: realmHref,
+            type,
+            status: response.status,
+            message: `HTTP ${statusMessage}`,
+          },
+        };
       }
       let json = await response.json();
       if (!isCardCollectionDocument(json)) {
-        return [];
+        return {
+          cards: [],
+          error: {
+            realm: realmHref,
+            type: 'unknown',
+            message: 'remote realm returned unexpected payload',
+          },
+        };
       }
-      return json.data;
-    } catch (_err) {
-      return [];
+      return { cards: json.data };
+    } catch (err: unknown) {
+      let message =
+        err instanceof Error ? err.message : String(err ?? 'unknown error');
+      return {
+        cards: [],
+        error: {
+          realm: realmHref,
+          type: 'network',
+          message,
+        },
+      };
     }
   }
 
