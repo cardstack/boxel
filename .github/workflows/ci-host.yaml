@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
         with:
           path: preindexed-db
-          key: host-preindexed-db-${{ hashFiles('packages/base/**', 'packages/catalog-realm/**', 'packages/realm-server/**', 'packages/host/tests/cards/**', 'packages/skills-realm/contents/**') }}
+          key: host-preindexed-db-v2-${{ hashFiles('packages/base/**', 'packages/catalog-realm/**', 'packages/realm-server/**', 'packages/host/tests/cards/**', 'packages/skills-realm/contents/**') }}
       - name: Build boxel-icons
         if: steps.preindex-cache.outputs.cache-hit != 'true'
         run: pnpm build

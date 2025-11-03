@@ -11,12 +11,13 @@ rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 for DB in boxel boxel_base boxel_test; do
-  if docker exec boxel-pg psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='${DB}'" | grep -q 1; then
-    echo "Dumping $DB"
-    docker exec boxel-pg pg_dump -Fc -U postgres "$DB" > "$OUTPUT_DIR/${DB}.dump"
+  echo "Dumping $DB"
+  if docker exec boxel-pg pg_dump -Fc -U postgres "$DB" > "$OUTPUT_DIR/${DB}.dump"; then
+    echo "  ✓ wrote $OUTPUT_DIR/${DB}.dump"
   else
-    echo "Skipping $DB (database does not exist)"
+    echo "  ⚠️ skipping $DB (pg_dump failed)" >&2
+    rm -f "$OUTPUT_DIR/${DB}.dump"
   fi
 done
 
-ls "$OUTPUT_DIR"
+ls -al "$OUTPUT_DIR"
