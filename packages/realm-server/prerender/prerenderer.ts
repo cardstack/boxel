@@ -148,10 +148,12 @@ export class Prerenderer {
           },
         };
       }
-      return {
-        ...(parsed as unknown as RenderError),
-        evict: capture.status === 'unusable',
-      };
+      if (parsed) {
+        return {
+          ...parsed,
+          evict: capture.status === 'unusable',
+        };
+      }
     }
     return undefined;
   }
