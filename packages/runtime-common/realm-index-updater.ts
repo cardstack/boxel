@@ -14,7 +14,6 @@ import {
   type IncrementalResult,
   type CopyArgs,
   type CopyResult,
-  type Job,
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -89,14 +88,16 @@ export class RealmIndexUpdater {
   // in an onInvalidation callback
   async fullIndex() {
     this.#indexingDeferred = new Deferred<void>();
-    let args: FromScratchArgs | undefined;
-    let job: Job<FromScratchResult> | undefined;
+    let startedAt = performance.now();
     try {
-      args = {
+      let args: FromScratchArgs = {
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
       };
-      job = await this.#queue.publish<FromScratchResult>({
+
+      this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
+
+      let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
         timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
@@ -106,32 +107,19 @@ export class RealmIndexUpdater {
       let { ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;
+      let indexingDurationSeconds = (
+        (performance.now() - startedAt) /
+        1000
+      ).toFixed(2);
       this.#log.info(
-        `Realm ${this.realmURL.href} has completed indexing: ${JSON.stringify(
+        `Realm ${this.realmURL.href} has completed indexing in ${indexingDurationSeconds}s: ${JSON.stringify(
           stats,
           null,
           2,
         )}`,
       );
     } catch (e: any) {
-      let jobDescriptor = job ? `job ${job.id}` : 'no job id recorded';
-      let { summary, details } = describeIndexingError(e);
-      this.#log.error(
-        `Realm ${this.realmURL.href} from-scratch indexing failed (${jobDescriptor}): ${summary}`,
-      );
-      if (args) {
-        let serializedArgs = safeJSONStringify(args);
-        if (serializedArgs) {
-          this.#log.error(
-            `Realm ${this.realmURL.href} from-scratch indexing job payload:\n${serializedArgs}`,
-          );
-        }
-      }
-      if (details) {
-        this.#log.error(
-          `Realm ${this.realmURL.href} from-scratch indexing error payload:\n${details}`,
-        );
-      }
+      this.#log.error(`Error running from-scratch-index: ${e.message}`);
     } finally {
       this.#indexingDeferred.fulfill();
     }
@@ -217,42 +205,6 @@ export class RealmIndexUpdater {
     }
     return isIgnored(this.realmURL, this.ignoreMap, url);
   }
-}
-
-function safeJSONStringify(value: unknown): string | undefined {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return undefined;
-  }
-}
-
-function describeIndexingError(error: unknown): {
-  summary: string;
-  details?: string;
-} {
-  if (error instanceof Error) {
-    return {
-      summary: error.stack ?? `${error.name}: ${error.message}`,
-    };
-  }
-  if (error && typeof error === 'object') {
-    let message =
-      typeof (error as { message?: unknown }).message === 'string'
-        ? (error as { message: string }).message
-        : undefined;
-    let serialized = safeJSONStringify(error);
-    return {
-      summary: message ?? serialized ?? Object.prototype.toString.call(error),
-      details:
-        serialized && serialized !== message
-          ? serialized
-          : undefined,
-    };
-  }
-  return {
-    summary: String(error),
-  };
 }
 
 export function isIgnored(

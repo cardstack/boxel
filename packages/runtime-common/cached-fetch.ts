@@ -13,6 +13,20 @@ export type MaybeCachedResponse = Response & {
   cacheResponse?: (body: string) => void;
 };
 
+function getAcceptHeader(
+  urlOrRequest: string | URL | Request,
+  init?: RequestInit,
+): string {
+  if (urlOrRequest instanceof Request) {
+    return urlOrRequest.headers.get('Accept') ?? '*/*';
+  }
+  if (init?.headers) {
+    let headers = new Headers(init.headers as HeadersInit);
+    return headers.get('Accept') ?? '*/*';
+  }
+  return '*/*';
+}
+
 export async function cachedFetch(
   fetchImplementation: typeof globalThis.fetch,
   urlOrRequest: string | URL | Request,
@@ -30,7 +44,9 @@ export async function cachedFetch(
       : urlOrRequest instanceof URL
         ? urlOrRequest.href
         : urlOrRequest.url;
-  let cached = cache.get(key);
+  let accept = getAcceptHeader(urlOrRequest, init).trim().toLowerCase();
+  let cacheKey = `${key}::accept:${accept}`;
+  let cached = cache.get(cacheKey);
   if (cached?.etag) {
     if (urlOrRequest instanceof Request) {
       urlOrRequest.headers.set('If-None-Match', cached.etag);
@@ -49,7 +65,7 @@ export async function cachedFetch(
   if (response.status === 304) {
     if (!cached) {
       throw new Error(
-        `Received HTTP 304 "not modified" when we don't have cache for ${key}`,
+        `Received HTTP 304 "not modified" when we don't have cache for ${key} (Accept: ${accept})`,
       );
     }
     return new Response(cached.body);
@@ -59,7 +75,7 @@ export async function cachedFetch(
     if (maybeETag && maybeRealmURL) {
       let etag = maybeETag;
       response.cacheResponse = (body: string) => {
-        cache.set(key, { etag, body });
+        cache.set(cacheKey, { etag, body });
       };
     }
   }
