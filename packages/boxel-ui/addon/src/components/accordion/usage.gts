@@ -4,7 +4,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import Accordion from './index.gts';
 
@@ -14,7 +13,7 @@ export default class AccordionUsage extends Component {
       <:example>
         <Accordion as |A|>
           <A.Item
-            class='item'
+            @id='schema'
             @onClick={{fn this.selectItem 'schema'}}
             @isOpen={{eq this.selectedItem 'schema'}}
           >
@@ -22,7 +21,7 @@ export default class AccordionUsage extends Component {
             <:content><p>Content</p></:content>
           </A.Item>
           <A.Item
-            class='item'
+            @id='playground'
             @onClick={{fn this.selectItem 'playground'}}
             @isOpen={{eq this.selectedItem 'playground'}}
           >
@@ -30,12 +29,20 @@ export default class AccordionUsage extends Component {
             <:content><p>Content</p></:content>
           </A.Item>
           <A.Item
-            class='item'
-            style={{cssVars accordion-item-closed-height='65px'}}
+            @id='item'
+            @onClick={{fn this.selectItem 'item'}}
+            @isOpen={{eq this.selectedItem 'item'}}
+            @disabled={{true}}
+          >
+            <:title>Disabled item</:title>
+            <:content><p>Content</p></:content>
+          </A.Item>
+          <A.Item
+            @id='other'
             @onClick={{fn this.selectItem 'other'}}
             @isOpen={{eq this.selectedItem 'other'}}
           >
-            <:title>LLorem ipsum dolor sit amet, consectetur adipiscing elit sed
+            <:title>Lorem ipsum dolor sit amet, consectetur adipiscing elit sed
               do eiusmod tempor incididunt ut labore</:title>
             <:content>
               <p>
@@ -61,14 +68,24 @@ export default class AccordionUsage extends Component {
       </:example>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='accordion-item-closed-height'
-          @type='height'
-          @description='Sets height for collapsed accordion item.'
+          @name='--accordion-border'
+          @type='border'
+          @description='Separator between items.'
         />
         <Css.Basic
-          @name='accordion-item-open-height'
-          @type='height'
-          @description='Sets height for expanded accordion item.'
+          @name='--accordion-item-title-min-height'
+          @type='min-height'
+          @description='Sets min-height for accordion item title.'
+        />
+        <Css.Basic
+          @name='--accordion-item-content-min-height'
+          @type='min-height'
+          @description='Sets min-height for accordion item content.'
+        />
+        <Css.Basic
+          @name='--accordion-item-trigger-padding'
+          @type='padding'
+          @description='Trigger padding'
         />
       </:cssVars>
     </FreestyleUsage>

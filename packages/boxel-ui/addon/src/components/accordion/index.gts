@@ -17,20 +17,17 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
     {{yield (hash Item=(component AccordionItem className='item'))}}
   </div>
   <style scoped>
-    .accordion {
-      --accordion-background-color: var(--boxel-light);
-      --accordion-border: var(--boxel-border);
-      --accordion-border-radius: var(--boxel-border-radius-xl);
+    @layer boxelComponentL1 {
+      .accordion {
+        --accordion-border: 1px solid var(--border, var(--boxel-border-color));
 
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      background-color: var(--accordion-background-color);
-      border: var(--accordion-border);
-      border-radius: var(--accordion-border-radius);
-    }
-    .accordion > :deep(.item + .item) {
-      border-top: var(--accordion-border);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      .accordion > :deep(.item + .item) {
+        border-top: var(--accordion-border);
+      }
     }
   </style>
 </template>;
