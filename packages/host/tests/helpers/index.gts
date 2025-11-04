@@ -437,6 +437,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         },
         modelId: 'openai/gpt-5',
         toolsSupported: true,
+        reasoningEffort: 'minimal',
       },
       relationships: {
         'cardInfo.theme': {

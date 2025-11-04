@@ -36,12 +36,12 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/6961c8be-50e1-476d-bd34-100fc1813d73"
+          "self": "../Spec/62e067bc-4f88-43a7-9e30-6d8f6ffde66f"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/61c8be50-e137-4dbd-b410-0fc1813d7328"
+          "self": "../Spec/e067bc4f-8873-47de-b06d-8f6ffde66f6f"
         }
       },
       "specs.2": {
@@ -61,7 +61,7 @@
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/0fc1813d-7328-43f4-8d83-4dc743b86f4a"
+          "self": "../Spec/6f6f99ad-b439-46d4-8985-45c3cec00ffd"
         }
       },
       "specs.6": {
@@ -76,7 +76,7 @@
       },
       "examples.0": {
         "links": {
-          "self": "../TableApp/1d3f55f1-aeb0-4bb6-8427-78ddb189fa2a"
+          "self": "../app/DataExplorer/1d3f55f1-aeb0-4bb6-8427-78ddb189fa2a"
         }
       },
       "categories.0": {
