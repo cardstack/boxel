@@ -53,7 +53,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
   </div>
   <style scoped>
     @layer {
-      .fitted-template {
+      :global(.fitted-template) {
         width: 100%;
         height: 100%;
         display: flex;
@@ -63,14 +63,14 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         color: var(--card-foreground);
         overflow: hidden;
       }
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         flex-shrink: 0;
         display: flex;
         justify-content: center;
         align-items: center;
         overflow: hidden;
       }
-      .card-thumbnail {
+      :global(.card-thumbnail) {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -82,7 +82,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         width: 100%;
         height: 100%;
       }
-      .card-type-icon {
+      :global(.card-type-icon) {
         aspect-ratio: 1 / 1;
         min-width: 32px;
         min-height: 32px;
@@ -91,11 +91,11 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         width: 100%;
         height: auto;
       }
-      .info-section {
+      :global(.info-section) {
         width: 100%;
         overflow: hidden;
       }
-      .card-title {
+      :global(.card-title) {
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
@@ -107,7 +107,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         line-height: 1.25;
         text-overflow: ellipsis;
       }
-      .card-display-name {
+      :global(.card-display-name) {
         margin-top: var(--boxel-sp-4xs);
         margin-bottom: 0;
         color: var(--muted-foreground, var(--boxel-450));
@@ -119,7 +119,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         white-space: nowrap;
         overflow: hidden;
       }
-      .card-description {
+      :global(.card-description) {
         display: -webkit-box;
         -webkit-box-orient: vertical;
         overflow: hidden;
@@ -134,76 +134,76 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
 
     /* Aspect Ratio <= 1.0 (Vertical) */
     @container fitted-card (aspect-ratio <= 1.0) {
-      .fitted-template {
+      :global(.fitted-template) {
         flex-direction: column;
       }
-      .card-description {
+      :global(.card-description) {
         display: none;
       }
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         width: 100%;
         height: 50cqmin;
       }
-      .info-section {
+      :global(.info-section) {
         text-align: center;
       }
     }
 
     @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         display: none;
       }
     }
     /* Vertical Tiles*/
     /* Small Tile (150 x 170) */
     @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         min-height: 70px;
       }
-      .card-title {
+      :global(.card-title) {
         -webkit-line-clamp: 3;
       }
     }
     /* CardsGrid Tile (170 x 250) */
     @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         height: auto;
         aspect-ratio: 1 / 1;
       }
-      .card-title {
+      :global(.card-title) {
         -webkit-line-clamp: 2;
       }
     }
     /* Tall Tile (150 x 275) */
     @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         min-height: 85px;
       }
-      .card-title {
+      :global(.card-title) {
         font-size: var(--boxel-font-size);
         -webkit-line-clamp: 4;
       }
     }
     /* Large Tile (250 x 275) */
     @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         min-height: 150px;
       }
-      .card-title {
+      :global(.card-title) {
         font-size: var(--boxel-font-size-sm);
         -webkit-line-clamp: 3;
       }
     }
     /* Vertical Cards */
     @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
-      .fitted-template {
+      :global(.fitted-template) {
         padding: var(--boxel-sp);
         gap: var(--boxel-sp);
       }
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         min-height: 236px;
       }
-      .card-title {
+      :global(.card-title) {
         font-size: var(--boxel-font-size-med);
         -webkit-line-clamp: 4;
       }
@@ -212,36 +212,36 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
 
     /* 1.0 < Aspect Ratio (Horizontal) */
     @container fitted-card (1.0 < aspect-ratio) {
-      .card-description {
+      :global(.card-description) {
         display: none;
       }
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         aspect-ratio: 1;
       }
     }
     @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
-      .info-section {
+      :global(.info-section) {
         align-self: center;
       }
     }
     /* Badges */
     @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
-      .fitted-template {
+      :global(.fitted-template) {
         padding: var(--boxel-sp-xxxs);
       }
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         display: none;
       }
     }
     /* Small Badge (150 x 40) */
     @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
-      .card-title {
+      :global(.card-title) {
         -webkit-line-clamp: 1;
         font-weight: var(--boxel-font-weight-semibold);
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-lineheight-xs);
       }
-      .card-display-name {
+      :global(.card-display-name) {
         margin-top: 0;
       }
     }
@@ -249,7 +249,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
 
     /* Large Badge (150 x 105) */
     @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
-      .card-title {
+      :global(.card-title) {
         -webkit-line-clamp: 3;
       }
     }
@@ -257,10 +257,10 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
     /* Strips */
     /* Single Strip (250 x 40) */
     @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
-      .fitted-template {
+      :global(.fitted-template) {
         padding: var(--boxel-sp-xxxs);
       }
-      .card-display-name {
+      :global(.card-display-name) {
         display: none;
       }
     }
@@ -272,10 +272,10 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
     /* Horizontal Tiles */
     /* Regular Tile (250 x 170) */
     @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         height: 40%;
       }
-      .card-title {
+      :global(.card-title) {
         -webkit-line-clamp: 4;
         font-size: var(--boxel-font-size);
       }
@@ -284,20 +284,20 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
     /* Horizontal Cards */
     /* Compact Card (400 x 170) */
     @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         height: 100%;
       }
     }
     /* Full Card (400 x 275) */
     @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
-      .fitted-template {
+      :global(.fitted-template) {
         padding: var(--boxel-sp);
         gap: var(--boxel-sp);
       }
-      .thumbnail-section {
+      :global(.thumbnail-section) {
         max-width: 44%;
       }
-      .card-title {
+      :global(.card-title) {
         font-size: var(--boxel-font-size-med);
       }
     }
