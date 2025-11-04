@@ -444,6 +444,7 @@ jobs:
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",
             "publish-unpublish-realm-test.ts",
+            "realm-publishability-test.ts",
             "boxel-domain-availability-test.ts",
             "claim-boxel-domain-test.ts",
             "delete-boxel-claimed-domain-test.ts",

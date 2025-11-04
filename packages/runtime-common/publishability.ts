@@ -1,0 +1,225 @@
+import type { RealmVisibility } from './realm';
+
+export interface ResourceIndexEntry {
+  canonicalUrl: string;
+  realmUrl: string;
+  dependencies: string[];
+}
+
+export interface ExternalDependencySummary {
+  dependency: string;
+  via: string[];
+  realmURL: string;
+  realmVisibility: RealmVisibility;
+}
+
+export interface PublishabilityViolation {
+  resource: string;
+  externalDependencies: ExternalDependencySummary[];
+}
+
+export interface PublishabilityResult {
+  publishable: boolean;
+  violations: PublishabilityViolation[];
+}
+
+export interface PublishabilityOptions {
+  sourceRealmURL: string;
+  listRealmResources: () => Promise<string[]>;
+  getResourceEntries: (
+    resourceUrl: string,
+  ) => Promise<ResourceIndexEntry[] | undefined>;
+  getRealmVisibility: (realmUrl: string) => Promise<RealmVisibility>;
+  isResourceInherentlyPublic?: (resourceUrl: string) => boolean;
+}
+
+type DependencyChain = string[];
+
+/**
+ * Determine whether a realm can be published by inspecting its dependencies.
+ * Returns the list of problematic resources and the external dependencies that
+ * prevent publication.
+ */
+export async function analyzeRealmPublishability({
+  sourceRealmURL,
+  listRealmResources,
+  getResourceEntries,
+  getRealmVisibility,
+  isResourceInherentlyPublic,
+}: PublishabilityOptions): Promise<PublishabilityResult> {
+  let violationsByResource = new Map<
+    string,
+    Map<string, ExternalDependencySummary>
+  >();
+  let memoizedChains = new Map<string, DependencyChain[]>();
+  let normalizedRealmURL = normalizeRealmURL(sourceRealmURL);
+  let realmResources = new Set<string>(
+    await listRealmResources().then((resources) =>
+      resources.map((resource) => normalizeResourceUrl(resource)),
+    ),
+  );
+
+  async function collectChains(
+    resourceUrl: string,
+    ancestry: string[] = [],
+  ): Promise<DependencyChain[]> {
+    if (memoizedChains.has(resourceUrl)) {
+      return memoizedChains.get(resourceUrl)!;
+    }
+
+    // Prevent circular traversal
+    if (ancestry.includes(resourceUrl)) {
+      return [];
+    }
+    let updatedAncestry = [...ancestry, resourceUrl];
+
+    let resourceEntries = await getResourceEntries(resourceUrl);
+    if (!resourceEntries || resourceEntries.length === 0) {
+      memoizedChains.set(resourceUrl, []);
+      return [];
+    }
+
+    let canonicalResourceUrl = resourceEntries[0].canonicalUrl;
+    if (resourceUrl !== canonicalResourceUrl) {
+      let chains = await collectChains(canonicalResourceUrl, ancestry);
+      memoizedChains.set(resourceUrl, chains);
+      return chains;
+    }
+
+    let chains: DependencyChain[] = [];
+    for (let { dependencies } of resourceEntries) {
+      for (let dependency of dependencies) {
+        if (typeof dependency !== 'string' || dependency.trim() === '') {
+          continue;
+        }
+        if (updatedAncestry.includes(dependency)) {
+          continue;
+        }
+        // Some dependency entries are synthetic (e.g. base realm or scoped CSS)
+        if (isResourceInherentlyPublic?.(dependency)) {
+          continue;
+        }
+
+        let dependencyEntries = await getResourceEntries(dependency);
+        if (!dependencyEntries || dependencyEntries.length === 0) {
+          continue;
+        }
+
+        let [dependencyEntry] = dependencyEntries;
+        let canonicalDependencyUrl = dependencyEntry.canonicalUrl;
+        let dependencyRealmURL = normalizeRealmURL(dependencyEntry.realmUrl);
+        if (dependency !== canonicalDependencyUrl) {
+          dependency = canonicalDependencyUrl;
+        }
+
+        if (dependencyRealmURL === normalizedRealmURL) {
+          if (!realmResources.has(dependency)) {
+            continue;
+          }
+          let subChains = await collectChains(dependency, updatedAncestry);
+          for (let subChain of subChains) {
+            chains.push([resourceUrl, ...subChain]);
+          }
+          continue;
+        }
+
+        let visibility = await getRealmVisibility(dependencyRealmURL);
+        if (visibility !== 'public') {
+          chains.push([resourceUrl, dependency]);
+          continue;
+        }
+
+        let subChains = await collectChains(dependency, updatedAncestry);
+        for (let subChain of subChains) {
+          chains.push([resourceUrl, ...subChain]);
+        }
+      }
+    }
+
+    let deduped = dedupeChains(chains);
+    memoizedChains.set(resourceUrl, deduped);
+    return deduped;
+  }
+
+  for (let resource of realmResources) {
+    let chains = await collectChains(resource);
+    if (chains.length === 0) {
+      continue;
+    }
+
+    for (let chain of chains) {
+      if (chain.length < 2) {
+        continue;
+      }
+
+      let [origin, ...rest] = chain;
+      let dependency = rest[rest.length - 1];
+
+      let dependencyEntries = await getResourceEntries(dependency);
+      if (!dependencyEntries || dependencyEntries.length === 0) {
+        continue;
+      }
+
+      let dependencyRealmURL = normalizeRealmURL(dependencyEntries[0].realmUrl);
+      let visibility = await getRealmVisibility(dependencyRealmURL);
+
+      if (visibility === 'public') {
+        continue;
+      }
+
+      let via =
+        rest.length > 1 ? rest.slice(0, rest.length - 1) : ([] as string[]);
+
+      let perResource =
+        violationsByResource.get(origin) ??
+        new Map<string, ExternalDependencySummary>();
+
+      let key = `${dependency}|${via.join('>')}`;
+      if (!perResource.has(key)) {
+        perResource.set(key, {
+          dependency,
+          via,
+          realmURL: dependencyRealmURL,
+          realmVisibility: visibility,
+        });
+      }
+
+      violationsByResource.set(origin, perResource);
+    }
+  }
+
+  let violations: PublishabilityViolation[] = [];
+  for (let [resource, summaries] of violationsByResource.entries()) {
+    violations.push({
+      resource,
+      externalDependencies: [...summaries.values()],
+    });
+  }
+
+  return {
+    publishable: violations.length === 0,
+    violations,
+  };
+}
+
+function dedupeChains(chains: DependencyChain[]) {
+  let seen = new Set<string>();
+  let result: DependencyChain[] = [];
+  for (let chain of chains) {
+    let key = chain.join('>');
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(chain);
+  }
+  return result;
+}
+
+function normalizeRealmURL(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`;
+}
+
+function normalizeResourceUrl(url: string): string {
+  return url;
+}

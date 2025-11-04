@@ -27,6 +27,8 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
+  baseRealm,
+  maybeURL,
   insertPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
@@ -116,6 +118,10 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries';
+import {
+  analyzeRealmPublishability,
+  type ResourceIndexEntry,
+} from './publishability';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -439,6 +445,11 @@ export class Realm {
         '/_types',
         SupportedMimeType.CardTypeSummary,
         this.fetchCardTypeSummary.bind(this),
+      )
+      .get(
+        '/_publishable',
+        SupportedMimeType.JSONAPI,
+        this.getPublishable.bind(this),
       )
       .get(
         '/_dependencies',
@@ -2762,6 +2773,113 @@ export class Realm {
     }
   }
 
+  private async getPublishable(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let normalizedRealmURL = ensureTrailingSlash(this.url);
+    let resourceCache = new Map<string, ResourceIndexEntry[] | undefined>();
+    let visibilityCache = new Map<string, RealmVisibility>();
+
+    let result = await analyzeRealmPublishability({
+      sourceRealmURL: normalizedRealmURL,
+      listRealmResources: async () => {
+        let rows = (await query(this.#dbAdapter, [
+          `SELECT url FROM boxel_index WHERE realm_url =`,
+          param(normalizedRealmURL),
+          `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+        ])) as { url: string }[];
+
+        return rows.map((row) => row.url);
+      },
+      getResourceEntries: async (resourceUrl) => {
+        if (resourceCache.has(resourceUrl)) {
+          return resourceCache.get(resourceUrl);
+        }
+
+        let rows = (await query(this.#dbAdapter, [
+          `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
+          param(resourceUrl),
+          `OR file_alias =`,
+          param(resourceUrl),
+          `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+        ])) as { url: string; realm_url: string; deps: unknown }[];
+
+        if (rows.length === 0) {
+          resourceCache.set(resourceUrl, undefined);
+          return undefined;
+        }
+
+        let entries = rows.map((row) => ({
+          canonicalUrl: row.url,
+          realmUrl: ensureTrailingSlash(row.realm_url),
+          dependencies: parseDeps(row.deps),
+        }));
+        resourceCache.set(resourceUrl, entries);
+        if (!resourceCache.has(entries[0].canonicalUrl)) {
+          resourceCache.set(entries[0].canonicalUrl, entries);
+        }
+
+        return entries;
+      },
+      getRealmVisibility: async (realmUrl) => {
+        let normalized = ensureTrailingSlash(realmUrl);
+        if (visibilityCache.has(normalized)) {
+          return visibilityCache.get(normalized)!;
+        }
+
+        let permissions = await fetchRealmPermissions(
+          this.#dbAdapter,
+          new URL(normalized),
+        );
+        let usernames = Object.keys(permissions).filter(
+          (username) => !username.startsWith('@realm/'),
+        );
+        let visibility: RealmVisibility;
+        if (usernames.includes('*')) {
+          visibility = 'public';
+        } else if (usernames.includes('users') || usernames.length > 1) {
+          visibility = 'shared';
+        } else {
+          visibility = 'private';
+        }
+
+        visibilityCache.set(normalized, visibility);
+        return visibility;
+      },
+      isResourceInherentlyPublic: (resourceUrl) => {
+        let parsed = maybeURL(resourceUrl);
+        if (!parsed) {
+          return resourceUrl.startsWith('data:');
+        }
+        if (parsed.protocol === 'data:') {
+          return true;
+        }
+        return baseRealm.inRealm(parsed);
+      },
+    });
+
+    let doc = {
+      data: {
+        type: 'realm-publishability',
+        id: normalizedRealmURL,
+        attributes: {
+          publishable: result.publishable,
+          realmURL: normalizedRealmURL,
+          violations: result.violations,
+        },
+      },
+    };
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
   private async realmMtimes(
     _request: Request,
     requestContext: RequestContext,
@@ -3244,6 +3362,37 @@ export class Realm {
 }
 
 export type Kind = 'file' | 'directory';
+
+function parseDeps(value: unknown): string[] {
+  if (value == null) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === 'string');
+  }
+
+  if (typeof value === 'string') {
+    try {
+      let parsed = JSON.parse(value);
+      return Array.isArray(parsed)
+        ? parsed.filter((entry): entry is string => typeof entry === 'string')
+        : [];
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  if (value instanceof Buffer) {
+    return parseDeps(value.toString());
+  }
+
+  if (value instanceof Uint8Array) {
+    return parseDeps(Buffer.from(value).toString());
+  }
+
+  return [];
+}
 
 function lastModifiedHeader(
   card: LooseSingleCardDocument,

@@ -32,6 +32,7 @@ import './types-endpoint-test';
 import './virtual-network-test';
 import './request-forward-test';
 import './publish-unpublish-realm-test';
+import './realm-publishability-test';
 import './boxel-domain-availability-test';
 import './get-boxel-claimed-domain-test';
 import './claim-boxel-domain-test';
