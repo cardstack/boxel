@@ -117,7 +117,7 @@ export default class ModuleRoute extends Route<Model> {
       this.typesCache = new WeakMap();
       this.loaderService.resetLoader({
         clearFetchCache: true,
-        reason: 'render-route clearCache',
+        reason: 'module-route clearCache',
       });
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
