@@ -404,7 +404,7 @@ function modelWithError({
     id,
     nonce,
     status: 'error' as const,
-    deps: deps ?? [],
+    deps: deps,
     isShimmed: false,
     lastModified: 0,
     createdAt: 0,
