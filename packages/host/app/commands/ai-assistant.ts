@@ -9,12 +9,11 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import AddSkillsToRoomCommand from './add-skills-to-room';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
-
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
+import UpdateRoomSkillsCommand from './update-room-skills';
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -131,32 +130,38 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     input: BaseCommandModule.UseAiAssistantInput,
     roomId: string,
   ): Promise<void> {
-    let skillCards = new Set<Skill>(input.skillCards ?? []);
-    let skillCardIds = input.skillCardIds ?? [];
-    let loadSkillCardPromises = skillCardIds.map(async (skillCardId) => {
-      return this.store.get<Skill>(skillCardId);
-    });
+    let skillCardIdsToActivate = new Set<string>();
 
-    let loadedSkillCardOrErrors = await Promise.all(loadSkillCardPromises);
-    for (const loadedSkillCardOrError of loadedSkillCardOrErrors) {
-      if (isCardInstance(loadedSkillCardOrError)) {
-        skillCards.add(loadedSkillCardOrError);
-      } else {
-        console.warn(
-          'Failed to load skill card',
-          loadedSkillCardOrError.id,
-          loadedSkillCardOrError.message,
-        );
+    for (let skillCard of input.skillCards ?? []) {
+      if (skillCard?.id) {
+        skillCardIdsToActivate.add(skillCard.id);
       }
     }
 
-    if (skillCards.size) {
-      let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+    let skillCardIds = input.skillCardIds ?? [];
+    let loadSkillCardPromises = skillCardIds.map(async (skillCardId) => {
+      let loadedSkillCardOrError = await this.store.get<Skill>(skillCardId);
+      if (isCardInstance(loadedSkillCardOrError) && loadedSkillCardOrError.id) {
+        skillCardIdsToActivate.add(loadedSkillCardOrError.id);
+      } else {
+        console.warn(
+          'Failed to load skill card',
+          skillCardId,
+          loadedSkillCardOrError,
+        );
+      }
+    });
+
+    await Promise.all(loadSkillCardPromises);
+
+    if (skillCardIdsToActivate.size) {
+      let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
         this.commandContext,
       );
-      await addSkillsToRoomCommand.execute({
+      await updateRoomSkillsCommand.execute({
         roomId,
-        skills: [...skillCards],
+        skillCardIdsToActivate: [...skillCardIdsToActivate],
+        skillCardIdsToDeactivate: [],
       });
     }
   }

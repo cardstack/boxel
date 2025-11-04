@@ -188,15 +188,10 @@ export class SetActiveLLMInput extends CardDef {
   @field mode = contains(StringField); // 'act' or 'ask'
 }
 
-export class AddSkillsToRoomInput extends CardDef {
+export class UpdateRoomSkillsInput extends CardDef {
   @field roomId = contains(StringField);
-  @field skills = linksToMany(Skill);
-}
-
-export class UpdateSkillActivationInput extends CardDef {
-  @field roomId = contains(StringField);
-  @field skillCardId = contains(StringField);
-  @field isActive = contains(BooleanField);
+  @field skillCardIdsToActivate = containsMany(StringField);
+  @field skillCardIdsToDeactivate = containsMany(StringField);
 }
 
 export class UseAiAssistantInput extends CardDef {

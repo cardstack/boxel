@@ -45,9 +45,9 @@ import {
   DEFAULT_LLM_ID_TO_NAME,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
-import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
+import UpdateRoomSkillsCommand from '../../commands/update-room-skills';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
+
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { RoomResource } from '@cardstack/host/resources/room';
@@ -64,7 +64,6 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Skill } from 'https://cardstack.com/base/skill';
 
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
@@ -1104,12 +1103,15 @@ export default class Room extends Component<Signature> {
 
   private updateSkillIsActiveTask = task(
     async (isActive: boolean, skillCardId?: string) => {
-      await new UpdateSkillActivationCommand(
+      if (!skillCardId) {
+        return;
+      }
+      await new UpdateRoomSkillsCommand(
         this.commandService.commandContext,
       ).execute({
         roomId: this.args.roomId,
-        skillCardId,
-        isActive,
+        skillCardIdsToActivate: isActive ? [skillCardId] : [],
+        skillCardIdsToDeactivate: isActive ? [] : [skillCardId],
       });
     },
   );
@@ -1139,17 +1141,13 @@ export default class Room extends Component<Signature> {
   }
 
   private attachSkillTask = task(async (cardId: string) => {
-    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+    await new UpdateRoomSkillsCommand(
       this.commandService.commandContext,
-    );
-
-    let skillCard = await this.store.get<Skill>(cardId);
-    if (skillCard && isCardInstance(skillCard)) {
-      await addSkillsToRoomCommand.execute({
-        roomId: this.args.roomId,
-        skills: [skillCard],
-      });
-    }
+    ).execute({
+      roomId: this.args.roomId,
+      skillCardIdsToActivate: [cardId],
+      skillCardIdsToDeactivate: [],
+    });
   });
 
   @action

@@ -5,10 +5,10 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 
 import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-box';
 
@@ -39,7 +39,7 @@ export default class AskAiContainer extends Component<Signature> {
 
     let createRoomCommand = new CreateAiAssistantRoomCommand(commandContext);
     let openRoomCommand = new OpenAiAssistantRoomCommand(commandContext);
-    let addSkillsCommand = new AddSkillsToRoomCommand(commandContext);
+    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(commandContext);
     let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
 
     let [{ roomId }, skills, openCards] = await Promise.all([
@@ -50,8 +50,14 @@ export default class AskAiContainer extends Component<Signature> {
       this.operatorModeStateService.getOpenCards.perform(),
     ]);
 
+    let skillIds = skills.map((skill) => skill.id).filter(Boolean) as string[];
+
     await Promise.all([
-      addSkillsCommand.execute({ roomId, skills }),
+      updateRoomSkillsCommand.execute({
+        roomId,
+        skillCardIdsToActivate: skillIds,
+        skillCardIdsToDeactivate: [],
+      }),
       sendMessageCommand.execute({
         roomId,
         prompt: this.aiPrompt,
