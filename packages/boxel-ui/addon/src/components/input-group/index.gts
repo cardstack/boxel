@@ -251,7 +251,9 @@ export default class InputGroup extends Component<Signature> {
         }
       }
 
-      .boxel-input-group:not(:has(.accessory)):focus-within {
+      .boxel-input-group:not(:has(.accessory)):focus-within:not(
+          .boxel-input-group--invalid
+        ) {
         outline: 1px solid var(--ring, var(--boxel-highlight));
         border-color: var(--ring, var(--boxel-highlight));
       }
