@@ -2,6 +2,7 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import { logger } from '@cardstack/runtime-common';
 import { fetchRequestFromContext, fullRequestURL } from '../middleware';
+import { format } from 'date-fns';
 
 type ServerInfo = {
   url: string;
@@ -9,6 +10,7 @@ type ServerInfo = {
   activeRealms: Set<string>;
   registeredAt: number;
   lastSeenAt: number;
+  lastAssignedAt: number;
 };
 
 type Registry = {
@@ -47,6 +49,21 @@ async function ping(url: string, timeoutMs: number): Promise<boolean> {
   }
 }
 
+function formatTimestampWithTimezone(timestamp: number): string {
+  const date = new Date(timestamp);
+  // Get timezone offset in hours and minutes
+  const offset = -date.getTimezoneOffset();
+  const offsetHours = Math.floor(Math.abs(offset) / 60);
+  const offsetMinutes = Math.abs(offset) % 60;
+  const offsetSign = offset >= 0 ? '+' : '-';
+  const timezone = `UTC${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+
+  // Format: YYYY-MM-DD HH:mm:ss (Timezone)
+  const formattedDate = format(date, 'yyyy-MM-dd HH:mm:ss');
+
+  return `${formattedDate} (${timezone})`;
+}
+
 export function buildPrerenderManagerApp(): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   registry: Registry;
@@ -63,7 +80,7 @@ export function buildPrerenderManagerApp(): {
   const multiplex = Math.max(1, Number(process.env.PRERENDER_MULTIPLEX ?? 1));
   const proxyTimeoutMs = Math.max(
     1000,
-    Number(process.env.PRERENDER_SERVER_TIMEOUT_MS ?? 30000),
+    Number(process.env.PRERENDER_SERVER_TIMEOUT_MS ?? 60000),
   );
   const healthcheckTimeoutMs = Math.max(
     100,
@@ -90,8 +107,46 @@ export function buildPrerenderManagerApp(): {
     ctxt.status = 200;
   });
   router.get('/', async (ctxt) => {
-    ctxt.set('Content-Type', 'application/json');
-    ctxt.body = JSON.stringify({ ready: true });
+    ctxt.set('Content-Type', 'application/vnd.api+json');
+
+    // Build the list of active servers with their realms
+    let servers = [];
+    for (let [serverUrl, serverInfo] of registry.servers) {
+      let realms = [];
+      for (let realm of serverInfo.activeRealms) {
+        realms.push({
+          url: realm,
+          // Use the last access time if available, otherwise fall back to server registration time
+          // (which represents when the realm was first assigned to this server)
+          lastUsed: formatTimestampWithTimezone(
+            registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt,
+          ),
+        });
+      }
+
+      servers.push({
+        type: 'prerender-server',
+        id: serverUrl,
+        attributes: {
+          url: serverUrl,
+          capacity: serverInfo.capacity,
+          registeredAt: formatTimestampWithTimezone(serverInfo.registeredAt),
+          lastSeenAt: formatTimestampWithTimezone(serverInfo.lastSeenAt),
+          realms: realms,
+        },
+      });
+    }
+
+    ctxt.body = JSON.stringify({
+      data: {
+        type: 'prerender-manager-health',
+        id: 'health',
+        attributes: {
+          ready: true,
+        },
+      },
+      included: servers,
+    });
     ctxt.status = 200;
   });
 
@@ -147,6 +202,7 @@ export function buildPrerenderManagerApp(): {
         activeRealms: new Set(),
         registeredAt: now(),
         lastSeenAt: now(),
+        lastAssignedAt: 0,
       });
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
@@ -213,21 +269,50 @@ export function buildPrerenderManagerApp(): {
     ctxt.status = 204;
   });
 
+  function leastRecentlyUsedServerWithCapacity(options?: {
+    exclude?: Iterable<string>;
+  }): string | undefined {
+    let excludeSet = new Set(options?.exclude ? [...options.exclude] : []);
+    let best: { url: string; info: ServerInfo } | undefined;
+    for (let [url, info] of registry.servers) {
+      if (excludeSet.has(url)) {
+        continue;
+      }
+      if (info.activeRealms.size >= info.capacity) {
+        continue;
+      }
+      if (!best) {
+        best = { url, info };
+        continue;
+      }
+      if (info.lastAssignedAt < best.info.lastAssignedAt) {
+        best = { url, info };
+      }
+    }
+    return best?.url;
+  }
+
   // helper: choose server for realm
   function chooseServerForRealm(realm: string): string | null {
     let assigned = registry.realms.get(realm);
     if (assigned && assigned.length > 0) {
       // If we have fewer than multiplex servers assigned, try to add a new one and prefer returning it
       if (assigned.length < multiplex) {
-        for (let [url, info] of registry.servers) {
-          if (
-            !assigned.includes(url) &&
-            info.activeRealms.size < info.capacity
-          ) {
-            assigned.push(url);
-            // prefer the newly added server to spread load
-            return url;
+        let candidate = leastRecentlyUsedServerWithCapacity({
+          exclude: assigned,
+        });
+        if (candidate) {
+          assigned.push(candidate);
+          if (assigned.length > multiplex) {
+            assigned.splice(0, assigned.length - multiplex);
           }
+          registry.realms.set(realm, assigned);
+          let info = registry.servers.get(candidate);
+          if (info) {
+            info.activeRealms.add(realm);
+            info.lastAssignedAt = now();
+          }
+          return candidate;
         }
       }
       // Otherwise rotate among the assigned set
@@ -236,18 +321,27 @@ export function buildPrerenderManagerApp(): {
       if (assigned.length > multiplex) {
         assigned.splice(0, assigned.length - multiplex);
       }
+      registry.realms.set(realm, assigned);
+      let info = registry.servers.get(next);
+      if (info) {
+        info.lastAssignedAt = now();
+      }
       return next;
     }
     // pick server with available capacity
-    for (let [url, info] of registry.servers) {
-      if (info.activeRealms.size < info.capacity) {
-        // assign
+    {
+      let candidate = leastRecentlyUsedServerWithCapacity();
+      if (candidate) {
         let list = registry.realms.get(realm) || [];
-        if (!list.includes(url)) list.push(url);
+        if (!list.includes(candidate)) list.push(candidate);
         if (list.length > multiplex) list = list.slice(-multiplex);
         registry.realms.set(realm, list);
-        info.activeRealms.add(realm);
-        return url;
+        let info = registry.servers.get(candidate);
+        if (info) {
+          info.activeRealms.add(realm);
+          info.lastAssignedAt = now();
+        }
+        return candidate;
       }
     }
     // pressure mode: pick server owning globally LRU realm
@@ -267,6 +361,10 @@ export function buildPrerenderManagerApp(): {
         if (!list.includes(url)) list.push(url);
         if (list.length > multiplex) list = list.slice(-multiplex);
         registry.realms.set(realm, list);
+        let info = registry.servers.get(url);
+        if (info) {
+          info.lastAssignedAt = now();
+        }
         // don't mark active until success
         return url;
       }
@@ -278,6 +376,10 @@ export function buildPrerenderManagerApp(): {
       if (!list.includes(any)) list.push(any);
       if (list.length > multiplex) list = list.slice(-multiplex);
       registry.realms.set(realm, list);
+      let info = registry.servers.get(any);
+      if (info) {
+        info.lastAssignedAt = now();
+      }
       return any;
     }
     return null;
@@ -345,6 +447,7 @@ export function buildPrerenderManagerApp(): {
       }
 
       const targetURL = `${normalizeURL(target)}/prerender`;
+      log.info(`proxying prerender request for ${attrs.url} to ${targetURL}`);
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
       const res = await fetch(targetURL, {

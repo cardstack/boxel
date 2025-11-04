@@ -1,3 +1,7 @@
+import type {
+  // prettier-ignore
+  SetupTestOptions,
+} from 'ember-qunit';
 import {
   // prettier-ignore
   setupApplicationTest as upstreamSetupApplicationTest,
@@ -5,8 +9,6 @@ import {
   setupRenderingTest as upstreamSetupRenderingTest,
   // prettier-ignore
   setupTest as upstreamSetupTest,
-  // prettier-ignore
-  SetupTestOptions,
 } from 'ember-qunit';
 
 // This file exists to provide wrappers around ember-qunit's

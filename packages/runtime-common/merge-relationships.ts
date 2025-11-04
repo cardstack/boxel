@@ -1,4 +1,4 @@
-import { type LooseCardResource, type Relationship } from './index';
+import type { LooseCardResource, Relationship } from './index';
 import mergeWith from 'lodash/mergeWith';
 
 export function mergeRelationships(

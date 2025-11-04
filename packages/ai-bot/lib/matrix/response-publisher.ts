@@ -1,7 +1,7 @@
-import { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import { thinkingMessage } from '../../constants';
-import ResponseState from '../response-state';
+import type ResponseState from '../response-state';
 import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
@@ -10,7 +10,7 @@ import { sendErrorEvent, sendMessageEvent } from '@cardstack/runtime-common/ai';
 import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 import ResponseEventData from './response-event-data';
 import { logger } from '@cardstack/runtime-common';
-import { MatrixClient } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 

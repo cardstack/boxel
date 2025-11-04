@@ -60,6 +60,7 @@ import {
   containsMany,
   DateField,
   DatetimeField,
+  EmailField,
   EthereumAddressField,
   field,
   FieldDef,
@@ -112,6 +113,7 @@ module('Integration | card-basics', function (hooks) {
         @field ethereumAddress = contains(EthereumAddressField);
         @field markdown = contains(MarkdownField);
         @field textArea = contains(TextAreaField);
+        @field email = contains(EmailField);
       }
       let person = new Person();
       await renderCard(loader, person, 'edit');
@@ -119,6 +121,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-field="string"] input').hasAttribute('disabled');
       assert.dom('[data-test-field="number"] input').hasAttribute('disabled');
       assert.dom('[data-test-field="bigInt"] input').hasAttribute('disabled');
+      assert.dom('[data-test-field="email"] input').hasAttribute('disabled');
 
       assert
         .dom('[data-test-field="boolean"] .boxel-radio-fieldset')
@@ -3567,6 +3570,21 @@ module('Integration | card-basics', function (hooks) {
       await fillIn('[data-test-datetime-field-editor]', '');
       assert.dom('[data-test-datetime-field-editor]').hasNoValue();
       assert.dom('[data-test-datetime-output]').hasText('[no date-time]');
+
+      class DatesCard extends CardDef {
+        @field date = contains(DateField);
+        @field datetime = contains(DatetimeField);
+      }
+
+      let personWithBrokenDates = new DatesCard({
+        date: 'invalid date',
+        appointment: 'invalid datetime',
+      });
+
+      await renderCard(loader, personWithBrokenDates, 'edit');
+      assert
+        .dom('[data-test-boxel-card-container]')
+        .exists('card rendered without runtime crash');
     });
 
     test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {

@@ -1,11 +1,11 @@
-import { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
+import type { Expression } from '@cardstack/runtime-common';
 import {
   query,
   param,
   addExplicitParens,
   separatedByCommas,
   asExpressions,
-  Expression,
 } from '@cardstack/runtime-common';
 
 export async function acquireLock(

@@ -1,4 +1,4 @@
-import { type PgPrimitive } from './index';
+import type { PgPrimitive } from './index';
 
 export interface TypeCoercion {
   [column: string]: 'BOOLEAN' | 'JSON' | 'VARCHAR';

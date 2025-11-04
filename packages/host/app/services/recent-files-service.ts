@@ -8,7 +8,7 @@ import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { RealmPaths } from '@cardstack/runtime-common';
-import { LocalPath } from '@cardstack/runtime-common/paths';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 import { RecentFiles } from '../utils/local-storage-keys';
 

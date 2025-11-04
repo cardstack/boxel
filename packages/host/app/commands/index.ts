@@ -1,6 +1,4 @@
-import { VirtualNetwork } from '@cardstack/runtime-common';
-
-import HostBaseCommand from '../lib/host-base-command';
+import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-definition';
 import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
@@ -54,6 +52,8 @@ import * as UpdatePlaygroundSelectionCommandModule from './update-playground-sel
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
 import * as CommandUtilsModule from './utils';
 import * as WriteTextFileCommandModule from './write-text-file';
+
+import type HostBaseCommand from '../lib/host-base-command';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(

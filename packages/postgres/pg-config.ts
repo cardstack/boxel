@@ -1,4 +1,4 @@
-import { type ClientConfig } from 'pg';
+import type { ClientConfig } from 'pg';
 
 export function postgresConfig(defaultConfig: ClientConfig = {}) {
   return Object.assign({}, defaultConfig, {

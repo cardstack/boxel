@@ -4,8 +4,9 @@ import type {
   IRequestOpts,
   MatrixHttpApi,
   StateEvents,
+  Method,
 } from 'matrix-js-sdk';
-import { Method, MatrixClient } from 'matrix-js-sdk';
+import { MatrixClient } from 'matrix-js-sdk';
 
 export class FakeMatrixClient extends MatrixClient {
   private eventId = 0;

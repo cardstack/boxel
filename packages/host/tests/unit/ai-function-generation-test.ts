@@ -1,4 +1,4 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -13,9 +13,9 @@ import {
   type ObjectSchema,
   type AttributesSchema,
 } from '@cardstack/runtime-common/helpers/ai';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
-import { primitive as primitiveType } from 'https://cardstack.com/base/card-api';
+import type { primitive as primitiveType } from 'https://cardstack.com/base/card-api';
 
 import { setupLocalIndexing, setupOnSave, setupCardLogs } from '../helpers';
 import { setupRenderingTest } from '../helpers/setup';

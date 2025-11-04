@@ -8,7 +8,7 @@ import {
   WaitBehavior,
 } from '@cardstack/boxel-motion';
 import { FPS } from '@cardstack/boxel-motion';
-import { type Keyframe } from '@cardstack/boxel-motion/models';
+import type { Keyframe } from '@cardstack/boxel-motion/models';
 import {
   constructKeyframe,
   type Snapshot,

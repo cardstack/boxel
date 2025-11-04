@@ -1,9 +1,11 @@
 import { module, test } from 'qunit';
-import supertest, { SuperTest, Test } from 'supertest';
+import type { SuperTest, Test } from 'supertest';
+import supertest from 'supertest';
 import { basename } from 'path';
 import Koa from 'koa';
 import Router from '@koa/router';
-import { Server, createServer } from 'http';
+import type { Server } from 'http';
+import { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app';
 
 module(basename(__filename), function () {
@@ -46,7 +48,128 @@ module(basename(__filename), function () {
       assert.strictEqual(headResponse.status, 200, 'HEAD / 200');
       let getResponse = await request.get('/');
       assert.strictEqual(getResponse.status, 200, 'GET / 200');
-      assert.deepEqual(getResponse.body, { ready: true }, 'ready body');
+      assert.strictEqual(
+        getResponse.headers['content-type'],
+        'application/vnd.api+json',
+        'JSON-API content type',
+      );
+      assert.strictEqual(
+        getResponse.body.data.type,
+        'prerender-manager-health',
+        'response type',
+      );
+      assert.strictEqual(getResponse.body.data.id, 'health', 'response id');
+      assert.true(getResponse.body.data.attributes.ready, 'ready attribute');
+      assert.ok(Array.isArray(getResponse.body.included), 'included is array');
+      assert.strictEqual(
+        getResponse.body.included.length,
+        0,
+        'no servers registered',
+      );
+    });
+
+    test('health includes active servers with realms and last used times', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      // Register two servers
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      // Make a prerender request to assign a realm to a server
+      let realm = 'https://realm.example/R';
+      let body = makeBody(realm, `${realm}/1`);
+      let proxyResponse = await request.post('/prerender').send(body);
+      assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
+      let assignedServer = proxyResponse.headers['x-boxel-prerender-target'];
+
+      // Get healthcheck
+      let healthResponse = await request.get('/');
+      assert.strictEqual(healthResponse.status, 200, 'health 200');
+      assert.strictEqual(
+        healthResponse.headers['content-type'],
+        'application/vnd.api+json',
+        'JSON-API content type',
+      );
+
+      let { data, included } = healthResponse.body;
+      assert.strictEqual(data.type, 'prerender-manager-health', 'health type');
+      assert.true(data.attributes.ready, 'ready');
+
+      // Verify included servers
+      assert.ok(Array.isArray(included), 'included is array');
+      assert.strictEqual(included.length, 2, 'two servers in included');
+
+      // Find the server that was assigned the realm
+      let assignedServerData = included.find(
+        (s: any) => s.id === assignedServer,
+      );
+      assert.ok(assignedServerData, 'assigned server in included');
+      assert.strictEqual(
+        assignedServerData.type,
+        'prerender-server',
+        'server type',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.url,
+        assignedServer,
+        'server url',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.capacity,
+        2,
+        'server capacity',
+      );
+      assert.ok(
+        assignedServerData.attributes.registeredAt,
+        'has registeredAt timestamp',
+      );
+      assert.ok(
+        assignedServerData.attributes.lastSeenAt,
+        'has lastSeenAt timestamp',
+      );
+
+      // Verify realms array
+      assert.ok(
+        Array.isArray(assignedServerData.attributes.realms),
+        'realms is array',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.realms.length,
+        1,
+        'one realm active',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.realms[0].url,
+        realm,
+        'realm url',
+      );
+      assert.ok(
+        assignedServerData.attributes.realms[0].lastUsed,
+        'has realm lastUsed timestamp',
+      );
+
+      // Verify the other server has no realms
+      let otherServerUrl =
+        assignedServer === serverUrlA ? serverUrlB : serverUrlA;
+      let otherServerData = included.find((s: any) => s.id === otherServerUrl);
+      assert.ok(otherServerData, 'other server in included');
+      assert.strictEqual(
+        otherServerData.attributes.realms.length,
+        0,
+        'other server has no realms',
+      );
     });
 
     test('registration: explicit url passes and returns 204', async function (assert) {
@@ -254,6 +377,49 @@ module(basename(__filename), function () {
         [serverUrlA, serverUrlB].includes(
           secondProxyResponse.headers['x-boxel-prerender-target'],
         ),
+      );
+    });
+
+    test('realm disposal selects least recently used idle server when multiplex=1', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlB },
+        },
+      });
+
+      let realm = 'https://realm.example/R';
+      let body = makeBody(realm, `${realm}/1`);
+      let firstProxyResponse = await request.post('/prerender').send(body);
+      assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
+      let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
+      assert.ok(firstTarget, 'proxy response includes target header');
+
+      let disposalResponse = await request
+        .delete(`/prerender-servers/realms/${encodeURIComponent(realm)}`)
+        .query({ url: firstTarget as string });
+      assert.strictEqual(disposalResponse.status, 204, 'realm disposal 204');
+
+      let otherTarget = firstTarget === serverUrlA ? serverUrlB : serverUrlA;
+      let secondProxyResponse = await request.post('/prerender').send(body);
+      assert.strictEqual(
+        secondProxyResponse.status,
+        201,
+        'proxy ok after disposal',
+      );
+      assert.strictEqual(
+        secondProxyResponse.headers['x-boxel-prerender-target'],
+        otherTarget,
+        'chooses least recently used idle server',
       );
     });
 

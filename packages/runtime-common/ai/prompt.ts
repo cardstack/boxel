@@ -1,5 +1,5 @@
-import { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
-import {
+import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
+import type {
   ChatCompletionMessageToolCall,
   OpenAIPromptMessage,
   PromptParts,
@@ -38,12 +38,12 @@ import {
   DEFAULT_LLM,
 } from '../matrix-constants';
 import type { ReasoningEffort } from 'openai/resources/shared';
-import {
+import type {
   CardResource,
   LooseCardResource,
   LooseSingleCardDocument,
 } from '../index';
-import { ToolChoice } from '../helpers/ai';
+import type { ToolChoice } from '../helpers/ai';
 import { logger } from '../log';
 
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants';

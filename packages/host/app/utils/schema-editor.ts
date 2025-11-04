@@ -2,7 +2,7 @@ import {
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
-import { type Type } from '@cardstack/host/services/card-type-service';
+import type { Type } from '@cardstack/host/services/card-type-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 

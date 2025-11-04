@@ -17,7 +17,9 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
+  type TestContextWithSave,
 } from '../helpers';
+
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -766,6 +768,27 @@ module('Acceptance | prerender | html', function (hooks) {
       /data-test-field="friendsOfFriend"?.*Germaine?.*Hassan/s.test(value),
       `failed to find "Germaine" and "Hassan" field values in isolated HTML`,
     );
+  });
+
+  test<TestContextWithSave>('does not save instances while prerendering', async function (assert) {
+    this.onSave(() => {
+      assert.step('persisted');
+    });
+
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(renderPath(url, '/html/isolated/0'));
+
+    let renderInstance = (globalThis as any).__renderInstance;
+    assert.ok(renderInstance, 'render instance exists when prerendering');
+
+    // Mutate the rendered instance between the visit and capture, mirroring instance mutations that
+    // normally enqueue an autosave, and confirm that nothing is persisted in prerender context.
+    (renderInstance as any).name = 'Paper (mutated for prerender test)';
+    await getService('store').flushSaves();
+    assert.verifySteps([], 'no save occurs while prerendering');
+
+    await capturePrerenderResult('innerHTML');
+    this.unregisterOnSave();
   });
 
   test('can handle not found prerender url', async function (assert) {

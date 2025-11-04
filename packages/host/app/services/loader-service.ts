@@ -1,13 +1,13 @@
 import { registerDestructor } from '@ember/destroyable';
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
+import type { FetcherMiddlewareHandler } from '@cardstack/runtime-common';
 import {
   fetcher,
   maybeHandleScopedCSSRequest,
-  FetcherMiddlewareHandler,
   authorizationMiddleware,
   clearFetchCache,
   logger,

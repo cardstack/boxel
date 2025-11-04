@@ -1,11 +1,11 @@
-import {
+import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '../index';
+import type {
   DBAdapter,
   FromScratchArgs,
   FromScratchResult,
   QueuePublisher,
-  param,
-  query,
 } from '../';
+import { param, query } from '../';
 
 export async function enqueueReindexRealmJob(
   realmUrl: string,
@@ -25,9 +25,7 @@ export async function enqueueReindexRealmJob(
   let job = await queue.publish<FromScratchResult>({
     jobType: `from-scratch-index`,
     concurrencyGroup: `indexing:${realmUrl}`,
-    // allow this to run longer than normal as we are forcing all files to be
-    // revisited regardless of mtime
-    timeout: 6 * 60,
+    timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
     priority,
     args,
   });

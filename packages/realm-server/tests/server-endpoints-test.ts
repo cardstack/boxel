@@ -1,24 +1,26 @@
 import { module, test } from 'qunit';
-import supertest, { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
+import supertest from 'supertest';
 import { join, basename } from 'path';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, existsSync, ensureDirSync, readJSONSync } from 'fs-extra';
+import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import {
   Deferred,
-  Realm,
   fetchRealmPermissions,
   baseCardRef,
   type SingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
   DEFAULT_PERMISSIONS,
-  VirtualNetwork,
+  normalizeFullReindexBatchSize,
+  normalizeFullReindexCooldownSeconds,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
-import { Query } from '@cardstack/runtime-common/query';
+import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupBaseRealmServer,
   setupPermissionedRealm,
@@ -39,19 +41,17 @@ import {
   grafanaSecret,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { RealmServer } from '../server';
+import type { RealmServer } from '../server';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
-import { type CardCollectionDocument } from '@cardstack/runtime-common/document-types';
-import { type PgAdapter } from '@cardstack/postgres';
+import type { CardCollectionDocument } from '@cardstack/runtime-common/document-types';
+import type { PgAdapter } from '@cardstack/postgres';
 import {
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
-import {
-  createJWT as createRealmServerJWT,
-  RealmServerTokenClaim,
-} from '../utils/jwt';
+import type { RealmServerTokenClaim } from '../utils/jwt';
+import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
@@ -1333,50 +1333,44 @@ module(basename(__filename), function () {
           );
         });
 
-        test('can reindex all realms via post-deployment endpoint called from CI pipeline', async function (assert: Assert) {
-          let compareCurrentBoxelUIChecksumStub: sinon.SinonStub;
-          let writeCurrentBoxelUIChecksumStub: sinon.SinonStub;
+        test('post-deployment endpoint requires authorization header', async function (assert: Assert) {
+          let response = await request2
+            .post('/_post-deployment')
+            .set('Content-Type', 'application/json');
 
-          // Test case 1: Missing authorization header - should be unauthorized
-          {
-            let response = await request2
-              .post('/_post-deployment')
-              .set('Content-Type', 'application/json');
+          assert.strictEqual(
+            response.status,
+            401,
+            'HTTP 401 status for missing auth header',
+          );
+        });
 
-            assert.strictEqual(
-              response.status,
-              401,
-              'HTTP 401 status for missing auth header',
-            );
-          }
+        test('post-deployment endpoint rejects incorrect authorization', async function (assert: Assert) {
+          let response = await request2
+            .post('/_post-deployment')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', 'wrong-secret');
 
-          // Test case 2: Wrong authorization header - should be unauthorized
-          {
-            let response = await request2
-              .post('/_post-deployment')
-              .set('Content-Type', 'application/json')
-              .set('Authorization', 'wrong-secret');
+          assert.strictEqual(
+            response.status,
+            401,
+            'HTTP 401 status for wrong auth header',
+          );
+        });
 
-            assert.strictEqual(
-              response.status,
-              401,
-              'HTTP 401 status for wrong auth header',
-            );
-          }
+        test('post-deployment endpoint triggers full reindex when checksums differ', async function (assert: Assert) {
+          let compareCurrentBoxelUIChecksumStub = sinon
+            .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+            .resolves({
+              previousChecksum: 'old-checksum-123',
+              currentChecksum: 'new-checksum-456',
+            });
+          let writeCurrentBoxelUIChecksumStub = sinon.stub(
+            boxelUIChangeChecker,
+            'writeCurrentBoxelUIChecksum',
+          );
 
-          // Test case 3: Checksums are different - should trigger reindex
-          {
-            compareCurrentBoxelUIChecksumStub = sinon
-              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
-              .resolves({
-                previousChecksum: 'old-checksum-123',
-                currentChecksum: 'new-checksum-456',
-              });
-            writeCurrentBoxelUIChecksumStub = sinon.stub(
-              boxelUIChangeChecker,
-              'writeCurrentBoxelUIChecksum',
-            );
-
+          try {
             let initialJobs = await dbAdapter.execute('select * from jobs');
             let initialJobCount = initialJobs.length;
 
@@ -1395,7 +1389,6 @@ module(basename(__filename), function () {
               'response body contains checksum comparison result',
             );
 
-            // Verify that a full-reindex job was published
             let finalJobs = await dbAdapter.execute('select * from jobs');
             assert.strictEqual(
               finalJobs.length,
@@ -1418,9 +1411,22 @@ module(basename(__filename), function () {
                 360,
                 'job has correct timeout (6 minutes)',
               );
+              let jobArgs = (reindexJob.args ?? {}) as {
+                batchSize?: number;
+                cooldownSeconds?: number;
+              };
+              assert.strictEqual(
+                jobArgs.batchSize,
+                normalizeFullReindexBatchSize(),
+                'job includes batch size for full reindex',
+              );
+              assert.strictEqual(
+                jobArgs.cooldownSeconds,
+                normalizeFullReindexCooldownSeconds(),
+                'job includes cooldown seconds for full reindex',
+              );
             }
 
-            // Verify that writeCurrentBoxelUIChecksum was called
             assert.ok(
               writeCurrentBoxelUIChecksumStub.calledOnce,
               'writeCurrentBoxelUIChecksum was called',
@@ -1429,24 +1435,25 @@ module(basename(__filename), function () {
               writeCurrentBoxelUIChecksumStub.calledWith('new-checksum-456'),
               'writeCurrentBoxelUIChecksum called with new checksum',
             );
-
+          } finally {
             compareCurrentBoxelUIChecksumStub.restore();
             writeCurrentBoxelUIChecksumStub.restore();
           }
+        });
 
-          // Test case 4: Checksums are the same - should not trigger reindex
-          {
-            compareCurrentBoxelUIChecksumStub = sinon
-              .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
-              .resolves({
-                previousChecksum: 'same-checksum-789',
-                currentChecksum: 'same-checksum-789',
-              });
-            writeCurrentBoxelUIChecksumStub = sinon.stub(
-              boxelUIChangeChecker,
-              'writeCurrentBoxelUIChecksum',
-            );
+        test('post-deployment endpoint ignores reindex when checksums match', async function (assert: Assert) {
+          let compareCurrentBoxelUIChecksumStub = sinon
+            .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+            .resolves({
+              previousChecksum: 'same-checksum-789',
+              currentChecksum: 'same-checksum-789',
+            });
+          let writeCurrentBoxelUIChecksumStub = sinon.stub(
+            boxelUIChangeChecker,
+            'writeCurrentBoxelUIChecksum',
+          );
 
+          try {
             let initialJobs = await dbAdapter.execute('select * from jobs');
             let initialJobCount = initialJobs.length;
 
@@ -1465,7 +1472,6 @@ module(basename(__filename), function () {
               'response body contains checksum comparison result',
             );
 
-            // Verify that no new job was published
             let finalJobs = await dbAdapter.execute('select * from jobs');
             assert.strictEqual(
               finalJobs.length,
@@ -1473,12 +1479,11 @@ module(basename(__filename), function () {
               'no new job was created when checksums are the same',
             );
 
-            // Verify that writeCurrentBoxelUIChecksum was not called
             assert.ok(
               writeCurrentBoxelUIChecksumStub.notCalled,
               'writeCurrentBoxelUIChecksum was not called when checksums are same',
             );
-
+          } finally {
             compareCurrentBoxelUIChecksumStub.restore();
             writeCurrentBoxelUIChecksumStub.restore();
           }
@@ -1547,6 +1552,20 @@ module(basename(__filename), function () {
             jobs[0].concurrency_group,
             `full-reindex-group`,
             'concurrency group is correct',
+          );
+          let jobArgs = (jobs[0].args ?? {}) as {
+            batchSize?: number;
+            cooldownSeconds?: number;
+          };
+          assert.strictEqual(
+            jobArgs.batchSize,
+            normalizeFullReindexBatchSize(),
+            'batch size is included for grafana-triggered full reindex',
+          );
+          assert.strictEqual(
+            jobArgs.cooldownSeconds,
+            normalizeFullReindexCooldownSeconds(),
+            'cooldown seconds are included for grafana-triggered full reindex',
           );
         });
 

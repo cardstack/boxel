@@ -1,13 +1,12 @@
+import type { Definition, FieldDefinition } from './index';
 import {
   type LooseSingleCardDocument,
   type CardResource,
-  Definition,
-  FieldDefinition,
   isUrlLike,
   maybeRelativeURL,
   isCodeRef,
 } from './index';
-import { type CardFields, type Meta } from './resource-types';
+import type { CardFields, Meta } from './resource-types';
 import { serialize as serializeCodeRef } from './serializers/code-ref';
 
 export default function serialize({

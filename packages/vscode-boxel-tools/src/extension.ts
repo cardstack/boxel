@@ -2,12 +2,14 @@
 
 import * as vscode from 'vscode';
 import { SynapseAuthProvider } from './synapse-auth-provider';
-import { SkillsProvider, Skill } from './skills';
+import type { Skill } from './skills';
+import { SkillsProvider } from './skills';
 import { RealmAuth } from './realm-auth';
 import { LocalFileSystem } from './local-file-system';
 import * as fs from 'fs';
 import * as path from 'path';
-import { RealmProvider, RealmItem } from './realms';
+import type { RealmItem } from './realms';
+import { RealmProvider } from './realms';
 
 export async function activate(context: vscode.ExtensionContext) {
   const realmAuth = new RealmAuth();

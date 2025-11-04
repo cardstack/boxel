@@ -1,5 +1,5 @@
 import { action } from '@ember/object';
-import Owner from '@ember/owner';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
@@ -12,7 +12,7 @@ import window from 'ember-window-mock';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import * as CommandModule from 'https://cardstack.com/base/command';
+import type * as CommandModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
@@ -27,12 +27,11 @@ import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
 import { titleize } from '../utils/titleize';
 
-import LocalPersistenceService from './local-persistence-service';
-
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from './operator-mode-state-service';
 
 import type CodeSemanticsService from './code-semantics-service';
 import type CommandService from './command-service';
+import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
 import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';

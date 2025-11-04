@@ -1,4 +1,4 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 

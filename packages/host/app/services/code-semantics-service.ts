@@ -1,15 +1,14 @@
 import Service from '@ember/service';
 import { inject as service } from '@ember/service';
 
+import type { ResolvedCodeRef, CodeRef } from '@cardstack/runtime-common';
 import {
-  ResolvedCodeRef,
   hasExecutableExtension,
   identifyCard,
   isCardDocumentString,
   isResolvedCodeRef,
   loadCardDef,
   getAncestor,
-  CodeRef,
   isCardDef as isCardDefHelper,
   isFieldDef as isFieldDefHelper,
   getField,
@@ -18,8 +17,6 @@ import {
 import { isReady } from '@cardstack/host/resources/file';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
-
-import { type Ready } from '../resources/file';
 
 import {
   moduleContentsResource,
@@ -31,6 +28,7 @@ import { findDeclarationByName } from '../services/module-contents-service';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type { Ready } from '../resources/file';
 
 export default class CodeSemanticsService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;

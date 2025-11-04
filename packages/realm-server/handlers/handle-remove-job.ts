@@ -1,4 +1,4 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 import {
   type Expression,
   query as _query,
@@ -6,7 +6,7 @@ import {
   separatedByCommas,
 } from '@cardstack/runtime-common';
 import { sendResponseForBadRequest, setContextResponse } from '../middleware';
-import { type CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes';
 
 export default function handleReindex({
   dbAdapter,

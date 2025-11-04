@@ -1,4 +1,4 @@
-import { type SerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
 export default function (assert: Assert) {
   assert.operatorModeParametersMatch = function (

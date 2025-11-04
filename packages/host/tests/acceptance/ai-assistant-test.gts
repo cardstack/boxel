@@ -1018,6 +1018,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     mockedFileContent = 'test card content';
 
+    // This is to make sure opening code mode works even if the workspace chooser is open
+    await click('[data-test-workspace-chooser-toggle]');
+
     await click('[data-test-attached-file-dropdown-button="Fadhlan"]');
 
     assert.dom('[data-test-boxel-menu-item-text="Open in Code Mode"]').exists();
