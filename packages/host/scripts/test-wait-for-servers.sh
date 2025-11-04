@@ -42,19 +42,61 @@ SMTP_4_DEV_URL="http://localhost:5001"
 WAIT_RESOURCES="$BASE_REALM_READY|$CATALOG_REALM_READY|$NODE_TEST_REALM_READY|$SKILLS_REALM_READY|$TEST_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL"
 WAIT_ON_TIMEOUT=${WAIT_ON_TIMEOUT:-600000}
 
+log_wait_failures() {
+  echo "Timeout waiting for services. Current endpoint status:"
+  OLD_IFS=$IFS
+  IFS='|'
+  for resource in $WAIT_RESOURCES; do
+    [ -z "$resource" ] && continue
+    case "$resource" in
+      http-get://*)
+        url="http://${resource#http-get://}"
+        ;;
+      https-get://*)
+        url="https://${resource#https-get://}"
+        ;;
+      *)
+        url="$resource"
+        ;;
+    esac
+    printf '  %s ... ' "$url"
+    set +e
+    output=$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' "$url" 2>&1)
+    status=$?
+    set -e
+    if [ $status -eq 0 ]; then
+      printf 'HTTP %s\n' "$output"
+    else
+      printf 'FAILED (%s)\n' "$output"
+    fi
+  done
+  IFS=$OLD_IFS
+}
+
+run_start_and_log() {
+  set +e
+  WAIT_ON_TIMEOUT=$WAIT_ON_TIMEOUT NODE_NO_WARNINGS=1 start-server-and-test "$1" "$2" "$3"
+  status=$?
+  set -e
+  if [ $status -ne 0 ]; then
+    log_wait_failures
+  fi
+  return $status
+}
+
 if [ "${HOST_TEST_WAIT_ONLY:-}" = "true" ] || [ "${HOST_TEST_WAIT_ONLY:-}" = "1" ]; then
-  WAIT_ON_TIMEOUT=$WAIT_ON_TIMEOUT NODE_NO_WARNINGS=1 start-server-and-test \
+  run_start_and_log \
     'pnpm run wait' \
     "$WAIT_RESOURCES" \
     'node -e "console.log(\"realm services ready\")"'
-  exit 0
+  exit $?
 fi
 
 if [ "${HOST_TEST_SKIP_WAIT:-}" = "true" ] || [ "${HOST_TEST_SKIP_WAIT:-}" = "1" ]; then
   exec pnpm ember-test-pre-built
 fi
 
-WAIT_ON_TIMEOUT=$WAIT_ON_TIMEOUT NODE_NO_WARNINGS=1 start-server-and-test \
+run_start_and_log \
   'pnpm run wait' \
   "$WAIT_RESOURCES" \
   'ember-test-pre-built'
