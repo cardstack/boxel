@@ -131,7 +131,10 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
                 await this.store.get<SkillModule.Skill>(skillId);
               if (
                 isCardInstance(maybeSkillCard) &&
-                isSkillCard in maybeSkillCard
+                Object.prototype.hasOwnProperty.call(
+                  maybeSkillCard,
+                  isSkillCard,
+                )
               ) {
                 let skillCard = maybeSkillCard as SkillModule.Skill;
                 skillCardCache.set(skillId, skillCard);
