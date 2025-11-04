@@ -415,7 +415,7 @@ function modelWithError({
         status: status ?? err?.status ?? 500,
         message,
         additionalErrors: err !== undefined ? [serializableError(err)] : null,
-        ...(deps ? { deps } : {}),
+        deps,
       },
     },
   };
