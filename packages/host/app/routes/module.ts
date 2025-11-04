@@ -117,7 +117,7 @@ export default class ModuleRoute extends Route<Model> {
       this.typesCache = new WeakMap();
       this.loaderService.resetLoader({
         clearFetchCache: true,
-        reason: 'render-route clearCache',
+        reason: 'module-route clearCache',
       });
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
@@ -404,7 +404,7 @@ function modelWithError({
     id,
     nonce,
     status: 'error' as const,
-    deps: deps ?? [],
+    deps: deps,
     isShimmed: false,
     lastModified: 0,
     createdAt: 0,
@@ -415,7 +415,7 @@ function modelWithError({
         status: status ?? err?.status ?? 500,
         message,
         additionalErrors: err !== undefined ? [serializableError(err)] : null,
-        ...(deps ? { deps } : {}),
+        deps,
       },
     },
   };
