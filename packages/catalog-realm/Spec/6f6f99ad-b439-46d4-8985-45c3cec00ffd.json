@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../components/field-renderer",
-        "name": "SingleFieldRenderer"
+        "module": "../resources/get-fields-resource",
+        "name": "getFieldsResource"
       },
-      "specType": "component",
+      "specType": null,
       "containedExamples": [],
-      "title": "SingleFieldRenderer",
+      "title": "getFieldsResource",
       "description": null,
       "cardInfo": {
         "title": null,

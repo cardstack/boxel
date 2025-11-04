@@ -1487,8 +1487,14 @@ export default class MatrixService extends Service {
   }
 
   async sendActiveLLMEvent(roomId: string, model: string) {
+    let modelConfiguration = this.systemCard?.modelConfigurations?.find(
+      (configuration) => configuration.modelId === model,
+    );
+
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
+      toolsSupported: modelConfiguration?.toolsSupported,
+      reasoningEffort: modelConfiguration?.reasoningEffort,
     });
   }
 

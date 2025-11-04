@@ -2242,5 +2242,36 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-section-header]').exists({ count: 3 });
       assert.dom('[data-test-community-link]').exists({ count: 4 });
     });
+
+    test('sends typed prompt to ask ai when creating app', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+        selectAllCardsFilter: false,
+      });
+
+      await click('[data-test-boxel-button][title="About Me"]');
+      let typedPrompt =
+        'Design a travel planner dashboard that tracks itineraries, bookings, and budgets';
+
+      await fillIn(
+        '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+        typedPrompt,
+      );
+      assert
+        .dom(
+          '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+        )
+        .hasValue(typedPrompt);
+
+      await click('[data-test-create-this-for-me]');
+      await waitFor('[data-test-room-settled]');
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: typedPrompt,
+          cards: [{ id: `${testRealmURL}index`, title: 'Test Workspace B' }],
+        },
+      ]);
+    });
   });
 });
