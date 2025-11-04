@@ -310,7 +310,7 @@ export default class ModuleRoute extends Route<Model> {
     let fullRef: CodeRef = ref;
     let result: TypesWithErrors | undefined;
     try {
-      while (fullRef) {
+      for (;;) {
         let loadedCard: typeof CardAPI.CardDef,
           loadedCardRef: CodeRef | undefined;
         try {
