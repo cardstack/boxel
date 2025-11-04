@@ -107,6 +107,7 @@ export default class RoomMessage extends Component<Signature> {
   };
 
   private bumpTimeoutCheckTimestamp() {
+    // This is needed for the streamingTimeout getter reactivity - it will update on every tick of the checkStreamingTimeout task
     this.timeoutCheckTimestamp = Date.now();
   }
 

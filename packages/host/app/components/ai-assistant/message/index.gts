@@ -288,7 +288,6 @@ export default class AiAssistantMessage extends Component<Signature> {
                   <div class='credits-added' data-test-credits-added>
                     Credits added!
                   </div>
-
                   <Alert.Action @actionName='Retry' @action={{@retryAction}} />
                 </div>
               {{/if}}
