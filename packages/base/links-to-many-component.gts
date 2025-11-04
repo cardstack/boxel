@@ -1,5 +1,4 @@
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import {
@@ -167,13 +166,11 @@ interface LinksToManyStandardEditorSignature {
 
 class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEditorSignature> {
   @consume(CardContextName) declare cardContext: CardContext;
-  @tracked private reorderNonce = 0;
   private sortableGroupId = uuidv4();
 
   @action
   setItems(items: any) {
     this.args.arrayField.set(items);
-    this.reorderNonce++;
   }
 
   get decoratedChildren() {
@@ -183,7 +180,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     return this.args.arrayField.children.map((child, index) => ({
       box: child,
       index,
-      key: `${this.reorderNonce}-${index}`,
+      key: index,
     }));
   }
 
