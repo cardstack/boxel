@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../app/table",
-        "name": "TableApp"
+        "module": "../app/data-explorer",
+        "name": "DataExplorer"
       },
       "specType": "app",
       "containedExamples": [],
-      "title": "TableApp",
+      "title": "DataExplorer",
       "description": null,
       "cardInfo": {
         "title": null,

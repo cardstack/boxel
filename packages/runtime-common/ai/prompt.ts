@@ -37,6 +37,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
 } from '../matrix-constants';
+import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
   CardResource,
   LooseCardResource,
@@ -71,6 +72,8 @@ export async function getPromptParts(
       model: undefined,
       history: [],
       toolChoice: undefined,
+      toolsSupported: undefined,
+      reasoningEffort: undefined,
     };
   }
   let skills = await getEnabledSkills(eventList, client);
@@ -85,7 +88,8 @@ export async function getPromptParts(
     disabledSkillIds,
     client,
   );
-  let model = getModel(eventList);
+  let { model, toolsSupported, reasoningEffort } =
+    getActiveLLMDetails(eventList);
   return {
     shouldRespond,
     tools,
@@ -93,6 +97,8 @@ export async function getPromptParts(
     model,
     history,
     toolChoice: toolChoice,
+    toolsSupported,
+    reasoningEffort,
   };
 }
 
@@ -1020,15 +1026,55 @@ export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
   );
 };
 
-function getModel(eventlist: DiscreteMatrixEvent[]): string {
+function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
+  model: string;
+  toolsSupported?: boolean;
+  reasoningEffort?: ReasoningEffort;
+} {
   let activeLLMEvent = findLast(
     eventlist,
     (event) => event.type === APP_BOXEL_ACTIVE_LLM,
-  ) as ActiveLLMEvent;
+  ) as ActiveLLMEvent | undefined;
   if (!activeLLMEvent) {
-    return DEFAULT_LLM;
+    return {
+      model: DEFAULT_LLM,
+      toolsSupported: undefined,
+      reasoningEffort: undefined,
+    };
   }
-  return activeLLMEvent.content.model;
+  return {
+    model: activeLLMEvent.content.model,
+    toolsSupported: activeLLMEvent.content.toolsSupported,
+    reasoningEffort: normalizeReasoningEffort(
+      activeLLMEvent.content.reasoningEffort,
+    ),
+  };
+}
+
+const VALID_REASONING_EFFORTS: ReasoningEffort[] = [
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  null,
+];
+
+function normalizeReasoningEffort(
+  value?: string | null,
+): ReasoningEffort | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (
+    VALID_REASONING_EFFORTS.includes(value as ReasoningEffort) &&
+    value !== null
+  ) {
+    return value as ReasoningEffort;
+  }
+  return undefined;
 }
 
 export function isCommandResultEvent(
