@@ -109,7 +109,7 @@ module(basename(__filename), function (hooks) {
     });
 
     let response = await request
-      .get(`${url}_publishable`)
+      .get(`${url}_has-private-dependencies`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -166,7 +166,7 @@ module(basename(__filename), function (hooks) {
     });
 
     let response = await request
-      .get(`${sourceRealmURL}_publishable`)
+      .get(`${sourceRealmURL}_has-private-dependencies`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -270,7 +270,7 @@ module(basename(__filename), function (hooks) {
     });
 
     let response = await request
-      .get(`${sourceRealmURL}_publishable`)
+      .get(`${sourceRealmURL}_has-private-dependencies`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',

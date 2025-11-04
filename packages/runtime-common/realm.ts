@@ -447,9 +447,9 @@ export class Realm {
         this.fetchCardTypeSummary.bind(this),
       )
       .get(
-        '/_publishable',
+        '/_has-private-dependencies',
         SupportedMimeType.JSONAPI,
-        this.getPublishable.bind(this),
+        this.hasPrivateExternalDependencies.bind(this),
       )
       .get(
         '/_dependencies',
@@ -2773,7 +2773,7 @@ export class Realm {
     }
   }
 
-  private async getPublishable(
+  private async hasPrivateExternalDependencies(
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
