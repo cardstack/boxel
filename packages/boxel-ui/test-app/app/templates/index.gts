@@ -105,10 +105,6 @@ class IndexComponent extends Component {
         color: var(--foreground, var(--boxel-dark));
         background-color: var(--background, var(--boxel-light));
       }
-      input {
-        border-width: 1px;
-        border-style: solid;
-      }
     </style>
   </template>
 

@@ -10,6 +10,7 @@ import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
+import * as awesomePhoneNumber from 'awesome-phonenumber';
 import * as dateFns from 'date-fns';
 import * as emberConcurrency from 'ember-concurrency';
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
@@ -102,5 +103,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: 'uuid',
     resolve: () => import('uuid'),
   });
+  virtualNetwork.shimModule('awesome-phonenumber', awesomePhoneNumber);
   shimHostCommands(virtualNetwork);
 }
