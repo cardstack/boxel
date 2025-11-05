@@ -130,172 +130,182 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         letter-spacing: var(--boxel-lsp-xs);
         text-overflow: ellipsis;
       }
-    }
 
-    /* Aspect Ratio <= 1.0 (Vertical) */
-    @container fitted-card (aspect-ratio <= 1.0) {
-      :global(.fitted-template) {
-        flex-direction: column;
+      /* Aspect Ratio <= 1.0 (Vertical) */
+      /* Common */
+      @container fitted-card ((aspect-ratio <= 1) and (height < 180px)) {
+        :global(.card-title) {
+          font-size: var(--boxel-font-size-xs);
+        }
       }
-      :global(.thumbnail-section) {
-        width: 100%;
-        height: 50cqmin;
-      }
-      :global(.info-section) {
-        text-align: center;
-      }
-    }
 
-    @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
-      :global(.thumbnail-section) {
-        display: none;
+      @container fitted-card (aspect-ratio <= 1.0) {
+        :global(.fitted-template) {
+          flex-direction: column;
+        }
+        :global(.thumbnail-section) {
+          width: 100%;
+          height: 50cqmin;
+        }
+        :global(.info-section) {
+          text-align: center;
+        }
       }
-    }
-    /* Vertical Tiles*/
-    /* Small Tile (150 x 170) */
-    @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
-      :global(.thumbnail-section) {
-        min-height: 70px;
-      }
-      :global(.card-title) {
-        -webkit-line-clamp: 3;
-      }
-    }
-    /* CardsGrid Tile (170 x 250) */
-    @container fitted-card (aspect-ratio <= 1.0) and (width = 170px) and (height = 250px) {
-      :global(.thumbnail-section) {
-        height: auto;
-        aspect-ratio: 1 / 1;
-      }
-      :global(.card-title) {
-        -webkit-line-clamp: 2;
-      }
-    }
-    /* Tall Tile (150 x 275) */
-    @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
-      :global(.thumbnail-section) {
-        min-height: 85px;
-      }
-      :global(.card-title) {
-        font-size: var(--boxel-font-size);
-        -webkit-line-clamp: 4;
-      }
-    }
-    /* Large Tile (250 x 275) */
-    @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
-      :global(.thumbnail-section) {
-        min-height: 150px;
-      }
-      :global(.card-title) {
-        font-size: var(--boxel-font-size-sm);
-        -webkit-line-clamp: 3;
-      }
-    }
-    /* Vertical Cards */
-    @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
-      :global(.fitted-template) {
-        padding: var(--boxel-sp);
-        gap: var(--boxel-sp);
-      }
-      :global(.thumbnail-section) {
-        min-height: 236px;
-      }
-      :global(.card-title) {
-        font-size: var(--boxel-font-size-med);
-        -webkit-line-clamp: 4;
-      }
-    }
-    /* Expanded Card (400 x 445) */
 
-    /* 1.0 < Aspect Ratio (Horizontal) */
-    @container fitted-card (1.0 < aspect-ratio) {
-      :global(.card-description) {
-        display: none;
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
+        :global(.thumbnail-section) {
+          display: none;
+        }
       }
-      :global(.thumbnail-section) {
-        aspect-ratio: 1;
+      /* Vertical Tiles*/
+      /* Small Tile (150 x 170) */
+      @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
+        :global(.thumbnail-section) {
+          min-height: 70px;
+        }
+        :global(.card-title) {
+          -webkit-line-clamp: 2;
+        }
+        :global(.card-description) {
+          display: none;
+        }
       }
-    }
-    @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
-      :global(.info-section) {
-        align-self: center;
+      /* CardsGrid Tile (170 x 250) */
+      @container fitted-card (aspect-ratio <= 1.0) and (width = 170px) and (height = 250px) {
+        :global(.thumbnail-section) {
+          height: auto;
+          aspect-ratio: 1 / 1;
+        }
+        :global(.card-title) {
+          -webkit-line-clamp: 2;
+        }
       }
-    }
-    /* Badges */
-    @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
-      :global(.fitted-template) {
-        padding: var(--boxel-sp-xxxs);
+      /* Tall Tile (150 x 275) */
+      @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
+        :global(.thumbnail-section) {
+          min-height: 85px;
+        }
+        :global(.card-title) {
+          font-size: var(--boxel-font-size);
+          -webkit-line-clamp: 4;
+        }
       }
-      :global(.thumbnail-section) {
-        display: none;
+      /* Large Tile (250 x 275) */
+      @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
+        :global(.thumbnail-section) {
+          min-height: 150px;
+        }
+        :global(.card-title) {
+          font-size: var(--boxel-font-size-sm);
+          -webkit-line-clamp: 3;
+        }
       }
-    }
-    /* Small Badge (150 x 40) */
-    @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
-      :global(.card-title) {
-        -webkit-line-clamp: 1;
-        font-weight: var(--boxel-font-weight-semibold);
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-lineheight-xs);
+      /* Vertical Cards */
+      @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
+        :global(.fitted-template) {
+          padding: var(--boxel-sp);
+          gap: var(--boxel-sp);
+        }
+        :global(.thumbnail-section) {
+          min-height: 236px;
+        }
+        :global(.card-title) {
+          font-size: var(--boxel-font-size-med);
+          -webkit-line-clamp: 4;
+        }
       }
-      :global(.card-display-name) {
-        margin-top: 0;
-      }
-    }
-    /* Medium Badge (150 x 65) */
+      /* Expanded Card (400 x 445) */
 
-    /* Large Badge (150 x 105) */
-    @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
-      :global(.card-title) {
-        -webkit-line-clamp: 3;
+      /* 1.0 < Aspect Ratio (Horizontal) */
+      @container fitted-card (1.0 < aspect-ratio) {
+        :global(.card-description) {
+          display: none;
+        }
+        :global(.thumbnail-section) {
+          aspect-ratio: 1;
+        }
       }
-    }
+      @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
+        :global(.info-section) {
+          align-self: center;
+        }
+      }
+      /* Badges */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
+        :global(.fitted-template) {
+          padding: var(--boxel-sp-xxxs);
+        }
+        :global(.thumbnail-section) {
+          display: none;
+        }
+      }
+      /* Small Badge (150 x 40) */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
+        :global(.card-title) {
+          -webkit-line-clamp: 1;
+          font-weight: var(--boxel-font-weight-semibold);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-lineheight-xs);
+        }
+        :global(.card-display-name) {
+          margin-top: 0;
+        }
+      }
+      /* Medium Badge (150 x 65) */
 
-    /* Strips */
-    /* Single Strip (250 x 40) */
-    @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
-      :global(.fitted-template) {
-        padding: var(--boxel-sp-xxxs);
+      /* Large Badge (150 x 105) */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
+        :global(.card-title) {
+          -webkit-line-clamp: 3;
+        }
       }
-      :global(.card-display-name) {
-        display: none;
-      }
-    }
-    /* Double Strip (250 x 65) */
-    /* Triple Strip (250 x 105) */
-    /* Double Wide Strip (400 x 65) */
-    /* Triple Wide Strip (400 x 105) */
 
-    /* Horizontal Tiles */
-    /* Regular Tile (250 x 170) */
-    @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
-      :global(.thumbnail-section) {
-        height: 40%;
+      /* Strips */
+      /* Single Strip (250 x 40) */
+      @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
+        :global(.fitted-template) {
+          padding: var(--boxel-sp-xxxs);
+        }
+        :global(.card-display-name) {
+          display: none;
+        }
       }
-      :global(.card-title) {
-        -webkit-line-clamp: 4;
-        font-size: var(--boxel-font-size);
-      }
-    }
+      /* Double Strip (250 x 65) */
+      /* Triple Strip (250 x 105) */
+      /* Double Wide Strip (400 x 65) */
+      /* Triple Wide Strip (400 x 105) */
 
-    /* Horizontal Cards */
-    /* Compact Card (400 x 170) */
-    @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
-      :global(.thumbnail-section) {
-        height: 100%;
+      /* Horizontal Tiles */
+      /* Regular Tile (250 x 170) */
+      @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
+        :global(.thumbnail-section) {
+          height: 40%;
+        }
+        :global(.card-title) {
+          -webkit-line-clamp: 4;
+          font-size: var(--boxel-font-size);
+        }
       }
-    }
-    /* Full Card (400 x 275) */
-    @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
-      :global(.fitted-template) {
-        padding: var(--boxel-sp);
-        gap: var(--boxel-sp);
+
+      /* Horizontal Cards */
+      /* Compact Card (400 x 170) */
+      @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
+        :global(.thumbnail-section) {
+          height: 100%;
+        }
       }
-      :global(.thumbnail-section) {
-        max-width: 44%;
-      }
-      :global(.card-title) {
-        font-size: var(--boxel-font-size-med);
+      /* Full Card (400 x 275) */
+      @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
+        :global(.fitted-template) {
+          padding: var(--boxel-sp);
+          gap: var(--boxel-sp);
+        }
+        :global(.thumbnail-section) {
+          max-width: 44%;
+        }
+        :global(.card-title) {
+          font-size: var(--boxel-font-size-med);
+        }
       }
     }
   </style>
