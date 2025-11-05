@@ -30,9 +30,9 @@ import {
   runTestRealmServer,
   setupBaseRealmServer,
   setupDB,
-} from './helpers';
-import { createJWT as createRealmServerJWT } from '../utils/jwt';
-import type { RealmServer } from '../server';
+} from '../helpers';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt';
+import type { RealmServer } from '../../server';
 
 const ownerUserId = '@mango:localhost';
 const realmServerURL = new URL('http://127.0.0.1:4460/test/');

@@ -2861,7 +2861,7 @@ export class Realm {
 
     let doc = {
       data: {
-        type: 'realm-publishability',
+        type: 'has-private-endpoints',
         id: normalizedRealmURL,
         attributes: {
           publishable: result.publishable,
