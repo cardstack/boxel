@@ -52,7 +52,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
   </div>
   <style scoped>
-    @layer {
+    @layer boxelComponentL1 {
       :global(.fitted-template) {
         width: 100%;
         height: 100%;
@@ -137,9 +137,6 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
       :global(.fitted-template) {
         flex-direction: column;
       }
-      :global(.card-description) {
-        display: none;
-      }
       :global(.thumbnail-section) {
         width: 100%;
         height: 50cqmin;
@@ -165,7 +162,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
       }
     }
     /* CardsGrid Tile (170 x 250) */
-    @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
+    @container fitted-card (aspect-ratio <= 1.0) and (width = 170px) and (height = 250px) {
       :global(.thumbnail-section) {
         height: auto;
         aspect-ratio: 1 / 1;
