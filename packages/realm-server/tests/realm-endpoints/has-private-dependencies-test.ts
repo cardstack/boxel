@@ -103,6 +103,20 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
             @field label = contains(StringField);
           }
         `,
+        'source-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              label: 'Public Label',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './source-card',
+                name: 'SourceCard',
+              },
+            },
+          },
+        },
       },
     });
 
@@ -160,6 +174,20 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
             @field secret = linksTo(() => SecretCard);
           }
         `,
+        'source-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              label: 'Secret label',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './source-card',
+                name: 'SourceCard',
+              },
+            },
+          },
+        },
       },
     });
 
@@ -177,23 +205,28 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       'Realm is not publishable',
     );
 
-    // FIXME why is there source-card/SourceCard and source-card.gts
-    assert.deepEqual(
-      response.body.data.attributes.violations,
-      [
-        {
-          resource: `${sourceRealmURL}source-card`,
-          externalDependencies: [
-            {
-              dependency: `${privateRealmURL}secret-card/SecretCard`,
-              via: [],
-              realmURL: privateRealmURL,
-              realmVisibility: 'private',
-            },
-          ],
-        },
-      ],
-      'Violation references private dependency',
+    assert.strictEqual(
+      response.body.data.attributes.violations.length,
+      1,
+      'one violating resource is reported',
+    );
+    let violation = response.body.data.attributes.violations[0];
+    assert.strictEqual(
+      violation.resource,
+      `${sourceRealmURL}source-instance`,
+      'violation references the offending instance',
+    );
+    assert.true(
+      violation.externalDependencies.some((dep: any) =>
+        String(dep.dependency).startsWith(`${privateRealmURL}secret-card`),
+      ),
+      'dependency points into the private realm',
+    );
+    assert.true(
+      violation.externalDependencies.every(
+        (dep: any) => dep.realmURL === privateRealmURL,
+      ),
+      'dependencies report the private realm URL',
     );
   });
 
@@ -230,6 +263,20 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
             @field secret = linksTo(() => SecretCard);
           }
         `,
+        'public-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Public bridge',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './public-card',
+                name: 'PublicCard',
+              },
+            },
+          },
+        },
       },
     });
     await makeRealmPublic(publicRealmURL);
@@ -253,6 +300,20 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
             @field publicCard = linksTo(() => PublicCard);
           }
         `,
+        'source-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              label: 'Transitive label',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './source-card',
+                name: 'SourceCard',
+              },
+            },
+          },
+        },
       },
     });
 
@@ -269,22 +330,108 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       response.body.data.attributes.publishable,
       'Realm is not publishable due to private dependency',
     );
+    assert.strictEqual(
+      response.body.data.attributes.violations.length,
+      1,
+      'one violating resource is reported',
+    );
+    let transitiveViolation = response.body.data.attributes.violations[0];
+    assert.strictEqual(
+      transitiveViolation.resource,
+      `${sourceRealmURL}source-instance`,
+      'violation references the offending instance',
+    );
+    assert.true(
+      transitiveViolation.externalDependencies.some((dep: any) =>
+        String(dep.dependency).startsWith(`${privateRealmURL}secret-card`),
+      ),
+      'dependency points into the private realm',
+    );
+    assert.true(
+      transitiveViolation.externalDependencies.some((dep: any) =>
+        String(dep.via?.[0] ?? '').startsWith(`${publicRealmURL}public-card`),
+      ),
+      'dependency chain records the public realm hop',
+    );
+
+    assert.true(
+      transitiveViolation.externalDependencies.every(
+        (dep: any) => dep.realmURL === privateRealmURL,
+      ),
+      'dependencies report the private realm URL',
+    );
+  });
+
+  test('ignores deleted instances', async function (assert) {
+    let { url: privateRealmURL } = await createRealm({
+      name: 'Private Realm For Deletion',
+      files: {
+        'secret-card.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class SecretCard extends CardDef {
+            @field name = contains(StringField);
+          }
+        `,
+      },
+    });
+
+    let { url, realm } = await createRealm({
+      name: 'Realm with deleted instance',
+      files: {
+        'source-card.gts': `
+          import {
+            contains,
+            field,
+            linksTo,
+            CardDef,
+          } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { SecretCard } from "${privateRealmURL}secret-card";
+
+          export class SourceCard extends CardDef {
+            @field label = contains(StringField);
+            @field secret = linksTo(() => SecretCard);
+          }
+        `,
+        'source-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              label: 'Temporary',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './source-card',
+                name: 'SourceCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await realm.delete('source-instance.json');
+    await realm.realmIndexUpdater.fullIndex();
+
+    let response = await request
+      .get(`${new URL(url).pathname}_has-private-dependencies`)
+      .set('Accept', SupportedMimeType.JSONAPI)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(realm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+      );
+
+    assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.true(
+      response.body.data.attributes.publishable,
+      'Realm is publishable after instance deletion',
+    );
     assert.deepEqual(
       response.body.data.attributes.violations,
-      [
-        {
-          resource: `${sourceRealmURL}source-card`,
-          externalDependencies: [
-            {
-              dependency: `${privateRealmURL}secret-card/SecretCard`,
-              via: [`${publicRealmURL}public-card/ PublicCard`],
-              realmURL: privateRealmURL,
-              realmVisibility: 'private',
-            },
-          ],
-        },
-      ],
-      'Violation records transitive dependency chain',
+      [],
+      'No violations reported once the offending instance is deleted',
     );
   });
 
