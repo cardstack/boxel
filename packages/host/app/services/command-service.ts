@@ -9,6 +9,7 @@ import Ajv from 'ajv';
 import { task, timeout, all } from 'ember-concurrency';
 
 import { TrackedSet } from 'tracked-built-ins';
+import { v4 as uuidv4 } from 'uuid';
 
 import type { Command, CommandContext } from '@cardstack/runtime-common';
 import {
@@ -22,6 +23,9 @@ import {
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
+import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
+
+import LimitedSet from '../lib/limited-set';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
@@ -55,10 +59,86 @@ export default class CommandService extends Service {
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   executedCommandRequestIds = new TrackedSet<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
+  private aiAssistantClientRequestIdsByRoom = new Map<
+    string,
+    LimitedSet<string>
+  >();
+  private allAiAssistantClientRequestIds = new LimitedSet<string>(250);
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
+
+  private registerAiAssistantClientRequestId(
+    action: string,
+    roomId?: string,
+  ): string {
+    let normalizedRoom = roomId ?? 'unknown-room';
+    let encodedRoom = encodeURIComponent(normalizedRoom);
+    let clientRequestId = `bot-patch:${encodedRoom}:${action}:${uuidv4()}`;
+    this.trackClientRequestId(clientRequestId);
+    return clientRequestId;
+  }
+
+  private ensureAiAssistantClientRequestId(
+    input: Record<string, unknown>,
+    action: string,
+    roomId?: string,
+  ): string {
+    let existing = (input as { clientRequestId?: string }).clientRequestId;
+    if (existing) {
+      let normalizedId = this.enrichClientRequestId(existing, action, roomId);
+      (input as { clientRequestId: string }).clientRequestId = normalizedId;
+      this.trackClientRequestId(normalizedId);
+      return normalizedId;
+    }
+    let generated = this.registerAiAssistantClientRequestId(action, roomId);
+    (input as { clientRequestId: string }).clientRequestId = generated;
+    return generated;
+  }
+
+  private enrichClientRequestId(
+    id: string,
+    action: string,
+    roomId?: string,
+  ): string {
+    if (id.startsWith('bot-patch:')) {
+      return id;
+    }
+    let normalizedRoom = roomId ?? 'unknown-room';
+    let encodedRoom = encodeURIComponent(normalizedRoom);
+    if (id.includes(':')) {
+      // preserve existing suffix to avoid losing uniqueness
+      return `bot-patch:${encodedRoom}:${action}:${id.split(':').pop()}`;
+    }
+    return `bot-patch:${encodedRoom}:${action}:${id}`;
+  }
+
+  private trackClientRequestId(id: string) {
+    let { roomId } = this.parseClientRequestId(id);
+    let roomKey = roomId ?? 'unknown-room';
+    let roomSet = this.aiAssistantClientRequestIdsByRoom.get(roomKey);
+    if (!roomSet) {
+      roomSet = new LimitedSet<string>(250);
+      this.aiAssistantClientRequestIdsByRoom.set(roomKey, roomSet);
+    }
+    roomSet.add(id);
+    this.allAiAssistantClientRequestIds.add(id);
+  }
+
+  private parseClientRequestId(id: string): {
+    roomId?: string;
+    action?: string;
+  } {
+    if (!id.startsWith('bot-patch:')) {
+      return {};
+    }
+    let [, encodedRoom, action] = id.split(':');
+    return {
+      roomId: encodedRoom ? decodeURIComponent(encodedRoom) : undefined,
+      action,
+    };
+  }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
@@ -347,6 +427,19 @@ export default class CommandService extends Service {
           payload?.attributes,
           payload?.relationships,
         );
+        if (commandToRun instanceof PatchCardInstanceCommand) {
+          this.ensureAiAssistantClientRequestId(
+            typedInput as Record<string, unknown>,
+            'patch-instance',
+            command.message.roomId,
+          );
+        } else if (commandToRun instanceof PatchCodeCommand) {
+          this.ensureAiAssistantClientRequestId(
+            typedInput as Record<string, unknown>,
+            'patch-code',
+            command.message.roomId,
+          );
+        }
         [resultCard] = await all([
           await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
@@ -357,10 +450,18 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
-        await this.store.patch(payload?.attributes?.cardId, {
-          attributes: payload?.attributes?.patch?.attributes,
-          relationships: payload?.attributes?.patch?.relationships,
-        });
+        let clientRequestId = this.registerAiAssistantClientRequestId(
+          'patch-instance',
+          command.message.roomId,
+        );
+        await this.store.patch(
+          payload?.attributes?.cardId,
+          {
+            attributes: payload?.attributes?.patch?.attributes,
+            relationships: payload?.attributes?.patch?.relationships,
+          },
+          { clientRequestId },
+        );
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
@@ -519,11 +620,16 @@ export default class CommandService extends Service {
     let finalFileUrl: string | undefined;
     try {
       let patchCodeCommand = new PatchCodeCommand(this.commandContext);
+      let clientRequestId = this.registerAiAssistantClientRequestId(
+        'patch-code',
+        roomId,
+      );
       let patchCodeResult = await patchCodeCommand.execute({
         fileUrl,
         codeBlocks: codeDataItems.map(
           (codeData) => codeData.searchReplaceBlock!,
         ),
+        clientRequestId,
       });
       finalFileUrl = patchCodeResult.finalFileUrl;
 

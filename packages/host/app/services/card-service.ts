@@ -48,7 +48,10 @@ export type SaveType =
 
 export interface SaveSourceOptions {
   resetLoader?: boolean;
+  clientRequestId?: string;
 }
+
+type CardServiceRequestInit = RequestInit & { clientRequestId?: string };
 
 export default class CardService extends Service {
   @service declare private loaderService: LoaderService;
@@ -102,11 +105,14 @@ export default class CardService extends Service {
 
   async fetchJSON(
     url: string | URL,
-    args?: RequestInit,
+    args?: CardServiceRequestInit,
   ): Promise<CardDocument | undefined> {
-    let { headers, ...argsExceptHeaders } = args ?? {
+    let {
+      headers,
+      clientRequestId: providedClientRequestId,
+      ...argsExceptHeaders
+    } = args ?? {
       headers: {},
-      argsExceptHeaders: {},
     };
     let isReadOperation =
       !args ||
@@ -118,7 +124,8 @@ export default class CardService extends Service {
           'QUERY');
 
     if (!isReadOperation) {
-      let clientRequestId = `instance:${uuidv4()}`;
+      let clientRequestId =
+        providedClientRequestId ?? `instance:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
       headers = { ...headers, 'X-Boxel-Client-Request-Id': clientRequestId };
     }
@@ -186,7 +193,8 @@ export default class CardService extends Service {
     options?: SaveSourceOptions,
   ) {
     try {
-      let clientRequestId = `${type}:${uuidv4()}`;
+      let clientRequestId =
+        options?.clientRequestId ?? `${type}:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
 
       let response = await this.network.authedFetch(url, {

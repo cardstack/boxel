@@ -629,16 +629,23 @@ export class Realm {
     let invalidations: Set<string> = new Set();
     let clientRequestId: string | null | undefined;
     let performIndex = async () => {
+      let requestId = clientRequestId ?? options?.clientRequestId ?? null;
       await this.#realmIndexUpdater.update(urls, {
+        clientRequestId: requestId,
         onInvalidation: (invalidatedURLs: URL[]) => {
           this.handleExecutableInvalidations(invalidatedURLs);
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
           ]);
-          clientRequestId = clientRequestId ?? options?.clientRequestId;
+          if (clientRequestId == null && requestId) {
+            clientRequestId = requestId;
+          }
         },
       });
+      if (clientRequestId == null && requestId) {
+        clientRequestId = requestId;
+      }
     };
 
     for (let [path, content] of files) {

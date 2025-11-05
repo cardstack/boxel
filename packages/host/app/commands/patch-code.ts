@@ -41,7 +41,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.PatchCodeInput,
   ): Promise<BaseCommandModule.PatchCodeCommandResult> {
-    let { fileUrl, codeBlocks } = input;
+    let { fileUrl, codeBlocks, clientRequestId } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
     let hasEmptySearchPortion = this.hasEmptySearchPortion(codeBlocks);
@@ -64,7 +64,10 @@ export default class PatchCodeCommand extends HostBaseCommand<
         new URL(finalFileUrl),
         patchedCode,
         'bot-patch',
-        { resetLoader: hasExecutableExtension(finalFileUrl) },
+        {
+          resetLoader: hasExecutableExtension(finalFileUrl),
+          clientRequestId: clientRequestId ?? undefined,
+        },
       );
     }
 
