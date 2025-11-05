@@ -37,7 +37,7 @@ import type { RealmServer } from '../../server';
 const ownerUserId = '@mango:localhost';
 const realmServerURL = new URL('http://127.0.0.1:4460/test/');
 
-module(basename(__filename), function (hooks) {
+module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let dbAdapter: PgAdapter;
   let publisher: QueuePublisher;
   let runner: QueueRunner;
