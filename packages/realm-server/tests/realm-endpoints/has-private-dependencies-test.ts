@@ -109,7 +109,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     });
 
     let response = await request
-      .get(`${url}_has-private-dependencies`)
+      .get(`${new URL(url).pathname}_has-private-dependencies`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -166,7 +166,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     });
 
     let response = await request
-      .get(`${sourceRealmURL}_has-private-dependencies`)
+      .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -270,7 +270,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     });
 
     let response = await request
-      .get(`${sourceRealmURL}_has-private-dependencies`)
+      .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
