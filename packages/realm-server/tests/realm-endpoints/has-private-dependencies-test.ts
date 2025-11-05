@@ -182,18 +182,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       response.body.data.attributes.violations,
       [
         {
-          resource: `${sourceRealmURL}source-card/SourceCard`,
-          externalDependencies: [
-            {
-              dependency: `${privateRealmURL}secret-card/SecretCard`,
-              via: [],
-              realmURL: privateRealmURL,
-              realmVisibility: 'private',
-            },
-          ],
-        },
-        {
-          resource: `${sourceRealmURL}source-card.gts`,
+          resource: `${sourceRealmURL}source-card`,
           externalDependencies: [
             {
               dependency: `${privateRealmURL}secret-card/SecretCard`,
@@ -284,11 +273,11 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       response.body.data.attributes.violations,
       [
         {
-          resource: `${sourceRealmURL}source-card/SourceCard`,
+          resource: `${sourceRealmURL}source-card`,
           externalDependencies: [
             {
-              dependency: `${privateRealmURL}secret-card`,
-              via: [`${publicRealmURL}public-card`],
+              dependency: `${privateRealmURL}secret-card/SecretCard`,
+              via: [`${publicRealmURL}public-card/ PublicCard`],
               realmURL: privateRealmURL,
               realmVisibility: 'private',
             },

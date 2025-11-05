@@ -2787,6 +2787,7 @@ export class Realm {
         let rows = (await query(this.#dbAdapter, [
           `SELECT url FROM boxel_index WHERE realm_url =`,
           param(normalizedRealmURL),
+          `AND type = 'instance'`,
           `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
         ])) as { url: string }[];
 
