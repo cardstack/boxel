@@ -121,7 +121,10 @@ export async function analyzeRealmPublishability({
           continue;
         }
 
-        let visibility = await getRealmVisibility(dependencyRealmURL);
+        let visibility =
+          realmVisibility.get(dependencyRealmURL) ??
+          realmVisibility.get(dependencyRealmURL.replace(/\/$/, '')) ??
+          'private';
         if (visibility !== 'public') {
           chains.push([resourceUrl, dependency]);
           continue;
