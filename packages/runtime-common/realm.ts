@@ -2778,65 +2778,37 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let normalizedRealmURL = ensureTrailingSlash(this.url);
-    let resourceCache = new Map<string, ResourceIndexEntry[] | undefined>();
+    let resourceEntries = new Map<string, ResourceIndexEntry[]>();
     let visibilityCache = new Map<string, RealmVisibility>();
 
-    let result = await analyzeRealmPublishability({
-      sourceRealmURL: normalizedRealmURL,
-      listRealmResources: async () => {
-        let rows = (await query(this.#dbAdapter, [
-          `SELECT url FROM boxel_index WHERE realm_url =`,
-          param(normalizedRealmURL),
-          `AND type = 'instance'`,
-          `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-        ])) as { url: string }[];
+    let instanceRows = (await query(this.#dbAdapter, [
+      `SELECT url FROM boxel_index WHERE realm_url =`,
+      param(normalizedRealmURL),
+      `AND type = 'instance'`,
+      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+    ])) as { url: string }[];
 
-        return rows.map((row) => row.url);
-      },
-      getResourceEntries: async (resourceUrl) => {
-        if (resourceCache.has(resourceUrl)) {
-          return resourceCache.get(resourceUrl);
-        }
+    let rootResources = Array.from(new Set(instanceRows.map((row) => row.url)));
 
-        let rows = (await query(this.#dbAdapter, [
-          `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
-          param(resourceUrl),
-          `OR file_alias =`,
-          param(resourceUrl),
-          `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-        ])) as { url: string; realm_url: string; deps: unknown }[];
+    let queue: string[] = [...rootResources];
+    let queued = new Set(queue);
 
-        if (rows.length === 0) {
-          resourceCache.set(resourceUrl, undefined);
-          return undefined;
-        }
+    let resolveRealmVisibility = async (realmUrl: string) => {
+      if (visibilityCache.has(realmUrl)) {
+        return visibilityCache.get(realmUrl)!;
+      }
 
-        let entries = rows.map((row) => ({
-          canonicalUrl: row.url,
-          realmUrl: ensureTrailingSlash(row.realm_url),
-          dependencies: parseDeps(row.deps),
-        }));
-        resourceCache.set(resourceUrl, entries);
-        if (!resourceCache.has(entries[0].canonicalUrl)) {
-          resourceCache.set(entries[0].canonicalUrl, entries);
-        }
-
-        return entries;
-      },
-      getRealmVisibility: async (realmUrl) => {
-        let normalized = ensureTrailingSlash(realmUrl);
-        if (visibilityCache.has(normalized)) {
-          return visibilityCache.get(normalized)!;
-        }
-
+      let visibility: RealmVisibility;
+      if (realmUrl === normalizedRealmURL) {
+        visibility = await this.visibility();
+      } else {
         let permissions = await fetchRealmPermissions(
           this.#dbAdapter,
-          new URL(normalized),
+          new URL(realmUrl),
         );
         let usernames = Object.keys(permissions).filter(
           (username) => !username.startsWith('@realm/'),
         );
-        let visibility: RealmVisibility;
         if (usernames.includes('*')) {
           visibility = 'public';
         } else if (usernames.includes('users') || usernames.length > 1) {
@@ -2844,10 +2816,63 @@ export class Realm {
         } else {
           visibility = 'private';
         }
+      }
 
-        visibilityCache.set(normalized, visibility);
-        return visibility;
-      },
+      visibilityCache.set(realmUrl, visibility);
+      return visibility;
+    };
+
+    while (queue.length > 0) {
+      let resourceUrl = queue.shift()!;
+      queued.delete(resourceUrl);
+
+      if (resourceEntries.has(resourceUrl)) {
+        continue;
+      }
+
+      let rows = (await query(this.#dbAdapter, [
+        `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
+        param(resourceUrl),
+        `OR file_alias =`,
+        param(resourceUrl),
+        `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      ])) as { url: string; realm_url: string; deps: unknown }[];
+
+      if (rows.length === 0) {
+        resourceEntries.set(resourceUrl, []);
+        continue;
+      }
+
+      let entries = rows.map((row) => ({
+        canonicalUrl: row.url,
+        realmUrl: ensureTrailingSlash(row.realm_url),
+        dependencies: parseDeps(row.deps),
+      }));
+
+      resourceEntries.set(resourceUrl, entries);
+      let canonical = entries[0].canonicalUrl;
+      if (!resourceEntries.has(canonical)) {
+        resourceEntries.set(canonical, entries);
+      }
+
+      for (let entry of entries) {
+        await resolveRealmVisibility(ensureTrailingSlash(entry.realmUrl));
+        for (let dependency of entry.dependencies) {
+          if (!resourceEntries.has(dependency) && !queued.has(dependency)) {
+            queue.push(dependency);
+            queued.add(dependency);
+          }
+        }
+      }
+    }
+
+    await resolveRealmVisibility(normalizedRealmURL);
+
+    let result = await analyzeRealmPublishability({
+      sourceRealmURL: normalizedRealmURL,
+      resources: rootResources,
+      resourceEntries,
+      realmVisibility: visibilityCache,
       isResourceInherentlyPublic: (resourceUrl) => {
         let parsed = maybeURL(resourceUrl);
         if (!parsed) {
