@@ -1,7 +1,8 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
-import { PgAdapter } from '@cardstack/postgres';
-import { query, insert, asExpressions, User } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
+import type { User } from '@cardstack/runtime-common';
+import { query, insert, asExpressions } from '@cardstack/runtime-common';
 import {
   setupDB,
   insertUser,
@@ -11,13 +12,12 @@ import {
   closeServer,
   setupBaseRealmServer,
 } from './helpers';
-import {
-  RealmServerTokenClaim,
-  createJWT as createRealmServerJWT,
-} from '../utils/jwt';
+import type { RealmServerTokenClaim } from '../utils/jwt';
+import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import { realmSecretSeed } from './helpers';
-import supertest, { SuperTest, Test } from 'supertest';
-import { Server } from 'http';
+import type { SuperTest, Test } from 'supertest';
+import supertest from 'supertest';
+import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 

@@ -10,10 +10,12 @@ import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
 import type * as CodeRefModule from 'https://cardstack.com/base/code-ref';
 import type * as DateFieldModule from 'https://cardstack.com/base/date';
 import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
+import type * as EmailFieldModule from 'https://cardstack.com/base/email';
 import type * as EnumModule from 'https://cardstack.com/base/enum';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
+import type * as PhoneNumberFieldModule from 'https://cardstack.com/base/phone-number';
 import type * as RealmFieldModule from 'https://cardstack.com/base/realm';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
@@ -31,6 +33,9 @@ let DateField: DateField;
 
 type DatetimeField = (typeof DatetimeFieldModule)['default'];
 let DatetimeField: DatetimeField;
+
+type EmailField = (typeof EmailFieldModule)['default'];
+let EmailField: EmailField;
 
 type Base64ImageField = (typeof Base64ImageFieldModule)['default'];
 let Base64ImageField: Base64ImageField;
@@ -55,6 +60,9 @@ let TextAreaField: TextAreaField;
 
 type RealmField = (typeof RealmFieldModule)['default'];
 let RealmField: RealmField;
+
+type PhoneNumberField = (typeof PhoneNumberFieldModule)['default'];
+let PhoneNumberField: PhoneNumberField;
 
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
@@ -117,6 +125,10 @@ async function initialize() {
     await loader.import<typeof DatetimeFieldModule>(`${baseRealm.url}datetime`)
   ).default;
 
+  EmailField = (
+    await loader.import<typeof EmailFieldModule>(`${baseRealm.url}email`)
+  ).default;
+
   Base64ImageField = (
     await loader.import<typeof Base64ImageFieldModule>(
       `${baseRealm.url}base64-image`,
@@ -151,6 +163,12 @@ async function initialize() {
 
   RealmField = (
     await loader.import<typeof RealmFieldModule>(`${baseRealm.url}realm`)
+  ).default;
+
+  PhoneNumberField = (
+    await loader.import<typeof PhoneNumberFieldModule>(
+      `${baseRealm.url}phone-number`,
+    )
   ).default;
 
   CardsGrid = (
@@ -219,6 +237,7 @@ export {
   NumberField,
   DateField,
   DatetimeField,
+  EmailField,
   Base64ImageField,
   CodeRefField,
   BigIntegerField,
@@ -227,6 +246,7 @@ export {
   MarkdownField,
   TextAreaField,
   RealmField,
+  PhoneNumberField,
   CardsGrid,
   SystemCard,
   ModelConfiguration,

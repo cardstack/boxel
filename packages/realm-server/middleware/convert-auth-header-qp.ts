@@ -1,4 +1,4 @@
-import { Context, Next } from 'koa';
+import type { Context, Next } from 'koa';
 import qs from 'qs';
 
 const convertAuthHeaderMiddleware = async (

@@ -22,11 +22,11 @@ import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
-import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import {
-  type JSONAPISingleResourceDocument,
-  type CardDef,
+import type {
+  JSONAPISingleResourceDocument,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 

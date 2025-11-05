@@ -33,7 +33,7 @@
     "test:ember": "ember test"
   },
   "dependencies": {
-    "@ember/test-waiters": "^3.0.2",
+    "@ember/test-waiters": "catalog:",
     "@embroider/addon-shim": "^1.8.9",
     "@glint/template": "1.3.0",
     "typescript": "catalog:"

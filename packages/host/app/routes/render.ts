@@ -1,16 +1,16 @@
 import type Controller from '@ember/controller';
 import { action } from '@ember/object';
 import Route from '@ember/routing/route';
-import RouterService from '@ember/routing/router-service';
-import Transition from '@ember/routing/transition';
+import type RouterService from '@ember/routing/router-service';
+import type Transition from '@ember/routing/transition';
 import { join, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 
 import { TrackedMap } from 'tracked-built-ins';
 
+import type { CardError } from '@cardstack/runtime-common';
 import {
   formattedError,
-  CardError,
   baseRealm,
   SupportedMimeType,
   isCardError,
@@ -158,8 +158,6 @@ export default class RenderRoute extends Route<Model> {
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
-    }
-    if (parsedOptions.clearCache) {
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
         this.store.resetCache();

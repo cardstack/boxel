@@ -52,15 +52,17 @@ interface Signature {
   };
 }
 
-const STREAMING_TIMEOUT_MS = 60000;
+const STREAMING_TIMEOUT_MS = 3 * 60 * 1000;
+export const STREAMING_TIMEOUT_MINUTES = STREAMING_TIMEOUT_MS / 60_000;
 
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
-  @tracked private streamingTimeout = false;
   @tracked private attachedCardCollection:
     | ReturnType<getCardCollection>
     | undefined;
+  @tracked private timeoutCheckTimestamp = Date.now();
+  @tracked private waitStartTimestamp: number | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -84,17 +86,54 @@ export default class RoomMessage extends Component<Signature> {
       return;
     }
 
-    // If message is streaming and hasn't been updated in the last minute, show a timeout message
-    if (Date.now() - Number(this.message.updated) > STREAMING_TIMEOUT_MS) {
-      this.streamingTimeout = true;
+    if (this.message.isStreamingFinished === true) {
       return;
     }
+
+    this.bumpTimeoutCheckTimestamp();
 
     // Do this check every second
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     this.checkStreamingTimeout.perform();
   });
+
+  private waitLonger = () => {
+    this.waitStartTimestamp = Date.now();
+    this.bumpTimeoutCheckTimestamp();
+    if (!this.checkStreamingTimeout.isRunning) {
+      this.checkStreamingTimeout.perform();
+    }
+  };
+
+  private bumpTimeoutCheckTimestamp() {
+    // This is needed for the streamingTimeout getter reactivity - it will update on every tick of the checkStreamingTimeout task
+    this.timeoutCheckTimestamp = Date.now();
+  }
+
+  private get streamingTimeout() {
+    if (!this.isFromAssistant || !this.args.isStreaming) {
+      return false;
+    }
+
+    if (!this.isLastAssistantMessage) {
+      return false;
+    }
+
+    if (this.message.isStreamingFinished === true) {
+      return false;
+    }
+
+    let lastActivityTimestamp = Math.max(
+      Number(this.message.updated),
+      this.waitStartTimestamp ?? 0,
+    );
+
+    // If message is streaming and hasn't been updated in the last three minutes, show a timeout message
+    return (
+      this.timeoutCheckTimestamp - lastActivityTimestamp > STREAMING_TIMEOUT_MS
+    );
+  }
 
   private get isFromAssistant() {
     return this.message.author.userId === aiBotUserId;
@@ -164,6 +203,7 @@ export default class RoomMessage extends Component<Signature> {
         @isDebugMessage={{this.message.isDebugMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
+        @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
@@ -207,7 +247,7 @@ export default class RoomMessage extends Component<Signature> {
       return humanFriendlyErrorMessage || this.message.errorMessage;
     }
     if (this.streamingTimeout) {
-      return 'This message was processing for too long. Please try again.';
+      return `This message has been processing for a long time (more than ${STREAMING_TIMEOUT_MINUTES} minutes), possibly due to a delay in response time, or due to a system error.`; // Will show a "Wait longer" and "Retry" button
     }
     if (this.attachedCardCollection?.cardErrors.length === 0) {
       return undefined;

@@ -1,5 +1,6 @@
-import { DBAdapter, reportError } from '@cardstack/runtime-common';
-import { StripeSubscriptionDeletedWebhookEvent } from '.';
+import type { DBAdapter } from '@cardstack/runtime-common';
+import { reportError } from '@cardstack/runtime-common';
+import type { StripeSubscriptionDeletedWebhookEvent } from '.';
 import {
   insertStripeEvent,
   updateSubscription,
@@ -11,7 +12,8 @@ import {
   getPlanByMonthlyPrice,
 } from '../billing-queries';
 
-import { PgAdapter, TransactionManager } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
+import { TransactionManager } from '@cardstack/postgres';
 import { getStripe } from './stripe';
 
 export async function handleSubscriptionDeleted(

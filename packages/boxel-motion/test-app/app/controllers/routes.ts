@@ -1,7 +1,7 @@
 import {
+  type Sprite,
   type AnimationDefinition,
   type Changeset,
-  Sprite,
   SpriteType,
   TweenBehavior,
 } from '@cardstack/boxel-motion';

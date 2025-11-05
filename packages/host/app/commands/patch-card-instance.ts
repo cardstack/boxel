@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { type CommandContext } from '@cardstack/runtime-common';
+import type { CommandContext } from '@cardstack/runtime-common';
 import {
   type AttributesSchema,
   type CardSchema,
@@ -14,7 +14,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import StoreService from '../services/store';
+
+import type StoreService from '../services/store';
 
 interface Configuration {
   cardType: typeof CardDef;

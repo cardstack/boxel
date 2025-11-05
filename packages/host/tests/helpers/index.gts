@@ -278,6 +278,33 @@ export async function capturePrerenderResult(
   return { status: 'ready', value: container.children[0][capture]! };
 }
 
+export function captureModuleResult(): {
+  status: 'ready' | 'error';
+  model: any;
+  raw: string;
+} {
+  let container = document.querySelector(
+    '[data-prerender-module]',
+  ) as HTMLElement | null;
+  if (!container) {
+    throw new Error(
+      'captureModuleResult: missing [data-prerender-module] container after wait',
+    );
+  }
+  let status = (container.dataset.prerenderModuleStatus ?? 'ready') as
+    | 'ready'
+    | 'error';
+  let pre = container.querySelector('pre');
+  if (!pre) {
+    throw new Error(
+      'captureModuleResult: missing <pre> element inside [data-prerender-module]',
+    );
+  }
+  let raw = pre.textContent ?? '';
+  let model = raw ? JSON.parse(raw) : null;
+  return { status, model, raw };
+}
+
 async function makeRenderer() {
   // This emulates the application.hbs
   await renderComponent(
@@ -410,6 +437,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         },
         modelId: 'openai/gpt-5',
         toolsSupported: true,
+        reasoningEffort: 'minimal',
       },
       relationships: {
         'cardInfo.theme': {

@@ -1,11 +1,11 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 
-import { type CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes';
 import {
   SupportedMimeType,
   fetchUserPermissions,
 } from '@cardstack/runtime-common';
-import { RealmServerTokenClaim } from 'utils/jwt';
+import type { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { createJWT } from '../jwt';
 import { sendResponseForError, setContextResponse } from '../middleware';

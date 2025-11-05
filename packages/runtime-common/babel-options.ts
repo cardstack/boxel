@@ -1,4 +1,4 @@
-import { ParserOptions, ParserPlugin } from '@babel/parser';
+import type { ParserOptions, ParserPlugin } from '@babel/parser';
 
 export type Overrides = Partial<{
   sourceType: ParserOptions['sourceType'];

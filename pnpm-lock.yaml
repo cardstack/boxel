@@ -69,6 +69,9 @@ catalogs:
     '@cardstack/requirejs-monaco-ember-polyfill':
       specifier: ^0.0.1
       version: 0.0.1
+    '@ember/test-waiters':
+      specifier: ^4.1.1
+      version: 4.1.1
     '@eslint/eslintrc':
       specifier: ^2.1.4
       version: 2.1.4
@@ -312,6 +315,9 @@ catalogs:
     dompurify:
       specifier: ^3.0.3
       version: 3.0.3
+    ember-cli-deploy-fastboot-s3:
+      specifier: https://github.com/outdoorsy/ember-cli-deploy-fastboot-s3.git#f35c58eea35aad149e48ea1369ef549d92da9256
+      version: 0.3.7
     ember-concurrency:
       specifier: ^4.0.3
       version: 4.0.3
@@ -526,8 +532,8 @@ catalogs:
       specifier: ^2.24.1
       version: 2.24.1
     qunit-dom:
-      specifier: ^1.6.0
-      version: 1.6.0
+      specifier: ^3.5.0
+      version: 3.5.0
     reactiveweb:
       specifier: ^1.3.0
       version: 1.6.0
@@ -875,6 +881,9 @@ importers:
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.15
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -934,8 +943,8 @@ importers:
         specifier: ^3.1.1
         version: 3.1.1
       '@ember/test-waiters':
-        specifier: ^3.0.2
-        version: 3.1.0
+        specifier: 'catalog:'
+        version: 4.1.1(@glint/template@1.3.0)
       '@embroider/addon-shim':
         specifier: ^1.8.9
         version: 1.8.9
@@ -1417,7 +1426,7 @@ importers:
         version: 2.24.1
       qunit-dom:
         specifier: 'catalog:'
-        version: 1.6.0
+        version: 3.5.0
       tracked-built-ins:
         specifier: 'catalog:'
         version: 4.0.0(@babel/core@7.26.10)
@@ -1437,8 +1446,8 @@ importers:
         specifier: ^3.1.1
         version: 3.1.1
       '@ember/test-waiters':
-        specifier: ^3.0.2
-        version: 3.1.0
+        specifier: 'catalog:'
+        version: 4.1.1(@glint/template@1.3.0)
       '@embroider/addon-shim':
         specifier: ^1.8.9
         version: 1.8.9
@@ -1510,7 +1519,7 @@ importers:
         version: 1.0.2
       ember-sortable:
         specifier: ^5.3.1
-        version: 5.3.1(@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0))(@ember/test-waiters@3.1.0)(@glint/template@1.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
+        version: 5.3.1(@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0))(@ember/test-waiters@4.1.1(@glint/template@1.3.0))(@glint/template@1.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       ember-source:
         specifier: 'catalog:'
         version: 5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)
@@ -1857,7 +1866,7 @@ importers:
         version: 2.24.1
       qunit-dom:
         specifier: 'catalog:'
-        version: 1.6.0
+        version: 3.5.0
       tracked-built-ins:
         specifier: 'catalog:'
         version: 4.0.0(@babel/core@7.26.10)
@@ -2030,7 +2039,7 @@ importers:
         version: 1.1.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-resources@7.0.7(@glimmer/component@2.0.0)(@glint/template@1.3.0))
       reactiveweb:
         specifier: 'catalog:'
-        version: 1.6.0(@babel/core@7.26.10)(@ember/test-waiters@3.1.0)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
+        version: 1.6.0(@babel/core@7.26.10)(@ember/test-waiters@4.1.1(@glint/template@1.3.0))(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -2078,8 +2087,8 @@ importers:
         specifier: ^3.3.1
         version: 3.3.1(@babel/core@7.26.10)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6)
       '@ember/test-waiters':
-        specifier: ^3.0.2
-        version: 3.1.0
+        specifier: 'catalog:'
+        version: 4.1.1(@glint/template@1.3.0)
       '@embroider/compat':
         specifier: ^3.5.5
         version: 3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.6(@glint/template@1.3.0))(@glint/template@1.3.0)
@@ -2182,6 +2191,9 @@ importers:
       ajv:
         specifier: 'catalog:'
         version: 8.17.1
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       broccoli-asset-rev:
         specifier: 'catalog:'
         version: 3.0.0
@@ -2252,8 +2264,8 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0
       ember-cli-deploy-fastboot-s3:
-        specifier: ^0.3.6
-        version: 0.3.6
+        specifier: 'catalog:'
+        version: https://codeload.github.com/outdoorsy/ember-cli-deploy-fastboot-s3/tar.gz/f35c58eea35aad149e48ea1369ef549d92da9256
       ember-cli-deploy-revision-data:
         specifier: ^2.0.0
         version: 2.0.0
@@ -2457,7 +2469,7 @@ importers:
         version: 2.24.1
       qunit-dom:
         specifier: 'catalog:'
-        version: 1.6.0
+        version: 3.5.0
       safe-stable-stringify:
         specifier: 'catalog:'
         version: 2.4.3
@@ -2907,6 +2919,9 @@ importers:
       '@types/uuid':
         specifier: 'catalog:'
         version: 9.0.8
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       babel-import-util:
         specifier: ^1.2.2
         version: 1.2.2
@@ -3941,6 +3956,9 @@ packages:
     resolution: {integrity: sha512-bb9h95ktG2wKY9+ja1sdsFBdOms2lB19VWs8wmNpzgHv1NCetonBoV5jHBV4DHt0uS1tg9z66cZqhUVlYs96KQ==}
     engines: {node: 10.* || 12.* || >= 14.*}
 
+  '@ember/test-waiters@4.1.1':
+    resolution: {integrity: sha512-HbK70JYCDJcGI0CrwcbjeL2QHAn0HLwa3oGep7mr6l/yO95U7JYA8VN+/9VTsWJTmKueLtWayUqEmGS3a3mVOg==}
+
   '@embroider/addon-dev@5.0.0':
     resolution: {integrity: sha512-cEaPnhNJBqb+1Mp/1iDsfZjXU/odQ+vYqtqg19qh/28KBbbL5do1TzFPfXuGjzuDHiTIagklpGoNGkMwU/bJtw==}
     engines: {node: 12.* || 14.* || >= 16}
@@ -3963,6 +3981,10 @@ packages:
 
   '@embroider/addon-shim@0.50.2':
     resolution: {integrity: sha512-a+pFlXZPovcCNFo05HxXBW9ole43mPyFZnkhvZlLF0f1sHEn9j0sD1Ld2BM/NCERmHcYz9eXQnX1FPNLCDoGEA==}
+    engines: {node: 12.* || 14.* || >= 16}
+
+  '@embroider/addon-shim@1.10.0':
+    resolution: {integrity: sha512-gcJuHiXgnrzaU8NyU+2bMbtS6PNOr5v5B8OXBqaBvTCsMpXLvKo8OBOQFCoUN0rPX2J6VaFqrbi/371sMvzZug==}
     engines: {node: 12.* || 14.* || >= 16}
 
   '@embroider/addon-shim@1.8.9':
@@ -6241,9 +6263,6 @@ packages:
   ansicolors@0.2.1:
     resolution: {integrity: sha512-tOIuy1/SK/dr94ZA0ckDohKXNeBNqZ4us6PjMVLs5h1w2GBB6uPtOknp2+VF4F/zcy9LI70W+Z+pE2Soajky1w==}
 
-  any-promise@1.3.0:
-    resolution: {integrity: sha512-7UvmKalWRt1wgjL1RrGxoSJW/0QZFIegpeGvZG9kjp8vrRu55XTHbwnqq2GpXm9uLbcuhxm3IqX9OB4MZR1b2A==}
-
   anymatch@2.0.0:
     resolution: {integrity: sha512-5teOsQWABXHHBFP9y3skS5P3d/WfWXpv3FUpy+LorMrNYaT9pI4oLMQX7jzQ2KklNpGpWHzdCXTDT2Y3XGlZBw==}
 
@@ -6254,13 +6273,13 @@ packages:
   aproba@2.0.0:
     resolution: {integrity: sha512-lYe4Gx7QT+MKGbDsA+Z+he/Wtef0BiwDOlK/XkBrdfsh9J/jPPXbX0tE9x9cl27Tmu5gg3QUbUrQYa/y+KOHPQ==}
 
-  archiver-utils@1.3.0:
-    resolution: {integrity: sha512-h+hTREBXcW5e1L9RihGXdH4PHHdGipG/jE2sMZrqIH6BmZAxeGU5IWjVsKhokdCSWX7km6Kkh406zZNEElHFPQ==}
-    engines: {node: '>= 0.10.0'}
+  archiver-utils@2.1.0:
+    resolution: {integrity: sha512-bEL/yUb/fNNiNTuUz979Z0Yg5L+LzLxGJz8x79lYmR54fmTIb6ob/hNQgkQnIUDWIFjZVQwl9Xs356I6BAMHfw==}
+    engines: {node: '>= 6'}
 
-  archiver@2.1.0:
-    resolution: {integrity: sha512-jTj7icZ0qicfXcuxguuwzXgj10wSKk7jmIVFGEj7ggZyMnGqh6nNWydqQdiQ+aHs2NNO+JaM+4iEvL9ppuONbg==}
-    engines: {node: '>= 4'}
+  archiver@4.0.1:
+    resolution: {integrity: sha512-/YV1pU4Nhpf/rJArM23W6GTUjT0l++VbjykrCRua1TSXrn+yM8Qs7XvtwSiRse0iCe49EPNf7ktXnPsWuSb91Q==}
+    engines: {node: '>= 8'}
 
   are-we-there-yet@3.0.1:
     resolution: {integrity: sha512-QZW4EDmGwlYur0Yyf/b2uGucHQMa8aFUP7eu9ddR73vvhFyt4V0Vl3QHPcTNJ8l6qYOBdxgXdnBXQrHilfRQBg==}
@@ -6658,9 +6677,6 @@ packages:
   bind-event-listener@3.0.0:
     resolution: {integrity: sha512-PJvH288AWQhKs2v9zyfYdPzlPqf5bXbGMmhmUIY9x4dAUGIWgomO771oBQNwJnMQSnUIXhKu6sgzpBRXTlvb8Q==}
 
-  bl@1.2.3:
-    resolution: {integrity: sha512-pvcNpa0UU69UT341rO6AYy4FVAIkUHuZXRIWbq+zHnsVcRzDDjIAhGuuYoi0d//cwIwtt4pkpKycWEfjdV+vww==}
-
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
 
@@ -6906,20 +6922,11 @@ packages:
   bser@2.1.1:
     resolution: {integrity: sha512-gQxTNE/GAfIIrmHLUE3oJyp5FO6HRBfhjnw4/wMmA63ZGDJnWBmgY/lyQBpnDUkGmAhbSe39tx2d/iTOAfglwQ==}
 
-  buffer-alloc-unsafe@1.1.0:
-    resolution: {integrity: sha512-TEM2iMIEQdJ2yjPJoSIsldnleVaAk1oW3DBVUykyOLsEsFmEc9kn+SFFPz+gl54KQNxlDnAwCXosOS9Okx2xAg==}
-
-  buffer-alloc@1.2.0:
-    resolution: {integrity: sha512-CFsHQgjtW1UChdXgbyJGtnm+O/uLQeZdtbDo8mfUgYXCHSM1wgrVxXm6bSyrUuErEb+4sYVGCzASBRot7zyrow==}
-
   buffer-crc32@0.2.13:
     resolution: {integrity: sha512-VO9Ht/+p3SN7SKWqcrgEzjGbRSJYTx+Q1pTQC0wrWqHx0vpJraQ6GtHx8tvcg1rlK1byhU5gccxgOgj7B0TDkQ==}
 
   buffer-equal-constant-time@1.0.1:
     resolution: {integrity: sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==}
-
-  buffer-fill@1.0.0:
-    resolution: {integrity: sha512-T7zexNBwiiaCOGDg9xNX9PBmjrubblRkENuptryuI64URkXDFum9il/JGL8Lm8wYfAXpredVXXZz7eMHilimiQ==}
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
@@ -7268,9 +7275,9 @@ packages:
   component-emitter@1.3.0:
     resolution: {integrity: sha512-Rd3se6QB+sO1TwqZjscQrurpEPIfO0/yYnSin6Q/rD3mOutHvUrCAhJub3r90uNb+SESBuE0QYoB90YdfatsRg==}
 
-  compress-commons@1.2.2:
-    resolution: {integrity: sha512-SLTU8iWWmcORfUN+4351Z2aZXKJe1tr0jSilPMCZlLPzpdTXnkBW1LevW/MfuANBKJek8Xu9ggqrtVmQrChLtg==}
-    engines: {node: '>= 0.10.0'}
+  compress-commons@3.0.0:
+    resolution: {integrity: sha512-FyDqr8TKX5/X0qo+aVfaZ+PVmNJHJeckFBlq8jZGSJOgnynhfifoyl24qaqdUdDIBe0EVTHByN6NAkqYvE/2Xg==}
+    engines: {node: '>= 8'}
 
   compressible@2.0.18:
     resolution: {integrity: sha512-AF3r7P5dWxL8MxyITRMlORQNaOA2IkAFaTr4k7BUumjPtRpGDTZpl0Pb1XCO6JeDCBdp126Cgs9sMxqSjgYyRg==}
@@ -7569,9 +7576,9 @@ packages:
   countries-list@3.1.1:
     resolution: {integrity: sha512-nPklKJ5qtmY5MdBKw1NiBAoyx5Sa7p2yPpljZyQ7gyCN1m+eMFs9I6CT37Mxt8zvR5L3VzD3DJBE4WQzX3WF4A==}
 
-  crc32-stream@2.0.0:
-    resolution: {integrity: sha512-UjZSqFCbn+jZUHJIh6Y3vMF7EJLcJWNm4tKDf2peJRwlZKHvkkvOMTvAei6zjU9gO1xONVr3rRFw0gixm2eUng==}
-    engines: {node: '>= 0.10.0'}
+  crc32-stream@3.0.1:
+    resolution: {integrity: sha512-mctvpXlbzsvK+6z8kJwSJ5crm7yBwrQMTybJzMw1O4lLGJqjlDCXY2Zw7KheiA6XBEcBmfLx1D88mjRGVJtY9w==}
+    engines: {node: '>= 6.9.0'}
 
   crc@3.8.0:
     resolution: {integrity: sha512-iX3mfgcTMIq3ZKLIsVFAbv7+Mc10kxabAGQb8HvjA1o3T1PIYprbakQ65d3I+2HGHt6nSKkM9PYjgoJO2KcFBQ==}
@@ -8082,9 +8089,10 @@ packages:
     resolution: {integrity: sha512-6M1r9Au0sWCwHONyzLqgJzTRCpAskqJptN/HKJFzORZ917iflEl3Z4g1r22UVJau8Iwoc6hdB6TKZ2Ake5b51g==}
     engines: {node: 14.* || >= 16}
 
-  ember-cli-deploy-fastboot-s3@0.3.6:
-    resolution: {integrity: sha512-C0Lc0TMgddFC3WehCfYChEu+n6VfcSLUaE+iWaQ3s/ZviSFR1tascPnI5U0M4MjdOQBdioNqlTkkv2RvFGonKw==}
-    engines: {node: '>= 4'}
+  ember-cli-deploy-fastboot-s3@https://codeload.github.com/outdoorsy/ember-cli-deploy-fastboot-s3/tar.gz/f35c58eea35aad149e48ea1369ef549d92da9256:
+    resolution: {tarball: https://codeload.github.com/outdoorsy/ember-cli-deploy-fastboot-s3/tar.gz/f35c58eea35aad149e48ea1369ef549d92da9256}
+    version: 0.3.7
+    engines: {node: ^4.5 || 6.* || >= 7.*}
 
   ember-cli-deploy-plugin@0.2.9:
     resolution: {integrity: sha512-6Cq3XbjZLi4vFYcyF0xfVr5tJdcnNY8kXZFY76qeN3VoKpwTfwiYMc45I8N9DsH8zog8xzHO8YL5RU58qKiqUQ==}
@@ -9257,9 +9265,6 @@ packages:
     resolution: {integrity: sha512-Z4XaCL6dUDHfP/jT25jJKMmtxvuwbkrD1vNSMFlo9lNLY2c5FHYSQgHPRZUjAB26TpDEoW9HCOgplrdbaPV/ew==}
     engines: {node: '>=14.14'}
 
-  fs-extra@2.1.2:
-    resolution: {integrity: sha512-9ztMtDZtSKC78V8mev+k31qaTabbmuH5jatdvPBMikrFHvw5BqlYnQIn/WGK3WHeRooSTkRvLa2IPlaHjPq5Sg==}
-
   fs-extra@4.0.2:
     resolution: {integrity: sha512-wYid1zXctNLgas1pZ8q8ChdsnGg4DHZVqMzJ7pOE85q5BppAEXgQGSoOjVgrcw5yI7pzz49p9AfMhM7z5PRuaw==}
 
@@ -9283,10 +9288,6 @@ packages:
 
   fs-merger@3.2.1:
     resolution: {integrity: sha512-AN6sX12liy0JE7C2evclwoo0aCG3PFulLjrTLsJpWh/2mM+DinhpSGqYLbHBBbIW1PLRNcFhJG8Axtz8mQW3ug==}
-
-  fs-promise@2.0.3:
-    resolution: {integrity: sha512-oDrTLBQAcRd+p/tSRWvqitKegLPsvqr7aehs5N9ILWFM9az5y5Uh71jKdZ/DTMC4Kel7+GNCQyFCx/IftRv8yg==}
-    deprecated: Use mz or fs-extra^3.0 with Promise Support
 
   fs-tree-diff@0.5.9:
     resolution: {integrity: sha512-872G8ax0kHh01m9n/2KDzgYwouKza0Ad9iFltBpNykvROvf2AGtoOzPJgGx125aolGPER3JuC7uZFrQ7bG1AZw==}
@@ -10461,6 +10462,9 @@ packages:
   lodash.debounce@4.0.8:
     resolution: {integrity: sha512-FT1yDzDYEoYWhnSGnpE/4Kj1fLZkDFyqRb7fNt6FdYOSxlUWAtp42Eh6Wb0rGIv/m9Bgo7x4GhQbm5Ys4SG5ow==}
 
+  lodash.defaults@4.2.0:
+    resolution: {integrity: sha512-qjxPLHd3r5DnsdGacqOMU6pb/avJzdh9tFX2ymgoZE27BmjXrNy/y4LoaiTeAb+O3gL8AfpJGtqfX/ae2leYYQ==}
+
   lodash.defaultsdeep@4.6.1:
     resolution: {integrity: sha512-3j8wdDzYuWO3lM3Reg03MuQR957t287Rpcxp1njpEa8oDrikb+FwGdW3n+FELh/A6qib6yPit0j/pv9G/yeAqA==}
 
@@ -10472,6 +10476,9 @@ packages:
 
   lodash.flatten@3.0.2:
     resolution: {integrity: sha512-jCXLoNcqQRbnT/KWZq2fIREHWeczrzpTR0vsycm96l/pu5hGeAntVBG0t7GuM/2wFqmnZs3d1eGptnAH2E8+xQ==}
+
+  lodash.flatten@4.4.0:
+    resolution: {integrity: sha512-C5N2Z3DgnnKr0LOpv/hKCgKdb7ZZwafIrsesve6lmzvZIRZRGaZ/l6Q8+2W7NaT+ZwO3fFlSCzCzrDCFdJfZ4g==}
 
   lodash.get@4.4.2:
     resolution: {integrity: sha512-z+Uw/vLuy6gQe8cfaFWD7p0wVv8fJl3mbzXh33RS+0oW2wvUqiRXiQ69gLWSLpgB5/6sU+r6BlQR0MBILadqTQ==}
@@ -10526,6 +10533,9 @@ packages:
 
   lodash.templatesettings@4.2.0:
     resolution: {integrity: sha512-stgLz+i3Aa9mZgnjr/O+v9ruKZsPsndy7qPZOchbqk2cnTU1ZaldKK+v7m54WoKIyxiuMZTKT2H81F8BeAc3ZQ==}
+
+  lodash.union@4.6.0:
+    resolution: {integrity: sha512-c4pB2CdGrGdjMKYLA+XiRDO7Y0PRQbm/Gzg8qMj+QH+pFVAoTp5sBpO0odL3FjoPCGjK96p6qsP+yQoiLoOBcw==}
 
   lodash.uniq@4.5.0:
     resolution: {integrity: sha512-xfBaXQd9ryd9dlSDvnvI0lvxfLJlYAZzXomUYzLKtUeOQvOP5piqAWuGtrhWeqaXK9hhoM/iyJc5AV+XfsX3HQ==}
@@ -10931,9 +10941,6 @@ packages:
   mute-stream@1.0.0:
     resolution: {integrity: sha512-avsJQhyd+680gKXyG/sQc0nXaC6rBkPOfyHYcFb9+hdkqQkR9bdnkJ0AMZhke0oesPqIO+mFFJ+IdBc7mst4IA==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
-
-  mz@2.7.0:
-    resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
 
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
@@ -11798,9 +11805,8 @@ packages:
   quick-temp@0.1.8:
     resolution: {integrity: sha512-YsmIFfD9j2zaFwJkzI6eMG7y0lQP7YeWzgtFgNl38pGWZBSXJooZbOWwkcRot7Vt0Fg9L23pX0tqWU3VvLDsiA==}
 
-  qunit-dom@1.6.0:
-    resolution: {integrity: sha512-YwSqcLjQcRI0fUFpaSWwU10KIJPFW5Qh+d3cT5DOgx81dypRuUSiPkKFmBY/CDs/R1KdHRadthkcXg2rqAon8Q==}
-    engines: {node: 10.* || >= 12.*}
+  qunit-dom@3.5.0:
+    resolution: {integrity: sha512-eemLM5bflWafzmBnwlYbjf9NrjEkV2j7NO7mTvsMzQBJbEaq2zFvUFDtHV9JaK0TT5mgRZt034LCUewYGmjjjQ==}
 
   qunit@2.24.1:
     resolution: {integrity: sha512-Eu0k/5JDjx0QnqxsE1WavnDNDgL1zgMZKsMw/AoAxnsl9p4RgyLODyo2N7abZY7CEAnvl5YUqFZdkImzbgXzSg==}
@@ -12750,10 +12756,6 @@ packages:
   tar-fs@3.0.8:
     resolution: {integrity: sha512-ZoROL70jptorGAlgAYiLoBLItEKw/fUxg9BSYK/dF/GAGYFJOJJJMvjPAKDJraCXFwadD456FCuvLWgfhMsPwg==}
 
-  tar-stream@1.6.2:
-    resolution: {integrity: sha512-rzS0heiNf8Xn7/mpdSVVSMAWAoy9bfb1WOTYC78Z0UQKeKa/CWS8FOq0lKGNa8DWKAn9gxjCvMLYc5PGXYlK2A==}
-    engines: {node: '>= 0.8.0'}
-
   tar-stream@2.2.0:
     resolution: {integrity: sha512-ujeqbceABgwMZxEJnk2HDY2DlnUZ+9oEcb1KzTVfYHio0UE6dG71n60d8D2I4qNvleWrrXpmjpt7vZeF1LnMZQ==}
     engines: {node: '>=6'}
@@ -12803,13 +12805,6 @@ packages:
   textextensions@2.6.0:
     resolution: {integrity: sha512-49WtAWS+tcsy93dRt6P0P3AMD2m5PvXRhuEA0kaXos5ZLlujtYmpmFsB+QvWUSxE1ZsstmYXfQ7L40+EcQgpAQ==}
     engines: {node: '>=0.8'}
-
-  thenify-all@1.6.0:
-    resolution: {integrity: sha512-RNxQH/qI8/t3thXJDwcstUO4zeqo64+Uy/+sNVRBx4Xn2OX+OZ9oP+iJnNFqplFra2ZUVeKCSa2oVWi3T4uVmA==}
-    engines: {node: '>=0.8'}
-
-  thenify@3.3.1:
-    resolution: {integrity: sha512-RVZSIV5IG10Hk3enotrhvz0T9em6cyHBLkH/YAZuKqd8hRkKhSfCGIcP2KUY0EPxndzANBmNllzWPwak+bheSw==}
 
   thread-loader@3.0.4:
     resolution: {integrity: sha512-ByaL2TPb+m6yArpqQUZvP+5S1mZtXsEP7nWKKlAUTm7fCml8kB5s1uI3+eHRP2bk5mVYfRSBI7FFf+tWEyLZwA==}
@@ -12876,9 +12871,6 @@ packages:
 
   tmpl@1.0.5:
     resolution: {integrity: sha512-3f0uOEAQwIqGuWW2MVzYg8fV/QNnc/IpuJNG837rLuczAaLVHslWHZQj4IGiEl5Hs3kkbhwL9Ab7Hrsmuj+Smw==}
-
-  to-buffer@1.1.1:
-    resolution: {integrity: sha512-lx9B5iv7msuFYE3dytT+KE5tap+rNYw+K4jVkb9R/asAb+pbBSM17jtunHplhBe6RRJdZx3Pn2Jph24O32mOVg==}
 
   to-fast-properties@1.0.3:
     resolution: {integrity: sha512-lxrWP8ejsq+7E3nNjwYmUBMAgjMTZoTI+sdBOpvNyijeDLa29LUn9QaoXAHv4+Z578hbmHHJKZknzxVtvo77og==}
@@ -13760,9 +13752,9 @@ packages:
     resolution: {integrity: sha512-9bnSc/HEW2uRy67wc+T8UwauLuPJVn28jb+GtJY16iiKWyvmYJRXVT4UamsAEGQfPohgr2q4Tq0sQbQlxTfi1g==}
     engines: {node: '>=12.20'}
 
-  zip-stream@1.2.0:
-    resolution: {integrity: sha512-2olrDUuPM4NvRIgGPhvrp84f7/HmWR6RiQrgwFF2VctmnssFiogtYL3DcA8Vl2bsSmju79sVXe38TsII7JleUg==}
-    engines: {node: '>= 0.10.0'}
+  zip-stream@3.0.1:
+    resolution: {integrity: sha512-r+JdDipt93ttDjsOVPU5zaq5bAyY+3H19bDrThkvuVxC0xMQzU1PJcS6D+KrP3u96gH9XLomcHPb+2skoDjulQ==}
+    engines: {node: '>= 8'}
 
   zod@3.24.4:
     resolution: {integrity: sha512-OdqJE9UDRPwWsrHjLN2F8bPxvwJBK22EHLWtanu0LSYr5YqzsaaW3RMgmjwr8Rypg5k+meEJdSPXJZXE/yqOMg==}
@@ -14769,7 +14761,7 @@ snapshots:
 
   '@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0)':
     dependencies:
-      '@ember/test-waiters': 3.1.0
+      '@ember/test-waiters': 4.1.1(@glint/template@1.3.0)
       '@embroider/addon-shim': 1.8.9
       '@embroider/macros': 1.16.13(@glint/template@1.3.0)
       '@simple-dom/interface': 1.4.0
@@ -14787,6 +14779,14 @@ snapshots:
       ember-cli-version-checker: 5.1.2
       semver: 7.7.1
     transitivePeerDependencies:
+      - supports-color
+
+  '@ember/test-waiters@4.1.1(@glint/template@1.3.0)':
+    dependencies:
+      '@embroider/addon-shim': 1.10.0
+      '@embroider/macros': 1.16.13(@glint/template@1.3.0)
+    transitivePeerDependencies:
+      - '@glint/template'
       - supports-color
 
   '@embroider/addon-dev@5.0.0(@glint/template@1.3.0)(rollup@4.40.0)':
@@ -14833,6 +14833,15 @@ snapshots:
     dependencies:
       '@embroider/shared-internals': 0.50.2
       semver: 7.7.1
+
+  '@embroider/addon-shim@1.10.0':
+    dependencies:
+      '@embroider/shared-internals': 3.0.0
+      broccoli-funnel: 3.0.8
+      common-ancestor-path: 1.0.1
+      semver: 7.7.1
+    transitivePeerDependencies:
+      - supports-color
 
   '@embroider/addon-shim@1.8.9':
     dependencies:
@@ -17406,8 +17415,6 @@ snapshots:
 
   ansicolors@0.2.1: {}
 
-  any-promise@1.3.0: {}
-
   anymatch@2.0.0:
     dependencies:
       micromatch: 3.1.10
@@ -17422,25 +17429,28 @@ snapshots:
 
   aproba@2.0.0: {}
 
-  archiver-utils@1.3.0:
+  archiver-utils@2.1.0:
     dependencies:
       glob: 7.2.3
       graceful-fs: 4.2.11
       lazystream: 1.0.1
-      lodash: 4.17.21
-      normalize-path: 2.1.1
+      lodash.defaults: 4.2.0
+      lodash.difference: 4.5.0
+      lodash.flatten: 4.4.0
+      lodash.isplainobject: 4.0.6
+      lodash.union: 4.6.0
+      normalize-path: 3.0.0
       readable-stream: 2.3.8
 
-  archiver@2.1.0:
+  archiver@4.0.1:
     dependencies:
-      archiver-utils: 1.3.0
+      archiver-utils: 2.1.0
       async: 2.6.4
       buffer-crc32: 0.2.13
       glob: 7.2.3
-      lodash: 4.17.21
-      readable-stream: 2.3.8
-      tar-stream: 1.6.2
-      zip-stream: 1.2.0
+      readable-stream: 3.6.2
+      tar-stream: 2.2.0
+      zip-stream: 3.0.1
 
   are-we-there-yet@3.0.1:
     dependencies:
@@ -17962,11 +17972,6 @@ snapshots:
   bind-decorator@1.0.11: {}
 
   bind-event-listener@3.0.0: {}
-
-  bl@1.2.3:
-    dependencies:
-      readable-stream: 2.3.8
-      safe-buffer: 5.2.1
 
   bl@4.1.0:
     dependencies:
@@ -18562,18 +18567,9 @@ snapshots:
     dependencies:
       node-int64: 0.4.0
 
-  buffer-alloc-unsafe@1.1.0: {}
-
-  buffer-alloc@1.2.0:
-    dependencies:
-      buffer-alloc-unsafe: 1.1.0
-      buffer-fill: 1.0.0
-
   buffer-crc32@0.2.13: {}
 
   buffer-equal-constant-time@1.0.1: {}
-
-  buffer-fill@1.0.0: {}
 
   buffer-from@1.1.2: {}
 
@@ -18927,11 +18923,11 @@ snapshots:
 
   component-emitter@1.3.0: {}
 
-  compress-commons@1.2.2:
+  compress-commons@3.0.0:
     dependencies:
       buffer-crc32: 0.2.13
-      crc32-stream: 2.0.0
-      normalize-path: 2.1.1
+      crc32-stream: 3.0.1
+      normalize-path: 3.0.0
       readable-stream: 2.3.8
 
   compressible@2.0.18:
@@ -19084,10 +19080,10 @@ snapshots:
 
   countries-list@3.1.1: {}
 
-  crc32-stream@2.0.0:
+  crc32-stream@3.0.1:
     dependencies:
       crc: 3.8.0
-      readable-stream: 2.3.8
+      readable-stream: 3.6.2
 
   crc@3.8.0:
     dependencies:
@@ -19783,13 +19779,12 @@ snapshots:
       rsvp: 4.8.5
       uuid: 8.3.2
 
-  ember-cli-deploy-fastboot-s3@0.3.6:
+  ember-cli-deploy-fastboot-s3@https://codeload.github.com/outdoorsy/ember-cli-deploy-fastboot-s3/tar.gz/f35c58eea35aad149e48ea1369ef549d92da9256:
     dependencies:
-      archiver: 2.1.0
+      archiver: 4.0.1
       aws-sdk: 2.154.0
       ember-cli-deploy-plugin: 0.2.9
       fs-extra: 4.0.2
-      fs-promise: 2.0.3
 
   ember-cli-deploy-plugin@0.2.9:
     dependencies:
@@ -20656,10 +20651,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-sortable@5.3.1(@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0))(@ember/test-waiters@3.1.0)(@glint/template@1.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))):
+  ember-sortable@5.3.1(@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0))(@ember/test-waiters@4.1.1(@glint/template@1.3.0))(@glint/template@1.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))):
     dependencies:
       '@ember/test-helpers': 5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0)
-      '@ember/test-waiters': 3.1.0
+      '@ember/test-waiters': 4.1.1(@glint/template@1.3.0)
       '@embroider/addon-shim': 1.8.9
       '@embroider/macros': 1.16.13(@glint/template@1.3.0)
       '@glimmer/env': 0.1.7
@@ -22032,11 +22027,6 @@ snapshots:
       jsonfile: 6.1.0
       universalify: 2.0.0
 
-  fs-extra@2.1.2:
-    dependencies:
-      graceful-fs: 4.2.11
-      jsonfile: 2.4.0
-
   fs-extra@4.0.2:
     dependencies:
       graceful-fs: 4.2.11
@@ -22083,13 +22073,6 @@ snapshots:
       walk-sync: 2.2.0
     transitivePeerDependencies:
       - supports-color
-
-  fs-promise@2.0.3:
-    dependencies:
-      any-promise: 1.3.0
-      fs-extra: 2.1.2
-      mz: 2.7.0
-      thenify-all: 1.6.0
 
   fs-tree-diff@0.5.9:
     dependencies:
@@ -23530,6 +23513,8 @@ snapshots:
 
   lodash.debounce@4.0.8: {}
 
+  lodash.defaults@4.2.0: {}
+
   lodash.defaultsdeep@4.6.1: {}
 
   lodash.difference@4.5.0: {}
@@ -23540,6 +23525,8 @@ snapshots:
     dependencies:
       lodash._baseflatten: 3.1.4
       lodash._isiterateecall: 3.0.9
+
+  lodash.flatten@4.4.0: {}
 
   lodash.get@4.4.2: {}
 
@@ -23579,6 +23566,8 @@ snapshots:
   lodash.templatesettings@4.2.0:
     dependencies:
       lodash._reinterpolate: 3.0.0
+
+  lodash.union@4.6.0: {}
 
   lodash.uniq@4.5.0: {}
 
@@ -23992,12 +23981,6 @@ snapshots:
   mute-stream@0.0.8: {}
 
   mute-stream@1.0.0: {}
-
-  mz@2.7.0:
-    dependencies:
-      any-promise: 1.3.0
-      object-assign: 4.1.1
-      thenify-all: 1.6.0
 
   nanoid@3.3.11: {}
 
@@ -24912,14 +24895,9 @@ snapshots:
       rimraf: 2.7.1
       underscore.string: 3.3.6
 
-  qunit-dom@1.6.0:
+  qunit-dom@3.5.0:
     dependencies:
-      broccoli-funnel: 3.0.8
-      broccoli-merge-trees: 4.2.0
-      ember-cli-babel: 7.26.11
-      ember-cli-version-checker: 5.1.2
-    transitivePeerDependencies:
-      - supports-color
+      dom-element-descriptors: 0.5.1
 
   qunit@2.24.1:
     dependencies:
@@ -24968,9 +24946,9 @@ snapshots:
 
   react-is@18.3.1: {}
 
-  reactiveweb@1.6.0(@babel/core@7.26.10)(@ember/test-waiters@3.1.0)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)):
+  reactiveweb@1.6.0(@babel/core@7.26.10)(@ember/test-waiters@4.1.1(@glint/template@1.3.0))(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)):
     dependencies:
-      '@ember/test-waiters': 3.1.0
+      '@ember/test-waiters': 4.1.1(@glint/template@1.3.0)
       '@embroider/addon-shim': 1.8.9
       '@embroider/macros': 1.16.13(@glint/template@1.3.0)
       decorator-transforms: 2.3.0(@babel/core@7.26.10)
@@ -26091,16 +26069,6 @@ snapshots:
     transitivePeerDependencies:
       - bare-buffer
 
-  tar-stream@1.6.2:
-    dependencies:
-      bl: 1.2.3
-      buffer-alloc: 1.2.0
-      end-of-stream: 1.4.4
-      fs-constants: 1.0.0
-      readable-stream: 2.3.8
-      to-buffer: 1.1.1
-      xtend: 4.0.2
-
   tar-stream@2.2.0:
     dependencies:
       bl: 4.1.0
@@ -26108,7 +26076,6 @@ snapshots:
       fs-constants: 1.0.0
       inherits: 2.0.4
       readable-stream: 3.6.2
-    optional: true
 
   tar-stream@3.1.7:
     dependencies:
@@ -26236,14 +26203,6 @@ snapshots:
 
   textextensions@2.6.0: {}
 
-  thenify-all@1.6.0:
-    dependencies:
-      thenify: 3.3.1
-
-  thenify@3.3.1:
-    dependencies:
-      any-promise: 1.3.0
-
   thread-loader@3.0.4(webpack@5.99.6):
     dependencies:
       json-parse-better-errors: 1.0.2
@@ -26312,8 +26271,6 @@ snapshots:
   tmp@0.2.3: {}
 
   tmpl@1.0.5: {}
-
-  to-buffer@1.1.1: {}
 
   to-fast-properties@1.0.3:
     optional: true
@@ -27182,11 +27139,10 @@ snapshots:
 
   yocto-queue@1.0.0: {}
 
-  zip-stream@1.2.0:
+  zip-stream@3.0.1:
     dependencies:
-      archiver-utils: 1.3.0
-      compress-commons: 1.2.2
-      lodash: 4.17.21
-      readable-stream: 2.3.8
+      archiver-utils: 2.1.0
+      compress-commons: 3.0.0
+      readable-stream: 3.6.2
 
   zod@3.24.4: {}

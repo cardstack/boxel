@@ -27,7 +27,7 @@ permissions:
 jobs:
   host-test:
     name: Host Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-8-core
     strategy:
       fail-fast: false
       matrix:

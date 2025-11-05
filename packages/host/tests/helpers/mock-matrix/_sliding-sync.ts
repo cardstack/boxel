@@ -1,8 +1,11 @@
-import * as MatrixSDK from 'matrix-js-sdk';
 import {
   SlidingSync,
   SlidingSyncEvent,
   SlidingSyncState,
+} from 'matrix-js-sdk/lib/sliding-sync';
+
+import type * as MatrixSDK from 'matrix-js-sdk';
+import type {
   MSC3575List,
   MSC3575RoomSubscription,
 } from 'matrix-js-sdk/lib/sliding-sync';

@@ -1,15 +1,12 @@
-import {
-  Plan,
-  SubscriptionCycle,
-  SupportedMimeType,
-} from '@cardstack/runtime-common';
-import Koa from 'koa';
+import type { Plan, SubscriptionCycle } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '@cardstack/runtime-common';
+import type Koa from 'koa';
 import {
   sendResponseForNotFound,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
-import { RealmServerTokenClaim } from '../utils/jwt';
+import type { RealmServerTokenClaim } from '../utils/jwt';
 import {
   getCurrentActiveSubscription,
   getMostRecentSubscriptionCycle,
@@ -17,7 +14,7 @@ import {
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
-import { CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes';
 
 type FetchUserResponse = {
   data: {

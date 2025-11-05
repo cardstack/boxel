@@ -1,12 +1,12 @@
-import Koa from 'koa';
+import type Koa from 'koa';
+import type { RealmInfo } from '@cardstack/runtime-common';
 import {
   fetchCatalogRealms,
   logger,
-  RealmInfo,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware';
-import { CreateRoutesArgs } from '../routes';
+import type { CreateRoutesArgs } from '../routes';
 
 type CatalogRealm = {
   type: 'catalog-realm';

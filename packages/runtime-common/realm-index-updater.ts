@@ -15,12 +15,11 @@ import {
   type CopyArgs,
   type CopyResult,
 } from '.';
-import { Realm } from './realm';
+import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './reindex-config';
+import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
-
-const FROM_SCRATCH_JOB_TIMEOUT_SEC = 10 * 60;
-const INCREMENTAL_JOB_TIMEOUT_SEC = 3 * 60;
+const INCREMENTAL_JOB_TIMEOUT_SEC = 10 * 60;
 
 export class RealmIndexUpdater {
   #realm: Realm;
@@ -88,11 +87,15 @@ export class RealmIndexUpdater {
   // in an onInvalidation callback
   async fullIndex() {
     this.#indexingDeferred = new Deferred<void>();
+    let startedAt = performance.now();
     try {
       let args: FromScratchArgs = {
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
       };
+
+      this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
+
       let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
@@ -103,8 +106,12 @@ export class RealmIndexUpdater {
       let { ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;
+      let indexingDurationSeconds = (
+        (performance.now() - startedAt) /
+        1000
+      ).toFixed(2);
       this.#log.info(
-        `Realm ${this.realmURL.href} has completed indexing: ${JSON.stringify(
+        `Realm ${this.realmURL.href} has completed indexing in ${indexingDurationSeconds}s: ${JSON.stringify(
           stats,
           null,
           2,

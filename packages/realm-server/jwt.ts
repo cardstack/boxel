@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { type TokenClaims } from '@cardstack/runtime-common';
+import type { TokenClaims } from '@cardstack/runtime-common';
 
 export function createJWT(
   claims: TokenClaims,

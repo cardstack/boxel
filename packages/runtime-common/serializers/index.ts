@@ -6,17 +6,19 @@ import * as CodeRefSerializer from './code-ref';
 import * as AbsoluteCodeRefSerializer from './absolute-code-ref';
 import * as EthereumAddressSerializer from './ethereum-address';
 import * as NumberSerializer from './number';
+import * as EmailSerializer from './email';
 import * as ImageSizeSerializer from './image-size';
+import * as PhoneSerializer from './phone';
 
-import { type CardDocument } from '../index';
-import {
-  type JSONAPISingleResourceDocument,
-  type SerializeOpts,
-  type BaseDef,
-  type BaseDefConstructor,
-  type BaseInstanceType,
-  type CardStore,
-  type DeserializeOpts,
+import type { CardDocument } from '../index';
+import type {
+  JSONAPISingleResourceDocument,
+  SerializeOpts,
+  BaseDef,
+  BaseDefConstructor,
+  BaseInstanceType,
+  CardStore,
+  DeserializeOpts,
 } from 'https://cardstack.com/base/card-api';
 
 export {
@@ -29,6 +31,8 @@ export {
   EthereumAddressSerializer,
   NumberSerializer,
   ImageSizeSerializer,
+  EmailSerializer,
+  PhoneSerializer,
 };
 
 interface Serializer {
@@ -59,6 +63,8 @@ const serializerMapping: { [name: string]: Serializer } = {
   'ethereum-address': EthereumAddressSerializer,
   number: NumberSerializer,
   'image-size': ImageSizeSerializer,
+  email: EmailSerializer,
+  phone: PhoneSerializer,
 };
 
 export type SerializerName =
@@ -70,7 +76,9 @@ export type SerializerName =
   | 'absolute-code-ref'
   | 'ethereum-address'
   | 'number'
-  | 'image-size';
+  | 'image-size'
+  | 'email'
+  | 'phone';
 
 export function getSerializer(name: SerializerName): Serializer {
   assertIsSerializerName(name);

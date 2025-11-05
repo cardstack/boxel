@@ -16,6 +16,7 @@ import puppeteer, {
   type Page,
 } from 'puppeteer';
 import { createJWT } from '../jwt';
+import type { RenderCapture } from './utils';
 import {
   captureResult,
   isRenderError,
@@ -23,7 +24,6 @@ import {
   renderHTML,
   renderIcon,
   renderMeta,
-  RenderCapture,
   type CaptureOptions,
   withTimeout,
   transitionTo,
@@ -134,11 +134,26 @@ export class Prerenderer {
 
   #captureToError(capture: RenderCapture): RenderError | undefined {
     if (capture.status === 'error' || capture.status === 'unusable') {
-      let parsed = JSON.parse(capture.value) as RenderError;
-      return {
-        ...(parsed as unknown as RenderError),
-        evict: capture.status === 'unusable',
-      };
+      let parsed: RenderError | undefined;
+      try {
+        parsed = JSON.parse(capture.value);
+      } catch (e) {
+        parsed = {
+          type: 'error',
+          error: {
+            status: 500,
+            title: 'Render capture parse error',
+            message: `Error result could not be during prerendering: "${capture.value}"`,
+            additionalErrors: null,
+          },
+        };
+      }
+      if (parsed) {
+        return {
+          ...parsed,
+          evict: capture.status === 'unusable',
+        };
+      }
     }
     return undefined;
   }
@@ -480,6 +495,27 @@ export class Prerenderer {
     this.#stopped = true;
   }
 
+  async #restartBrowser(): Promise<void> {
+    log.warn('Restarting prerender browser');
+    for (let [realm, entry] of this.#pool) {
+      try {
+        await entry.context.close();
+      } catch (e) {
+        log.warn(`Error closing context for realm ${realm} during restart:`, e);
+      }
+      this.#lru.delete(realm);
+    }
+    this.#pool.clear();
+    if (this.#browser) {
+      try {
+        await this.#browser.close();
+      } catch (e) {
+        log.warn('Error closing browser during restart:', e);
+      }
+    }
+    this.#browser = null;
+  }
+
   async disposeRealm(realm: string): Promise<void> {
     let entry = this.#pool.get(realm);
     if (!entry) return;
@@ -576,16 +612,54 @@ export class Prerenderer {
             };
           }
         | undefined;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        let result = await this.#prerenderAttempt({
-          realm,
-          url,
-          userId,
-          permissions,
-          auth,
-          opts,
-          renderOptions: attemptOptions,
-        });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let result: {
+          response: RenderResponse;
+          timings: { launchMs: number; renderMs: number };
+          pool: {
+            pageId: string;
+            realm: string;
+            reused: boolean;
+            evicted: boolean;
+            timedOut: boolean;
+          };
+        };
+        try {
+          result = await this.#prerenderAttempt({
+            realm,
+            url,
+            userId,
+            permissions,
+            auth,
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e) {
+          log.error(
+            `prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+            e,
+          );
+          await this.#restartBrowser();
+          try {
+            result = await this.#prerenderAttempt({
+              realm,
+              url,
+              userId,
+              permissions,
+              auth,
+              opts,
+              renderOptions: attemptOptions,
+            });
+          } catch (e2) {
+            log.error(
+              `prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+              e2,
+            );
+            // Optionally, set result to an error response or continue the loop
+            // For now, rethrow to break the loop and propagate the error
+            throw e2;
+          }
+        }
         lastResult = result;
 
         let retrySignature = this.#shouldRetryWithClearCache(result.response);
@@ -985,9 +1059,24 @@ export class Prerenderer {
     if (this.#browser) {
       return this.#browser;
     }
+    let launchArgs: string[] = [];
+    let disableSandbox =
+      process.env.CI === 'true' ||
+      process.env.PUPPETEER_DISABLE_SANDBOX === 'true';
+    if (disableSandbox) {
+      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
+    let extraArgs =
+      process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
+    if (extraArgs && extraArgs.length > 0) {
+      launchArgs.push(...extraArgs);
+    }
     this.#browser = await puppeteer.launch({
       headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
-      args: process.env.CI ? ['--no-sandbox'] : [],
+      ...(launchArgs.length > 0 ? { args: launchArgs } : {}),
+      ...(process.env.PUPPETEER_EXECUTABLE_PATH
+        ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
+        : {}),
     });
     return this.#browser;
   }

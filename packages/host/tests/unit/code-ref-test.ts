@@ -1,12 +1,13 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader, loadCardDef } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
+import { baseRealm, loadCardDef } from '@cardstack/runtime-common';
 
-import * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,

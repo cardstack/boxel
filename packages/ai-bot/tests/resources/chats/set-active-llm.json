@@ -285,7 +285,8 @@
     "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "model": "openai/gpt-4o"
+      "model": "openai/gpt-4o",
+      "toolsSupported": true
     },
     "state_key": "",
     "origin_server_ts": 1733266518032,
@@ -301,7 +302,9 @@
     "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "model": "google/gemini-pro-1.5"
+      "model": "google/gemini-pro-1.5",
+      "toolsSupported": true,
+      "reasoningEffort": "minimal"
     },
     "state_key": "",
     "origin_server_ts": 1733266540113,

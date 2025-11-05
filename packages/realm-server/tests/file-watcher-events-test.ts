@@ -1,10 +1,10 @@
 import { module, test } from 'qunit';
-import { Test, SuperTest } from 'supertest';
+import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import { Server } from 'http';
-import { type DirResult } from 'tmp';
+import type { Server } from 'http';
+import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync } from 'fs-extra';
-import { Realm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 import {
   findRealmEvent,
   setupBaseRealmServer,
@@ -14,7 +14,7 @@ import {
   waitForRealmEvent,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
 
 module(basename(__filename), function () {
   module('file watcher realm events', function (hooks) {

@@ -1,12 +1,11 @@
-import {
+import type {
   LedgerEntry,
   Plan,
   Subscription,
   SubscriptionCycle,
   User,
-  param,
-  query,
 } from '@cardstack/runtime-common';
+import { param, query } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
   fetchSubscriptionsByUserId,
@@ -26,7 +25,7 @@ import {
   spendCredits,
 } from '@cardstack/billing/billing-queries';
 
-import {
+import type {
   StripeInvoicePaymentSucceededWebhookEvent,
   StripeSubscriptionDeletedWebhookEvent,
   StripeCheckoutSessionCompletedWebhookEvent,

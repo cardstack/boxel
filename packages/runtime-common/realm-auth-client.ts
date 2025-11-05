@@ -1,5 +1,5 @@
 import { unixTime, delay } from './index';
-import { TokenClaims } from './realm';
+import type { TokenClaims } from './realm';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)

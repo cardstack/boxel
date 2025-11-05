@@ -118,7 +118,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     ],
   });
 
-  let { createAndJoinRoom, getRoomState, simulateRemoteMessage } =
+  let { createAndJoinRoom, getRoomIds, getRoomState, simulateRemoteMessage } =
     mockMatrixUtils;
 
   // Setup realm server endpoints for summarization tests
@@ -292,6 +292,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       }),
       modelId: 'openai/gpt-5',
       toolsSupported: true,
+      reasoningEffort: 'minimal',
     });
 
     let openAiGpt4oMiniModel = new ModelConfiguration({
@@ -657,6 +658,71 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.strictEqual(roomState.model, llmIdToChangeTo);
   });
 
+  test('active LLM event includes metadata when switching models', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-llm-select-selected]');
+    await click(`[data-test-llm-select-item="openai/gpt-4o-mini"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return state.model === 'openai/gpt-4o-mini';
+    });
+
+    let firstState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      firstState.model,
+      'openai/gpt-4o-mini',
+      'Switching to GPT-4o mini updates active LLM',
+    );
+    assert.true(
+      firstState.toolsSupported,
+      'Active LLM event records tool support for GPT-4o mini',
+    );
+    assert.strictEqual(
+      firstState.reasoningEffort,
+      null,
+      'Reasoning effort is omitted when not configured',
+    );
+
+    await click('[data-test-llm-select-selected]');
+    await click(`[data-test-llm-select-item="openai/gpt-5"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return state.model === 'openai/gpt-5';
+    });
+
+    let secondState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      secondState.model,
+      'openai/gpt-5',
+      'Switching back to GPT-5 updates active LLM',
+    );
+    assert.true(
+      secondState.toolsSupported,
+      'Active LLM event records tool support for GPT-5',
+    );
+    assert.strictEqual(
+      secondState.reasoningEffort,
+      'minimal',
+      'Active LLM event records configured reasoning effort for GPT-5',
+    );
+  });
+
   test('defaults to anthropic/claude-sonnet-4.5 in code mode', async function (assert) {
     let defaultCodeLLMId = 'anthropic/claude-sonnet-4.5';
     let defaultCodeLLMName = modelNameFor(defaultCodeLLMId);
@@ -951,6 +1017,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-send-message-btn]');
 
     mockedFileContent = 'test card content';
+
+    // This is to make sure opening code mode works even if the workspace chooser is open
+    await click('[data-test-workspace-chooser-toggle]');
 
     await click('[data-test-attached-file-dropdown-button="Fadhlan"]');
 
@@ -2512,6 +2581,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`)
       .exists();
     await click(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`);
+    await waitFor(
+      `[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`,
+    );
     assert
       .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`)
       .exists();
@@ -2523,10 +2595,36 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-send-message-btn]');
 
+    let roomsBeforeSameSkills = getRoomIds();
     await click('[data-test-create-room-btn]', { shiftKey: true });
     await click('[data-test-new-session-settings-option="Add Same Skills"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor('[data-room-settled]');
+
+    let roomsAfterSameSkills = getRoomIds();
+    let duplicatedSkillsRoomId = roomsAfterSameSkills.find(
+      (roomId) => !roomsBeforeSameSkills.includes(roomId),
+    );
+    assert.ok(
+      duplicatedSkillsRoomId,
+      'Creating a new session with copied skills creates a new room',
+    );
+    if (duplicatedSkillsRoomId) {
+      let activeLLMState = getRoomState(
+        duplicatedSkillsRoomId,
+        APP_BOXEL_ACTIVE_LLM,
+        '',
+      );
+      assert.strictEqual(
+        typeof activeLLMState.toolsSupported,
+        'boolean',
+        'New room active LLM event includes toolsSupported metadata',
+      );
+      assert.true(
+        Object.prototype.hasOwnProperty.call(activeLLMState, 'reasoningEffort'),
+        'New room active LLM event includes reasoningEffort metadata',
+      );
+    }
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu]');
@@ -2560,9 +2658,32 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Enabling create new session button',
     );
     await click('[data-test-send-message-btn]');
+    let roomsBeforeNewSession = getRoomIds();
     await waitFor('[data-test-create-room-btn]:not([disabled])');
     await click('[data-test-create-room-btn]');
     await waitFor('[data-room-settled]');
+
+    let roomsAfterNewSession = getRoomIds();
+    let newlyCreatedRoomId = roomsAfterNewSession.find(
+      (roomId) => !roomsBeforeNewSession.includes(roomId),
+    );
+    assert.ok(newlyCreatedRoomId, 'Creating a new session creates a new room');
+    if (newlyCreatedRoomId) {
+      let activeLLMState = getRoomState(
+        newlyCreatedRoomId,
+        APP_BOXEL_ACTIVE_LLM,
+        '',
+      );
+      assert.strictEqual(
+        typeof activeLLMState.toolsSupported,
+        'boolean',
+        'Newly created room includes toolsSupported metadata',
+      );
+      assert.true(
+        Object.prototype.hasOwnProperty.call(activeLLMState, 'reasoningEffort'),
+        'Newly created room includes reasoningEffort metadata',
+      );
+    }
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu]');

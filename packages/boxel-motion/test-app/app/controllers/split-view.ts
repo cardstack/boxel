@@ -1,8 +1,8 @@
 import {
+  type AnimationDefinition,
   type Changeset,
   StaticBehavior,
   SpringBehavior,
-  AnimationDefinition,
 } from '@cardstack/boxel-motion';
 import Controller from '@ember/controller';
 import { action } from '@ember/object';

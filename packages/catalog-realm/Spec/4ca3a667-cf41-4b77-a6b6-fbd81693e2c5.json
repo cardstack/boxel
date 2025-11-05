@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../app/table",
-        "name": "QueryState"
+        "module": "../youtube-thumbnail-composer/modifiers/draggable",
+        "name": "DragModifier"
       },
       "specType": null,
       "containedExamples": [],
-      "title": "QueryState",
+      "title": "DragModifier",
       "description": null,
       "cardInfo": {
         "title": null,

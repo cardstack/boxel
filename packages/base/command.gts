@@ -199,6 +199,12 @@ export class UpdateSkillActivationInput extends CardDef {
   @field isActive = contains(BooleanField);
 }
 
+export class UpdateRoomSkillsInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field skillCardIdsToActivate = containsMany(StringField);
+  @field skillCardIdsToDeactivate = containsMany(StringField);
+}
+
 export class UseAiAssistantInput extends CardDef {
   @field roomId = contains(StringField); // pass 'new' or leave blank to create a new room
   @field roomName = contains(StringField); // only used when creating a new room

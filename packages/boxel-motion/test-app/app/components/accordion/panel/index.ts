@@ -1,6 +1,6 @@
 import {
+  type Sprite,
   type Changeset,
-  Sprite,
   SpriteType,
   SpringBehavior,
   TweenBehavior,

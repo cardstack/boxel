@@ -1,4 +1,4 @@
-import Koa from 'koa';
+import type Koa from 'koa';
 import {
   asExpressions,
   insert,
@@ -15,8 +15,8 @@ import {
   sendResponseForUnprocessableEntity,
   setContextResponse,
 } from '../middleware';
-import { RealmServerTokenClaim } from '../utils/jwt';
-import { CreateRoutesArgs } from '../routes';
+import type { RealmServerTokenClaim } from '../utils/jwt';
+import type { CreateRoutesArgs } from '../routes';
 import { validateSubdomain } from '../lib/user-subdomain-validation';
 
 interface ClaimedBoxelDomainJSON {

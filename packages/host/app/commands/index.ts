@@ -1,9 +1,6 @@
-import { VirtualNetwork } from '@cardstack/runtime-common';
-
-import HostBaseCommand from '../lib/host-base-command';
+import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-definition';
-import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
 import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
@@ -51,18 +48,16 @@ import * as SwitchSubmodeCommandModule from './switch-submode';
 import * as TransformCardsCommandModule from './transform-cards';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
-import * as UpdateSkillActivationCommandModule from './update-skill-activation';
+import * as UpdateRoomSkillsCommandModule from './update-room-skills';
 import * as CommandUtilsModule from './utils';
 import * as WriteTextFileCommandModule from './write-text-file';
+
+import type HostBaseCommand from '../lib/host-base-command';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/add-field-to-card-definition',
     AddFieldToCardDefinitionCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/add-skills-to-room',
-    AddSkillsToRoomCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ask-ai',
@@ -209,8 +204,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     UpdatePlaygroundSelectionCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/update-skill-activation',
-    UpdateSkillActivationCommandModule,
+    '@cardstack/boxel-host/commands/update-room-skills',
+    UpdateRoomSkillsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/send-request-via-proxy',
@@ -273,7 +268,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
 // Note - this is used for the tests
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AddFieldToCardDefinitionCommandModule.default,
-  AddSkillsToRoomCommandModule.default,
   ApplySearchReplaceBlockCommandModule.default,
   AskAiCommandModule.default,
   CopyCardToRealmModule.default,
@@ -320,7 +314,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   TransformCardsCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
-  UpdateSkillActivationCommandModule.default,
+  UpdateRoomSkillsCommandModule.default,
   UseAiAssistantCommandModule.default,
   WriteTextFileCommandModule.default,
 ];

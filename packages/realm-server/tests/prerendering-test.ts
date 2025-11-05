@@ -1,10 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import {
-  type RealmPermissions,
-  type Realm,
-  type RealmAdapter,
-  type RenderResponse,
+import type {
+  RealmPermissions,
+  Realm,
+  RealmAdapter,
+  RenderResponse,
 } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/index';
 

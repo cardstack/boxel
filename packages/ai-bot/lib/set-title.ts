@@ -1,10 +1,6 @@
-import {
-  type MatrixEvent,
-  type IEventRelation,
-  IRoomEvent,
-} from 'matrix-js-sdk';
-import OpenAI from 'openai';
-import type { MatrixClient } from 'matrix-js-sdk';
+import type { MatrixEvent, IEventRelation } from 'matrix-js-sdk';
+import type OpenAI from 'openai';
+import type { MatrixClient, IRoomEvent } from 'matrix-js-sdk';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultWithOutputContent,
@@ -13,7 +9,7 @@ import type {
   CodePatchResultContent,
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
-import { ChatCompletionMessageParam } from 'openai/resources';
+import type { ChatCompletionMessageParam } from 'openai/resources';
 import {
   type OpenAIPromptMessage,
   isCodePatchResultStatusApplied,

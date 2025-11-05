@@ -1,11 +1,7 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import {
-  RoomMemberEvent,
-  RoomEvent,
-  createClient,
-  MatrixEvent,
-} from 'matrix-js-sdk';
+import type { MatrixEvent } from 'matrix-js-sdk';
+import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
 import OpenAI from 'openai';
 import {
@@ -16,8 +12,8 @@ import {
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
+import type { PromptParts } from '@cardstack/runtime-common/ai';
 import {
-  PromptParts,
   isRecognisedDebugCommand,
   getPromptParts,
   isInDebugMode,
@@ -45,14 +41,14 @@ import * as Sentry from '@sentry/node';
 
 import { saveUsageCost } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
-import { ChatCompletionMessageParam } from 'openai/resources';
-import { OpenAIError } from 'openai/error';
-import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
+import type { ChatCompletionMessageParam } from 'openai/resources';
+import type { OpenAIError } from 'openai/error';
+import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireLock, releaseLock } from './lib/queries';
 import { DebugLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
-import { type MatrixClient } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
 
@@ -73,7 +69,6 @@ let aiBotInstanceId = uuidv4();
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
-  private toolCallCapableModels: Set<string>;
   pgAdapter: PgAdapter;
   id: string;
   aiBotInstanceId: string;
@@ -86,22 +81,7 @@ class Assistant {
     this.id = id;
     this.client = client;
     this.pgAdapter = new PgAdapter();
-    this.toolCallCapableModels = new Set();
     this.aiBotInstanceId = aiBotInstanceId;
-  }
-
-  async loadToolCallCapableModels() {
-    // api request is https://openrouter.ai/api/v1/models?supported_parameters=tools
-    let response = await fetch(
-      'https://openrouter.ai/api/v1/models?supported_parameters=tools',
-    );
-    let responseJson = (await response.json()) as {
-      data: { id: string }[];
-    };
-    let modelList = responseJson.data;
-    this.toolCallCapableModels = new Set(
-      modelList.map((model: any) => model.id),
-    );
   }
 
   async trackAiUsageCost(matrixUserId: string, generationId: string) {
@@ -126,38 +106,29 @@ class Assistant {
       throw new Error('Model is required');
     }
 
-    // Sending tools to models that don't support them results in an error
-    // from openrouter.
-    if (
-      prompt.tools?.length === 0 ||
-      (prompt.model && !this.toolCallCapableModels.has(prompt.model))
-    ) {
-      return this.openai.chat.completions.stream({
-        model: this.getModel(prompt),
-        messages: prompt.messages as ChatCompletionMessageParam[],
-        reasoning_effort: this.getReasoningEffort(prompt),
-      });
-    } else {
-      return this.openai.chat.completions.stream({
-        model: this.getModel(prompt),
-        messages: prompt.messages as ChatCompletionMessageParam[],
-        tools: prompt.tools,
-        tool_choice: prompt.toolChoice,
-        reasoning_effort: this.getReasoningEffort(prompt),
-      });
+    let request: Parameters<typeof this.openai.chat.completions.stream>[0] = {
+      model: this.getModel(prompt),
+      messages: prompt.messages as ChatCompletionMessageParam[],
+    };
+
+    if (prompt.reasoningEffort !== undefined) {
+      request.reasoning_effort = prompt.reasoningEffort;
     }
+
+    if (
+      prompt.toolsSupported === true &&
+      prompt.tools &&
+      prompt.tools.length > 0
+    ) {
+      request.tools = prompt.tools;
+      request.tool_choice = prompt.toolChoice;
+    }
+
+    return this.openai.chat.completions.stream(request);
   }
 
   getModel(prompt: PromptParts) {
     return prompt.model ?? DEFAULT_LLM;
-  }
-
-  // TODO: This function is used to avoid a thinking model of gpt-5.
-  // This should use the reasoning effort defined in the ModelConfiguration card instead.
-  // once this is supported.
-  getReasoningEffort(prompt: PromptParts) {
-    let model = this.getModel(prompt);
-    return model === 'openai/gpt-5' ? 'minimal' : undefined;
   }
 
   async handleDebugCommands(
@@ -222,7 +193,6 @@ Common issues are:
   let { user_id: aiBotUserId } = auth;
 
   assistant = new Assistant(client, aiBotUserId, aiBotInstanceId);
-  await assistant.loadToolCallCapableModels();
 
   // Set up signal handlers for graceful shutdown
   setupSignalHandlers();

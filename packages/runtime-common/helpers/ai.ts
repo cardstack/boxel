@@ -1,7 +1,7 @@
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { primitive } from '../constants';
-import { Loader } from '../loader';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { Loader } from '../loader';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
 
 type ArraySchema = {

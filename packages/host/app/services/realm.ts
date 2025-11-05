@@ -18,14 +18,16 @@ import window from 'ember-window-mock';
 
 import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 
-import {
+import type {
   Permissions,
+  JWTPayload,
+  RealmPermissions,
+} from '@cardstack/runtime-common';
+import {
   Deferred,
   logger,
-  JWTPayload,
   SupportedMimeType,
   type RealmInfo,
-  RealmPermissions,
   RealmPaths,
 } from '@cardstack/runtime-common';
 

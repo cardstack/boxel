@@ -6,11 +6,11 @@ import {
   type RenderError,
 } from '@cardstack/runtime-common';
 
-import { type Page } from 'puppeteer';
+import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
-export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 15_000);
+export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 180_000);
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
 
@@ -293,7 +293,7 @@ export async function captureResult(
       }
       return false;
     },
-    {},
+    { timeout: renderTimeoutMs },
     statuses,
     opts?.expectedId ?? null,
     opts?.expectedNonce ?? null,

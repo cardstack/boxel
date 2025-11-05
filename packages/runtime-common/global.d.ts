@@ -9,6 +9,6 @@ declare module 'ember-source/dist/ember-template-compiler' {
 }
 
 declare module '@babel/plugin-transform-typescript' {
-  import * as Babel from '@babel/core';
+  import type * as Babel from '@babel/core';
   export default function makePlugin(babel: typeof Babel): Babel.PluginObj;
 }

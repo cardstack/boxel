@@ -26,6 +26,13 @@ module.exports = {
     browser: true,
   },
   rules: {
+    '@typescript-eslint/consistent-type-imports': [
+      'error',
+      {
+        disallowTypeAnnotations: false,
+      },
+    ],
+    '@typescript-eslint/no-import-type-side-effects': 'error',
     'prefer-const': 'off',
     '@typescript-eslint/no-empty-function': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
