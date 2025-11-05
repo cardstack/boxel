@@ -1,5 +1,5 @@
 import { getOwner } from '@ember/owner';
-import { visit, waitFor } from '@ember/test-helpers';
+import { click, settled, visit, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -90,6 +90,19 @@ module('Acceptance | site config home page', function (hooks) {
         data: {
           attributes: {
             name: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `../pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'Pet/peanut.json': {
+        data: {
+          attributes: {
+            name: 'Peanut',
           },
           meta: {
             adoptsFrom: {
@@ -210,6 +223,69 @@ module('Acceptance | site config home page', function (hooks) {
       assert
         .dom(`[data-test-host-mode-card="${testRealmURL}Pet/mango"]`)
         .exists();
+    });
+
+    test('host submode updates primary card after home page change', async function (assert) {
+      await visitOperatorMode({
+        submode: 'interact',
+        stacks: [[{ id: `${testRealmURL}`, format: 'isolated' }]],
+      });
+      await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
+
+      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      await waitFor('[data-test-submode-switcher="host"]');
+      await waitFor(`[data-test-host-mode-card="${testRealmURL}Pet/mango"]`);
+
+      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-boxel-menu-item-text="Interact"]');
+      await waitFor('[data-test-submode-switcher="interact"]');
+      await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      await click(`[data-cards-grid-item="${testRealmURL}site"]`);
+
+      await click(
+        `[data-test-stack-card="${testRealmURL}site"] [data-test-edit-button]`,
+      );
+      await waitFor(
+        `[data-test-links-to-editor="home"] [data-test-remove-card]`,
+      );
+
+      await click(`[data-test-links-to-editor="home"] [data-test-remove-card]`);
+      await waitFor(`[data-test-links-to-editor="home"] [data-test-add-new]`);
+
+      await click(`[data-test-links-to-editor="home"] [data-test-add-new]`);
+      await waitFor('[data-test-card-catalog-modal]');
+      await click(`[data-test-card-catalog-item="${testRealmURL}Pet/peanut"]`);
+      await click('[data-test-card-catalog-go-button]');
+      await waitUntil(
+        () => !document.querySelector('[data-test-card-catalog-modal]'),
+      );
+      await waitFor(
+        `[data-test-links-to-editor="home"] [data-test-card="${testRealmURL}Pet/peanut"]`,
+      );
+
+      await click(
+        `[data-test-stack-card="${testRealmURL}site"] [data-test-edit-button]`,
+      );
+      await waitFor(
+        `[data-test-stack-card="${testRealmURL}site"] [data-test-card-format="isolated"]`,
+      );
+      await settled();
+      await click(
+        `[data-test-stack-card="${testRealmURL}site"] [data-test-close-button]`,
+      );
+
+      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      await waitFor('[data-test-submode-switcher="host"]');
+      await waitFor(`[data-test-host-mode-card="${testRealmURL}Pet/peanut"]`);
+      assert
+        .dom(`[data-test-host-mode-card="${testRealmURL}Pet/peanut"]`)
+        .exists();
+      assert
+        .dom(`[data-test-host-mode-card="${testRealmURL}Pet/mango"]`)
+        .doesNotExist();
     });
   });
 });

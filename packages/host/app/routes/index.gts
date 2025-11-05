@@ -70,11 +70,6 @@ export default class Card extends Route {
 
   async beforeModel(transition: Transition) {
     await super.beforeModel(transition);
-    console.log(
-      'transition to index route',
-      transition.to?.name,
-      transition.to?.params,
-    );
 
     if (!this.hostModeService.isActive) {
       return;

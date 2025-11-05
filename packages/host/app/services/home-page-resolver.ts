@@ -47,7 +47,9 @@ export default class HomePageResolverService extends Service {
 
     let promise = this.inflight.get(realmURL);
     if (!promise) {
-      promise = this.loadHomePage(realmURL);
+      promise = this.loadHomePage(realmURL).finally(() => {
+        this.inflight.delete(realmURL);
+      });
       this.inflight.set(realmURL, promise);
     }
 
