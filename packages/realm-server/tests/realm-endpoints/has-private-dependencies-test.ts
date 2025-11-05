@@ -15,8 +15,6 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   DEFAULT_PERMISSIONS,
-  param,
-  query,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -360,19 +358,10 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   }
 
   async function makeRealmPublic(realmURL: string) {
-    await query(dbAdapter, [
-      `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES (`,
-      param(realmURL),
-      `,`,
-      param('*'),
-      `,`,
-      param(true),
-      `,`,
-      param(false),
-      `,`,
-      param(false),
-      `)`,
-    ]);
+    await dbAdapter.execute(`
+      INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+      VALUES ('${realmURL}', '*', true, false, false)
+    `);
   }
 });
 
