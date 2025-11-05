@@ -62,7 +62,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       );
       let testRealmDir = join(realmsRootPath, 'test');
       ensureDirSync(testRealmDir);
-      copySync(join(__dirname, 'cards'), testRealmDir);
+      copySync(join(__dirname, '..', 'cards'), testRealmDir);
 
       virtualNetwork = createVirtualNetwork();
 
