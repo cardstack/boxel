@@ -9,7 +9,8 @@
     "type": "card",
     "attributes": {
       "birthday": {
-        "value": "{\"month\":\"03\",\"day\":\"15\"}"
+        "day": null,
+        "month": null
       },
       "cardInfo": {
         "notes": null,
@@ -18,70 +19,110 @@
         "thumbnailURL": null
       },
       "workWeek": {
-        "value": "2025-W46"
+        "value": "2025-W47"
       },
       "payPeriod": {
-        "value": "2025-11"
+        "value": "2025-12"
       },
       "publishIn": {
-        "value": "{\"amount\":3,\"unit\":\"days\"}"
+        "unit": null,
+        "amount": null
       },
       "fiscalYear": {
         "value": "2025"
       },
-      "playground": {
-        "value": "2025-12-25T10:30"
-      },
-      "employeeAge": {
-        "value": "1990-03-15"
-      },
+      "employeeAge": "2025-01-15",
       "meetingTime": {
-        "value": "14:30"
+        "value": null
       },
-      "orderPlaced": {
-        "value": "2025-10-28T09:15"
-      },
-      "tokenExpiry": {
-        "value": "2025-11-05T23:59"
-      },
+      "orderPlaced": "2025-11-06T13:18:00.000Z",
+      "tokenExpiry": "2025-11-23T13:20:00.000Z",
       "billingMonth": {
-        "value": "11"
+        "value": "07"
       },
       "taskDuration": {
-        "value": "{\"hours\":2,\"minutes\":30,\"seconds\":0}"
+        "hours": 10,
+        "minutes": 50,
+        "seconds": null
       },
       "workingHours": {
-        "value": "{\"start\":\"09:00\",\"end\":\"17:30\"}"
+        "end": {
+          "value": null
+        },
+        "start": {
+          "value": null
+        }
       },
-      "eventDateTime": {
-        "value": "2025-11-20T19:00"
-      },
+      "eventDateTime": "2025-11-19T13:21:00.000Z",
       "campaignPeriod": {
-        "value": "{\"start\":\"2025-11-01\",\"end\":\"2025-12-31\"}"
+        "end": null,
+        "start": null
       },
-      "appointmentDate": {
-        "value": "2025-11-15"
+      "playgroundDate": "2025-11-20",
+      "playgroundTime": {
+        "value": "13:00"
+      },
+      "playgroundWeek": {
+        "value": null
+      },
+      "playgroundYear": {
+        "value": null
+      },
+      "appointmentDate": "2025-11-28",
+      "playgroundMonth": {
+        "value": null
       },
       "appointmentSlots": {
-        "value": "02:00 PM"
+        "value": "13:00"
       },
       "financialQuarter": {
-        "value": "{\"quarter\":\"Q4\",\"year\":\"2024\"}"
+        "year": null,
+        "quarter": null
       },
-      "lastActivityTime": {
-        "value": "2025-11-02T14:30"
-      },
+      "lastActivityTime": "2025-11-06T13:20:00.000Z",
       "meetingRecurrence": {
-        "value": "{\"pattern\":\"weekly\",\"startDate\":\"2025-11-04\",\"endDate\":\"2026-01-31\",\"daysOfWeek\":[1,3,5]}"
+        "endDate": null,
+        "pattern": null,
+        "interval": null,
+        "startDate": null,
+        "customRule": null,
+        "dayOfMonth": null,
+        "daysOfWeek": null,
+        "monthOfYear": null,
+        "occurrences": null
+      },
+      "playgroundDatetime": "2025-11-22T05:19:00.000Z",
+      "playgroundDuration": {
+        "hours": null,
+        "minutes": null,
+        "seconds": null
       },
       "deliveryCalculation": {
-        "value": "{\"start\":\"2025-11-04\",\"end\":\"2025-11-18\"}"
+        "end": null,
+        "start": null
       },
-      "playgroundInputType": "datetime",
+      "playgroundDateRange": {
+        "end": null,
+        "start": null
+      },
+      "playgroundFieldType": "datetime",
+      "playgroundMonthYear": {
+        "value": null
+      },
+      "playgroundTimeRange": {
+        "end": {
+          "value": null
+        },
+        "start": {
+          "value": null
+        }
+      },
       "playgroundPresentation": "standard",
-      "productLaunchCountdown": {
-        "value": "2026-01-15T00:00"
-      }
+      "playgroundRelativeTime": {
+        "unit": null,
+        "amount": null
+      },
+      "productLaunchCountdown": "2025-11-30T13:16:00.000Z"
     },
     "relationships": {
       "cardInfo.theme": {

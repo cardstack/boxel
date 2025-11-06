@@ -1,3 +1,4 @@
+import { eq } from '@cardstack/boxel-ui/helpers';
 // ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   CardDef,
@@ -6,7 +7,20 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
-import { DateTimeField } from '../fields/date-time'; // ² Import unified DateTimeField
+import { DateField } from '../fields/date'; // ² Import DateField
+import { TimeField } from '../fields/time'; // ³ Import TimeField
+import { DatetimeField } from '../fields/date-time'; // ⁴ Import DatetimeField
+import { DateRangeField } from '../fields/date/date-range'; // ⁵ Import DateRangeField
+import { TimeRangeField } from '../fields/time/time-range'; // ⁶ Import TimeRangeField
+import { DurationField } from '../fields/time/duration'; // ⁷ Import DurationField
+import { RelativeTimeField } from '../fields/time/relative-time'; // ⁸ Import RelativeTimeField
+import { MonthDayField } from '../fields/date/month-day'; // ⁹ Import MonthDayField
+import { QuarterField } from '../fields/date/quarter'; // ¹⁰ Import QuarterField
+import { RecurringPatternField } from '../fields/recurring-pattern'; // ¹¹ Import RecurringPatternField
+import { YearField } from '../fields/date/year'; // ¹² Import YearField
+import { MonthField } from '../fields/date/month'; // ¹³ Import MonthField
+import { MonthYearField } from '../fields/date/month-year'; // ¹⁴ Import MonthYearField
+import { WeekField } from '../fields/date/week'; // ¹⁵ Import WeekField
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import { BoxelSelect } from '@cardstack/boxel-ui/components'; // ³ BoxelSelect component
 import { tracked } from '@glimmer/tracking';
@@ -23,141 +37,100 @@ export class DateTimePreview extends CardDef {
     },
   });
 
-  // ⁴ᵃ Configuration control fields - BoxelSelect updates these
-  @field playgroundInputType = contains(StringField);
+  // ¹⁶ Playground control fields
+  @field playgroundFieldType = contains(StringField);
   @field playgroundPresentation = contains(StringField);
 
-  // ⁴ᵇ PLAYGROUND - Dynamic configuration via function!
-  @field playground = contains(DateTimeField, {
+  // ¹⁷ Playground fields - one for each field type
+  @field playgroundDate = contains(DateField, {
     configuration: function (this: DateTimePreview) {
       return {
-        inputType: this.playgroundInputType || 'datetime',
         presentation: this.playgroundPresentation || 'standard',
-        placeholder: 'Try editing this field!',
       };
     },
   });
 
-  // ⁵ BASIC DATE & TIME INPUTS - Using unified DateTimeField with inputType
-
-  // ⁶ Single date picker
-  @field appointmentDate = contains(DateTimeField, {
-    configuration: {
-      inputType: 'date',
-      placeholder: 'Select appointment date',
+  @field playgroundTime = contains(TimeField, {
+    configuration: function (this: DateTimePreview) {
+      return {
+        presentation: this.playgroundPresentation || 'standard',
+      };
     },
   });
 
-  // ⁷ Time picker (12-hour)
-  @field meetingTime = contains(DateTimeField, {
-    configuration: {
-      inputType: 'time',
-      timeFormat: '12h',
-      placeholder: 'Select meeting time',
+  @field playgroundDatetime = contains(DatetimeField, {
+    configuration: function (this: DateTimePreview) {
+      return {
+        presentation: this.playgroundPresentation || 'standard',
+      };
     },
   });
 
-  // ⁸ DateTime picker
-  @field eventDateTime = contains(DateTimeField, {
-    configuration: {
-      inputType: 'datetime',
-      placeholder: 'Select event date and time',
+  @field playgroundYear = contains(YearField);
+  @field playgroundMonth = contains(MonthField);
+  @field playgroundMonthYear = contains(MonthYearField);
+  @field playgroundWeek = contains(WeekField);
+  @field playgroundDateRange = contains(DateRangeField, {
+    configuration: function (this: DateTimePreview) {
+      return {
+        presentation: this.playgroundPresentation || 'standard',
+      };
     },
   });
+  @field playgroundTimeRange = contains(TimeRangeField);
+  @field playgroundDuration = contains(DurationField);
+  @field playgroundRelativeTime = contains(RelativeTimeField);
 
-  // ⁹ RANGE INPUTS - Start/End selections
+  // ²⁸ BASIC DATE & TIME INPUTS - Using separate field types
 
-  // ¹⁰ Date range picker
-  @field campaignPeriod = contains(DateTimeField, {
-    configuration: {
-      inputType: 'date-range',
-      placeholder: 'Select campaign period',
-    },
-  });
+  // ²⁹ Single date picker
+  @field appointmentDate = contains(DateField);
 
-  // ¹¹ Time range picker (24-hour format)
-  @field workingHours = contains(DateTimeField, {
-    configuration: {
-      inputType: 'time-range',
-      timeFormat: '24h',
-      placeholder: 'Set working hours',
-    },
-  });
+  // ³⁰ Time picker
+  @field meetingTime = contains(TimeField);
 
-  // ¹² DURATION INPUT - Hours/Minutes/Seconds
+  // ³¹ DateTime picker
+  @field eventDateTime = contains(DatetimeField);
 
-  @field taskDuration = contains(DateTimeField, {
-    configuration: {
-      inputType: 'duration',
-      placeholder: 'Enter task duration',
-    },
-  });
+  // ⁹ INDEPENDENT SPECIALIZED FIELDS - Now separate FieldDef types
 
-  // ¹³ PARTIAL DATE INPUTS - Granular selections
+  // ¹⁰ Date range picker - uses independent DateRangeField
+  @field campaignPeriod = contains(DateRangeField);
 
-  // ¹⁴ Birthday picker (month-day only, privacy-focused)
-  @field birthday = contains(DateTimeField, {
-    configuration: {
-      inputType: 'month-day',
-      placeholder: 'Select birthday',
-    },
-  });
+  // ¹¹ Time range picker - uses independent TimeRangeField
+  @field workingHours = contains(TimeRangeField);
 
-  // ¹⁵ Year picker (fiscal year, graduation, etc.)
-  @field fiscalYear = contains(DateTimeField, {
-    configuration: {
-      inputType: 'year',
-      placeholder: 'Select fiscal year',
-    },
-  });
+  // ¹² Duration input - uses independent DurationField
+  @field taskDuration = contains(DurationField);
 
-  // ¹⁶ Month picker (billing month, reports)
-  @field billingMonth = contains(DateTimeField, {
-    configuration: {
-      inputType: 'month',
-      placeholder: 'Select billing month',
-    },
-  });
+  // ¹³ PARTIAL DATE INPUTS - Mix of unified DateTimeField and independent fields
 
-  // ¹⁷ Month-year picker (payroll, statements)
-  @field payPeriod = contains(DateTimeField, {
-    configuration: {
-      inputType: 'month-year',
-      placeholder: 'Select pay period',
-    },
-  });
+  // ¹⁴ Birthday picker - uses independent MonthDayField
+  @field birthday = contains(MonthDayField);
 
-  // ¹⁸ Week picker (ISO weeks, timesheets)
-  @field workWeek = contains(DateTimeField, {
-    configuration: {
-      inputType: 'week',
-      placeholder: 'Select work week',
-    },
-  });
+  // ³² Year picker (fiscal year, graduation, etc.)
+  @field fiscalYear = contains(YearField);
 
-  // ¹⁹ Quarter picker (Q1-Q4, financial reports)
-  @field financialQuarter = contains(DateTimeField, {
-    configuration: {
-      inputType: 'quarter',
-      placeholder: 'Select financial quarter',
-    },
-  });
+  // ³³ Month picker (billing month, reports)
+  @field billingMonth = contains(MonthField);
 
-  // ²⁰ RELATIVE TIME INPUT - Human-friendly scheduling
+  // ³⁴ Month-year picker (payroll, statements)
+  @field payPeriod = contains(MonthYearField);
 
-  @field publishIn = contains(DateTimeField, {
-    configuration: {
-      inputType: 'relative',
-      placeholder: 'Publish in...',
-    },
-  });
+  // ³⁵ Week picker (ISO weeks, timesheets)
+  @field workWeek = contains(WeekField);
+
+  // ¹⁹ Quarter picker - uses independent QuarterField
+  @field financialQuarter = contains(QuarterField);
+
+  // ²⁰ Relative time input - uses independent RelativeTimeField
+  @field publishIn = contains(RelativeTimeField);
 
   // ²¹ PRESENTATION MODES - Using unified DateTimeField with presentation configuration
 
-  // ²² Countdown timer presentation
-  @field productLaunchCountdown = contains(DateTimeField, {
+  // ²² Countdown timer presentation - using DatetimeField
+  @field productLaunchCountdown = contains(DatetimeField, {
     configuration: {
-      inputType: 'datetime',
       presentation: 'countdown',
       countdownOptions: {
         label: 'Product Launch',
@@ -166,10 +139,9 @@ export class DateTimePreview extends CardDef {
     },
   });
 
-  // ²³ Relative time display presentation
-  @field lastActivityTime = contains(DateTimeField, {
+  // ²³ Relative time display presentation - using DatetimeField
+  @field lastActivityTime = contains(DatetimeField, {
     configuration: {
-      inputType: 'datetime',
       presentation: 'timeAgo',
       timeAgoOptions: {
         eventLabel: 'Last Activity',
@@ -178,10 +150,9 @@ export class DateTimePreview extends CardDef {
     },
   });
 
-  // ²⁴ Timeline event presentation
-  @field orderPlaced = contains(DateTimeField, {
+  // ²⁴ Timeline event presentation - using DatetimeField
+  @field orderPlaced = contains(DatetimeField, {
     configuration: {
-      inputType: 'datetime',
       presentation: 'timeline',
       timelineOptions: {
         eventName: 'Order Placed',
@@ -190,10 +161,9 @@ export class DateTimePreview extends CardDef {
     },
   });
 
-  // ²⁵ Age calculator presentation
-  @field employeeAge = contains(DateTimeField, {
+  // ²⁵ Age calculator presentation - using DateField
+  @field employeeAge = contains(DateField, {
     configuration: {
-      inputType: 'date',
       presentation: 'age',
       ageOptions: {
         showNextBirthday: true,
@@ -201,39 +171,23 @@ export class DateTimePreview extends CardDef {
     },
   });
 
-  // ²⁶ Business days calculator presentation
-  @field deliveryCalculation = contains(DateTimeField, {
+  // ²⁶ Business days calculator - uses DateRangeField with presentation
+  @field deliveryCalculation = contains(DateRangeField, {
     configuration: {
-      inputType: 'date-range',
       presentation: 'businessDays',
     },
   });
 
-  // ²⁷ Time slot picker presentation
-  @field appointmentSlots = contains(DateTimeField, {
+  // ²⁷ Time slot picker - uses TimeField with presentation
+  @field appointmentSlots = contains(TimeField, {
     configuration: {
-      inputType: 'time',
       presentation: 'timeSlots',
-      timeSlotsOptions: {
-        availableSlots: [
-          '09:00 AM',
-          '10:00 AM',
-          '11:00 AM',
-          '12:00 PM',
-          '01:00 PM',
-          '02:00 PM',
-          '03:00 PM',
-          '04:00 PM',
-          '05:00 PM',
-        ],
-      },
     },
   });
 
-  // ²⁸ Expiration warning presentation
-  @field tokenExpiry = contains(DateTimeField, {
+  // ³⁶ Expiration warning presentation - using DatetimeField
+  @field tokenExpiry = contains(DatetimeField, {
     configuration: {
-      inputType: 'datetime',
       presentation: 'expirationWarning',
       expirationOptions: {
         itemName: 'API Token',
@@ -241,73 +195,72 @@ export class DateTimePreview extends CardDef {
     },
   });
 
-  // ²⁹ Recurring pattern input - migrated from presentation to input type
-  @field meetingRecurrence = contains(DateTimeField, {
-    configuration: {
-      inputType: 'recurring', // ⁶⁶ Now an input type, not presentation
-      placeholder: 'Select repeat pattern',
-    },
-  });
+  // ²⁹ Recurring pattern - uses independent RecurringPatternField
+  @field meetingRecurrence = contains(RecurringPatternField);
 
   // ¹⁸ Isolated format - shows edit mode for all components
   static isolated = class Isolated extends Component<typeof this> {
-    // ⁴⁸ Compatibility map - defines which presentations work with which input types
+    // ¹⁸ Compatibility map - defines which presentations work with each field type
     compatibilityMap: Record<string, string[]> = {
-      standard: [
-        'date',
-        'time',
-        'datetime',
-        'date-range',
-        'time-range',
-        'duration',
-        'month-day',
-        'year',
-        'month',
-        'month-year',
-        'week',
-        'quarter',
-        'relative',
-        'recurring', // ⁶⁴ Added recurring to standard presentation
+      date: ['standard', 'countdown', 'timeline', 'age'],
+      time: ['standard', 'timeSlots'],
+      datetime: [
+        'standard',
+        'countdown',
+        'timeAgo',
+        'timeline',
+        'expirationWarning',
       ],
-      countdown: ['datetime', 'date'],
-      timeAgo: ['datetime', 'date'],
-      age: ['date', 'month-day'],
-      businessDays: ['date-range'],
-      timeline: ['datetime', 'date'],
-      timeSlots: ['time', 'datetime'],
-      expirationWarning: ['datetime', 'date'],
+      dateRange: ['standard', 'businessDays'],
+      year: ['standard'],
+      month: ['standard'],
+      monthYear: ['standard'],
+      week: ['standard'],
+      timeRange: ['standard'],
+      duration: ['standard'],
+      relativeTime: ['standard'],
     };
 
-    // Initialize from card's field values
-    get selectedInputType() {
-      const value = this.args.model?.playgroundInputType || 'datetime';
-      return this.inputTypeOptions.find((opt) => opt.value === value);
-    }
-
-    get selectedPresentation() {
-      const value = this.args.model?.playgroundPresentation || 'standard';
-      return this.availablePresentationOptions.find(
-        (opt) => opt.value === value,
-      );
-    }
-
-    inputTypeOptions = [
-      { value: 'date', label: 'Date' },
-      { value: 'time', label: 'Time' },
-      { value: 'datetime', label: 'DateTime' },
-      { value: 'date-range', label: 'Date Range' },
-      { value: 'time-range', label: 'Time Range' },
-      { value: 'duration', label: 'Duration' },
-      { value: 'month-day', label: 'Birthday (Month-Day)' },
-      { value: 'year', label: 'Year' },
-      { value: 'month', label: 'Month' },
-      { value: 'month-year', label: 'Month-Year' },
-      { value: 'week', label: 'Week' },
-      { value: 'quarter', label: 'Quarter' },
-      { value: 'relative', label: 'Relative Time' },
-      { value: 'recurring', label: 'Recurring Pattern' }, // ⁶² Added recurring input type
+    // ¹⁹ Field type options
+    fieldTypeOptions = [
+      { value: 'date', label: 'DateField', fieldName: 'playgroundDate' },
+      { value: 'time', label: 'TimeField', fieldName: 'playgroundTime' },
+      {
+        value: 'datetime',
+        label: 'DatetimeField',
+        fieldName: 'playgroundDatetime',
+      },
+      { value: 'year', label: 'YearField', fieldName: 'playgroundYear' },
+      { value: 'month', label: 'MonthField', fieldName: 'playgroundMonth' },
+      {
+        value: 'monthYear',
+        label: 'MonthYearField',
+        fieldName: 'playgroundMonthYear',
+      },
+      { value: 'week', label: 'WeekField', fieldName: 'playgroundWeek' },
+      {
+        value: 'dateRange',
+        label: 'DateRangeField',
+        fieldName: 'playgroundDateRange',
+      },
+      {
+        value: 'timeRange',
+        label: 'TimeRangeField',
+        fieldName: 'playgroundTimeRange',
+      },
+      {
+        value: 'duration',
+        label: 'DurationField',
+        fieldName: 'playgroundDuration',
+      },
+      {
+        value: 'relativeTime',
+        label: 'RelativeTimeField',
+        fieldName: 'playgroundRelativeTime',
+      },
     ];
 
+    // ²⁰ All presentation options
     allPresentationOptions = [
       { value: 'standard', label: 'Standard' },
       { value: 'countdown', label: 'Countdown Timer' },
@@ -319,37 +272,52 @@ export class DateTimePreview extends CardDef {
       { value: 'expirationWarning', label: 'Expiration Warning' },
     ];
 
-    // ⁴⁹ Filter presentation options based on selected input type
-    get availablePresentationOptions() {
-      const inputType = this.args.model?.playgroundInputType || 'datetime';
-
-      return this.allPresentationOptions.filter((option) => {
-        const compatibleInputs = this.compatibilityMap[option.value] || [];
-        return compatibleInputs.includes(inputType);
-      });
+    get selectedFieldType() {
+      const value = this.args.model?.playgroundFieldType || 'date';
+      return this.fieldTypeOptions.find((opt) => opt.value === value);
     }
 
-    // ⁵⁰ Check if current combination is valid
-    get isValidCombination() {
-      const inputType = this.args.model?.playgroundInputType || 'datetime';
-      const presentation =
-        this.args.model?.playgroundPresentation || 'standard';
-      const compatibleInputs = this.compatibilityMap[presentation] || [];
-      return compatibleInputs.includes(inputType);
+    get selectedPresentation() {
+      const value = this.args.model?.playgroundPresentation || 'standard';
+      return this.availablePresentationOptions.find(
+        (opt) => opt.value === value,
+      );
+    }
+
+    // ²¹ Filter presentation options based on selected field type
+    get availablePresentationOptions() {
+      const fieldType = this.args.model?.playgroundFieldType || 'date';
+      const compatiblePresentations = this.compatibilityMap[fieldType] || [
+        'standard',
+      ];
+
+      return this.allPresentationOptions.filter((option) =>
+        compatiblePresentations.includes(option.value),
+      );
+    }
+
+    // ²² Get the current playground field name
+    get currentPlaygroundField() {
+      const fieldType = this.args.model?.playgroundFieldType || 'date';
+      const option = this.fieldTypeOptions.find(
+        (opt) => opt.value === fieldType,
+      );
+      return option?.fieldName || 'playgroundDate';
     }
 
     @action
-    updateInputType(option: { value: string; label: string } | null) {
+    updateFieldType(option: { value: string; label: string } | null) {
       if (option && this.args.model) {
-        this.args.model.playgroundInputType = option.value;
+        this.args.model.playgroundFieldType = option.value;
 
-        // ⁵¹ Auto-reset presentation to 'standard' if current combo is incompatible
+        // ²³ Auto-reset presentation to 'standard' if incompatible
         const currentPresentation =
           this.args.model.playgroundPresentation || 'standard';
-        const compatibleInputs =
-          this.compatibilityMap[currentPresentation] || [];
+        const compatiblePresentations = this.compatibilityMap[option.value] || [
+          'standard',
+        ];
 
-        if (!compatibleInputs.includes(option.value)) {
+        if (!compatiblePresentations.includes(currentPresentation)) {
           this.args.model.playgroundPresentation = 'standard';
         }
       }
@@ -362,18 +330,39 @@ export class DateTimePreview extends CardDef {
       }
     }
 
+    // ²⁴ Generate configuration code based on current selection
     get configCode() {
-      const inputType = this.args.model?.playgroundInputType || 'datetime';
+      const fieldType = this.args.model?.playgroundFieldType || 'date';
       const presentation =
         this.args.model?.playgroundPresentation || 'standard';
+      const option = this.fieldTypeOptions.find(
+        (opt) => opt.value === fieldType,
+      );
+      const fieldTypeName = option?.label || 'DateField';
 
-      return `@field playground = contains(DateTimeField, {
-  configuration: function(this: YourCard) {
-    return {
-      inputType: '${inputType}',
-      presentation: '${presentation}',
-      placeholder: 'Try editing this field!'
-    };
+      // Fields without presentation support
+      const simplFields = [
+        'year',
+        'month',
+        'monthYear',
+        'week',
+        'timeRange',
+        'duration',
+        'relativeTime',
+      ];
+
+      if (simplFields.includes(fieldType)) {
+        return `@field myField = contains(${fieldTypeName});`;
+      }
+
+      // Fields with presentation support
+      if (presentation === 'standard') {
+        return `@field myField = contains(${fieldTypeName});`;
+      }
+
+      return `@field myField = contains(${fieldTypeName}, {
+  configuration: {
+    presentation: '${presentation}'
   }
 });`;
     }
@@ -391,25 +380,25 @@ export class DateTimePreview extends CardDef {
           </div>
         </header>
 
-        {{! ³⁰ Playground Section }}
+        {{! ²⁵ Multi-Field Playground Section }}
         <section class='playground-section'>
           <div class='playground-header'>
             <h2>Interactive Playground</h2>
-            <p>Experiment with different configurations! Change the input type
-              and presentation mode to see how the field behaves.</p>
+            <p>Experiment with different field types and presentation modes!
+              Switch between fields to see their unique capabilities.</p>
           </div>
 
           {{! Configuration Controls }}
           <div class='playground-controls'>
             <div class='control-group'>
-              <label class='control-label'>Input Type</label>
+              <label class='control-label'>Field Type</label>
               <BoxelSelect
-                @selected={{this.selectedInputType}}
-                @options={{this.inputTypeOptions}}
-                @onChange={{this.updateInputType}}
-                @placeholder='Select input type'
+                @selected={{this.selectedFieldType}}
+                @options={{this.fieldTypeOptions}}
+                @onChange={{this.updateFieldType}}
+                @placeholder='Select field type'
                 class='config-select'
-                data-test-input-type-select
+                data-test-field-type-select
                 as |option|
               >
                 {{option.label}}
@@ -437,7 +426,42 @@ export class DateTimePreview extends CardDef {
               <h3>Edit Mode</h3>
               <p class='playground-hint'>Change the value below</p>
               <div class='playground-demo'>
-                <@fields.playground @format='edit' />
+                {{! ²⁶ Dynamically render the selected playground field }}
+                {{#if (eq this.currentPlaygroundField 'playgroundDate')}}
+                  <@fields.playgroundDate @format='edit' />
+                {{else if (eq this.currentPlaygroundField 'playgroundTime')}}
+                  <@fields.playgroundTime @format='edit' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDatetime')
+                }}
+                  <@fields.playgroundDatetime @format='edit' />
+                {{else if (eq this.currentPlaygroundField 'playgroundYear')}}
+                  <@fields.playgroundYear @format='edit' />
+                {{else if (eq this.currentPlaygroundField 'playgroundMonth')}}
+                  <@fields.playgroundMonth @format='edit' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundMonthYear')
+                }}
+                  <@fields.playgroundMonthYear @format='edit' />
+                {{else if (eq this.currentPlaygroundField 'playgroundWeek')}}
+                  <@fields.playgroundWeek @format='edit' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDateRange')
+                }}
+                  <@fields.playgroundDateRange @format='edit' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundTimeRange')
+                }}
+                  <@fields.playgroundTimeRange @format='edit' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDuration')
+                }}
+                  <@fields.playgroundDuration @format='edit' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundRelativeTime')
+                }}
+                  <@fields.playgroundRelativeTime @format='edit' />
+                {{/if}}
               </div>
             </div>
             <div class='playground-divider'></div>
@@ -445,8 +469,42 @@ export class DateTimePreview extends CardDef {
               <h3>Display</h3>
               <p class='playground-hint'>See how it renders</p>
               <div class='playground-demo'>
-                {{! Delegated rendering - configuration comes from field definition function }}
-                <@fields.playground @format='embedded' />
+                {{! ²⁷ Dynamically render the selected playground field in embedded format }}
+                {{#if (eq this.currentPlaygroundField 'playgroundDate')}}
+                  <@fields.playgroundDate @format='embedded' />
+                {{else if (eq this.currentPlaygroundField 'playgroundTime')}}
+                  <@fields.playgroundTime @format='embedded' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDatetime')
+                }}
+                  <@fields.playgroundDatetime @format='embedded' />
+                {{else if (eq this.currentPlaygroundField 'playgroundYear')}}
+                  <@fields.playgroundYear @format='embedded' />
+                {{else if (eq this.currentPlaygroundField 'playgroundMonth')}}
+                  <@fields.playgroundMonth @format='embedded' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundMonthYear')
+                }}
+                  <@fields.playgroundMonthYear @format='embedded' />
+                {{else if (eq this.currentPlaygroundField 'playgroundWeek')}}
+                  <@fields.playgroundWeek @format='embedded' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDateRange')
+                }}
+                  <@fields.playgroundDateRange @format='embedded' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundTimeRange')
+                }}
+                  <@fields.playgroundTimeRange @format='embedded' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDuration')
+                }}
+                  <@fields.playgroundDuration @format='embedded' />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundRelativeTime')
+                }}
+                  <@fields.playgroundRelativeTime @format='embedded' />
+                {{/if}}
               </div>
             </div>
           </div>
@@ -466,10 +524,7 @@ export class DateTimePreview extends CardDef {
             </div>
             <pre class='code-block'><code>{{this.configCode}}</code></pre>
           </div>
-          {{! ⁵² Compatibility info banner }}
-          <div
-            class='playground-info {{unless this.isValidCombination "warning"}}'
-          >
+          <div class='playground-info'>
             <svg
               class='info-icon'
               viewBox='0 0 24 24'
@@ -477,44 +532,27 @@ export class DateTimePreview extends CardDef {
               stroke='currentColor'
               stroke-width='2'
             >
-              {{#if this.isValidCombination}}
-                <circle cx='12' cy='12' r='10'></circle>
-                <line x1='12' y1='16' x2='12' y2='12'></line>
-                <line x1='12' y1='8' x2='12.01' y2='8'></line>
-              {{else}}
-                <path
-                  d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'
-                ></path>
-                <line x1='12' y1='9' x2='12' y2='13'></line>
-                <line x1='12' y1='17' x2='12.01' y2='17'></line>
-              {{/if}}
+              <circle cx='12' cy='12' r='10'></circle>
+              <line x1='12' y1='16' x2='12' y2='12'></line>
+              <line x1='12' y1='8' x2='12.01' y2='8'></line>
             </svg>
-            {{#if this.isValidCombination}}
-              <span>Try different
-                <code>inputType</code>
-                and
-                <code>presentation</code>
-                combinations - only compatible options are shown!</span>
-            {{else}}
-              <span>⚠️ This combination was reset to
-                <code>standard</code>
-                - presentation was incompatible with the selected input type</span>
-            {{/if}}
+            <span>Switch between different field types to explore their unique
+              capabilities and presentation modes!</span>
           </div>
         </section>
 
-        {{! ³⁰ Basic Date & Time Section }}
+        {{! ³⁷ Core Field Types }}
         <section class='input-section'>
           <div class='section-header-inline'>
-            <h2>Basic Date & Time</h2>
-            <p>Single date, time, or combined inputs</p>
+            <h2>Core Field Types</h2>
+            <p>Basic date, time, and datetime fields</p>
           </div>
           <div class='components-grid'>
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Date</h3>
+                <h3>DateField</h3>
                 <p>Single date selection</p>
-                <code class='config'>inputType: 'date'</code>
+                <code class='config'>contains(DateField)</code>
                 <span class='use-case'>Appointments • Deadlines • Events</span>
               </div>
               <div class='component-demo'>
@@ -524,9 +562,9 @@ export class DateTimePreview extends CardDef {
 
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Time (12h)</h3>
-                <p>AM/PM time input</p>
-                <code class='config'>inputType: 'time', timeFormat: '12h'</code>
+                <h3>TimeField</h3>
+                <p>Time input</p>
+                <code class='config'>contains(TimeField)</code>
                 <span class='use-case'>Meetings • Reminders • Schedules</span>
               </div>
               <div class='component-demo'>
@@ -536,9 +574,9 @@ export class DateTimePreview extends CardDef {
 
             <div class='component-card'>
               <div class='component-info'>
-                <h3>DateTime</h3>
+                <h3>DatetimeField</h3>
                 <p>Combined date and time</p>
-                <code class='config'>inputType: 'datetime'</code>
+                <code class='config'>contains(DatetimeField)</code>
                 <span class='use-case'>Events • Bookings • Timestamps</span>
               </div>
               <div class='component-demo'>
@@ -548,18 +586,75 @@ export class DateTimePreview extends CardDef {
           </div>
         </section>
 
-        {{! ³¹ Range Inputs Section }}
+        {{! ³⁸ Partial Date Fields }}
         <section class='input-section'>
           <div class='section-header-inline'>
-            <h2>Range Inputs</h2>
-            <p>Start and end selections</p>
+            <h2>Partial Date Fields</h2>
+            <p>Year, month, week specialized fields</p>
           </div>
-          <div class='components-grid-half'>
+          <div class='components-grid'>
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Date Range</h3>
-                <p>Start → End dates</p>
-                <code class='config'>inputType: 'date-range'</code>
+                <h3>YearField</h3>
+                <p>Year-only selection</p>
+                <code class='config'>contains(YearField)</code>
+                <span class='use-case'>Fiscal Year • Graduation • Archives</span>
+              </div>
+              <div class='component-demo'>
+                <@fields.fiscalYear @format='edit' />
+              </div>
+            </div>
+
+            <div class='component-card'>
+              <div class='component-info'>
+                <h3>MonthField</h3>
+                <p>Month-only selection</p>
+                <code class='config'>contains(MonthField)</code>
+                <span class='use-case'>Billing • Reports • Planning</span>
+              </div>
+              <div class='component-demo'>
+                <@fields.billingMonth @format='edit' />
+              </div>
+            </div>
+
+            <div class='component-card'>
+              <div class='component-info'>
+                <h3>MonthYearField</h3>
+                <p>Combined month and year</p>
+                <code class='config'>contains(MonthYearField)</code>
+                <span class='use-case'>Payroll • Statements • Archives</span>
+              </div>
+              <div class='component-demo'>
+                <@fields.payPeriod @format='edit' />
+              </div>
+            </div>
+
+            <div class='component-card'>
+              <div class='component-info'>
+                <h3>WeekField</h3>
+                <p>ISO week selection</p>
+                <code class='config'>contains(WeekField)</code>
+                <span class='use-case'>Timesheets • Sprint Planning • Schedules</span>
+              </div>
+              <div class='component-demo'>
+                <@fields.workWeek @format='edit' />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {{! ³¹ Independent Specialized Fields }}
+        <section class='input-section'>
+          <div class='section-header-inline'>
+            <h2>Independent Specialized Fields</h2>
+            <p>Dedicated FieldDef types for complex date/time use cases</p>
+          </div>
+          <div class='components-grid'>
+            <div class='component-card'>
+              <div class='component-info'>
+                <h3>DateRangeField</h3>
+                <p>Independent field for date ranges</p>
+                <code class='config'>contains(DateRangeField)</code>
                 <span class='use-case'>Campaigns • Projects • Vacations</span>
               </div>
               <div class='component-demo'>
@@ -569,51 +664,34 @@ export class DateTimePreview extends CardDef {
 
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Time Range</h3>
-                <p>Working hours (24h)</p>
-                <code class='config'>inputType: 'time-range', timeFormat: '24h'</code>
+                <h3>TimeRangeField</h3>
+                <p>Independent field for time ranges</p>
+                <code class='config'>contains(TimeRangeField)</code>
                 <span class='use-case'>Shifts • Operating Hours • Availability</span>
               </div>
               <div class='component-demo'>
                 <@fields.workingHours @format='edit' />
               </div>
             </div>
-          </div>
-        </section>
 
-        {{! ³² Duration Section }}
-        <section class='input-section'>
-          <div class='section-header-inline'>
-            <h2>Duration</h2>
-            <p>Time spans and periods</p>
-          </div>
-          <div class='components-grid-single'>
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Duration</h3>
-                <p>Hours:Minutes:Seconds</p>
-                <code class='config'>inputType: 'duration'</code>
-                <span class='use-case'>Tasks • Videos • Timers • Workouts</span>
+                <h3>DurationField</h3>
+                <p>Hours:Minutes:Seconds input</p>
+                <code class='config'>contains(DurationField)</code>
+                <span class='use-case'>Tasks • Videos • Workouts</span>
               </div>
               <div class='component-demo'>
                 <@fields.taskDuration @format='edit' />
               </div>
             </div>
-          </div>
-        </section>
 
-        {{! ³³ Partial Date Inputs Section }}
-        <section class='input-section'>
-          <div class='section-header-inline'>
-            <h2>Partial Date Inputs</h2>
-            <p>Granular date component selection</p>
-          </div>
-          <div class='components-grid'>
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Birthday</h3>
-                <p>Month + Day only</p>
-                <code class='config'>inputType: 'month-day'</code>
+                <h3>MonthDayField</h3>
+                <p>Birthday/anniversary (no year)</p>
+                <code class='config'>contains(MonthDayField)</code>
+                <span class='use-case'>Birthdays • Anniversaries • Holidays</span>
               </div>
               <div class='component-demo'>
                 <@fields.birthday @format='edit' />
@@ -622,94 +700,33 @@ export class DateTimePreview extends CardDef {
 
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Year</h3>
-                <p>Year-only</p>
-                <code class='config'>inputType: 'year'</code>
-              </div>
-              <div class='component-demo'>
-                <@fields.fiscalYear @format='edit' />
-              </div>
-            </div>
-
-            <div class='component-card'>
-              <div class='component-info'>
-                <h3>Month</h3>
-                <p>Month-only</p>
-                <code class='config'>inputType: 'month'</code>
-              </div>
-              <div class='component-demo'>
-                <@fields.billingMonth @format='edit' />
-              </div>
-            </div>
-
-            <div class='component-card'>
-              <div class='component-info'>
-                <h3>Month-Year</h3>
-                <p>Combined selection</p>
-                <code class='config'>inputType: 'month-year'</code>
-              </div>
-              <div class='component-demo'>
-                <@fields.payPeriod @format='edit' />
-              </div>
-            </div>
-
-            <div class='component-card'>
-              <div class='component-info'>
-                <h3>Week</h3>
-                <p>ISO week</p>
-                <code class='config'>inputType: 'week'</code>
-              </div>
-              <div class='component-demo'>
-                <@fields.workWeek @format='edit' />
-              </div>
-            </div>
-
-            <div class='component-card'>
-              <div class='component-info'>
-                <h3>Quarter</h3>
-                <p>Q1-Q4 + Year</p>
-                <code class='config'>inputType: 'quarter'</code>
+                <h3>QuarterField</h3>
+                <p>Fiscal quarter selector</p>
+                <code class='config'>contains(QuarterField)</code>
+                <span class='use-case'>Financial Reports • Business Planning</span>
               </div>
               <div class='component-demo'>
                 <@fields.financialQuarter @format='edit' />
               </div>
             </div>
-          </div>
-        </section>
 
-        {{! ³⁴ Relative Time Section }}
-        <section class='input-section'>
-          <div class='section-header-inline'>
-            <h2>Relative Time</h2>
-            <p>Human-friendly time expressions</p>
-          </div>
-          <div class='components-grid-single'>
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Relative Time</h3>
-                <p>"In 2 hours", "In 3 days"</p>
-                <code class='config'>inputType: 'relative'</code>
+                <h3>RelativeTimeField</h3>
+                <p>"In X hours/days" scheduler</p>
+                <code class='config'>contains(RelativeTimeField)</code>
                 <span class='use-case'>Publish Later • Reminders • Delays</span>
               </div>
               <div class='component-demo'>
                 <@fields.publishIn @format='edit' />
               </div>
             </div>
-          </div>
-        </section>
 
-        {{! ⁶⁷ Recurring Pattern Section }}
-        <section class='input-section'>
-          <div class='section-header-inline'>
-            <h2>Recurring Pattern</h2>
-            <p>Event recurrence selector</p>
-          </div>
-          <div class='components-grid-single'>
             <div class='component-card'>
               <div class='component-info'>
-                <h3>Recurring Pattern</h3>
-                <p>Daily, weekly, monthly, etc.</p>
-                <code class='config'>inputType: 'recurring'</code>
+                <h3>RecurringPatternField</h3>
+                <p>Full recurrence rules editor</p>
+                <code class='config'>contains(RecurringPatternField)</code>
                 <span class='use-case'>Calendar Events • Meetings • Schedules</span>
               </div>
               <div class='component-demo'>
@@ -722,15 +739,17 @@ export class DateTimePreview extends CardDef {
         {{! ³¹ Presentation Modes Section }}
         <header class='section-header'>
           <h2>Presentation Modes</h2>
-          <p>All powered by DateTimeField with presentation configuration -
-            auto-updating, interactive, and calculated displays</p>
+          <p>Use DateField, DatetimeField, TimeField, and DateRangeField with
+            presentation configuration for auto-updating, interactive, and
+            calculated displays</p>
         </header>
 
         <div class='components-grid'>
           <div class='component-card'>
             <div class='component-info'>
-              <h3>Countdown Timer</h3>
+              <h3>Countdown Timer (DatetimeField)</h3>
               <p>Live countdown with controls</p>
+              <code class='config'>DatetimeField with presentation: 'countdown'</code>
               <span class='use-case'>Launches • Deadlines • Events</span>
             </div>
             <div class='component-demo'>
@@ -740,8 +759,9 @@ export class DateTimePreview extends CardDef {
 
           <div class='component-card'>
             <div class='component-info'>
-              <h3>Time Ago Display</h3>
+              <h3>Time Ago Display (DatetimeField)</h3>
               <p>Auto-updating relative timestamps</p>
+              <code class='config'>DatetimeField with presentation: 'timeAgo'</code>
               <span class='use-case'>Social • Activity Feeds • Logs</span>
             </div>
             <div class='component-demo'>
@@ -751,8 +771,9 @@ export class DateTimePreview extends CardDef {
 
           <div class='component-card'>
             <div class='component-info'>
-              <h3>Timeline Event</h3>
+              <h3>Timeline Event (DatetimeField)</h3>
               <p>Status-tracked timeline entries</p>
+              <code class='config'>DatetimeField with presentation: 'timeline'</code>
               <span class='use-case'>Order Tracking • Process Flows</span>
             </div>
             <div class='component-demo'>
@@ -762,8 +783,9 @@ export class DateTimePreview extends CardDef {
 
           <div class='component-card'>
             <div class='component-info'>
-              <h3>Age Calculator</h3>
+              <h3>Age Calculator (DateField)</h3>
               <p>Auto-calculated age from birthdate</p>
+              <code class='config'>DateField with presentation: 'age'</code>
               <span class='use-case'>HR • CRM • Healthcare</span>
             </div>
             <div class='component-demo'>
@@ -773,8 +795,10 @@ export class DateTimePreview extends CardDef {
 
           <div class='component-card'>
             <div class='component-info'>
-              <h3>Business Days</h3>
-              <p>Working days vs calendar days</p>
+              <h3>Business Days (DateRangeField)</h3>
+              <p>Working days calculation</p>
+              <code class='config'>DateRangeField with presentation:
+                'businessDays'</code>
               <span class='use-case'>Delivery • SLA • Project Planning</span>
             </div>
             <div class='component-demo'>
@@ -784,8 +808,9 @@ export class DateTimePreview extends CardDef {
 
           <div class='component-card'>
             <div class='component-info'>
-              <h3>Time Slot Picker</h3>
-              <p>Visual appointment booking</p>
+              <h3>Time Slots (TimeField)</h3>
+              <p>Visual slot picker</p>
+              <code class='config'>TimeField with presentation: 'timeSlots'</code>
               <span class='use-case'>Scheduling • Booking • Reservations</span>
             </div>
             <div class='component-demo'>

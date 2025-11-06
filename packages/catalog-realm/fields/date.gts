@@ -1,47 +1,37 @@
 // ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import BaseDatetimeField from 'https://cardstack.com/base/datetime';
-import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event'; // ² Calendar event icon
+import BaseDateField from 'https://cardstack.com/base/date';
+import CalendarIcon from '@cardstack/boxel-icons/calendar'; // ² Calendar icon
 import { eq } from '@cardstack/boxel-ui/helpers'; // ³ Helpers
 
 // ⁴ Import presentation components
 import { Countdown } from './components/countdown';
 import { Timeline } from './components/timeline';
-import { TimeAgo } from './components/time-ago';
-import { ExpirationWarning } from './components/expiration-warning';
+import { Age } from './components/age';
 
 // Configuration interface
 interface DateTimeConfiguration {
   // ⁵ Configuration type
-  presentation?:
-    | 'standard'
-    | 'countdown'
-    | 'timeAgo'
-    | 'timeline'
-    | 'expirationWarning';
+  presentation?: 'standard' | 'countdown' | 'timeline' | 'age';
   countdownOptions?: {
     label?: string;
     showControls?: boolean;
-  };
-  timeAgoOptions?: {
-    eventLabel?: string;
-    updateInterval?: number;
   };
   timelineOptions?: {
     eventName?: string;
     status?: 'complete' | 'active' | 'pending';
   };
-  expirationOptions?: {
-    itemName?: string;
+  ageOptions?: {
+    showNextBirthday?: boolean;
   };
 }
 
-// ⁶ DatetimeField - Extends base DatetimeField with presentation modes
-export class DatetimeField extends BaseDatetimeField {
-  static displayName = 'Date & Time';
-  static icon = CalendarEventIcon;
+// ⁶ DateField - Extends base DateField with presentation modes
+export class DateField extends BaseDateField {
+  static displayName = 'Date';
+  static icon = CalendarIcon;
 
-  // ⁷ Embedded format - routes to presentation or shows formatted datetime
+  // ⁷ Embedded format - routes to presentation or shows formatted date
   static embedded = class Embedded extends Component<typeof this> {
     get config(): DateTimeConfiguration | undefined {
       return this.args.configuration as DateTimeConfiguration | undefined;
@@ -51,45 +41,41 @@ export class DatetimeField extends BaseDatetimeField {
       return this.config?.presentation ?? 'standard';
     }
 
-    get datetimeValue() {
+    get dateValue() {
       return this.args.model;
     }
 
     get displayValue() {
-      if (!this.datetimeValue) return 'No date/time set';
+      if (!this.dateValue) return 'No date set';
 
       try {
-        const date = new Date(String(this.datetimeValue));
-        return date.toLocaleString('en-US', {
-          weekday: 'short',
+        const date = new Date(this.dateValue.toString());
+        return date.toLocaleDateString('en-US', {
+          weekday: 'long',
           year: 'numeric',
-          month: 'short',
+          month: 'long',
           day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
         });
       } catch {
-        return String(this.datetimeValue);
+        return String(this.dateValue);
       }
     }
 
     <template>
-      {{#if (eq this.presentationMode 'countdown')}}
-        <Countdown @model={{@model}} @config={{this.config}} />
-      {{else if (eq this.presentationMode 'timeAgo')}}
-        <TimeAgo @model={{@model}} @config={{this.config}} />
+      {{#if (eq this.presentationMode 'age')}}
+        <Age @model={{@model}} @config={{this.config}} />
       {{else if (eq this.presentationMode 'timeline')}}
         <Timeline @model={{@model}} @config={{this.config}} />
-      {{else if (eq this.presentationMode 'expirationWarning')}}
-        <ExpirationWarning @model={{@model}} @config={{this.config}} />
+      {{else if (eq this.presentationMode 'countdown')}}
+        <Countdown @model={{@model}} @config={{this.config}} />
       {{else}}
-        <div class='datetime-embedded' data-test-datetime-embedded>
-          <span class='datetime-value'>{{this.displayValue}}</span>
+        <div class='date-embedded' data-test-date-embedded>
+          <span class='date-value'>{{this.displayValue}}</span>
         </div>
       {{/if}}
 
       <style scoped>
-        .datetime-embedded {
+        .date-embedded {
           display: flex;
           align-items: center;
           padding: 0.5rem;
@@ -97,25 +83,24 @@ export class DatetimeField extends BaseDatetimeField {
           color: var(--foreground, #1a1a1a);
         }
 
-        .datetime-value {
+        .date-value {
           font-weight: 500;
         }
       </style>
     </template>
   };
 
-  // ⁸ Atom format - compact datetime badge
+  // ⁸ Atom format - compact date badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
-      if (!this.args.model) return 'No date/time';
+      if (!this.args.model) return 'No date';
 
       try {
         const date = new Date(String(this.args.model));
-        return date.toLocaleString('en-US', {
+        return date.toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
+          year: 'numeric',
         });
       } catch {
         return String(this.args.model);
@@ -123,13 +108,13 @@ export class DatetimeField extends BaseDatetimeField {
     }
 
     <template>
-      <span class='datetime-atom' data-test-datetime-atom>
-        <CalendarEventIcon class='datetime-icon' />
-        <span class='datetime-value'>{{this.displayValue}}</span>
+      <span class='date-atom' data-test-date-atom>
+        <CalendarIcon class='date-icon' />
+        <span class='date-value'>{{this.displayValue}}</span>
       </span>
 
       <style scoped>
-        .datetime-atom {
+        .date-atom {
           display: inline-flex;
           align-items: center;
           gap: 0.375rem;
@@ -141,16 +126,18 @@ export class DatetimeField extends BaseDatetimeField {
           font-weight: 500;
         }
 
-        .datetime-icon {
+        .date-icon {
           width: 0.875rem;
           height: 0.875rem;
           flex-shrink: 0;
         }
 
-        .datetime-value {
+        .date-value {
           white-space: nowrap;
         }
       </style>
     </template>
   };
 }
+
+export default DateField;
