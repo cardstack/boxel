@@ -12,8 +12,8 @@ import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
 import LintAndFixCommand from './lint-and-fix';
 
 import type CardService from '../services/card-service';
+import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
-import CommandService from '../services/command-service';
 
 interface FileInfo {
   exists: boolean;

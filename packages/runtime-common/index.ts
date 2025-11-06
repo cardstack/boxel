@@ -399,6 +399,7 @@ export interface Store {
   patch<T extends CardDef>(
     id: string,
     patchData: PatchData,
+    opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
   search(query: Query, realmURL?: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
