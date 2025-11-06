@@ -2581,6 +2581,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`)
       .exists();
     await click(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`);
+    await waitFor(
+      `[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`,
+    );
     assert
       .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`)
       .exists();

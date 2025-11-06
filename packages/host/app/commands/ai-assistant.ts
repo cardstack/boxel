@@ -9,12 +9,12 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import AddSkillsToRoomCommand from './add-skills-to-room';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
 
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
+import UpdateRoomSkillsCommand from './update-room-skills';
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -132,33 +132,24 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     roomId: string,
   ): Promise<void> {
     let skillCards = new Set<Skill>(input.skillCards ?? []);
-    let skillCardIds = input.skillCardIds ?? [];
-    let loadSkillCardPromises = skillCardIds.map(async (skillCardId) => {
-      return this.store.get<Skill>(skillCardId);
-    });
-
-    let loadedSkillCardOrErrors = await Promise.all(loadSkillCardPromises);
-    for (const loadedSkillCardOrError of loadedSkillCardOrErrors) {
-      if (isCardInstance(loadedSkillCardOrError)) {
-        skillCards.add(loadedSkillCardOrError);
-      } else {
-        console.warn(
-          'Failed to load skill card',
-          loadedSkillCardOrError.id,
-          loadedSkillCardOrError.message,
-        );
+    let skillCardIds = new Set<string>(input.skillCardIds ?? []);
+    for (let skillCard of skillCards) {
+      if (skillCard.id) {
+        skillCardIds.add(skillCard.id);
       }
     }
 
-    if (skillCards.size) {
-      let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
-        this.commandContext,
-      );
-      await addSkillsToRoomCommand.execute({
-        roomId,
-        skills: [...skillCards],
-      });
+    if (skillCardIds.size === 0) {
+      return;
     }
+
+    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
+      this.commandContext,
+    );
+    await updateRoomSkillsCommand.execute({
+      roomId,
+      skillCardIdsToActivate: [...skillCardIds],
+    });
   }
 
   async ensureAttachedCardsLoaded(

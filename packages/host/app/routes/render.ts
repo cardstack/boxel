@@ -158,8 +158,6 @@ export default class RenderRoute extends Route<Model> {
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
-    }
-    if (parsedOptions.clearCache) {
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
         this.store.resetCache();

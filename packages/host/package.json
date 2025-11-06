@@ -81,6 +81,7 @@
     "@typescript-eslint/parser": "catalog:",
     "@universal-ember/test-support": "catalog:",
     "ajv": "catalog:",
+    "awesome-phonenumber": "catalog:",
     "broccoli-asset-rev": "catalog:",
     "broccoli-funnel": "catalog:",
     "broccoli-merge-trees": "catalog:",
