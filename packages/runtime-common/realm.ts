@@ -627,7 +627,7 @@ export class Realm {
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
-    let clientRequestId: string | null | undefined;
+    let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
       let requestId = clientRequestId ?? options?.clientRequestId ?? null;
       await this.#realmIndexUpdater.update(urls, {
