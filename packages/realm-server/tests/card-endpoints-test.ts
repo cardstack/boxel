@@ -3040,7 +3040,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module.only('Query-backed relationships runtime resolver', function (hooks) {
+  module('Query-backed relationships runtime resolver', function (hooks) {
     const providerRealmURL = 'http://127.0.0.1:5521/';
     const consumerRealmURL = 'http://127.0.0.1:5522/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
@@ -3224,8 +3224,8 @@ module(basename(__filename), function () {
         'remote realm result is returned',
       );
 
-      assert.ok(
-        !matchesRelationship?.meta?.errors,
+      assert.notOk(
+        matchesRelationship?.meta?.errors,
         'successful remote query does not include errors metadata',
       );
       assert.deepEqual(
