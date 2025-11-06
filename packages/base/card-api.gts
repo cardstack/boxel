@@ -64,8 +64,12 @@ import {
   loadDocument,
   LocalPath,
   getCardMenuItems,
+  parseQuery,
+  assertQuery,
+  normalizeQueryForSignature,
+  querySignature,
+  type Query as RelationshipQuery,
 } from '@cardstack/runtime-common';
-import { type Query as RelationshipQuery } from '@cardstack/runtime-common/query';
 
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -121,6 +125,9 @@ import {
   notifyCardTracking,
   peekAtField,
   relationshipMeta,
+  setQueryFieldState,
+  getQueryFieldState,
+  getQueryFieldStateKeys,
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
@@ -153,6 +160,7 @@ export {
   relationshipMeta,
   serialize,
   serializeCard,
+  getQueryFieldState,
   type BoxComponent,
   type DeserializeOpts,
   type GetCardMenuItemParams,
@@ -1018,9 +1026,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       let docMeta = (doc.data.meta = doc.data.meta ?? {});
       let queryMeta = (docMeta as any).queryFields ?? {};
       (docMeta as any).queryFields = queryMeta;
-      queryMeta[this.name] = JSON.parse(
-        JSON.stringify(this.queryDefinition),
-      );
+      queryMeta[this.name] = JSON.parse(JSON.stringify(this.queryDefinition));
     }
     if (isNotLoadedValue(value)) {
       return {
@@ -1272,7 +1278,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       isComputed: boolean,
       isQueryBacked: boolean,
     ) {
-      return (format ?? defaultFormat) === 'edit' && !isComputed && !isQueryBacked;
+      return (
+        (format ?? defaultFormat) === 'edit' && !isComputed && !isQueryBacked
+      );
     }
     function getChildFormat(
       format: Format | undefined,
@@ -1510,9 +1518,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       let docMeta = (doc.data.meta = doc.data.meta ?? {});
       let queryMeta = (docMeta as any).queryFields ?? {};
       (docMeta as any).queryFields = queryMeta;
-      queryMeta[this.name] = JSON.parse(
-        JSON.stringify(this.queryDefinition),
-      );
+      queryMeta[this.name] = JSON.parse(JSON.stringify(this.queryDefinition));
     }
     // Check for skip-serialization marker for computed fields that can't be computed
     if (
@@ -3384,6 +3390,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
   }
 
+  if (isCardInstance(instance)) {
+    seedQueryFieldState(instance as CardDef, resource);
+  }
+
   // now we make the instance "live" after it's all constructed
   if (resource.id != null) {
     store.makeTracked(resource.id);
@@ -3391,6 +3401,97 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   deferred.fulfill(instance);
   return instance;
+}
+
+function seedQueryFieldState(
+  instance: CardDef,
+  resource: LooseCardResource,
+): void {
+  let queryFieldsMeta =
+    ((resource.meta as any)?.queryFields as Record<string, unknown>) ?? {};
+
+  for (let existingField of getQueryFieldStateKeys(instance)) {
+    if (!(existingField in queryFieldsMeta)) {
+      setQueryFieldState(instance, existingField, undefined);
+    }
+  }
+
+  for (let [fieldName] of Object.entries(queryFieldsMeta)) {
+    let field = getField(instance, fieldName);
+    if (!field || !('queryDefinition' in field) || !field.queryDefinition) {
+      setQueryFieldState(instance, fieldName, undefined);
+      continue;
+    }
+
+    let relationship = resource.relationships?.[fieldName];
+    if (!relationship) {
+      setQueryFieldState(instance, fieldName, undefined);
+      continue;
+    }
+
+    let relationshipClone = cloneRelationship(relationship);
+    let searchURL = relationshipClone?.links?.search ?? null;
+    let normalizedQuery: RelationshipQuery | undefined;
+    let signature: string | undefined;
+
+    if (typeof searchURL === 'string' && searchURL.length > 0) {
+      let queryString: string | undefined;
+      try {
+        let url = new URL(searchURL);
+        queryString =
+          url.search && url.search.startsWith('?')
+            ? url.search.slice(1)
+            : url.search;
+      } catch {
+        if (searchURL.startsWith('?')) {
+          queryString = searchURL.slice(1);
+        }
+      }
+      if (queryString) {
+        try {
+          let parsed = parseQuery(queryString);
+          assertQuery(parsed);
+          normalizedQuery = normalizeQueryForSignature(
+            parsed as RelationshipQuery,
+          );
+          signature = querySignature(normalizedQuery);
+        } catch {
+          normalizedQuery = undefined;
+          signature = undefined;
+        }
+      }
+    }
+
+    setQueryFieldState(instance, fieldName, {
+      query: normalizedQuery,
+      signature,
+      searchURL,
+      relationship: relationshipClone,
+    });
+  }
+}
+
+function cloneRelationship(
+  relationship?: Relationship,
+): Relationship | undefined {
+  if (!relationship) {
+    return undefined;
+  }
+  let cloned: Relationship = {};
+  if (relationship.links) {
+    cloned.links = { ...relationship.links };
+  }
+  if (Array.isArray(relationship.data)) {
+    cloned.data = relationship.data.map((item) => ({ ...item }));
+  } else if (relationship.data && typeof relationship.data === 'object') {
+    cloned.data = { ...relationship.data };
+  } else if (relationship.data === null) {
+    cloned.data = null;
+  }
+  if (relationship.meta) {
+    cloned.meta = JSON.parse(JSON.stringify(relationship.meta));
+  }
+  return cloned;
 }
 
 export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
@@ -3419,9 +3520,7 @@ function validateRelationshipQuery(
   query: RelationshipQuery,
 ): void {
   if (typeof query !== 'object' || query == null) {
-    throw new Error(
-      `query field "${fieldName}" must provide a query object`,
-    );
+    throw new Error(`query field "${fieldName}" must provide a query object`);
   }
   if (!ownerPrototype) {
     return;
@@ -3433,7 +3532,10 @@ function validateRelationshipQuery(
     if (token === THIS_REALM_TOKEN) {
       continue;
     }
-    if (typeof token === 'string' && token.startsWith(THIS_INTERPOLATION_PREFIX)) {
+    if (
+      typeof token === 'string' &&
+      token.startsWith(THIS_INTERPOLATION_PREFIX)
+    ) {
       let path = token.slice(THIS_INTERPOLATION_PREFIX.length);
       let [head] = path.split('.');
       let referencedField = getField(ownerClass, head, { untracked: true });
@@ -3447,10 +3549,7 @@ function validateRelationshipQuery(
   }
 }
 
-function collectInterpolationTokens(
-  value: unknown,
-  tokens: Set<string>,
-): void {
+function collectInterpolationTokens(value: unknown, tokens: Set<string>): void {
   if (value == null) {
     return;
   }

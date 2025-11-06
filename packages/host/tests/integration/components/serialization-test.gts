@@ -20,6 +20,7 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
@@ -60,6 +61,7 @@ import {
   getQueryableValue,
   EthereumAddressField,
   getFields,
+  getQueryFieldState,
 } from '../../helpers/base-realm';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -3716,7 +3718,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('query-backed relationships include canonical search links in serialized payloads', async function (assert) {
-    assert.expect(14);
+    assert.expect(30);
 
     class Person extends CardDef {
       @field title = contains(StringField);
@@ -3848,6 +3850,86 @@ module('Integration | serialization', function (hooks) {
       firstChild?.links?.self,
       `${testRealmURL}Person/target`,
       'matches indexed relationship retains links to result resource',
+    );
+
+    let store = getService('store') as StoreService;
+    type QueryCardInstance = InstanceType<typeof QueryCard>;
+    let queryCardInstance = (await store.get(
+      `${testRealmURL}query-card`,
+    )) as QueryCardInstance;
+
+    let favoriteState = getQueryFieldState(queryCardInstance, 'favorite');
+    assert.ok(favoriteState, 'favorite query field state is seeded');
+    assert.strictEqual(
+      favoriteState?.searchURL,
+      favoriteSearchLink,
+      'favorite query field cache stores canonical search URL',
+    );
+    assert.deepEqual(
+      favoriteState?.relationship?.data,
+      favoriteRelationship.data,
+      'favorite query field cache stores relationship payload',
+    );
+    assert.ok(
+      favoriteState?.signature,
+      'favorite query field cache stores query signature',
+    );
+    assert.strictEqual(
+      favoriteState?.query?.filter?.eq?.title,
+      'Target',
+      'favorite query field cache stores interpolated filter',
+    );
+    assert.strictEqual(
+      favoriteState?.query?.filter?.type?.module,
+      favoriteQueryParams.filter?.type?.module,
+      'favorite query field cache preserves implicit type filter module',
+    );
+    assert.strictEqual(
+      favoriteState?.query?.page?.size,
+      1,
+      'favorite query field cache normalizes page size',
+    );
+
+    let matchesState = getQueryFieldState(queryCardInstance, 'matches');
+    assert.ok(matchesState, 'matches query field state is seeded');
+    assert.strictEqual(
+      matchesState?.searchURL,
+      matchesSearchLink,
+      'matches query field cache stores canonical search URL',
+    );
+    assert.deepEqual(
+      matchesState?.relationship?.data,
+      matchesRelationship.data,
+      'matches query field cache stores relationship payload',
+    );
+    assert.ok(
+      matchesState?.signature,
+      'matches query field cache stores query signature',
+    );
+    assert.strictEqual(
+      matchesState?.query?.filter?.eq?.title,
+      'Target',
+      'matches query field cache stores interpolated filter',
+    );
+    assert.strictEqual(
+      matchesState?.query?.filter?.type?.module,
+      matchesQueryParams.filter?.type?.module,
+      'matches query field cache preserves implicit type filter module',
+    );
+    assert.strictEqual(
+      matchesState?.query?.page?.size,
+      5,
+      'matches query field cache normalizes page size',
+    );
+    assert.strictEqual(
+      matchesState?.query?.sort?.[0]?.by,
+      'title',
+      'matches query field cache preserves sort field',
+    );
+    assert.strictEqual(
+      matchesState?.query?.sort?.[0]?.direction,
+      'asc',
+      'matches query field cache preserves sort direction',
     );
   });
 

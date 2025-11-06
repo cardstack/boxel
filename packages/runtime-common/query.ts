@@ -484,3 +484,46 @@ export const parseQuery = (queryString: string) => {
     strictNullHandling: true,
   });
 };
+
+export function normalizeQueryForSignature(query: Query): Query {
+  let cloned = sortKeysDeep(JSON.parse(JSON.stringify(query)));
+
+  if (cloned.page) {
+    let page: any = cloned.page;
+    if (typeof page.size === 'string') {
+      let parsedSize = Number(page.size);
+      page.size = Number.isFinite(parsedSize) ? parsedSize : page.size;
+    }
+    if (typeof page.number === 'string') {
+      let parsedNumber = Number(page.number);
+      page.number = Number.isFinite(parsedNumber)
+        ? parsedNumber
+        : page.number;
+    }
+  }
+
+  return cloned;
+}
+
+export function querySignature(query: Query | undefined): string | undefined {
+  if (!query) {
+    return undefined;
+  }
+  return JSON.stringify(sortKeysDeep(query));
+}
+
+export function sortKeysDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => sortKeysDeep(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    let sorted = Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
+    return sorted as unknown as T;
+  }
+  return value;
+}
