@@ -123,7 +123,7 @@ const fullReindexBatch: Task<FullReindexBatchArgs, void> = ({
   queuePublisher,
 }) =>
   async function (args) {
-    let { jobInfo, totalBatches, batchNumber } = args;
+    let { jobInfo, totalBatches, batchNumber, realms } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting full-reindex batch for job: ${JSON.stringify(
         args,
@@ -134,7 +134,6 @@ const fullReindexBatch: Task<FullReindexBatchArgs, void> = ({
     let cooldownSeconds = normalizeFullReindexCooldownSeconds(
       args.cooldownSeconds,
     );
-    let realms = [...args.realms];
     let cooldownMs =
       cooldownSeconds > 0 ? Math.floor(cooldownSeconds * 1000) : 0;
 
