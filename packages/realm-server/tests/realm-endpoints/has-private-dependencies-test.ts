@@ -99,6 +99,9 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
 
+          // Ensure data: dependencies are ignored
+          import "data:text/javascript,export%20default%200;";
+
           export class SourceCard extends CardDef {
             @field label = contains(StringField);
           }
@@ -140,7 +143,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     );
   });
 
-  // FIXME add ignored deleted records and data: resources
+  // FIXME add ignored deleted records
   test('lists direct dependencies on private realms', async function (assert) {
     let { url: privateRealmURL } = await createRealm({
       name: 'Private Realm',
