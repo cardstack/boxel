@@ -58,17 +58,17 @@ export default class RatingField extends NumberField {
         .star-btn {
           background: none;
           border: none;
-          font-size: 2rem;
-          color: var(--muted, var(--boxel-300));
+          font-size: 1.25rem;
+          color: var(--muted, var(--boxel-300, #d1d1d1));
           cursor: pointer;
           padding: 0;
-          transition: transform 0.1s;
+          transition: transform 0.1s, color 0.2s;
         }
         .star-btn:hover {
           transform: scale(1.15);
         }
         .star-filled {
-          color: var(--accent, var(--boxel-highlight));
+          color: var(--accent, var(--boxel-yellow, #ffd800));
         }
         .rating-value {
           margin-left: 0.5rem;
@@ -109,12 +109,14 @@ export default class RatingField extends NumberField {
     <template>
       <span class='rating-field-atom'>
         <span class='atom-star {{if this.isHighlighted "highlighted"}}'>★</span>
+        <span class='atom-value'>{{this.numericValue}}</span>
       </span>
 
       <style scoped>
         .rating-field-atom {
           display: inline-flex;
           align-items: center;
+          gap: var(--boxel-sp-5xs, 0.25rem);
           line-height: 1;
         }
         .atom-star {
@@ -123,6 +125,12 @@ export default class RatingField extends NumberField {
         }
         .atom-star.highlighted {
           color: var(--accent, var(--boxel-yellow, #ffd800));
+        }
+        .atom-value {
+          font-size: var(--boxel-font-size-xs, 0.6875rem);
+          font-weight: var(--boxel-font-weight-semibold, 600);
+          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
         }
       </style>
     </template>
