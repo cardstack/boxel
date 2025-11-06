@@ -148,6 +148,8 @@ export interface FileRef {
 const CACHE_HEADER = 'X-Boxel-Cache';
 const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
+const MODULE_ETAG_VARIANT = 'module';
+const SOURCE_ETAG_VARIANT = 'source';
 
 type CachedSourceFileEntry = {
   type: 'file';
@@ -186,6 +188,17 @@ type ModuleLoadResult =
       body: string;
       headers: Record<string, string>;
     };
+
+function buildEtag(
+  lastModified: number | undefined,
+  variant?: string,
+): string | undefined {
+  if (lastModified == null) {
+    return undefined;
+  }
+  let base = String(lastModified);
+  return variant ? `${base}:${variant}` : base;
+}
 
 export interface TokenClaims {
   user: string;
@@ -1461,13 +1474,12 @@ export class Realm {
       return { kind: 'shimmed', response };
     }
 
-    let etag =
-      fileRef.lastModified != null ? String(fileRef.lastModified) : undefined;
+    let etag = buildEtag(fileRef.lastModified, MODULE_ETAG_VARIANT);
     if (etag && request.headers.get('if-none-match') === etag) {
       let headers: Record<string, string> = {
         'cache-control': 'public, max-age=0',
-        etag,
       };
+      headers.etag = etag;
       if (fileRef.lastModified != null) {
         headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
       }
@@ -1543,12 +1555,11 @@ export class Realm {
     requestContext: RequestContext,
     options?: {
       defaultHeaders?: Record<string, string>;
+      etagVariant?: string;
     },
   ): Promise<ResponseWithNodeStream> {
-    if (
-      ref.lastModified != null &&
-      request.headers.get('if-none-match') === String(ref.lastModified)
-    ) {
+    let etag = buildEtag(ref.lastModified, options?.etagVariant);
+    if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
         body: null,
         init: { status: 304 },
@@ -1562,7 +1573,7 @@ export class Realm {
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
         : {}),
-      etag: String(ref.lastModified),
+      ...(etag ? { etag } : {}),
       'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
     };
     if (createdFromDb != null) {
@@ -1757,6 +1768,7 @@ export class Realm {
                 ...cached.defaultHeaders,
                 [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
+              etagVariant: SOURCE_ETAG_VARIANT,
             },
           );
         } finally {
@@ -1810,6 +1822,7 @@ export class Realm {
       if (bypassCache) {
         return await this.serveLocalFile(request, handle, requestContext, {
           defaultHeaders,
+          etagVariant: SOURCE_ETAG_VARIANT,
         });
       } else {
         let cachedRef = await this.materializeFileRef(handle);
@@ -1821,6 +1834,7 @@ export class Realm {
         });
         return await this.serveLocalFile(request, cachedRef, requestContext, {
           defaultHeaders,
+          etagVariant: SOURCE_ETAG_VARIANT,
         });
       }
     } finally {
