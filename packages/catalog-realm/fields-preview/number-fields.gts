@@ -11,13 +11,20 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import { getField } from '@cardstack/runtime-common';
 
 export class NumberFieldsPreview extends CardDef {
+  static displayName = 'Number Fields Preview';
   // Basic number field (default - no type specified)
   @field basicNumber = contains(NumberField);
 
   // Slider field
   @field sliderNumber = contains(NumberField, {
     configuration: {
-      presentation: { type: 'slider', min: 0, max: 100, suffix: '%' },
+      presentation: {
+        type: 'slider',
+        min: 0,
+        max: 100,
+        suffix: '%',
+        showValue: true,
+      },
     },
   });
 
@@ -114,9 +121,125 @@ export class NumberFieldsPreview extends CardDef {
     },
   });
 
-  static displayName = 'Number Fields Preview';
-
   static isolated = class Isolated extends Component<typeof this> {
+    get basicNumberConfig() {
+      return `@field basicNumber = contains(NumberField);`;
+    }
+
+    get sliderNumberConfig() {
+      return `@field sliderNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'slider',
+      min: 0,
+      max: 100,
+      suffix: '%'
+    }
+  }
+});`;
+    }
+
+    get ratingNumberConfig() {
+      return `@field ratingNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'rating',
+      maxStars: 5
+    }
+  }
+});`;
+    }
+
+    get quantityNumberConfig() {
+      return `@field quantityNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'quantity',
+      min: 0,
+      max: 999
+    }
+  }
+});`;
+    }
+
+    get percentageNumberConfig() {
+      return `@field percentageNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'percentage',
+      min: 0,
+      max: 200
+    }
+  }
+});`;
+    }
+
+    get statNumberConfig() {
+      return `@field statNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'stat',
+      prefix: '+',
+      suffix: '',
+      min: 0,
+      max: 100
+    }
+  }
+});`;
+    }
+
+    get badgeNumberConfig() {
+      return `@field badgeNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'badge',
+      label: 'NEW',
+      decimals: 0,
+      min: 0,
+      max: 100
+    }
+  }
+});`;
+    }
+
+    get scoresNumberConfig() {
+      return `@field scoresNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'scores',
+      decimals: 0,
+      min: 0,
+      max: 1000
+    }
+  }
+});`;
+    }
+
+    get progressBarNumberConfig() {
+      return `@field progressBarNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'progress-bar',
+      min: 0,
+      max: 100,
+      label: 'Completion'
+    }
+  }
+});`;
+    }
+
+    get progressCircleNumberConfig() {
+      return `@field progressCircleNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'progress-circle',
+      min: 0,
+      max: 100
+    }
+  }
+});`;
+    }
+
     <template>
       <div class='number-fields-preview'>
         <header class='header'>
@@ -153,7 +276,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field basicNumber = contains(NumberField);</code></pre>
+            <pre class='config-code'><code
+              >{{this.basicNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -185,16 +309,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field sliderNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'slider',
-      min: 0,
-      max: 100,
-      suffix: '%'
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.sliderNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -225,14 +341,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field ratingNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'rating',
-      maxStars: 5
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.ratingNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -263,15 +373,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field quantityNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'quantity',
-      min: 0,
-      max: 999
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.quantityNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -303,15 +406,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field percentageNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'percentage',
-      min: 0,
-      max: 200
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.percentageNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -343,17 +439,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field statNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'stat',
-      prefix: '+',
-      suffix: '',
-      min: 0,
-      max: 100
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.statNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -385,17 +472,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field badgeNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'badge',
-      label: 'NEW',
-      decimals: 0,
-      min: 0,
-      max: 100
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.badgeNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -426,16 +504,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field scoresNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'scores',
-      decimals: 0,
-      min: 0,
-      max: 1000
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.scoresNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -467,16 +537,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field progressBarNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'progress-bar',
-      min: 0,
-      max: 100,
-      label: 'Completion'
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.progressBarNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -507,15 +569,8 @@ export class NumberFieldsPreview extends CardDef {
           </div>
           <div class='config-details'>
             <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code>@field progressCircleNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'progress-circle',
-      min: 0,
-      max: 100
-    }
-  }
-});</code></pre>
+            <pre class='config-code'><code
+              >{{this.progressCircleNumberConfig}}</code></pre>
           </div>
         </section>
       </div>
@@ -697,6 +752,7 @@ export class NumberFieldsPreview extends CardDef {
           border: 1px solid #333;
           border-radius: var(--boxel-border-radius);
           overflow-x: auto;
+          overflow-y: hidden;
           box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
@@ -705,8 +761,8 @@ export class NumberFieldsPreview extends CardDef {
           font-size: 0.8125rem;
           color: #d4d4d4;
           line-height: 1.6;
-          white-space: pre-wrap;
-          word-break: break-word;
+          white-space: pre;
+          display: block;
         }
       </style>
     </template>

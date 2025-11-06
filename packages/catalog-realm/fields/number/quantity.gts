@@ -6,6 +6,7 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
+import { lte, gte } from '@cardstack/boxel-ui/helpers';
 import { getNumericValue, clamp, type QuantityConfig } from './util/index';
 
 export default class QuantityField extends NumberField {
@@ -45,18 +46,38 @@ export default class QuantityField extends NumberField {
       );
     };
 
+    handleInput = (event: Event) => {
+      const target = event.target as HTMLInputElement;
+      const value = target.value;
+      const num = parseFloat(value);
+      if (!isNaN(num)) {
+        this.args.set(clamp(num, this.config.min, this.config.max));
+      } else if (value === '') {
+        this.args.set(this.config.min);
+      }
+    };
+
     <template>
       <div class='quantity-field-edit'>
         <button
           type='button'
           class='qty-btn'
           {{on 'click' this.decrement}}
+          disabled={{if (lte this.numericValue this.config.min) 'true'}}
         >−</button>
-        <span class='qty-value'>{{this.numericValue}}</span>
+        <input
+          type='number'
+          class='qty-input'
+          value={{this.numericValue}}
+          min={{this.config.min}}
+          max={{this.config.max}}
+          {{on 'input' this.handleInput}}
+        />
         <button
           type='button'
           class='qty-btn'
           {{on 'click' this.increment}}
+          disabled={{if (gte this.numericValue this.config.max) 'true'}}
         >+</button>
       </div>
 
@@ -64,30 +85,55 @@ export default class QuantityField extends NumberField {
         .quantity-field-edit {
           display: flex;
           align-items: center;
-          gap: 1rem;
+          gap: var(--boxel-sp-xs, 0.5rem);
         }
         .qty-btn {
           width: 2.5rem;
           height: 2.5rem;
           border-radius: 50%;
-          border: 2px solid var(--border, var(--boxel-border));
-          background: var(--background, var(--boxel-light));
+          border: 2px solid var(--border, var(--boxel-200, #e0e0e0));
+          background: var(--background, var(--boxel-light, #ffffff));
           font-size: 1.25rem;
           font-weight: 700;
           cursor: pointer;
           transition: all 0.2s;
-          color: var(--foreground, var(--boxel-dark));
+          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+          flex-shrink: 0;
         }
-        .qty-btn:hover {
-          background: var(--primary, var(--boxel-purple));
-          color: var(--primary-foreground, white);
-          border-color: var(--primary, var(--boxel-purple));
+        .qty-btn:hover:not(:disabled) {
+          background: var(--primary, var(--boxel-purple, #6638ff));
+          color: var(--primary-foreground, var(--boxel-light, #ffffff));
+          border-color: var(--primary, var(--boxel-purple, #6638ff));
         }
-        .qty-value {
-          min-width: 3rem;
+        .qty-btn:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+        .qty-input {
+          width: 4rem;
+          height: 2.5rem;
           text-align: center;
-          font-size: 1.25rem;
+          font-size: 1.125rem;
           font-weight: 700;
+          padding: 0;
+          border: 2px solid var(--border, var(--boxel-200, #e0e0e0));
+          border-radius: var(--boxel-border-radius-xs, 0.25rem);
+          background: var(--background, var(--boxel-light, #ffffff));
+          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          outline: none;
+          transition: border-color 0.2s;
+        }
+        .qty-input:focus {
+          border-color: var(--primary, var(--boxel-purple, #6638ff));
+        }
+        .qty-input::-webkit-inner-spin-button,
+        .qty-input::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .qty-input[type='number'] {
+          -moz-appearance: textfield;
         }
       </style>
     </template>

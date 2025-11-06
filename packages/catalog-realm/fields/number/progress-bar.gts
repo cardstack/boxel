@@ -36,18 +36,15 @@ export default class ProgressBarField extends NumberField {
     }
 
     handleInputChange = (value: string) => {
-      // Handle empty input by setting to null
       if (value === '' || value === null || value === undefined) {
         this.args.set(null);
         return;
       }
-      let num = parseFloat(value);
+      const num = parseFloat(value);
       if (!isNaN(num)) {
-        // Apply min/max clamping using utility function
-        const min = this.config.min;
-        const max = this.config.max;
-        num = clamp(num, min, max);
-        this.args.set(num);
+        const min = this.config.min ?? -Infinity;
+        const max = this.config.max ?? Infinity;
+        this.args.set(clamp(num, min, max));
       }
     };
 
