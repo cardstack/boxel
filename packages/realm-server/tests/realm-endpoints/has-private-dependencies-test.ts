@@ -53,6 +53,8 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       publisher = _publisher;
       runner = _runner;
 
+      console.log('test database: ' + dbAdapter.url);
+
       tempDir = dirSync({ unsafeCleanup: true });
       let realmsRootPath = join(
         tempDir.name,
@@ -361,6 +363,96 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
         (dep: any) => dep.realmURL === privateRealmURL,
       ),
       'dependencies report the private realm URL',
+    );
+  });
+
+  test('handles circular dependencies', async function (assert) {
+    let { url: privateRealmURL, realm: privateRealm } = await createRealm({
+      name: 'Circular Private Realm',
+      files: {
+        'secret-card.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class SecretCard extends CardDef {
+            @field name = contains(StringField);
+          }
+        `,
+      },
+    });
+
+    let { url: sourceRealmURL, realm: sourceRealm } = await createRealm({
+      name: 'Source Realm With Cycle',
+      files: {
+        'source-card.gts': `
+          import {
+            contains,
+            field,
+            linksTo,
+            CardDef,
+          } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { SecretCard } from "${privateRealmURL}secret-card";
+
+          export class SourceCard extends CardDef {
+            @field label = contains(StringField);
+            @field secret = linksTo(() => SecretCard);
+          }
+        `,
+        'source-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              label: 'Circular secret label',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './source-card',
+                name: 'SourceCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await privateRealm.write(
+      'secret-card.gts',
+      `
+        import {
+          contains,
+          field,
+          linksTo,
+          CardDef,
+        } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { SourceCard } from "${sourceRealmURL}source-card";
+
+        export class SecretCard extends CardDef {
+          @field name = contains(StringField);
+          @field source = linksTo(() => SourceCard);
+        }
+      `,
+    );
+    await privateRealm.realmIndexUpdater.fullIndex();
+
+    let response = await request
+      .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
+      .set('Accept', SupportedMimeType.JSONAPI)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+      );
+
+    assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.false(
+      response.body.data.attributes.publishable,
+      'Realm is not publishable due to private dependency',
+    );
+    assert.strictEqual(
+      response.body.data.attributes.violations.length,
+      1,
+      'one violating resource is reported despite circular dependency',
     );
   });
 
