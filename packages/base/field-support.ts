@@ -4,7 +4,9 @@ import {
   isNotLoadedError,
   NotLoaded,
   primitive,
+  type Relationship,
 } from '@cardstack/runtime-common';
+import type { Query } from '@cardstack/runtime-common/query';
 import type {
   BaseDef,
   BaseDefConstructor,
@@ -49,6 +51,16 @@ const fieldDescriptions = initSharedState(
 const fieldOverrides = initSharedState(
   'fieldOverrides',
   () => new WeakMap<BaseDef, Map<string, any>>(),
+);
+export interface QueryFieldState {
+  signature?: string;
+  query?: Query;
+  searchURL?: string | null;
+  relationship?: Relationship;
+}
+const queryFieldStates = initSharedState(
+  'queryFieldStates',
+  () => new WeakMap<BaseDef, Map<string, QueryFieldState>>(),
 );
 
 export function getter<CardT extends BaseDefConstructor>(
@@ -211,9 +223,9 @@ export function resolveFieldConfiguration(
     if (!input) return undefined;
     try {
       if (typeof input === 'function') {
-        return (input as (this: Readonly<T>) => FieldConfiguration | undefined).call(
-          instance as unknown as T,
-        );
+        return (
+          input as (this: Readonly<T>) => FieldConfiguration | undefined
+        ).call(instance as unknown as T);
       } else {
         return input as FieldConfiguration;
       }
@@ -254,6 +266,41 @@ export function getFieldDescription(
     fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
   }
   return descriptionsMap.get(fieldName);
+}
+
+export function setQueryFieldState(
+  instance: BaseDef,
+  fieldName: string,
+  state: QueryFieldState | undefined,
+) {
+  let cache = queryFieldStates.get(instance);
+  if (!cache) {
+    if (!state) {
+      return;
+    }
+    cache = new Map();
+    queryFieldStates.set(instance, cache);
+  }
+
+  if (state) {
+    cache.set(fieldName, state);
+  } else {
+    cache.delete(fieldName);
+    if (cache.size === 0) {
+      queryFieldStates.delete(instance);
+    }
+  }
+}
+
+export function getQueryFieldState(
+  instance: BaseDef,
+  fieldName: string,
+): QueryFieldState | undefined {
+  return queryFieldStates.get(instance)?.get(fieldName);
+}
+
+export function getQueryFieldStateKeys(instance: BaseDef): string[] {
+  return Array.from(queryFieldStates.get(instance)?.keys() ?? []);
 }
 
 export function getFieldOverrides<T extends BaseDef>(
