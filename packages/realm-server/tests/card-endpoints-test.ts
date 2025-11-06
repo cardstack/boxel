@@ -11,7 +11,7 @@ import {
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
-import { stringify } from 'qs';
+import { stringify, parse } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupBaseRealmServer,
@@ -3040,7 +3040,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module('Query-backed relationships runtime resolver', function (hooks) {
+  module.only('Query-backed relationships runtime resolver', function (hooks) {
     const providerRealmURL = 'http://127.0.0.1:5521/';
     const consumerRealmURL = 'http://127.0.0.1:5522/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
@@ -3164,6 +3164,35 @@ module(basename(__filename), function () {
         { type: 'card', id: `${consumerRealmURL}local-person` },
         'linksTo picks the first (local realm) match',
       );
+      let favoriteSearchLink = favoriteRelationship?.links?.search;
+      assert.ok(
+        favoriteSearchLink,
+        'linksTo relationship exposes canonical search link',
+      );
+      let favoriteSearchURL = new URL(favoriteSearchLink);
+      assert.strictEqual(
+        favoriteSearchURL.href.split('?')[0],
+        new URL('_search', consumerRealmURL).href,
+        'favorite relationship search link targets consumer realm',
+      );
+      let favoriteQueryParams = parse(
+        favoriteSearchURL.searchParams.toString(),
+      ) as Record<string, any>;
+      assert.deepEqual(
+        favoriteQueryParams.page,
+        { size: '1', number: '0' },
+        'favorite relationship search link encodes pagination',
+      );
+      assert.strictEqual(
+        favoriteQueryParams.filter?.type?.module,
+        `${providerRealmURL}person`,
+        'favorite relationship search link encodes implicit type filter module',
+      );
+      assert.strictEqual(
+        favoriteQueryParams.filter?.type?.name,
+        'Person',
+        'favorite relationship search link encodes implicit type filter name',
+      );
       assert.ok(
         Array.isArray(doc.included),
         '`included` array exists for linksTo query',
@@ -3199,6 +3228,50 @@ module(basename(__filename), function () {
         !matchesRelationship?.meta?.errors,
         'successful remote query does not include errors metadata',
       );
+      assert.deepEqual(
+        matchesRelationship?.data,
+        [{ type: 'card', id: `${providerRealmURL}person-remote` }],
+        'linksToMany base relationship provides data array for remote results',
+      );
+      let matchesSearchLink = matchesRelationship?.links?.search;
+      assert.ok(
+        matchesSearchLink,
+        'linksToMany relationship exposes canonical search link',
+      );
+      let matchesSearchURL = new URL(matchesSearchLink);
+      assert.strictEqual(
+        matchesSearchURL.href.split('?')[0],
+        new URL('_search', providerRealmURL).href,
+        'matches relationship search link targets provider realm',
+      );
+      let matchesQueryParams = parse(
+        matchesSearchURL.searchParams.toString(),
+      ) as Record<string, any>;
+      assert.deepEqual(
+        matchesQueryParams.page,
+        { size: '1', number: '0' },
+        'matches relationship search link encodes pagination',
+      );
+      assert.strictEqual(
+        matchesQueryParams.sort?.[0]?.by,
+        'name',
+        'matches relationship search link preserves sort by',
+      );
+      assert.strictEqual(
+        matchesQueryParams.sort?.[0]?.direction,
+        'desc',
+        'matches relationship search link preserves sort direction',
+      );
+      assert.strictEqual(
+        matchesQueryParams.sort?.[0]?.on?.module,
+        `${providerRealmURL}person`,
+        'matches relationship search link encodes sort module',
+      );
+      assert.strictEqual(
+        matchesQueryParams.sort?.[0]?.on?.name,
+        'Person',
+        'matches relationship search link encodes sort card name',
+      );
 
       let failingRelationship = relationships.failingMatches;
       assert.ok(
@@ -3210,6 +3283,40 @@ module(basename(__filename), function () {
           (error: any) => error.realm === UNREACHABLE_REALM_URL,
         ),
         'meta includes unreachable realm entry for failing query',
+      );
+      let failingSearchLink = failingRelationship.links?.search;
+      assert.ok(
+        failingSearchLink,
+        'failingMatches relationship exposes canonical search link despite error',
+      );
+      let failingSearchURL = new URL(failingSearchLink);
+      assert.strictEqual(
+        failingSearchURL.href.split('?')[0],
+        new URL('_search', UNREACHABLE_REALM_URL).href,
+        'failingMatches search link targets unreachable realm',
+      );
+      let failingQueryParams = parse(
+        failingSearchURL.searchParams.toString(),
+      ) as Record<string, any>;
+      assert.deepEqual(
+        failingQueryParams.page,
+        { size: '1', number: '0' },
+        'failingMatches search link encodes pagination',
+      );
+      assert.strictEqual(
+        failingQueryParams.filter?.type?.module,
+        `${providerRealmURL}person`,
+        'failingMatches search link encodes implicit type filter module',
+      );
+      assert.strictEqual(
+        failingQueryParams.filter?.type?.name,
+        'Person',
+        'failingMatches search link encodes implicit type filter name',
+      );
+      assert.deepEqual(
+        failingRelationship.data,
+        [],
+        'failingMatches relationship provides empty data array when query fails',
       );
 
       assert.ok(Array.isArray(doc.included), '`included` array is present');

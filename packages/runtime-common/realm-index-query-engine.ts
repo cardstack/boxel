@@ -274,7 +274,7 @@ export class RealmIndexQueryEngine {
         continue;
       }
 
-      let { results, errors } = await this.executeQueryForField({
+      let { results, errors, searchURL } = await this.executeQueryForField({
         fieldDefinition,
         fieldName,
         queryDefinition,
@@ -288,6 +288,7 @@ export class RealmIndexQueryEngine {
         resource,
         results,
         errors,
+        searchURL,
       });
     }
   }
@@ -309,6 +310,7 @@ export class RealmIndexQueryEngine {
   }): Promise<{
     results: CardResource<Saved>[];
     errors: QueryFieldErrorDetail[];
+    searchURL: string;
   }> {
     let normalized = this.normalizeQueryDefinition(
       fieldDefinition,
@@ -318,10 +320,11 @@ export class RealmIndexQueryEngine {
       fieldName,
     );
     if (!normalized) {
-      return { results: [], errors: [] };
+      return { results: [], errors: [], searchURL: '' };
     }
 
     let { query, realm } = normalized;
+    let searchURL = this.buildSearchURL(realm, query);
     let aggregated: CardResource<Saved>[] = [];
     let seen = new Set<string>();
     let errors: QueryFieldErrorDetail[] = [];
@@ -378,7 +381,14 @@ export class RealmIndexQueryEngine {
       );
     }
 
-    return { results: aggregated, errors };
+    return { results: aggregated, errors, searchURL };
+  }
+
+  private buildSearchURL(realmHref: string, query: Query): string {
+    let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
+    let searchURL = new URL('./_search', baseHref);
+    searchURL.search = buildQueryString(query);
+    return searchURL.href;
   }
 
   private normalizeQueryDefinition(
@@ -622,12 +632,14 @@ export class RealmIndexQueryEngine {
     resource,
     results,
     errors,
+    searchURL,
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
     resource: LooseCardResource;
     results: CardResource<Saved>[];
     errors: QueryFieldErrorDetail[];
+    searchURL: string;
   }): void {
     resource.relationships = resource.relationships ?? {};
     for (let key of Object.keys(resource.relationships)) {
@@ -650,30 +662,54 @@ export class RealmIndexQueryEngine {
 
     if (fieldDefinition.type === 'linksTo') {
       let first = results[0];
-      if (!first || !first.id) {
-        resource.relationships[fieldName] = {
-          links: { self: null },
-          ...(errorMeta ? { meta: errorMeta } : {}),
-        };
-        return;
-      }
-      resource.relationships[fieldName] = {
-        links: { self: first.id },
-        data: { type: 'card', id: first.id },
+      let relationshipLinks: Record<string, string | null> = {
+        ...(searchURL ? { search: searchURL } : {}),
+      };
+      let relationship: {
+        links: Record<string, string | null>;
+        data?: { type: string; id: string } | null;
+        meta?: typeof errorMeta;
+      } = {
+        links: relationshipLinks,
         ...(errorMeta ? { meta: errorMeta } : {}),
       };
+      if (first && first.id) {
+        relationship.links.self = first.id;
+        if (searchURL) {
+          relationship.data = { type: 'card', id: first.id };
+        }
+      } else {
+        relationship.links.self = null;
+        if (searchURL) {
+          relationship.data = null;
+        }
+      }
+      resource.relationships[fieldName] = relationship;
       return;
     }
 
-    if (results.length === 0 || errorMeta) {
-      resource.relationships[fieldName] = {
-        links: { self: null },
-        ...(errorMeta ? { meta: errorMeta } : {}),
-      };
-      if (results.length === 0) {
-        return;
-      }
+    let baseRelationshipLinks: Record<string, string | null> = {
+      ...(searchURL ? { search: searchURL } : {}),
+    };
+    if (!('self' in baseRelationshipLinks)) {
+      baseRelationshipLinks.self = null;
     }
+
+    let relationshipData =
+      searchURL !== ''
+        ? results
+            .filter(
+              (card): card is CardResource<Saved> & { id: string } =>
+                typeof card.id === 'string',
+            )
+            .map((card) => ({ type: 'card', id: card.id }))
+        : undefined;
+
+    resource.relationships[fieldName] = {
+      links: baseRelationshipLinks,
+      ...(relationshipData !== undefined ? { data: relationshipData } : {}),
+      ...(errorMeta ? { meta: errorMeta } : {}),
+    };
 
     results.forEach((card, index) => {
       if (!card.id) {

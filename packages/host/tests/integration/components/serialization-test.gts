@@ -3,6 +3,7 @@ import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
 import parseISO from 'date-fns/parseISO';
+import { parse as parseQueryString } from 'qs';
 
 import { isAddress } from 'ethers';
 import { module, test } from 'qunit';
@@ -12,6 +13,7 @@ import {
   PermissionsContextName,
   localId,
   fields,
+  isSingleCardDocument,
   type LooseSingleCardDocument,
   type Permissions,
 } from '@cardstack/runtime-common';
@@ -63,6 +65,7 @@ import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { Captain } from '../../cards/captain';
+import type CardService from '@cardstack/host/services/card-service';
 
 let loader: Loader;
 
@@ -3709,6 +3712,140 @@ module('Integration | serialization', function (hooks) {
     } else {
       assert.ok(false, 'Not a customer');
     }
+  });
+
+  test('query-backed relationships include canonical search links in serialized payloads', async function (assert) {
+    assert.expect(13);
+
+    class Person extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class QueryCard extends CardDef {
+      @field title = contains(StringField);
+      @field favorite = linksTo(Person, {
+        query: {
+          realm: '$thisRealm',
+          filter: {
+            eq: { title: '$this.title' },
+          },
+        },
+      });
+      @field matches = linksToMany(Person, {
+        query: {
+          realm: '$thisRealm',
+          filter: {
+            eq: { title: '$this.title' },
+          },
+          sort: [{ by: 'title', direction: 'asc' }],
+          page: { size: 5 },
+        },
+      });
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, QueryCard },
+        'Person/target.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Target',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'query-card.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Target',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'QueryCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let cardService = getService('card-service') as CardService;
+    let rawDoc = await cardService.fetchJSON(`${testRealmURL}query-card`);
+    assert.ok(
+      rawDoc && isSingleCardDocument(rawDoc),
+      'received serialized card document',
+    );
+    if (!rawDoc || !isSingleCardDocument(rawDoc)) {
+      return;
+    }
+    let doc = rawDoc;
+    let favoriteRelationship = doc.data.relationships.favorite;
+    assert.ok(favoriteRelationship, 'favorite relationship exists');
+    let favoriteSearchLink = favoriteRelationship.links?.search;
+    assert.ok(favoriteSearchLink, 'favorite relationship exposes links.search');
+    let favoriteSearchURL = new URL(favoriteSearchLink);
+    assert.strictEqual(
+      favoriteSearchURL.href.split('?')[0],
+      new URL('_search', testRealmURL).href,
+      'favorite search link points to canonical search endpoint',
+    );
+    let favoriteQueryParams = parseQueryString(
+      favoriteSearchURL.searchParams.toString(),
+    ) as Record<string, any>;
+    assert.strictEqual(
+      favoriteQueryParams.filter?.eq?.title,
+      'Target',
+      'favorite search link encodes interpolated filter',
+    );
+    assert.deepEqual(
+      favoriteRelationship.data,
+      { type: 'card', id: `${testRealmURL}Person/target` },
+      'favorite relationship retains resolved data entry',
+    );
+
+    let matchesRelationship = doc.data.relationships.matches;
+    assert.ok(matchesRelationship, 'matches relationship exists');
+    assert.deepEqual(
+      matchesRelationship.data,
+      [{ type: 'card', id: `${testRealmURL}Person/target` }],
+      'matches relationship exposes aggregate data entries',
+    );
+    let matchesSearchLink = matchesRelationship.links?.search;
+    assert.ok(matchesSearchLink, 'matches relationship exposes links.search');
+    let matchesSearchURL = new URL(matchesSearchLink);
+    assert.strictEqual(
+      matchesSearchURL.href.split('?')[0],
+      new URL('_search', testRealmURL).href,
+      'matches search link points to canonical search endpoint',
+    );
+    let matchesQueryParams = parseQueryString(
+      matchesSearchURL.searchParams.toString(),
+    ) as Record<string, any>;
+    assert.strictEqual(
+      matchesQueryParams.page?.size,
+      '5',
+      'matches search link preserves pagination',
+    );
+    assert.strictEqual(
+      matchesQueryParams.filter?.eq?.title,
+      'Target',
+      'matches search link encodes interpolated filter',
+    );
+    let firstChild = doc.data.relationships['matches.0'];
+    assert.strictEqual(
+      firstChild?.links?.self,
+      `${testRealmURL}Person/target`,
+      'matches indexed relationship retains links to result resource',
+    );
   });
 
   test('can serialize polymorphic containsMany fields nested within a field', async function (assert) {
