@@ -315,69 +315,66 @@ export class RealmIndexQueryEngine {
       queryDefinition,
       resource,
       realmURL,
+      fieldName,
     );
     if (!normalized) {
       return { results: [], errors: [] };
     }
 
-    let { query, realms } = normalized;
+    let { query, realm } = normalized;
     let aggregated: CardResource<Saved>[] = [];
     let seen = new Set<string>();
     let errors: QueryFieldErrorDetail[] = [];
 
-    for (let realmHref of realms) {
-      let realmResults: CardResource<Saved>[] = [];
-      if (realmHref === this.realmURL.href) {
-        try {
-          let collection = await this.#indexQueryEngine.search(
-            this.realmURL,
-            query,
-            opts,
-          );
-          realmResults = Array.isArray(collection.cards)
-            ? collection.cards
-            : [];
-        } catch (err: unknown) {
-          let message =
-            err instanceof Error ? err.message : String(err ?? 'unknown error');
-          errors.push({
-            realm: realmHref,
-            type: 'unknown',
-            message,
-          });
-          this.#log.debug(
-            `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed to execute local search: ${message}`,
-          );
-          continue;
-        }
-      } else {
-        let remoteResult = await this.fetchRemoteQueryResults(realmHref, query);
-        if (remoteResult.error) {
-          errors.push(remoteResult.error);
-          this.#log.debug(
-            `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed querying realm ${realmHref}: ${remoteResult.error.message}`,
-          );
-        }
-        realmResults = remoteResult.cards;
+    let realmResults: CardResource<Saved>[] = [];
+    if (realm === this.realmURL.href) {
+      try {
+        let collection = await this.#indexQueryEngine.search(
+          this.realmURL,
+          query,
+          opts,
+        );
+        realmResults = Array.isArray(collection.cards)
+          ? collection.cards
+          : [];
+      } catch (err: unknown) {
+        let message =
+          err instanceof Error ? err.message : String(err ?? 'unknown error');
+        errors.push({
+          realm,
+          type: 'unknown',
+          message,
+        });
+        this.#log.debug(
+          `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed to execute local search: ${message}`,
+        );
       }
+    } else {
+      let remoteResult = await this.fetchRemoteQueryResults(realm, query);
+      if (remoteResult.error) {
+        errors.push(remoteResult.error);
+        this.#log.debug(
+          `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed querying realm ${realm}: ${remoteResult.error.message}`,
+        );
+      }
+      realmResults = remoteResult.cards;
+    }
 
-      for (let card of realmResults) {
-        if (!card?.id || seen.has(card.id)) {
-          continue;
-        }
-        seen.add(card.id);
-        aggregated.push(card);
+    for (let card of realmResults) {
+      if (!card?.id || seen.has(card.id)) {
+        continue;
       }
+      seen.add(card.id);
+      aggregated.push(card);
     }
 
     if (
       aggregated.length === 0 &&
       errors.length > 0 &&
-      errors.length === realms.length &&
       errors.every((error) => error.type === 'authorization')
     ) {
       this.#log.warn(
-        `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} returned no results because all realm queries were unauthorized`,
+        `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} returned no results because the realm query was unauthorized`,
       );
     }
 
@@ -389,7 +386,8 @@ export class RealmIndexQueryEngine {
     queryDefinition: Query,
     resource: LooseCardResource,
     realmURL: URL,
-  ): { query: Query; realms: string[] } | null {
+    fieldName: string,
+  ): { query: Query; realm: string } | null {
     let workingQuery: Query = JSON.parse(JSON.stringify(queryDefinition));
     let queryAny = workingQuery as Record<string, any>;
     let aborted = false;
@@ -481,41 +479,62 @@ export class RealmIndexQueryEngine {
       }
     }
 
-    let realmsList: any = queryAny.realms ?? [THIS_REALM_TOKEN];
-    let interpolatedRealms = interpolateNode(realmsList, 'realms');
-    if (interpolatedRealms !== undefined) {
-      realmsList = interpolatedRealms;
+    let realmSource: any = queryAny.realm ?? THIS_REALM_TOKEN;
+
+    let interpolatedRealm = interpolateNode(realmSource, 'realm');
+    if (interpolatedRealm !== undefined) {
+      realmSource = interpolatedRealm;
     }
-    delete queryAny.realms;
+    delete queryAny.realm;
 
     if (aborted) {
       return null;
     }
 
-    let resolvedRealms = (Array.isArray(realmsList) ? realmsList : [realmsList])
-      .map((realm) => {
-        if (typeof realm !== 'string') {
-          return undefined;
-        }
-        if (realm === THIS_REALM_TOKEN) {
+    const resolveRealm = (value: any): string => {
+      if (value == null) {
+        return realmURL.href;
+      }
+      if (Array.isArray(value)) {
+        if (value.length === 0) {
           return realmURL.href;
         }
-        if (realm.startsWith(THIS_INTERPOLATION_PREFIX)) {
-          let value = this.getValueForPath(
-            resource,
-            realm.slice(THIS_INTERPOLATION_PREFIX.length),
+        if (value.length > 1) {
+          throw new Error(
+            `query field "${fieldName}" only supports a single realm but received multiple entries`,
           );
-          return typeof value === 'string' && value.length > 0
-            ? value
-            : undefined;
         }
-        return realm;
-      })
-      .filter((realm): realm is string => typeof realm === 'string');
+        return resolveRealm(value[0]);
+      }
+      if (typeof value !== 'string') {
+        throw new Error(
+          `query field "${fieldName}" must resolve realm to a string`,
+        );
+      }
+      if (value.length === 0) {
+        throw new Error(
+          `query field "${fieldName}" must resolve realm to a non-empty string`,
+        );
+      }
+      if (value === THIS_REALM_TOKEN) {
+        return realmURL.href;
+      }
+      if (value.startsWith(THIS_INTERPOLATION_PREFIX)) {
+        let interpolated = this.getValueForPath(
+          resource,
+          value.slice(THIS_INTERPOLATION_PREFIX.length),
+        );
+        if (typeof interpolated === 'string' && interpolated.length > 0) {
+          return interpolated;
+        }
+        throw new Error(
+          `query field "${fieldName}" must resolve realm interpolation "${value}" to a non-empty string`,
+        );
+      }
+      return value;
+    };
 
-    if (resolvedRealms.length === 0) {
-      resolvedRealms = [realmURL.href];
-    }
+    let resolvedRealm = resolveRealm(realmSource);
 
     let targetRef = codeRefWithAbsoluteURL(
       fieldDefinition.fieldOrCard,
@@ -553,7 +572,7 @@ export class RealmIndexQueryEngine {
       }
     }
 
-    return { query: workingQuery, realms: resolvedRealms };
+    return { query: workingQuery, realm: resolvedRealm };
   }
 
   private getQueryDefinition(

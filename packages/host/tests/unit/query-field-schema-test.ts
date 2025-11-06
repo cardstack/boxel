@@ -27,7 +27,7 @@ module('Unit | query field schema', function (hooks) {
       filter: {
         eq: { size: '$this.size' },
       },
-      realms: ['$thisRealm', 'https://example.com/realm'],
+      realm: '$thisRealm',
     };
 
     class Person extends CardDef {

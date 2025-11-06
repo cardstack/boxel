@@ -3092,16 +3092,22 @@ module(basename(__filename), function () {
               export class FavoriteLookup extends CardDef {
                 @field favorite = linksTo(Person, {
                   query: {
-                    realms: ['$thisRealm', '${providerRealmURL}', '${UNREACHABLE_REALM_URL}'],
+                    realm: '$thisRealm',
                     page: { size: 1 },
                   },
                 });
                 @field matches = linksToMany(Person, {
                   query: {
-                    realms: ['$thisRealm', '${providerRealmURL}', '${UNREACHABLE_REALM_URL}'],
+                    realm: '${providerRealmURL}',
                     sort: [
                       { by: 'name', direction: 'desc' },
                     ],
+                    page: { size: 1 },
+                  },
+                });
+                @field failingMatches = linksToMany(Person, {
+                  query: {
+                    realm: '${UNREACHABLE_REALM_URL}',
                     page: { size: 1 },
                   },
                 });
@@ -3170,7 +3176,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('linksToMany query enforces global page size, records remote errors, and includes results', async function (assert) {
+    test('linksToMany query returns remote results and records errors for failing realm', async function (assert) {
       let response = await consumerRequest
         .get('/favorite')
         .set('Accept', 'application/vnd.card+json');
@@ -3179,31 +3185,31 @@ module(basename(__filename), function () {
 
       let doc = response.body;
       let relationships = doc.data.relationships as Record<string, any>;
-      let firstRelationship = relationships['matches.0'];
-      let secondRelationship = relationships['matches.1'];
+      let remoteRelationship = relationships['matches.0'];
+      let matchesRelationship = relationships.matches;
 
-      assert.ok(firstRelationship, 'first match is present');
+      assert.ok(remoteRelationship, 'remote match is present');
       assert.deepEqual(
-        firstRelationship.data,
-        { type: 'card', id: `${consumerRealmURL}local-person` },
-        'host realm result appears first when no global sort is applied',
-      );
-      assert.deepEqual(
-        secondRelationship?.data,
+        remoteRelationship?.data,
         { type: 'card', id: `${providerRealmURL}person-remote` },
-        'remote realm result is appended after local matches',
+        'remote realm result is returned',
       );
 
-      let baseRelationship = relationships.matches;
       assert.ok(
-        baseRelationship?.meta?.errors,
-        'relationship meta includes errors array',
+        !matchesRelationship?.meta?.errors,
+        'successful remote query does not include errors metadata',
+      );
+
+      let failingRelationship = relationships.failingMatches;
+      assert.ok(
+        failingRelationship?.meta?.errors,
+        'failingMatches relationship meta includes errors array',
       );
       assert.ok(
-        baseRelationship.meta.errors.some(
+        failingRelationship.meta.errors.some(
           (error: any) => error.realm === UNREACHABLE_REALM_URL,
         ),
-        'meta includes unreachable realm entry',
+        'meta includes unreachable realm entry for failing query',
       );
 
       assert.ok(Array.isArray(doc.included), '`included` array is present');
