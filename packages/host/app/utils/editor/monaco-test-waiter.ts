@@ -177,10 +177,6 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
               change.originalEndLineNumber,
               change.modifiedStartLineNumber,
               change.modifiedEndLineNumber,
-              change.originalStartColumn,
-              change.originalEndColumn,
-              change.modifiedStartColumn,
-              change.modifiedEndColumn,
             ].join(':');
 
             const charSignature =
