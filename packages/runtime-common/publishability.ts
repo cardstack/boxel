@@ -118,10 +118,7 @@ export async function analyzeRealmPublishability({
           continue;
         }
 
-        let visibility =
-          realmVisibility.get(dependencyRealmURL) ??
-          realmVisibility.get(dependencyRealmURL.replace(/\/$/, '')) ??
-          'private';
+        let visibility = realmVisibility.get(dependencyRealmURL) ?? 'private';
         if (visibility !== 'public') {
           chains.push([resourceUrl, dependency]);
           continue;
@@ -161,10 +158,7 @@ export async function analyzeRealmPublishability({
       let dependencyRealmURL = ensureTrailingSlash(
         dependencyEntries[0].realmUrl,
       );
-      let visibility =
-        realmVisibility.get(dependencyRealmURL) ??
-        realmVisibility.get(dependencyRealmURL.replace(/\/$/, '')) ??
-        'private';
+      let visibility = realmVisibility.get(dependencyRealmURL) ?? 'private';
 
       if (visibility === 'public') {
         continue;
