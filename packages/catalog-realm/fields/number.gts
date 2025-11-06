@@ -9,7 +9,6 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import HashIcon from '@cardstack/boxel-icons/hash';
 import {
   hasValue,
-  clamp,
   getFieldClass,
   registerFieldType,
   getFormattedDisplayValue,
@@ -63,10 +62,6 @@ export default class NumberField extends BaseNumberField {
       }
       let num = parseFloat(value);
       if (!isNaN(num)) {
-        // Apply min/max clamping using utility function
-        const min = this.config.min;
-        const max = this.config.max;
-        num = clamp(num, min, max);
         this.args.set(num);
       }
     };
@@ -85,8 +80,6 @@ export default class NumberField extends BaseNumberField {
           @type='number'
           @value={{this.inputValue}}
           @onInput={{this.handleInputChange}}
-          min={{this.config.min}}
-          max={{this.config.max}}
         />
       {{/if}}
     </template>

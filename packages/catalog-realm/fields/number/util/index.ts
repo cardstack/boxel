@@ -26,7 +26,6 @@ export function getNumericValue(model: any): number {
  * Field type registry for dynamic delegation
  */
 export type FieldType = 
-  | 'basic'
   | 'slider' 
   | 'rating' 
   | 'quantity'
