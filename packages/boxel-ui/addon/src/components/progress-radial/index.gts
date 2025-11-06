@@ -45,15 +45,23 @@ export default class ProgressRadial extends Component<Signature> {
           --progress-radial-size: var(--boxel-progress-radial-size, 80px);
           --progress-radial-fill-color: var(
             --boxel-progress-radial-fill-color,
-            var(--boxel-highlight)
+            var(--primary, var(--boxel-highlight))
           );
           --progress-radial-background-color: var(
             --boxel-progress-radial-background-color,
-            var(--boxel-light-200)
+            var(--muted, var(--boxel-light-200))
           );
           --progress-radial-font-weight: var(
             --boxel-progress-radial-font-weight,
             600
+          );
+          --progress-radial-inner-bg: var(
+            --boxel-progress-radial-inner-bg,
+            var(--background, var(--boxel-light))
+          );
+          --progress-radial-text-color: var(
+            --boxel-progress-radial-text-color,
+            var(--foreground, var(--boxel-dark))
           );
         }
         .progress-radial-circle-outer {
@@ -70,7 +78,7 @@ export default class ProgressRadial extends Component<Signature> {
         .progress-radial-circle-inner {
           position: absolute;
           inset: 10px;
-          background: var(--boxel-light);
+          background: var(--progress-radial-inner-bg);
           border-radius: 50%;
           display: grid;
           place-items: center;
@@ -79,7 +87,7 @@ export default class ProgressRadial extends Component<Signature> {
         .progress-percentage {
           font-size: var(--boxel-font-sm);
           font-weight: var(--progress-radial-font-weight);
-          color: var(--boxel-dark);
+          color: var(--progress-radial-text-color);
         }
       }
     </style>
