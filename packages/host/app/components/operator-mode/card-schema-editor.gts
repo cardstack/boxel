@@ -568,6 +568,7 @@ export default class CardSchemaEditor extends Component<Signature> {
     return field.type === 'linksTo' || field.type === 'linksToMany';
   }
 
+  @action
   canManipulateField(field: FieldOfType) {
     return (
       this.args.allowFieldManipulation &&
