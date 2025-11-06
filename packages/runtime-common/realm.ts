@@ -2777,13 +2777,13 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let normalizedRealmURL = ensureTrailingSlash(this.url);
+    let sourceRealmURL = ensureTrailingSlash(this.url);
     let resourceEntries = new Map<string, ResourceIndexEntry[]>();
     let visibilityCache = new Map<string, RealmVisibility>();
 
     let instanceRows = (await query(this.#dbAdapter, [
       `SELECT url FROM boxel_index WHERE realm_url =`,
-      param(normalizedRealmURL),
+      param(sourceRealmURL),
       `AND type = 'instance'`,
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
     ])) as { url: string }[];
@@ -2799,7 +2799,7 @@ export class Realm {
       }
 
       let visibility: RealmVisibility;
-      if (realmUrl === normalizedRealmURL) {
+      if (realmUrl === sourceRealmURL) {
         visibility = await this.visibility();
       } else {
         let permissions = await fetchRealmPermissions(
@@ -2866,10 +2866,10 @@ export class Realm {
       }
     }
 
-    await resolveRealmVisibility(normalizedRealmURL);
+    await resolveRealmVisibility(sourceRealmURL);
 
     let result = await analyzeRealmPublishability({
-      sourceRealmURL: normalizedRealmURL,
+      sourceRealmURL,
       resources: rootResources,
       resourceEntries,
       realmVisibility: visibilityCache,
@@ -2888,10 +2888,10 @@ export class Realm {
     let doc = {
       data: {
         type: 'has-private-endpoints',
-        id: normalizedRealmURL,
+        id: sourceRealmURL,
         attributes: {
           publishable: result.publishable,
-          realmURL: normalizedRealmURL,
+          realmURL: sourceRealmURL,
           violations: result.violations,
         },
       },
