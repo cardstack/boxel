@@ -111,9 +111,9 @@ export async function analyzeRealmPublishability({
           if (!realmResources.has(dependency)) {
             continue;
           }
-          let subChains = await collectChains(dependency, updatedAncestry);
-          for (let subChain of subChains) {
-            chains.push([resourceUrl, ...subChain]);
+          let subchains = await collectChains(dependency, updatedAncestry);
+          for (let subchain of subchains) {
+            chains.push([resourceUrl, ...subchain]);
           }
           continue;
         }
@@ -124,9 +124,9 @@ export async function analyzeRealmPublishability({
           continue;
         }
 
-        let subChains = await collectChains(dependency, updatedAncestry);
-        for (let subChain of subChains) {
-          chains.push([resourceUrl, ...subChain]);
+        let subchains = await collectChains(dependency, updatedAncestry);
+        for (let subchain of subchains) {
+          chains.push([resourceUrl, ...subchain]);
         }
       }
     }
