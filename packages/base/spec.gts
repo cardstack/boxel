@@ -442,7 +442,7 @@ class Fitted extends Component<typeof Spec> {
       </div>
       <div class='info-section'>
         <h3 class='card-title' data-test-card-title><@fields.title /></h3>
-        <h4 class='card-description' data-test-card-description>
+        <h4 class='description' data-test-card-description>
           <@fields.description />
         </h4>
       </div>
@@ -481,7 +481,7 @@ class Fitted extends Component<typeof Spec> {
           white-space: nowrap;
           overflow: hidden;
         }
-        .card-description {
+        .description {
           margin-top: var(--boxel-sp-4xs);
           margin-bottom: 0;
           color: var(--boxel-450);
