@@ -71,6 +71,11 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   };
 }
 
+export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
+  type?: 'card';
+  id?: string;
+};
+
 //prerendered cards
 export interface PrerenderedCardResource {
   id: string;

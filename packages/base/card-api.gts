@@ -70,6 +70,10 @@ import {
   querySignature,
   type Query as RelationshipQuery,
 } from '@cardstack/runtime-common';
+import {
+  THIS_INTERPOLATION_PREFIX,
+  THIS_REALM_TOKEN,
+} from '@cardstack/runtime-common/query-field-utils';
 
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -3510,9 +3514,6 @@ export function searchDoc<CardT extends BaseDefConstructor>(
     any
   >;
 }
-
-const THIS_INTERPOLATION_PREFIX = '$this.';
-const THIS_REALM_TOKEN = '$thisRealm';
 
 function validateRelationshipQuery(
   ownerPrototype: BaseDef | undefined,
