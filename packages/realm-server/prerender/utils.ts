@@ -310,8 +310,11 @@ export async function captureModule(
   return capture;
 }
 
-// For render captures we intentionally do not enforce id/nonce parity here.
-// The module capture handles that check once the DOM settles.
+// captureResult is only used by card prerenders. Cards surface their id/nonce
+// through `[data-prerender]` elements, but those attributes can appear after
+// the DOM has settled so we tolerate them being absent while waiting. Module
+// prerenders capture via `captureModule`, which performs strict id/nonce parity
+// checks once the module container is present.
 export async function captureResult(
   page: Page,
   capture: 'textContent' | 'innerHTML' | 'outerHTML',

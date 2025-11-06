@@ -872,6 +872,8 @@ export class Prerenderer {
     let serializedOptions = serializeRenderRouteOptions(options);
     let optionsSegment = encodeURIComponent(serializedOptions);
     const captureOptions: CaptureOptions = {
+      expectedId: url.replace(/\.json$/i, ''),
+      expectedNonce: String(this.#nonce),
       simulateTimeoutMs: opts?.simulateTimeoutMs,
     };
 

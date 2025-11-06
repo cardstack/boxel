@@ -46,7 +46,7 @@ module('Acceptance | prerender | module', function (hooks) {
     optionsSegment = DEFAULT_MODULE_OPTIONS_SEGMENT,
   ) => `/module/${encodeURIComponent(url)}/${nonce}/${optionsSegment}`;
   const PERSON_MODULE = `
-    import { CardDef, field, contains, StringField } from "https://cardstack.com/base/card-api";
+    import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
 
     export class Person extends CardDef {
       static displayName = 'Person';
@@ -54,7 +54,7 @@ module('Acceptance | prerender | module', function (hooks) {
     }
   `;
   const PARENT_MODULE = `
-    import { CardDef, field, contains, StringField } from "https://cardstack.com/base/card-api";
+    import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
 
     export class Parent extends CardDef {
       static displayName = 'Parent';
@@ -62,8 +62,8 @@ module('Acceptance | prerender | module', function (hooks) {
     }
   `;
   const CHILD_MODULE = `
-    import { Parent } from "./parent";
-    import { field, contains, StringField } from "https://cardstack.com/base/card-api";
+    import { Parent } from './parent';
+    import { field, contains, StringField } from 'https://cardstack.com/base/card-api';
 
     export class Child extends Parent {
       static displayName = 'Child';
@@ -309,7 +309,7 @@ module('Acceptance | prerender | module', function (hooks) {
     await adapter.write(
       'person.gts',
       `
-      import { CardDef, field, contains, StringField } from "https://cardstack.com/base/card-api";
+      import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
 
       export class Person extends CardDef {
         static displayName = 'Updated Person';
