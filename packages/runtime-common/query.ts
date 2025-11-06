@@ -1,9 +1,15 @@
-import type * as JSON from 'json-typescript';
 import isEqual from 'lodash/isEqual';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';
 
 import { type CodeRef, isCodeRef, generalSortFields } from './index';
+type JSONValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JSONValue[]
+  | { [key: string]: JSONValue };
 
 export class InvalidQueryError extends Error {
   constructor(message: string) {
@@ -74,7 +80,7 @@ export interface NotFilter extends TypedFilter {
 }
 
 export interface EqFilter extends TypedFilter {
-  eq: { [fieldName: string]: JSON.Value };
+  eq: { [fieldName: string]: JSONValue };
 }
 
 export const RANGE_OPERATORS: Record<RangeOperator, string> = {
@@ -85,7 +91,7 @@ export const RANGE_OPERATORS: Record<RangeOperator, string> = {
 };
 export type RangeOperator = 'gt' | 'gte' | 'lt' | 'lte';
 export type RangeFilterValue = {
-  [range in RangeOperator]?: JSON.Value;
+  [range in RangeOperator]?: JSONValue;
 };
 
 export interface RangeFilter extends TypedFilter {
@@ -95,7 +101,7 @@ export interface RangeFilter extends TypedFilter {
 }
 
 export interface ContainsFilter extends TypedFilter {
-  contains: { [fieldName: string]: JSON.Value };
+  contains: { [fieldName: string]: JSONValue };
 }
 
 export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
@@ -496,9 +502,7 @@ export function normalizeQueryForSignature(query: Query): Query {
     }
     if (typeof page.number === 'string') {
       let parsedNumber = Number(page.number);
-      page.number = Number.isFinite(parsedNumber)
-        ? parsedNumber
-        : page.number;
+      page.number = Number.isFinite(parsedNumber) ? parsedNumber : page.number;
     }
   }
 
