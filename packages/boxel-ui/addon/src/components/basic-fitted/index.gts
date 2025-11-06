@@ -1,18 +1,18 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import type { ComponentLike } from '@glint/template';
 import cssUrl from 'ember-css-url';
+
+import type { Icon } from '../../icons.ts';
 
 interface Signature {
   Args: {
     description?: string;
-    iconComponent?: ComponentLike<{
-      Element: Element;
-    }>;
+    iconComponent?: Icon;
     isEmpty?: boolean;
     primary: string;
     secondary?: string;
     thumbnailURL?: string;
   };
+  Blocks: { content: []; default: []; empty: []; thumbnail: [] };
   Element: HTMLDivElement;
 }
 
@@ -20,35 +20,48 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
   <div class='fitted-template' ...attributes>
     {{#if @isEmpty}}
       {{! empty links-to field }}
-      <div data-test-empty-field class='empty-field'></div>
+      <div data-test-empty-field class='empty-field'>
+        {{yield to='empty'}}
+      </div>
     {{else}}
       <div class='thumbnail-section'>
-        {{#if @thumbnailURL}}
-          <div
-            class='card-thumbnail'
-            style={{cssUrl 'background-image' @thumbnailURL}}
-          >
-            {{#unless @thumbnailURL}}
-              <div
-                class='card-thumbnail-placeholder'
-                data-test-card-thumbnail-placeholder
-              />
-            {{/unless}}
-          </div>
+        {{#if (has-block 'thumbnail')}}
+          {{yield to='thumbnail'}}
         {{else}}
-          <@iconComponent data-test-card-type-icon class='card-type-icon' />
+          {{#if @thumbnailURL}}
+            <div
+              class='card-thumbnail'
+              style={{cssUrl 'background-image' @thumbnailURL}}
+            >
+              {{#unless @thumbnailURL}}
+                <div
+                  class='card-thumbnail-placeholder'
+                  data-test-card-thumbnail-placeholder
+                />
+              {{/unless}}
+            </div>
+          {{else}}
+            <@iconComponent data-test-card-type-icon class='card-type-icon' />
+          {{/if}}
         {{/if}}
       </div>
-      <div class='info-section'>
-        <h3 class='card-title' data-test-card-title>{{@primary}}</h3>
-        <h4 class='card-display-name' data-test-card-display-name>
-          {{@secondary}}
-        </h4>
-      </div>
-      <div
-        class='card-description'
-        data-test-card-description
-      >{{@description}}</div>
+      {{#if (has-block 'content')}}
+        {{yield to='content'}}
+      {{else}}
+        <div class='info-section'>
+          <h3 class='card-title' data-test-card-title>{{@primary}}</h3>
+          <h4 class='card-display-name' data-test-card-display-name>
+            {{@secondary}}
+          </h4>
+        </div>
+      {{/if}}
+      {{#if @description}}
+        <div class='card-description' data-test-card-description>
+          {{@description}}
+        </div>
+      {{/if}}
+
+      {{yield}}
     {{/if}}
   </div>
   <style scoped>

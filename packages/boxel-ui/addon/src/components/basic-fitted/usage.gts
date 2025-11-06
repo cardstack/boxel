@@ -12,7 +12,9 @@ import BasicFitted from './index.gts';
 
 type Spec = { height: number; title?: string; width: number };
 
-// these can be imported as `import { FITTED_FORMATS } from '@cardstack/runtime-common'`. For various build problems, can't do that here.
+// These can be imported from the @cardstack/runtime-common package:
+// `import { FITTED_FORMATS } from '@cardstack/runtime-common'`
+// For various build problems, could not do that here.
 const FITTED_FORMATS = [
   {
     name: 'Badges',
@@ -329,7 +331,7 @@ export default class BasicFittedUsage extends Component {
         />
         <Args.Component
           @name='iconComponent'
-          @description='Component for the card type icon'
+          @description='Component for the thumbnail icon'
           @value={{this.iconComponent}}
         />
       </:api>
