@@ -152,11 +152,24 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         }
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 128px) {
         :global(.thumbnail-section) {
+          height: 45cqmin;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (width <= 140px) and (height <= 148px) {
+        :global(.card-description) {
           display: none;
         }
       }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (width <= 100px) and (400px <= height) {
+        :global(.card-description) {
+          -webkit-line-clamp: 15;
+        }
+      }
+
       /* Vertical Tiles*/
       /* Small Tile (150 x 170) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
@@ -186,7 +199,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
           min-height: 85px;
         }
         :global(.card-title) {
-          font-size: var(--boxel-font-size);
+          font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 4;
         }
       }
@@ -210,7 +223,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
           min-height: 236px;
         }
         :global(.card-title) {
-          font-size: var(--boxel-font-size-med);
+          font-size: var(--boxel-font-size);
           -webkit-line-clamp: 4;
         }
       }
@@ -283,7 +296,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         }
         :global(.card-title) {
           -webkit-line-clamp: 4;
-          font-size: var(--boxel-font-size);
+          font-size: var(--boxel-font-size-sm);
         }
       }
 
@@ -304,7 +317,8 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
           max-width: 44%;
         }
         :global(.card-title) {
-          font-size: var(--boxel-font-size-med);
+          -webkit-line-clamp: 4;
+          font-size: var(--boxel-font-size);
         }
       }
     }
