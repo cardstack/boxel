@@ -213,7 +213,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     let violation = response.body.data.attributes.violations[0];
     assert.strictEqual(
       violation.resource,
-      `${sourceRealmURL}source-instance`,
+      `${sourceRealmURL}source-instance.json`,
       'violation references the offending instance',
     );
     assert.true(
@@ -338,7 +338,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     let transitiveViolation = response.body.data.attributes.violations[0];
     assert.strictEqual(
       transitiveViolation.resource,
-      `${sourceRealmURL}source-instance`,
+      `${sourceRealmURL}source-instance.json`,
       'violation references the offending instance',
     );
     assert.true(
