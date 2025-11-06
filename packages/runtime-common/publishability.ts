@@ -1,5 +1,5 @@
-import type { RealmVisibility } from './realm';
 import { ensureTrailingSlash } from './paths';
+import type { RealmVisibility } from './realm';
 
 export interface ResourceIndexEntry {
   canonicalUrl: string;
