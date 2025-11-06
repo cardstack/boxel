@@ -258,6 +258,8 @@ export interface ActiveLLMEvent extends RoomStateEvent {
   type: typeof APP_BOXEL_ACTIVE_LLM;
   content: {
     model: string;
+    toolsSupported?: boolean;
+    reasoningEffort?: string;
   };
 }
 

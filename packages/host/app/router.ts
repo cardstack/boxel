@@ -15,6 +15,7 @@ Router.map(function () {
     this.route('meta');
     this.route('error');
   });
+  this.route('module', { path: '/module/:id/:nonce/:options' });
   this.route('connect', { path: '/connect/:origin' });
 
   this.route('index', { path: '/*path' });

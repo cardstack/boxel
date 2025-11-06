@@ -2,6 +2,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
+import type { ReasoningEffort } from 'openai/resources/shared';
 import type { LooseCardResource } from '../index';
 import type { ToolChoice } from '../helpers/ai';
 
@@ -19,6 +20,8 @@ export interface PromptParts {
   tools: Tool[] | undefined;
   toolChoice: ToolChoice | undefined;
   model: string | undefined;
+  toolsSupported?: boolean;
+  reasoningEffort?: ReasoningEffort;
   shouldRespond: boolean;
   history: DiscreteMatrixEvent[];
 }

@@ -55,6 +55,8 @@ import {
   not,
   or,
 } from './helpers/truth-helpers.ts';
+import type { EmailFormatValidationError } from './helpers/validate-email-format.ts';
+import type { NormalizePhoneFormatResult } from './helpers/validate-phone-format.ts';
 
 export {
   add,
@@ -114,5 +116,7 @@ export type {
   CssGroups,
   CssRuleMap,
   CssVariableEntry,
+  EmailFormatValidationError,
   MenuItemOptions,
+  NormalizePhoneFormatResult,
 };

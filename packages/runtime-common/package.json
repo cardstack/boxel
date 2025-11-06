@@ -29,6 +29,7 @@
     "@types/pluralize": "catalog:",
     "@types/qs": "catalog:",
     "@types/uuid": "catalog:",
+    "awesome-phonenumber": "catalog:",
     "babel-import-util": "^1.2.2",
     "babel-plugin-ember-template-compilation": "catalog:",
     "camelcase": "catalog:",

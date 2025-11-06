@@ -4,7 +4,7 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../app/table",
+        "module": "../app/data-explorer",
         "name": "QueryState"
       },
       "specType": null,

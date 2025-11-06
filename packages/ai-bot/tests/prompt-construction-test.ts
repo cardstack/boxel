@@ -4002,11 +4002,13 @@ module('set model in prompt', (hooks) => {
       ),
     );
 
-    const { model } = await getPromptParts(
+    const { model, toolsSupported, reasoningEffort } = await getPromptParts(
       eventList,
       '@aibot:localhost',
       fakeMatrixClient,
     );
     assert.strictEqual(model, 'google/gemini-pro-1.5');
+    assert.strictEqual(toolsSupported, true);
+    assert.strictEqual(reasoningEffort, 'minimal');
   });
 });
