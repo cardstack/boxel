@@ -556,10 +556,7 @@ export default class CommandService extends Service {
     let finalFileUrl: string | undefined;
 
     try {
-      let patchCodeCommand = new PatchCodeCommand({
-        roomId,
-        ...this.commandContext,
-      });
+      let patchCodeCommand = new PatchCodeCommand(this.commandContext);
 
       let patchCodeResult = await patchCodeCommand.execute({
         fileUrl,
