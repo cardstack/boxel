@@ -7,6 +7,8 @@ import {
   logger,
   type RealmPermissions,
   type RenderRouteOptions,
+  type RenderResponse,
+  type ModulePrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -46,131 +48,196 @@ export function buildPrerenderApp(
     ctxt.status = 200;
   });
 
-  router.post('/prerender', async (ctxt: Koa.Context) => {
-    try {
-      let request = await fetchRequestFromContext(ctxt);
-      let raw = await request.text();
-      let body: any;
+  type PrerenderArgs = {
+    realm: string;
+    url: string;
+    userId: string;
+    permissions: RealmPermissions;
+    renderOptions: RenderRouteOptions;
+  };
+
+  type PrerenderExecResult<R> = {
+    response: R;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  };
+
+  function registerPrerenderRoute<R>(
+    path: string,
+    options: {
+      requestDescription: string;
+      responseType: string;
+      infoLabel: string;
+      warnTimeoutMessage: (url: string) => string;
+      errorContext: string;
+      execute: (args: PrerenderArgs) => Promise<PrerenderExecResult<R>>;
+      afterResponse?: (url: string, response: R) => void;
+    },
+  ) {
+    router.post(path, async (ctxt: Koa.Context) => {
       try {
-        body = raw ? JSON.parse(raw) : {};
-      } catch (e) {
-        ctxt.status = 400;
-        ctxt.body = {
-          errors: [
-            {
-              status: 400,
-              message: 'Invalid JSON body',
-            },
-          ],
-        };
-        return;
-      }
+        let request = await fetchRequestFromContext(ctxt);
+        let raw = await request.text();
+        let body: any;
+        try {
+          body = raw ? JSON.parse(raw) : {};
+        } catch (e) {
+          ctxt.status = 400;
+          ctxt.body = {
+            errors: [
+              {
+                status: 400,
+                message: 'Invalid JSON body',
+              },
+            ],
+          };
+          return;
+        }
 
-      let attrs = body?.data?.attributes ?? {};
-      let url = attrs.url as string | undefined;
-      let userId = attrs.userId as string | undefined;
-      let permissions = attrs.permissions as RealmPermissions | undefined;
-      let realm = attrs.realm as string | undefined;
-      let renderOptions: RenderRouteOptions =
-        attrs.renderOptions &&
-        typeof attrs.renderOptions === 'object' &&
-        !Array.isArray(attrs.renderOptions)
-          ? (attrs.renderOptions as RenderRouteOptions)
-          : {};
+        let attrs = body?.data?.attributes ?? {};
+        let url = attrs.url as string | undefined;
+        let userId = attrs.userId as string | undefined;
+        let permissions = attrs.permissions as RealmPermissions | undefined;
+        let realm = attrs.realm as string | undefined;
+        let renderOptions: RenderRouteOptions =
+          attrs.renderOptions &&
+          typeof attrs.renderOptions === 'object' &&
+          !Array.isArray(attrs.renderOptions)
+            ? (attrs.renderOptions as RenderRouteOptions)
+            : {};
 
-      log.debug(
-        `received prerender request ${url}: realm=${realm} userId=${userId} options=${JSON.stringify(renderOptions)} permissions=${JSON.stringify(permissions)}`,
-      );
-      if (
-        !url ||
-        !userId ||
-        !permissions ||
-        typeof permissions !== 'object' ||
-        !realm
-      ) {
-        ctxt.status = 400;
-        ctxt.body = {
-          errors: [
-            {
-              status: 400,
-              message:
-                'Missing or invalid required attributes: url, userId, permissions, realm',
-            },
-          ],
-        };
-        return;
-      }
-
-      let start = Date.now();
-      let { response, timings, pool } = await prerenderer.prerenderCard({
-        realm,
-        url,
-        userId,
-        permissions,
-        renderOptions,
-      });
-      let totalMs = Date.now() - start;
-      let poolFlags = Object.entries({
-        reused: pool.reused,
-        evicted: pool.evicted,
-        timedOut: pool.timedOut,
-      })
-        .filter(([, value]) => value === true)
-        .map(([key]) => key)
-        .join(', ');
-      let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
-      log.info(
-        'prerendered %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
-        url,
-        totalMs,
-        timings.launchMs,
-        timings.renderMs,
-        pool.pageId,
-        pool.realm,
-        poolFlagSuffix,
-      );
-      ctxt.status = 201;
-      ctxt.set('Content-Type', 'application/vnd.api+json');
-      ctxt.body = {
-        data: {
-          type: 'prerender-result',
-          id: url,
-          attributes: response,
-        },
-        meta: {
-          timing: {
-            launchMs: timings.launchMs,
-            renderMs: timings.renderMs,
-            totalMs,
-          },
-          pool,
-        },
-      };
-      if (pool.timedOut) {
-        log.warn(`render of ${url} timed out`);
-      }
-      if (response.error) {
         log.debug(
-          `render of ${url} resulted in error doc:\n${JSON.stringify(response.error, null, 2)}`,
+          `received ${options.requestDescription} ${url}: realm=${realm} userId=${userId} options=${JSON.stringify(renderOptions)} permissions=${JSON.stringify(permissions)}`,
+        );
+        if (
+          !url ||
+          !userId ||
+          !permissions ||
+          typeof permissions !== 'object' ||
+          !realm
+        ) {
+          ctxt.status = 400;
+          ctxt.body = {
+            errors: [
+              {
+                status: 400,
+                message:
+                  'Missing or invalid required attributes: url, userId, permissions, realm',
+              },
+            ],
+          };
+          return;
+        }
+
+        let start = Date.now();
+        let { response, timings, pool } = await options.execute({
+          realm,
+          url,
+          userId,
+          permissions,
+          renderOptions,
+        });
+        let totalMs = Date.now() - start;
+        let poolFlags = Object.entries({
+          reused: pool.reused,
+          evicted: pool.evicted,
+          timedOut: pool.timedOut,
+        })
+          .filter(([, value]) => value === true)
+          .map(([key]) => key)
+          .join(', ');
+        let poolFlagSuffix =
+          poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+        log.info(
+          '%s %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
+          options.infoLabel,
+          url,
+          totalMs,
+          timings.launchMs,
+          timings.renderMs,
+          pool.pageId,
+          pool.realm,
+          poolFlagSuffix,
+        );
+        ctxt.status = 201;
+        ctxt.set('Content-Type', 'application/vnd.api+json');
+        ctxt.body = {
+          data: {
+            type: options.responseType,
+            id: url,
+            attributes: response,
+          },
+          meta: {
+            timing: {
+              launchMs: timings.launchMs,
+              renderMs: timings.renderMs,
+              totalMs,
+            },
+            pool,
+          },
+        };
+        if (pool.timedOut) {
+          log.warn(options.warnTimeoutMessage(url));
+        }
+        options.afterResponse?.(url, response);
+      } catch (err: any) {
+        Sentry.captureException(err);
+        log.error(`Unhandled error in ${options.errorContext}:`, err);
+        ctxt.status = 500;
+        ctxt.body = {
+          errors: [
+            {
+              status: 500,
+              message: err?.message ?? 'Unknown error',
+            },
+          ],
+        };
+      }
+    });
+  }
+
+  registerPrerenderRoute('/prerender-card', {
+    requestDescription: 'prerender request',
+    responseType: 'prerender-result',
+    infoLabel: 'prerendered',
+    warnTimeoutMessage: (url) => `render of ${url} timed out`,
+    errorContext: '/prerender-card',
+    execute: (args) => prerenderer.prerenderCard(args),
+    afterResponse: (url, response) => {
+      const cardResponse = response as RenderResponse;
+      if (cardResponse.error) {
+        log.debug(
+          `render of ${url} resulted in error doc:\n${JSON.stringify(cardResponse.error, null, 2)}`,
         );
       } else {
         log.debug(
-          `render of ${url} resulted in search doc:\n${JSON.stringify(response.searchDoc, null, 2)}`,
+          `render of ${url} resulted in search doc:\n${JSON.stringify(cardResponse.searchDoc, null, 2)}`,
         );
       }
-    } catch (err: any) {
-      Sentry.captureException(err);
-      log.error(`Unhandled error in /prerender:`, err);
-      ctxt.status = 500;
-      ctxt.body = {
-        errors: [
-          {
-            status: 500,
-            message: err?.message ?? 'Unknown error',
-          },
-        ],
-      };
-    }
+    },
+  });
+
+  registerPrerenderRoute('/prerender-module', {
+    requestDescription: 'module prerender request',
+    responseType: 'prerender-module-result',
+    infoLabel: 'module prerendered',
+    warnTimeoutMessage: (url) => `module render of ${url} timed out`,
+    errorContext: '/prerender-module',
+    execute: (args) => prerenderer.prerenderModule(args),
+    afterResponse: (url, response) => {
+      const moduleResponse = response as ModulePrerenderResponse;
+      if (moduleResponse.status === 'error' && moduleResponse.error) {
+        log.debug(
+          `module render of ${url} resulted in error doc:\n${JSON.stringify(moduleResponse.error, null, 2)}`,
+        );
+      }
+    },
   });
 
   app

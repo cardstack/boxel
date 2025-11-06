@@ -3,6 +3,7 @@ import {
   type RealmPermissions,
   type RenderResponse,
   type RenderError,
+  type ModulePrerenderResponse,
   type RenderRouteOptions,
   uuidv4,
   logger,
@@ -19,14 +20,17 @@ import { createJWT } from '../jwt';
 import type { RenderCapture } from './utils';
 import {
   captureResult,
+  captureModule,
   isRenderError,
   renderAncestors,
   renderHTML,
   renderIcon,
   renderMeta,
   type CaptureOptions,
+  type ModuleCapture,
   withTimeout,
   transitionTo,
+  buildInvalidModuleResponseError,
 } from './utils';
 import { resolvePrerenderManagerURL } from './config';
 
@@ -702,6 +706,94 @@ export class Prerenderer {
     }
   }
 
+  async prerenderModule({
+    realm,
+    url,
+    userId,
+    permissions,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    userId: string;
+    permissions: RealmPermissions;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: ModulePrerenderResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    let prev = this.#pendingByRealm.get(realm) ?? Promise.resolve();
+    let deferred = new Deferred<void>();
+    this.#pendingByRealm.set(
+      realm,
+      prev.then(() => deferred.promise),
+    );
+
+    try {
+      await prev.catch((e) => {
+        log.debug('Previous prerender in chain failed (continuing):', e);
+      });
+
+      let sessions: { [realm: string]: string } = {};
+      for (let [realmURL, realmPermissions] of Object.entries(
+        permissions ?? {},
+      )) {
+        sessions[realmURL] = createJWT(
+          {
+            user: userId,
+            realm: realmURL,
+            permissions: realmPermissions,
+            sessionRoom: '',
+          },
+          '1d',
+          this.#secretSeed,
+        );
+      }
+      let auth = JSON.stringify(sessions);
+
+      try {
+        return await this.#prerenderModuleAttempt({
+          realm,
+          url,
+          userId,
+          permissions,
+          auth,
+          opts,
+          renderOptions,
+        });
+      } catch (e) {
+        log.error(
+          `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+          e,
+        );
+        await this.#restartBrowser();
+        return await this.#prerenderModuleAttempt({
+          realm,
+          url,
+          userId,
+          permissions,
+          auth,
+          opts,
+          renderOptions,
+        });
+      }
+    } finally {
+      deferred.fulfill();
+    }
+  }
+
   async #prerenderAttempt({
     realm,
     url,
@@ -780,8 +872,6 @@ export class Prerenderer {
     let serializedOptions = serializeRenderRouteOptions(options);
     let optionsSegment = encodeURIComponent(serializedOptions);
     const captureOptions: CaptureOptions = {
-      expectedId: url.replace(/\.json$/i, ''),
-      expectedNonce: String(this.#nonce),
       simulateTimeoutMs: opts?.simulateTimeoutMs,
     };
 
@@ -1023,6 +1113,174 @@ export class Prerenderer {
       fittedHTML,
     };
     await finalizePendingEviction();
+    return {
+      response,
+      timings: { launchMs, renderMs: Date.now() - renderStart },
+      pool: poolInfo,
+    };
+  }
+
+  async #prerenderModuleAttempt({
+    realm,
+    url,
+    userId,
+    permissions,
+    auth,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    userId: string;
+    permissions: RealmPermissions;
+    auth: string;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: ModulePrerenderResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    log.info(
+      `module prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId}`,
+    );
+    log.debug(
+      `module prerendering url ${url} with permissions=${JSON.stringify(permissions)}`,
+    );
+
+    const { page, reused, launchMs } = await this.#getPage(realm);
+    const poolInfo = {
+      pageId: this.#pool.get(realm)?.pageId ?? 'unknown',
+      realm,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+
+    if (!reused) {
+      page.evaluateOnNewDocument((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
+    } else {
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
+    }
+
+    let renderStart = Date.now();
+    let options = renderOptions ?? {};
+    let serializedOptions = serializeRenderRouteOptions(options);
+    let optionsSegment = encodeURIComponent(serializedOptions);
+    const captureOptions: CaptureOptions = {
+      expectedId: url,
+      expectedNonce: String(this.#nonce),
+      simulateTimeoutMs: opts?.simulateTimeoutMs,
+    };
+
+    let capture = await withTimeout(
+      page,
+      async () => {
+        if (reused) {
+          await transitionTo(
+            page,
+            'module',
+            url,
+            String(this.#nonce),
+            serializedOptions,
+          );
+        } else {
+          await page.goto(
+            `${boxelHostURL}/module/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}`,
+          );
+        }
+        return await captureModule(page, captureOptions);
+      },
+      opts?.timeoutMs,
+    );
+
+    let response: ModulePrerenderResponse;
+    if (isRenderError(capture)) {
+      let renderError = capture as RenderError;
+      markTimeout(renderError);
+      if (await this.#maybeEvict(realm, 'module render', renderError)) {
+        poolInfo.evicted = true;
+      }
+      response = {
+        id: url,
+        status: 'error',
+        nonce: String(this.#nonce),
+        isShimmed: false,
+        lastModified: 0,
+        createdAt: 0,
+        deps: renderError.error.deps ?? [],
+        definitions: {},
+        error: renderError,
+      };
+    } else {
+      let moduleCapture = capture as ModuleCapture;
+      try {
+        response = JSON.parse(moduleCapture.value) as ModulePrerenderResponse;
+        if (response.status !== moduleCapture.status) {
+          let renderError = buildInvalidModuleResponseError(
+            page,
+            `module prerender status mismatch (${moduleCapture.status} vs ${response.status})`,
+            { title: 'Invalid module response', evict: true },
+          );
+          markTimeout(renderError);
+          if (await this.#maybeEvict(realm, 'module render', renderError)) {
+            poolInfo.evicted = true;
+          }
+          response = {
+            id: url,
+            status: 'error',
+            nonce: moduleCapture.nonce ?? String(this.#nonce),
+            isShimmed: false,
+            lastModified: 0,
+            createdAt: 0,
+            deps: renderError.error.deps ?? [],
+            definitions: {},
+            error: {
+              type: 'error',
+              error: renderError.error,
+            },
+          };
+        }
+      } catch (_e) {
+        let renderError = buildInvalidModuleResponseError(
+          page,
+          `module prerender returned invalid payload: ${moduleCapture.value}`,
+          { title: 'Invalid module response' },
+        );
+        markTimeout(renderError);
+        if (await this.#maybeEvict(realm, 'module render', renderError)) {
+          poolInfo.evicted = true;
+        }
+        response = {
+          id: url,
+          status: 'error',
+          nonce: moduleCapture.nonce ?? String(this.#nonce),
+          isShimmed: false,
+          lastModified: 0,
+          createdAt: 0,
+          deps: renderError.error.deps ?? [],
+          definitions: {},
+          error: renderError,
+        };
+      }
+    }
+
     return {
       response,
       timings: { launchMs, renderMs: Date.now() - renderStart },

@@ -206,8 +206,13 @@ async function getTestPrerenderer(
   usePrerenderer?: boolean,
 ): Promise<Prerenderer> {
   if (!usePrerenderer) {
-    return async () => {
-      throw new Error(`prerenderer not enabled`);
+    return {
+      async prerenderCard() {
+        throw new Error(`prerenderer not enabled`);
+      },
+      async prerenderModule() {
+        throw new Error(`prerenderer not enabled`);
+      },
     };
   }
   // in node context this is a boolean
@@ -1021,8 +1026,10 @@ export function setupPermissionedRealms(
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
     for (let realm of realms) {
+      realm.realm.__testOnlyClearCaches();
       await closeServer(realm.realmHttpServer);
     }
+    realms = [];
   });
 }
 

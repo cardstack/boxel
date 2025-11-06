@@ -14,6 +14,7 @@ import {
   CardError,
   type RenderResponse,
   type RenderError,
+  type ModulePrerenderResponse,
   type IndexWriter,
   type JobInfo,
   type Prerenderer,
@@ -56,6 +57,7 @@ export default class CardPrerender extends Component {
   @service private declare loaderService: LoaderService;
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
+  #prerendererDelegate!: Prerenderer;
 
   #renderBasePath(url: string, renderOptions?: RenderRouteOptions) {
     let optionsSegment = encodeURIComponent(
@@ -66,8 +68,21 @@ export default class CardPrerender extends Component {
     }/${optionsSegment}`;
   }
 
+  #moduleBasePath(url: string, renderOptions?: RenderRouteOptions) {
+    let optionsSegment = encodeURIComponent(
+      serializeRenderRouteOptions(renderOptions ?? {}),
+    );
+    return `/module/${encodeURIComponent(url)}/${
+      this.#nonce
+    }/${optionsSegment}`;
+  }
+
   constructor(owner: Owner, args: {}) {
     super(owner, args);
+    this.#prerendererDelegate = {
+      prerenderCard: this.prerender.bind(this),
+      prerenderModule: this.prerenderModule.bind(this),
+    };
     if (this.fastboot.isFastBoot) {
       try {
         this.doRegistration.perform();
@@ -83,7 +98,7 @@ export default class CardPrerender extends Component {
       this.localIndexer.setup(
         this.fromScratch.bind(this),
         this.incremental.bind(this),
-        this.prerender.bind(this),
+        this.#prerendererDelegate,
       );
     }
   }
@@ -117,6 +132,37 @@ export default class CardPrerender extends Component {
     }
     throw new Error(
       `card-prerender component is missing or being destroyed before prerender of url ${url} was completed`,
+    );
+  }
+
+  private async prerenderModule({
+    url,
+    realm,
+    userId,
+    permissions,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    userId: string;
+    permissions: RealmPermissions;
+    renderOptions?: RenderRouteOptions;
+  }): Promise<ModulePrerenderResponse> {
+    try {
+      return await this.modulePrerenderTask.perform({
+        url,
+        realm,
+        userId,
+        permissions,
+        renderOptions,
+      });
+    } catch (e: any) {
+      if (!didCancel(e)) {
+        throw e;
+      }
+    }
+    throw new Error(
+      `card-prerender component is missing or being destroyed before module prerender of url ${url} was completed`,
     );
   }
 
@@ -223,6 +269,42 @@ export default class CardPrerender extends Component {
         iconHTML,
         ...(error ? { error } : {}),
       };
+    },
+  );
+
+  private modulePrerenderTask = enqueueTask(
+    async ({
+      url,
+      renderOptions,
+    }: {
+      realm: string;
+      url: string;
+      userId: string;
+      permissions: RealmPermissions;
+      renderOptions?: RenderRouteOptions;
+    }): Promise<ModulePrerenderResponse> => {
+      this.#nonce++;
+      let shouldClearCache = this.#consumeClearCacheForRender(
+        Boolean(renderOptions?.clearCache),
+      );
+      let initialRenderOptions: RenderRouteOptions = {
+        ...(renderOptions ?? {}),
+      };
+      if (shouldClearCache) {
+        initialRenderOptions.clearCache = true;
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'module-prerender clearCache',
+        });
+        this.store.resetCache();
+      } else {
+        delete initialRenderOptions.clearCache;
+      }
+
+      let routeInfo = await this.router.recognizeAndLoad(
+        this.#moduleBasePath(url, initialRenderOptions),
+      );
+      return routeInfo.attributes as ModulePrerenderResponse;
     },
   );
 
