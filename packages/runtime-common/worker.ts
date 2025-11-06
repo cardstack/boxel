@@ -1,6 +1,6 @@
 import type * as JSONTypes from 'json-typescript';
 import { parse } from 'date-fns';
-import type { IndexWriter, QueuePublisher, DBAdapter, Job } from '.';
+import type { IndexWriter, QueuePublisher, DBAdapter } from '.';
 import {
   Deferred,
   reportError,
@@ -19,20 +19,13 @@ import {
   type TextFileRef,
   type VirtualNetwork,
   type ResponseWithNodeStream,
-  type RealmInfo,
-  type LintArgs,
   type Prerenderer,
   type RealmPermissions,
-  systemInitiatedPriority,
-  fetchAllRealmsWithOwners,
   fetchUserPermissions,
-  normalizeFullReindexBatchSize,
-  fullReindexBatchTimeoutSeconds,
-  normalizeFullReindexCooldownSeconds,
 } from '.';
 import { MatrixClient } from './matrix-client';
-import { lintFix } from './lint';
-import { enqueueReindexRealmJob } from './jobs/reindex-realm';
+import * as Tasks from './tasks';
+import { type WorkerArgs, type TaskArgs } from './tasks';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -68,13 +61,6 @@ export interface StatusArgs {
   deps?: string[];
 }
 
-export interface FullReindexArgs {
-  realmUrls: string[];
-  concurrency: number;
-  batchSize?: number;
-  cooldownSeconds?: number;
-}
-
 export type RunnerRegistration = (
   fromScratch: (args: FromScratchArgsWithPermissions) => Promise<IndexResults>,
   incremental: (args: IncrementalArgsWithPermissions) => Promise<IndexResults>,
@@ -88,23 +74,6 @@ export interface RunnerOpts {
   indexWriter: IndexWriter;
   jobInfo?: JobInfo;
   reportStatus?(args: StatusArgs): void;
-}
-
-export interface WorkerArgs extends JSONTypes.Object {
-  realmURL: string;
-  realmUsername: string;
-}
-
-export interface RealmReindexTarget extends JSONTypes.Object {
-  realmUrl: string;
-  realmUsername: string;
-}
-
-export interface FullReindexBatchArgs extends JSONTypes.Object {
-  realms: RealmReindexTarget[];
-  cooldownSeconds: number;
-  batchNumber: number;
-  totalBatches: number;
 }
 
 export interface IncrementalArgs extends WorkerArgs {
@@ -134,15 +103,6 @@ export interface FromScratchResult extends JSONTypes.Object {
   stats: Stats;
 }
 
-export interface CopyArgs extends WorkerArgs {
-  sourceRealmURL: string;
-}
-
-export interface CopyResult {
-  totalNonErrorIndexEntries: number;
-  invalidations: string[];
-}
-
 export type IndexRunner = (optsId: number) => Promise<void>;
 
 // This class is used to support concurrent index runs against the same fastboot
@@ -156,14 +116,7 @@ export type IndexRunner = (optsId: number) => Promise<void>;
 // will provide the indexer route with the id for the fastboot global that is
 // specific to the index run.
 let optsId = 0;
-const FULL_REINDEX_BATCH_JOB = 'full-reindex-batch';
-const FULL_REINDEX_BATCH_CONCURRENCY_GROUP = 'full-reindex-group';
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms).unref?.();
-  });
-}
 export class RunnerOptionsManager {
   #opts = new Map<number, RunnerOpts>();
   setOptions(opts: RunnerOpts): number {
@@ -250,13 +203,24 @@ export class Worker {
   }
 
   async run() {
+    let taskArgs: TaskArgs = {
+      dbAdapter: this.#dbAdapter,
+      queuePublisher: this.#queuePublisher,
+      indexWriter: this.#indexWriter,
+      log: this.#log,
+      getAuthedFetch: this.makeAuthedFetch.bind(this),
+      reportStatus: this.reportStatus.bind(this),
+    };
     await Promise.all([
       this.#queue.register(`from-scratch-index`, this.fromScratch),
       this.#queue.register(`incremental-index`, this.incremental),
-      this.#queue.register(`copy-index`, this.copy),
-      this.#queue.register(`lint-source`, this.lintSource),
-      this.#queue.register(FULL_REINDEX_BATCH_JOB, this.fullReindexBatch),
-      this.#queue.register(`full-reindex`, this.fullReindex),
+      this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
+      this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
+      this.#queue.register(
+        Tasks.FULL_REINDEX_BATCH_JOB,
+        Tasks['fullReindexBatch'](taskArgs),
+      ),
+      this.#queue.register(`full-reindex`, Tasks['fullReindex'](taskArgs)),
     ]);
     await this.#queue.start();
   }
@@ -379,233 +343,8 @@ export class Worker {
     }
   }
 
-  // TODO let's break out the individual job logic below into separate modules when we
-  // take on the CurrentRun refactor
-
-  private lintSource = async (args: LintArgs & { jobInfo?: JobInfo }) => {
-    let { source: _remove, ...displayableArgs } = args;
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} starting lint-source for job: ${JSON.stringify(displayableArgs)}`,
-    );
-    this.reportStatus(args.jobInfo, 'start');
-    let result = await lintFix(args);
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} completed lint-source for job: ${JSON.stringify(displayableArgs)}`,
-    );
-    this.reportStatus(args.jobInfo, 'finish');
-    return result;
-  };
-
-  private fullReindex = async (
-    args: FullReindexArgs & { jobInfo?: JobInfo },
-  ) => {
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} starting reindex-all for job: ${JSON.stringify(args)}`,
-    );
-    this.reportStatus(args.jobInfo, 'start');
-    let { realmUrls, concurrency } = args;
-
-    const realmOwners = await fetchAllRealmsWithOwners(this.#dbAdapter);
-
-    const ownerMap = new Map(
-      realmOwners.map((r) => [r.realm_url, r.owner_username]),
-    );
-
-    // Only include realms with a non-bot owner
-    const realmsWithUsernames = realmUrls
-      .map((realmUrl) => {
-        const username = ownerMap.get(realmUrl)!;
-        return {
-          realmUrl,
-          realmUsername: username,
-        };
-      })
-      .filter((realm) => !realm.realmUsername.startsWith('@realm/'));
-
-    if (realmsWithUsernames.length === 0) {
-      this.#log.debug(
-        `${jobIdentity(args.jobInfo)} no eligible realms found for full reindex`,
-      );
-      this.reportStatus(args.jobInfo, 'finish');
-      return;
-    }
-
-    let batchSize = normalizeFullReindexBatchSize(args.batchSize);
-    let cooldownSeconds = normalizeFullReindexCooldownSeconds(
-      args.cooldownSeconds,
-    );
-
-    let batches: RealmReindexTarget[][] = [];
-    for (let i = 0; i < realmsWithUsernames.length; i += batchSize) {
-      batches.push(realmsWithUsernames.slice(i, i + batchSize));
-    }
-
-    let totalBatches = batches.length;
-    for (let [index, batch] of batches.entries()) {
-      if (batch.length === 0) {
-        continue;
-      }
-      let timeout = fullReindexBatchTimeoutSeconds(
-        batch.length,
-        cooldownSeconds,
-      );
-      let concurrencySuffix = (index % concurrency) + 1;
-      await this.#queuePublisher.publish<void>({
-        jobType: FULL_REINDEX_BATCH_JOB,
-        concurrencyGroup: `${FULL_REINDEX_BATCH_CONCURRENCY_GROUP}-${concurrencySuffix}`,
-        timeout,
-        priority: systemInitiatedPriority,
-        args: {
-          realms: batch,
-          cooldownSeconds,
-          batchNumber: index + 1,
-          totalBatches,
-        },
-      });
-    }
-
-    this.#log.info(
-      `${jobIdentity(args.jobInfo)} scheduled full reindex for ${realmsWithUsernames.length} realm(s) across ${totalBatches} batch(es) with batch size ${batchSize} and cooldown ${cooldownSeconds}s`,
-    );
-
-    this.reportStatus(args.jobInfo, 'finish');
-  };
-
-  private fullReindexBatch = async (
-    args: FullReindexBatchArgs & { jobInfo?: JobInfo },
-  ) => {
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} starting full-reindex batch for job: ${JSON.stringify(
-        args,
-      )}`,
-    );
-    this.reportStatus(args.jobInfo, 'start');
-
-    let cooldownSeconds = normalizeFullReindexCooldownSeconds(
-      args.cooldownSeconds,
-    );
-    if (!Array.isArray(args.realms) || args.realms.length === 0) {
-      throw new Error(
-        `${jobIdentity(args.jobInfo)} full-reindex batch missing realms`,
-      );
-    }
-    let realms = [...args.realms];
-    let cooldownMs =
-      cooldownSeconds > 0 ? Math.floor(cooldownSeconds * 1000) : 0;
-
-    let enqueueFailures: { target: RealmReindexTarget; error: Error }[] = [];
-    let completedCount = 0;
-    let failedRuns: {
-      target: RealmReindexTarget;
-      error: Error;
-    }[] = [];
-
-    let batchLabel =
-      args.totalBatches != null && args.batchNumber != null
-        ? `batch ${args.batchNumber}/${args.totalBatches}`
-        : 'batch';
-
-    this.#log.info(
-      `${jobIdentity(args.jobInfo)} starting ${batchLabel} with ${realms.length} realm(s)`,
-    );
-
-    for (let index = 0; index < realms.length; index++) {
-      let target = realms[index];
-      let job: Job<FromScratchResult> | undefined;
-      try {
-        job = await enqueueReindexRealmJob(
-          target.realmUrl,
-          target.realmUsername,
-          this.#queuePublisher,
-          this.#dbAdapter,
-          systemInitiatedPriority,
-        );
-      } catch (error: any) {
-        this.#log.error(
-          `${jobIdentity(args.jobInfo)} failed to enqueue from-scratch job for ${target.realmUrl}`,
-          error,
-        );
-        enqueueFailures.push({
-          target,
-          error: error instanceof Error ? error : new Error(String(error)),
-        });
-        continue;
-      }
-
-      try {
-        await job.done;
-        completedCount++;
-      } catch (error: any) {
-        let normalizedError =
-          error instanceof Error ? error : new Error(String(error));
-        this.#log.error(
-          `${jobIdentity(args.jobInfo)} from-scratch job for ${target.realmUrl} rejected`,
-          normalizedError,
-        );
-        failedRuns.push({ target, error: normalizedError });
-      }
-
-      if (index < realms.length - 1 && cooldownMs > 0) {
-        await sleep(cooldownMs);
-      }
-    }
-
-    if (failedRuns.length > 0 || enqueueFailures.length > 0) {
-      let totalFailures = failedRuns.length + enqueueFailures.length;
-      this.#log.warn(
-        `${jobIdentity(args.jobInfo)} full-reindex batch completed with ${totalFailures} failure(s) (${failedRuns.length} runtime, ${enqueueFailures.length} enqueue)`,
-      );
-      let failureSummary = [
-        enqueueFailures.length
-          ? `${enqueueFailures.length} enqueue failure(s)`
-          : null,
-        failedRuns.length ? `${failedRuns.length} runtime failure(s)` : null,
-      ]
-        .filter(Boolean)
-        .join(', ');
-      throw new Error(
-        `${jobIdentity(args.jobInfo)} full-reindex batch had ${failureSummary}`,
-      );
-    } else {
-      this.#log.info(
-        `${jobIdentity(args.jobInfo)} completed ${batchLabel} for ${completedCount} realm(s)`,
-      );
-    }
-
-    this.reportStatus(args.jobInfo, 'finish');
-  };
-
-  private copy = async (args: CopyArgs & { jobInfo?: JobInfo }) => {
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
-    );
-    this.reportStatus(args.jobInfo, 'start');
-    let authedFetch = await this.makeAuthedFetch(args);
-    let realmInfoResponse = await authedFetch(`${args.realmURL}_info`, {
-      headers: { Accept: SupportedMimeType.RealmInfo },
-    });
-    let realmInfo: RealmInfo = (await realmInfoResponse.json())?.data
-      ?.attributes;
-
-    let batch = await this.#indexWriter.createBatch(new URL(args.realmURL));
-    await batch.copyFrom(new URL(args.sourceRealmURL), realmInfo);
-    let result = await batch.done();
-    let invalidations = batch.invalidations;
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} completed copy indexing for realm ${args.realmURL}:\n${JSON.stringify(
-        result,
-        null,
-        2,
-      )}`,
-    );
-    let { totalIndexEntries: totalNonErrorIndexEntries } = result;
-    this.reportStatus(args.jobInfo, 'finish');
-    return {
-      invalidations,
-      totalNonErrorIndexEntries,
-    };
-  };
-
+  // TODO this is the legacy fromScratch task that depends on FastBoot, this
+  // will eventually get removed
   private fromScratch = async (
     args: FromScratchArgs & { jobInfo?: JobInfo },
   ) => {
@@ -642,6 +381,8 @@ export class Worker {
     });
   };
 
+  // TODO this is the legacy incremental task that depends on FastBoot, this
+  // will eventually get removed
   private incremental = async (
     args: IncrementalArgs & { jobInfo?: JobInfo },
   ) => {
