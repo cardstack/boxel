@@ -1,4 +1,5 @@
 import type { RealmVisibility } from './realm';
+import { ensureTrailingSlash } from './paths';
 
 export interface ResourceIndexEntry {
   canonicalUrl: string;
@@ -50,10 +51,8 @@ export async function analyzeRealmPublishability({
     Map<string, ExternalDependencySummary>
   >();
   let memoizedChains = new Map<string, DependencyChain[]>();
-  let normalizedRealmURL = normalizeRealmURL(sourceRealmURL);
-  let realmResources = new Set<string>(
-    resources.map((resource) => normalizeResourceUrl(resource)),
-  );
+  let normalizedRealmURL = ensureTrailingSlash(sourceRealmURL);
+  let realmResources = new Set<string>(resources);
 
   async function collectChains(
     resourceUrl: string,
@@ -96,16 +95,14 @@ export async function analyzeRealmPublishability({
           continue;
         }
 
-        let dependencyEntries =
-          resourceEntries.get(dependency) ??
-          resourceEntries.get(normalizeResourceUrl(dependency));
+        let dependencyEntries = resourceEntries.get(dependency);
         if (!dependencyEntries || dependencyEntries.length === 0) {
           continue;
         }
 
         let [dependencyEntry] = dependencyEntries;
         let canonicalDependencyUrl = dependencyEntry.canonicalUrl;
-        let dependencyRealmURL = normalizeRealmURL(dependencyEntry.realmUrl);
+        let dependencyRealmURL = ensureTrailingSlash(dependencyEntry.realmUrl);
         if (dependency !== canonicalDependencyUrl) {
           dependency = canonicalDependencyUrl;
         }
@@ -156,14 +153,14 @@ export async function analyzeRealmPublishability({
       let [origin, ...rest] = chain;
       let dependency = rest[rest.length - 1];
 
-      let dependencyEntries =
-        resourceEntries.get(dependency) ??
-        resourceEntries.get(normalizeResourceUrl(dependency));
+      let dependencyEntries = resourceEntries.get(dependency);
       if (!dependencyEntries || dependencyEntries.length === 0) {
         continue;
       }
 
-      let dependencyRealmURL = normalizeRealmURL(dependencyEntries[0].realmUrl);
+      let dependencyRealmURL = ensureTrailingSlash(
+        dependencyEntries[0].realmUrl,
+      );
       let visibility =
         realmVisibility.get(dependencyRealmURL) ??
         realmVisibility.get(dependencyRealmURL.replace(/\/$/, '')) ??
@@ -220,12 +217,4 @@ function dedupeChains(chains: DependencyChain[]) {
     result.push(chain);
   }
   return result;
-}
-
-function normalizeRealmURL(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
-
-function normalizeResourceUrl(url: string): string {
-  return url;
 }
