@@ -1,0 +1,188 @@
+import { Component } from 'https://cardstack.com/base/card-api';
+import NumberField, {
+  deserializeForUI,
+  serializeForUI,
+} from 'https://cardstack.com/base/number';
+import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
+import { NumberSerializer } from '@cardstack/runtime-common';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+import {
+  hasValue,
+  getNumericValue,
+  getFormattedDisplayValue,
+  calculatePercentage,
+  clamp,
+  type PercentageConfig,
+} from './util/index';
+
+export default class PercentageField extends NumberField {
+  static displayName = 'Percentage Number Field';
+
+  static configuration = {
+    presentation: {
+      type: 'percentage',
+      decimals: 1,
+      min: 0,
+      max: 100,
+    },
+  };
+
+  static edit = class Edit extends Component<typeof this> {
+    get config(): PercentageConfig {
+      return {
+        type: 'percentage',
+        decimals: 1,
+        min: 0,
+        max: 100,
+        ...this.args.configuration?.presentation,
+      };
+    }
+
+    get inputValue() {
+      // Return null for empty input, otherwise the numeric value
+      return hasValue(this.args.model) ? this.args.model : null;
+    }
+
+    handleInputChange = (value: string) => {
+      // Handle empty input by setting to null
+      if (value === '' || value === null || value === undefined) {
+        this.args.set(null);
+        return;
+      }
+      let num = parseFloat(value);
+      if (!isNaN(num)) {
+        // Apply min/max clamping using utility function
+        const min = this.config.min;
+        const max = this.config.max;
+        num = clamp(num, min, max);
+        this.args.set(num);
+      }
+    };
+
+    <template>
+      <BoxelInput
+        @type='number'
+        @value={{this.inputValue}}
+        @onInput={{this.handleInputChange}}
+        min={{this.config.min}}
+        max={{this.config.max}}
+      />
+    </template>
+
+    textInputValidator: TextInputValidator<number> = new TextInputValidator(
+      () => this.args.model,
+      (inputVal) => this.args.set(inputVal),
+      deserializeForUI,
+      serializeForUI,
+      NumberSerializer.validate,
+    );
+  };
+
+  static atom = class Atom extends Component<typeof this> {
+    get config(): PercentageConfig {
+      return {
+        type: 'percentage',
+        decimals: 1,
+        min: 0,
+        max: 100,
+        ...this.args.configuration?.presentation,
+      };
+    }
+
+    get displayValue() {
+      return getFormattedDisplayValue(this.args.model, this.config);
+    }
+
+    <template>
+      <span class='percentage-field-atom'>{{this.displayValue}}</span>
+
+      <style scoped>
+        .percentage-field-atom {
+          display: inline-flex;
+          padding: 0.125rem 0.5rem;
+          background: var(--muted, var(--boxel-100));
+          border: 1px solid var(--border, var(--boxel-border));
+          border-radius: 0.25rem;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          color: var(--foreground, var(--boxel-dark));
+          font-family: var(--font-mono, monospace);
+        }
+      </style>
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    get config(): PercentageConfig {
+      return {
+        type: 'percentage',
+        decimals: 1,
+        min: 0,
+        max: 100,
+        ...this.args.configuration?.presentation,
+      };
+    }
+
+    get displayValue() {
+      return getFormattedDisplayValue(this.args.model, this.config);
+    }
+
+    get percentage() {
+      const numericValue = getNumericValue(this.args.model);
+      return calculatePercentage(
+        numericValue,
+        this.config.min,
+        this.config.max,
+      );
+    }
+
+    get percentageColor() {
+      const pct = this.percentage;
+      if (pct < 33) return 'var(--success, #10b981)';
+      if (pct < 66) return 'var(--warning, #f59e0b)';
+      return 'var(--destructive, #ef4444)';
+    }
+
+    <template>
+      <div class='percentage-field-embedded'>
+        <div class='percentage-bar'>
+          <div
+            class='percentage-fill'
+            style='width: {{this.percentage}}%; background: {{this.percentageColor}}'
+          ></div>
+          <span class='percentage-text'>{{this.displayValue}}</span>
+        </div>
+      </div>
+
+      <style scoped>
+        .percentage-field-embedded {
+          width: 100%;
+        }
+        .percentage-bar {
+          position: relative;
+          height: 2rem;
+          background: var(--muted, var(--boxel-200));
+          border-radius: 0.5rem;
+          overflow: hidden;
+        }
+        .percentage-fill {
+          position: absolute;
+          height: 100%;
+          transition:
+            width 0.3s ease,
+            background 0.3s ease;
+        }
+        .percentage-text {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-weight: 600;
+          color: var(--foreground, var(--boxel-dark));
+          font-size: 0.875rem;
+          z-index: 1;
+        }
+      </style>
+    </template>
+  };
+}
