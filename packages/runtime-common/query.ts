@@ -16,7 +16,7 @@ export interface Query {
   filter?: Filter;
   sort?: Sort;
   page?: {
-    number: number; // page.number is 0-based
+    number?: number; // page.number is 0-based
     size: number;
     realmVersion?: number;
   };
