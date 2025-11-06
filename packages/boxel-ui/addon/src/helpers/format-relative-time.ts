@@ -1,132 +1,328 @@
-export default function formatRelativeTime(
-  timestamp: Date | string | number | null | undefined,
-  options: {
-    fallback?: string;
-    locale?: string;
-    size?: 'tiny' | 'medium';
-  } = {},
+import type { HelperLike } from '@glint/template';
+
+import type { DateLike, DateUnit, SerialOrigin } from '../utils/date-utils.ts';
+import { parseDateValue } from '../utils/date-utils.ts';
+import {
+  type FormatDateTimeOptions,
+  formatDateTime,
+} from './format-date-time.ts';
+
+type RelativeSize = 'tiny' | 'short' | 'medium' | 'long';
+type RelativeRound = 'floor' | 'ceil' | 'nearest';
+type RelativeUnit =
+  | 'year'
+  | 'month'
+  | 'week'
+  | 'day'
+  | 'hour'
+  | 'minute'
+  | 'second';
+
+interface ParseOptions {
+  serialOrigin?: SerialOrigin;
+}
+
+export interface FormatRelativeTimeOptions {
+  absoluteOptions?: FormatDateTimeOptions;
+  fallback?: string;
+  locale?: string;
+  now?: Date;
+  nowThresholdMs?: number;
+  numeric?: 'auto' | 'always';
+  parse?: ParseOptions;
+  round?: RelativeRound;
+  size?: RelativeSize;
+  switchToAbsoluteAfterMs?: number;
+  timeZone?: string;
+  unit?: DateUnit;
+  unitCeil?: RelativeUnit;
+}
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const UNIT_IN_MS: Record<RelativeUnit, number> = {
+  year: 365 * DAY_IN_MS,
+  month: 30 * DAY_IN_MS,
+  week: 7 * DAY_IN_MS,
+  day: DAY_IN_MS,
+  hour: 60 * 60 * 1000,
+  minute: 60 * 1000,
+  second: 1000,
+};
+
+const UNIT_ORDER: RelativeUnit[] = [
+  'year',
+  'month',
+  'week',
+  'day',
+  'hour',
+  'minute',
+  'second',
+];
+
+const DEFAULT_NOW_THRESHOLD = 30_000;
+
+function formatRelativeTimeInternal(
+  value: DateLike | null | undefined,
+  options: FormatRelativeTimeOptions = {},
 ): string {
-  if (timestamp == null) {
-    return options.fallback || '';
+  const parsed = parseDateValue(value, {
+    unit: options.unit,
+    serialOrigin: options.parse?.serialOrigin,
+  });
+
+  if (!parsed) {
+    return options.fallback ?? '';
   }
 
-  let date: Date;
-  if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-    date = new Date(timestamp);
-  } else if (timestamp instanceof Date) {
-    date = timestamp;
-  } else {
-    return options.fallback || '';
-  }
-
-  if (isNaN(date.getTime())) {
-    return options.fallback || '';
-  }
-
-  const { size = 'medium', locale = 'en-US' } = options;
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const isFuture = diffMs < 0;
+  const now = options.now ?? new Date();
+  const diffMs = parsed.getTime() - now.getTime();
   const absDiffMs = Math.abs(diffMs);
 
-  const seconds = Math.floor(absDiffMs / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  const weeks = Math.floor(days / 7);
-  const months = Math.floor(days / 30);
-  const years = Math.floor(days / 365);
+  if (shouldUseAbsolute(absDiffMs, options.switchToAbsoluteAfterMs)) {
+    const absoluteOptions: FormatDateTimeOptions = {
+      locale: options.locale,
+      timeZone: options.timeZone,
+      ...options.absoluteOptions,
+    };
+    return formatDateTime(parsed, absoluteOptions);
+  }
 
-  // Handle special cases for "now" and "just now"
-  if (absDiffMs < 1000) {
-    return 'now';
+  const nowThreshold = options.nowThresholdMs ?? DEFAULT_NOW_THRESHOLD;
+  if (absDiffMs <= nowThreshold) {
+    return formatNow(options);
   }
-  if (absDiffMs < 30000 && !isFuture) {
-    // Less than 30 seconds ago
-    return 'just now';
-  }
+
+  const selection = selectRelativeUnit(absDiffMs, options);
+  const size = options.size ?? 'medium';
 
   if (size === 'tiny') {
-    // Tiny format is always in English abbreviations regardless of locale
-    if (years > 0) {
-      return `${years}y`;
-    }
-    if (months > 0) {
-      return `${months}mo`;
-    }
-    if (weeks > 0) {
-      return `${weeks}w`;
-    }
-    if (days > 0) {
-      return `${days}d`;
-    }
-    if (hours > 0) {
-      return `${hours}h`;
-    }
-    if (minutes > 0) {
-      return `${minutes}m`;
-    }
-    return `${seconds}s`;
+    return formatTiny(selection.value, selection.unit, diffMs > 0);
   }
 
-  // Medium size uses Intl.RelativeTimeFormat for localization
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  // Use 'long' style for month/year units even when size is 'short' so
+  // larger calendar spans are spelled out (e.g. "2 months ago") instead of
+  // abbreviated (e.g. "2 mo. ago"). For other units, use the resolved style
+  // based on the requested size.
+  const styleForUnit: Intl.RelativeTimeFormatStyle | undefined =
+    size === 'short' &&
+    (selection.unit === 'month' || selection.unit === 'year')
+      ? 'long'
+      : resolveRelativeStyle(size);
 
-  // Determine the appropriate unit and value
-  let value: number;
-  let unit: Intl.RelativeTimeFormatUnit;
+  const rtf = new Intl.RelativeTimeFormat(options.locale ?? 'en-US', {
+    numeric: options.numeric ?? 'auto',
+    style: styleForUnit,
+  });
 
-  if (years > 0) {
-    value = years;
-    unit = 'year';
-  } else if (months > 0) {
-    value = months;
-    unit = 'month';
-  } else if (weeks > 0) {
-    value = weeks;
-    unit = 'week';
-  } else if (days > 0) {
-    value = days;
-    unit = 'day';
-  } else if (hours > 0) {
-    value = hours;
-    unit = 'hour';
-  } else if (minutes > 0) {
-    value = minutes;
-    unit = 'minute';
-  } else {
-    value = seconds;
-    unit = 'second';
-  }
-
-  // Handle near-boundary times that should be rounded up with "about"
-  let actualValue = isFuture ? value : -value;
-  let actualUnit = unit;
-  let shouldAddAbout = false;
-
-  // Check if we're close to the next boundary and should round up
-  // Only round up if we're not at an exact boundary
-  const remainingMinutes = minutes % 60;
-  const remainingHours = hours % 24;
-
-  if (unit === 'hour' && remainingMinutes >= 50 && remainingMinutes < 60) {
-    // Between 1h 50m and 1h 59m 59s, round up to next hour with "about"
-    actualValue = isFuture ? value + 1 : -(value + 1);
-    actualUnit = 'hour';
-    shouldAddAbout = true;
-  } else if (unit === 'day' && remainingHours >= 23 && remainingHours < 24) {
-    // 23h+, use "yesterday" or "tomorrow"
-    actualValue = isFuture ? 1 : -1;
-    actualUnit = 'day';
-    shouldAddAbout = false; // "yesterday" doesn't need "about"
-  }
-
-  let result = rtf.format(actualValue, actualUnit);
-
-  // Add "about" prefix for rounded-up times
-  if (shouldAddAbout) {
-    result = result.replace(/^(\d+)/, 'about $1');
-  }
-
-  return result;
+  const signedValue = diffMs > 0 ? selection.value : -selection.value;
+  return rtf.format(signedValue, selection.unit);
 }
+
+function shouldUseAbsolute(
+  absDiffMs: number,
+  thresholdMs: number | undefined,
+): boolean {
+  if (thresholdMs == null) {
+    return false;
+  }
+
+  return absDiffMs >= thresholdMs;
+}
+
+function formatNow(options: FormatRelativeTimeOptions): string {
+  if ((options.size ?? 'medium') === 'tiny') {
+    return 'now';
+  }
+
+  const rtf = new Intl.RelativeTimeFormat(options.locale ?? 'en-US', {
+    numeric: options.numeric ?? 'auto',
+    style: resolveRelativeStyle(options.size ?? 'medium'),
+  });
+
+  return rtf.format(0, 'second');
+}
+
+function selectRelativeUnit(
+  absDiffMs: number,
+  options: FormatRelativeTimeOptions,
+): { unit: RelativeUnit; value: number } {
+  // Use human-friendly thresholds (inspired by Moment.js) so that
+  // durations read naturally: seconds, minutes, hours, days, months, years.
+  // Respect `unitCeil` by preventing selection of larger units when set.
+  const roundMode = options.round ?? 'floor';
+  const unitCeilIndex =
+    options.unitCeil && UNIT_ORDER.includes(options.unitCeil)
+      ? UNIT_ORDER.indexOf(options.unitCeil)
+      : 0;
+
+  const seconds = absDiffMs / UNIT_IN_MS.second;
+  const minutes = absDiffMs / UNIT_IN_MS.minute;
+  const hours = absDiffMs / UNIT_IN_MS.hour;
+  const days = absDiffMs / UNIT_IN_MS.day;
+  const months = absDiffMs / UNIT_IN_MS.month; // month uses 30*DAY as defined
+  const years = absDiffMs / UNIT_IN_MS.year;
+
+  // Thresholds (tuned for human-friendly display):
+  // seconds < 45 -> seconds
+  // seconds < 90 -> 1 minute
+  // minutes < 45 -> minutes
+  // minutes < 90 -> 1 hour
+  // hours < 22 -> hours
+  // hours < 36 -> 1 day
+  // days < 45 -> days
+  // days < 345 -> months
+  // otherwise years
+
+  // Helper to ensure we don't pick a unit above unitCeil
+  const isAllowed = (unit: RelativeUnit) =>
+    UNIT_ORDER.indexOf(unit) >= unitCeilIndex;
+
+  // If a unitCeil is provided, prefer the largest allowed unit that is
+  // >= 1 (after rounding). This guarantees that when callers restrict to
+  // a smaller ceiling (e.g. 'minute') we still return a sensible value
+  // like '120 minutes ago' for a 2-hour span instead of falling back to
+  // seconds due to threshold rules.
+  if (options.unitCeil) {
+    const allowed = UNIT_ORDER.slice(unitCeilIndex);
+    for (const unit of allowed) {
+      const raw = absDiffMs / UNIT_IN_MS[unit];
+      if (unit !== 'second' && raw < 1) {
+        continue;
+      }
+      const rounded = applyRound(raw, roundMode);
+      if (rounded === 0 && unit !== 'second') {
+        continue;
+      }
+      return { unit, value: Math.max(rounded, 1) };
+    }
+
+    return { unit: 'second', value: 1 };
+  }
+
+  if (seconds < 45 && isAllowed('second')) {
+    return {
+      unit: 'second',
+      value: Math.max(applyRound(seconds, roundMode), 1),
+    };
+  }
+
+  if (seconds < 90 && isAllowed('minute')) {
+    return { unit: 'minute', value: 1 };
+  }
+
+  if (minutes < 45 && isAllowed('minute')) {
+    return {
+      unit: 'minute',
+      value: Math.max(applyRound(minutes, roundMode), 1),
+    };
+  }
+
+  if (minutes < 90 && isAllowed('hour')) {
+    return { unit: 'hour', value: 1 };
+  }
+
+  if (hours < 22 && isAllowed('hour')) {
+    return { unit: 'hour', value: Math.max(applyRound(hours, roundMode), 1) };
+  }
+
+  if (hours < 36 && isAllowed('day')) {
+    return { unit: 'day', value: 1 };
+  }
+
+  if (days < 45 && isAllowed('day')) {
+    return { unit: 'day', value: Math.max(applyRound(days, roundMode), 1) };
+  }
+
+  if (days < 345 && isAllowed('month')) {
+    return { unit: 'month', value: Math.max(applyRound(months, roundMode), 1) };
+  }
+
+  if (isAllowed('year')) {
+    return { unit: 'year', value: Math.max(applyRound(years, roundMode), 1) };
+  }
+
+  // Fallback to seconds if nothing else matched / allowed
+  return { unit: 'second', value: 1 };
+}
+
+function formatTiny(
+  value: number,
+  unit: RelativeUnit,
+  isFuture: boolean,
+): string {
+  if (value <= 0) {
+    return 'now';
+  }
+
+  const label = tinyUnitLabel(unit);
+  const prefix = isFuture ? '+' : '';
+  return `${prefix}${value}${label}`;
+}
+
+function tinyUnitLabel(unit: RelativeUnit): string {
+  switch (unit) {
+    case 'year':
+      return 'y';
+    case 'month':
+      return 'mo';
+    case 'week':
+      return 'w';
+    case 'day':
+      return 'd';
+    case 'hour':
+      return 'h';
+    case 'minute':
+      return 'm';
+    case 'second':
+      return 's';
+    default:
+      return '';
+  }
+}
+
+function resolveRelativeStyle(
+  size: RelativeSize,
+): Intl.RelativeTimeFormatStyle {
+  switch (size) {
+    case 'short':
+      return 'short';
+    case 'long':
+      return 'long';
+    case 'tiny':
+      return 'narrow';
+    case 'medium':
+    default:
+      return 'long';
+  }
+}
+
+function applyRound(value: number, round: RelativeRound): number {
+  switch (round) {
+    case 'ceil':
+      return Math.ceil(value);
+    case 'nearest':
+      return Math.round(value);
+    case 'floor':
+    default:
+      return Math.floor(value);
+  }
+}
+
+type FormatRelativeTimeHelperSignature = {
+  Args: {
+    Named: FormatRelativeTimeOptions;
+    Positional: [DateLike | null | undefined];
+  };
+  Return: string;
+};
+
+type FormatRelativeTimeHelper = HelperLike<FormatRelativeTimeHelperSignature> &
+  ((
+    value: DateLike | null | undefined,
+    options?: FormatRelativeTimeOptions,
+  ) => string);
+
+export const formatRelativeTime =
+  formatRelativeTimeInternal as FormatRelativeTimeHelper;
+
+export default formatRelativeTime;
