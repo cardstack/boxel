@@ -119,7 +119,10 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
     } else {
       let monacoContainer = element;
 
-      let editor = monacoSDK.editor.create(monacoContainer, editorDisplayOptions);
+      let editor = monacoSDK.editor.create(
+        monacoContainer,
+        editorDisplayOptions,
+      );
 
       let model = editor.getModel()!;
       monacoSDK.editor.setModelLanguage(model, language);
