@@ -93,6 +93,7 @@ let serializeCard: (typeof CardAPIModule)['serializeCard'];
 let isSaved: (typeof CardAPIModule)['isSaved'];
 let relationshipMeta: (typeof CardAPIModule)['relationshipMeta'];
 let getQueryableValue: (typeof CardAPIModule)['getQueryableValue'];
+let getQueryFieldState: (typeof CardAPIModule)['getQueryFieldState'];
 let subscribeToChanges: (typeof CardAPIModule)['subscribeToChanges'];
 let unsubscribeFromChanges: (typeof CardAPIModule)['unsubscribeFromChanges'];
 let flushLogs: (typeof CardAPIModule)['flushLogs'];
@@ -207,6 +208,7 @@ async function initialize() {
     isSaved,
     relationshipMeta,
     getQueryableValue,
+    getQueryFieldState,
     subscribeToChanges,
     unsubscribeFromChanges,
     flushLogs,
@@ -267,6 +269,7 @@ export {
   isSaved,
   relationshipMeta,
   getQueryableValue,
+  getQueryFieldState,
   subscribeToChanges,
   unsubscribeFromChanges,
   flushLogs,
