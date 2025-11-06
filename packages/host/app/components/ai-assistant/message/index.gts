@@ -61,6 +61,7 @@ interface Signature {
     isDebugMessage?: boolean;
     isPending?: boolean;
     retryAction?: () => void;
+    waitAction?: () => void;
     hideMeta?: boolean;
   };
   Blocks: { default: [] };
@@ -294,9 +295,17 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{else}}
             <Alert @type='error' as |Alert|>
               <Alert.Messages @messages={{this.errorMessages}} />
-              {{#if @retryAction}}
-                <Alert.Action @actionName='Retry' @action={{@retryAction}} />
-              {{/if}}
+              <div class='alert-action-buttons-row'>
+                {{#if @waitAction}}
+                  <Alert.Action
+                    @actionName='Wait longer'
+                    @action={{@waitAction}}
+                  />
+                {{/if}}
+                {{#if @retryAction}}
+                  <Alert.Action @actionName='Retry' @action={{@retryAction}} />
+                {{/if}}
+              </div>
             </Alert>
           {{/if}}
         {{/if}}
@@ -326,6 +335,16 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       :deep(code) {
         overflow-wrap: break-word;
+      }
+
+      .alert-action-buttons-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-sm);
+      }
+
+      .alert-action-buttons-row > :deep(.action-button) {
+        margin-left: 0;
       }
 
       .add-more-credits-button {

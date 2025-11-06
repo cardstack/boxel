@@ -1472,9 +1472,7 @@ export class Realm {
       let headers: Record<string, string> = {
         'cache-control': 'public, max-age=0',
       };
-      if (etag) {
-        headers.etag = etag;
-      }
+      headers.etag = etag;
       if (fileRef.lastModified != null) {
         headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
       }
