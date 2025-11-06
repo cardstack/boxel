@@ -25,7 +25,7 @@ import {
 } from '.';
 import { MatrixClient } from './matrix-client';
 import * as Tasks from './tasks';
-import { type WorkerArgs, type TaskArgs } from './tasks';
+import type { WorkerArgs, TaskArgs } from './tasks';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
