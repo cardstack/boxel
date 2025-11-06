@@ -81,6 +81,8 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
         background-color: transparent;
         border: none;
         text-align: left;
+        width: 100%;
+        max-width: 100%;
       }
       .accordion-item-trigger:focus-visible {
         outline-color: var(--ring, var(--boxel-highlight));
