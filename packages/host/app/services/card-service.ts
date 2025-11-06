@@ -124,8 +124,7 @@ export default class CardService extends Service {
           'QUERY');
 
     if (!isReadOperation) {
-      let clientRequestId =
-        providedClientRequestId ?? `instance:${uuidv4()}`;
+      let clientRequestId = providedClientRequestId ?? `instance:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
       headers = { ...headers, 'X-Boxel-Client-Request-Id': clientRequestId };
     }
@@ -193,8 +192,7 @@ export default class CardService extends Service {
     options?: SaveSourceOptions,
   ) {
     try {
-      let clientRequestId =
-        options?.clientRequestId ?? `${type}:${uuidv4()}`;
+      let clientRequestId = options?.clientRequestId ?? `${type}:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
 
       let response = await this.network.authedFetch(url, {

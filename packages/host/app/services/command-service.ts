@@ -23,15 +23,14 @@ import {
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
-
-import LimitedSet from '../lib/limited-set';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+
+import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -63,81 +62,30 @@ export default class CommandService extends Service {
     string,
     LimitedSet<string>
   >();
-  private allAiAssistantClientRequestIds = new LimitedSet<string>(250);
+
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
-  private registerAiAssistantClientRequestId(
+  registerAiAssistantClientRequestId(
     action: string,
     roomId?: string,
-  ): string {
-    let normalizedRoom = roomId ?? 'unknown-room';
-    let encodedRoom = encodeURIComponent(normalizedRoom);
+  ): string | undefined {
+    if (!roomId) {
+      return `bot-patch:${action}:${uuidv4()}`;
+    }
+    let encodedRoom = encodeURIComponent(roomId);
     let clientRequestId = `bot-patch:${encodedRoom}:${action}:${uuidv4()}`;
-    this.trackClientRequestId(clientRequestId);
-    return clientRequestId;
-  }
 
-  private ensureAiAssistantClientRequestId(
-    input: Record<string, unknown>,
-    action: string,
-    roomId?: string,
-  ): string {
-    let existing = (input as { clientRequestId?: string }).clientRequestId;
-    if (existing) {
-      let normalizedId = this.enrichClientRequestId(existing, action, roomId);
-      (input as { clientRequestId: string }).clientRequestId = normalizedId;
-      this.trackClientRequestId(normalizedId);
-      return normalizedId;
-    }
-    let generated = this.registerAiAssistantClientRequestId(action, roomId);
-    (input as { clientRequestId: string }).clientRequestId = generated;
-    return generated;
-  }
-
-  private enrichClientRequestId(
-    id: string,
-    action: string,
-    roomId?: string,
-  ): string {
-    if (id.startsWith('bot-patch:')) {
-      return id;
-    }
-    let normalizedRoom = roomId ?? 'unknown-room';
-    let encodedRoom = encodeURIComponent(normalizedRoom);
-    if (id.includes(':')) {
-      // preserve existing suffix to avoid losing uniqueness
-      return `bot-patch:${encodedRoom}:${action}:${id.split(':').pop()}`;
-    }
-    return `bot-patch:${encodedRoom}:${action}:${id}`;
-  }
-
-  private trackClientRequestId(id: string) {
-    let { roomId } = this.parseClientRequestId(id);
-    let roomKey = roomId ?? 'unknown-room';
-    let roomSet = this.aiAssistantClientRequestIdsByRoom.get(roomKey);
+    let roomSet = this.aiAssistantClientRequestIdsByRoom.get(roomId!);
     if (!roomSet) {
       roomSet = new LimitedSet<string>(250);
-      this.aiAssistantClientRequestIdsByRoom.set(roomKey, roomSet);
+      this.aiAssistantClientRequestIdsByRoom.set(roomId!, roomSet);
     }
-    roomSet.add(id);
-    this.allAiAssistantClientRequestIds.add(id);
-  }
+    roomSet.add(clientRequestId);
 
-  private parseClientRequestId(id: string): {
-    roomId?: string;
-    action?: string;
-  } {
-    if (!id.startsWith('bot-patch:')) {
-      return {};
-    }
-    let [, encodedRoom, action] = id.split(':');
-    return {
-      roomId: encodedRoom ? decodeURIComponent(encodedRoom) : undefined,
-      action,
-    };
+    return clientRequestId;
   }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
@@ -427,19 +375,7 @@ export default class CommandService extends Service {
           payload?.attributes,
           payload?.relationships,
         );
-        if (commandToRun instanceof PatchCardInstanceCommand) {
-          this.ensureAiAssistantClientRequestId(
-            typedInput as Record<string, unknown>,
-            'patch-instance',
-            command.message.roomId,
-          );
-        } else if (commandToRun instanceof PatchCodeCommand) {
-          this.ensureAiAssistantClientRequestId(
-            typedInput as Record<string, unknown>,
-            'patch-code',
-            command.message.roomId,
-          );
-        }
+
         [resultCard] = await all([
           await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
@@ -618,18 +554,19 @@ export default class CommandService extends Service {
       );
     }
     let finalFileUrl: string | undefined;
+
     try {
-      let patchCodeCommand = new PatchCodeCommand(this.commandContext);
-      let clientRequestId = this.registerAiAssistantClientRequestId(
-        'patch-code',
+      let patchCodeCommand = new PatchCodeCommand({
         roomId,
-      );
+        ...this.commandContext,
+      });
+
       let patchCodeResult = await patchCodeCommand.execute({
         fileUrl,
         codeBlocks: codeDataItems.map(
           (codeData) => codeData.searchReplaceBlock!,
         ),
-        clientRequestId,
+        roomId,
       });
       finalFileUrl = patchCodeResult.finalFileUrl;
 

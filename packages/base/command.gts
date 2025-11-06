@@ -62,7 +62,7 @@ export class CopySourceResult extends CardDef {
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field patch = contains(JsonField);
-  @field clientRequestId = contains(StringField);
+  @field roomId = contains(StringField);
 }
 
 export class CardIdCard extends CardDef {
@@ -170,7 +170,7 @@ export class PatchCodeCommandResult extends CardDef {
 export class PatchCodeInput extends CardDef {
   @field fileUrl = contains(StringField);
   @field codeBlocks = containsMany(StringField);
-  @field clientRequestId = contains(StringField);
+  @field roomId = contains(StringField);
 }
 
 export class CreateAIAssistantRoomInput extends CardDef {

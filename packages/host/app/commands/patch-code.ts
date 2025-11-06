@@ -13,6 +13,7 @@ import LintAndFixCommand from './lint-and-fix';
 
 import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
+import CommandService from '../services/command-service';
 
 interface FileInfo {
   exists: boolean;
@@ -26,6 +27,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
+  @service declare private commandService: CommandService;
 
   description = `Apply code changes to file and then apply lint fixes`;
   static actionVerb = 'Apply';
@@ -41,7 +43,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.PatchCodeInput,
   ): Promise<BaseCommandModule.PatchCodeCommandResult> {
-    let { fileUrl, codeBlocks, clientRequestId } = input;
+    let { fileUrl, codeBlocks, roomId } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
     let hasEmptySearchPortion = this.hasEmptySearchPortion(codeBlocks);
@@ -60,13 +62,19 @@ export default class PatchCodeCommand extends HostBaseCommand<
         hasEmptySearchPortion,
       );
 
+      let clientRequestId =
+        this.commandService.registerAiAssistantClientRequestId(
+          'patch-code',
+          roomId,
+        );
+
       await this.cardService.saveSource(
         new URL(finalFileUrl),
         patchedCode,
         'bot-patch',
         {
           resetLoader: hasExecutableExtension(finalFileUrl),
-          clientRequestId: clientRequestId ?? undefined,
+          clientRequestId,
         },
       );
     }

@@ -550,9 +550,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let ids: string[] = roomRequestIds ? Array.from(roomRequestIds) : [];
     assert.ok(
       ids.some((id) =>
-        id.startsWith(
-          `bot-patch:${encodeURIComponent(roomId)}:patch-instance`,
-        ),
+        id.startsWith(`bot-patch:${encodeURIComponent(roomId)}:patch-instance`),
       ),
       'bot patch clientRequestId recorded for the room when patching instance',
     );
