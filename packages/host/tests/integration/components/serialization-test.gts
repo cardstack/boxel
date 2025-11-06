@@ -16,6 +16,9 @@ import {
   isSingleCardDocument,
   type LooseSingleCardDocument,
   type Permissions,
+  EqFilter,
+  CardTypeFilter,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -3875,12 +3878,15 @@ module('Integration | serialization', function (hooks) {
       'favorite query field cache stores query signature',
     );
     assert.strictEqual(
-      favoriteState?.query?.filter?.eq?.title,
+      (favoriteState?.query?.filter as EqFilter)?.eq?.title,
       'Target',
       'favorite query field cache stores interpolated filter',
     );
     assert.strictEqual(
-      favoriteState?.query?.filter?.type?.module,
+      (
+        (favoriteState?.query?.filter as CardTypeFilter)
+          ?.type as ResolvedCodeRef
+      )?.module,
       favoriteQueryParams.filter?.type?.module,
       'favorite query field cache preserves implicit type filter module',
     );
@@ -3907,12 +3913,13 @@ module('Integration | serialization', function (hooks) {
       'matches query field cache stores query signature',
     );
     assert.strictEqual(
-      matchesState?.query?.filter?.eq?.title,
+      (matchesState?.query?.filter as EqFilter)?.eq?.title,
       'Target',
       'matches query field cache stores interpolated filter',
     );
     assert.strictEqual(
-      matchesState?.query?.filter?.type?.module,
+      ((matchesState?.query?.filter as CardTypeFilter)?.type as ResolvedCodeRef)
+        ?.module,
       matchesQueryParams.filter?.type?.module,
       'matches query field cache preserves implicit type filter module',
     );
