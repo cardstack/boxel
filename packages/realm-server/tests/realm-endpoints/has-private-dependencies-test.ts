@@ -53,8 +53,6 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       publisher = _publisher;
       runner = _runner;
 
-      console.log('test database: ' + dbAdapter.url);
-
       tempDir = dirSync({ unsafeCleanup: true });
       let realmsRootPath = join(
         tempDir.name,
