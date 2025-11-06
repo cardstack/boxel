@@ -100,6 +100,9 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
       // 3. Bracket/indent guides (the vertical indentation highlight blocks inside the code area)
       let layoutReady = false;
       let diffReady = !diffEditor;
+      // Diff computation emits multiple updates; wait until results stabilize
+      let diffStableCount = 0;
+      let lastDiffSignature: string | null = null;
       const indentGuidesExpected = (() => {
         const model = targetEditor.getModel();
         if (!model) return false;
@@ -157,10 +160,57 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
       const updateDiffReady = () => {
         if (!diffEditor) return;
-        // Diff highlights (overview ruler + gutter badges) appear only after Monaco
-        // calculates lineChanges for the diff editor.
         const lineChanges = diffEditor.getLineChanges();
-        if (lineChanges !== null) {
+        if (!lineChanges) {
+          return;
+        }
+
+        if (lineChanges.length === 0) {
+          diffReady = true;
+          return;
+        }
+
+        const diffSignature = lineChanges
+          .map((change) => {
+            const changeSignature = [
+              change.originalStartLineNumber,
+              change.originalEndLineNumber,
+              change.modifiedStartLineNumber,
+              change.modifiedEndLineNumber,
+              change.originalStartColumn,
+              change.originalEndColumn,
+              change.modifiedStartColumn,
+              change.modifiedEndColumn,
+            ].join(':');
+
+            const charSignature =
+              change.charChanges
+                ?.map((charChange) =>
+                  [
+                    charChange.originalStartLineNumber,
+                    charChange.originalEndLineNumber,
+                    charChange.modifiedStartLineNumber,
+                    charChange.modifiedEndLineNumber,
+                    charChange.originalStartColumn,
+                    charChange.originalEndColumn,
+                    charChange.modifiedStartColumn,
+                    charChange.modifiedEndColumn,
+                  ].join(':'),
+                )
+                .join(',') ?? '';
+
+            return `${changeSignature}|${charSignature}`;
+          })
+          .join(';');
+
+        if (diffSignature === lastDiffSignature) {
+          diffStableCount += 1;
+        } else {
+          lastDiffSignature = diffSignature;
+          diffStableCount = 1;
+        }
+
+        if (diffStableCount >= 2) {
           diffReady = true;
         }
       };
