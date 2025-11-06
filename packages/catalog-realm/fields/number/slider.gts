@@ -87,6 +87,70 @@ export default class SliderField extends NumberField {
     );
   };
 
+  static atom = class Atom extends Component<typeof this> {
+    get config(): SliderConfig {
+      return this.args.configuration?.presentation ?? {
+        min: 0,
+        max: 100,
+        decimals: 0,
+      };
+    }
+
+    get percentage() {
+      const numericValue = getNumericValue(this.args.model);
+      return calculatePercentage(
+        numericValue,
+        this.config.min,
+        this.config.max,
+      );
+    }
+
+    get displayValue() {
+      return getFormattedDisplayValue(this.args.model, this.config);
+    }
+
+    get fillStyle() {
+      return htmlSafe(`width: ${this.percentage}%`);
+    }
+
+    <template>
+      <span class='slider-atom'>
+        <span class='slider-mini-track'>
+          <span class='slider-mini-fill' style={{this.fillStyle}}></span>
+        </span>
+        <span class='slider-value'>{{this.displayValue}}</span>
+      </span>
+
+      <style scoped>
+        .slider-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-5xs, 0.25rem);
+        }
+        .slider-mini-track {
+          position: relative;
+          width: 2rem;
+          height: 0.25rem;
+          background: var(--border, var(--boxel-200, #e0e0e0));
+          border-radius: var(--boxel-border-radius-xs, 0.125rem);
+          overflow: hidden;
+        }
+        .slider-mini-fill {
+          position: absolute;
+          height: 100%;
+          background: var(--primary, var(--boxel-purple, #6638ff));
+          border-radius: var(--boxel-border-radius-xs, 0.125rem);
+        }
+        .slider-value {
+          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          font-size: var(--boxel-font-size-xs, 0.6875rem);
+          font-weight: var(--boxel-font-weight-semibold, 600);
+          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+        }
+      </style>
+    </template>
+  };
+
   static embedded = class Embedded extends Component<typeof this> {
     get config(): SliderConfig {
       return this.args.configuration?.presentation ?? {

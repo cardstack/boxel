@@ -15,20 +15,20 @@
         "thumbnailURL": null
       },
       "statNumber": 100,
-      "badgeNumber": null,
-      "basicNumber": 100,
-      "ratingNumber": 3,
-      "scoresNumber": 200,
-      "sliderNumber": 57,
+      "badgeNumber": 100,
+      "basicNumber": 0,
+      "ratingNumber": 5,
+      "scoresNumber": 1000,
+      "sliderNumber": 0,
       "quantityNumber": 0,
-      "percentageNumber": 113,
-      "progressBarNumber": 33,
-      "progressCircleNumber": 53
+      "percentageNumber": null,
+      "progressBarNumber": 100,
+      "progressCircleNumber": 30
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/experiments/Theme/bubblegum"
+          "self": null
         }
       }
     }

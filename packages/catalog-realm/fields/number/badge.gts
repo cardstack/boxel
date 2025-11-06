@@ -90,31 +90,23 @@ export default class BadgeField extends NumberField {
     }
 
     <template>
-      <span class='badge-field-atom'>
-        {{#if this.config.label}}
-          <span class='label'>{{this.config.label}}</span>
-        {{/if}}
-        <span class='count'>{{this.displayValue}}</span>
-      </span>
+      <span class='badge-field-atom'>{{this.displayValue}}</span>
 
       <style scoped>
         .badge-field-atom {
           display: inline-flex;
           align-items: center;
-          gap: 0.25rem;
-          padding: 0.125rem 0.5rem;
-          background: var(--foreground, var(--boxel-dark));
-          color: var(--background, var(--boxel-light));
-          border-radius: 9999px;
-          font-size: 0.75rem;
-          font-weight: 600;
-        }
-        .badge-field-atom .label {
-          opacity: 0.9;
-          font-weight: 500;
-        }
-        .badge-field-atom .count {
-          font-weight: 700;
+          justify-content: center;
+          min-width: var(--boxel-icon-xs, 1rem);
+          height: var(--boxel-icon-xs, 1rem);
+          padding: calc(var(--boxel-sp-6xs, 0.125rem) * 1.5) var(--boxel-sp-xs, 0.5rem);
+          background: var(--destructive, var(--boxel-red, #ff5050));
+          color: var(--destructive-foreground, var(--boxel-light, #ffffff));
+          border-radius: var(--radius, var(--boxel-border-radius-xl, 0.9375rem));
+          font-size: var(--boxel-font-size-xs, 0.6875rem);
+          font-weight: var(--boxel-font-weight-semibold, 600);
+          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          line-height: 1;
         }
       </style>
     </template>

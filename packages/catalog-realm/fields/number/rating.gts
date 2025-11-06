@@ -102,41 +102,27 @@ export default class RatingField extends NumberField {
       return getNumericValue(this.args.model);
     }
 
-    get stars() {
-      return Array.from({ length: this.config.maxStars }, (_, idx) => ({
-        filled: idx + 1 <= this.numericValue,
-      }));
+    get isHighlighted() {
+      return this.numericValue > 0;
     }
 
     <template>
-      {{#if this.hasValue}}
-        <span class='rating-field-atom'>
-          {{#each this.stars as |star|}}
-            <span class='atom-star {{if star.filled "filled"}}'>★</span>
-          {{/each}}
-        </span>
-      {{else}}
-        <span class='rating-field-empty'>–</span>
-      {{/if}}
+      <span class='rating-field-atom'>
+        <span class='atom-star {{if this.isHighlighted "highlighted"}}'>★</span>
+      </span>
 
       <style scoped>
         .rating-field-atom {
           display: inline-flex;
-          gap: 2px;
-          font-size: 0.875rem;
+          align-items: center;
           line-height: 1;
         }
         .atom-star {
-          color: var(--muted, var(--boxel-300));
+          font-size: var(--boxel-font-size-sm, 0.8125rem);
+          color: var(--muted, var(--boxel-300, #d1d1d1));
         }
-        .atom-star.filled {
-          color: var(--accent, var(--boxel-highlight));
-        }
-        .rating-field-empty {
-          display: inline-flex;
-          font-size: 0.875rem;
-          color: var(--muted-foreground, var(--boxel-400));
-          font-family: var(--font-family, var(--boxel-font-family));
+        .atom-star.highlighted {
+          color: var(--accent, var(--boxel-yellow, #ffd800));
         }
       </style>
     </template>

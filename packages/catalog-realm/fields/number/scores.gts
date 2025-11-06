@@ -87,16 +87,43 @@ export default class ScoresField extends NumberField {
     }
 
     <template>
-      <span class='scores-field-atom'>{{this.displayValue}}</span>
+      <span class='scores-field-atom'>
+        <svg
+          class='chart-icon'
+          viewBox='0 0 16 16'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
+        >
+          <rect x='2' y='10' width='3' height='4' rx='0.5' fill='currentColor' />
+          <rect
+            x='6.5'
+            y='6'
+            width='3'
+            height='8'
+            rx='0.5'
+            fill='currentColor'
+          />
+          <rect x='11' y='2' width='3' height='12' rx='0.5' fill='currentColor' />
+        </svg>
+        <span class='value'>{{this.displayValue}}</span>
+      </span>
 
       <style scoped>
         .scores-field-atom {
           display: inline-flex;
           align-items: center;
-          font-weight: 700;
-          font-size: 0.875rem;
-          color: var(--foreground, var(--boxel-dark));
-          font-family: var(--font-mono, monospace);
+          gap: var(--boxel-sp-5xs, 0.25rem);
+        }
+        .chart-icon {
+          width: var(--boxel-icon-xxs, 0.75rem);
+          height: var(--boxel-icon-xxs, 0.75rem);
+          color: var(--primary, var(--boxel-purple, #6638ff));
+        }
+        .value {
+          font-size: var(--boxel-font-size-xs, 0.6875rem);
+          font-weight: var(--boxel-font-weight-semibold, 600);
+          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
         }
       </style>
     </template>

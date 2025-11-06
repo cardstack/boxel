@@ -6,7 +6,7 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { BoxelInput, ProgressBar } from '@cardstack/boxel-ui/components';
-import { hasValue, clamp, getNumericValue, type ProgressBarConfig } from './util/index';
+import { hasValue, clamp, getNumericValue, calculatePercentage, type ProgressBarConfig } from './util/index';
 
 export default class ProgressBarField extends NumberField {
   static displayName = 'Progress Bar Number Field';
@@ -68,6 +68,58 @@ export default class ProgressBarField extends NumberField {
       serializeForUI,
       NumberSerializer.validate,
     );
+  };
+
+  static atom = class Atom extends Component<typeof this> {
+    get config(): ProgressBarConfig {
+      return {
+        min: 0,
+        max: 100,
+        label: 'Progress',
+        ...this.args.configuration?.presentation,
+      };
+    }
+
+    get numericValue() {
+      return getNumericValue(this.args.model);
+    }
+
+    get percentage() {
+      const percent = calculatePercentage(
+        this.numericValue,
+        this.config.min,
+        this.config.max,
+      );
+      return Math.round(percent);
+    }
+
+    <template>
+      <span class='progress-bar-atom'>
+        {{#if this.config.label}}
+          <span class='label'>{{this.config.label}}:</span>
+        {{/if}}
+        <span class='value'>{{this.percentage}}%</span>
+      </span>
+
+      <style scoped>
+        .progress-bar-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-5xs, 0.25rem);
+          font-size: var(--boxel-font-size-xs, 0.6875rem);
+          font-family: var(--font-sans, var(--boxel-font-family, system-ui, sans-serif));
+        }
+        .label {
+          color: var(--muted-foreground, var(--boxel-450, #919191));
+          font-weight: var(--boxel-font-weight-medium, 500);
+        }
+        .value {
+          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+          font-weight: var(--boxel-font-weight-semibold, 600);
+          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+        }
+      </style>
+    </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {

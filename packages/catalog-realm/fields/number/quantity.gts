@@ -180,16 +180,17 @@ export default class QuantityField extends NumberField {
     }
 
     <template>
-      <div class='quantity-display'>
-        <span class='quantity-label'>Qty:</span>
-        <span class='quantity-value'>{{this.numericValue}}</span>
-      </div>
+      <span class='quantity-atom'>QTY:
+        {{this.numericValue}}</span>
 
       <style scoped>
-        .quantity-display {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
+        .quantity-atom {
+          font-size: var(--boxel-font-size-xs, 0.6875rem);
+          font-weight: var(--boxel-font-weight-semibold, 600);
+          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+          font-family: var(--font-sans, var(--boxel-font-family, system-ui, sans-serif));
+          text-transform: uppercase;
+          letter-spacing: var(--boxel-lsp-xs, 0.01em);
         }
       </style>
     </template>

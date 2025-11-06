@@ -90,24 +90,19 @@ export default class PercentageField extends NumberField {
       };
     }
 
-    get displayValue() {
-      return getFormattedDisplayValue(this.args.model, this.config);
+    get numericValue() {
+      return getNumericValue(this.args.model);
     }
 
     <template>
-      <span class='percentage-field-atom'>{{this.displayValue}}</span>
+      <span class='percentage-field-atom'>{{this.numericValue}}%</span>
 
       <style scoped>
         .percentage-field-atom {
-          display: inline-flex;
-          padding: 0.125rem 0.5rem;
-          background: var(--muted, var(--boxel-100));
-          border: 1px solid var(--border, var(--boxel-border));
-          border-radius: 0.25rem;
-          font-size: 0.8125rem;
-          font-weight: 600;
-          color: var(--foreground, var(--boxel-dark));
-          font-family: var(--font-mono, monospace);
+          font-size: var(--boxel-font-size-xs, 0.6875rem);
+          font-weight: var(--boxel-font-weight-semibold, 600);
+          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
         }
       </style>
     </template>
