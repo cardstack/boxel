@@ -8,9 +8,15 @@ export class SiteConfig extends CardDef {
 
   static isolated = class Isolated extends Component<typeof SiteConfig> {
     <template>
-      <div data-test-site-config-home>
+      <div class='site-config-home-card' data-test-site-config-home>
         <@fields.home />
       </div>
+      <style scoped>
+        .site-config-home-card {
+          width: 100%;
+          height: 100%;
+        }
+      </style>
     </template>
   };
 }
