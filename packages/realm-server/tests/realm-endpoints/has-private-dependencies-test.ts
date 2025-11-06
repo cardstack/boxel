@@ -143,7 +143,6 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     );
   });
 
-  // FIXME add ignored deleted records
   test('lists direct dependencies on private realms', async function (assert) {
     let { url: privateRealmURL } = await createRealm({
       name: 'Private Realm',
