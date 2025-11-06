@@ -10,7 +10,6 @@ import {
   extractCssVariables,
   parseCssGroups,
 } from './helpers/extract-css-variables.ts';
-import { FITTED_FORMATS } from './helpers/fitted-format.ts';
 import formatAge from './helpers/format-age.ts';
 import formatCountdown from './helpers/format-countdown.ts';
 import formatCurrency from './helpers/format-currency.ts';
@@ -75,7 +74,6 @@ export {
   entriesToCssRuleMap,
   eq,
   extractCssVariables,
-  FITTED_FORMATS,
   formatAge,
   formatCountdown,
   formatCurrency,
