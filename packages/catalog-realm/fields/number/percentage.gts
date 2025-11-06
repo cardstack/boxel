@@ -1,3 +1,4 @@
+import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
 import NumberField, {
   deserializeForUI,
@@ -138,18 +139,21 @@ export default class PercentageField extends NumberField {
 
     get percentageColor() {
       const pct = this.percentage;
-      if (pct < 33) return 'var(--success, #10b981)';
-      if (pct < 66) return 'var(--warning, #f59e0b)';
-      return 'var(--destructive, #ef4444)';
+      if (pct < 33) return 'var(--success, var(--boxel-green))';
+      if (pct < 66) return 'var(--warning, var(--boxel-orange))';
+      return 'var(--destructive, var(--boxel-red))';
+    }
+
+    get fillStyle() {
+      return htmlSafe(
+        `width: ${this.percentage}%; background: ${this.percentageColor}`,
+      );
     }
 
     <template>
       <div class='percentage-field-embedded'>
         <div class='percentage-bar'>
-          <div
-            class='percentage-fill'
-            style='width: {{this.percentage}}%; background: {{this.percentageColor}}'
-          ></div>
+          <div class='percentage-fill' style={{this.fillStyle}}></div>
           <span class='percentage-text'>{{this.displayValue}}</span>
         </div>
       </div>

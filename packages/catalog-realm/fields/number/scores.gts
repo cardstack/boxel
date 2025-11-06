@@ -120,22 +120,10 @@ export default class ScoresField extends NumberField {
       <div class='scores-field-embedded'>
         <span class='score-value'>{{this.displayValue}}</span>
         <div class='score-bars'>
-          <div
-            class='score-bar'
-            style='background: var(--destructive, #ef4444)'
-          ></div>
-          <div
-            class='score-bar'
-            style='background: var(--warning, #f97316)'
-          ></div>
-          <div
-            class='score-bar'
-            style='background: var(--accent, #eab308)'
-          ></div>
-          <div
-            class='score-bar'
-            style='background: var(--success, #22c55e)'
-          ></div>
+          <div class='score-bar score-bar-red'></div>
+          <div class='score-bar score-bar-orange'></div>
+          <div class='score-bar score-bar-yellow'></div>
+          <div class='score-bar score-bar-green'></div>
         </div>
       </div>
 
@@ -162,6 +150,18 @@ export default class ScoresField extends NumberField {
         .score-bar {
           width: 3px;
           border-radius: 1px;
+        }
+        .score-bar-red {
+          background: var(--destructive, var(--boxel-red));
+        }
+        .score-bar-orange {
+          background: var(--warning, var(--boxel-orange));
+        }
+        .score-bar-yellow {
+          background: var(--accent, var(--boxel-yellow));
+        }
+        .score-bar-green {
+          background: var(--success, var(--boxel-green));
         }
       </style>
     </template>

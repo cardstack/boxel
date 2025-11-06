@@ -1,3 +1,4 @@
+import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
 import NumberField, {
   deserializeForUI,
@@ -108,11 +109,19 @@ export default class SliderField extends NumberField {
       return getFormattedDisplayValue(this.args.model, this.config);
     }
 
+    get fillStyle() {
+      return htmlSafe(`width: ${this.percentage}%`);
+    }
+
+    get thumbStyle() {
+      return htmlSafe(`left: ${this.percentage}%`);
+    }
+
     <template>
       <div class='slider-field-embedded'>
         <div class='slider-track'>
-          <div class='slider-fill' style='width: {{this.percentage}}%'></div>
-          <div class='slider-thumb' style='left: {{this.percentage}}%'></div>
+          <div class='slider-fill' style={{this.fillStyle}}></div>
+          <div class='slider-thumb' style={{this.thumbStyle}}></div>
         </div>
         {{#if this.config.showValue}}
           <span class='slider-label'>{{this.displayValue}}</span>
