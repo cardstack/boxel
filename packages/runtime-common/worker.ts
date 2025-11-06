@@ -1,6 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
 import { parse } from 'date-fns';
-import type { IndexWriter, QueuePublisher, DBAdapter } from '.';
 import {
   Deferred,
   reportError,
@@ -15,13 +14,16 @@ import {
   logger,
   jobIdentity,
   userIdFromUsername,
+  fetchUserPermissions,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
   type ResponseWithNodeStream,
   type Prerenderer,
   type RealmPermissions,
-  fetchUserPermissions,
+  type IndexWriter,
+  type QueuePublisher,
+  type DBAdapter,
 } from '.';
 import { MatrixClient } from './matrix-client';
 import * as Tasks from './tasks';
