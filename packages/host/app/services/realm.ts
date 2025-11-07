@@ -211,6 +211,8 @@ class RealmResource {
     } catch (e: any) {
       console.error(`RealmService - Failed to login to realm: ${e.message}`, e);
       this.token = undefined;
+      const event = new CustomEvent('boxel-auth-error', { detail: e });
+      globalThis.dispatchEvent(event);
     } finally {
       this.loggingIn = undefined;
     }
