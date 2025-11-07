@@ -176,8 +176,19 @@ export default class SliderField extends NumberField {
       return htmlSafe(`left: ${this.percentage}%`);
     }
 
+    get hasRange() {
+      return (
+        typeof this.config?.min === 'number' &&
+        typeof this.config?.max === 'number'
+      );
+    }
+
     <template>
       <div class='slider-field-embedded'>
+        <div class='slider-card-header'>
+          <span class='slider-card-title'>Current value</span>
+          <span class='slider-card-value'>{{this.displayValue}}</span>
+        </div>
         <div class='slider-track'>
           <div class='slider-fill' style={{this.fillStyle}}></div>
           <div class='slider-thumb' style={{this.thumbStyle}}></div>
@@ -185,47 +196,89 @@ export default class SliderField extends NumberField {
         {{#if this.config.showValue}}
           <span class='slider-label'>{{this.displayValue}}</span>
         {{/if}}
+        {{#if this.hasRange}}
+          <div class='slider-range'>
+            <span>Min {{this.config.min}}</span>
+            <span>Max {{this.config.max}}</span>
+          </div>
+        {{/if}}
       </div>
 
       <style scoped>
         .slider-field-embedded {
           display: flex;
-          align-items: center;
-          gap: var(--boxel-sp);
+          flex-direction: column;
+          gap: var(--boxel-sp-xs, 0.5rem);
           width: 100%;
+          padding: var(--boxel-sp-sm, 0.75rem) var(--boxel-sp, 1rem);
+          background: var(--boxel-light, #fff);
+          border: 1px solid var(--boxel-200, #e8e8e8);
+          border-radius: var(--boxel-border-radius-lg, 0.75rem);
+          box-shadow: 0 6px 16px rgba(20, 17, 37, 0.08);
+        }
+        .slider-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--boxel-sp-sm, 0.75rem);
+        }
+        .slider-card-title {
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--boxel-450);
+        }
+        .slider-card-value {
+          font-size: 1.5rem;
+          font-weight: 700;
+          font-family: var(--boxel-monospace-font-family, monospace);
+          color: var(--boxel-700);
         }
         .slider-track {
           position: relative;
           flex: 1;
-          height: 0.5rem;
-          background: var(--border, var(--boxel-border));
-          border-radius: 0.25rem;
+          height: 0.75rem;
+          background: var(--boxel-100);
+          border-radius: 999px;
+          overflow: hidden;
+          border: 1px solid var(--boxel-200);
         }
         .slider-fill {
           position: absolute;
           height: 100%;
-          background: var(--primary, var(--boxel-purple));
-          border-radius: 0.25rem;
+          background: linear-gradient(
+            90deg,
+            var(--boxel-purple) 0%,
+            var(--boxel-teal) 100%
+          );
+          border-radius: inherit;
           transition: width 0.3s ease;
         }
         .slider-thumb {
           position: absolute;
           top: 50%;
           transform: translate(-50%, -50%);
-          width: 1rem;
-          height: 1rem;
-          background: white;
-          border: 2px solid var(--primary, var(--boxel-purple));
+          width: 1.25rem;
+          height: 1.25rem;
+          background: var(--boxel-light);
+          border: 2px solid var(--boxel-purple);
           border-radius: 50%;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 4px 12px rgba(102, 56, 255, 0.25);
           transition: left 0.3s ease;
         }
         .slider-label {
+          align-self: flex-end;
           font-weight: 600;
-          color: var(--primary, var(--boxel-purple));
-          min-width: 3rem;
-          text-align: right;
-          font-family: var(--font-mono, monospace);
+          color: var(--boxel-purple);
+          font-family: var(--boxel-monospace-font-family, monospace);
+        }
+        .slider-range {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.75rem;
+          color: var(--boxel-500);
+          font-family: var(--boxel-monospace-font-family, monospace);
         }
       </style>
     </template>

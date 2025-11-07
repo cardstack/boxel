@@ -1,15 +1,5 @@
-/**
- * Shared utilities for number field components
- * 
- * This module provides reusable helpers to reduce duplication across
- * all number field types (basic, slider, rating, percentage, etc.)
- */
+import type IconComponent from '@cardstack/boxel-icons/captions';
 
-
-
-/**
- * Check if a model has a value (not null/undefined)
- */
 export function hasValue(model: any): boolean {
   return model != null;
 }
@@ -154,6 +144,9 @@ export interface StatConfig extends DisplayConfig {
   min: number;
   max: number;
   label?: string;
+  placeholder?: string;
+  subtitle?: string;
+  icon?: typeof IconComponent;
 }
 
 /**
@@ -161,10 +154,12 @@ export interface StatConfig extends DisplayConfig {
  */
 export interface BadgeConfig extends DisplayConfig {
   type: 'badge'; // Required
-  label?: string;
   decimals?: number;
   min: number;
   max: number;
+  label?: string;
+  placeholder?: string;
+  icon?: typeof IconComponent;
 }
 
 /**

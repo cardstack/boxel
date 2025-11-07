@@ -118,54 +118,89 @@ export default class PercentageField extends NumberField {
       );
     }
 
-    get percentageColor() {
-      const pct = this.percentage;
-      if (pct < 33) return 'var(--success, var(--boxel-green))';
-      if (pct < 66) return 'var(--warning, var(--boxel-orange))';
-      return 'var(--destructive, var(--boxel-red))';
+    get fillStyle() {
+      return htmlSafe(`width: ${this.percentage}%;`);
     }
 
-    get fillStyle() {
-      return htmlSafe(
-        `width: ${this.percentage}%; background: ${this.percentageColor}`,
-      );
+    get rangeLabel() {
+      return `${this.config.min ?? 0} – ${this.config.max ?? 100}`;
     }
 
     <template>
       <div class='percentage-field-embedded'>
+        <div class='percentage-header'>
+          <div>
+            <span class='percentage-title'>Percent complete</span>
+            <span class='percentage-range'>{{this.rangeLabel}}</span>
+          </div>
+          <span class='percentage-value'>{{this.displayValue}}</span>
+        </div>
         <div class='percentage-bar'>
           <div class='percentage-fill' style={{this.fillStyle}}></div>
-          <span class='percentage-text'>{{this.displayValue}}</span>
         </div>
       </div>
 
       <style scoped>
         .percentage-field-embedded {
           width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxs, 0.65rem);
+          padding: var(--boxel-sp, 1rem);
+          border-radius: var(--boxel-border-radius-lg, 0.75rem);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: linear-gradient(
+            145deg,
+            rgba(255, 255, 255, 0.9),
+            rgba(245, 244, 255, 0.95)
+          );
+          box-shadow: 0 8px 18px rgba(15, 6, 56, 0.08);
+        }
+        .percentage-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: var(--boxel-sp);
+        }
+        .percentage-title {
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--boxel-450);
+          display: block;
+        }
+        .percentage-range {
+          font-size: 0.8125rem;
+          color: var(--boxel-500);
+          font-family: var(--boxel-monospace-font-family, monospace);
+        }
+        .percentage-value {
+          font-size: 2rem;
+          font-weight: 700;
+          font-family: var(--boxel-monospace-font-family, monospace);
+          color: var(--boxel-700);
         }
         .percentage-bar {
           position: relative;
-          height: 2rem;
-          background: var(--muted, var(--boxel-200));
-          border-radius: 0.5rem;
+          height: 0.85rem;
+          background: rgba(0, 0, 0, 0.08);
+          border-radius: 999px;
           overflow: hidden;
+          border: 1px solid rgba(0, 0, 0, 0.05);
         }
         .percentage-fill {
           position: absolute;
           height: 100%;
+          background: linear-gradient(
+            90deg,
+            var(--success, var(--boxel-green, #37eb77)) 0%,
+            var(--boxel-dark-green, #00ac3d) 100%
+          );
+          border-radius: inherit;
           transition:
             width 0.3s ease,
             background 0.3s ease;
-        }
-        .percentage-text {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          font-weight: 600;
-          color: var(--foreground, var(--boxel-dark));
-          font-size: 0.875rem;
-          z-index: 1;
         }
       </style>
     </template>

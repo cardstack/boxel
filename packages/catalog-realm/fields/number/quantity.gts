@@ -7,7 +7,12 @@ import { TextInputValidator } from 'https://cardstack.com/base/text-input-valida
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { lte, gte } from '@cardstack/boxel-ui/helpers';
-import { getNumericValue, clamp, type QuantityConfig } from './util/index';
+import {
+  getNumericValue,
+  clamp,
+  calculatePercentage,
+  type QuantityConfig,
+} from './util/index';
 
 interface Configuration {
   presentation: QuantityConfig;
@@ -158,6 +163,18 @@ export default class QuantityField extends NumberField {
       return getNumericValue(this.args.model);
     }
 
+    get percentage() {
+      return calculatePercentage(
+        this.numericValue,
+        this.config.min,
+        this.config.max,
+      );
+    }
+
+    get progressStyle() {
+      return `width: ${this.percentage}%`;
+    }
+
     increment = () => {
       if (!this.args.set) return;
       this.args.set(
@@ -174,35 +191,76 @@ export default class QuantityField extends NumberField {
 
     <template>
       <div class='quantity-field-embedded'>
-        <div class='quantity-display'>
-          <span class='quantity-label'>Qty:</span>
-          <span class='quantity-value'>{{this.numericValue}}</span>
+        <div class='quantity-card-header'>
+          <span class='quantity-card-title'>Quantity</span>
+          <span class='quantity-card-value'>{{this.numericValue}}</span>
+        </div>
+        <div class='quantity-card-meta'>
+          <span>Min {{this.config.min}}</span>
+          <span>Max {{this.config.max}}</span>
+        </div>
+        <div class='quantity-progress'>
+          <div class='quantity-progress-fill' style={{this.progressStyle}}></div>
         </div>
       </div>
 
       <style scoped>
         .quantity-field-embedded {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.5rem 0.75rem;
-          background: var(--muted, var(--boxel-100));
-          border-radius: 0.375rem;
-        }
-        .quantity-display {
           display: flex;
-          align-items: center;
-          gap: 0.5rem;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxs, 0.65rem);
+          padding: var(--boxel-sp, 1rem);
+          background: linear-gradient(
+            135deg,
+            rgba(63, 94, 251, 0.06) 0%,
+            rgba(252, 70, 107, 0.08) 100%
+          );
+          border-radius: var(--boxel-border-radius-lg, 0.75rem);
+          border: 1px solid var(--boxel-200);
         }
-        .quantity-label {
-          font-size: 0.875rem;
-          color: var(--muted-foreground, var(--boxel-450));
+        .quantity-card-header {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
         }
-        .quantity-value {
-          font-size: 1.125rem;
+        .quantity-card-title {
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--boxel-450);
+        }
+        .quantity-card-value {
+          font-size: 2rem;
           font-weight: 700;
-          font-family: var(--font-family, var(--boxel-font-family));
-          color: var(--foreground, var(--boxel-dark));
+          font-family: var(--boxel-monospace-font-family, monospace);
+          color: var(--boxel-700);
+        }
+        .quantity-card-meta {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.8125rem;
+          color: var(--boxel-500);
+          font-family: var(--boxel-monospace-font-family, monospace);
+        }
+        .quantity-progress {
+          position: relative;
+          width: 100%;
+          height: 0.4rem;
+          background: rgba(0, 0, 0, 0.08);
+          border-radius: 999px;
+          overflow: hidden;
+        }
+        .quantity-progress-fill {
+          position: absolute;
+          inset: 0 auto 0 0;
+          background: linear-gradient(
+            90deg,
+            var(--boxel-green),
+            var(--boxel-teal)
+          );
+          border-radius: inherit;
+          transition: width 0.3s ease;
         }
       </style>
     </template>

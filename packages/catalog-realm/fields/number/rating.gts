@@ -185,7 +185,7 @@ export default class RatingField extends NumberField {
           line-height: 1;
         }
         .star-filled {
-          color: var(--accent, var(--boxel-highlight));
+          color: var(--accent, var(--boxel-yellow, #ffd800));
         }
         .rating-label {
           font-size: 0.875rem;

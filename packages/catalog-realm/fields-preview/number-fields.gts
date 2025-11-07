@@ -1,3 +1,5 @@
+import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
+import CubeIcon from '@cardstack/boxel-icons/cube';
 import NumberField from '../fields/number';
 
 import {
@@ -69,6 +71,10 @@ export class NumberFieldsPreview extends CardDef {
         suffix: '',
         min: 0,
         max: 100,
+        label: 'Total Revenue',
+        subtitle: '↑ 12.5% vs last month',
+        placeholder: '$0.00',
+        icon: TrendingUpIcon,
       },
     },
   });
@@ -78,10 +84,11 @@ export class NumberFieldsPreview extends CardDef {
     configuration: {
       presentation: {
         type: 'badge',
-        label: 'NEW',
         decimals: 0,
         min: 0,
         max: 100,
+        label: 'Items',
+        icon: CubeIcon,
       },
     },
   });
@@ -137,140 +144,6 @@ export class NumberFieldsPreview extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
-    get basicNumberConfig() {
-      return `@field basicNumber = contains(NumberField);`;
-    }
-
-    get sliderNumberConfig() {
-      return `@field sliderNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'slider',
-      min: 0,
-      max: 100,
-      suffix: '%'
-    }
-  }
-});`;
-    }
-
-    get ratingNumberConfig() {
-      return `@field ratingNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'rating',
-      maxStars: 5
-    }
-  }
-});`;
-    }
-
-    get quantityNumberConfig() {
-      return `@field quantityNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'quantity',
-      min: 0,
-      max: 999
-    }
-  }
-});`;
-    }
-
-    get percentageNumberConfig() {
-      return `@field percentageNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'percentage',
-      min: 0,
-      max: 200
-    }
-  }
-});`;
-    }
-
-    get statNumberConfig() {
-      return `@field statNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'stat',
-      prefix: '+',
-      suffix: '',
-      min: 0,
-      max: 100
-    }
-  }
-});`;
-    }
-
-    get badgeNumberConfig() {
-      return `@field badgeNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'badge',
-      label: 'NEW',
-      decimals: 0,
-      min: 0,
-      max: 100
-    }
-  }
-});`;
-    }
-
-    get scoresNumberConfig() {
-      return `@field scoresNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'scores',
-      decimals: 0,
-      min: 0,
-      max: 1000
-    }
-  }
-});`;
-    }
-
-    get progressBarNumberConfig() {
-      return `@field progressBarNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'progress-bar',
-      min: 0,
-      max: 100,
-      label: 'Completion'
-    }
-  }
-});`;
-    }
-
-    get progressCircleNumberConfig() {
-      return `@field progressCircleNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'progress-circle',
-      min: 0,
-      max: 100
-    }
-  }
-});`;
-    }
-
-    get gaugeNumberConfig() {
-      return `@field gaugeNumber = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'gauge',
-      min: 0,
-      max: 100,
-      suffix: '%',
-      label: 'CPU Usage',
-      warningThreshold: 70,
-      dangerThreshold: 90
-    }
-  }
-});`;
-    }
-
     <template>
       <div class='number-fields-preview'>
         <header class='header'>
@@ -282,33 +155,31 @@ export class NumberFieldsPreview extends CardDef {
         <section class='field-section'>
           <div class='section-header'>
             <h2 class='section-title'>1. Default Number Field</h2>
-            <p class='section-description'>Standard number display with optional
-              prefix, suffix, and decimal configuration</p>
           </div>
           <div class='field-layout'>
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.basicNumber @format='edit' />
-              </div>
+              <@fields.basicNumber @format='edit' />
+
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.basicNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.basicNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.basicNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -322,26 +193,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.sliderNumber @format='edit' />
-              </div>
+              <@fields.sliderNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.sliderNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.sliderNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.sliderNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -354,26 +224,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.ratingNumber @format='edit' />
-              </div>
+              <@fields.ratingNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.ratingNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.ratingNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.ratingNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -386,26 +255,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.quantityNumber @format='edit' />
-              </div>
+              <@fields.quantityNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.quantityNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.quantityNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.quantityNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -419,26 +287,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.percentageNumber @format='edit' />
-              </div>
+              <@fields.percentageNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.percentageNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.percentageNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.percentageNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -452,26 +319,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.statNumber @format='edit' />
-              </div>
+              <@fields.statNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.statNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.statNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.statNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -485,26 +351,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.badgeNumber @format='edit' />
-              </div>
+              <@fields.badgeNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.badgeNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.badgeNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.badgeNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -517,26 +382,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.scoresNumber @format='edit' />
-              </div>
+              <@fields.scoresNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.scoresNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.scoresNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.scoresNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -550,26 +414,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.progressBarNumber @format='edit' />
-              </div>
+              <@fields.progressBarNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.progressBarNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.progressBarNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.progressBarNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -582,26 +445,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.progressCircleNumber @format='edit' />
-              </div>
+              <@fields.progressCircleNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.progressCircleNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.progressCircleNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.progressCircleNumberConfig}}</code></pre>
           </div>
         </section>
 
@@ -614,26 +476,25 @@ export class NumberFieldsPreview extends CardDef {
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <div class='field-box'>
-                <@fields.gaugeNumber @format='edit' />
-              </div>
+              <@fields.gaugeNumber @format='edit' />
             </div>
             <div class='display-column'>
-              <div class='column-header'>Atom View</div>
-              <p class='column-subtitle'>See how it renders</p>
+              <div class='column-header'>Display View</div>
               <div class='display-group'>
                 <div class='display-item'>
+                  <p>Atom:</p>
                   <div class='field-box'>
                     <@fields.gaugeNumber @format='atom' />
                   </div>
                 </div>
               </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.gaugeNumber @format='embedded' />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class='config-details'>
-            <div class='config-header'>Configuration Code</div>
-            <pre class='config-code'><code
-              >{{this.gaugeNumberConfig}}</code></pre>
           </div>
         </section>
       </div>
@@ -701,15 +562,9 @@ export class NumberFieldsPreview extends CardDef {
 
         .field-layout {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp-xxl);
           margin-bottom: var(--boxel-sp-lg);
-        }
-
-        @media (max-width: 900px) {
-          .field-layout {
-            grid-template-columns: 1fr;
-          }
         }
 
         .edit-column,
@@ -756,11 +611,11 @@ export class NumberFieldsPreview extends CardDef {
         }
 
         .field-box {
-          padding: var(--boxel-sp-lg);
+          padding: var(--boxel-sp);
           background: white;
           border: 1px solid var(--boxel-200);
           border-radius: var(--boxel-border-radius);
-          min-height: 80px;
+          min-height: 60px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -783,49 +638,6 @@ export class NumberFieldsPreview extends CardDef {
           font-weight: 600;
           color: var(--boxel-500);
           font-family: var(--boxel-font-family);
-        }
-
-        .config-details {
-          margin-top: var(--boxel-sp-xl);
-          padding-top: var(--boxel-sp-lg);
-          border-top: 1px solid var(--boxel-100);
-        }
-
-        .config-header {
-          font-size: 0.875rem;
-          font-weight: 600;
-          color: var(--boxel-purple);
-          margin-bottom: var(--boxel-sp-sm);
-          font-family: var(--boxel-font-family);
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxxs);
-        }
-
-        .config-header::before {
-          content: '<>';
-          font-size: 1rem;
-          font-weight: 700;
-        }
-
-        .config-code {
-          margin: 0;
-          padding: var(--boxel-sp-lg);
-          background: #1e1e1e;
-          border: 1px solid #333;
-          border-radius: var(--boxel-border-radius);
-          overflow-x: auto;
-          overflow-y: hidden;
-          box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .config-code code {
-          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-          font-size: 0.8125rem;
-          color: #d4d4d4;
-          line-height: 1.6;
-          white-space: pre;
-          display: block;
         }
       </style>
     </template>

@@ -15,16 +15,16 @@
         "thumbnailURL": null
       },
       "statNumber": 100,
-      "badgeNumber": 100,
+      "badgeNumber": 20,
       "basicNumber": 1000,
-      "gaugeNumber": null,
+      "gaugeNumber": 100,
       "ratingNumber": 1,
       "scoresNumber": 1000,
-      "sliderNumber": 56,
+      "sliderNumber": 41,
       "quantityNumber": 0,
-      "percentageNumber": 200,
+      "percentageNumber": 20,
       "progressBarNumber": 100,
-      "progressCircleNumber": 30
+      "progressCircleNumber": 100
     },
     "relationships": {
       "cardInfo.theme": {
