@@ -364,6 +364,103 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     );
   });
 
+  test('detects private dependencies referenced through local modules', async function (assert) {
+    let { url: privateRealmURL } = await createRealm({
+      name: 'Private Realm For Local Modules',
+      files: {
+        'secret-card.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class SecretCard extends CardDef {
+            @field name = contains(StringField);
+          }
+        `,
+      },
+    });
+
+    let { url: sourceRealmURL, realm: sourceRealm } = await createRealm({
+      name: 'Source Realm With Local Modules',
+      files: {
+        'helper-card.gts': `
+          import {
+            contains,
+            field,
+            linksTo,
+            CardDef,
+          } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { SecretCard } from "${privateRealmURL}secret-card";
+
+          export class HelperCard extends CardDef {
+            @field label = contains(StringField);
+            @field secret = linksTo(() => SecretCard);
+          }
+        `,
+        'source-card.gts': `
+          import {
+            contains,
+            field,
+            linksTo,
+            CardDef,
+          } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { HelperCard } from "./helper-card";
+
+          export class SourceCard extends CardDef {
+            @field label = contains(StringField);
+            @field helper = linksTo(() => HelperCard);
+          }
+        `,
+        'source-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              label: 'Local helper label',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './source-card',
+                name: 'SourceCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let response = await request
+      .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
+      .set('Accept', SupportedMimeType.JSONAPI)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+      );
+
+    assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.false(
+      response.body.data.attributes.publishable,
+      'Realm is not publishable due to helper referencing private realm',
+    );
+    assert.strictEqual(
+      response.body.data.attributes.violations.length,
+      1,
+      'one violating resource is reported',
+    );
+    let violation = response.body.data.attributes.violations[0];
+    assert.strictEqual(
+      violation.resource,
+      `${sourceRealmURL}source-instance.json`,
+      'instance is identified as violating resource',
+    );
+    assert.true(
+      violation.externalDependencies.some((dep: any) =>
+        String(dep.dependency).startsWith(`${privateRealmURL}secret-card`),
+      ),
+      'violation references the private realm dependency',
+    );
+  });
+
   test('handles circular dependencies', async function (assert) {
     let { url: privateRealmURL, realm: privateRealm } = await createRealm({
       name: 'Circular Private Realm',

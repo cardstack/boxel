@@ -108,9 +108,6 @@ export async function analyzeRealmPublishability({
         }
 
         if (dependencyRealmURL === normalizedRealmURL) {
-          if (!realmResources.has(dependency)) {
-            continue;
-          }
           let subchains = await collectChains(dependency, updatedAncestry);
           for (let subchain of subchains) {
             chains.push([resourceUrl, ...subchain]);
