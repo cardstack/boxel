@@ -33,10 +33,10 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
 
         display: flex;
         flex-direction: column;
-        height: 100%;
       }
       .boxel-accordion-container {
-        --boxel-accordion-trigger-padding-inline: var(--boxel-sp-xs);
+        --boxel-accordion-item-padding-inline: var(--boxel-sp-xxs);
+        --boxel-accordion-item-padding-block: var(--boxel-sp-xxxs);
 
         border: var(--accordion-border);
         border-radius: var(--boxel-border-radius);

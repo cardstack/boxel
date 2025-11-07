@@ -58,8 +58,22 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   </div>
   <style scoped>
     @layer boxelComponentL1 {
+      .boxel-accordion-item {
+        min-height: var(
+          --boxel-accordion-item-min-height,
+          var(--boxel-form-control-height)
+        );
+        padding-inline: var(--boxel-accordion-item-padding-inline, 0);
+        padding-block: var(--boxel-accordion-item-padding-block, 2px);
+      }
       .boxel-accordion-item:not(:first-child) {
-        border-top: var(--boxel-accordion-item-border, var(--accordion-border));
+        border-top: var(
+          --boxel-accordion-item-border,
+          var(
+            --accordion-border,
+            1px solid var(--border, var(--boxel-border-color))
+          )
+        );
       }
 
       .boxel-accordion-item-title {
@@ -79,10 +93,6 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
         gap: var(--boxel-sp-xxs);
         width: 100%;
         max-width: 100%;
-        min-height: var(
-          --boxel-accordion-trigger-min-height,
-          var(--boxel-form-control-height)
-        );
         padding-block: var(
           --boxel-accordion-trigger-padding-block,
           var(--boxel-sp-xs)
