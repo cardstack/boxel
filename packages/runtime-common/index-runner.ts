@@ -15,6 +15,7 @@ import {
   Deferred,
   RealmPaths,
   isIgnored,
+  trimExecutableExtension,
   type IndexWriter,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -484,6 +485,10 @@ export class IndexRunner {
       this.stats.modulesIndexed++;
     }
 
+    let depsForDefinitions = [
+      ...deps,
+      trimExecutableExtension(new URL(url)).href,
+    ];
     for (let [codeRefURL, detail] of Object.entries(definitions)) {
       if (detail.type === 'error') {
         await this.batch.updateEntry(new URL(codeRefURL), detail);
@@ -495,7 +500,7 @@ export class IndexRunner {
           definition: detail.definition,
           lastModified,
           resourceCreatedAt,
-          deps: new Set(deps),
+          deps: new Set(depsForDefinitions),
           types: detail.types,
         });
         this.stats.definitionsIndexed++;
