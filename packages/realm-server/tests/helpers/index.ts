@@ -142,7 +142,10 @@ let fastbootState:
   | undefined;
 
 export function cleanWhiteSpace(text: string) {
-  return text.replace('<!---->', '').replace(/\s+/g, ' ').trim();
+  return text
+    .replace(/<!---->/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function createVirtualNetwork() {
