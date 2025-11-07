@@ -6,12 +6,21 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { hasValue, getFormattedDisplayValue, clamp, type StatConfig } from './util/index';
+import {
+  hasValue,
+  getFormattedDisplayValue,
+  clamp,
+  type StatConfig,
+} from './util/index';
+
+interface Configuration {
+  presentation: StatConfig;
+}
 
 export default class StatField extends NumberField {
   static displayName = 'Stat Number Field';
 
-  static configuration = {
+  static configuration: Configuration = {
     presentation: {
       type: 'stat',
       prefix: '',
@@ -23,10 +32,9 @@ export default class StatField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config(): StatConfig {
-      return this.args.configuration?.presentation ?? {};
+    get config() {
+      return this.args.configuration?.presentation;
     }
-
     get inputValue() {
       // Return null for empty input, otherwise the numeric value
       return hasValue(this.args.model) ? this.args.model : null;
@@ -65,8 +73,8 @@ export default class StatField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config(): StatConfig {
-      return this.args.configuration?.presentation ?? {};
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get displayValue() {
@@ -84,13 +92,20 @@ export default class StatField extends NumberField {
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-5xs, 0.25rem);
-          padding: calc(var(--boxel-sp-6xs, 0.125rem) * 1.5) var(--boxel-sp-xs, 0.5rem);
+          padding: calc(var(--boxel-sp-6xs, 0.125rem) * 1.5)
+            var(--boxel-sp-xs, 0.5rem);
           background: var(--primary, var(--boxel-purple, #6638ff));
           color: var(--primary-foreground, var(--boxel-light, #ffffff));
-          border-radius: var(--radius, var(--boxel-border-radius-xl, 0.9375rem));
+          border-radius: var(
+            --radius,
+            var(--boxel-border-radius-xl, 0.9375rem)
+          );
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
-          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
           line-height: 1;
         }
         .stat-indicator {
@@ -110,8 +125,8 @@ export default class StatField extends NumberField {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config(): StatConfig {
-      return this.args.configuration?.presentation ?? {};
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get displayValue() {

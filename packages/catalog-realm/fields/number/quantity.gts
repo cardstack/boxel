@@ -9,10 +9,14 @@ import { on } from '@ember/modifier';
 import { lte, gte } from '@cardstack/boxel-ui/helpers';
 import { getNumericValue, clamp, type QuantityConfig } from './util/index';
 
+interface Configuration {
+  presentation: QuantityConfig;
+}
+
 export default class QuantityField extends NumberField {
   static displayName = 'Quantity Number Field';
 
-  static configuration = {
+  static configuration: Configuration = {
     presentation: {
       type: 'quantity',
       min: 0,
@@ -21,13 +25,8 @@ export default class QuantityField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config(): QuantityConfig {
-      return (
-        this.args.configuration?.presentation ?? {
-          min: 0,
-          max: 999,
-        }
-      );
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {
@@ -120,7 +119,10 @@ export default class QuantityField extends NumberField {
           border-radius: var(--boxel-border-radius-xs, 0.25rem);
           background: var(--background, var(--boxel-light, #ffffff));
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
           outline: none;
           transition: border-color 0.2s;
         }
@@ -148,13 +150,8 @@ export default class QuantityField extends NumberField {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config(): QuantityConfig {
-      return (
-        this.args.configuration?.presentation ?? {
-          min: 0,
-          max: 999,
-        }
-      );
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {
@@ -212,13 +209,8 @@ export default class QuantityField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config(): QuantityConfig {
-      return (
-        this.args.configuration?.presentation ?? {
-          min: 0,
-          max: 999,
-        }
-      );
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {
@@ -234,7 +226,10 @@ export default class QuantityField extends NumberField {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(--font-sans, var(--boxel-font-family, system-ui, sans-serif));
+          font-family: var(
+            --font-sans,
+            var(--boxel-font-family, system-ui, sans-serif)
+          );
           text-transform: uppercase;
           letter-spacing: var(--boxel-lsp-xs, 0.01em);
         }

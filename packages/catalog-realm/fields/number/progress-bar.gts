@@ -6,12 +6,22 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { BoxelInput, ProgressBar } from '@cardstack/boxel-ui/components';
-import { hasValue, clamp, getNumericValue, calculatePercentage, type ProgressBarConfig } from './util/index';
+import {
+  hasValue,
+  clamp,
+  getNumericValue,
+  calculatePercentage,
+  type ProgressBarConfig,
+} from './util/index';
+
+interface Configuration {
+  presentation: ProgressBarConfig;
+}
 
 export default class ProgressBarField extends NumberField {
   static displayName = 'Progress Bar Number Field';
 
-  static configuration = {
+  static configuration: Configuration = {
     presentation: {
       type: 'progress-bar',
       min: 0,
@@ -21,13 +31,8 @@ export default class ProgressBarField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config(): ProgressBarConfig {
-      return {
-        min: 0,
-        max: 100,
-        label: 'Progress',
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get inputValue() {
@@ -68,13 +73,8 @@ export default class ProgressBarField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config(): ProgressBarConfig {
-      return {
-        min: 0,
-        max: 100,
-        label: 'Progress',
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {
@@ -104,7 +104,10 @@ export default class ProgressBarField extends NumberField {
           align-items: center;
           gap: var(--boxel-sp-5xs, 0.25rem);
           font-size: var(--boxel-font-size-xs, 0.6875rem);
-          font-family: var(--font-sans, var(--boxel-font-family, system-ui, sans-serif));
+          font-family: var(
+            --font-sans,
+            var(--boxel-font-family, system-ui, sans-serif)
+          );
         }
         .label {
           color: var(--muted-foreground, var(--boxel-450, #919191));
@@ -113,20 +116,18 @@ export default class ProgressBarField extends NumberField {
         .value {
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
           font-weight: var(--boxel-font-weight-semibold, 600);
-          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
         }
       </style>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config(): ProgressBarConfig {
-      return {
-        min: 0,
-        max: 100,
-        label: 'Progress',
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {

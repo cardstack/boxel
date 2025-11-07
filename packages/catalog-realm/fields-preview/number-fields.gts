@@ -121,6 +121,21 @@ export class NumberFieldsPreview extends CardDef {
     },
   });
 
+  // Gauge field
+  @field gaugeNumber = contains(NumberField, {
+    configuration: {
+      presentation: {
+        type: 'gauge',
+        min: 0,
+        max: 100,
+        suffix: '%',
+        label: 'CPU Usage',
+        warningThreshold: 70,
+        dangerThreshold: 90,
+      },
+    },
+  });
+
   static isolated = class Isolated extends Component<typeof this> {
     get basicNumberConfig() {
       return `@field basicNumber = contains(NumberField);`;
@@ -235,6 +250,22 @@ export class NumberFieldsPreview extends CardDef {
       type: 'progress-circle',
       min: 0,
       max: 100
+    }
+  }
+});`;
+    }
+
+    get gaugeNumberConfig() {
+      return `@field gaugeNumber = contains(NumberField, {
+  configuration: {
+    presentation: {
+      type: 'gauge',
+      min: 0,
+      max: 100,
+      suffix: '%',
+      label: 'CPU Usage',
+      warningThreshold: 70,
+      dangerThreshold: 90
     }
   }
 });`;
@@ -571,6 +602,38 @@ export class NumberFieldsPreview extends CardDef {
             <div class='config-header'>Configuration Code</div>
             <pre class='config-code'><code
               >{{this.progressCircleNumberConfig}}</code></pre>
+          </div>
+        </section>
+
+        <section class='field-section'>
+          <div class='section-header'>
+            <h2 class='section-title'>11. Gauge Field</h2>
+            <p class='section-description'>Gauge display with thresholds</p>
+          </div>
+          <div class='field-layout'>
+            <div class='edit-column'>
+              <div class='column-header'>Edit Mode</div>
+              <p class='column-subtitle'>Change the value below</p>
+              <div class='field-box'>
+                <@fields.gaugeNumber @format='edit' />
+              </div>
+            </div>
+            <div class='display-column'>
+              <div class='column-header'>Atom View</div>
+              <p class='column-subtitle'>See how it renders</p>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <div class='field-box'>
+                    <@fields.gaugeNumber @format='atom' />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class='config-details'>
+            <div class='config-header'>Configuration Code</div>
+            <pre class='config-code'><code
+              >{{this.gaugeNumberConfig}}</code></pre>
           </div>
         </section>
       </div>

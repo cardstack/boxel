@@ -6,12 +6,22 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { BoxelInput, ProgressRadial } from '@cardstack/boxel-ui/components';
-import { hasValue, clamp, getNumericValue, calculatePercentage, type ProgressCircleConfig } from './util/index';
+import {
+  hasValue,
+  clamp,
+  getNumericValue,
+  calculatePercentage,
+  type ProgressCircleConfig,
+} from './util/index';
+
+interface Configuration {
+  presentation: ProgressCircleConfig;
+}
 
 export default class ProgressCircleField extends NumberField {
   static displayName = 'Progress Circle Number Field';
 
-  static configuration = {
+  static configuration: Configuration = {
     presentation: {
       type: 'progress-circle',
       min: 0,
@@ -20,12 +30,8 @@ export default class ProgressCircleField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config(): ProgressCircleConfig {
-      return {
-        min: 0,
-        max: 100,
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get inputValue() {
@@ -66,12 +72,8 @@ export default class ProgressCircleField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config(): ProgressCircleConfig {
-      return {
-        min: 0,
-        max: 100,
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {
@@ -145,19 +147,18 @@ export default class ProgressCircleField extends NumberField {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
         }
       </style>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config(): ProgressCircleConfig {
-      return {
-        min: 0,
-        max: 100,
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {

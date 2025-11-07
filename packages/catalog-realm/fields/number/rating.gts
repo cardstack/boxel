@@ -10,10 +10,14 @@ import { fn, array } from '@ember/helper';
 import { lte } from '@cardstack/boxel-ui/helpers';
 import { getNumericValue, hasValue, type RatingConfig } from './util/index';
 
+interface Configuration {
+  presentation: RatingConfig;
+}
+
 export default class RatingField extends NumberField {
   static displayName = 'Rating Number Field';
 
-  static configuration = {
+  static configuration: Configuration = {
     presentation: {
       type: 'rating',
       maxStars: 5,
@@ -21,10 +25,8 @@ export default class RatingField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config(): RatingConfig {
-      return this.args.configuration?.presentation ?? {
-        maxStars: 5,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {
@@ -62,7 +64,9 @@ export default class RatingField extends NumberField {
           color: var(--muted, var(--boxel-300, #d1d1d1));
           cursor: pointer;
           padding: 0;
-          transition: transform 0.1s, color 0.2s;
+          transition:
+            transform 0.1s,
+            color 0.2s;
         }
         .star-btn:hover {
           transform: scale(1.15);
@@ -88,10 +92,8 @@ export default class RatingField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config(): RatingConfig {
-      return this.args.configuration?.presentation ?? {
-        maxStars: 5,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get hasValue() {
@@ -130,17 +132,18 @@ export default class RatingField extends NumberField {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
         }
       </style>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config(): RatingConfig {
-      return this.args.configuration?.presentation ?? {
-        maxStars: 5,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get numericValue() {

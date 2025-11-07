@@ -6,12 +6,21 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { hasValue, getFormattedDisplayValue, clamp, type ScoresConfig } from './util/index';
+import {
+  hasValue,
+  getFormattedDisplayValue,
+  clamp,
+  type ScoresConfig,
+} from './util/index';
+
+interface Configuration {
+  presentation: ScoresConfig;
+}
 
 export default class ScoresField extends NumberField {
   static displayName = 'Scores Number Field';
 
-  static configuration = {
+  static configuration: Configuration = {
     presentation: {
       type: 'scores',
       decimals: 0,
@@ -21,13 +30,8 @@ export default class ScoresField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config(): ScoresConfig {
-      return {
-        min: 0,
-        max: 100,
-        decimals: 0,
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get inputValue() {
@@ -68,13 +72,8 @@ export default class ScoresField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config(): ScoresConfig {
-      return {
-        min: 0,
-        max: 100,
-        decimals: 0,
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get displayValue() {
@@ -89,7 +88,14 @@ export default class ScoresField extends NumberField {
           fill='none'
           xmlns='http://www.w3.org/2000/svg'
         >
-          <rect x='2' y='10' width='3' height='4' rx='0.5' fill='currentColor' />
+          <rect
+            x='2'
+            y='10'
+            width='3'
+            height='4'
+            rx='0.5'
+            fill='currentColor'
+          />
           <rect
             x='6.5'
             y='6'
@@ -98,7 +104,14 @@ export default class ScoresField extends NumberField {
             rx='0.5'
             fill='currentColor'
           />
-          <rect x='11' y='2' width='3' height='12' rx='0.5' fill='currentColor' />
+          <rect
+            x='11'
+            y='2'
+            width='3'
+            height='12'
+            rx='0.5'
+            fill='currentColor'
+          />
         </svg>
         <span class='value'>{{this.displayValue}}</span>
       </span>
@@ -118,20 +131,18 @@ export default class ScoresField extends NumberField {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
         }
       </style>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config(): ScoresConfig {
-      return {
-        min: 0,
-        max: 100,
-        decimals: 0,
-        ...this.args.configuration?.presentation,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get displayValue() {

@@ -24,6 +24,7 @@ import BadgeField from './number/badge';
 import ScoresField from './number/scores';
 import ProgressBarField from './number/progress-bar';
 import ProgressCircleField from './number/progress-circle';
+import GaugeField from './number/gauge';
 
 // Register all field types
 registerFieldType('slider', SliderField);
@@ -35,6 +36,7 @@ registerFieldType('badge', BadgeField);
 registerFieldType('scores', ScoresField);
 registerFieldType('progress-bar', ProgressBarField);
 registerFieldType('progress-circle', ProgressCircleField);
+registerFieldType('gauge', GaugeField);
 
 export default class NumberField extends BaseNumberField {
   static displayName = 'Number Field';

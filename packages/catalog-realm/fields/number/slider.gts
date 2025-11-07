@@ -14,10 +14,14 @@ import {
   type SliderConfig,
 } from './util/index';
 
+interface Configuration {
+  presentation: SliderConfig;
+}
+
 export default class SliderField extends NumberField {
   static displayName = 'Slider Number Field';
 
-  static configuration = {
+  static configuration: Configuration = {
     presentation: {
       type: 'slider',
       min: 0,
@@ -30,12 +34,8 @@ export default class SliderField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config(): SliderConfig {
-      return this.args.configuration?.presentation ?? {
-        min: 0,
-        max: 100,
-        decimals: 0,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get displayValue() {
@@ -88,12 +88,8 @@ export default class SliderField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config(): SliderConfig {
-      return this.args.configuration?.presentation ?? {
-        min: 0,
-        max: 100,
-        decimals: 0,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get percentage() {
@@ -142,7 +138,10 @@ export default class SliderField extends NumberField {
           border-radius: var(--boxel-border-radius-xs, 0.125rem);
         }
         .slider-value {
-          font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
@@ -152,12 +151,8 @@ export default class SliderField extends NumberField {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config(): SliderConfig {
-      return this.args.configuration?.presentation ?? {
-        min: 0,
-        max: 100,
-        decimals: 0,
-      };
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get percentage() {
