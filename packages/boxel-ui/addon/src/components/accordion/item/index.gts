@@ -1,9 +1,9 @@
+import ChevronRight from '@cardstack/boxel-icons/chevron-right';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
 import cn from '../../../helpers/cn.ts';
 import optional from '../../../helpers/optional.ts';
-import AccordionIcon from '../../../icons/dropdown-arrow-down.gts';
 
 export interface AccordionItemSignature {
   Args: {
@@ -22,113 +22,125 @@ export interface AccordionItemSignature {
 }
 
 const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
-  <div class={{cn 'accordion-item' @className open=@isOpen}} ...attributes>
-    <h3 class='accordion-item-title'>
+  <div
+    class={{cn 'boxel-accordion-item' @className open=@isOpen}}
+    ...attributes
+  >
+    <h3 class='boxel-accordion-item-title'>
       <button
-        class='accordion-item-trigger'
+        class='boxel-accordion-item-trigger'
         {{on 'click' (optional @onClick)}}
         id={{@id}}
         aria-controls='section-{{@id}}'
-        aria-expanded='{{@isOpen}}'
-        aria-disabled={{@disabled}}
+        aria-expanded={{@isOpen}}
         disabled={{@disabled}}
       >
-        <AccordionIcon class='accordion-item-icon' width='10' height='10' />
+        <ChevronRight
+          class='boxel-accordion-item-icon'
+          width='14'
+          height='14'
+        />
         {{yield to='title'}}
       </button>
     </h3>
     <div
-      class={{cn 'accordion-item-content' @contentClass}}
+      class={{cn 'boxel-accordion-item-content' @contentClass}}
       data-state={{if @isOpen 'open' 'closed'}}
       id='section-{{@id}}'
       role='region'
       aria-labelledby={{@id}}
+      aria-hidden={{if @isOpen 'false' 'true'}}
     >
-      {{#if @isOpen}}
+      <div class='boxel-accordion-item-content-inner'>
         {{yield to='content'}}
-      {{/if}}
+      </div>
     </div>
   </div>
   <style scoped>
     @layer boxelComponentL1 {
-      .accordion-item {
-        --accordion-item-title-min-height: var(--boxel-form-control-height);
-        --accordion-item-content-min-height: var(--boxel-form-control-height);
-        --accordion-item-trigger-padding: var(--boxel-sp-xs);
-        --accordion-icon-rotation: rotate(-90deg);
-        --accordion-transition: 200ms ease-out;
+      .boxel-accordion-item:not(:first-child) {
+        border-top: var(--boxel-accordion-item-border, var(--accordion-border));
       }
-      .accordion-item.open {
-        --accordion-icon-rotation: rotate(0deg);
-      }
-      .accordion-item-title {
+
+      .boxel-accordion-item-title {
         margin: 0;
         font-weight: var(
-          --accordion-title-font-weight,
+          --boxel-accordion-title-font-weight,
           var(--boxel-font-weight-semibold)
         );
         font-size: inherit;
         line-height: inherit;
         letter-spacing: inherit;
-        min-height: var(--accordion-item-title-min-height);
       }
-      .accordion-item-trigger {
+
+      .boxel-accordion-item-trigger {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
-        padding: var(--accordion-item-trigger-padding);
+        width: 100%;
+        max-width: 100%;
+        min-height: var(
+          --boxel-accordion-trigger-min-height,
+          var(--boxel-form-control-height)
+        );
+        padding-block: var(
+          --boxel-accordion-trigger-padding-block,
+          var(--boxel-sp-xs)
+        );
+        padding-inline: var(--boxel-accordion-trigger-padding-inline, 0);
         color: inherit;
         background-color: transparent;
         border: none;
-        text-align: left;
-        width: 100%;
-        max-width: 100%;
+        text-align: start;
       }
-      .accordion-item-trigger:focus-visible {
+      .boxel-accordion-item-trigger:focus-visible {
         outline-color: var(--ring, var(--boxel-highlight));
       }
-      .accordion-item-trigger:hover:not(:disabled) {
+      .boxel-accordion-item-trigger:hover:not(:disabled) {
         cursor: pointer;
       }
-      .accordion-item-trigger:disabled {
+      .boxel-accordion-item-trigger:disabled {
         opacity: 0.5;
       }
-      .accordion-item-icon {
+
+      .boxel-accordion-item-icon {
         flex-shrink: 0;
-        transform: var(--accordion-icon-rotation);
-        transition: transform var(--accordion-transition);
       }
-      .accordion-item-content {
+      [aria-expanded] .boxel-accordion-item-icon {
+        transform: rotate(90deg);
+      }
+
+      .boxel-accordion-item-content {
+        display: grid;
+        grid-template-rows: 0fr;
+      }
+      .boxel-accordion-item-content[data-state='open'] {
+        grid-template-rows: 1fr;
+      }
+      .boxel-accordion-item-content-inner {
         overflow: hidden;
       }
-      .accordion-item-content[data-state='closed'] {
-        animation: slideUp var(--accordion-transition);
-      }
-      .accordion-item-content[data-state='open'] {
-        min-height: var(--accordion-item-content-min-height);
-        animation: slideDown var(--accordion-transition);
-      }
-    }
 
-    @keyframes slideDown {
-      from {
-        min-height: 0;
-        height: 0;
-      }
-      to {
-        min-height: var(--accordion-item-content-min-height);
-        height: max-content;
-      }
-    }
+      @media (prefers-reduced-motion: no-preference) {
+        .boxel-accordion-item {
+          --_bai-transition: var(--boxel-accordion-transition, 200ms ease-out);
+        }
 
-    @keyframes slideUp {
-      from {
-        height: max-content;
-        min-height: var(--accordion-item-content-min-height);
-      }
-      to {
-        height: 0;
-        min-height: 0;
+        .boxel-accordion-item-icon {
+          transition: transform var(--_bai-transition);
+        }
+
+        .boxel-accordion-item-content {
+          transition: grid-template-rows var(--_bai-transition);
+        }
+        .boxel-accordion-item-content-inner {
+          transition: opacity var(--_bai-transition);
+          opacity: 0;
+        }
+        .boxel-accordion-item-content[data-state='open']
+          .boxel-accordion-item-content-inner {
+          opacity: 1;
+        }
       }
     }
   </style>
