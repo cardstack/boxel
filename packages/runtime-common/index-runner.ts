@@ -15,7 +15,6 @@ import {
   Deferred,
   RealmPaths,
   isIgnored,
-  CardStoreWithErrors,
   type IndexWriter,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -170,7 +169,6 @@ export class IndexRunner {
       } in ${Date.now() - start} ms`,
     );
     return {
-      invalidations: [...(invalidations ?? [])].map((url) => url.href),
       ignoreData: current.#ignoreData,
       stats: current.stats,
     };
@@ -362,10 +360,7 @@ export class IndexRunner {
     return this.batch.invalidations;
   }
 
-  private async visitFile(
-    url: URL,
-    store?: CardStoreWithErrors,
-  ): Promise<void> {
+  private async visitFile(url: URL): Promise<void> {
     if (isIgnored(this.#realmURL, this.ignoreMap, url)) {
       return;
     }
@@ -401,10 +396,6 @@ export class IndexRunner {
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url);
     } else {
-      if (!store) {
-        store = new CardStoreWithErrors(this.#fetch);
-      }
-
       if (url.href.endsWith('.json')) {
         let resource;
 

@@ -25,7 +25,6 @@ import {
   getFieldDefinitions,
   cleanCapturedHTML,
   modulesConsumedInMeta,
-  CardStoreWithErrors,
   type ResolvedCodeRef,
   type Definition,
   type Batch,
@@ -62,15 +61,17 @@ import ENV from '@cardstack/host/config/environment';
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import {
+  type RenderCard,
+  type RenderCardParams,
+  type Render,
+  CardStoreWithErrors,
+} from '../services/render-service';
+
 import { directModuleDeps, recursiveModuleDeps } from './prerender-util';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
-import type {
-  RenderCard,
-  RenderCardParams,
-  Render,
-} from '../services/render-service';
 
 const log = logger('current-run');
 const perfLog = logger('index-perf');

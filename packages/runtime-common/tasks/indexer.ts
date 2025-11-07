@@ -51,7 +51,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     });
 
     let _fetch = await getAuthedFetch(args);
-    let reader = await getReader(_fetch, realmURL);
+    let reader = getReader(_fetch, realmURL);
     let currentRun = new IndexRunner({
       realmURL: new URL(realmURL),
       reader,
@@ -100,7 +100,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     });
 
     let _fetch = await getAuthedFetch(args);
-    let reader = await getReader(_fetch, realmURL);
+    let reader = getReader(_fetch, realmURL);
     let currentRun = new IndexRunner({
       realmURL: new URL(realmURL),
       reader,
