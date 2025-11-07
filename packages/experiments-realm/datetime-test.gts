@@ -136,7 +136,6 @@ export class DateTimeTest extends CardDef {
         {{#if @model.testDate}}
           <div class='test-sections'>
 
-            <!-- Size/Preset Variants -->
             <section class='test-section'>
               <h2>Size/Preset Variants</h2>
               <div class='test-grid'>
@@ -191,7 +190,6 @@ export class DateTimeTest extends CardDef {
               </div>
             </section>
 
-            <!-- Kind Variants -->
             <section class='test-section'>
               <h2>Kind Variants</h2>
               <table class='test-table'>
@@ -313,7 +311,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Style Combinations -->
             <section class='test-section'>
               <h2>Date & Time Styles</h2>
               <table class='test-table'>
@@ -404,7 +401,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Custom Format Strings (Day.js) -->
             <section class='test-section'>
               <h2>Custom Format Strings (Day.js)</h2>
               <table class='test-table'>
@@ -487,7 +483,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Relative Time - Advanced Options -->
             <section class='test-section'>
               <h2>Relative Time - Advanced Options</h2>
               <table class='test-table'>
@@ -540,7 +535,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Multi-Unit Precision -->
             <section class='test-section'>
               <h2>Multi-Unit Precision</h2>
               <p class='section-intro'>Show multiple time units for more precise
@@ -654,7 +648,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Tiny Preset Scenarios -->
             <section class='test-section'>
               <h2>Tiny Preset Scenarios</h2>
               <table class='test-table'>
@@ -788,7 +781,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Hour Formats -->
             <section class='test-section'>
               <h2>Hour Formats</h2>
               <table class='test-table'>
@@ -845,7 +837,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Month Display Options -->
             <section class='test-section'>
               <h2>Month Display Options</h2>
               <table class='test-table'>
@@ -917,7 +908,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Locale Examples -->
             <section class='test-section'>
               <h2>Different Locales</h2>
               <table class='test-table'>
@@ -1000,7 +990,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- TimeZone Examples -->
             <section class='test-section'>
               <h2>Different TimeZones</h2>
               <table class='test-table'>
@@ -1082,7 +1071,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Fallback Handling -->
             <section class='test-section'>
               <h2>Fallback & Edge Cases</h2>
               <table class='test-table'>
@@ -1117,7 +1105,6 @@ export class DateTimeTest extends CardDef {
               </table>
             </section>
 
-            <!-- Engine Selection -->
             <section class='test-section'>
               <h2>Engine Selection</h2>
               <table class='test-table'>
