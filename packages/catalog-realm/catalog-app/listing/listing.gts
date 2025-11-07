@@ -354,6 +354,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           >
             {{#each-in this.specBreakdown as |specType specs|}}
               <A.Item
+                @id={{specType}}
                 @contentClass='listing-accordion-item'
                 @onClick={{fn this.selectAccordionItem specType}}
                 @isOpen={{eq this.selectedAccordionItem specType}}
