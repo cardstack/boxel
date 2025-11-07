@@ -40,4 +40,4 @@ SMTP_4_DEV_URL="http://localhost:5001"
 WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 start-server-and-test \
   'pnpm run wait' \
   "$BASE_REALM_READY|$CATALOG_REALM_READY|$NODE_TEST_REALM_READY|$SKILLS_REALM_READY|$TEST_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL" \
-  'ember-test-pre-built'
+  './scripts/run-tests-with-logs.sh'
