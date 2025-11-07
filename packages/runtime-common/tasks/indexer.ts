@@ -1,12 +1,12 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task, WorkerArgs } from './index';
 import {
-  type Stats,
   jobIdentity,
   userIdFromUsername,
   fetchUserPermissions,
 } from '../index';
 import { IndexRunner } from '../index-runner';
+import type { Stats } from '../worker';
 
 export { fromScratchIndex, incrementalIndex };
 
