@@ -39,6 +39,10 @@ module.exports = {
     URLField: ['default', 'https://cardstack.com/base/url'],
     WebsiteField: ['default', 'https://cardstack.com/base/website'],
 
+    // Enumerations
+    enumField: ['default', 'https://cardstack.com/base/enum'],
+    enumConfig: ['enumConfig', 'https://cardstack.com/base/enum'],
+
     // More
     Skill: ['default', 'https://cardstack.com/base/skill'],
   },
