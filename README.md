@@ -107,9 +107,9 @@ The realm server also uses FastBoot to pre-render card html. The realm server bo
 
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
 
-- Prerender server: Handles POST /prerender requests that include user/session permissions and a target card URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
+- Prerender server: Handles POST `/prerender-card` (cards) and `/prerender-module` (modules) requests that include user/session permissions and a target URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
 - Pooling: Each prerender server maintains up to PRERENDER_PAGE_POOL_SIZE pages (default 4). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively.
-- Prerender manager: When multiple prerender servers are running, a central manager receives /prerender requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
+- Prerender manager: When multiple prerender servers are running, a central manager receives `/prerender-card` and `/prerender-module` requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
 
 #### Pre-rendering start scripts
 
