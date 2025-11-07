@@ -7,8 +7,11 @@ import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/hel
 import start from 'ember-exam/test-support/start';
 import { useTestWaiters } from '@cardstack/runtime-common';
 import * as TestWaiters from '@ember/test-waiters';
+import enableFetchLogging from '@cardstack/host/tests/helpers/enable-fetch-logging';
 
 QUnit.dump.maxDepth = 20;
+
+enableFetchLogging();
 
 useTestWaiters(TestWaiters);
 setApplication(Application.create(config.APP));
