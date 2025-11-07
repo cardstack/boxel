@@ -78,6 +78,11 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
+const FULL_INDEX_ON_STARTUP =
+  process.env.FULL_INDEX_ON_STARTUP === 'false' ? false : true;
+if (!FULL_INDEX_ON_STARTUP) {
+  console.warn('Full indexing on startup disabled via FULL_INDEX_ON_STARTUP');
+}
 
 let {
   port,
@@ -242,7 +247,7 @@ let autoMigrate = migrateDB || undefined;
         realmServerMatrixClient,
       },
       {
-        fullIndexOnStartup: true,
+        fullIndexOnStartup: FULL_INDEX_ON_STARTUP,
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),

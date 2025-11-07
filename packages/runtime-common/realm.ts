@@ -284,7 +284,7 @@ export interface RealmAdapter {
 interface Options {
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
-  fullIndexOnStartup?: true;
+  fullIndexOnStartup?: boolean;
 }
 
 interface UpdateItem {
@@ -373,7 +373,7 @@ export class Realm {
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
     this.#queue = queue;
-    this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
+    this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? true;
     this.#realmServerMatrixClient = realmServerMatrixClient;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
