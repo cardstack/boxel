@@ -11,7 +11,7 @@ import { TextInputValidator } from 'https://cardstack.com/base/text-input-valida
 import { NumberSerializer } from '@cardstack/runtime-common';
 
 import { getNumericValue, hasValue } from './util/index';
-import type { RatingConfig } from './util/types/index';
+import type { RatingConfig } from './util/types';
 
 interface Configuration {
   presentation: RatingConfig;

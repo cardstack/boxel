@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { hasValue, clamp } from '../util/index';
-import type { DisplayConfig } from '../util/types/index';
+import type { DisplayConfig } from '../util/types';
 
 interface Signature {
   Args: {

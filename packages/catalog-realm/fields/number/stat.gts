@@ -9,7 +9,7 @@ import { TextInputValidator } from 'https://cardstack.com/base/text-input-valida
 import { NumberSerializer } from '@cardstack/runtime-common';
 
 import { hasValue, getFormattedDisplayValue } from './util/index';
-import type { StatConfig } from './util/types/index';
+import type { StatConfig } from './util/types';
 
 interface Configuration {
   presentation: StatConfig;

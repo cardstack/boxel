@@ -2,6 +2,7 @@
 import { Component } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
 import { lte, gte } from '@cardstack/boxel-ui/helpers';
+import GradientProgressBar from './components/gradient-progress-bar';
 
 import NumberField, {
   deserializeForUI,
@@ -11,7 +12,7 @@ import { TextInputValidator } from 'https://cardstack.com/base/text-input-valida
 import { NumberSerializer } from '@cardstack/runtime-common';
 
 import { getNumericValue, clamp, calculatePercentage } from './util/index';
-import type { QuantityConfig } from './util/types/index';
+import type { QuantityConfig } from './util/types';
 
 interface Configuration {
   presentation: QuantityConfig;
@@ -166,10 +167,6 @@ export default class QuantityField extends NumberField {
       );
     }
 
-    get progressStyle() {
-      return `width: ${this.percentage}%`;
-    }
-
     increment = () => {
       if (!this.args.set) return;
       this.args.set(
@@ -194,12 +191,12 @@ export default class QuantityField extends NumberField {
           <span>Min {{this.config.min}}</span>
           <span>Max {{this.config.max}}</span>
         </div>
-        <div class='quantity-progress'>
-          <div
-            class='quantity-progress-fill'
-            style={{this.progressStyle}}
-          ></div>
-        </div>
+        <GradientProgressBar
+          @value={{this.numericValue}}
+          @max={{this.config.max}}
+          @height='0.4rem'
+          @useGradient={{true}}
+        />
       </div>
 
       <style scoped>
@@ -234,21 +231,6 @@ export default class QuantityField extends NumberField {
           justify-content: space-between;
           font-size: 0.8125rem;
           color: var(--muted-foreground, #64748b);
-        }
-        .quantity-progress {
-          position: relative;
-          width: 100%;
-          height: 0.4rem;
-          background: var(--muted, #f1f5f9);
-          border-radius: 999px;
-          overflow: hidden;
-        }
-        .quantity-progress-fill {
-          position: absolute;
-          inset: 0 auto 0 0;
-          background: var(--primary, #3b82f6);
-          border-radius: inherit;
-          transition: width 0.3s ease;
         }
       </style>
     </template>

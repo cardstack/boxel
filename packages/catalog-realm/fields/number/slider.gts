@@ -14,7 +14,7 @@ import {
   calculatePercentage,
   getFormattedDisplayValue,
 } from './util/index';
-import type { SliderConfig } from './util/types/index';
+import type { SliderConfig } from './util/types';
 
 interface Configuration {
   presentation: SliderConfig;

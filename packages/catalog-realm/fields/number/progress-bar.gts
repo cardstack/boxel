@@ -10,7 +10,7 @@ import { TextInputValidator } from 'https://cardstack.com/base/text-input-valida
 import { NumberSerializer } from '@cardstack/runtime-common';
 
 import { getNumericValue, calculatePercentage } from './util/index';
-import type { ProgressBarConfig } from './util/types/index';
+import type { ProgressBarConfig } from './util/types';
 
 interface Configuration {
   presentation: ProgressBarConfig;
@@ -24,7 +24,7 @@ export default class ProgressBarField extends NumberField {
       type: 'progress-bar',
       min: 0,
       max: 100,
-      label: 'Progress',
+      label: '',
     },
   };
 

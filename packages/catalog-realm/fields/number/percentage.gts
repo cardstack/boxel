@@ -1,6 +1,7 @@
 import { Component } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 import NumberInput from './components/number-input';
+import GradientProgressBar from './components/gradient-progress-bar';
 
 import { NumberSerializer } from '@cardstack/runtime-common';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
@@ -14,9 +15,7 @@ import {
   getFormattedDisplayValue,
   calculatePercentage,
 } from './util/index';
-import type { PercentageConfig } from './util/types/index';
-
-import { htmlSafe } from '@ember/template';
+import type { PercentageConfig } from './util/types';
 
 interface Configuration {
   presentation: PercentageConfig;
@@ -87,6 +86,10 @@ export default class PercentageField extends NumberField {
       return getFormattedDisplayValue(this.args.model, this.config);
     }
 
+    get numericValue() {
+      return getNumericValue(this.args.model);
+    }
+
     get percentage() {
       const numericValue = getNumericValue(this.args.model);
       return calculatePercentage(
@@ -94,10 +97,6 @@ export default class PercentageField extends NumberField {
         this.config.min,
         this.config.max,
       );
-    }
-
-    get fillStyle() {
-      return htmlSafe(`width: ${this.percentage}%;`);
     }
 
     get rangeLabel() {
@@ -113,9 +112,12 @@ export default class PercentageField extends NumberField {
           </div>
           <span class='percentage-value'>{{this.displayValue}}</span>
         </div>
-        <div class='percentage-bar'>
-          <div class='percentage-fill' style={{this.fillStyle}}></div>
-        </div>
+        <GradientProgressBar
+          @value={{this.numericValue}}
+          @max={{this.config.max}}
+          @height='0.875rem'
+          @useGradient={{true}}
+        />
       </div>
 
       <style scoped>
@@ -155,20 +157,6 @@ export default class PercentageField extends NumberField {
           font-size: 2rem;
           font-weight: 700;
           color: var(--foreground, #0f172a);
-        }
-        .percentage-bar {
-          position: relative;
-          height: 0.875rem;
-          background: var(--muted, #f1f5f9);
-          border-radius: 999px;
-          overflow: hidden;
-        }
-        .percentage-fill {
-          position: absolute;
-          height: 100%;
-          background: var(--primary, #3b82f6);
-          border-radius: inherit;
-          transition: width 0.3s ease;
         }
       </style>
     </template>

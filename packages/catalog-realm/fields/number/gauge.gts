@@ -16,7 +16,7 @@ import {
   getFormattedDisplayValue,
   clamp,
 } from './util/index';
-import type { GaugeConfig } from './util/types/index';
+import type { GaugeConfig } from './util/types';
 
 export default class GaugeField extends NumberField {
   static displayName = 'Gauge Number Field';

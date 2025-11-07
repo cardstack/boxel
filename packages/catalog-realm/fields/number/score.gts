@@ -1,6 +1,7 @@
 import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
 import NumberInput from './components/number-input';
+import GradientProgressBar from './components/gradient-progress-bar';
 
 import NumberField, {
   deserializeForUI,
@@ -14,18 +15,18 @@ import {
   getNumericValue,
   calculatePercentage,
 } from './util/index';
-import type { ScoresConfig } from './util/types/index';
+import type { ScoreConfig } from './util/types';
 
 interface Configuration {
-  presentation: ScoresConfig;
+  presentation: ScoreConfig;
 }
 
-export default class ScoresField extends NumberField {
-  static displayName = 'Scores Number Field';
+export default class ScoreField extends NumberField {
+  static displayName = 'Score Number Field';
 
   static configuration: Configuration = {
     presentation: {
-      type: 'scores',
+      type: 'score',
       decimals: 0,
       min: 0,
       max: 100,
@@ -64,7 +65,7 @@ export default class ScoresField extends NumberField {
     }
 
     <template>
-      <span class='scores-field-atom'>
+      <span class='score-field-atom'>
         <svg
           class='chart-icon'
           viewBox='0 0 16 16'
@@ -100,7 +101,7 @@ export default class ScoresField extends NumberField {
       </span>
 
       <style scoped>
-        .scores-field-atom {
+        .score-field-atom {
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-5xs, 0.25rem);
@@ -128,10 +129,13 @@ export default class ScoresField extends NumberField {
       return getFormattedDisplayValue(this.args.model, this.config);
     }
 
+    get numericValue() {
+      return getNumericValue(this.args.model);
+    }
+
     get percentage() {
-      const numericValue = getNumericValue(this.args.model);
       return calculatePercentage(
-        numericValue,
+        this.numericValue,
         this.config.min,
         this.config.max,
       );
@@ -149,17 +153,20 @@ export default class ScoresField extends NumberField {
     }
 
     <template>
-      <div class='scores-field-embedded'>
-        <div class='scores-header'>
+      <div class='score-field-embedded'>
+        <div class='score-header'>
           <div>
-            <span class='scores-title'>Score</span>
-            <span class='scores-tier'>{{this.tierLabel}}</span>
+            <span class='score-title'>Score</span>
+            <span class='score-tier'>{{this.tierLabel}}</span>
           </div>
           <span class='score-value'>{{this.displayValue}}</span>
         </div>
-        <div class='score-meter'>
-          <div class='score-meter-fill' style={{this.fillStyle}}></div>
-        </div>
+        <GradientProgressBar
+          @value={{this.numericValue}}
+          @max={{this.config.max}}
+          @height='0.65rem'
+          @useGradient={{true}}
+        />
         <div class='score-scale'>
           <span>Low</span>
           <span>Avg</span>
@@ -168,7 +175,7 @@ export default class ScoresField extends NumberField {
       </div>
 
       <style scoped>
-        .scores-field-embedded {
+        .score-field-embedded {
           display: flex;
           flex-direction: column;
           gap: calc(var(--spacing, 0.25rem) * 2.5);
@@ -178,18 +185,18 @@ export default class ScoresField extends NumberField {
           background: var(--card, #ffffff);
           box-shadow: var(--shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
         }
-        .scores-header {
+        .score-header {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
         }
-        .scores-title {
+        .score-title {
           font-size: 0.75rem;
           text-transform: uppercase;
           letter-spacing: 0.08em;
           color: var(--muted-foreground, #64748b);
         }
-        .scores-tier {
+        .score-tier {
           display: block;
           font-size: 0.8125rem;
           color: var(--muted-foreground, #64748b);

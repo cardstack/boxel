@@ -10,7 +10,7 @@ import { TextInputValidator } from 'https://cardstack.com/base/text-input-valida
 import { NumberSerializer } from '@cardstack/runtime-common';
 
 import { getNumericValue, calculatePercentage } from './util/index';
-import type { ProgressCircleConfig } from './util/types/index';
+import type { ProgressCircleConfig } from './util/types';
 
 interface Configuration {
   presentation: ProgressCircleConfig;

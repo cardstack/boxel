@@ -3,13 +3,29 @@ import RatingField from '../rating';
 import QuantityField from '../quantity';
 import PercentageField from '../percentage';
 import StatField from '../stat';
-import BadgeField from '../badge';
-import ScoresField from '../scores';
+import BadgeNotificationField from '../badge-notification';
+import BadgeMetricField from '../badge-metric';
+import BadgeCounterField from '../badge-counter';
+import ScoreField from '../score';
 import ProgressBarField from '../progress-bar';
 import ProgressCircleField from '../progress-circle';
 import GaugeField from '../gauge';
 
-import { DisplayConfig } from './types/index';
+import {
+  DisplayConfig,
+  SliderConfig,
+  RatingConfig,
+  QuantityConfig,
+  PercentageConfig,
+  StatConfig,
+  BadgeNotificationConfig,
+  BadgeMetricConfig,
+  BadgeCounterConfig,
+  ScoreConfig,
+  ProgressBarConfig,
+  ProgressCircleConfig,
+  GaugeConfig,
+} from './types';
 
 export function hasValue(model: any): boolean {
   return model != null;
@@ -81,20 +97,39 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-const FIELD_TYPE_MAP: Record<string, any> = {
+// Map each field type to its config type for clarity
+export type FieldConfigMap = {
+  slider: SliderConfig;
+  rating: RatingConfig;
+  quantity: QuantityConfig;
+  percentage: PercentageConfig;
+  stat: StatConfig;
+  'badge-notification': BadgeNotificationConfig;
+  'badge-metric': BadgeMetricConfig;
+  'badge-counter': BadgeCounterConfig;
+  score: ScoreConfig;
+  'progress-bar': ProgressBarConfig;
+  'progress-circle': ProgressCircleConfig;
+  gauge: GaugeConfig;
+};
+
+// Map each field type to its class
+const FIELD_TYPE_MAP: Record<keyof FieldConfigMap, any> = {
   slider: SliderField,
   rating: RatingField,
   quantity: QuantityField,
   percentage: PercentageField,
   stat: StatField,
-  badge: BadgeField,
-  scores: ScoresField,
+  'badge-notification': BadgeNotificationField,
+  'badge-metric': BadgeMetricField,
+  'badge-counter': BadgeCounterField,
+  score: ScoreField,
   'progress-bar': ProgressBarField,
   'progress-circle': ProgressCircleField,
   gauge: GaugeField,
 };
 
-export function getFieldClass(type?: string): any | null {
+export function getFieldClass(type?: keyof FieldConfigMap): any | null {
   if (!type) return null;
   return FIELD_TYPE_MAP[type] ?? null;
 }

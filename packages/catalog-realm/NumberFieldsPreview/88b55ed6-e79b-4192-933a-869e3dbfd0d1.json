@@ -15,16 +15,18 @@
         "thumbnailURL": null
       },
       "statNumber": 100,
-      "badgeNumber": 20,
       "basicNumber": 100,
-      "gaugeNumber": 60,
+      "gaugeNumber": 20,
+      "scoreNumber": 600,
       "ratingNumber": 4,
-      "scoresNumber": 1000,
-      "sliderNumber": 37,
-      "quantityNumber": 4,
-      "percentageNumber": 30,
-      "progressBarNumber": 40,
-      "progressCircleNumber": 20
+      "sliderNumber": 55,
+      "quantityNumber": 200,
+      "percentageNumber": 200,
+      "badgeMetricNumber": 0,
+      "progressBarNumber": 30,
+      "badgeCounterNumber": 300,
+      "progressCircleNumber": 30,
+      "badgeNotificationNumber": 99
     },
     "relationships": {
       "cardInfo.theme": {

@@ -79,25 +79,53 @@ export class NumberFieldsPreview extends CardDef {
     },
   });
 
-  // Badge field
-  @field badgeNumber = contains(NumberField, {
+  // Badge Notification field
+  @field badgeNotificationNumber = contains(NumberField, {
     configuration: {
       presentation: {
-        type: 'badge',
+        type: 'badge-notification',
         decimals: 0,
         min: 0,
-        max: 100,
-        label: 'Items',
+        max: 99,
+        label: 'Notifications',
         icon: CubeIcon,
       },
     },
   });
 
-  // Scores field
-  @field scoresNumber = contains(NumberField, {
+  // Badge Metric field
+  @field badgeMetricNumber = contains(NumberField, {
     configuration: {
       presentation: {
-        type: 'scores',
+        type: 'badge-metric',
+        decimals: 2,
+        min: 0,
+        max: 1000,
+        label: 'Items',
+        icon: TrendingUpIcon,
+      },
+    },
+  });
+
+  // Badge Counter field
+  @field badgeCounterNumber = contains(NumberField, {
+    configuration: {
+      presentation: {
+        type: 'badge-counter',
+        decimals: 0,
+        min: 0,
+        max: 9999,
+        label: 'Stocks',
+        icon: CubeIcon,
+      },
+    },
+  });
+
+  // Score field
+  @field scoreNumber = contains(NumberField, {
+    configuration: {
+      presentation: {
+        type: 'score',
         decimals: 0,
         min: 0,
         max: 1000,
@@ -112,7 +140,7 @@ export class NumberFieldsPreview extends CardDef {
         type: 'progress-bar',
         min: 0,
         max: 100,
-        label: 'Completion',
+        label: 'Progress',
       },
     },
   });
@@ -343,15 +371,14 @@ export class NumberFieldsPreview extends CardDef {
 
         <section class='field-section'>
           <div class='section-header'>
-            <h2 class='section-title'>7. Badge Field</h2>
-            <p class='section-description'>Badge-style number display with
-              optional label</p>
+            <h2 class='section-title'>7. Badge Notification Field</h2>
+            <p class='section-description'>Notification-style badge display</p>
           </div>
           <div class='field-layout'>
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <@fields.badgeNumber @format='edit' />
+              <@fields.badgeNotificationNumber @format='edit' />
             </div>
             <div class='display-column'>
               <div class='column-header'>Display View</div>
@@ -359,14 +386,14 @@ export class NumberFieldsPreview extends CardDef {
                 <div class='display-item'>
                   <p>Atom:</p>
                   <div class='field-box'>
-                    <@fields.badgeNumber @format='atom' />
+                    <@fields.badgeNotificationNumber @format='atom' />
                   </div>
                 </div>
               </div>
               <div class='display-group'>
                 <div class='display-item'>
                   <p>Embedded:</p>
-                  <@fields.badgeNumber @format='embedded' />
+                  <@fields.badgeNotificationNumber @format='embedded' />
                 </div>
               </div>
             </div>
@@ -375,14 +402,14 @@ export class NumberFieldsPreview extends CardDef {
 
         <section class='field-section'>
           <div class='section-header'>
-            <h2 class='section-title'>8. Scores Field</h2>
-            <p class='section-description'>Score display with colored bars</p>
+            <h2 class='section-title'>8. Badge Metric Field</h2>
+            <p class='section-description'>Metric-style badge display</p>
           </div>
           <div class='field-layout'>
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
               <p class='column-subtitle'>Change the value below</p>
-              <@fields.scoresNumber @format='edit' />
+              <@fields.badgeMetricNumber @format='edit' />
             </div>
             <div class='display-column'>
               <div class='column-header'>Display View</div>
@@ -390,14 +417,14 @@ export class NumberFieldsPreview extends CardDef {
                 <div class='display-item'>
                   <p>Atom:</p>
                   <div class='field-box'>
-                    <@fields.scoresNumber @format='atom' />
+                    <@fields.badgeMetricNumber @format='atom' />
                   </div>
                 </div>
               </div>
               <div class='display-group'>
                 <div class='display-item'>
                   <p>Embedded:</p>
-                  <@fields.scoresNumber @format='embedded' />
+                  <@fields.badgeMetricNumber @format='embedded' />
                 </div>
               </div>
             </div>
@@ -406,7 +433,38 @@ export class NumberFieldsPreview extends CardDef {
 
         <section class='field-section'>
           <div class='section-header'>
-            <h2 class='section-title'>9. Progress Bar Field</h2>
+            <h2 class='section-title'>9. Badge Counter Field</h2>
+            <p class='section-description'>Counter-style badge display</p>
+          </div>
+          <div class='field-layout'>
+            <div class='edit-column'>
+              <div class='column-header'>Edit Mode</div>
+              <p class='column-subtitle'>Change the value below</p>
+              <@fields.badgeCounterNumber @format='edit' />
+            </div>
+            <div class='display-column'>
+              <div class='column-header'>Display View</div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Atom:</p>
+                  <div class='field-box'>
+                    <@fields.badgeCounterNumber @format='atom' />
+                  </div>
+                </div>
+              </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.badgeCounterNumber @format='embedded' />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class='field-section'>
+          <div class='section-header'>
+            <h2 class='section-title'>10. Progress Bar Field</h2>
             <p class='section-description'>Horizontal progress bar with
               percentage</p>
           </div>
@@ -438,7 +496,7 @@ export class NumberFieldsPreview extends CardDef {
 
         <section class='field-section'>
           <div class='section-header'>
-            <h2 class='section-title'>10. Progress Circle Field</h2>
+            <h2 class='section-title'>11. Progress Circle Field</h2>
             <p class='section-description'>Circular progress indicator</p>
           </div>
           <div class='field-layout'>
@@ -469,7 +527,39 @@ export class NumberFieldsPreview extends CardDef {
 
         <section class='field-section'>
           <div class='section-header'>
-            <h2 class='section-title'>11. Gauge Field</h2>
+            <h2 class='section-title'>12. Score Field</h2>
+            <p class='section-description'>Score display with customizable range
+              and formatting</p>
+          </div>
+          <div class='field-layout'>
+            <div class='edit-column'>
+              <div class='column-header'>Edit Mode</div>
+              <p class='column-subtitle'>Change the value below</p>
+              <@fields.scoreNumber @format='edit' />
+            </div>
+            <div class='display-column'>
+              <div class='column-header'>Display View</div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Atom:</p>
+                  <div class='field-box'>
+                    <@fields.scoreNumber @format='atom' />
+                  </div>
+                </div>
+              </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.scoreNumber @format='embedded' />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class='field-section'>
+          <div class='section-header'>
+            <h2 class='section-title'>13. Gauge Field</h2>
             <p class='section-description'>Gauge display with thresholds</p>
           </div>
           <div class='field-layout'>
