@@ -46,6 +46,8 @@ import {
   type FieldDefinition,
   type RealmPermissions,
   type RealmAction,
+  type LintArgs,
+  type LintResult,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
@@ -101,7 +103,6 @@ import type {
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { LintArgs, LintResult } from './lint';
 import type {
   AtomicOperation,
   AtomicOperationResult,
