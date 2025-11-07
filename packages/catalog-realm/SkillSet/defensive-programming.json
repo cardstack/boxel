@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Skill",
+        "module": "https://cardstack.com/base/skill"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Defensive Programming",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "description": "Safe data access, error handling, optional chaining, and try-catch patterns",
+      "instructions": "**Always use optional chaining:**\n```js\n// ❌ UNSAFE\nif (this.args.model.items.includes(x)) { }\n\n// ✅ SAFE\nif (this.args.model?.items?.includes?.(x)) { }\n```\n\n**Provide defaults:**\n```js\nreturn (this.args.model?.progress ?? 0) + 10;\n```\n\n**Wrap cross-card access in try-catch:**\n```js\nget authorName() {\n  try {\n    const author = this.args?.model?.author;\n    return author?.name ?? 'Unknown Author';\n  } catch (e) {\n    console.error('Error accessing author', e);\n    return 'Author Unavailable';\n  }\n}\n```\n\n<!--more-->\n\n## Defensive Programming in Boxel Components\n\n**CRITICAL:** Prevent runtime errors by safely handling undefined/null values and malformed data. Cards boot with no data by default - every component must handle completely empty state gracefully.\n\n### Essential Defensive Patterns\n\n#### Always Use Optional Chaining (`?.`)\n```js\n// ❌ UNSAFE: Will throw if model is undefined\nif (this.args.model.completedDays.includes(day)) { ... }\n\n// ✅ SAFE: Optional chaining prevents errors\nif (this.args.model?.completedDays?.includes?.(day)) { ... }\n```\n\n#### Provide Default Values (`??`)\n```js\n// ❌ UNSAFE: May result in NaN\nreturn this.args.model.progress + 10;\n\n// ✅ SAFE: Default value prevents NaN\nreturn (this.args.model?.progress ?? 0) + 10;\n```\n\n#### Try-Catch for Network of Cards\nWhen accessing data across card relationships, always wrap in try-catch to handle missing or malformed data:\n\n```js\n// ³⁷ In computed properties or methods\nget authorDisplayName() {\n  try {\n    const author = this.args?.model?.author;\n    if (!author) {\n      console.warn('BlogPost: No author assigned');\n      return 'Unknown Author';\n    }\n    \n    const name = author.name || author.title;\n    if (!name) {\n      console.warn('BlogPost: Author exists but has no name', { authorId: author.id });\n      return 'Unnamed Author';\n    }\n    \n    return name;\n  } catch (error) {\n    console.error('BlogPost: Error accessing author data', {\n      error,\n      postId: this.args.model?.id,\n      authorData: this.args.model?.author\n    });\n    return 'Author Unavailable';\n  }\n}\n\n// ³⁸ In template getters\nget relatedPostsSummary() {\n  try {\n    const posts = this.args.model?.relatedPosts;\n    if (!Array.isArray(posts)) {\n      return 'No related posts';\n    }\n    \n    return posts\n      .filter(post => post?.title) // Skip malformed entries\n      .map(post => post.title)\n      .join(', ') || 'No related posts';\n      \n  } catch (error) {\n    console.error('BlogPost: Failed to process related posts', error);\n    return 'Related posts unavailable';\n  }\n}\n```\n\n#### Validate Arrays Before Operations\n```js\n// ❌ UNSAFE: May throw if not an array\nconst sorted = this.completedDays.sort((a, b) => a - b);\n\n// ✅ SAFE: Check existence and type first\nif (!Array.isArray(this.completedDays) || !this.completedDays.length) {\n  return [];\n}\nconst sorted = [...this.completedDays].sort((a, b) => a - b);\n```\n\n**Key Principles:** \n- Assume data might be missing, null, or the wrong type\n- Provide meaningful fallbacks for user display\n- Log errors with context for debugging (include IDs, data state)\n- Never let malformed data crash your UI"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
