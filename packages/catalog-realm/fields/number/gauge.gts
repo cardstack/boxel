@@ -227,12 +227,12 @@ export default class GaugeField extends NumberField {
       const warningThreshold = this.config.warningThreshold;
 
       if (dangerThreshold !== undefined && numericValue >= dangerThreshold) {
-        return 'var(--destructive, var(--boxel-red, #ff5050))';
+        return 'var(--destructive, #ef4444)';
       }
       if (warningThreshold !== undefined && numericValue >= warningThreshold) {
-        return 'var(--warning, var(--boxel-orange, #ff9800))';
+        return 'var(--warning, #f59e0b)';
       }
-      return 'var(--primary, var(--boxel-purple, #6638ff))';
+      return 'var(--primary, #3b82f6)';
     }
 
     get needleRotation() {
@@ -244,36 +244,32 @@ export default class GaugeField extends NumberField {
       return htmlSafe(`transform: rotate(${this.needleRotation}deg)`);
     }
 
-    // SVG arc calculations for the embedded view
     get arcDashArray() {
-      return 251.32; // Circumference of the arc for the larger gauge
+      return 251.32;
     }
 
     get arcDashOffset() {
-      // Calculate the offset based on percentage
       return this.arcDashArray - (this.percentage * this.arcDashArray) / 100;
     }
 
     <template>
-      <div class='gauge-field-embedded'>
+      <div class='gauge-embedded'>
         {{#if this.config.label}}
           <div class='gauge-label'>{{this.config.label}}</div>
         {{/if}}
-        <div class='gauge-container'>
+        <div class='gauge-display'>
           <svg
-            class='gauge-svg-large'
+            class='gauge-svg'
             viewBox='0 0 200 120'
             xmlns='http://www.w3.org/2000/svg'
           >
-            {{! Background arc }}
             <path
               d='M 20 100 A 80 80 0 0 1 180 100'
               fill='none'
-              stroke='var(--border, var(--boxel-border, #e0e0e0))'
+              stroke='var(--muted, #f1f5f9)'
               stroke-width='16'
               stroke-linecap='round'
             />
-            {{! Value arc }}
             <path
               d='M 20 100 A 80 80 0 0 1 180 100'
               fill='none'
@@ -284,40 +280,31 @@ export default class GaugeField extends NumberField {
               stroke-dashoffset={{this.arcDashOffset}}
               style='transition: stroke-dashoffset 0.4s ease, stroke 0.3s ease;'
             />
-            {{! Min label }}
             <text
               x='20'
               y='115'
               text-anchor='start'
               font-size='10'
-              fill='var(--muted-foreground, var(--boxel-450, #666))'
+              fill='var(--muted-foreground, #94a3b8)'
             >
               {{this.config.min}}
             </text>
-            {{! Max label }}
             <text
               x='180'
               y='115'
               text-anchor='end'
               font-size='10'
-              fill='var(--muted-foreground, var(--boxel-450, #666))'
+              fill='var(--muted-foreground, #94a3b8)'
             >
               {{this.config.max}}
             </text>
-            {{! Center dot }}
-            <circle
-              cx='100'
-              cy='100'
-              r='6'
-              fill='var(--foreground, var(--boxel-dark, #1a1a1a))'
-            />
-            {{! Needle }}
+            <circle cx='100' cy='100' r='6' fill='var(--foreground, #1e293b)' />
             <line
               x1='100'
               y1='100'
               x2='100'
               y2='40'
-              stroke='var(--foreground, var(--boxel-dark, #1a1a1a))'
+              stroke='var(--foreground, #1e293b)'
               stroke-width='3'
               stroke-linecap='round'
               style={{this.needleStyle}}
@@ -325,43 +312,39 @@ export default class GaugeField extends NumberField {
             />
           </svg>
           {{#if this.config.showValue}}
-            <div class='gauge-value-large'>{{this.displayValue}}</div>
+            <div class='gauge-value'>{{this.displayValue}}</div>
           {{/if}}
         </div>
       </div>
 
       <style scoped>
-        .gauge-field-embedded {
+        .gauge-embedded {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: var(--boxel-sp-xs, 0.5rem);
-          padding: var(--boxel-sp, 1rem);
-          background: var(--card, var(--boxel-light, #fff));
-          border: 1px solid var(--border, var(--boxel-200, #e0e0e0));
-          border-radius: var(--radius, var(--boxel-border-radius, 0.25rem));
+          gap: calc(var(--spacing, 0.25rem) * 2);
+          padding: calc(var(--spacing, 0.25rem) * 4);
         }
         .gauge-label {
-          font-size: var(--boxel-font-size, 1rem);
-          font-weight: var(--boxel-font-weight-semibold, 600);
-          color: var(--foreground, var(--boxel-dark, #000));
+          font-size: 0.875rem;
+          font-weight: 600;
+          text-align: center;
         }
-        .gauge-container {
+        .gauge-display {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: var(--boxel-sp-xs, 0.5rem);
+          gap: calc(var(--spacing, 0.25rem) * 2);
           width: 100%;
         }
-        .gauge-svg-large {
+        .gauge-svg {
           width: 100%;
           max-width: 12rem;
           height: auto;
         }
-        .gauge-value-large {
-          font-size: var(--boxel-font-size-xl, 1.5rem);
-          font-weight: var(--boxel-font-weight-bold, 700);
-          color: var(--foreground, var(--boxel-dark, #000));
+        .gauge-value {
+          font-size: 1.5rem;
+          font-weight: 700;
         }
       </style>
     </template>

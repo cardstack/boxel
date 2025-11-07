@@ -206,15 +206,11 @@ export default class QuantityField extends NumberField {
         .quantity-field-embedded {
           display: flex;
           flex-direction: column;
-          gap: var(--boxel-sp-xxs, 0.65rem);
-          padding: var(--boxel-sp, 1rem);
-          background: linear-gradient(
-            135deg,
-            rgba(63, 94, 251, 0.06) 0%,
-            rgba(252, 70, 107, 0.08) 100%
-          );
-          border-radius: var(--boxel-border-radius-lg, 0.75rem);
-          border: 1px solid var(--boxel-200);
+          gap: calc(var(--spacing, 0.25rem) * 2.5);
+          padding: calc(var(--spacing, 0.25rem) * 4);
+          background: var(--card, #ffffff);
+          border-radius: var(--radius, 0.75rem);
+          border: 1px solid var(--border, #e2e8f0);
         }
         .quantity-card-header {
           display: flex;
@@ -226,35 +222,31 @@ export default class QuantityField extends NumberField {
           font-weight: 600;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-          color: var(--boxel-450);
+          color: var(--muted-foreground, #64748b);
         }
         .quantity-card-value {
           font-size: 2rem;
           font-weight: 700;
-          color: var(--boxel-700);
+          color: var(--foreground, #0f172a);
         }
         .quantity-card-meta {
           display: flex;
           justify-content: space-between;
           font-size: 0.8125rem;
-          color: var(--boxel-500);
+          color: var(--muted-foreground, #64748b);
         }
         .quantity-progress {
           position: relative;
           width: 100%;
           height: 0.4rem;
-          background: rgba(0, 0, 0, 0.08);
+          background: var(--muted, #f1f5f9);
           border-radius: 999px;
           overflow: hidden;
         }
         .quantity-progress-fill {
           position: absolute;
           inset: 0 auto 0 0;
-          background: linear-gradient(
-            90deg,
-            var(--boxel-green),
-            var(--boxel-teal)
-          );
+          background: var(--primary, #3b82f6);
           border-radius: inherit;
           transition: width 0.3s ease;
         }

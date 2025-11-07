@@ -162,29 +162,29 @@ export default class StatField extends NumberField {
         .stat-field-embedded {
           display: flex;
           flex-direction: column;
-          gap: var(--boxel-sp-xxs, 0.65rem);
-          padding: var(--boxel-sp, 1rem);
-          border-radius: var(--boxel-border-radius-lg, 0.75rem);
-          background: linear-gradient(135deg, #f4f8ff, #e4edff);
-          color: var(--boxel-700);
-          border: 1px solid #dbe7ff;
-          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+          gap: calc(var(--spacing, 0.25rem) * 2.5);
+          padding: calc(var(--spacing, 0.25rem) * 4);
+          border-radius: var(--radius, 0.75rem);
+          background: var(--card, #ffffff);
+          border: 1px solid var(--border, #e2e8f0);
+          box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
         }
         .stat-header {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          gap: var(--boxel-sp, 1rem);
+          gap: calc(var(--spacing, 0.25rem) * 4);
         }
         .stat-chip {
-          padding: 0.25rem 0.75rem;
+          padding: calc(var(--spacing, 0.25rem) * 1)
+            calc(var(--spacing, 0.25rem) * 3);
           border-radius: 999px;
-          border: 1px solid rgba(61, 110, 255, 0.25);
+          border: 1px solid var(--border, #e2e8f0);
           font-size: 0.75rem;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-          color: var(--boxel-500);
-          background: rgba(255, 255, 255, 0.8);
+          color: var(--muted-foreground, #64748b);
+          background: var(--background, #ffffff);
         }
         .stat-icon-pill {
           display: inline-flex;
@@ -193,27 +193,27 @@ export default class StatField extends NumberField {
           width: 2rem;
           height: 2rem;
           border-radius: 999px;
-          background: rgba(64, 120, 255, 0.12);
-          color: var(--boxel-blue, #0069f9);
+          background: var(--muted, #f1f5f9);
+          color: var(--primary, #3b82f6);
         }
         .stat-range {
           font-size: 0.8125rem;
-          color: var(--boxel-500);
+          color: var(--muted-foreground, #64748b);
         }
         .stat-value-row {
           display: flex;
           align-items: baseline;
-          gap: 0.5rem;
+          gap: calc(var(--spacing, 0.25rem) * 2);
         }
         .stat-value {
           font-size: 2.25rem;
           font-weight: 700;
-          color: var(--boxel-700);
+          color: var(--foreground, #0f172a);
         }
         .stat-subtitle {
           font-size: 0.875rem;
           font-weight: 600;
-          color: var(--boxel-green, #37eb77);
+          color: var(--accent, #10b981);
         }
       </style>
     </template>

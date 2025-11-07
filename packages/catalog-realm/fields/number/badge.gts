@@ -58,18 +58,18 @@ class View extends Component<typeof BadgeField> {
       .badge-leading {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-sm, 0.75rem);
+        gap: calc(var(--spacing, 0.25rem) * 3);
       }
       .badge-icon-wrapper {
         position: relative;
         width: 2.5rem;
         height: 2.5rem;
-        border-radius: 0.75rem;
-        background: rgba(9, 9, 11, 0.04);
+        border-radius: var(--radius, 0.5rem);
+        background: var(--muted, #f1f5f9);
         display: flex;
         align-items: center;
         justify-content: center;
-        color: var(--boxel-dark);
+        color: var(--muted-foreground, #64748b);
       }
       .badge-icon-dot {
         position: absolute;
@@ -77,32 +77,27 @@ class View extends Component<typeof BadgeField> {
         right: -0.3rem;
         min-width: 1.2rem;
         min-height: 1.2rem;
-        padding: 0 0.25rem;
+        padding: 0 calc(var(--spacing, 0.25rem) * 1);
         border-radius: 999px;
-        background: var(--boxel-red);
-        color: var(--boxel-light);
+        background: var(--destructive, #ef4444);
+        color: var(--destructive-foreground, #ffffff);
         font-size: 0.6875rem;
         font-weight: 700;
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 2px solid #fff;
-      }
-      .badge-label {
-        font-size: 0.75rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--boxel-blue, #0069f9);
+        border: 2px solid var(--background, #ffffff);
       }
       .badge-counter {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: var(--boxel-sp-sm);
-        padding: 0.65rem 0.85rem;
-        border-radius: 0.65rem;
-        background: #0f172a;
-        color: var(--boxel-light);
+        gap: calc(var(--spacing, 0.25rem) * 3);
+        padding: calc(var(--spacing, 0.25rem) * 2.5)
+          calc(var(--spacing, 0.25rem) * 3.5);
+        border-radius: var(--radius, 0.5rem);
+        background: var(--primary, #3b82f6);
+        color: var(--primary-foreground, #ffffff);
       }
       .badge-counter-label {
         font-size: 0.75rem;

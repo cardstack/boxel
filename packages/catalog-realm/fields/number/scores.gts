@@ -171,13 +171,12 @@ export default class ScoresField extends NumberField {
         .scores-field-embedded {
           display: flex;
           flex-direction: column;
-          gap: var(--boxel-sp-xxs, 0.65rem);
-          padding: var(--boxel-sp, 1rem);
-          border-radius: var(--boxel-border-radius-lg, 0.75rem);
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          background: #0f172a;
-          color: var(--boxel-light);
-          box-shadow: 0 14px 28px rgba(2, 6, 23, 0.4);
+          gap: calc(var(--spacing, 0.25rem) * 2.5);
+          padding: calc(var(--spacing, 0.25rem) * 4);
+          border-radius: var(--radius, 0.75rem);
+          border: 1px solid var(--border, #e2e8f0);
+          background: var(--card, #ffffff);
+          box-shadow: var(--shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
         }
         .scores-header {
           display: flex;
@@ -188,35 +187,30 @@ export default class ScoresField extends NumberField {
           font-size: 0.75rem;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          color: rgba(255, 255, 255, 0.8);
+          color: var(--muted-foreground, #64748b);
         }
         .scores-tier {
           display: block;
           font-size: 0.8125rem;
-          color: rgba(255, 255, 255, 0.6);
+          color: var(--muted-foreground, #64748b);
         }
         .score-value {
           font-size: 2rem;
           font-weight: 700;
+          color: var(--foreground, #0f172a);
         }
         .score-meter {
           position: relative;
           height: 0.65rem;
           width: 100%;
-          background: rgba(255, 255, 255, 0.12);
+          background: var(--muted, #f1f5f9);
           border-radius: 999px;
           overflow: hidden;
         }
         .score-meter-fill {
           position: absolute;
           inset: 0 auto 0 0;
-          background: linear-gradient(
-            90deg,
-            #ff4d4d 0%,
-            #ffb347 35%,
-            #ffe259 60%,
-            #37eb77 100%
-          );
+          background: var(--primary, #3b82f6);
           border-radius: inherit;
           transition: width 0.3s ease;
         }
@@ -224,7 +218,7 @@ export default class ScoresField extends NumberField {
           display: flex;
           justify-content: space-between;
           font-size: 0.75rem;
-          color: rgba(255, 255, 255, 0.6);
+          color: var(--muted-foreground, #64748b);
           text-transform: uppercase;
           letter-spacing: 0.08em;
         }

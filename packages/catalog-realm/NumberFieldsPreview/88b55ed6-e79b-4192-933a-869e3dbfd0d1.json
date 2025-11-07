@@ -17,19 +17,19 @@
       "statNumber": 100,
       "badgeNumber": 20,
       "basicNumber": 100,
-      "gaugeNumber": 100,
+      "gaugeNumber": 60,
       "ratingNumber": 4,
       "scoresNumber": 1000,
-      "sliderNumber": 52,
+      "sliderNumber": 37,
       "quantityNumber": 4,
-      "percentageNumber": 20,
+      "percentageNumber": 30,
       "progressBarNumber": 40,
       "progressCircleNumber": 20
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/experiments/default/5b09feb0-ed5f-4ee5-8836-36cbcb789a72"
+          "self": null
         }
       }
     }

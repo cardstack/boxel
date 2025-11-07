@@ -58,13 +58,13 @@ export default class RatingField extends NumberField {
         .rating-field-edit {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: calc(var(--spacing, 0.25rem) * 2);
         }
         .star-btn {
           background: none;
           border: none;
           font-size: 1.25rem;
-          color: var(--muted, var(--boxel-300, #d1d1d1));
+          color: var(--muted, #f1f5f9);
           cursor: pointer;
           padding: 0;
           transition:
@@ -75,12 +75,12 @@ export default class RatingField extends NumberField {
           transform: scale(1.15);
         }
         .star-filled {
-          color: var(--accent, var(--boxel-yellow, #ffd800));
+          color: var(--accent, #f59e0b);
         }
         .rating-value {
-          margin-left: 0.5rem;
+          margin-left: calc(var(--spacing, 0.25rem) * 2);
           font-weight: 600;
-          color: var(--muted-foreground, var(--boxel-450));
+          color: var(--muted-foreground, #64748b);
         }
       </style>
     </template>
@@ -121,20 +121,20 @@ export default class RatingField extends NumberField {
         .rating-field-atom {
           display: inline-flex;
           align-items: center;
-          gap: var(--boxel-sp-5xs, 0.25rem);
+          gap: calc(var(--spacing, 0.25rem) * 1);
           line-height: 1;
         }
         .atom-star {
-          font-size: var(--boxel-font-size-sm, 0.8125rem);
-          color: var(--muted, var(--boxel-300, #d1d1d1));
+          font-size: 0.8125rem;
+          color: var(--muted, #f1f5f9);
         }
         .atom-star.highlighted {
-          color: var(--accent, var(--boxel-yellow, #ffd800));
+          color: var(--accent, #f59e0b);
         }
         .atom-value {
-          font-size: var(--boxel-font-size-xs, 0.6875rem);
-          font-weight: var(--boxel-font-weight-semibold, 600);
-          color: var(--foreground, var(--boxel-dark, #1a1a1a));
+          font-size: 0.6875rem;
+          font-weight: 600;
+          color: var(--foreground, #1a1a1a);
         }
       </style>
     </template>
@@ -158,38 +158,59 @@ export default class RatingField extends NumberField {
 
     <template>
       <div class='rating-field-embedded'>
+        <div class='rating-header'>
+          <span class='rating-title'>Rating</span>
+          <span
+            class='rating-score'
+          >{{this.numericValue}}/{{this.config.maxStars}}</span>
+        </div>
         <div class='stars'>
           {{#each this.stars as |star|}}
             <span class='star {{if star.filled "star-filled"}}'>★</span>
           {{/each}}
         </div>
-        <span
-          class='rating-label'
-        >{{this.numericValue}}/{{this.config.maxStars}}</span>
       </div>
 
       <style scoped>
         .rating-field-embedded {
           display: flex;
+          flex-direction: column;
+          gap: calc(var(--spacing, 0.25rem) * 3);
+          padding: calc(var(--spacing, 0.25rem) * 4);
+          border-radius: var(--radius, 0.75rem);
+          border: 1px solid var(--border, #e2e8f0);
+          background: var(--card, #ffffff);
+        }
+        .rating-header {
+          display: flex;
           align-items: center;
-          gap: 0.5rem;
+          justify-content: space-between;
+        }
+        .rating-title {
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-foreground, #64748b);
+        }
+        .rating-score {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: var(--foreground, #0f172a);
         }
         .stars {
           display: flex;
-          gap: 0.25rem;
+          gap: calc(var(--spacing, 0.25rem) * 2);
+          justify-content: center;
         }
         .star {
-          font-size: 1.5rem;
-          color: var(--muted, var(--boxel-300));
+          font-size: 2rem;
+          color: var(--muted, #f1f5f9);
           line-height: 1;
+          transition: color 0.2s;
         }
         .star-filled {
-          color: var(--accent, var(--boxel-yellow, #ffd800));
-        }
-        .rating-label {
-          font-size: 0.875rem;
-          font-weight: 600;
-          color: var(--muted-foreground, var(--boxel-450));
+          color: var(--accent, #f59e0b);
         }
       </style>
     </template>

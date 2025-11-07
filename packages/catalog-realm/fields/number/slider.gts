@@ -205,49 +205,46 @@ export default class SliderField extends NumberField {
         .slider-field-embedded {
           display: flex;
           flex-direction: column;
-          gap: var(--boxel-sp-xs, 0.5rem);
+          gap: calc(var(--spacing, 0.25rem) * 2);
           width: 100%;
-          padding: var(--boxel-sp-sm, 0.75rem) var(--boxel-sp, 1rem);
-          background: var(--boxel-light, #fff);
-          border: 1px solid var(--boxel-200, #e8e8e8);
-          border-radius: var(--boxel-border-radius-lg, 0.75rem);
-          box-shadow: 0 6px 16px rgba(20, 17, 37, 0.08);
+          padding: calc(var(--spacing, 0.25rem) * 3)
+            calc(var(--spacing, 0.25rem) * 4);
+          background: var(--card, #ffffff);
+          border: 1px solid var(--border, #e2e8f0);
+          border-radius: var(--radius, 0.75rem);
+          box-shadow: var(--shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1));
         }
         .slider-card-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--boxel-sp-sm, 0.75rem);
+          gap: calc(var(--spacing, 0.25rem) * 3);
         }
         .slider-card-title {
           font-size: 0.75rem;
           font-weight: 600;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-          color: var(--boxel-450);
+          color: var(--muted-foreground, #64748b);
         }
         .slider-card-value {
           font-size: 1.5rem;
           font-weight: 700;
-          color: var(--boxel-700);
+          color: var(--foreground, #0f172a);
         }
         .slider-track {
           position: relative;
           flex: 1;
           height: 0.75rem;
-          background: var(--boxel-100);
+          background: var(--muted, #f1f5f9);
           border-radius: 999px;
           overflow: hidden;
-          border: 1px solid var(--boxel-200);
+          border: 1px solid var(--border, #e2e8f0);
         }
         .slider-fill {
           position: absolute;
           height: 100%;
-          background: linear-gradient(
-            90deg,
-            var(--boxel-purple) 0%,
-            var(--boxel-teal) 100%
-          );
+          background: var(--primary, #3b82f6);
           border-radius: inherit;
           transition: width 0.3s ease;
         }
@@ -257,22 +254,22 @@ export default class SliderField extends NumberField {
           transform: translate(-50%, -50%);
           width: 1.25rem;
           height: 1.25rem;
-          background: var(--boxel-light);
-          border: 2px solid var(--boxel-purple);
+          background: var(--background, #ffffff);
+          border: 2px solid var(--primary, #3b82f6);
           border-radius: 50%;
-          box-shadow: 0 4px 12px rgba(102, 56, 255, 0.25);
+          box-shadow: var(--shadow-sm, 0 1px 2px 0 rgb(0 0 0 / 0.05));
           transition: left 0.3s ease;
         }
         .slider-label {
           align-self: flex-end;
           font-weight: 600;
-          color: var(--boxel-purple);
+          color: var(--primary, #3b82f6);
         }
         .slider-range {
           display: flex;
           justify-content: space-between;
           font-size: 0.75rem;
-          color: var(--boxel-500);
+          color: var(--muted-foreground, #64748b);
         }
       </style>
     </template>

@@ -107,7 +107,7 @@ export default class PercentageField extends NumberField {
     <template>
       <div class='percentage-field-embedded'>
         <div class='percentage-header'>
-          <div>
+          <div class='percentage-info'>
             <span class='percentage-title'>Percent complete</span>
             <span class='percentage-range'>{{this.rangeLabel}}</span>
           </div>
@@ -123,60 +123,52 @@ export default class PercentageField extends NumberField {
           width: 100%;
           display: flex;
           flex-direction: column;
-          gap: var(--boxel-sp-xxs, 0.65rem);
-          padding: var(--boxel-sp, 1rem);
-          border-radius: var(--boxel-border-radius-lg, 0.75rem);
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          background: linear-gradient(
-            145deg,
-            rgba(255, 255, 255, 0.9),
-            rgba(245, 244, 255, 0.95)
-          );
-          box-shadow: 0 8px 18px rgba(15, 6, 56, 0.08);
+          gap: calc(var(--spacing, 0.25rem) * 3);
+          padding: calc(var(--spacing, 0.25rem) * 4);
+          border-radius: var(--radius, 0.5rem);
+          border: 1px solid var(--border, #e2e8f0);
+          background: var(--card, #ffffff);
         }
         .percentage-header {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          gap: var(--boxel-sp);
+          gap: calc(var(--spacing, 0.25rem) * 4);
+        }
+        .percentage-info {
+          display: flex;
+          flex-direction: column;
+          gap: calc(var(--spacing, 0.25rem) * 1);
         }
         .percentage-title {
           font-size: 0.75rem;
           font-weight: 600;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-          color: var(--boxel-450);
-          display: block;
+          color: var(--muted-foreground, #64748b);
         }
         .percentage-range {
           font-size: 0.8125rem;
-          color: var(--boxel-500);
+          color: var(--muted-foreground, #64748b);
         }
         .percentage-value {
           font-size: 2rem;
           font-weight: 700;
-          color: var(--boxel-700);
+          color: var(--foreground, #0f172a);
         }
         .percentage-bar {
           position: relative;
-          height: 0.85rem;
-          background: rgba(0, 0, 0, 0.08);
+          height: 0.875rem;
+          background: var(--muted, #f1f5f9);
           border-radius: 999px;
           overflow: hidden;
-          border: 1px solid rgba(0, 0, 0, 0.05);
         }
         .percentage-fill {
           position: absolute;
           height: 100%;
-          background: linear-gradient(
-            90deg,
-            var(--success, var(--boxel-green, #37eb77)) 0%,
-            var(--boxel-dark-green, #00ac3d) 100%
-          );
+          background: var(--primary, #3b82f6);
           border-radius: inherit;
-          transition:
-            width 0.3s ease,
-            background 0.3s ease;
+          transition: width 0.3s ease;
         }
       </style>
     </template>

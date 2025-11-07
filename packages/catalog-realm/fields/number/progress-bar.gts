@@ -140,25 +140,13 @@ export default class ProgressBarField extends NumberField {
         .progress-bar-field {
           display: flex;
           flex-direction: column;
-          gap: var(--boxel-sp-xxs, 0.65rem);
+          gap: calc(var(--spacing, 0.25rem) * 2.5);
           width: 100%;
-          padding: var(--boxel-sp, 1rem);
-          border-radius: var(--boxel-border-radius-lg, 0.75rem);
-          background: var(
-            --progress-card-bg,
-            linear-gradient(
-              135deg,
-              color-mix(in srgb, var(--boxel-700, #272330) 90%, transparent),
-              color-mix(
-                in srgb,
-                var(--boxel-purple, #6638ff) 30%,
-                var(--boxel-700, #272330) 70%
-              )
-            )
-          );
-          color: var(--progress-card-color, var(--boxel-light, #ffffff));
-          box-shadow: 0 12px 28px
-            color-mix(in srgb, var(--boxel-900, #1a1a1a) 35%, transparent);
+          padding: calc(var(--spacing, 0.25rem) * 4);
+          border-radius: var(--radius, 0.75rem);
+          background: var(--card, #ffffff);
+          border: 1px solid var(--border, #e2e8f0);
+          box-shadow: var(--shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
         }
         .progress-bar-header {
           display: flex;
@@ -167,12 +155,11 @@ export default class ProgressBarField extends NumberField {
           text-transform: uppercase;
           letter-spacing: 0.08em;
           font-size: 0.75rem;
-          color: var(
-            --progress-card-header-color,
-            color-mix(in srgb, var(--boxel-light, #ffffff) 75%, transparent)
-          );
+          color: var(--muted-foreground, #64748b);
         }
         .progress-bar-value {
+          color: var(--foreground, #0f172a);
+          font-weight: 600;
         }
       </style>
     </template>
