@@ -5,38 +5,10 @@ import BaseNumberField, {
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { getFieldClass, getFormattedDisplayValue } from './number/util/index';
+
+import NumberInput from './number/components/number-input';
 import HashIcon from '@cardstack/boxel-icons/hash';
-import {
-  hasValue,
-  getFieldClass,
-  registerFieldType,
-  getFormattedDisplayValue,
-} from './number/util/index';
-
-// Import and register all specialized fields
-import SliderField from './number/slider';
-import RatingField from './number/rating';
-import QuantityField from './number/quantity';
-import PercentageField from './number/percentage';
-import StatField from './number/stat';
-import BadgeField from './number/badge';
-import ScoresField from './number/scores';
-import ProgressBarField from './number/progress-bar';
-import ProgressCircleField from './number/progress-circle';
-import GaugeField from './number/gauge';
-
-// Register all field types
-registerFieldType('slider', SliderField);
-registerFieldType('rating', RatingField);
-registerFieldType('quantity', QuantityField);
-registerFieldType('percentage', PercentageField);
-registerFieldType('stat', StatField);
-registerFieldType('badge', BadgeField);
-registerFieldType('scores', ScoresField);
-registerFieldType('progress-bar', ProgressBarField);
-registerFieldType('progress-circle', ProgressCircleField);
-registerFieldType('gauge', GaugeField);
 
 export default class NumberField extends BaseNumberField {
   static displayName = 'Number Field';
@@ -51,23 +23,6 @@ export default class NumberField extends BaseNumberField {
       return this.config.type ? getFieldClass(this.config.type) : null;
     }
 
-    get inputValue() {
-      // Return null for empty input, otherwise the numeric value
-      return hasValue(this.args.model) ? this.args.model : null;
-    }
-
-    handleInputChange = (value: string) => {
-      // Handle empty input by setting to null
-      if (value === '' || value === null || value === undefined) {
-        this.args.set(null);
-        return;
-      }
-      let num = parseFloat(value);
-      if (!isNaN(num)) {
-        this.args.set(num);
-      }
-    };
-
     <template>
       {{#if this.delegatedFieldClass}}
         {{#let this.delegatedFieldClass.edit as |DelegatedEdit|}}
@@ -78,10 +33,10 @@ export default class NumberField extends BaseNumberField {
           />
         {{/let}}
       {{else}}
-        <BoxelInput
-          @type='number'
-          @value={{this.inputValue}}
-          @onInput={{this.handleInputChange}}
+        <NumberInput
+          @value={{this.args.model}}
+          @config={{this.config}}
+          @onChange={{this.args.set}}
         />
       {{/if}}
     </template>
@@ -125,7 +80,6 @@ export default class NumberField extends BaseNumberField {
           font-size: 0.875rem;
           font-weight: 600;
           color: var(--foreground, var(--boxel-dark));
-          font-family: var(--font-mono, monospace);
         }
       </style>
     </template>
@@ -159,7 +113,6 @@ export default class NumberField extends BaseNumberField {
       <style scoped>
         .number-field-embedded {
           display: inline-flex;
-          font-family: monospace;
           font-weight: 600;
           color: var(--primary, var(--boxel-purple));
           font-size: 1.125rem;

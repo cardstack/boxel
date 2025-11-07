@@ -1,20 +1,22 @@
 import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
+import NumberInput from './components/number-input';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+
 import {
   hasValue,
   getNumericValue,
   calculatePercentage,
   getFormattedDisplayValue,
   clamp,
-  type GaugeConfig,
 } from './util/index';
+import type { GaugeConfig } from './util/types/index';
 
 export default class GaugeField extends NumberField {
   static displayName = 'Gauge Number Field';
@@ -33,8 +35,8 @@ export default class GaugeField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config(): GaugeConfig {
-      return this.args.configuration?.presentation as GaugeConfig;
+    get config() {
+      return this.args.configuration?.presentation;
     }
 
     get inputValue() {
@@ -71,36 +73,11 @@ export default class GaugeField extends NumberField {
     );
 
     <template>
-      <div class='gauge-field-edit'>
-        <BoxelInput
-          @type='number'
-          @value={{this.inputValue}}
-          @onInput={{this.handleInputChange}}
-          min={{this.config.min}}
-          max={{this.config.max}}
-          step={{this.stepValue}}
-        />
-        {{#if this.config.showValue}}
-          <span class='gauge-value-display'>{{this.displayValue}}</span>
-        {{/if}}
-      </div>
-
-      <style scoped>
-        .gauge-field-edit {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs, 0.5rem);
-        }
-        .gauge-value-display {
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
-          font-weight: var(--boxel-font-weight-semibold, 600);
-          font-size: var(--boxel-font-size-sm, 0.875rem);
-          color: var(--primary, var(--boxel-purple, #6638ff));
-        }
-      </style>
+      <NumberInput
+        @value={{this.args.model}}
+        @config={{this.config}}
+        @onChange={{this.args.set}}
+      />
     </template>
   };
 
@@ -218,10 +195,6 @@ export default class GaugeField extends NumberField {
           height: 1.875rem;
         }
         .gauge-value {
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-bold, 700);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
@@ -386,10 +359,6 @@ export default class GaugeField extends NumberField {
           height: auto;
         }
         .gauge-value-large {
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
           font-size: var(--boxel-font-size-xl, 1.5rem);
           font-weight: var(--boxel-font-weight-bold, 700);
           color: var(--foreground, var(--boxel-dark, #000));

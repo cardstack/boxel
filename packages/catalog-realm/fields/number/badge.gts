@@ -1,17 +1,15 @@
 import { Component } from 'https://cardstack.com/base/card-api';
+import NumberInput from './components/number-input';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
-import {
-  hasValue,
-  getFormattedDisplayValue,
-  clamp,
-  type BadgeConfig,
-} from './util/index';
+
+import { hasValue, getFormattedDisplayValue } from './util/index';
+import type { BadgeConfig } from './util/types/index';
 
 interface Configuration {
   presentation: BadgeConfig;
@@ -115,7 +113,6 @@ class View extends Component<typeof BadgeField> {
       .badge-counter-value {
         font-weight: 700;
         font-size: 1.1rem;
-        font-family: var(--boxel-monospace-font-family, monospace);
       }
     </style>
   </template>
@@ -139,31 +136,11 @@ export default class BadgeField extends NumberField {
       return this.args.configuration?.presentation;
     }
 
-    get inputValue() {
-      // Return null for empty input, otherwise the numeric value
-      return hasValue(this.args.model) ? this.args.model : null;
-    }
-
-    handleInputChange = (value: string) => {
-      if (value === '' || value === null || value === undefined) {
-        this.args.set(null);
-        return;
-      }
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        const min = this.config.min ?? -Infinity;
-        const max = this.config.max ?? Infinity;
-        this.args.set(clamp(num, min, max));
-      }
-    };
-
     <template>
-      <BoxelInput
-        @type='number'
-        @value={{this.inputValue}}
-        @onInput={{this.handleInputChange}}
-        min={{this.config.min}}
-        max={{this.config.max}}
+      <NumberInput
+        @value={{this.args.model}}
+        @config={{this.config}}
+        @onChange={{this.args.set}}
       />
     </template>
 

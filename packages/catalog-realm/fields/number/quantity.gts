@@ -1,18 +1,17 @@
+// External dependencies
 import { Component } from 'https://cardstack.com/base/card-api';
+import { on } from '@ember/modifier';
+import { lte, gte } from '@cardstack/boxel-ui/helpers';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { on } from '@ember/modifier';
-import { lte, gte } from '@cardstack/boxel-ui/helpers';
-import {
-  getNumericValue,
-  clamp,
-  calculatePercentage,
-  type QuantityConfig,
-} from './util/index';
+
+import { getNumericValue, clamp, calculatePercentage } from './util/index';
+import type { QuantityConfig } from './util/types/index';
 
 interface Configuration {
   presentation: QuantityConfig;
@@ -124,10 +123,6 @@ export default class QuantityField extends NumberField {
           border-radius: var(--boxel-border-radius-xs, 0.25rem);
           background: var(--background, var(--boxel-light, #ffffff));
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
           outline: none;
           transition: border-color 0.2s;
         }
@@ -200,7 +195,10 @@ export default class QuantityField extends NumberField {
           <span>Max {{this.config.max}}</span>
         </div>
         <div class='quantity-progress'>
-          <div class='quantity-progress-fill' style={{this.progressStyle}}></div>
+          <div
+            class='quantity-progress-fill'
+            style={{this.progressStyle}}
+          ></div>
         </div>
       </div>
 
@@ -233,7 +231,6 @@ export default class QuantityField extends NumberField {
         .quantity-card-value {
           font-size: 2rem;
           font-weight: 700;
-          font-family: var(--boxel-monospace-font-family, monospace);
           color: var(--boxel-700);
         }
         .quantity-card-meta {
@@ -241,7 +238,6 @@ export default class QuantityField extends NumberField {
           justify-content: space-between;
           font-size: 0.8125rem;
           color: var(--boxel-500);
-          font-family: var(--boxel-monospace-font-family, monospace);
         }
         .quantity-progress {
           position: relative;
@@ -284,10 +280,6 @@ export default class QuantityField extends NumberField {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(
-            --font-sans,
-            var(--boxel-font-family, system-ui, sans-serif)
-          );
           text-transform: uppercase;
           letter-spacing: var(--boxel-lsp-xs, 0.01em);
         }

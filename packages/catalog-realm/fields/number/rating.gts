@@ -1,14 +1,17 @@
 import { Component } from 'https://cardstack.com/base/card-api';
+import { on } from '@ember/modifier';
+import { fn, array } from '@ember/helper';
+import { lte } from '@cardstack/boxel-ui/helpers';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { on } from '@ember/modifier';
-import { fn, array } from '@ember/helper';
-import { lte } from '@cardstack/boxel-ui/helpers';
-import { getNumericValue, hasValue, type RatingConfig } from './util/index';
+
+import { getNumericValue, hasValue } from './util/index';
+import type { RatingConfig } from './util/types/index';
 
 interface Configuration {
   presentation: RatingConfig;
@@ -132,10 +135,6 @@ export default class RatingField extends NumberField {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
         }
       </style>
     </template>

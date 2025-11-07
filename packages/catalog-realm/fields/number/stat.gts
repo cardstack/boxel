@@ -1,17 +1,15 @@
 import { Component } from 'https://cardstack.com/base/card-api';
+import NumberInput from './components/number-input';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
-import {
-  hasValue,
-  getFormattedDisplayValue,
-  clamp,
-  type StatConfig,
-} from './util/index';
+
+import { hasValue, getFormattedDisplayValue } from './util/index';
+import type { StatConfig } from './util/types/index';
 
 interface Configuration {
   presentation: StatConfig;
@@ -35,31 +33,12 @@ export default class StatField extends NumberField {
     get config() {
       return this.args.configuration?.presentation;
     }
-    get inputValue() {
-      // Return null for empty input, otherwise the numeric value
-      return hasValue(this.args.model) ? this.args.model : null;
-    }
-
-    handleInputChange = (value: string) => {
-      if (value === '' || value === null || value === undefined) {
-        this.args.set(null);
-        return;
-      }
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        const min = this.config.min ?? -Infinity;
-        const max = this.config.max ?? Infinity;
-        this.args.set(clamp(num, min, max));
-      }
-    };
 
     <template>
-      <BoxelInput
-        @type='number'
-        @value={{this.inputValue}}
-        @onInput={{this.handleInputChange}}
-        min={{this.config.min}}
-        max={{this.config.max}}
+      <NumberInput
+        @value={{this.args.model}}
+        @config={{this.config}}
+        @onChange={{this.args.set}}
       />
     </template>
 
@@ -102,10 +81,6 @@ export default class StatField extends NumberField {
           );
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
           line-height: 1;
         }
         .stat-indicator {
@@ -176,7 +151,10 @@ export default class StatField extends NumberField {
           <div class='stat-subtitle'>{{this.config.subtitle}}</div>
         {{/if}}
         {{#if this.hasRange}}
-          <div class='stat-range'>Min {{this.config.min}} · Max {{this.config.max}}</div>
+          <div class='stat-range'>Min
+            {{this.config.min}}
+            · Max
+            {{this.config.max}}</div>
         {{/if}}
       </div>
 
@@ -187,22 +165,10 @@ export default class StatField extends NumberField {
           gap: var(--boxel-sp-xxs, 0.65rem);
           padding: var(--boxel-sp, 1rem);
           border-radius: var(--boxel-border-radius-lg, 0.75rem);
-          background: var(
-            --stat-card-bg,
-            linear-gradient(
-              135deg,
-              color-mix(in srgb, var(--boxel-light, #ffffff) 95%, transparent),
-              color-mix(in srgb, var(--boxel-purple, #6638ff) 15%, var(--boxel-light, #ffffff) 85%)
-            )
-          );
-          color: var(--stat-card-color, var(--boxel-700, #272330));
-          border: 1px solid
-            var(
-              --stat-card-border,
-              color-mix(in srgb, var(--boxel-blue, #0069f9) 15%, transparent)
-            );
-          box-shadow: 0 10px 24px
-            color-mix(in srgb, var(--boxel-700, #272330) 15%, transparent);
+          background: linear-gradient(135deg, #f4f8ff, #e4edff);
+          color: var(--boxel-700);
+          border: 1px solid #dbe7ff;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
         }
         .stat-header {
           display: flex;
@@ -213,19 +179,12 @@ export default class StatField extends NumberField {
         .stat-chip {
           padding: 0.25rem 0.75rem;
           border-radius: 999px;
-          border: 1px solid
-            var(
-              --stat-chip-border,
-              color-mix(in srgb, var(--boxel-blue, #0069f9) 30%, transparent)
-            );
+          border: 1px solid rgba(61, 110, 255, 0.25);
           font-size: 0.75rem;
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: var(--boxel-500);
-          background: var(
-            --stat-chip-bg,
-            color-mix(in srgb, var(--boxel-light, #ffffff) 90%, transparent)
-          );
+          background: rgba(255, 255, 255, 0.8);
         }
         .stat-icon-pill {
           display: inline-flex;
@@ -234,11 +193,8 @@ export default class StatField extends NumberField {
           width: 2rem;
           height: 2rem;
           border-radius: 999px;
-          background: var(
-            --stat-icon-bg,
-            color-mix(in srgb, var(--boxel-blue, #0069f9) 12%, transparent)
-          );
-          color: var(--stat-icon-color, var(--boxel-blue, #0069f9));
+          background: rgba(64, 120, 255, 0.12);
+          color: var(--boxel-blue, #0069f9);
         }
         .stat-range {
           font-size: 0.8125rem;
@@ -252,7 +208,6 @@ export default class StatField extends NumberField {
         .stat-value {
           font-size: 2.25rem;
           font-weight: 700;
-          font-family: var(--boxel-monospace-font-family, monospace);
           color: var(--boxel-700);
         }
         .stat-subtitle {

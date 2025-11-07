@@ -1,18 +1,20 @@
 import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+
 import {
   getNumericValue,
   calculatePercentage,
   getFormattedDisplayValue,
-  type SliderConfig,
 } from './util/index';
+import type { SliderConfig } from './util/types/index';
 
 interface Configuration {
   presentation: SliderConfig;
@@ -68,7 +70,6 @@ export default class SliderField extends NumberField {
           width: 100%;
         }
         .slider-value {
-          font-family: var(--font-mono, monospace);
           font-weight: 600;
           font-size: var(--boxel-font-sm);
           color: var(--primary, var(--boxel-purple));
@@ -138,10 +139,6 @@ export default class SliderField extends NumberField {
           border-radius: var(--boxel-border-radius-xs, 0.125rem);
         }
         .slider-value {
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
@@ -232,7 +229,6 @@ export default class SliderField extends NumberField {
         .slider-card-value {
           font-size: 1.5rem;
           font-weight: 700;
-          font-family: var(--boxel-monospace-font-family, monospace);
           color: var(--boxel-700);
         }
         .slider-track {
@@ -271,14 +267,12 @@ export default class SliderField extends NumberField {
           align-self: flex-end;
           font-weight: 600;
           color: var(--boxel-purple);
-          font-family: var(--boxel-monospace-font-family, monospace);
         }
         .slider-range {
           display: flex;
           justify-content: space-between;
           font-size: 0.75rem;
           color: var(--boxel-500);
-          font-family: var(--boxel-monospace-font-family, monospace);
         }
       </style>
     </template>

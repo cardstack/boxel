@@ -14,22 +14,22 @@
         "description": null,
         "thumbnailURL": null
       },
-      "statNumber": 100,
-      "badgeNumber": 20,
-      "basicNumber": 100,
-      "gaugeNumber": 100,
-      "ratingNumber": 4,
-      "scoresNumber": 1000,
-      "sliderNumber": 52,
-      "quantityNumber": 4,
-      "percentageNumber": 20,
-      "progressBarNumber": 40,
-      "progressCircleNumber": 20
+      "statNumber": null,
+      "badgeNumber": null,
+      "basicNumber": null,
+      "gaugeNumber": null,
+      "ratingNumber": null,
+      "scoresNumber": null,
+      "sliderNumber": null,
+      "quantityNumber": null,
+      "percentageNumber": null,
+      "progressBarNumber": null,
+      "progressCircleNumber": null
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/experiments/default/5b09feb0-ed5f-4ee5-8836-36cbcb789a72"
+          "self": null
         }
       }
     }

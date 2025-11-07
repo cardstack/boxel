@@ -1,19 +1,16 @@
 import { Component } from 'https://cardstack.com/base/card-api';
+import NumberInput from './components/number-input';
+import { ProgressRadial } from '@cardstack/boxel-ui/components';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput, ProgressRadial } from '@cardstack/boxel-ui/components';
 
-import {
-  hasValue,
-  clamp,
-  getNumericValue,
-  calculatePercentage,
-  type ProgressCircleConfig,
-} from './util/index';
+import { getNumericValue, calculatePercentage } from './util/index';
+import type { ProgressCircleConfig } from './util/types/index';
 
 interface Configuration {
   presentation: ProgressCircleConfig;
@@ -35,31 +32,11 @@ export default class ProgressCircleField extends NumberField {
       return this.args.configuration?.presentation;
     }
 
-    get inputValue() {
-      // Return null for empty input, otherwise the numeric value
-      return hasValue(this.args.model) ? this.args.model : null;
-    }
-
-    handleInputChange = (value: string) => {
-      if (value === '' || value === null || value === undefined) {
-        this.args.set(null);
-        return;
-      }
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        const min = this.config.min ?? -Infinity;
-        const max = this.config.max ?? Infinity;
-        this.args.set(clamp(num, min, max));
-      }
-    };
-
     <template>
-      <BoxelInput
-        @type='number'
-        @value={{this.inputValue}}
-        @onInput={{this.handleInputChange}}
-        min={{this.config.min}}
-        max={{this.config.max}}
+      <NumberInput
+        @value={{this.args.model}}
+        @config={{this.config}}
+        @onChange={{this.args.set}}
       />
     </template>
 
@@ -142,16 +119,12 @@ export default class ProgressCircleField extends NumberField {
         .radial-svg {
           width: 100%;
           height: 100%;
-          color: var(--primary, var(--boxel-purple, #6638ff));
+          color: var(--primary, var(--boxel-highlight));
         }
         .value {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
         }
       </style>
     </template>

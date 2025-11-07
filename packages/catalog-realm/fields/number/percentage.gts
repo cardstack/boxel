@@ -1,20 +1,22 @@
-import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
-import NumberField, {
+import NumberField from 'https://cardstack.com/base/number';
+import NumberInput from './components/number-input';
+
+import { NumberSerializer } from '@cardstack/runtime-common';
+import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
+import {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
-import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
-import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+
 import {
-  hasValue,
   getNumericValue,
   getFormattedDisplayValue,
   calculatePercentage,
-  clamp,
-  type PercentageConfig,
 } from './util/index';
+import type { PercentageConfig } from './util/types/index';
+
+import { htmlSafe } from '@ember/template';
 
 interface Configuration {
   presentation: PercentageConfig;
@@ -37,31 +39,11 @@ export default class PercentageField extends NumberField {
       return this.args.configuration?.presentation;
     }
 
-    get inputValue() {
-      // Return null for empty input, otherwise the numeric value
-      return hasValue(this.args.model) ? this.args.model : null;
-    }
-
-    handleInputChange = (value: string) => {
-      if (value === '' || value === null || value === undefined) {
-        this.args.set(null);
-        return;
-      }
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        const min = this.config.min ?? -Infinity;
-        const max = this.config.max ?? Infinity;
-        this.args.set(clamp(num, min, max));
-      }
-    };
-
     <template>
-      <BoxelInput
-        @type='number'
-        @value={{this.inputValue}}
-        @onInput={{this.handleInputChange}}
-        min={{this.config.min}}
-        max={{this.config.max}}
+      <NumberInput
+        @value={{this.args.model}}
+        @config={{this.config}}
+        @onChange={{this.args.set}}
       />
     </template>
 
@@ -91,10 +73,6 @@ export default class PercentageField extends NumberField {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
         }
       </style>
     </template>
@@ -173,12 +151,10 @@ export default class PercentageField extends NumberField {
         .percentage-range {
           font-size: 0.8125rem;
           color: var(--boxel-500);
-          font-family: var(--boxel-monospace-font-family, monospace);
         }
         .percentage-value {
           font-size: 2rem;
           font-weight: 700;
-          font-family: var(--boxel-monospace-font-family, monospace);
           color: var(--boxel-700);
         }
         .percentage-bar {

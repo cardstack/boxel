@@ -1,19 +1,16 @@
-import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
+import NumberInput from './components/number-input';
+import { ProgressBar } from '@cardstack/boxel-ui/components';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput, ProgressBar } from '@cardstack/boxel-ui/components';
-import {
-  hasValue,
-  clamp,
-  getNumericValue,
-  calculatePercentage,
-  type ProgressBarConfig,
-} from './util/index';
+
+import { getNumericValue, calculatePercentage } from './util/index';
+import type { ProgressBarConfig } from './util/types/index';
 
 interface Configuration {
   presentation: ProgressBarConfig;
@@ -36,31 +33,11 @@ export default class ProgressBarField extends NumberField {
       return this.args.configuration?.presentation;
     }
 
-    get inputValue() {
-      // Return null for empty input, otherwise the numeric value
-      return hasValue(this.args.model) ? this.args.model : null;
-    }
-
-    handleInputChange = (value: string) => {
-      if (value === '' || value === null || value === undefined) {
-        this.args.set(null);
-        return;
-      }
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        const min = this.config.min ?? -Infinity;
-        const max = this.config.max ?? Infinity;
-        this.args.set(clamp(num, min, max));
-      }
-    };
-
     <template>
-      <BoxelInput
-        @type='number'
-        @value={{this.inputValue}}
-        @onInput={{this.handleInputChange}}
-        min={{this.config.min}}
-        max={{this.config.max}}
+      <NumberInput
+        @value={{this.args.model}}
+        @config={{this.config}}
+        @onChange={{this.args.set}}
       />
     </template>
 
@@ -105,10 +82,6 @@ export default class ProgressBarField extends NumberField {
           align-items: center;
           gap: var(--boxel-sp-5xs, 0.25rem);
           font-size: var(--boxel-font-size-xs, 0.6875rem);
-          font-family: var(
-            --font-sans,
-            var(--boxel-font-family, system-ui, sans-serif)
-          );
         }
         .label {
           color: var(--muted-foreground, var(--boxel-450, #919191));
@@ -117,10 +90,6 @@ export default class ProgressBarField extends NumberField {
         .value {
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
           font-weight: var(--boxel-font-weight-semibold, 600);
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
         }
       </style>
     </template>
@@ -149,34 +118,11 @@ export default class ProgressBarField extends NumberField {
       return this.config.label ?? 'Progress';
     }
 
-    get barStyle() {
-      return htmlSafe(`
-        --boxel-progress-bar-border-radius: var(--boxel-border-radius-xl, 1rem);
-        --boxel-progress-bar-fill-color: var(
-          --progress-bar-fill,
-          var(--primary, var(--boxel-blue, #0069f9))
-        );
-        --boxel-progress-bar-background-color: var(
-          --progress-bar-track,
-          color-mix(in srgb, var(--boxel-light, #ffffff) 85%, transparent)
-        );
-        --boxel-progress-bar-border-color: var(
-          --progress-bar-track-border,
-          color-mix(in srgb, var(--boxel-700, #272330) 10%, transparent)
-        );
-        --boxel-progress-bar-font-color: var(
-          --progress-bar-label-color,
-          var(--boxel-light, #ffffff)
-        );
-      `);
-    }
-
     <template>
       <div class='progress-bar-field'>
         <div class='progress-bar-header'>
           <span class='progress-bar-title'>{{this.labelText}}</span>
           <span class='progress-bar-value'>
-            {{this.percentage}}% ·
             {{this.numericValue}}
             /
             {{this.config.max}}
@@ -187,7 +133,6 @@ export default class ProgressBarField extends NumberField {
           @value={{this.numericValue}}
           @max={{this.config.max}}
           @position='right'
-          style={{this.barStyle}}
         />
       </div>
 
@@ -204,7 +149,11 @@ export default class ProgressBarField extends NumberField {
             linear-gradient(
               135deg,
               color-mix(in srgb, var(--boxel-700, #272330) 90%, transparent),
-              color-mix(in srgb, var(--boxel-purple, #6638ff) 30%, var(--boxel-700, #272330) 70%)
+              color-mix(
+                in srgb,
+                var(--boxel-purple, #6638ff) 30%,
+                var(--boxel-700, #272330) 70%
+              )
             )
           );
           color: var(--progress-card-color, var(--boxel-light, #ffffff));
@@ -224,7 +173,6 @@ export default class ProgressBarField extends NumberField {
           );
         }
         .progress-bar-value {
-          font-family: var(--boxel-monospace-font-family, monospace);
         }
       </style>
     </template>

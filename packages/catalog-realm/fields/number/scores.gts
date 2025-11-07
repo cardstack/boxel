@@ -1,20 +1,20 @@
 import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
+import NumberInput from './components/number-input';
+
 import NumberField, {
   deserializeForUI,
   serializeForUI,
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+
 import {
-  hasValue,
   getFormattedDisplayValue,
-  clamp,
   getNumericValue,
   calculatePercentage,
-  type ScoresConfig,
 } from './util/index';
+import type { ScoresConfig } from './util/types/index';
 
 interface Configuration {
   presentation: ScoresConfig;
@@ -37,31 +37,11 @@ export default class ScoresField extends NumberField {
       return this.args.configuration?.presentation;
     }
 
-    get inputValue() {
-      // Return null for empty input, otherwise the numeric value
-      return hasValue(this.args.model) ? this.args.model : null;
-    }
-
-    handleInputChange = (value: string) => {
-      if (value === '' || value === null || value === undefined) {
-        this.args.set(null);
-        return;
-      }
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        const min = this.config.min ?? -Infinity;
-        const max = this.config.max ?? Infinity;
-        this.args.set(clamp(num, min, max));
-      }
-    };
-
     <template>
-      <BoxelInput
-        @type='number'
-        @value={{this.inputValue}}
-        @onInput={{this.handleInputChange}}
-        min={{this.config.min}}
-        max={{this.config.max}}
+      <NumberInput
+        @value={{this.args.model}}
+        @config={{this.config}}
+        @onChange={{this.args.set}}
       />
     </template>
 
@@ -134,10 +114,6 @@ export default class ScoresField extends NumberField {
           font-size: var(--boxel-font-size-xs, 0.6875rem);
           font-weight: var(--boxel-font-weight-semibold, 600);
           color: var(--foreground, var(--boxel-dark, #1a1a1a));
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
         }
       </style>
     </template>
@@ -198,15 +174,10 @@ export default class ScoresField extends NumberField {
           gap: var(--boxel-sp-xxs, 0.65rem);
           padding: var(--boxel-sp, 1rem);
           border-radius: var(--boxel-border-radius-lg, 0.75rem);
-          border: 1px solid
-            var(
-              --scores-card-border,
-              color-mix(in srgb, var(--boxel-900, #1a1a1a) 20%, transparent)
-            );
-          background: var(--scores-card-bg, var(--boxel-700, #272330));
-          color: var(--scores-card-color, var(--boxel-light, #ffffff));
-          box-shadow: 0 14px 28px
-            color-mix(in srgb, var(--boxel-900, #1a1a1a) 35%, transparent);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: #0f172a;
+          color: var(--boxel-light);
+          box-shadow: 0 14px 28px rgba(2, 6, 23, 0.4);
         }
         .scores-header {
           display: flex;
@@ -217,32 +188,22 @@ export default class ScoresField extends NumberField {
           font-size: 0.75rem;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          color: var(
-            --scores-title-color,
-            color-mix(in srgb, var(--boxel-light, #ffffff) 80%, transparent)
-          );
+          color: rgba(255, 255, 255, 0.8);
         }
         .scores-tier {
           display: block;
           font-size: 0.8125rem;
-          color: var(
-            --scores-tier-color,
-            color-mix(in srgb, var(--boxel-light, #ffffff) 60%, transparent)
-          );
+          color: rgba(255, 255, 255, 0.6);
         }
         .score-value {
           font-size: 2rem;
           font-weight: 700;
-          font-family: var(--boxel-monospace-font-family, monospace);
         }
         .score-meter {
           position: relative;
           height: 0.65rem;
           width: 100%;
-          background: var(
-            --scores-meter-track,
-            color-mix(in srgb, var(--boxel-light, #ffffff) 12%, transparent)
-          );
+          background: rgba(255, 255, 255, 0.12);
           border-radius: 999px;
           overflow: hidden;
         }
@@ -251,10 +212,10 @@ export default class ScoresField extends NumberField {
           inset: 0 auto 0 0;
           background: linear-gradient(
             90deg,
-            var(--scores-meter-stop-red, var(--boxel-red, #ff5050)) 0%,
-            var(--scores-meter-stop-orange, var(--boxel-orange, #ff7f00)) 35%,
-            var(--scores-meter-stop-yellow, var(--boxel-yellow, #ffd800)) 60%,
-            var(--scores-meter-stop-green, var(--boxel-green, #37eb77)) 100%
+            #ff4d4d 0%,
+            #ffb347 35%,
+            #ffe259 60%,
+            #37eb77 100%
           );
           border-radius: inherit;
           transition: width 0.3s ease;
@@ -263,10 +224,7 @@ export default class ScoresField extends NumberField {
           display: flex;
           justify-content: space-between;
           font-size: 0.75rem;
-          color: var(
-            --scores-scale-color,
-            color-mix(in srgb, var(--boxel-light, #ffffff) 60%, transparent)
-          );
+          color: rgba(255, 255, 255, 0.6);
           text-transform: uppercase;
           letter-spacing: 0.08em;
         }
