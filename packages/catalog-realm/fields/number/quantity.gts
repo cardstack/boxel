@@ -63,6 +63,7 @@ export default class QuantityField extends NumberField {
 
     <template>
       <div class='quantity-field-edit'>
+        <label for='quantity-input' class='sr-only'>Quantity</label>
         <button
           type='button'
           class='qty-btn'
@@ -70,6 +71,7 @@ export default class QuantityField extends NumberField {
           disabled={{if (lte this.numericValue this.config.min) 'true'}}
         >−</button>
         <input
+          id='quantity-input'
           type='number'
           class='qty-input'
           value={{this.numericValue}}
@@ -86,6 +88,16 @@ export default class QuantityField extends NumberField {
       </div>
 
       <style scoped>
+        .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          border: 0;
+        }
         .quantity-field-edit {
           display: flex;
           align-items: center;

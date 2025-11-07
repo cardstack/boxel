@@ -64,6 +64,14 @@ export default class GaugeField extends NumberField {
       }
     };
 
+    <template>
+      <NumberInput
+        @value={{@model}}
+        @config={{this.config}}
+        @onChange={{@set}}
+      />
+    </template>
+
     textInputValidator: TextInputValidator<number> = new TextInputValidator(
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
@@ -71,14 +79,6 @@ export default class GaugeField extends NumberField {
       serializeForUI,
       NumberSerializer.validate,
     );
-
-    <template>
-      <NumberInput
-        @value={{this.args.model}}
-        @config={{this.config}}
-        @onChange={{this.args.set}}
-      />
-    </template>
   };
 
   static atom = class Atom extends Component<typeof this> {
@@ -145,9 +145,11 @@ export default class GaugeField extends NumberField {
           <path
             d='M 10 50 A 40 40 0 0 1 90 50'
             fill='none'
-            stroke='var(--border, var(--boxel-200, #e0e0e0))'
+            stroke='var(--muted, #f1f5f9)'
             stroke-width='8'
             stroke-linecap='round'
+            style={{htmlSafe 'transition: none;'}}
+          />
           />
           {{! Value arc }}
           <path
@@ -158,7 +160,9 @@ export default class GaugeField extends NumberField {
             stroke-linecap='round'
             stroke-dasharray={{this.arcDashArray}}
             stroke-dashoffset={{this.arcDashOffset}}
-            style='transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;'
+            style={{htmlSafe
+              'transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;'
+            }}
           />
           {{! Center dot }}
           <circle
@@ -278,7 +282,9 @@ export default class GaugeField extends NumberField {
               stroke-linecap='round'
               stroke-dasharray={{this.arcDashArray}}
               stroke-dashoffset={{this.arcDashOffset}}
-              style='transition: stroke-dashoffset 0.4s ease, stroke 0.3s ease;'
+              style={{htmlSafe
+                'transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;'
+              }}
             />
             <text
               x='20'

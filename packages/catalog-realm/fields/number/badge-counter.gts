@@ -124,9 +124,9 @@ export default class BadgeCounterField extends NumberField {
     }
     <template>
       <NumberInput
-        @value={{this.args.model}}
+        @value={{@model}}
         @config={{this.config}}
-        @onChange={{this.args.set}}
+        @onChange={{@set}}
       />
     </template>
     textInputValidator: TextInputValidator<number> = new TextInputValidator(

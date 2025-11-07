@@ -34,9 +34,9 @@ export default class NumberField extends BaseNumberField {
         {{/let}}
       {{else}}
         <NumberInput
-          @value={{this.args.model}}
+          @value={{@model}}
           @config={{this.config}}
-          @onChange={{this.args.set}}
+          @onChange={{@set}}
         />
       {{/if}}
     </template>

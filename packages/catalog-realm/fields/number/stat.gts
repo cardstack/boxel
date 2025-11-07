@@ -33,15 +33,13 @@ export default class StatField extends NumberField {
     get config() {
       return this.args.configuration?.presentation;
     }
-
     <template>
       <NumberInput
-        @value={{this.args.model}}
+        @value={{@model}}
         @config={{this.config}}
-        @onChange={{this.args.set}}
+        @onChange={{@set}}
       />
     </template>
-
     textInputValidator: TextInputValidator<number> = new TextInputValidator(
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
