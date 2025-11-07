@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Skill",
+        "module": "https://cardstack.com/base/skill"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Data Management",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "description": "JSON instances, file organization, and relationship patterns",
+      "instructions": "## JSON Instance Essentials\n\n**Instance structure:**\n```json\n{\n  \"data\": {\n    \"type\": \"card\",\n    \"attributes\": {\n      \"title\": \"My Title\",\n      \"price\": 29.99\n    },\n    \"relationships\": {\n      \"author\": {\n        \"links\": { \"self\": \"../Author/jane-doe\" }\n      }\n    },\n    \"meta\": {\n      \"adoptsFrom\": {\n        \"module\": \"../blog-post\",\n        \"name\": \"BlogPost\"\n      }\n    }\n  }\n}\n```\n\n**linksToMany pattern:**\n```json\n\"teamMembers.0\": { \"links\": { \"self\": \"../Person/kai\" } },\n\"teamMembers.1\": { \"links\": { \"self\": \"../Person/esperanza\" } }\n```\n\n**Empty linksToMany:**\n```json\n\"items\": { \"links\": { \"self\": null } }\n```\n\n**Paths:** Relative, no extensions\n- Module: `\"../author\"` not `\"../author.gts\"`\n- Instance: `\"../Author/jane\"` not `\"../Author/jane.json\"`\n\n<!--more-->\n\n# JSON Instance Format\n\n## Root Structure\n\nAll data wrapped in a `data` object with:\n* `type`: Always `\"card\"` for instances\n* `attributes`: Field values\n* `relationships`: Links to other cards\n* `meta.adoptsFrom`: Connection to GTS definition\n\n## Instance Template\n\n```json\n{\n  \"data\": {\n    \"type\": \"card\",\n    \"attributes\": {\n      \"title\": \"My Title\",\n      \"price\": 29.99\n    },\n    \"relationships\": {\n      \"author\": {\n        \"links\": {\n          \"self\": \"../Author/jane-doe\"\n        }\n      }\n    },\n    \"meta\": {\n      \"adoptsFrom\": {\n        \"module\": \"../blog-post\",\n        \"name\": \"BlogPost\"\n      }\n    }\n  }\n}\n```\n\n## Relationship Patterns\n\n**Single link (linksTo):**\n```json\n\"author\": {\n  \"links\": { \"self\": \"../Author/dr-nakamura\" }\n}\n```\n\n**Multiple links (linksToMany):**\n```json\n\"teamMembers.0\": {\n  \"links\": { \"self\": \"../Person/kai\" }\n},\n\"teamMembers.1\": {\n  \"links\": { \"self\": \"../Person/esperanza\" }\n}\n```\n\n**Empty linksToMany:**\n```json\n\"nextLevels\": {\n  \"links\": { \"self\": null }\n}\n```\n\n## File Organization\n\n### Single App\n```\nmy-realm/\n├── blog-post.gts\n├── author.gts\n├── BlogPost/\n│   └── hello-world.json\n└── Author/\n    └── jane-doe.json\n```\n\n### Related Cards App\n```\nmy-realm/\n├── ecommerce/\n│   ├── product.gts\n│   ├── order.gts\n│   ├── Product/\n│   │   └── laptop-pro.json\n│   └── Order/\n│       └── order-001.json\n└── shared/\n    └── address-field.gts\n```\n\n## Path Conventions\n\n* **Module paths:** Relative, no `.gts` extension\n  * `\"../author\"` or `\"../../shared/address-field\"`\n* **Relationship paths:** Relative, no `.json` extension\n  * `\"../Author/jane-doe\"`\n* **Date formats:**\n  * DateField: `\"2024-11-15\"`\n  * DatetimeField: `\"2024-11-15T10:00:00Z\"`"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
