@@ -36,10 +36,9 @@ module('Integration | helpers | formatDateTime', function (hooks) {
     );
   });
 
-  test('relative time formatting', function (assert) {
+  test('relative time formatting (direct helper)', function (assert) {
     assert.strictEqual(
-      formatDateTime(BASE_DATE, {
-        relative: true,
+      formatRelativeTime(BASE_DATE, {
         now: NOW,
       }),
       '2 hours ago',
@@ -48,8 +47,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
 
     const justNow = new Date(NOW.getTime() - 30000); // 30 seconds ago
     assert.strictEqual(
-      formatDateTime(justNow, {
-        relative: true,
+      formatRelativeTime(justNow, {
         now: NOW,
       }),
       'now',
@@ -57,57 +55,30 @@ module('Integration | helpers | formatDateTime', function (hooks) {
     );
   });
 
-  test('formatDateTime relative delegates to formatRelativeTime for short preset', function (assert) {
+  test('short relative preset equivalence (direct helper)', function (assert) {
     const now = NOW;
     const twentyEightDaysAgo = new Date(
       NOW.getTime() - 28 * 24 * 60 * 60 * 1000,
     );
     const sixtyDaysAgo = new Date(NOW.getTime() - 60 * 24 * 60 * 60 * 1000);
-
-    const fd1 = formatDateTime(twentyEightDaysAgo, {
-      relative: true,
-      preset: 'short',
-      now,
-      locale: 'en-US',
-    });
-
     const fr1 = formatRelativeTime(twentyEightDaysAgo, {
       size: 'short',
       now,
       locale: 'en-US',
     });
-
     assert.strictEqual(
-      fd1,
       fr1,
-      'formatDateTime delegates to formatRelativeTime for short preset (28 days)',
-    );
-    assert.strictEqual(
-      fd1,
       '28 days ago',
       'short preset shows days for ~last-month spans',
     );
-
-    const fd2 = formatDateTime(sixtyDaysAgo, {
-      relative: true,
-      preset: 'short',
-      now,
-      locale: 'en-US',
-    });
 
     const fr2 = formatRelativeTime(sixtyDaysAgo, {
       size: 'short',
       now,
       locale: 'en-US',
     });
-
     assert.strictEqual(
-      fd2,
       fr2,
-      'formatDateTime delegates to formatRelativeTime for short preset (60 days)',
-    );
-    assert.strictEqual(
-      fd2,
       '2 months ago',
       'short preset falls back to months for larger spans',
     );
@@ -118,6 +89,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       formatDateTime(NOW, {
         preset: 'tiny',
         now: NOW,
+        timeZone: 'UTC',
       }),
       '5:45 PM',
       'shows time for today',
@@ -128,6 +100,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       formatDateTime(yesterday, {
         preset: 'tiny',
         now: NOW,
+        timeZone: 'UTC',
       }),
       '3/14',
       'shows date for non-today',
@@ -247,6 +220,279 @@ module('Integration | helpers | formatDateTime', function (hooks) {
       {{formatDateTime BASE_DATE kind='time' locale='en-US' timeZone='UTC'}}
     </template>);
     assert.dom().hasText('3:45 PM', 'formats time-only output');
+  });
+
+  test('date and datetime kinds include the expected fields', async function (assert) {
+    await render(<template>
+      {{formatDateTime BASE_DATE kind='date' locale='en-US' timeZone='UTC'}}
+    </template>);
+    assert.dom().hasText('Mar 15, 2024', 'kind="date" renders date only');
+
+    await render(<template>
+      {{formatDateTime BASE_DATE kind='datetime' locale='en-US' timeZone='UTC'}}
+    </template>);
+    assert
+      .dom()
+      .hasText('Mar 15, 2024, 3:45 PM', 'kind="datetime" renders date + time');
+  });
+
+  test('month display supports numeric, 2-digit, short, and long outputs', async function (assert) {
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        kind='month'
+        locale='en-US'
+        timeZone='UTC'
+        monthDisplay='numeric'
+      }}
+    </template>);
+    assert.dom().hasText('3', 'numeric month display shows "3"');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        kind='month'
+        locale='en-US'
+        timeZone='UTC'
+        monthDisplay='2-digit'
+      }}
+    </template>);
+    assert.dom().hasText('03', '2-digit month display zero pads');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        kind='month'
+        locale='en-US'
+        timeZone='UTC'
+        monthDisplay='short'
+      }}
+    </template>);
+    assert.dom().hasText('Mar', 'short month display abbreviates');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        kind='monthYear'
+        locale='en-US'
+        timeZone='UTC'
+        monthDisplay='long'
+      }}
+    </template>);
+    assert.dom().hasText('March 2024', 'long month display spells out month');
+  });
+
+  test('date and time style permutations', async function (assert) {
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en-US'
+        timeZone='UTC'
+        dateStyle='full'
+      }}
+    </template>);
+    assert
+      .dom()
+      .hasText('Friday, March 15, 2024', 'full date style includes weekday');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en-US'
+        timeZone='UTC'
+        timeStyle='medium'
+      }}
+    </template>);
+    assert.dom().includesText('3:45:00', 'medium time style shows seconds');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en-US'
+        timeZone='UTC'
+        timeStyle='long'
+      }}
+    </template>);
+    assert
+      .dom()
+      .includesText('3:45:00 PM UTC', 'long time style includes zone');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en-US'
+        timeZone='UTC'
+        dateStyle='long'
+        timeStyle='short'
+      }}
+    </template>);
+    assert.dom().includesText('March 15, 2024', 'combined style shows date');
+    assert.dom().includesText('3:45 PM', 'combined style shows time');
+  });
+
+  test('hour cycle and hour12 options affect output format', async function (assert) {
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en-US'
+        timeZone='UTC'
+        kind='time'
+        hour12=true
+      }}
+    </template>);
+    assert.dom().hasText('3:45 PM', 'explicit hour12 formatting shows AM/PM');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en-US'
+        timeZone='UTC'
+        kind='time'
+        hourCycle='h23'
+      }}
+    </template>);
+    assert.dom().hasText('15:45', 'h23 cycle renders 24-hour clock');
+
+    const MIDNIGHT = new Date('2024-03-15T00:30:00.000Z');
+    await render(<template>
+      {{formatDateTime
+        MIDNIGHT
+        locale='en-US'
+        timeZone='UTC'
+        kind='time'
+        hourCycle='h11'
+      }}
+    </template>);
+    assert.dom().hasText('0:30 AM', 'h11 cycle emits 0-11 hours with AM');
+  });
+
+  test('tiny preset reflects timezone, locale, and future dates', function (assert) {
+    const now = NOW;
+
+    assert.strictEqual(
+      formatDateTime(BASE_DATE, {
+        locale: 'en-US',
+        timeZone: 'America/New_York',
+        preset: 'tiny',
+        now,
+      }),
+      '11:45 AM',
+      'tiny preset shows localized time when still today in New York',
+    );
+
+    assert.strictEqual(
+      formatDateTime(BASE_DATE, {
+        locale: 'en-US',
+        timeZone: 'Asia/Tokyo',
+        preset: 'tiny',
+        now,
+      }),
+      '12:45 AM',
+      'tiny preset switches to the local day boundary in Tokyo',
+    );
+
+    const previousDay = new Date('2024-03-14T12:00:00.000Z');
+    assert.strictEqual(
+      formatDateTime(previousDay, {
+        locale: 'es-ES',
+        timeZone: 'UTC',
+        preset: 'tiny',
+        now,
+      }),
+      '14/3',
+      'non-today dates render numeric day/month in the target locale',
+    );
+
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    assert.strictEqual(
+      formatDateTime(tomorrow, {
+        locale: 'en-US',
+        timeZone: 'UTC',
+        preset: 'tiny',
+        now,
+      }),
+      '3/16',
+      'future day renders numeric date',
+    );
+  });
+
+  test('Day.js advanced tokens cover ordinal, weekday, and literal text', async function (assert) {
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en'
+        timeZone='UTC'
+        format='dddd, MMMM Do, YYYY [at] h:mm A'
+      }}
+    </template>);
+
+    assert
+      .dom()
+      .hasText(
+        'Friday, March 15th, 2024 at 3:45 PM',
+        'advanced tokens render ordinal day and literal text',
+      );
+  });
+
+  test('locale and timezone combinations render localized output', async function (assert) {
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='es-ES'
+        timeZone='Europe/Madrid'
+        dateStyle='long'
+      }}
+    </template>);
+    assert
+      .dom()
+      .hasText(
+        '15 de marzo de 2024',
+        'Spanish locale uses expected long format',
+      );
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='fr-FR'
+        timeZone='Europe/Paris'
+        dateStyle='long'
+      }}
+    </template>);
+    assert
+      .dom()
+      .hasText('15 mars 2024', 'French locale renders localized month');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en-US'
+        timeZone='Asia/Tokyo'
+        kind='datetime'
+        dateStyle='long'
+        timeStyle='short'
+      }}
+    </template>);
+    assert
+      .dom()
+      .includesText('March 16, 2024', 'Tokyo timezone advances the date');
+    assert.dom().includesText('12:45 AM', 'Tokyo timezone adjusts the time');
+
+    await render(<template>
+      {{formatDateTime
+        BASE_DATE
+        locale='en-US'
+        timeZone='America/Los_Angeles'
+        kind='datetime'
+        dateStyle='long'
+        timeStyle='short'
+      }}
+    </template>);
+    assert
+      .dom()
+      .includesText('March 15, 2024', 'Los Angeles stays on the same day');
+    assert
+      .dom()
+      .includesText('8:45 AM', 'Los Angeles timezone shows morning time');
   });
 
   test('week and quarter formatting', async function (assert) {

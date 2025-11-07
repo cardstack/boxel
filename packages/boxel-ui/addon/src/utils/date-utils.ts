@@ -15,6 +15,13 @@ export interface ZonedDateParts {
   year: number;
 }
 
+export interface FullZonedDateParts extends ZonedDateParts {
+  hour?: number;
+  millisecond?: number;
+  minute?: number;
+  second?: number;
+}
+
 export interface ISOWeekInfo {
   week: number;
   year: number;
@@ -69,22 +76,60 @@ export function isSameCalendarDay(
 export function getZonedDateParts(
   date: Date,
   timeZone?: string,
-): ZonedDateParts {
+): FullZonedDateParts {
+  // Use formatToParts to reliably extract both date and time components for
+  // the requested IANA timezone. We default to numeric 24-hour time so that
+  // parsing is unambiguous; callers can supply a millisecond from the source
+  // Date if needed (Intl does not surface milliseconds).
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone,
     numberingSystem: 'latn',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
   });
-  const formatted = formatter.format(date);
-  const [yearStr, monthStr, dayStr] = formatted.split('-');
 
-  return {
-    day: Number(dayStr),
-    month: Number(monthStr),
-    year: Number(yearStr),
+  const parts = formatter.formatToParts(date);
+  const result: FullZonedDateParts = {
+    year: NaN,
+    month: NaN,
+    day: NaN,
   };
+
+  for (const p of parts) {
+    switch (p.type) {
+      case 'year':
+        result.year = Number(p.value);
+        break;
+      case 'month':
+        result.month = Number(p.value);
+        break;
+      case 'day':
+        result.day = Number(p.value);
+        break;
+      case 'hour':
+        result.hour = Number(p.value);
+        break;
+      case 'minute':
+        result.minute = Number(p.value);
+        break;
+      case 'second':
+        result.second = Number(p.value);
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Intl doesn't provide milliseconds; preserve the source milliseconds so
+  // callers that need sub-second precision still get a sensible value.
+  result.millisecond = date.getMilliseconds();
+
+  return result;
 }
 
 export function getISOWeekInfo(date: Date, timeZone?: string): ISOWeekInfo {
@@ -127,5 +172,21 @@ function parseExcelSerial(
     // Excel 1904 system: January 1, 1904 is day 0
     const excel1904Base = new Date(1904, 0, 1);
     return new Date(excel1904Base.getTime() + value * 24 * 60 * 60 * 1000);
+  }
+}
+
+// Shared configuration for date/time helpers to avoid circular dependencies.
+// Holds a global default timezone that host apps can set at bootstrap.
+// Resolution cascade used by helpers:
+//    explicit option.timeZone -> runtime Intl tz -> 'UTC'
+// UI-first policy: leaving the global default as null lets client UIs show local
+// calendar semantics ("today" matches user expectation). Tests/SSR should set
+// a deterministic timezone (e.g. 'UTC') before exercising helpers.
+
+export function resolveEffectiveTimeZone(input?: string): string {
+  try {
+    return input ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+  } catch {
+    return input ?? 'UTC';
   }
 }

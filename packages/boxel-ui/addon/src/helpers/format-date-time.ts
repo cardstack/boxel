@@ -1,5 +1,6 @@
 import type { HelperLike } from '@glint/template';
 import dayjs from 'dayjs';
+import advancedFormat from 'dayjs/plugin/advancedFormat.js';
 // Plugins need to be imported with .js extension
 // https://github.com/iamkun/dayjs/issues/1167#issuecomment-972880586
 import localizedFormat from 'dayjs/plugin/localizedFormat.js';
@@ -13,6 +14,7 @@ import {
   getZonedDateParts,
   isSameCalendarDay,
   parseDateValue,
+  resolveEffectiveTimeZone,
 } from '../utils/date-utils.ts';
 import formatRelativeTime from './format-relative-time.ts';
 
@@ -66,10 +68,6 @@ export interface FormatDateTimeOptions {
   format?: string;
   /** Whether to use 12-hour time format */
   hour12?: boolean;
-  /** Whether to show the date relative to now (e.g., "2 hours ago") */
-  relative?: boolean;
-  /** @deprecated Use preset instead */
-  size?: PresetSize;
   /** Specific hour cycle to use */
   hourCycle?: 'h11' | 'h12' | 'h23' | 'h24';
   /** The type of formatting to apply */
@@ -82,10 +80,16 @@ export interface FormatDateTimeOptions {
   now?: Date;
   /** The numbering system to use */
   numberingSystem?: string;
+  numeric?: 'auto' | 'always';
   /** Options for parsing the input value */
   parse?: { serialOrigin?: SerialOrigin };
+  precision?: number;
   preset?: PresetSize;
   quarterFormat?: QuarterFormat;
+  /** Whether to show the date relative to now (e.g., "2 hours ago") */
+  relative?: boolean;
+  /** @deprecated Use preset instead */
+  size?: PresetSize;
   timeStyle?: IntlTimeStyle;
   timeZone?: string;
   unit?: DateUnit;
@@ -102,31 +106,48 @@ let dayjsConfigured = false;
 /**
  * Helper function to format date in tiny size with today-awareness
  * @param date - The date to format
-x` * @param options - Formatting options including locale and timezone
+ * @param options - Formatting options including locale and timezone
  * @returns Formatted date string
  */
 function formatTinyWithToday(
   date: Date,
   options: FormatDateTimeOptions,
 ): string {
-  const timeZone = options.timeZone ?? 'UTC';
+  // Do not force a UTC fallback here — if no timeZone is provided we want
+  // Intl to use the host environment's timezone. Pass through the
+  // timeZone only when explicitly provided so the 'today' check and the
+  // resulting formatting match caller intent.
+  const timeZone = resolveEffectiveTimeZone(options.timeZone);
   const now = options.now ?? new Date();
   const isToday = isSameCalendarDay(date, now, timeZone);
 
   if (isToday) {
-    return new Intl.DateTimeFormat(options.locale ?? 'en-US', {
+    const intlOpts: Intl.DateTimeFormatOptions = {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true,
-      timeZone: timeZone,
-    }).format(date);
+      hour12: options.hour12,
+      hourCycle: options.hourCycle,
+    };
+    if (timeZone) {
+      intlOpts.timeZone = timeZone;
+    }
+    return new Intl.DateTimeFormat(options.locale ?? 'en-US', intlOpts).format(
+      date,
+    );
   }
 
-  const formatter = new Intl.DateTimeFormat(options.locale ?? 'en-US', {
+  const formatterOpts: Intl.DateTimeFormatOptions = {
     month: 'numeric',
     day: 'numeric',
-    timeZone: timeZone,
-  });
+  };
+  if (timeZone) {
+    formatterOpts.timeZone = timeZone;
+  }
+
+  const formatter = new Intl.DateTimeFormat(
+    options.locale ?? 'en-US',
+    formatterOpts,
+  );
 
   return formatter.format(date);
 }
@@ -146,6 +167,11 @@ function formatDateTimeInternal(
   value: DateLike | null | undefined,
   options: FormatDateTimeOptions = {},
 ): string {
+  const effectiveTimeZone = resolveEffectiveTimeZone(options.timeZone);
+  const optsWithTZ: FormatDateTimeOptions = {
+    ...options,
+    timeZone: effectiveTimeZone,
+  };
   const parsed = parseDateValue(value, {
     unit: options.unit,
     serialOrigin: options.parse?.serialOrigin,
@@ -161,15 +187,26 @@ function formatDateTimeInternal(
   // fallback does not re-enable relative formatting (to avoid recursion).
   if (options.relative) {
     const relOptions = {
-      locale: options.locale,
-      now: options.now,
-      size: options.size ?? options.preset,
-      timeZone: options.timeZone,
-      parse: options.parse as any,
-      unit: options.unit,
+      locale: optsWithTZ.locale,
+      now: optsWithTZ.now,
+      // map deprecated size/preset -> size
+      size: (optsWithTZ.size as any) ?? (optsWithTZ.preset as any),
+      timeZone: optsWithTZ.timeZone,
+      parse: optsWithTZ.parse as any,
+      unit: optsWithTZ.unit,
+      // forward control flags
+      numeric: (optsWithTZ as any).numeric,
+      round: (optsWithTZ as any).round,
+      unitCeil: (optsWithTZ as any).unitCeil,
+      nowThresholdMs: (optsWithTZ as any).nowThresholdMs,
+      precision: (optsWithTZ as any).precision,
+      switchToAbsoluteAfterMs: (optsWithTZ as any).switchToAbsoluteAfterMs,
       // Provide absoluteOptions that do not include `relative` so that when
       // the relative formatter switches to absolute it won't loop back.
-      absoluteOptions: { locale: options.locale, timeZone: options.timeZone },
+      absoluteOptions: {
+        locale: optsWithTZ.locale,
+        timeZone: optsWithTZ.timeZone,
+      },
     };
 
     return formatRelativeTime(parsed, relOptions as any);
@@ -178,14 +215,14 @@ function formatDateTimeInternal(
   // Handle size/preset with today-awareness
   const effectivePreset = options.size || options.preset;
   if (effectivePreset === 'tiny') {
-    return formatTinyWithToday(parsed, options);
+    return formatTinyWithToday(parsed, optsWithTZ);
   }
 
-  if (shouldUseDayjs(options)) {
-    return formatWithDayjs(parsed, options) ?? options.fallback ?? '';
+  if (shouldUseDayjs(optsWithTZ)) {
+    return formatWithDayjs(parsed, optsWithTZ) ?? optsWithTZ.fallback ?? '';
   }
 
-  return formatWithIntl(parsed, options) ?? options.fallback ?? '';
+  return formatWithIntl(parsed, optsWithTZ) ?? optsWithTZ.fallback ?? '';
 }
 
 function shouldUseDayjs(options: FormatDateTimeOptions): boolean {
@@ -203,6 +240,7 @@ function configureDayjs(): void {
     dayjs.extend(utc);
     dayjs.extend(timezone);
     dayjs.extend(localizedFormat);
+    dayjs.extend(advancedFormat);
     dayjs.extend(quarterOfYear);
     dayjsConfigured = true;
   }
@@ -223,9 +261,29 @@ function formatWithDayjs(
     timeZone: options.timeZone,
   };
 
-  let instance = options.timeZone
-    ? dayjs.tz(date, options.timeZone)
-    : dayjs(date);
+  // Construct an instance that reflects the requested target zone's wall-clock
+  // fields deterministically. We avoid relying on dayjs.tz at render-time and
+  // instead derive the zone-local parts and then build a UTC Date that holds
+  // those same fields. Formatting that UTC date with dayjs.utc(...) yields
+  // stable token output independent of the host environment timezone.
+  let instance;
+  if (options.timeZone) {
+    const parts = getZonedDateParts(date, options.timeZone);
+    const utcDate = new Date(
+      Date.UTC(
+        parts.year,
+        parts.month - 1,
+        parts.day,
+        parts.hour ?? 0,
+        parts.minute ?? 0,
+        parts.second ?? 0,
+        parts.millisecond ?? 0,
+      ),
+    );
+    instance = dayjs.utc(utcDate);
+  } else {
+    instance = dayjs(date);
+  }
 
   const locale = context.locale ? normalizeLocale(context.locale) : undefined;
   if (locale) {
@@ -247,12 +305,12 @@ function resolveDayjsFormat(options: FormatDateTimeOptions): string {
 
   switch (options.kind) {
     case 'time':
-      return 'HH:mm';
+      return 'h:mm A';
     case 'date':
       return 'YYYY-MM-DD';
     case 'month':
       return options.monthDisplay === 'numeric'
-        ? 'MM'
+        ? 'M'
         : options.monthDisplay === 'long'
           ? 'MMMM'
           : 'MMM';

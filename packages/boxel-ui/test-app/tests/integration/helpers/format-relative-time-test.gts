@@ -94,6 +94,53 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
     );
   });
 
+  test('multi-unit precision outputs detailed spans', function (assert) {
+    const now = NOW;
+    const span = 75 * DAY + 10 * HOUR + 30 * MINUTE;
+    const past = new Date(NOW.getTime() - span);
+
+    assert.strictEqual(
+      formatRelativeTime(past, { locale: 'en-US', now, precision: 2 }),
+      '2 months, 15 days ago',
+      'precision=2 returns the top two units',
+    );
+
+    assert.strictEqual(
+      formatRelativeTime(past, { locale: 'en-US', now, precision: 3 }),
+      '2 months, 15 days, 10 hours ago',
+      'precision=3 adds the next unit',
+    );
+  });
+
+  test('multi-unit precision supports future and locale-specific output', function (assert) {
+    const now = NOW;
+    const future = new Date(NOW.getTime() + 2 * HOUR + 30 * MINUTE);
+
+    assert.strictEqual(
+      formatRelativeTime(future, { locale: 'en-US', now, precision: 2 }),
+      'in 2 hours, 30 minutes',
+      'future multi-unit renders leading "in"',
+    );
+
+    const spanishPast = new Date(NOW.getTime() - 75 * DAY);
+    assert.strictEqual(
+      formatRelativeTime(spanishPast, { locale: 'es-ES', now, precision: 2 }),
+      'hace 2 meses, 15 días',
+      'non-English locale preserves localized direction words',
+    );
+  });
+
+  test('multi-unit precision honors tiny size compact output', function (assert) {
+    const now = NOW;
+    const future = new Date(NOW.getTime() + 3 * DAY + 4 * HOUR);
+
+    assert.strictEqual(
+      formatRelativeTime(future, { now, precision: 2, size: 'tiny' }),
+      '+3d, 4h',
+      'tiny size multi-unit uses compact labels',
+    );
+  });
+
   test('rounding modes and unit ceilings', async function (assert) {
     const now = NOW;
     const almostThreeHours = new Date(NOW.getTime() - (2 * HOUR + 5 * MINUTE));
@@ -115,6 +162,72 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
     assert
       .dom()
       .hasText('120 minutes ago', 'unit ceiling restricts to minutes');
+  });
+
+  test('formatDateTime relative forwards numeric and precision options', function (assert) {
+    const now = NOW;
+    const multiUnitPast = new Date(NOW.getTime() - (75 * DAY + 10 * HOUR));
+    const yesterday = new Date(NOW.getTime() - DAY);
+
+    assert.strictEqual(
+      formatDateTime(multiUnitPast, {
+        locale: 'en-US',
+        now,
+        precision: 2,
+        relative: true,
+      }),
+      '2 months, 15 days ago',
+      'formatDateTime relays precision to the relative helper',
+    );
+
+    assert.strictEqual(
+      formatDateTime(yesterday, { locale: 'en-US', now, relative: true }),
+      'yesterday',
+      'default relative formatting uses linguistic labels',
+    );
+
+    assert.strictEqual(
+      formatDateTime(yesterday, {
+        locale: 'en-US',
+        now,
+        relative: true,
+        numeric: 'always',
+      }),
+      '1 day ago',
+      'numeric flag is forwarded to formatRelativeTime',
+    );
+  });
+
+  test('unit selection thresholds pivot at 45 seconds and 45 minutes', function (assert) {
+    const now = NOW;
+    const fortyFourSecondsAgo = new Date(NOW.getTime() - 44 * 1000);
+    const fortyFiveSecondsAgo = new Date(NOW.getTime() - 45 * 1000);
+    const fortyFourMinutesAgo = new Date(NOW.getTime() - 44 * MINUTE);
+    const fortyFiveMinutesAgo = new Date(NOW.getTime() - 45 * MINUTE);
+
+    assert.strictEqual(
+      formatRelativeTime(fortyFourSecondsAgo, { locale: 'en-US', now }),
+      '44 seconds ago',
+      'values under 45 seconds stay in seconds',
+    );
+
+    assert.strictEqual(
+      formatRelativeTime(fortyFiveSecondsAgo, { locale: 'en-US', now }),
+      '1 minute ago',
+      '45 seconds rounds to 1 minute',
+    );
+
+    assert.strictEqual(
+      formatRelativeTime(fortyFourMinutesAgo, { locale: 'en-US', now }),
+      '44 minutes ago',
+      'values under 45 minutes stay in minutes',
+    );
+
+    assert.strictEqual(
+      formatRelativeTime(fortyFiveMinutesAgo, { locale: 'en-US', now }),
+      '1 hour ago',
+      '45 minutes rounds to 1 hour',
+    );
   });
 
   test('now threshold collapses near events', async function (assert) {

@@ -1,11 +1,11 @@
 import type { HelperLike } from '@glint/template';
 
 import type { DateLike, DateUnit, SerialOrigin } from '../utils/date-utils.ts';
-import { parseDateValue } from '../utils/date-utils.ts';
 import {
-  type FormatDateTimeOptions,
-  formatDateTime,
-} from './format-date-time.ts';
+  parseDateValue,
+  resolveEffectiveTimeZone,
+} from '../utils/date-utils.ts';
+import type { FormatDateTimeOptions } from './format-date-time.ts';
 
 type RelativeSize = 'tiny' | 'short' | 'medium' | 'long';
 type RelativeRound = 'floor' | 'ceil' | 'nearest';
@@ -30,6 +30,7 @@ export interface FormatRelativeTimeOptions {
   nowThresholdMs?: number;
   numeric?: 'auto' | 'always';
   parse?: ParseOptions;
+  precision?: number;
   round?: RelativeRound;
   size?: RelativeSize;
   switchToAbsoluteAfterMs?: number;
@@ -79,12 +80,17 @@ function formatRelativeTimeInternal(
   const absDiffMs = Math.abs(diffMs);
 
   if (shouldUseAbsolute(absDiffMs, options.switchToAbsoluteAfterMs)) {
+    const effectiveTimeZone = resolveEffectiveTimeZone(options.timeZone);
     const absoluteOptions: FormatDateTimeOptions = {
       locale: options.locale,
-      timeZone: options.timeZone,
+      timeZone: effectiveTimeZone,
       ...options.absoluteOptions,
     };
-    return formatDateTime(parsed, absoluteOptions);
+    // Avoid runtime circular import by formatting the absolute date locally
+    // with Intl.DateTimeFormat using the provided locale/timeZone. We keep
+    // this simple because absoluteOptions coming from callers (via
+    // formatDateTime) are typically just locale/timeZone in our usage.
+    return formatAbsoluteWithIntl(parsed, absoluteOptions);
   }
 
   const nowThreshold = options.nowThresholdMs ?? DEFAULT_NOW_THRESHOLD;
@@ -95,10 +101,6 @@ function formatRelativeTimeInternal(
   const selection = selectRelativeUnit(absDiffMs, options);
   const size = options.size ?? 'medium';
 
-  if (size === 'tiny') {
-    return formatTiny(selection.value, selection.unit, diffMs > 0);
-  }
-
   // Use 'long' style for month/year units even when size is 'short' so
   // larger calendar spans are spelled out (e.g. "2 months ago") instead of
   // abbreviated (e.g. "2 mo. ago"). For other units, use the resolved style
@@ -108,14 +110,438 @@ function formatRelativeTimeInternal(
     (selection.unit === 'month' || selection.unit === 'year')
       ? 'long'
       : resolveRelativeStyle(size);
-
   const rtf = new Intl.RelativeTimeFormat(options.locale ?? 'en-US', {
     numeric: options.numeric ?? 'auto',
     style: styleForUnit,
   });
 
   const signedValue = diffMs > 0 ? selection.value : -selection.value;
-  return rtf.format(signedValue, selection.unit);
+  // If precision is greater than 1, build a multi-unit string like
+  // "2 months, 15 days ago". Default precision is 1 (current behavior).
+  const precision = Math.max(1, options.precision ?? 1);
+
+  // If tiny size requested and precision is 1, return compact single-unit.
+  // If precision > 1 and size is tiny, fall through to multi-unit builder
+  // which will produce a compact tiny multi-unit using buildTinyMulti.
+  if (size === 'tiny' && precision === 1) {
+    return formatTiny(selection.value, selection.unit, diffMs > 0);
+  }
+
+  if (precision === 1) {
+    return rtf.format(signedValue, selection.unit);
+  }
+
+  return buildMultiUnitRelativeString(
+    absDiffMs,
+    diffMs > 0,
+    selection.unit,
+    precision,
+    options,
+    styleForUnit,
+  );
+}
+
+function buildMultiUnitRelativeString(
+  absDiffMs: number,
+  isFuture: boolean,
+  baseUnit: RelativeUnit,
+  precision: number,
+  options: FormatRelativeTimeOptions,
+  styleForUnit: Intl.RelativeTimeFormatStyle,
+): string {
+  const locale = options.locale ?? 'en-US';
+  const roundMode = options.round ?? 'floor';
+  const roundModeLocal = roundMode;
+
+  // When showing multiple units, prefer predictable numeric forms.
+  // Respect explicit caller choice if provided.
+  const numericOption: 'auto' | 'always' =
+    options.numeric ?? (precision > 1 ? 'always' : 'auto');
+
+  // Start from the base unit (as selected by thresholds) and decompose the
+  // remainder into smaller units greedily.
+  const units: { unit: RelativeUnit; value: number }[] = [];
+  let remainderMs = absDiffMs;
+
+  // For the base unit, prefer the rounded value used by the selector to
+  // keep behaviour consistent.
+  const startIndex = UNIT_ORDER.indexOf(baseUnit);
+  const firstValue = Math.max(
+    applyRound(absDiffMs / UNIT_IN_MS[baseUnit], roundModeLocal),
+    1,
+  );
+  units.push({ unit: baseUnit, value: firstValue });
+  remainderMs = Math.max(0, remainderMs - firstValue * UNIT_IN_MS[baseUnit]);
+
+  // Collect subsequent smaller units until we have enough or run out.
+  for (
+    let i = startIndex + 1;
+    i < UNIT_ORDER.length && units.length < precision;
+    i++
+  ) {
+    const u = UNIT_ORDER[i] as RelativeUnit;
+    // Prefer days over weeks in multi-unit output to match spec:
+    // e.g. "2 months, 15 days" rather than "2 months, 2 weeks".
+    if (u === 'week') {
+      continue;
+    }
+    const raw = Math.floor(remainderMs / UNIT_IN_MS[u]);
+    if (raw > 0) {
+      units.push({ unit: u, value: raw });
+      remainderMs -= raw * UNIT_IN_MS[u];
+    }
+  }
+
+  // If size is tiny, provide a compact multi-unit representation using short
+  // labels (e.g. "+2d, 10h") so precision+tiny works.
+  if ((options.size ?? 'medium') === 'tiny') {
+    return buildTinyMulti(units, isFuture);
+  }
+
+  // Build localized component strings for each unit while preserving locale
+  // ordering of number/unit (use formatToParts to respect locale rules but
+  // strip only detected directional words like "ago"/"in").
+
+  const rtfForParts = new Intl.RelativeTimeFormat(locale, {
+    numeric: numericOption,
+    style: styleForUnit,
+  });
+
+  // Detect directional literals/position for both past and future so we can
+  // render the correct direction and strip only those literal tokens from
+  // unit components.
+  const directionInfo = detectDirectionForLocale(rtfForParts, baseUnit);
+
+  const components = units.map((u) =>
+    formatUnitWithLocale(
+      u.value,
+      u.unit,
+      rtfForParts,
+      locale,
+      isFuture,
+      directionInfo,
+    ),
+  );
+
+  // Use the appropriate direction info based on whether this is future or past.
+  const dir = isFuture ? directionInfo.future : directionInfo.past;
+
+  const joined = components.join(', ');
+
+  // Compose by splicing multi-unit into a localized single-unit template.
+  // This preserves locale-specific direction words ("ago"/"in"/"hace") and ordering.
+  try {
+    const unitOne = formatUnitWithLocale(
+      1,
+      baseUnit,
+      rtfForParts,
+      locale,
+      isFuture,
+      directionInfo,
+    );
+    const template = rtfForParts.format(isFuture ? 1 : -1, baseUnit);
+    if (template.includes(unitOne)) {
+      // Replace the first occurrence only; keep any surrounding spaces intact.
+      const esc = unitOne.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const result = template.replace(new RegExp(esc), joined).trim();
+      if (result) {
+        return result;
+      }
+    }
+  } catch {
+    // fall through if anything unexpected happens
+  }
+
+  if (dir.position === 'prefix' && dir.text) {
+    return `${dir.text} ${joined}`.trim();
+  }
+
+  if (dir.position === 'suffix' && dir.text) {
+    return `${joined} ${dir.text}`.trim();
+  }
+
+  // Locale-safe fallback: synthesize direction using formatToParts
+  // without hardcoding English tokens. Filter out unit tokens to avoid
+  // tails like "second ago".
+  try {
+    const parts = rtfForParts.formatToParts(isFuture ? 1 : -1, 'second');
+    const firstSig = parts.findIndex(
+      (p) => p.type === 'integer' || p.type === 'unit',
+    );
+    const lastSig = parts
+      .map((p, idx) => ({ p, idx }))
+      .filter(({ p }) => p.type === 'integer' || p.type === 'unit')
+      .map(({ idx }) => idx)
+      .pop();
+
+    // Build the set of localized unit tokens we must ignore if they appear
+    // as lettered literals in some engines/polyfills (e.g., "second").
+    const unitTokens = new Set<string>(
+      parts
+        .filter(
+          (p) =>
+            p.type === 'unit' ||
+            (p.type === 'literal' && /\p{Letter}/u.test(p.value)),
+        )
+        .map((p) => p.value.trim().toLowerCase())
+        .filter(Boolean),
+    );
+
+    const literalLetters = (arr: Intl.RelativeTimeFormatPart[] = []) => {
+      const words = arr
+        .filter((p) => p.type === 'literal' && /\p{Letter}/u.test(p.value))
+        .map((p) => p.value.trim())
+        .filter(Boolean)
+        // Drop any token that matches the unit word, e.g., "second"
+        .filter((w) => !unitTokens.has(w.toLowerCase()));
+      return Array.from(new Set(words)).join(' ').trim();
+    };
+
+    const prefix = literalLetters(parts.slice(0, Math.max(0, firstSig)));
+    const suffix = literalLetters(parts.slice((lastSig ?? -1) + 1));
+
+    if (prefix) {
+      return `${prefix} ${joined}`.trim();
+    }
+    if (suffix) {
+      return `${joined} ${suffix}`.trim();
+    }
+  } catch {
+    // ignore and fall through
+  }
+
+  // Final neutral fallback: return joined components without a direction word.
+  // (Better than forcing English "ago"/"in".)
+  return joined;
+}
+
+function formatUnitWithLocale(
+  value: number,
+  unit: RelativeUnit,
+  rtf: Intl.RelativeTimeFormat,
+  locale: string,
+  isFuture: boolean,
+  directionInfo: {
+    future: {
+      literals: string[];
+      position: 'prefix' | 'suffix' | 'none';
+      text: string;
+    };
+    past: {
+      literals: string[];
+      position: 'prefix' | 'suffix' | 'none';
+      text: string;
+    };
+  },
+): string {
+  // Choose sign consistent with the intended direction so parts reflect the
+  // correct number/unit ordering for the locale variant.
+  const signedSample = isFuture ? value : -value;
+  const parts = rtf.formatToParts(signedSample as any, unit as any);
+
+  // Build formatted number using Intl.NumberFormat so grouping/locale are
+  // respected.
+  const nf = new Intl.NumberFormat(locale, { useGrouping: true });
+  const formattedNumber = nf.format(value);
+
+  // Fallback approach: format the full localized string and strip any
+  // directional token (prefix/suffix) discovered for this locale. This is
+  // more robust across different JS engines which may classify the unit as
+  // a 'unit' part or a 'literal'. Using the precomputed parts above we can
+  // still build a sane numeric formatting, but prefer the formatted full
+  // string to preserve complex locale-specific unit rendering.
+  try {
+    const full = rtf.format(signedSample as any, unit as any);
+
+    // Clean localized directional markers from formatted string.
+    // Some locales (like 'es-ES') may repeat "hace"/"en" per unit.
+    const cleanDirectionalMarkers = (text: string) => {
+      const tokens = [
+        directionInfo.past?.text,
+        directionInfo.future?.text,
+        'ago',
+        'in',
+        'hace',
+        'en',
+      ].filter(Boolean) as string[];
+
+      let result = text.trim();
+      for (const t of tokens) {
+        const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        result = result
+          .replace(new RegExp(`^\\s*${esc}\\s*`, 'iu'), '')
+          .replace(new RegExp(`\\s*${esc}\\s*$`, 'iu'), '');
+      }
+      return result.trim();
+    };
+
+    const cleaned = cleanDirectionalMarkers(full);
+
+    // If cleaning produced something non-empty, return it and
+    // DO NOT fall through to parts-based assembly (prevents duplication).
+    if (cleaned) {
+      return cleaned;
+    }
+  } catch (e) {
+    // Ignore and fall back to parts-based assembly below.
+  }
+
+  // Fallback to parts-based assembly if formatting/stripping above failed.
+  let sawNumber = false;
+  let sawUnit = false;
+  let result = '';
+  for (const p of parts) {
+    if (
+      p.type === 'integer' ||
+      p.type === 'fraction' ||
+      p.type === 'group' ||
+      p.type === 'decimal'
+    ) {
+      if (!sawNumber) {
+        result += formattedNumber;
+        sawNumber = true;
+      }
+      continue;
+    }
+
+    if (p.type === 'unit' && !sawUnit) {
+      if (
+        result.length > 0 &&
+        !/\s$/.test(result) &&
+        !/^[\p{P}\p{S}]/u.test(p.value)
+      ) {
+        result += ' ';
+      }
+      result += p.value;
+      sawUnit = true;
+      continue;
+    }
+
+    if (p.type === 'literal') {
+      // Drop lettered literals (likely direction words) here.
+      if (/\p{Letter}/u.test(p.value)) {
+        continue;
+      }
+      result += p.value;
+    }
+
+    if (p.type === 'plusSign' || p.type === 'minusSign') {
+      result += p.value;
+    }
+  }
+
+  if (!result) {
+    return `${formattedNumber} ${unit}${value === 1 ? '' : 's'}`;
+  }
+
+  return result.trim();
+}
+
+function detectDirectionForLocale(
+  rtf: Intl.RelativeTimeFormat,
+  unit: RelativeUnit,
+): {
+  future: {
+    literals: string[];
+    position: 'prefix' | 'suffix' | 'none';
+    text: string;
+  };
+  past: {
+    literals: string[];
+    position: 'prefix' | 'suffix' | 'none';
+    text: string;
+  };
+} {
+  // Helper to inspect a signed example and extract letter-only literal tokens
+  // and whether they appear before or after the main numeric/unit parts.
+  // IMPORTANT: Some JS engines/polyfills surface the localized unit word
+  // (e.g., "month", "day") as a literal instead of a 'unit' part.
+  // We detect and FILTER OUT those unit tokens so we only keep true
+  // direction words like "ago"/"in"/"hace"/"en".
+  function inspect(signedSample: number): {
+    literals: string[];
+    position: 'prefix' | 'suffix' | 'none';
+    text: string;
+  } {
+    const parts = rtf.formatToParts(signedSample as any, unit as any);
+
+    // Collect any visible unit tokens from parts (robust to odd engines).
+    const unitTokens = new Set<string>(
+      parts
+        .filter(
+          (p) =>
+            p.type === 'unit' ||
+            (p.type === 'literal' && /\p{Letter}/u.test(p.value)),
+        )
+        .map((p) => p.value.trim().toLowerCase())
+        .filter((v) => !!v),
+    );
+
+    const firstSignificant = parts.findIndex(
+      (p) => p.type === 'integer' || p.type === 'unit',
+    );
+    const lastSignificant = parts
+      .map((p, idx) => ({ p, idx }))
+      .filter(({ p }) => p.type === 'integer' || p.type === 'unit')
+      .map(({ idx }) => idx)
+      .pop();
+
+    if (firstSignificant === -1 || lastSignificant == null) {
+      return { position: 'none' as const, text: '', literals: [] as string[] };
+    }
+
+    const prefixLiterals: string[] = [];
+    const suffixLiterals: string[] = [];
+
+    parts.forEach((p, idx) => {
+      if (p.type === 'literal' && /\p{Letter}/u.test(p.value)) {
+        const raw = p.value.trim();
+        const val = raw;
+        const lower = val.toLowerCase();
+        // Filter out any literal that is actually the unit token
+        // (e.g., "month", "day") to avoid "month ago" / "day ago" tails.
+        if (unitTokens.has(lower)) {
+          return;
+        }
+        if (idx < firstSignificant) {
+          prefixLiterals.push(val);
+        } else if (idx > (lastSignificant as number)) {
+          suffixLiterals.push(val);
+        }
+      }
+    });
+
+    if (prefixLiterals.length === 0 && suffixLiterals.length === 0) {
+      return { position: 'none' as const, text: '', literals: [] as string[] };
+    }
+
+    if (prefixLiterals.length > 0) {
+      const text = prefixLiterals.join(' ').trim();
+      const literals = Array.from(new Set(prefixLiterals));
+      return { position: 'prefix', text, literals };
+    }
+
+    const text = suffixLiterals.join(' ').trim();
+    const literals = Array.from(new Set(suffixLiterals));
+    return { position: 'suffix', text, literals };
+  }
+
+  const past = inspect(-1);
+  const future = inspect(1);
+
+  return { past, future };
+}
+
+function buildTinyMulti(
+  units: { unit: RelativeUnit; value: number }[],
+  isFuture: boolean,
+): string {
+  if (units.length === 0) {
+    return isFuture ? '+0s' : '0s';
+  }
+  const comps = units.map((u) => `${u.value}${tinyUnitLabel(u.unit)}`);
+  const prefix = isFuture ? '+' : '';
+  return `${prefix}${comps.join(', ')}`;
 }
 
 function shouldUseAbsolute(
@@ -326,3 +752,38 @@ export const formatRelativeTime =
   formatRelativeTimeInternal as FormatRelativeTimeHelper;
 
 export default formatRelativeTime;
+
+function formatAbsoluteWithIntl(date: Date, options: FormatDateTimeOptions) {
+  const locale = options.locale ?? 'en-US';
+  const timeZone = resolveEffectiveTimeZone(options.timeZone);
+  // If the caller provided dateStyle/timeStyle use those so we match
+  // `formatDateTime` behavior (e.g. `dateStyle: 'long'` => full month name).
+  // Otherwise default to a sensible date-only representation.
+  const intlOpts: Intl.DateTimeFormatOptions = { timeZone };
+
+  if (options.dateStyle || options.timeStyle) {
+    if (options.dateStyle) {
+      intlOpts.dateStyle = options.dateStyle;
+    }
+    if (options.timeStyle) {
+      intlOpts.timeStyle = options.timeStyle;
+    }
+  } else {
+    // Default to date-only output when no explicit styles were requested.
+    intlOpts.year = 'numeric';
+    intlOpts.month = 'short';
+    intlOpts.day = 'numeric';
+    // Include time only when the caller explicitly asked for a datetime kind.
+    if ((options as any).kind === 'datetime') {
+      intlOpts.hour = 'numeric';
+      intlOpts.minute = '2-digit';
+    }
+  }
+
+  try {
+    return new Intl.DateTimeFormat(locale, intlOpts).format(date);
+  } catch {
+    // As a final fallback, use toISOString()
+    return date.toISOString();
+  }
+}
