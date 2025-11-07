@@ -4,31 +4,32 @@ import type IconComponent from '@cardstack/boxel-icons/captions';
  * Core field types provided by the catalog-realm
  * These are the built-in field types that ship with Boxel
  */
-export type CoreFieldType = 
-  | 'slider' 
-  | 'rating' 
+export type CoreFieldType =
+  | 'slider'
+  | 'rating'
   | 'quantity'
   | 'percentage'
   | 'stat'
   | 'badge'
   | 'scores'
   | 'progress-bar'
-  | 'progress-circle';
+  | 'progress-circle'
+  | 'gauge';
 
 /**
  * Field type registry for dynamic delegation
- * 
+ *
  * This type is intentionally open to allow users to register custom field types.
  * Users can extend this by creating their own field types and registering them
  * with `registerFieldType()`.
- * 
+ *
  * The `(string & {})` trick allows any string while still providing autocomplete
  * for CoreFieldType values in IDEs that support it.
- * 
+ *
  * @example
  * // In your custom field:
  * registerFieldType('currency', CurrencyField);
- * 
+ *
  * // Then use it:
  * @field price = contains(NumberField, {
  *   presentation: { type: 'currency', currency: 'USD' }
@@ -38,18 +39,18 @@ export type FieldType = CoreFieldType | (string & {});
 
 /**
  * Common display configuration for number fields
- * 
+ *
  * This interface provides the base properties shared by all number field configurations.
  * Custom field types should extend this interface to add their own type-safe properties,
  * NOT use the `[key: string]: any` pattern, which would compromise type safety.
- * 
+ *
  * @example
  * // CORRECT - Create a strongly-typed config interface:
  * export interface CurrencyConfig extends DisplayConfig {
  *   currency: 'USD' | 'EUR' | 'GBP';
  *   locale?: string;
  * }
- * 
+ *
  * // This maintains full type safety for your custom properties
  */
 export interface DisplayConfig {
@@ -133,7 +134,7 @@ export interface ProgressCircleConfig extends DisplayConfig {
 }
 
 export interface GaugeConfig extends DisplayConfig {
- type: 'gauge';
+  type: 'gauge';
   min: number;
   max: number;
   decimals?: number;
