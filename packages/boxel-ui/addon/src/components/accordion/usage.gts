@@ -70,7 +70,7 @@ export default class AccordionUsage extends Component {
         <Css.Basic
           @name='--accordion-border'
           @type='border'
-          @description='Separator between items.'
+          @description='Separator between items'
         />
         <Css.Basic
           @name='--accordion-item-title-min-height'
