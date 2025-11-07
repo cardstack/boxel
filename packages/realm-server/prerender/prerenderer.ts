@@ -3,7 +3,7 @@ import {
   type RealmPermissions,
   type RenderResponse,
   type RenderError,
-  type ModulePrerenderResponse,
+  type ModuleRenderResponse,
   type RenderRouteOptions,
   uuidv4,
   logger,
@@ -721,7 +721,7 @@ export class Prerenderer {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
   }): Promise<{
-    response: ModulePrerenderResponse;
+    response: ModuleRenderResponse;
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
@@ -1139,7 +1139,7 @@ export class Prerenderer {
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
   }): Promise<{
-    response: ModulePrerenderResponse;
+    response: ModuleRenderResponse;
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
@@ -1212,7 +1212,7 @@ export class Prerenderer {
       opts?.timeoutMs,
     );
 
-    let response: ModulePrerenderResponse;
+    let response: ModuleRenderResponse;
     if (isRenderError(capture)) {
       let renderError = capture as RenderError;
       markTimeout(renderError);
@@ -1233,7 +1233,7 @@ export class Prerenderer {
     } else {
       let moduleCapture = capture as ModuleCapture;
       try {
-        response = JSON.parse(moduleCapture.value) as ModulePrerenderResponse;
+        response = JSON.parse(moduleCapture.value) as ModuleRenderResponse;
         if (response.status !== moduleCapture.status) {
           let renderError = buildInvalidModuleResponseError(
             page,

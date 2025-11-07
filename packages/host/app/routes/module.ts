@@ -11,6 +11,7 @@ import {
   type CodeRef,
   type ResolvedCodeRef,
   type ErrorEntry,
+  type ModuleDefinitionResult,
   isBaseDef,
   baseCardRef,
   baseRealm,
@@ -39,12 +40,6 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type StoreService from '../services/store';
 
-interface DefinitionResult {
-  type: 'definition';
-  definition: Definition;
-  types: string[];
-}
-
 export type Model = {
   id: string;
   status: 'ready' | 'error';
@@ -54,7 +49,7 @@ export type Model = {
   createdAt: number;
   deps: string[];
   definitions: {
-    [name: string]: DefinitionResult | ErrorEntry;
+    [name: string]: ModuleDefinitionResult | ErrorEntry;
   };
   error?: ErrorEntry;
 };
@@ -212,7 +207,7 @@ export default class ModuleRoute extends Route<Model> {
     }
 
     let definitions: {
-      [name: string]: DefinitionResult | ErrorEntry;
+      [name: string]: ModuleDefinitionResult | ErrorEntry;
     } = {};
     for (let [name, maybeBaseDef] of Object.entries(module)) {
       if (isBaseDef(maybeBaseDef)) {
@@ -246,7 +241,7 @@ export default class ModuleRoute extends Route<Model> {
     url: URL;
     name: string;
     cardOrFieldDef: typeof BaseDef;
-  }): Promise<DefinitionResult | ErrorEntry> {
+  }): Promise<ModuleDefinitionResult | ErrorEntry> {
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
@@ -279,6 +274,7 @@ export default class ModuleRoute extends Route<Model> {
       return {
         type: 'definition',
         definition,
+        moduleURL: trimExecutableExtension(new URL(url)).href,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
       };
     } catch (err: any) {
