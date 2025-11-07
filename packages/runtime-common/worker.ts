@@ -196,16 +196,17 @@ export class Worker {
       reportStatus: this.reportStatus.bind(this),
     };
 
+    let isFeatureFlagEnabled = isHeadlessChromeFeatureFlagEnabled();
     await Promise.all([
       this.#queue.register(
         `from-scratch-index`,
-        isHeadlessChromeFeatureFlagEnabled()
+        isFeatureFlagEnabled
           ? Tasks['fromScratchIndex'](taskArgs)
           : this.fromScratch,
       ),
       this.#queue.register(
         `incremental-index`,
-        isHeadlessChromeFeatureFlagEnabled()
+        isFeatureFlagEnabled
           ? Tasks['incrementalIndex'](taskArgs)
           : this.incremental,
       ),

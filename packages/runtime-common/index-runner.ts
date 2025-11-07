@@ -685,16 +685,12 @@ function assertURLEndsWithJSON(url: URL): URL {
 }
 
 function sortInvalidations(urls: URL[]): URL[] {
-  if ((globalThis as any).__useHeadlessChromePrerender?.()) {
-    return urls.sort((a, b) => {
-      let aExec = hasExecutableExtension(a.href);
-      let bExec = hasExecutableExtension(b.href);
-      if (aExec === bExec) {
-        return a.href.localeCompare(b.href);
-      }
-      return aExec ? -1 : 1;
-    });
-  } else {
-    return urls;
-  }
+  return urls.sort((a, b) => {
+    let aExec = hasExecutableExtension(a.href);
+    let bExec = hasExecutableExtension(b.href);
+    if (aExec === bExec) {
+      return a.href.localeCompare(b.href);
+    }
+    return aExec ? -1 : 1;
+  });
 }
