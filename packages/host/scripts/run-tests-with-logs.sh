@@ -8,11 +8,8 @@ touch "$HOST_TESTS_STARTED_FILE"
 
 collect_diagnostics() {
   local exit_code=$1
-  if (( exit_code == 0 )); then
-    return
-  fi
 
-  echo "\n⛑️  Host tests failed – collecting diagnostics..." >&2
+  echo "\n⛑️  Host test (exit code $exit_code) diagnostics..." >&2
 
   local netlog_targets=()
   if [[ -n "${HOST_TEST_PARTITION:-}" ]]; then
