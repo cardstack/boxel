@@ -75,6 +75,8 @@ let waiter = buildWaiter('store-service');
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
 
+type PersistOptions = CreateOptions & { clientRequestId?: string };
+
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
@@ -361,7 +363,21 @@ export default class StoreService extends Service implements StoreInterface {
   async patch<T extends CardDef = CardDef>(
     id: string,
     patch: PatchData,
-    opts?: { doNotPersist?: true; doNotWaitForPersist?: true },
+    opts?: { clientRequestId?: string },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { doNotWaitForPersist?: true; clientRequestId?: string },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: {
+      doNotPersist?: true;
+      doNotWaitForPersist?: true;
+      clientRequestId?: string;
+    },
   ): Promise<T | CardErrorJSONAPI | undefined> {
     if ((globalThis as any).__boxelRenderContext) {
       return;
@@ -419,7 +435,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (opts?.doNotPersist) {
       await this.startAutoSaving(instance);
     } else if (shouldPersist) {
-      let persistPromise = this.persistAndUpdate(instance);
+      let persistPromise = this.persistAndUpdate(instance, {
+        clientRequestId: opts?.clientRequestId,
+      });
       if (shouldAwaitPersist) {
         persistedResult = await persistPromise;
       }
@@ -1032,7 +1050,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    opts?: CreateOptions,
+    opts?: PersistOptions,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
     let url = resolveDocUrl(doc.data.id, opts?.realm, opts?.localDir);
@@ -1042,6 +1060,7 @@ export default class StoreService extends Service implements StoreInterface {
       headers: {
         'Content-Type': SupportedMimeType.CardJson,
       },
+      clientRequestId: opts?.clientRequestId,
     });
     if (!isSingleCardDocument(json)) {
       throw new Error(
@@ -1086,7 +1105,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async persistAndUpdate(
     instance: CardDef,
-    opts?: CreateOptions,
+    opts?: PersistOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let isNew = !instance.id;
@@ -1127,6 +1146,7 @@ export default class StoreService extends Service implements StoreInterface {
         let json = await this.saveCardDocument(doc, {
           realm: realmURL.href,
           localDir: opts?.localDir,
+          clientRequestId: opts?.clientRequestId,
         });
 
         let api = await this.cardService.getAPI();

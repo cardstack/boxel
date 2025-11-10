@@ -14,6 +14,7 @@ import LintAndFixCommand from './lint-and-fix';
 import type CardService from '../services/card-service';
 import type MonacoService from '../services/monaco-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
 
 interface FileInfo {
@@ -30,6 +31,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   @service declare private realm: RealmService;
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private commandService: CommandService;
 
   description = `Apply code changes to file and then apply lint fixes`;
   static actionVerb = 'Apply';
@@ -45,7 +47,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.PatchCodeInput,
   ): Promise<BaseCommandModule.PatchCodeCommandResult> {
-    let { fileUrl, codeBlocks } = input;
+    let { fileUrl, codeBlocks, roomId } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
     let hasEmptySearchPortion = this.hasEmptySearchPortion(codeBlocks);
@@ -64,10 +66,17 @@ export default class PatchCodeCommand extends HostBaseCommand<
         hasEmptySearchPortion,
       );
 
+      let clientRequestId =
+        this.commandService.registerAiAssistantClientRequestId(
+          'patch-code',
+          roomId,
+        );
+
       if (!(await this.trySaveThroughOpenFile(finalFileUrl, patchedCode))) {
         void this.cardService
           .saveSource(new URL(finalFileUrl), patchedCode, 'bot-patch', {
             resetLoader: hasExecutableExtension(finalFileUrl),
+            clientRequestId,
           })
           .catch((error: unknown) => {
             console.error('PatchCodeCommand: failed to save source', error);

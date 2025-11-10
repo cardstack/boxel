@@ -265,6 +265,23 @@ ${REPLACE_MARKER}\n\`\`\``;
       'updated file should be attached 2',
     );
 
+    let commandService = getService('command-service') as any;
+    let requestIdsByRoom =
+      commandService.aiAssistantClientRequestIdsByRoom as Map<string, any>;
+    let roomRequestIds = requestIdsByRoom?.get(roomId);
+    assert.ok(
+      roomRequestIds,
+      'aiAssistantClientRequestIdsByRoom has an entry for the room',
+    );
+
+    let ids: string[] = roomRequestIds ? Array.from(roomRequestIds) : [];
+    assert.ok(
+      ids.some((id) =>
+        id.startsWith(`bot-patch:${encodeURIComponent(roomId)}:patch-code`),
+      ),
+      'bot patch clientRequestId recorded for the room',
+    );
+
     assert.dom('[data-test-boxel-menu-item-text="Open in Code Mode"]').exists();
     assert
       .dom('[data-test-boxel-menu-item-text="Copy Submitted Content"]')

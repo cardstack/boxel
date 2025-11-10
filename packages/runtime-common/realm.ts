@@ -641,16 +641,16 @@ export class Realm {
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
-    let clientRequestId: string | null | undefined;
+    let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
+        clientRequestId,
         onInvalidation: (invalidatedURLs: URL[]) => {
           this.handleExecutableInvalidations(invalidatedURLs);
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
           ]);
-          clientRequestId = clientRequestId ?? options?.clientRequestId;
         },
       });
     };
