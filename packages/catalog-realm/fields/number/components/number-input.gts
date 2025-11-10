@@ -39,8 +39,9 @@ export default class NumberInput extends GlimmerComponent<Signature> {
       @type='number'
       @value={{this.value}}
       @onInput={{this.handleInputChange}}
-      min={{this.config.min}}
-      max={{this.config.max}}
+      @min={{this.config.min}}
+      @max={{this.config.max}}
+      data-test-number-input
     />
   </template>
 }

@@ -69,7 +69,10 @@ export default class NumberField extends BaseNumberField {
           <DelegatedAtom @model={{@model}} @configuration={{@configuration}} />
         {{/let}}
       {{else}}
-        <span class='number-field-atom'>{{this.displayValue}}</span>
+        <span
+          class='number-field-atom'
+          data-test-number-field-atom
+        >{{this.displayValue}}</span>
 
       {{/if}}
       <style scoped>
@@ -107,7 +110,10 @@ export default class NumberField extends BaseNumberField {
           />
         {{/let}}
       {{else}}
-        <span class='number-field-embedded'>{{this.displayValue}}</span>
+        <span
+          class='number-field-embedded'
+          data-test-number-field-embedded
+        >{{this.displayValue}}</span>
 
       {{/if}}
       <style scoped>

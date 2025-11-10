@@ -49,7 +49,7 @@ export default class SliderField extends NumberField {
     };
 
     <template>
-      <div class='slider-field-edit'>
+      <div class='slider-field-edit' data-test-slider-edit>
         <BoxelInput
           @type='range'
           @value={{getNumericValue @model}}
@@ -111,7 +111,7 @@ export default class SliderField extends NumberField {
     }
 
     <template>
-      <span class='slider-atom'>
+      <span class='slider-atom' data-test-slider-atom>
         <span class='slider-mini-track'>
           <span class='slider-mini-fill' style={{this.fillStyle}}></span>
         </span>

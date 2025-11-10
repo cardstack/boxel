@@ -41,7 +41,7 @@ export default class RatingField extends NumberField {
     };
 
     <template>
-      <div class='rating-field-edit'>
+      <div class='rating-field-edit' data-test-rating-edit>
         {{#each (array 1 2 3 4 5) as |star|}}
           <button
             type='button'
@@ -112,7 +112,7 @@ export default class RatingField extends NumberField {
     }
 
     <template>
-      <span class='rating-field-atom'>
+      <span class='rating-field-atom' data-test-rating-atom>
         <span class='atom-star {{if this.isHighlighted "highlighted"}}'>★</span>
         <span class='atom-value'>{{this.numericValue}}</span>
       </span>
