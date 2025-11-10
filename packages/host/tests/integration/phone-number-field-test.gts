@@ -23,7 +23,7 @@ import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
-const phoneSelector = `[data-test-field="phone"] [data-test-boxel-phone-input-group] input`;
+const phoneSelector = `[data-test-field="phone"] [data-test-boxel-phone-input]`;
 
 module('Integration | PhoneNumberField', function (hooks) {
   setupRenderingTest(hooks);
