@@ -82,6 +82,7 @@ export interface IncrementalArgs extends WorkerArgs {
   urls: string[];
   operation: 'update' | 'delete';
   ignoreData: Record<string, string>;
+  clientRequestId: string | null;
 }
 
 export type IncrementalArgsWithPermissions = IncrementalArgs & {
