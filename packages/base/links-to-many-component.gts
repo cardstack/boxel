@@ -564,16 +564,17 @@ export function getLinksToManyComponent({
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
-      let components = getComponents();
-
       if (property === Symbol.iterator) {
+        // getComponents() is in the "hot" path, don't touch it unless absolutely necessary
+        let components = getComponents();
         return components[Symbol.iterator];
       }
       if (property === 'length') {
-        return components.length;
+        return arrayField.children.length;
       }
       if (typeof property === 'string' && property.match(/\d+/)) {
-        return components[parseInt(property)];
+        let child = arrayField.children[parseInt(property)];
+        return getBoxComponent(cardTypeFor(field, child), child, field);
       }
       return Reflect.get(target, property, received);
     },
