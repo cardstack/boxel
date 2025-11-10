@@ -9,7 +9,7 @@ import {
 } from '@cardstack/boxel-ui/helpers';
 
 const BASE_DATE = new Date('2024-03-15T15:45:00.000Z');
-const NOW = new Date('2024-03-15T17:45:00.000Z'); // 2 hours after BASE_DATE
+const REFERENCE_TIME = new Date('2024-03-15T17:45:00.000Z'); // 2 hours after BASE_DATE
 
 module('Integration | helpers | formatDateTime', function (hooks) {
   setupRenderingTest(hooks);
@@ -39,16 +39,16 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   test('relative time formatting (direct helper)', function (assert) {
     assert.strictEqual(
       formatRelativeTime(BASE_DATE, {
-        now: NOW,
+        now: REFERENCE_TIME,
       }),
       '2 hours ago',
       'shows relative time in hours',
     );
 
-    const justNow = new Date(NOW.getTime() - 30000); // 30 seconds ago
+    const justNow = new Date(REFERENCE_TIME.getTime() - 30000); // 30 seconds ago
     assert.strictEqual(
       formatRelativeTime(justNow, {
-        now: NOW,
+        now: REFERENCE_TIME,
       }),
       'now',
       'handles very recent times',
@@ -56,14 +56,15 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('short relative preset equivalence (direct helper)', function (assert) {
-    const now = NOW;
     const twentyEightDaysAgo = new Date(
-      NOW.getTime() - 28 * 24 * 60 * 60 * 1000,
+      REFERENCE_TIME.getTime() - 28 * 24 * 60 * 60 * 1000,
     );
-    const sixtyDaysAgo = new Date(NOW.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const sixtyDaysAgo = new Date(
+      REFERENCE_TIME.getTime() - 60 * 24 * 60 * 60 * 1000,
+    );
     const fr1 = formatRelativeTime(twentyEightDaysAgo, {
       size: 'short',
-      now,
+      now: REFERENCE_TIME,
       locale: 'en-US',
     });
     assert.strictEqual(
@@ -74,7 +75,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
 
     const fr2 = formatRelativeTime(sixtyDaysAgo, {
       size: 'short',
-      now,
+      now: REFERENCE_TIME,
       locale: 'en-US',
     });
     assert.strictEqual(
@@ -86,20 +87,20 @@ module('Integration | helpers | formatDateTime', function (hooks) {
 
   test('today-aware tiny formatting', function (assert) {
     assert.strictEqual(
-      formatDateTime(NOW, {
+      formatDateTime(REFERENCE_TIME, {
         preset: 'tiny',
-        now: NOW,
+        now: REFERENCE_TIME,
         timeZone: 'UTC',
       }),
       '5:45 PM',
       'shows time for today',
     );
 
-    const yesterday = new Date(NOW.getTime() - 24 * 60 * 60 * 1000);
+    const yesterday = new Date(REFERENCE_TIME.getTime() - 24 * 60 * 60 * 1000);
     assert.strictEqual(
       formatDateTime(yesterday, {
         preset: 'tiny',
-        now: NOW,
+        now: REFERENCE_TIME,
         timeZone: 'UTC',
       }),
       '3/14',
@@ -367,14 +368,12 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('tiny preset reflects timezone, locale, and future dates', function (assert) {
-    const now = NOW;
-
     assert.strictEqual(
       formatDateTime(BASE_DATE, {
         locale: 'en-US',
         timeZone: 'America/New_York',
         preset: 'tiny',
-        now,
+        now: REFERENCE_TIME,
       }),
       '11:45 AM',
       'tiny preset shows localized time when still today in New York',
@@ -385,7 +384,7 @@ module('Integration | helpers | formatDateTime', function (hooks) {
         locale: 'en-US',
         timeZone: 'Asia/Tokyo',
         preset: 'tiny',
-        now,
+        now: REFERENCE_TIME,
       }),
       '12:45 AM',
       'tiny preset switches to the local day boundary in Tokyo',
@@ -397,19 +396,19 @@ module('Integration | helpers | formatDateTime', function (hooks) {
         locale: 'es-ES',
         timeZone: 'UTC',
         preset: 'tiny',
-        now,
+        now: REFERENCE_TIME,
       }),
       '14/3',
       'non-today dates render numeric day/month in the target locale',
     );
 
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrow = new Date(REFERENCE_TIME.getTime() + 24 * 60 * 60 * 1000);
     assert.strictEqual(
       formatDateTime(tomorrow, {
         locale: 'en-US',
         timeZone: 'UTC',
         preset: 'tiny',
-        now,
+        now: REFERENCE_TIME,
       }),
       '3/16',
       'future day renders numeric date',
