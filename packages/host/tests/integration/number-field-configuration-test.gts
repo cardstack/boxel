@@ -70,6 +70,15 @@ module('Integration | number field configuration', function (hooks) {
               },
             });
 
+            @field customRatingNumber = contains(NumberField, {
+              configuration: {
+                presentation: {
+                  type: 'rating',
+                  maxStars: 10,
+                },
+              },
+            });
+
             @field prefixSuffixNumber = contains(NumberField, {
               configuration: {
                 presentation: {
@@ -119,6 +128,10 @@ module('Integration | number field configuration', function (hooks) {
                   <div data-test-rating-field>
                     <@fields.ratingNumber @format='edit' />
                     <@fields.ratingNumber @format='atom' />
+                  </div>
+                  <div data-test-custom-rating-field>
+                    <@fields.customRatingNumber @format='edit' />
+                    <@fields.customRatingNumber @format='atom' />
                   </div>
                   <div data-test-prefix-suffix-field>
                     <@fields.prefixSuffixNumber @format='atom' />
@@ -183,6 +196,21 @@ module('Integration | number field configuration', function (hooks) {
     assert
       .dom('[data-test-rating-field] [data-test-rating-atom] .atom-value')
       .hasText('3', 'Rating field atom view shows the numeric value');
+  });
+
+  test('rating field edit view respects custom maxStars configuration', async function (assert) {
+    let mod = await loader.import(`${testRealmURL}test-card`);
+    let { TestCard } = mod as any;
+    let card = new TestCard();
+    await renderCard(loader, card, 'isolated');
+
+    // Custom rating field should render 10 stars (not the default 5)
+    assert
+      .dom('[data-test-custom-rating-field] .star-btn')
+      .exists(
+        { count: 10 },
+        'Rating field edit view renders 10 star buttons when maxStars is 10',
+      );
   });
 
   test('min and max configuration is applied to slider field', async function (assert) {

@@ -36,13 +36,17 @@ export default class RatingField extends NumberField {
       return getNumericValue(this.args.model);
     }
 
+    get stars() {
+      return Array.from({ length: this.config.maxStars }, (_, idx) => idx + 1);
+    }
+
     setRating = (rating: number) => {
       this.args.set(rating);
     };
 
     <template>
       <div class='rating-field-edit' data-test-rating-edit>
-        {{#each (array 1 2 3 4 5) as |star|}}
+        {{#each this.stars as |star|}}
           <button
             type='button'
             class='star-btn {{if (lte star this.numericValue) "star-filled"}}'
