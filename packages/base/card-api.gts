@@ -14,6 +14,8 @@ import { getContainsManyComponent } from './contains-many-component';
 import { LinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
 import {
+  THIS_INTERPOLATION_PREFIX,
+  THIS_REALM_TOKEN,
   Deferred,
   isCardResource,
   Loader,
@@ -70,11 +72,6 @@ import {
   querySignature,
   type Query as RelationshipQuery,
 } from '@cardstack/runtime-common';
-import {
-  THIS_INTERPOLATION_PREFIX,
-  THIS_REALM_TOKEN,
-} from '@cardstack/runtime-common/query-field-utils';
-
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -91,7 +88,6 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
-// normalizeEnumOptions used by enum moved to packages/base/enum.gts
 
 import {
   callSerializeHook,
@@ -160,6 +156,7 @@ export {
   serialize,
   serializeCard,
   getQueryFieldState,
+  setQueryFieldState,
   type BoxComponent,
   type DeserializeOpts,
   type GetCardMenuItemParams,
@@ -225,6 +222,74 @@ export type FieldFormats = {
   ['cardDef']: Format;
 };
 type Setter = (value: any) => void;
+
+export interface QueryFieldAccessPayload {
+  instance: CardDef;
+  fieldName: string;
+  field: Field;
+}
+
+export interface QueryFieldCoordinator {
+  handleQueryFieldAccess(payload: QueryFieldAccessPayload): void;
+}
+
+let queryFieldCoordinator: QueryFieldCoordinator | undefined;
+
+export function registerQueryFieldCoordinator(
+  coordinator: QueryFieldCoordinator | undefined,
+) {
+  queryFieldCoordinator = coordinator;
+}
+
+const queryFieldEvaluationGuards = new WeakMap<BaseDef, Map<string, number>>();
+
+export function beginQueryFieldEvaluation(
+  instance: BaseDef,
+  fieldName: string,
+): () => void {
+  let guards = queryFieldEvaluationGuards.get(instance);
+  if (!guards) {
+    guards = new Map();
+    queryFieldEvaluationGuards.set(instance, guards);
+  }
+  let current = guards.get(fieldName) ?? 0;
+  guards.set(fieldName, current + 1);
+  return () => {
+    let existing = guards?.get(fieldName);
+    if (existing === undefined) {
+      return;
+    }
+    if (existing <= 1) {
+      guards?.delete(fieldName);
+      if (guards && guards.size === 0) {
+        queryFieldEvaluationGuards.delete(instance);
+      }
+    } else {
+      guards?.set(fieldName, existing - 1);
+    }
+  };
+}
+
+export function isQueryFieldEvaluationInProgress(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  return (queryFieldEvaluationGuards.get(instance)?.get(fieldName) ?? 0) > 0;
+}
+
+function notifyQueryFieldAccess(instance: CardDef, field: Field) {
+  if (!field.queryDefinition || !queryFieldCoordinator) {
+    return;
+  }
+  if (isQueryFieldEvaluationInProgress(instance, field.name)) {
+    return;
+  }
+  queryFieldCoordinator.handleQueryFieldAccess({
+    instance,
+    fieldName: field.name,
+    field,
+  });
+}
 
 interface Options {
   computeVia?: () => unknown;
@@ -978,6 +1043,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     entangleWithCardTracking(instance);
+    notifyQueryFieldAccess(instance, this);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
@@ -1356,6 +1422,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
     entangleWithCardTracking(instance);
+    notifyQueryFieldAccess(instance, this);
 
     if (this.computeVia) {
       // For computed LinksToMany fields, use the main getter function
