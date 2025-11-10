@@ -32,6 +32,7 @@ import config from '@cardstack/host/config/environment';
 import HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type { PrivateDependencyViolation } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
   ClaimedDomain,
@@ -75,10 +76,15 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
   @tracked private claimedDomain: ClaimedDomain | null = null;
+  @tracked
+  private privateDependencyViolations: PrivateDependencyViolation[] | null =
+    null;
+  @tracked private privateDependencyCheckError: string | null = null;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.fetchBoxelClaimedDomain.perform();
+    this.checkPrivateDependenciesTask.perform();
   }
 
   get isSubdirectoryRealmPublished() {
@@ -92,6 +98,34 @@ export default class PublishRealmModal extends Component<Signature> {
       this.isPublishing
     );
   }
+
+  get shouldShowPrivateDependencyWarning() {
+    return (
+      Array.isArray(this.privateDependencyViolations) &&
+      this.privateDependencyViolations.length > 0
+    );
+  }
+
+  get isCheckingPrivateDependencies() {
+    return this.checkPrivateDependenciesTask.isRunning;
+  }
+
+  private privateRealmURLsForViolation = (
+    violation: PrivateDependencyViolation,
+  ): string[] => {
+    if (!violation.externalDependencies?.length) {
+      return [];
+    }
+    return Array.from(
+      new Set(violation.externalDependencies.map((dep) => dep.realmURL)),
+    );
+  };
+
+  private hasPrivateRealmDependencies = (
+    violation: PrivateDependencyViolation,
+  ): boolean => {
+    return this.privateRealmURLsForViolation(violation).length > 0;
+  };
 
   get lastPublishedTime() {
     return this.getFormattedLastPublishedTime(this.subdirectoryRealmUrl);
@@ -277,6 +311,26 @@ export default class PublishRealmModal extends Component<Signature> {
       this.setCustomSubdomainSelection(null);
     }
   }
+
+  private checkPrivateDependenciesTask = restartableTask(async () => {
+    this.privateDependencyCheckError = null;
+    try {
+      let report = await this.realm.fetchPrivateDependencyReport(
+        this.currentRealmURL,
+      );
+      this.privateDependencyViolations = report.publishable
+        ? []
+        : report.violations;
+    } catch (error) {
+      console.error(
+        'Failed to check for private dependencies before publishing',
+        error,
+      );
+      this.privateDependencyCheckError =
+        'Unable to verify private dependencies. Publishing may cause errors.';
+      this.privateDependencyViolations = null;
+    }
+  });
 
   private fetchBoxelClaimedDomain = restartableTask(async () => {
     try {
@@ -518,6 +572,57 @@ export default class PublishRealmModal extends Component<Signature> {
         </div>
       </:header>
       <:content>
+        {{#if this.privateDependencyCheckError}}
+          <div
+            class='publish-warning publish-warning--error'
+            data-test-private-dependency-error
+          >
+            {{this.privateDependencyCheckError}}
+          </div>
+        {{else if this.shouldShowPrivateDependencyWarning}}
+          <div class='publish-warning' data-test-private-dependency-warning>
+            <div class='publish-warning__message'>
+              Publishing this realm may render with errors because it depends on
+              private workspaces.
+            </div>
+            <ul class='publish-warning__violations'>
+              {{#each this.privateDependencyViolations as |violation|}}
+                <li
+                  class='publish-warning__violation'
+                  data-test-private-dependency-resource={{violation.resource}}
+                >
+                  <span class='publish-warning__resource'>
+                    {{violation.resource}}
+                  </span>
+                  {{#if (this.hasPrivateRealmDependencies violation)}}
+                    <div class='publish-warning__realms'>
+                      Private workspaces:
+                      {{#each
+                        (this.privateRealmURLsForViolation violation)
+                        as |realmURL|
+                      }}
+                        <span
+                          class='publish-warning__realm'
+                          data-test-private-dependency-realm={{realmURL}}
+                        >
+                          {{realmURL}}
+                        </span>
+                      {{/each}}
+                    </div>
+                  {{/if}}
+                </li>
+              {{/each}}
+            </ul>
+          </div>
+        {{else if this.isCheckingPrivateDependencies}}
+          <div
+            class='publish-warning publish-warning--info'
+            data-test-private-dependency-loading
+          >
+            <LoadingIndicator />
+            Checking for private dependencies…
+          </div>
+        {{/if}}
 
         <div class='domain-options'>
           <div class='domain-option'>
@@ -866,6 +971,66 @@ export default class PublishRealmModal extends Component<Signature> {
       .modal-subtitle {
         font-size: normal var(--boxel-font-sm);
         color: var(--boxel-dark);
+      }
+
+      .publish-warning {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp);
+        padding: var(--boxel-sp-sm);
+        border: 1px solid var(--boxel-warning-200);
+        background-color: rgba(255, 186, 0, 0.12);
+        border-radius: var(--boxel-border-radius-lg);
+        font-size: var(--boxel-font-size-sm);
+      }
+
+      .publish-warning--error {
+        border-color: var(--boxel-error-200);
+        background-color: rgba(220, 38, 38, 0.08);
+        color: var(--boxel-error-200);
+      }
+
+      .publish-warning--info {
+        border-color: var(--boxel-300, #cfd2d7);
+        background-color: var(--boxel-050, rgba(0, 0, 0, 0.03));
+        color: var(--boxel-500, #5f6c80);
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .publish-warning__violations {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .publish-warning__violation {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxxs);
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+
+      .publish-warning__resource {
+        font-weight: 600;
+      }
+
+      .publish-warning__realms {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxxs);
+        font-size: var(--boxel-font-size-xs);
+      }
+
+      .publish-warning__realm {
+        background-color: rgba(0, 0, 0, 0.05);
+        padding: 0 var(--boxel-sp-xxxs);
+        border-radius: var(--boxel-border-radius-xs);
       }
 
       .domain-options {
