@@ -89,7 +89,12 @@ function resourceUrlFromElement(element: Element): string | undefined {
     return element.href || element.getAttribute('href') || undefined;
   }
   if (element instanceof HTMLImageElement) {
-    return element.currentSrc || element.src || element.getAttribute('src') || undefined;
+    return (
+      element.currentSrc ||
+      element.src ||
+      element.getAttribute('src') ||
+      undefined
+    );
   }
   if (element instanceof HTMLIFrameElement) {
     return element.src || element.getAttribute('src') || undefined;
@@ -112,10 +117,16 @@ function resourceUrlFromElement(element: Element): string | undefined {
     );
   }
 
-  return element.getAttribute('src') || element.getAttribute('href') || undefined;
+  return (
+    element.getAttribute('src') || element.getAttribute('href') || undefined
+  );
 }
 
-function formatLocation(failure: { filename?: string; lineno?: number; colno?: number }) {
+function formatLocation(failure: {
+  filename?: string;
+  lineno?: number;
+  colno?: number;
+}) {
   if (!failure.filename) {
     return undefined;
   }
