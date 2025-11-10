@@ -1,8 +1,14 @@
 import { RenderingTestContext } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
-import { Loader } from '@cardstack/runtime-common/loader';
+
 import { baseRealm, ensureTrailingSlash } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+
+import ENV from '@cardstack/host/config/environment';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -13,7 +19,6 @@ import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
-import ENV from '@cardstack/host/config/environment';
 
 let loader: Loader;
 
