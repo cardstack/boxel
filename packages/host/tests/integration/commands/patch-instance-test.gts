@@ -3,7 +3,7 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { localId } from '@cardstack/runtime-common';
+import { localId, type SingleCardDocument } from '@cardstack/runtime-common';
 import { type RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
 import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
@@ -17,6 +17,9 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   cardInfo,
+  setupOnSave,
+  withSlowSave,
+  type TestContextWithSave,
 } from '../../helpers';
 import {
   CardDef,
@@ -36,6 +39,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   setupBaseRealm(hooks);
 
   setupLocalIndexing(hooks);
+  setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
   let commandService: CommandService;
   let PersonDef: typeof CardDefType;
@@ -64,13 +68,20 @@ module('Integration | commands | patch-instance', function (hooks) {
     indexQuery = realm.realmIndexQueryEngine;
   });
 
-  test('can patch a contains field', async function (assert) {
+  test<TestContextWithSave>('can patch a contains field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
         cardType: PersonDef,
       },
     );
+    let url = new URL(`${testRealmURL}Person/hassan`);
+    let saves = 0;
+    this.onSave((saveURL) => {
+      if (saveURL.href === url.href) {
+        saves++;
+      }
+    });
 
     await patchInstanceCommand.execute({
       cardId: `${testRealmURL}Person/hassan`,
@@ -81,54 +92,63 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    let result = await indexQuery.instance(
-      new URL(`${testRealmURL}Person/hassan`),
-    );
-    if (result && 'instance' in result) {
-      console.log(
-        `actual: ${JSON.stringify(result.instance?.attributes, null, 2)}`,
-      );
-      assert.deepEqual(
-        result.instance?.attributes,
-        {
-          name: 'Paper',
-          description: null,
-          nickNames: [],
-          thumbnailURL: null,
-          title: 'Untitled Card',
-          cardInfo,
-        },
-        'the attributes are correct',
-      );
-      assert.deepEqual(
-        result.instance?.relationships,
-        {
-          bestFriend: {
-            links: {
-              self: null,
-            },
-          },
-          friends: {
-            links: {
-              self: null,
-            },
-          },
-          'cardInfo.theme': { links: { self: null } },
-        },
-        'the relationships are correct',
-      );
-    } else {
-      assert.ok(false, `expected result to be a card instance`);
+    await waitUntil(() => saves > 0);
+
+    let result = await indexQuery.instance(url);
+    assert.ok(result, 'instance query returned a result');
+    assert.strictEqual(result?.type, 'instance', 'result is an instance');
+    let instance =
+      result && result.type === 'instance' ? result.instance : undefined;
+    assert.ok(instance, 'instance payload is present');
+    if (!instance) {
+      throw new Error('expected instance payload');
     }
+
+    assert.deepEqual(
+      instance.attributes,
+      {
+        name: 'Paper',
+        description: null,
+        nickNames: [],
+        thumbnailURL: null,
+        title: 'Untitled Card',
+        cardInfo,
+      },
+      'the attributes are correct',
+    );
+    assert.deepEqual(
+      instance.relationships,
+      {
+        bestFriend: {
+          links: {
+            self: null,
+          },
+        },
+        friends: {
+          links: {
+            self: null,
+          },
+        },
+        'cardInfo.theme': { links: { self: null } },
+      },
+      'the relationships are correct',
+    );
   });
 
-  test('can patch a containsMany field', async function (assert) {
+  test<TestContextWithSave>('can patch a containsMany field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
         cardType: PersonDef,
       },
     );
+    let url = new URL(`${testRealmURL}Person/hassan`);
+    let saves = 0;
+    this.onSave((saveURL) => {
+      if (saveURL.href === url.href) {
+        saves++;
+      }
+    });
 
     await patchInstanceCommand.execute({
       cardId: `${testRealmURL}Person/hassan`,
@@ -139,51 +159,63 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    let result = await indexQuery.instance(
-      new URL(`${testRealmURL}Person/hassan`),
-    );
-    if (result && 'instance' in result) {
-      assert.deepEqual(
-        result.instance?.attributes,
-        {
-          name: 'Hassan',
-          description: null,
-          nickNames: ['Paper'],
-          thumbnailURL: null,
-          title: 'Untitled Card',
-          cardInfo,
-        },
-        'the attributes are correct',
-      );
-      assert.deepEqual(
-        result.instance?.relationships,
-        {
-          bestFriend: {
-            links: {
-              self: null,
-            },
-          },
-          friends: {
-            links: {
-              self: null,
-            },
-          },
-          'cardInfo.theme': { links: { self: null } },
-        },
-        'the relationships are correct',
-      );
-    } else {
-      assert.ok(false, `expected result to be a card instance`);
+    await waitUntil(() => saves > 0);
+
+    let result = await indexQuery.instance(url);
+    assert.ok(result, 'instance query returned a result');
+    assert.strictEqual(result?.type, 'instance', 'result is an instance');
+    let instance =
+      result && result.type === 'instance' ? result.instance : undefined;
+    assert.ok(instance, 'instance payload is present');
+    if (!instance) {
+      throw new Error('expected instance payload');
     }
+
+    assert.deepEqual(
+      instance.attributes,
+      {
+        name: 'Hassan',
+        description: null,
+        nickNames: ['Paper'],
+        thumbnailURL: null,
+        title: 'Untitled Card',
+        cardInfo,
+      },
+      'the attributes are correct',
+    );
+    assert.deepEqual(
+      instance.relationships,
+      {
+        bestFriend: {
+          links: {
+            self: null,
+          },
+        },
+        friends: {
+          links: {
+            self: null,
+          },
+        },
+        'cardInfo.theme': { links: { self: null } },
+      },
+      'the relationships are correct',
+    );
   });
 
-  test('can patch a linksTo field', async function (assert) {
+  test<TestContextWithSave>('can patch a linksTo field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
         cardType: PersonDef,
       },
     );
+    let url = new URL(`${testRealmURL}Person/hassan`);
+    let saves = 0;
+    this.onSave((saveURL) => {
+      if (saveURL.href === url.href) {
+        saves++;
+      }
+    });
 
     await patchInstanceCommand.execute({
       cardId: `${testRealmURL}Person/hassan`,
@@ -194,51 +226,63 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    let result = await indexQuery.instance(
-      new URL(`${testRealmURL}Person/hassan`),
-    );
-    if (result && 'instance' in result) {
-      assert.deepEqual(
-        result.instance?.attributes,
-        {
-          name: 'Hassan',
-          description: null,
-          nickNames: [],
-          thumbnailURL: null,
-          title: 'Untitled Card',
-          cardInfo,
-        },
-        'the attributes are correct',
-      );
-      assert.deepEqual(
-        result.instance?.relationships,
-        {
-          bestFriend: {
-            links: {
-              self: `./jade`,
-            },
-          },
-          friends: {
-            links: {
-              self: null,
-            },
-          },
-          'cardInfo.theme': { links: { self: null } },
-        },
-        'the relationships are correct',
-      );
-    } else {
-      assert.ok(false, `expected result to be a card instance`);
+    await waitUntil(() => saves > 0);
+
+    let result = await indexQuery.instance(url);
+    assert.ok(result, 'instance query returned a result');
+    assert.strictEqual(result?.type, 'instance', 'result is an instance');
+    let instance =
+      result && result.type === 'instance' ? result.instance : undefined;
+    assert.ok(instance, 'instance payload is present');
+    if (!instance) {
+      throw new Error('expected instance payload');
     }
+
+    assert.deepEqual(
+      instance.attributes,
+      {
+        name: 'Hassan',
+        description: null,
+        nickNames: [],
+        thumbnailURL: null,
+        title: 'Untitled Card',
+        cardInfo,
+      },
+      'the attributes are correct',
+    );
+    assert.deepEqual(
+      instance.relationships,
+      {
+        bestFriend: {
+          links: {
+            self: `./jade`,
+          },
+        },
+        friends: {
+          links: {
+            self: null,
+          },
+        },
+        'cardInfo.theme': { links: { self: null } },
+      },
+      'the relationships are correct',
+    );
   });
 
-  test('can patch a linksToMany field', async function (assert) {
+  test<TestContextWithSave>('can patch a linksToMany field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
         cardType: PersonDef,
       },
     );
+    let url = new URL(`${testRealmURL}Person/hassan`);
+    let saves = 0;
+    this.onSave((saveURL) => {
+      if (saveURL.href === url.href) {
+        saves++;
+      }
+    });
 
     await patchInstanceCommand.execute({
       cardId: `${testRealmURL}Person/hassan`,
@@ -250,39 +294,125 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    let result = await indexQuery.instance(
-      new URL(`${testRealmURL}Person/hassan`),
+    await waitUntil(() => saves > 0);
+
+    let result = await indexQuery.instance(url);
+    assert.ok(result, 'instance query returned a result');
+    assert.strictEqual(result?.type, 'instance', 'result is an instance');
+    let instance =
+      result && result.type === 'instance' ? result.instance : undefined;
+    assert.ok(instance, 'instance payload is present');
+    if (!instance) {
+      throw new Error('expected instance payload');
+    }
+
+    assert.deepEqual(
+      instance.attributes,
+      {
+        name: 'Hassan',
+        description: null,
+        nickNames: [],
+        thumbnailURL: null,
+        title: 'Untitled Card',
+        cardInfo,
+      },
+      'the attributes are correct',
     );
-    if (result && 'instance' in result) {
-      assert.deepEqual(
-        result.instance?.attributes,
-        {
-          name: 'Hassan',
-          description: null,
-          nickNames: [],
-          thumbnailURL: null,
-          title: 'Untitled Card',
-          cardInfo,
+    assert.deepEqual(
+      instance.relationships,
+      {
+        bestFriend: {
+          links: {
+            self: null,
+          },
         },
-        'the attributes are correct',
-      );
-      assert.deepEqual(
-        result.instance?.relationships,
-        {
-          bestFriend: {
-            links: {
-              self: null,
+        'friends.0': { links: { self: `./germaine` } },
+        'friends.1': { links: { self: `./queenzy` } },
+        'cardInfo.theme': { links: { self: null } },
+      },
+      'the relationships are correct',
+    );
+  });
+
+  test<TestContextWithSave>('patch command returns before persistence completes', async function (assert) {
+    assert.expect(6);
+
+    let storeService = getService('store');
+    let cardId = `${testRealmURL}Person/hassan`;
+    let patchInstanceCommand = new PatchCardInstanceCommand(
+      commandService.commandContext,
+      {
+        cardType: PersonDef,
+      },
+    );
+
+    let saves = 0;
+    let savedName: string | undefined;
+    this.onSave((url, doc) => {
+      if (url.href === cardId && typeof doc !== 'string') {
+        saves++;
+        savedName = (doc as SingleCardDocument).data.attributes?.name as
+          | string
+          | undefined;
+      }
+    });
+
+    let patchOptions: Parameters<typeof storeService.patch>[2];
+    let originalPatch = storeService.patch;
+    storeService.patch = async function (
+      this: typeof storeService,
+      id,
+      patch,
+      opts,
+    ) {
+      patchOptions = opts;
+      return await originalPatch.call(this, id, patch, opts);
+    };
+
+    try {
+      await withSlowSave(100, async () => {
+        await patchInstanceCommand.execute({
+          cardId,
+          patch: {
+            attributes: {
+              name: 'Hassan Optimistic',
             },
           },
-          'friends.0': { links: { self: `./germaine` } },
-          'friends.1': { links: { self: `./queenzy` } },
-          'cardInfo.theme': { links: { self: null } },
-        },
-        'the relationships are correct',
-      );
-    } else {
-      assert.ok(false, `expected result to be a card instance`);
+        });
+
+        let localCard = storeService.peek(cardId);
+        assert.ok(localCard, 'local card is present');
+        if (localCard) {
+          assert.strictEqual(
+            (localCard as any).name,
+            'Hassan Optimistic',
+            'local card updated immediately',
+          );
+        }
+        assert.strictEqual(saves, 0, 'persistence has not run yet');
+      });
+    } finally {
+      storeService.patch = originalPatch;
     }
+
+    assert.true(
+      patchOptions?.doNotWaitForPersist,
+      'store.patch invoked with doNotWaitForPersist',
+    );
+
+    await waitUntil(() => saves > 0);
+    assert.strictEqual(
+      savedName,
+      'Hassan Optimistic',
+      'background save includes updated data',
+    );
+
+    let persisted = await storeService.get(cardId);
+    assert.strictEqual(
+      (persisted as any).name,
+      'Hassan Optimistic',
+      'remote card reflects update after background save',
+    );
   });
 
   test('can patch an unsaved instance', async function (assert) {
@@ -313,34 +443,38 @@ module('Integration | commands | patch-instance', function (hooks) {
     });
 
     let result = await indexQuery.instance(new URL(andrea.id));
-    if (result && 'instance' in result) {
-      assert.deepEqual(
-        result.instance?.attributes,
-        {
-          name: 'Andrea',
-          description: null,
-          nickNames: ['Air'],
-          thumbnailURL: null,
-          title: 'Untitled Card',
-          cardInfo,
-        },
-        'the attributes are correct',
-      );
-      assert.deepEqual(
-        result.instance?.relationships,
-        {
-          bestFriend: { links: { self: `./queenzy` } },
-          friends: {
-            links: {
-              self: null,
-            },
-          },
-          'cardInfo.theme': { links: { self: null } },
-        },
-        'the relationships are correct',
-      );
-    } else {
-      assert.ok(false, `expected result to be a card instance`);
+    assert.ok(result, 'instance query returned a result');
+    assert.strictEqual(result?.type, 'instance', 'result is an instance');
+    let instance =
+      result && result.type === 'instance' ? result.instance : undefined;
+    assert.ok(instance, 'instance payload is present');
+    if (!instance) {
+      throw new Error('expected instance payload');
     }
+    assert.deepEqual(
+      instance.attributes,
+      {
+        name: 'Andrea',
+        description: null,
+        nickNames: ['Air'],
+        thumbnailURL: null,
+        title: 'Untitled Card',
+        cardInfo,
+      },
+      'the attributes are correct',
+    );
+    assert.deepEqual(
+      instance.relationships,
+      {
+        bestFriend: { links: { self: `./queenzy` } },
+        friends: {
+          links: {
+            self: null,
+          },
+        },
+        'cardInfo.theme': { links: { self: null } },
+      },
+      'the relationships are correct',
+    );
   });
 });

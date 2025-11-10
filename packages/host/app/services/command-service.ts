@@ -357,10 +357,14 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
-        await this.store.patch(payload?.attributes?.cardId, {
-          attributes: payload?.attributes?.patch?.attributes,
-          relationships: payload?.attributes?.patch?.relationships,
-        });
+        await this.store.patch(
+          payload?.attributes?.cardId,
+          {
+            attributes: payload?.attributes?.patch?.attributes,
+            relationships: payload?.attributes?.patch?.relationships,
+          },
+          { doNotWaitForPersist: true },
+        );
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
