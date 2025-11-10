@@ -1,8 +1,7 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { concat } from '@ember/helper'; // ² Helpers
+import GlimmerComponent from '@glimmer/component';
+import { concat } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 
-// Configuration interface
 interface TimelineConfiguration {
   timelineOptions?: {
     eventName?: string;
@@ -10,8 +9,15 @@ interface TimelineConfiguration {
   };
 }
 
+interface TimelineSignature {
+  Args: {
+    model?: any;
+    config?: TimelineConfiguration;
+  };
+}
+
 // ³ Timeline Component
-export class Timeline extends Component {
+export class Timeline extends GlimmerComponent<TimelineSignature> {
   get config(): TimelineConfiguration | undefined {
     return this.args.config as TimelineConfiguration | undefined;
   }
@@ -58,7 +64,7 @@ export class Timeline extends Component {
     <div class='timeline-event' data-test-timeline-event>
       <div
         class='timeline-marker'
-        style={{concat 'background-color: ' this.statusColor}}
+        style={{htmlSafe (concat 'background-color: ' this.statusColor)}}
       ></div>
       <div class='timeline-content'>
         <div class='timeline-name'>{{this.eventName}}</div>

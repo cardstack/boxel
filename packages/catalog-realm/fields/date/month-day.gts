@@ -1,4 +1,3 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
@@ -13,6 +12,236 @@ import { array, concat } from '@ember/helper';
 import { add, lt } from '@cardstack/boxel-ui/helpers'; // ² Helpers
 import GiftIcon from '@cardstack/boxel-icons/gift'; // ³ Gift icon
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down'; // ⁴ Chevron down icon
+
+class MonthDayFieldEdit extends Component<typeof MonthDayField> {
+  @tracked month = '01';
+  @tracked day = '01';
+
+  months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    // ¹¹ Initialize from model or set defaults
+    this.month = this.args.model?.month || '01';
+    this.day = this.args.model?.day || '01';
+  }
+
+  @action
+  updateMonth(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    this.month = target.value;
+    this.args.model.month = target.value;
+  }
+
+  @action
+  updateDay(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    this.day = target.value;
+    this.args.model.day = target.value;
+  }
+
+  get displayValue() {
+    const monthName = this.months[parseInt(this.month) - 1];
+    return `${monthName} ${parseInt(this.day)}`;
+  }
+
+  <template>
+    <div class='month-day-edit'>
+      <div class='month-day-inputs'>
+        <div class='select-wrapper month-select'>
+          <div class='input-icon'>
+            <GiftIcon class='icon' />
+          </div>
+          <label for='month-select' class='sr-only'>Month</label>
+          <select
+            id='month-select'
+            value={{this.month}}
+            {{on 'change' this.updateMonth}}
+            class='month-day-select'
+            data-test-month-select
+          >
+            {{#each this.months as |monthName index|}}
+              <option
+                value={{if
+                  (lt (add index 1) 10)
+                  (concat '0' (add index 1))
+                  (add index 1)
+                }}
+              >
+                {{monthName}}
+              </option>
+            {{/each}}
+          </select>
+          <div class='select-icon'>
+            <ChevronDownIcon class='icon' />
+          </div>
+        </div>
+        <div class='select-wrapper day-select'>
+          <label for='day-select' class='sr-only'>Day</label>
+          <select
+            id='day-select'
+            value={{this.day}}
+            {{on 'change' this.updateDay}}
+            class='month-day-select'
+            data-test-day-select
+          >
+            {{#each
+              (array
+                1
+                2
+                3
+                4
+                5
+                6
+                7
+                8
+                9
+                10
+                11
+                12
+                13
+                14
+                15
+                16
+                17
+                18
+                19
+                20
+                21
+                22
+                23
+                24
+                25
+                26
+                27
+                28
+                29
+                30
+                31
+              )
+              as |dayNum|
+            }}
+              <option value={{if (lt dayNum 10) (concat '0' dayNum) dayNum}}>
+                {{dayNum}}
+              </option>
+            {{/each}}
+          </select>
+          <div class='select-icon'>
+            <ChevronDownIcon class='icon' />
+          </div>
+        </div>
+      </div>
+      <p class='month-day-display'>Birthday: {{this.displayValue}}</p>
+    </div>
+
+    <style scoped>
+      .month-day-edit {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .month-day-inputs {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      .select-wrapper {
+        position: relative;
+      }
+
+      .month-select {
+        flex: 1;
+      }
+
+      .day-select {
+        width: 6rem;
+      }
+
+      .input-icon {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        color: var(--muted-foreground, #9ca3af);
+      }
+
+      .select-icon {
+        position: absolute;
+        right: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        color: var(--muted-foreground, #9ca3af);
+      }
+
+      .icon {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+
+      .month-day-select {
+        width: 100%;
+        padding: 0.5rem 2rem 0.5rem 0.75rem;
+        border: 1px solid var(--border, #e0e0e0);
+        border-radius: var(--radius, 0.375rem);
+        font-family: var(--font-sans, system-ui, sans-serif);
+        font-size: 0.875rem;
+        color: var(--foreground, #1a1a1a);
+        background: var(--input, #ffffff);
+        appearance: none;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .month-select .month-day-select {
+        padding-left: 2.5rem;
+      }
+
+      .month-day-select:focus {
+        outline: none;
+        border-color: var(--ring, #3b82f6);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .month-day-display {
+        font-size: 0.75rem;
+        color: var(--muted-foreground, #9ca3af);
+        margin: 0;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
+      }
+    </style>
+  </template>
+}
 
 // ⁵ MonthDayField - Independent FieldDef for birthdays and anniversaries
 export class MonthDayField extends FieldDef {
@@ -136,217 +365,7 @@ export class MonthDayField extends FieldDef {
   };
 
   // ¹⁰ Edit format - month and day dropdowns
-  static edit = class Edit extends Component<typeof this> {
-    @tracked month = '01';
-    @tracked day = '01';
-
-    months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      // ¹¹ Initialize from model or set defaults
-      this.month = this.args.model?.month || '01';
-      this.day = this.args.model?.day || '01';
-    }
-
-    @action
-    updateMonth(event: Event) {
-      const target = event.target as HTMLSelectElement;
-      this.month = target.value;
-      this.args.model.month = target.value;
-    }
-
-    @action
-    updateDay(event: Event) {
-      const target = event.target as HTMLSelectElement;
-      this.day = target.value;
-      this.args.model.day = target.value;
-    }
-
-    get displayValue() {
-      const monthName = this.months[parseInt(this.month) - 1];
-      return `${monthName} ${parseInt(this.day)}`;
-    }
-
-    <template>
-      <div class='month-day-edit'>
-        <div class='month-day-inputs'>
-          <div class='select-wrapper month-select'>
-            <div class='input-icon'>
-              <GiftIcon class='icon' />
-            </div>
-            <select
-              value={{this.month}}
-              {{on 'change' this.updateMonth}}
-              class='month-day-select'
-              data-test-month-select
-            >
-              {{#each this.months as |monthName index|}}
-                <option
-                  value={{if
-                    (lt (add index 1) 10)
-                    (concat '0' (add index 1))
-                    (add index 1)
-                  }}
-                >
-                  {{monthName}}
-                </option>
-              {{/each}}
-            </select>
-            <div class='select-icon'>
-              <ChevronDownIcon class='icon' />
-            </div>
-          </div>
-          <div class='select-wrapper day-select'>
-            <select
-              value={{this.day}}
-              {{on 'change' this.updateDay}}
-              class='month-day-select'
-              data-test-day-select
-            >
-              {{#each
-                (array
-                  1
-                  2
-                  3
-                  4
-                  5
-                  6
-                  7
-                  8
-                  9
-                  10
-                  11
-                  12
-                  13
-                  14
-                  15
-                  16
-                  17
-                  18
-                  19
-                  20
-                  21
-                  22
-                  23
-                  24
-                  25
-                  26
-                  27
-                  28
-                  29
-                  30
-                  31
-                )
-                as |dayNum|
-              }}
-                <option value={{if (lt dayNum 10) (concat '0' dayNum) dayNum}}>
-                  {{dayNum}}
-                </option>
-              {{/each}}
-            </select>
-            <div class='select-icon'>
-              <ChevronDownIcon class='icon' />
-            </div>
-          </div>
-        </div>
-        <p class='month-day-display'>Birthday: {{this.displayValue}}</p>
-      </div>
-
-      <style scoped>
-        .month-day-edit {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .month-day-inputs {
-          display: flex;
-          gap: 0.5rem;
-        }
-
-        .select-wrapper {
-          position: relative;
-        }
-
-        .month-select {
-          flex: 1;
-        }
-
-        .day-select {
-          width: 6rem;
-        }
-
-        .input-icon {
-          position: absolute;
-          left: 0.75rem;
-          top: 50%;
-          transform: translateY(-50%);
-          pointer-events: none;
-          display: flex;
-          align-items: center;
-          color: var(--muted-foreground, #9ca3af);
-        }
-
-        .select-icon {
-          position: absolute;
-          right: 0.75rem;
-          top: 50%;
-          transform: translateY(-50%);
-          pointer-events: none;
-          display: flex;
-          align-items: center;
-          color: var(--muted-foreground, #9ca3af);
-        }
-
-        .icon {
-          width: 1.25rem;
-          height: 1.25rem;
-        }
-
-        .month-day-select {
-          width: 100%;
-          padding: 0.5rem 2rem 0.5rem 0.75rem;
-          border: 1px solid var(--border, #e0e0e0);
-          border-radius: var(--radius, 0.375rem);
-          font-family: var(--font-sans, system-ui, sans-serif);
-          font-size: 0.875rem;
-          color: var(--foreground, #1a1a1a);
-          background: var(--input, #ffffff);
-          appearance: none;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .month-select .month-day-select {
-          padding-left: 2.5rem;
-        }
-
-        .month-day-select:focus {
-          outline: none;
-          border-color: var(--ring, #3b82f6);
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        .month-day-display {
-          font-size: 0.75rem;
-          color: var(--muted-foreground, #9ca3af);
-          margin: 0;
-        }
-      </style>
-    </template>
-  };
+  static edit = MonthDayFieldEdit;
 }
+
+export default MonthDayField;

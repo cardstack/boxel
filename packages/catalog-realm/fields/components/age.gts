@@ -1,16 +1,19 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { and } from '@cardstack/boxel-ui/helpers'; // ² Helpers
+import GlimmerComponent from '@glimmer/component';
+import { and } from '@cardstack/boxel-ui/helpers';
 
-// Configuration interface
 interface AgeConfiguration {
   ageOptions?: {
     showNextBirthday?: boolean;
   };
 }
+export interface AgeSignature {
+  Args: {
+    model?: any;
+    config?: AgeConfiguration;
+  };
+}
 
-// ³ Age Component
-export class Age extends Component {
+export class Age extends GlimmerComponent<AgeSignature> {
   get config(): AgeConfiguration | undefined {
     return this.args.config as AgeConfiguration | undefined;
   }
@@ -92,7 +95,7 @@ export class Age extends Component {
           <div class='age-meta'>
             Born
             {{this.birthDateDisplay}}
-            {{#if (and this.nextBirthday this.showNextBirthday)}}
+            {{#if (and this.nextBirthday (Number this.showNextBirthday))}}
               • Next birthday in
               {{this.nextBirthday}}
               days

@@ -1,11 +1,9 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { and, not } from '@cardstack/boxel-ui/helpers'; // ² Helpers
+import { and, not } from '@cardstack/boxel-ui/helpers';
 
-// Configuration interface
 interface CountdownConfiguration {
   countdownOptions?: {
     label?: string;
@@ -13,13 +11,19 @@ interface CountdownConfiguration {
   };
 }
 
-// ³ Countdown Component
-export class Countdown extends Component {
+interface CountdownSignature {
+  Args: {
+    model?: any;
+    config?: CountdownConfiguration;
+  };
+}
+
+export class Countdown extends GlimmerComponent<CountdownSignature> {
   @tracked currentTime = Date.now();
   @tracked isRunning = true;
   private intervalId: number | null = null;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: any, args: any) {
     super(owner, args);
     this.startTimer();
   }

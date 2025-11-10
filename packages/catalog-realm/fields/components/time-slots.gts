@@ -1,20 +1,25 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { eq } from '@cardstack/boxel-ui/helpers'; // ² Helpers
+import { eq } from '@cardstack/boxel-ui/helpers';
 
-// Configuration interface
 interface TimeSlotsConfiguration {
   timeSlotsOptions?: {
     availableSlots?: string[];
   };
 }
 
+interface TimeSlotsSignature {
+  Args: {
+    model?: any;
+    config?: TimeSlotsConfiguration;
+  };
+}
+
 // ³ TimeSlots Component
-export class TimeSlots extends Component {
+export class TimeSlots extends GlimmerComponent<TimeSlotsSignature> {
   @tracked selectedSlot: string | null = null;
 
   get config(): TimeSlotsConfiguration | undefined {
@@ -38,7 +43,7 @@ export class TimeSlots extends Component {
     ];
   }
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: any, args: any) {
     super(owner, args);
     this.selectedSlot = this.args.model?.value || null;
   }

@@ -1,17 +1,13 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+import { Component } from 'https://cardstack.com/base/card-api';
 import BaseDateField from 'https://cardstack.com/base/date';
-import CalendarIcon from '@cardstack/boxel-icons/calendar'; // ² Calendar icon
-import { eq } from '@cardstack/boxel-ui/helpers'; // ³ Helpers
+import CalendarIcon from '@cardstack/boxel-icons/calendar';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
-// ⁴ Import presentation components
 import { Countdown } from './components/countdown';
 import { Timeline } from './components/timeline';
 import { Age } from './components/age';
 
-// Configuration interface
 interface DateTimeConfiguration {
-  // ⁵ Configuration type
   presentation?: 'standard' | 'countdown' | 'timeline' | 'age';
   countdownOptions?: {
     label?: string;
@@ -26,13 +22,15 @@ interface DateTimeConfiguration {
   };
 }
 
-// ⁶ DateField - Extends base DateField with presentation modes
 export class DateField extends BaseDateField {
   static displayName = 'Date';
   static icon = CalendarIcon;
 
-  // ⁷ Embedded format - routes to presentation or shows formatted date
   static embedded = class Embedded extends Component<typeof this> {
+    get formatted() {
+      return this.displayValue;
+    }
+
     get config(): DateTimeConfiguration | undefined {
       return this.args.configuration as DateTimeConfiguration | undefined;
     }
@@ -90,8 +88,11 @@ export class DateField extends BaseDateField {
     </template>
   };
 
-  // ⁸ Atom format - compact date badge
   static atom = class Atom extends Component<typeof this> {
+    get formatted() {
+      return this.displayValue;
+    }
+
     get displayValue() {
       if (!this.args.model) return 'No date';
 

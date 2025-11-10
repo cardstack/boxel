@@ -1,20 +1,24 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-// Configuration interface
 interface ExpirationConfiguration {
   expirationOptions?: {
     itemName?: string;
   };
 }
 
-// ² ExpirationWarning Component
-export class ExpirationWarning extends Component {
+interface ExpirationSignature {
+  Args: {
+    model?: any;
+    config?: ExpirationConfiguration;
+  };
+}
+
+export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
   @tracked currentTime = Date.now();
   private intervalId: number | null = null;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: any, args: any) {
     super(owner, args);
     this.intervalId = window.setInterval(() => {
       this.currentTime = Date.now();

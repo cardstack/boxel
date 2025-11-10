@@ -13,6 +13,126 @@ import { lt, add } from '@cardstack/boxel-ui/helpers'; // ² Helpers
 import CalendarIcon from '@cardstack/boxel-icons/calendar'; // ³ Calendar icon
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down'; // ⁴ Chevron down icon
 
+class MonthFieldEdit extends Component<typeof MonthField> {
+  months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  @action
+  updateValue(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    this.args.model.value = target.value;
+  }
+
+  <template>
+    <div class='select-wrapper'>
+      <label for='month-select-input' class='sr-only'>Month</label>
+      <div class='input-icon'>
+        <CalendarIcon class='icon' />
+      </div>
+      <select
+        id='month-select-input'
+        value={{@model.value}}
+        {{on 'change' this.updateValue}}
+        class='datetime-select'
+        data-test-month-select
+      >
+        {{#each this.months as |monthName index|}}
+          <option
+            value={{if
+              (lt (add index 1) 10)
+              (concat '0' (add index 1))
+              (add index 1)
+            }}
+          >
+            {{monthName}}
+          </option>
+        {{/each}}
+      </select>
+      <div class='select-icon'>
+        <ChevronDownIcon class='icon' />
+      </div>
+    </div>
+
+    <style scoped>
+      .select-wrapper {
+        position: relative;
+        width: 100%;
+      }
+
+      .input-icon {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        color: var(--muted-foreground, #9ca3af);
+      }
+
+      .select-icon {
+        position: absolute;
+        right: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        color: var(--muted-foreground, #9ca3af);
+      }
+
+      .icon {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+
+      .datetime-select {
+        width: 100%;
+        padding: 0.5rem 2.5rem;
+        border: 1px solid var(--border, #e0e0e0);
+        border-radius: var(--radius, 0.375rem);
+        font-family: var(--font-sans, system-ui, sans-serif);
+        font-size: 0.875rem;
+        color: var(--foreground, #1a1a1a);
+        background: var(--input, #ffffff);
+        appearance: none;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .datetime-select:focus {
+        outline: none;
+        border-color: var(--ring, #3b82f6);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
+      }
+    </style>
+  </template>
+}
+
 // ⁵ MonthField - Independent FieldDef for month-only selection
 export class MonthField extends FieldDef {
   static displayName = 'Month';
@@ -130,109 +250,7 @@ export class MonthField extends FieldDef {
   };
 
   // ⁹ Edit format - month dropdown
-  static edit = class Edit extends Component<typeof this> {
-    months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-
-    @action
-    updateValue(event: Event) {
-      const target = event.target as HTMLSelectElement;
-      this.args.model.value = target.value;
-    }
-
-    <template>
-      <div class='select-wrapper'>
-        <div class='input-icon'>
-          <CalendarIcon class='icon' />
-        </div>
-        <select
-          value={{@model.value}}
-          {{on 'change' this.updateValue}}
-          class='datetime-select'
-          data-test-month-select
-        >
-          {{#each this.months as |monthName index|}}
-            <option
-              value={{if
-                (lt (add index 1) 10)
-                (concat '0' (add index 1))
-                (add index 1)
-              }}
-            >
-              {{monthName}}
-            </option>
-          {{/each}}
-        </select>
-        <div class='select-icon'>
-          <ChevronDownIcon class='icon' />
-        </div>
-      </div>
-
-      <style scoped>
-        .select-wrapper {
-          position: relative;
-          width: 100%;
-        }
-
-        .input-icon {
-          position: absolute;
-          left: 0.75rem;
-          top: 50%;
-          transform: translateY(-50%);
-          pointer-events: none;
-          display: flex;
-          align-items: center;
-          color: var(--muted-foreground, #9ca3af);
-        }
-
-        .select-icon {
-          position: absolute;
-          right: 0.75rem;
-          top: 50%;
-          transform: translateY(-50%);
-          pointer-events: none;
-          display: flex;
-          align-items: center;
-          color: var(--muted-foreground, #9ca3af);
-        }
-
-        .icon {
-          width: 1.25rem;
-          height: 1.25rem;
-        }
-
-        .datetime-select {
-          width: 100%;
-          padding: 0.5rem 2.5rem;
-          border: 1px solid var(--border, #e0e0e0);
-          border-radius: var(--radius, 0.375rem);
-          font-family: var(--font-sans, system-ui, sans-serif);
-          font-size: 0.875rem;
-          color: var(--foreground, #1a1a1a);
-          background: var(--input, #ffffff);
-          appearance: none;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .datetime-select:focus {
-          outline: none;
-          border-color: var(--ring, #3b82f6);
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-      </style>
-    </template>
-  };
+  static edit = MonthFieldEdit;
 }
+
+export default MonthField;

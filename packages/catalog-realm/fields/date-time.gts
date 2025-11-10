@@ -1,18 +1,14 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+import { Component } from 'https://cardstack.com/base/card-api';
 import BaseDatetimeField from 'https://cardstack.com/base/datetime';
-import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event'; // ² Calendar event icon
-import { eq } from '@cardstack/boxel-ui/helpers'; // ³ Helpers
+import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
-// ⁴ Import presentation components
 import { Countdown } from './components/countdown';
 import { Timeline } from './components/timeline';
 import { TimeAgo } from './components/time-ago';
 import { ExpirationWarning } from './components/expiration-warning';
 
-// Configuration interface
 interface DateTimeConfiguration {
-  // ⁵ Configuration type
   presentation?:
     | 'standard'
     | 'countdown'
@@ -36,13 +32,15 @@ interface DateTimeConfiguration {
   };
 }
 
-// ⁶ DatetimeField - Extends base DatetimeField with presentation modes
 export class DatetimeField extends BaseDatetimeField {
   static displayName = 'Date & Time';
   static icon = CalendarEventIcon;
 
-  // ⁷ Embedded format - routes to presentation or shows formatted datetime
   static embedded = class Embedded extends Component<typeof this> {
+    get formatted() {
+      return this.displayValue;
+    }
+
     get config(): DateTimeConfiguration | undefined {
       return this.args.configuration as DateTimeConfiguration | undefined;
     }
@@ -104,8 +102,11 @@ export class DatetimeField extends BaseDatetimeField {
     </template>
   };
 
-  // ⁸ Atom format - compact datetime badge
   static atom = class Atom extends Component<typeof this> {
+    get formatted() {
+      return this.displayValue;
+    }
+
     get displayValue() {
       if (!this.args.model) return 'No date/time';
 
@@ -154,3 +155,5 @@ export class DatetimeField extends BaseDatetimeField {
     </template>
   };
 }
+
+export default DatetimeField;

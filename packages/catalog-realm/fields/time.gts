@@ -22,6 +22,98 @@ interface TimeConfiguration {
   };
 }
 
+class TimeFieldEdit extends Component<typeof TimeField> {
+  @tracked timeValue = '';
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.timeValue = this.args.model?.value || '09:00';
+  }
+
+  @action
+  updateTime(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.timeValue = target.value;
+    this.args.model.value = target.value;
+  }
+
+  <template>
+    <div class='time-edit'>
+      <div class='input-wrapper'>
+        <label for='time-input' class='sr-only'>Time</label>
+        <div class='input-icon'>
+          <ClockIcon class='icon' />
+        </div>
+        <input
+          id='time-input'
+          type='time'
+          value={{this.timeValue}}
+          {{on 'change' this.updateTime}}
+          class='time-input'
+          data-test-time-input
+        />
+      </div>
+    </div>
+
+    <style scoped>
+      .time-edit {
+        width: 100%;
+      }
+
+      .input-wrapper {
+        position: relative;
+        width: 100%;
+      }
+
+      .input-icon {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        color: var(--muted-foreground, #9ca3af);
+      }
+
+      .icon {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+
+      .time-input {
+        width: 100%;
+        padding: 0.5rem 0.75rem 0.5rem 2.5rem;
+        border: 1px solid var(--border, #e0e0e0);
+        border-radius: var(--radius, 0.375rem);
+        font-family: var(--font-sans, system-ui, sans-serif);
+        font-size: 0.875rem;
+        color: var(--foreground, #1a1a1a);
+        background: var(--input, #ffffff);
+        transition: all 0.15s ease;
+      }
+
+      .time-input:focus {
+        outline: none;
+        border-color: var(--ring, #3b82f6);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
+      }
+    </style>
+  </template>
+}
+
 // ⁶ TimeField - Independent FieldDef for single time values with presentation support
 export class TimeField extends FieldDef {
   static displayName = 'Time';
@@ -182,81 +274,7 @@ export class TimeField extends FieldDef {
   };
 
   // ¹³ Edit format - time input
-  static edit = class Edit extends Component<typeof this> {
-    @tracked timeValue = '';
-
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      this.timeValue = this.args.model?.value || '09:00';
-    }
-
-    @action
-    updateTime(event: Event) {
-      const target = event.target as HTMLInputElement;
-      this.timeValue = target.value;
-      this.args.model.value = target.value;
-    }
-
-    <template>
-      <div class='time-edit'>
-        <div class='input-wrapper'>
-          <div class='input-icon'>
-            <ClockIcon class='icon' />
-          </div>
-          <input
-            type='time'
-            value={{this.timeValue}}
-            {{on 'change' this.updateTime}}
-            class='time-input'
-            data-test-time-input
-          />
-        </div>
-      </div>
-
-      <style scoped>
-        .time-edit {
-          width: 100%;
-        }
-
-        .input-wrapper {
-          position: relative;
-          width: 100%;
-        }
-
-        .input-icon {
-          position: absolute;
-          left: 0.75rem;
-          top: 50%;
-          transform: translateY(-50%);
-          pointer-events: none;
-          display: flex;
-          align-items: center;
-          color: var(--muted-foreground, #9ca3af);
-        }
-
-        .icon {
-          width: 1.25rem;
-          height: 1.25rem;
-        }
-
-        .time-input {
-          width: 100%;
-          padding: 0.5rem 0.75rem 0.5rem 2.5rem;
-          border: 1px solid var(--border, #e0e0e0);
-          border-radius: var(--radius, 0.375rem);
-          font-family: var(--font-sans, system-ui, sans-serif);
-          font-size: 0.875rem;
-          color: var(--foreground, #1a1a1a);
-          background: var(--input, #ffffff);
-          transition: all 0.15s ease;
-        }
-
-        .time-input:focus {
-          outline: none;
-          border-color: var(--ring, #3b82f6);
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-      </style>
-    </template>
-  };
+  static edit = TimeFieldEdit;
 }
+
+export default TimeField;

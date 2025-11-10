@@ -19,6 +19,92 @@ interface DateRangeConfiguration {
   presentation?: 'standard' | 'businessDays';
 }
 
+class DateRangeFieldEdit extends Component<typeof DateRangeField> {
+  @tracked startDate: Date | null = null;
+  @tracked endDate: Date | null = null;
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    // ¹³ Initialize from model or set defaults
+    try {
+      const startValue = this.args.model?.start;
+      const endValue = this.args.model?.end;
+
+      if (startValue && endValue) {
+        this.startDate = new Date(startValue);
+        this.endDate = new Date(endValue);
+      } else {
+        const today = new Date();
+        const nextWeek = new Date(today);
+        nextWeek.setDate(today.getDate() + 7);
+        this.startDate = today;
+        this.endDate = nextWeek;
+      }
+    } catch {
+      const today = new Date();
+      const nextWeek = new Date(today);
+      nextWeek.setDate(today.getDate() + 7);
+      this.startDate = today;
+      this.endDate = nextWeek;
+    }
+  }
+
+  get selectedRange() {
+    return {
+      start: this.startDate,
+      end: this.endDate,
+    };
+  }
+
+  @action
+  onSelect(selected: { date: { start: Date | null; end: Date | null } }) {
+    // ¹⁴ Update tracked state for partial selections
+    this.startDate = selected.date.start;
+    this.endDate = selected.date.end;
+
+    // ¹⁵ Save to model fields only when BOTH dates selected
+    if (selected.date.start && selected.date.end) {
+      this.args.model.start = selected.date.start as any;
+      this.args.model.end = selected.date.end as any;
+    }
+  }
+
+  get daysDuration() {
+    if (!this.startDate || !this.endDate) return 0;
+    return Math.ceil(
+      (this.endDate.getTime() - this.startDate.getTime()) /
+        (1000 * 60 * 60 * 24),
+    );
+  }
+
+  <template>
+    <div class='date-range-edit'>
+      <DateRangePicker
+        @selected={{this.selectedRange}}
+        @onSelect={{this.onSelect}}
+        data-test-date-range-picker
+      />
+      {{#if (gt this.daysDuration 0)}}
+        <p class='duration-info'>Duration: {{this.daysDuration}} days</p>
+      {{/if}}
+    </div>
+
+    <style scoped>
+      .date-range-edit {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .duration-info {
+        font-size: 0.75rem;
+        color: var(--muted-foreground, #9ca3af);
+        margin: 0;
+      }
+    </style>
+  </template>
+}
+
 // ⁷ DateRangeField - Independent FieldDef with structured start/end dates and presentation support
 export class DateRangeField extends FieldDef {
   static displayName = 'Date Range';
@@ -82,8 +168,9 @@ export class DateRangeField extends FieldDef {
       if (!start && !end) return 'No range';
 
       try {
-        const formatDate = (dateStr: string) => {
-          const date = new Date(dateStr);
+        const formatDate = (dateValue: string | Date) => {
+          const date =
+            typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
           return date.toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
@@ -132,89 +219,7 @@ export class DateRangeField extends FieldDef {
   };
 
   // ¹² Edit format - DateRangePicker with duration display
-  static edit = class Edit extends Component<typeof this> {
-    @tracked startDate: Date | null = null;
-    @tracked endDate: Date | null = null;
-
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      // ¹³ Initialize from model or set defaults
-      try {
-        const startValue = this.args.model?.start;
-        const endValue = this.args.model?.end;
-
-        if (startValue && endValue) {
-          this.startDate = new Date(startValue);
-          this.endDate = new Date(endValue);
-        } else {
-          const today = new Date();
-          const nextWeek = new Date(today);
-          nextWeek.setDate(today.getDate() + 7);
-          this.startDate = today;
-          this.endDate = nextWeek;
-        }
-      } catch {
-        const today = new Date();
-        const nextWeek = new Date(today);
-        nextWeek.setDate(today.getDate() + 7);
-        this.startDate = today;
-        this.endDate = nextWeek;
-      }
-    }
-
-    get selectedRange() {
-      return {
-        start: this.startDate,
-        end: this.endDate,
-      };
-    }
-
-    @action
-    onSelect(selected: { date: { start: Date | null; end: Date | null } }) {
-      // ¹⁴ Update tracked state for partial selections
-      this.startDate = selected.date.start;
-      this.endDate = selected.date.end;
-
-      // ¹⁵ Save to model fields only when BOTH dates selected
-      if (selected.date.start && selected.date.end) {
-        this.args.model.start = selected.date.start.toISOString().split('T')[0];
-        this.args.model.end = selected.date.end.toISOString().split('T')[0];
-      }
-    }
-
-    get daysDuration() {
-      if (!this.startDate || !this.endDate) return 0;
-      return Math.ceil(
-        (this.endDate.getTime() - this.startDate.getTime()) /
-          (1000 * 60 * 60 * 24),
-      );
-    }
-
-    <template>
-      <div class='date-range-edit'>
-        <DateRangePicker
-          @selected={{this.selectedRange}}
-          @onSelect={{this.onSelect}}
-          data-test-date-range-picker
-        />
-        {{#if (gt this.daysDuration 0)}}
-          <p class='duration-info'>Duration: {{this.daysDuration}} days</p>
-        {{/if}}
-      </div>
-
-      <style scoped>
-        .date-range-edit {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .duration-info {
-          font-size: 0.75rem;
-          color: var(--muted-foreground, #9ca3af);
-          margin: 0;
-        }
-      </style>
-    </template>
-  };
+  static edit = DateRangeFieldEdit;
 }
+
+export default DateRangeField;

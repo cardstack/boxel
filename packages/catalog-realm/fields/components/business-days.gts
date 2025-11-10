@@ -1,9 +1,17 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { gt } from '@cardstack/boxel-ui/helpers'; // ² Helpers
+import GlimmerComponent from '@glimmer/component';
+import { gt } from '@cardstack/boxel-ui/helpers';
 
-// ³ BusinessDays Component
-export class BusinessDays extends Component {
+export interface BusinessDaysSignature {
+  Args: {
+    model?: {
+      start?: Date | string;
+      end?: Date | string;
+    };
+    config?: any;
+  };
+}
+
+export class BusinessDays extends GlimmerComponent<BusinessDaysSignature> {
   get calendarDays() {
     const start = this.args.model?.start;
     const end = this.args.model?.end;
@@ -56,7 +64,7 @@ export class BusinessDays extends Component {
         year: 'numeric',
       });
     } catch {
-      return start;
+      return String(start);
     }
   }
 
@@ -71,7 +79,7 @@ export class BusinessDays extends Component {
         year: 'numeric',
       });
     } catch {
-      return end;
+      return String(end);
     }
   }
 

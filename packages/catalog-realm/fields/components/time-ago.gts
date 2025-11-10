@@ -1,7 +1,6 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import ClockIcon from '@cardstack/boxel-icons/clock'; // ² Clock icon
+import ClockIcon from '@cardstack/boxel-icons/clock';
 
 // Configuration interface
 interface TimeAgoConfiguration {
@@ -11,16 +10,22 @@ interface TimeAgoConfiguration {
   };
 }
 
-// ³ TimeAgo Component
-export class TimeAgo extends Component {
+interface TimeAgoSignature {
+  Args: {
+    model?: any;
+    config?: TimeAgoConfiguration;
+  };
+}
+
+export class TimeAgo extends GlimmerComponent<TimeAgoSignature> {
   @tracked currentTime = Date.now();
   private intervalId: number | null = null;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: any, args: any) {
     super(owner, args);
     this.intervalId = window.setInterval(() => {
       this.currentTime = Date.now();
-    }, 60000); // Update every minute
+    }, 60000);
   }
 
   willDestroy() {
