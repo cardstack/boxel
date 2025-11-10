@@ -1,4 +1,4 @@
-import { fillIn, RenderingTestContext } from '@ember/test-helpers';
+import { fillIn, RenderingTestContext, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
@@ -3937,6 +3937,229 @@ module('Integration | serialization', function (hooks) {
       matchesState?.query?.sort?.[0]?.direction,
       'asc',
       'matches query field cache preserves sort direction',
+    );
+  });
+
+  test('query-backed fields refresh when their signature changes', async function (assert) {
+    assert.expect(6);
+
+    class Person extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class QueryCard extends CardDef {
+      @field title = contains(StringField);
+      @field favorite = linksTo(Person, {
+        query: {
+          realm: '$thisRealm',
+          filter: {
+            eq: { title: '$this.title' },
+          },
+        },
+      });
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, QueryCard },
+        'Person/target.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Target' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/backup.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Backup' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'query-card.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Target' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'QueryCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store') as StoreService;
+    type QueryCardInstance = InstanceType<typeof QueryCard>;
+    let queryCard = (await store.get(
+      `${testRealmURL}query-card`,
+    )) as QueryCardInstance;
+
+    assert.strictEqual(
+      queryCard.favorite?.id,
+      `${testRealmURL}Person/target`,
+      'initial favorite is Target',
+    );
+
+    let initialState = getQueryFieldState(queryCard, 'favorite');
+    assert.ok(initialState?.signature, 'initial signature is captured');
+
+    queryCard.title = 'Backup';
+
+    assert.strictEqual(
+      getQueryFieldState(queryCard, 'favorite')?.signature,
+      initialState?.signature,
+      'signature stays the same until field is accessed again',
+    );
+
+    // Accessing the field triggers the coordinator to recompute the query
+    queryCard.favorite;
+
+    await waitUntil(() => {
+      return (
+        getQueryFieldState(queryCard, 'favorite')?.signature !==
+        initialState?.signature
+      );
+    });
+
+    assert.notStrictEqual(
+      getQueryFieldState(queryCard, 'favorite')?.signature,
+      initialState?.signature,
+      'signature updates after recompute',
+    );
+
+    assert.strictEqual(
+      queryCard.favorite?.id,
+      `${testRealmURL}Person/backup`,
+      'favorite updates after the query reruns',
+    );
+
+    assert.strictEqual(
+      getQueryFieldState(queryCard, 'favorite')?.relationship?.links?.self,
+      `${testRealmURL}Person/backup`,
+      'query field state reflects refreshed relationship data',
+    );
+  });
+
+  test('store.refreshQueryField forces a refresh with the latest results', async function (assert) {
+    assert.expect(5);
+
+    class Person extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class QueryCard extends CardDef {
+      @field title = contains(StringField);
+      @field matches = linksToMany(Person, {
+        query: {
+          filter: {
+            eq: { title: '$this.title' },
+          },
+        },
+      });
+    }
+
+    let refreshRealmSetupResult = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, QueryCard },
+        'Person/target.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Target' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'query-card.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Target' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'QueryCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let integrationRealm = refreshRealmSetupResult.realm;
+    let store = getService('store') as StoreService;
+    type QueryCardInstance = InstanceType<typeof QueryCard>;
+    let queryCard = (await store.get(
+      `${testRealmURL}query-card`,
+    )) as QueryCardInstance;
+
+    assert.strictEqual(
+      queryCard.matches.length,
+      1,
+      'initial matches include the original person',
+    );
+
+    let initialState = getQueryFieldState(queryCard, 'matches');
+    let initialRelationship = initialState?.relationship;
+    let initialCount = Array.isArray(initialRelationship?.data)
+      ? initialRelationship!.data.length
+      : 0;
+    assert.strictEqual(
+      initialCount,
+      1,
+      'query field state tracks initial relationship entries',
+    );
+
+    let newPerson = new Person({ title: 'Target' });
+    await saveCard(newPerson, `${testRealmURL}Person/second`, loader);
+    await waitUntil(async () => {
+      let instance = await integrationRealm.realmIndexQueryEngine.instance(
+        new URL(`${testRealmURL}Person/second`),
+      );
+      return instance?.type === 'instance';
+    });
+
+    await store.refreshQueryField(queryCard, 'matches');
+
+    await waitUntil(() => {
+      let matchesState = getQueryFieldState(queryCard, 'matches');
+      let refreshedData = matchesState?.relationship?.data;
+      return Array.isArray(refreshedData) && refreshedData.length === 2;
+    });
+
+    assert.ok(
+      getQueryFieldState(queryCard, 'matches')?.signature,
+      'manual refresh records a new signature',
+    );
+
+    assert.strictEqual(
+      queryCard.matches.length,
+      2,
+      'manual refresh loads the latest results',
+    );
+
+    let refreshedIds = queryCard.matches.map((card) => card?.id).sort();
+    assert.deepEqual(
+      refreshedIds,
+      [`${testRealmURL}Person/second`, `${testRealmURL}Person/target`].sort(),
+      'matches include the newly saved person',
     );
   });
 

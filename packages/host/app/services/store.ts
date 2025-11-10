@@ -69,6 +69,7 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type QueryFieldCoordinatorService from './query-field-coordinator';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
@@ -94,6 +95,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private reset: ResetService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
+  @service declare private queryFieldCoordinator: QueryFieldCoordinatorService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
@@ -118,6 +120,9 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = new CardStore(this.referenceCount, this.network.authedFetch);
     this.reset.register(this);
     this.ready = this.setup();
+    // Ensure the query field coordinator service instantiates early so it can
+    // register itself with the card API for automatic refresh handling.
+    this.queryFieldCoordinator;
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
     });
@@ -523,6 +528,10 @@ export default class StoreService extends Service implements StoreInterface {
         }),
       )
     ).filter(Boolean) as CardDef[];
+  }
+
+  async refreshQueryField(card: CardDef, fieldName: string): Promise<void> {
+    await this.queryFieldCoordinator.refreshQueryField(card, fieldName);
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
