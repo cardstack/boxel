@@ -99,6 +99,7 @@ export default class StoreService extends Service implements StoreInterface {
     new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private store: CardStore;
+  protected isRenderStore = false;
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
@@ -113,6 +114,12 @@ export default class StoreService extends Service implements StoreInterface {
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
     });
+  }
+
+  protected renderContextBlocksPersistence() {
+    return (
+      this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)
+    );
   }
 
   // used for tests only!
@@ -291,7 +298,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.setIdentityContext(instance);
     await this.startAutoSaving(instance);
 
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       return instance;
     }
 
@@ -350,7 +357,7 @@ export default class StoreService extends Service implements StoreInterface {
     patch: PatchData,
     opts?: { doNotPersist?: true; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined> {
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       return;
     }
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
@@ -779,7 +786,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     try {
       if (!id) {
-        if (!(globalThis as any).__boxelRenderContext) {
+        if (!this.renderContextBlocksPersistence()) {
           // this is a new card so instantiate it and save it
           let doc = idOrDoc as LooseSingleCardDocument;
           let newInstance = await this.createFromSerialized(
@@ -823,7 +830,7 @@ export default class StoreService extends Service implements StoreInterface {
         | undefined;
       if (!doc) {
         let json: CardDocument | undefined;
-        if ((globalThis as any).__boxelRenderContext) {
+        if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
           let result = await this.cardService.getSource(new URL(`${url}.json`));
           if (result.status === 200) {
             json = JSON.parse(result.content);
@@ -994,7 +1001,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       // we skip saving when rendering cards in headless chrome
       return;
     }

@@ -43,13 +43,13 @@ import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
-import type StoreService from '../services/store';
+import type RenderStoreService from '../services/render-store';
 
 // This component is used in a node/Fastboot context to perform
 // server-side rendering for indexing as well as by the TestRealm
 // to perform rendering for indexing in Ember test contexts.
 export default class CardPrerender extends Component {
-  @service private declare store: StoreService;
+  @service('render-store') private declare store: RenderStoreService;
   @service private declare network: NetworkService;
   @service private declare router: RouterService;
   @service private declare renderService: RenderService;

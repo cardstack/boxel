@@ -1,4 +1,8 @@
 import { unixTime, delay } from './index';
+
+function isBrowserTestEnv() {
+  return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
+}
 import type { TokenClaims } from './realm';
 
 // iat - issued at (seconds since epoch)
@@ -49,9 +53,18 @@ export class RealmAuthClient {
       let session: { [realmURL: string]: string } = JSON.parse(sessionStr);
       let jwt = session[this.realmURL.href];
       if (!jwt) {
-        throw new Error(
-          `Error: Prerenderer did not set a JWT for realm ${this.realmURL.href}`,
-        );
+        if (isBrowserTestEnv()) {
+          jwt = await this.createRealmSession();
+          session[this.realmURL.href] = jwt;
+          globalThis.localStorage.setItem(
+            'boxel-session',
+            JSON.stringify(session),
+          );
+        } else {
+          throw new Error(
+            `Error: Prerenderer did not set a JWT for realm ${this.realmURL.href}`,
+          );
+        }
       }
       this._jwt = jwt;
       return jwt;

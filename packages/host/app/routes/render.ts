@@ -37,7 +37,7 @@ import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RenderErrorStateService from '../services/render-error-state';
-import type StoreService from '../services/store';
+import type RenderStoreService from '../services/render-store';
 
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
@@ -57,7 +57,7 @@ type ModelState = {
 };
 
 export default class RenderRoute extends Route<Model> {
-  @service declare store: StoreService;
+  @service('render-store') declare store: RenderStoreService;
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
