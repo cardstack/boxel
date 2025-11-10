@@ -218,7 +218,6 @@ async function getTestPrerenderer(
       },
     };
   }
-  // in node context this is a boolean
   (globalThis as any).__useHeadlessChromePrerender = true;
   let url = await startTestPrerenderServer();
   return createRemotePrerenderer(url);

@@ -111,12 +111,7 @@ export class RunnerOptionsManager {
 }
 
 function isHeadlessChromeFeatureFlagEnabled() {
-  let useHeadlessChromePrerender = (globalThis as any)
-    .__useHeadlessChromePrerender;
-  if (typeof useHeadlessChromePrerender === 'function') {
-    return useHeadlessChromePrerender();
-  }
-  return useHeadlessChromePrerender;
+  return Boolean((globalThis as any).__useHeadlessChromePrerender);
 }
 
 export class Worker {

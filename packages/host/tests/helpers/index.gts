@@ -552,11 +552,13 @@ export async function setupAcceptanceTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  usePrerenderer = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  usePrerenderer?: boolean;
 }) {
   setupAuthEndpoints();
   return await setupTestRealm({
@@ -565,6 +567,7 @@ export async function setupAcceptanceTestRealm({
     isAcceptanceTest: true,
     permissions,
     mockMatrixUtils,
+    usePrerenderer,
   });
 }
 
@@ -573,11 +576,13 @@ export async function setupIntegrationTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  usePrerenderer = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  usePrerenderer?: boolean;
 }) {
   setupAuthEndpoints();
   return await setupTestRealm({
@@ -586,6 +591,7 @@ export async function setupIntegrationTestRealm({
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
+    usePrerenderer,
   });
 }
 
@@ -605,13 +611,21 @@ async function setupTestRealm({
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
+  usePrerenderer,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  usePrerenderer: boolean;
 }) {
+  // default to all tests using headless chrome
+  if (usePrerenderer) {
+    (globalThis as any).__useHeadlessChromePrerender = true;
+  } else {
+    delete (globalThis as any).__useHeadlessChromePrerender;
+  }
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
   let { queue } = getService('queue');

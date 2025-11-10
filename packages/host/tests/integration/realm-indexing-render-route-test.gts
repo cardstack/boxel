@@ -73,8 +73,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    // in browser context this is a function
-    (globalThis as any).__useHeadlessChromePrerender = () => true;
+    (globalThis as any).__useHeadlessChromePrerender = true;
     onError = function (event: Event) {
       let localIndexer = getService('local-indexer');
       windowErrorHandler({
