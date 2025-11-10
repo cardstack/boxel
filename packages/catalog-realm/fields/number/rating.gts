@@ -1,6 +1,6 @@
 import { Component } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
-import { fn, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { lte } from '@cardstack/boxel-ui/helpers';
 
 import NumberField, {
