@@ -12,9 +12,9 @@ import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
 import LintAndFixCommand from './lint-and-fix';
 
 import type CardService from '../services/card-service';
+import type CommandService from '../services/command-service';
 import type MonacoService from '../services/monaco-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
-import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
 
 interface FileInfo {

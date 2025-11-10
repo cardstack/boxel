@@ -179,7 +179,16 @@ module('Integration | Command | patch-fields', function (hooks) {
 
       let patchOptions: Parameters<StoreService['patch']>[2];
       let originalPatch = store.patch;
-      store.patch = async function (this: StoreService, id, patch, opts) {
+      store.patch = async function (
+        this: StoreService,
+        id,
+        patch,
+        opts: {
+          doNotPersist?: true;
+          doNotWaitForPersist?: true;
+          clientRequestId?: string;
+        },
+      ) {
         patchOptions = opts;
         return await originalPatch.call(this, id, patch, opts);
       };

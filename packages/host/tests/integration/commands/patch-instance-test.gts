@@ -363,7 +363,11 @@ module('Integration | commands | patch-instance', function (hooks) {
       this: typeof storeService,
       id,
       patch,
-      opts,
+      opts: {
+        doNotPersist?: true;
+        doNotWaitForPersist?: true;
+        clientRequestId?: string;
+      },
     ) {
       patchOptions = opts;
       return await originalPatch.call(this, id, patch, opts);
