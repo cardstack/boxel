@@ -574,6 +574,9 @@ export function getLinksToManyComponent({
       }
       if (typeof property === 'string' && property.match(/\d+/)) {
         let child = arrayField.children[parseInt(property)];
+        if (!child) {
+          return undefined;
+        }
         return getBoxComponent(cardTypeFor(field, child), child, field);
       }
       return Reflect.get(target, property, received);
