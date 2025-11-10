@@ -331,9 +331,7 @@ export class RealmIndexQueryEngine {
           query,
           opts,
         );
-        realmResults = Array.isArray(collection.cards)
-          ? collection.cards
-          : [];
+        realmResults = Array.isArray(collection.cards) ? collection.cards : [];
       } catch (err: unknown) {
         let message =
           err instanceof Error ? err.message : String(err ?? 'unknown error');

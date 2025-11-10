@@ -9,7 +9,7 @@ import {
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type Query } from './query';
+import type { Query } from './query';
 
 // we are only recursing 3 levels deep when we see a card def that we have already encountered,
 // we capture this: Person -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person)
